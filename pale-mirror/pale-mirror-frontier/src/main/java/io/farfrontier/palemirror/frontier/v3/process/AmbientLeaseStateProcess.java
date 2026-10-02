@@ -136,8 +136,7 @@ public final class AmbientLeaseStateProcess {
             }
         }
         ResourceSiteHarvestJob harvest = state.resourceSites().sites().values().stream()
-                .map(ResourceSiteLifecycle::activeWork).flatMap(java.util.Optional::stream)
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .flatMap(site -> site.harvestJobs().values().stream())
                 .filter(job -> job.workerId().equals(release.actorId()))
                 .reduce((left, right) -> { throw new IllegalArgumentException("ambient farmer belongs to more than one active field job"); })
                 .orElse(null);

@@ -11,15 +11,13 @@ public final class ResourceSiteHarvestSceneReconciliation {
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject,
                                             ResourceSiteHarvestSceneReconciled receipt) {
         var lifecycle = state.resourceSites().site(receipt.siteId());
-        var job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+        var job = lifecycle.harvestJob(receipt.jobId()).orElseThrow(
                         () -> new IllegalArgumentException("harvest reconciliation has no active job"));
         var lease = state.sceneLeases().get(receipt.leaseId());
         var cycle = state.resourceSites().cycle(receipt.siteId());
         if (!subject.equals(receipt.siteId()) || lifecycle.phase() != ResourceSitePhase.HARVESTING
                 || !job.id().equals(receipt.jobId())
-                || job.progress().completedCropSlots() != cycle.accountedCount()
-                || job.navigationBlock().isPresent() || job.progress().complete() && !cycle.cycleAccounted()
+                 || job.navigationBlock().isPresent()
                 || state.physicalIntents().get(job.intentId()) == null
                 || state.physicalIntents().get(job.intentId()).status()
                     != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
@@ -48,7 +46,7 @@ public final class ResourceSiteHarvestSceneReconciliation {
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !hand.actorId().equals(job.workerId()) || !hand.entityId().equals(lease.members().getFirst().entityId())
                 || !receipt.observedHand().itemKind().equals("minecraft:wheat")
-                || receipt.observedHand().quantity() != job.carriedYieldQuantity(cycle.harvestedCount())
+                || receipt.observedHand().quantity() != ResourceSiteHarvestCargo.quantity(state, job)
                 || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
                 || !account.claimQuantities().isEmpty() || bindings.size() != 1
                 || !bindings.getFirst().address().equals(hand) || bindings.getFirst().authorityEpoch() != lease.revision()

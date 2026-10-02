@@ -1,77 +1,291 @@
 {
   "schema": 1,
   "id": "disposable_bakery_full_cycle_restart",
-  "isolation": { "mode": "disposable_lite", "seed": 41 },
-  "server": { "host": "127.0.0.1", "port": 25575, "profile": "bakery-fresh-job", "viewDistance": 6 },
-  "pilot": { "username": "PMTestPilot" },
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25575,
+    "profile": "bakery-fresh-job",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
   "setup": [
-    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
-      { "view": "process", "id": "job:production-1-1", "expect": {
-        "status": "ok", "family": "frontier.production-work", "result": { "workStage": "DEPOT_PICKUP" }
-      } }
-    ] }
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "process",
+          "id": "job:production-development-fungible-production",
+          "expect": {
+            "status": "ok",
+            "family": "frontier.production-work",
+            "result": {
+              "workStage": "DEPOT_PICKUP"
+            }
+          }
+        }
+      ]
+    }
   ],
   "actions": [
-    { "type": "inspect", "view": "process", "id": "job:production-1-1", "causalMilestone": "admitted_job_wheat_still_at_depot" },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
-      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
-      "offset": { "x": -8, "y": 1, "z": 0 }, "settleMs": 0, "causalMilestone": "ordinary_player_depot_ingress" },
-    { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-1-1",
-      "expect": { "status": "ok", "result": { "workStage": "STATION_LOAD" } },
-      "timeoutMs": 90000, "causalMilestone": "wheat_taken_into_baker_hand" },
-    { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-1-1",
-      "expect": { "status": "ok", "result": { "workStage": "PROCESSING" } },
-      "timeoutMs": 90000, "causalMilestone": "wheat_placed_in_bakery_station" },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
-      "position": { "diagnostic": { "view": "process", "id": "job:production-1-1", "field": "goal.station" } },
-      "offset": { "x": -3, "y": 0, "z": -5 }, "settleMs": 0, "causalMilestone": "ordinary_player_bakery_ingress" },
-    { "type": "look", "at": { "diagnostic": { "view": "process", "id": "job:production-1-1", "field": "goal.station" } },
-      "causalMilestone": "look_at_baker_workstation" },
-    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "BAKER",
-      "maxDistance": 32, "maxAngleDeg": 55, "timeoutMs": 30000,
-      "causalMilestone": "baker_visible_operating_station" },
-    { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-1-1",
-      "expect": { "status": "ok", "result": { "workStage": "DEPOT_DELIVERY" } },
-      "timeoutMs": 120000, "causalMilestone": "bread_processed_at_station_and_taken_into_baker_hand" },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
-      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
-      "offset": { "x": -8, "y": 1, "z": 0 }, "settleMs": 0,
-      "causalMilestone": "ordinary_player_depot_delivery_ingress" },
-    { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-1-1",
-      "expect": { "status": "not_found" }, "timeoutMs": 120000,
-      "causalMilestone": "bread_deposited_and_job_completed" },
-    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot",
-      "causalMilestone": "canonical_bread_in_depot" },
-    { "type": "inspect", "view": "container", "id": "container:1-depot",
-      "causalMilestone": "physical_depot_receipt_current" }
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "causalMilestone": "admitted_job_wheat_still_at_depot"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0,
+      "causalMilestone": "ordinary_player_depot_ingress"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "workStage": "STATION_LOAD"
+        }
+      },
+      "timeoutMs": 90000,
+      "causalMilestone": "wheat_taken_into_baker_hand"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "workStage": "PROCESSING"
+        }
+      },
+      "timeoutMs": 90000,
+      "causalMilestone": "wheat_placed_in_bakery_station"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "process",
+          "id": "job:production-development-fungible-production",
+          "field": "goal.station"
+        }
+      },
+      "offset": {
+        "x": 1,
+        "y": 0,
+        "z": 1
+      },
+      "settleMs": 0,
+      "causalMilestone": "ordinary_player_bakery_ingress"
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      },
+      "causalMilestone": "look_at_baker_workstation"
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": "BAKER",
+      "maxDistance": 32,
+      "maxAngleDeg": 55,
+      "timeoutMs": 30000,
+      "causalMilestone": "baker_visible_operating_station"
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "physical_station_visible_with_working_baker"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "workStage": "DEPOT_DELIVERY"
+        }
+      },
+      "timeoutMs": 120000,
+      "causalMilestone": "bread_processed_at_station_and_taken_into_baker_hand"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0,
+      "causalMilestone": "ordinary_player_depot_delivery_ingress"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "not_found"
+      },
+      "timeoutMs": 120000,
+      "causalMilestone": "bread_deposited_and_job_completed"
+    },
+    {
+      "type": "inspect",
+      "view": "resource",
+      "id": "custody:container-1-depot",
+      "causalMilestone": "canonical_bread_in_depot"
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:1-depot",
+      "causalMilestone": "physical_depot_receipt_current"
+    }
   ],
   "restart": {
-    "mode": "graceful", "afterAction": 7,
+    "mode": "graceful",
+    "afterAction": 8,
     "resumeSetup": [
-      { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
-        "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
-        "offset": { "x": -8, "y": 1, "z": 0 }, "settleMs": 0 }
+      {
+        "type": "visit",
+        "dimension": "pale_mirror:frontier_graybox",
+        "position": {
+          "diagnostic": {
+            "view": "container",
+            "id": "container:1-depot",
+            "field": "position"
+          }
+        },
+        "offset": {
+          "x": -8,
+          "y": 0,
+          "z": 0
+        },
+        "settleMs": 0
+      }
     ]
   },
   "assertions": [
-    { "after": 1, "view": "process", "id": "job:production-1-1", "expect": {
-      "status": "ok", "result": { "workStage": "DEPOT_PICKUP" }
-    } },
-    { "after": 4, "view": "process", "id": "job:production-1-1", "expect": {
-      "status": "ok", "result": { "workStage": "PROCESSING" }
-    } },
-    { "after": 10, "view": "process", "id": "job:production-1-1", "expect": { "status": "not_found" } },
-    { "after": 11, "view": "resource", "id": "custody:container-1-depot", "expect": {
-      "status": "ok", "quantity": 64,
-      "lots": [{ "id": "lot:production-1-1-bread", "owner": "settlement:1",
-        "itemKind": "minecraft:bread", "quantity": 64 }], "claims": []
-    } },
-    { "after": 12, "view": "container", "id": "container:1-depot", "expect": {
-      "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" },
-      "custody": { "status": "ACQUIRED", "unresolvedReason": "" }
-    } }
+    {
+      "after": 1,
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "workStage": "DEPOT_PICKUP"
+        }
+      }
+    },
+    {
+      "after": 4,
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "workStage": "PROCESSING"
+        }
+      }
+    },
+    {
+      "after": 11,
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "not_found"
+      }
+    },
+    {
+      "after": 12,
+      "view": "resource",
+      "id": "custody:container-1-depot",
+      "expect": {
+        "status": "ok",
+        "quantity": 64,
+        "lots": [
+          {
+            "id": "lot:production-development-fungible-production-bread",
+            "owner": "settlement:1",
+            "itemKind": "minecraft:bread",
+            "quantity": 64
+          }
+        ],
+        "claims": []
+      }
+    },
+    {
+      "after": 13,
+      "view": "container",
+      "id": "container:1-depot",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      }
+    }
   ],
   "frames": [
-    { "after": 7, "name": "baker-operating-physical-station" }
+    {
+      "after": 8,
+      "name": "baker-operating-physical-station"
+    }
   ]
 }

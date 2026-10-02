@@ -16,8 +16,7 @@ final class ResourceSiteHarvestCellExclusion {
         if (!subject.equals(skipped.siteId()))
             throw new IllegalArgumentException("excluded field cell has a foreign site owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(skipped.jobId()).orElseThrow(
                         () -> new IllegalArgumentException("excluded field cell has no active farmer"));
         ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !job.id().equals(skipped.jobId())
@@ -47,9 +46,8 @@ final class ResourceSiteHarvestCellExclusion {
         ActorLocation actor = state.actorLocations().get(job.workerId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("excluded field skip has no retained worker body");
-        int nextSelected = worked.nextWorkSlotAfter(job.progress().nextCropSlotIndex()).orElse(-1);
-        ResourceSiteLifecycle advanced = lifecycle.skipSelectedHarvestCell(job, nextSelected, cycle.harvestedCount());
+        int nextSelected = lifecycle.nextHarvestTarget(job, worked);
+        ResourceSiteLifecycle advanced = lifecycle.skipSelectedHarvestCell(job, nextSelected, worked);
         return state.withResourceSites(state.resourceSites().replace(advanced, worked));
     }
 }
-

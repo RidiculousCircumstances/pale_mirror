@@ -258,6 +258,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (entry.getValue().equals(ZERO_INFECTION)) throw new IllegalArgumentException("sparse infection index must not retain zero cells");
             FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), entry.getKey().originAtY(0));
         }
+        ProductionFacilityReservations.validate(productionJobs);
         for (Map.Entry<SubjectId, ProductionJob> entry : productionJobs.entrySet()) {
             ProductionJob job = entry.getValue();
             if (!entry.getKey().equals(job.id())) throw new IllegalArgumentException("production job map key must match job identity");
@@ -267,7 +268,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (facility.kind() != StructureKind.WORKSHOP) throw new IllegalArgumentException("production job facility must be a workshop");
             ResidentProfile worker = humanPopulation.resident(job.workerId());
             if (worker == null) throw new IllegalArgumentException("production job worker must be a canonical resident");
-            if (!worker.settlementId().equals(settlement.id()) || worker.profession() != ResidentProfession.BAKER) throw new IllegalArgumentException("bread production job worker must be a settlement baker");
+            if (!worker.settlementId().equals(settlement.id())) throw new IllegalArgumentException("bread production job worker must belong to its retained settlement");
             if (job.bakeryWork().isPresent()) {
                 BakeryWorkValidation.validate(inventory, job, settlement);
                 continue;
@@ -629,10 +630,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public boolean harvestOutputReserves(InventoryCustody.ContainerSlot slot) {
         Objects.requireNonNull(slot, "container slot");
         return resourceSites.sites().values().stream()
-                .map(ResourceSiteLifecycle::activeWork)
-                .flatMap(java.util.Optional::stream)
-                .filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast)
+                .flatMap(site -> site.harvestJobs().values().stream())
                 .anyMatch(job -> job.outputSlot().equals(slot) || job.batchSuccessorSlot().filter(slot::equals).isPresent());
     }
     /** Derived from durable jobs: no parallel storage ledger can drift from its owner. */
@@ -650,8 +648,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     }
     private static void validateHarvestResourceAccounts(ExactInventory inventory, ResourceSiteState sites) {
         java.util.Set<SubjectId> declared = new java.util.HashSet<>();
-        for (ResourceSiteLifecycle lifecycle : sites.sites().values()) {
-            if (!(lifecycle.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job)) continue;
+        for (ResourceSiteHarvestJob job : sites.sites().values().stream()
+                .flatMap(site -> site.harvestJobs().values().stream()).toList()) {
             if (!declared.add(job.actorAccountId()))
                 throw new IllegalArgumentException("active harvest jobs share one declared actor resource account");
             CustodyAccount account = inventory.fungibleResources().accounts().get(job.actorAccountId());
@@ -688,7 +686,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             throw new IllegalArgumentException("only a materialized production input may remain in exact inventory");
         }
         if (productionJobs.containsKey(job.id())) throw new IllegalArgumentException("production job identity already exists: " + job.id().value());
-        if (productionJobs.values().stream().anyMatch(existing -> existing.facilityId().equals(job.facilityId()))) {
+        if (!ProductionFacilityReservations.available(productionJobs, job.facilityId())) {
             throw new IllegalArgumentException("facility already has an active production job: " + job.facilityId().value());
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.put(job.id(), job);

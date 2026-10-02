@@ -2,309 +2,252 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
-
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Mutable canonical facts for one fixed resource site, excluding Minecraft blocks and item custody. */
+/** Field readiness and independent exact executions; no preferred-worker compatibility view. */
 public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, long growthEpoch, int growthStage,
-                                    Optional<ResourceSiteWork> activeWork,
+                                    Optional<ResourceSitePreparationJob> preparationWork,
                                     Optional<ResourceSiteConflictDisposition> conflictDisposition,
-                                    Optional<ResourceSiteHarvestLineage> harvestLineage) {
+                                    Map<SubjectId, ResourceSiteHarvestJob> harvestJobs,
+                                    Map<PhysicalIntentId, ResourceSiteHarvestLineage> harvestLineages,
+                                    long harvestSequence) {
     public static final int MATURE_STAGE = 7;
+    public static final int MAX_HARVEST_WORKERS = 64;
 
     public ResourceSiteLifecycle {
-        Objects.requireNonNull(siteId, "resource-site lifecycle id"); Objects.requireNonNull(phase, "resource-site phase");
-        activeWork = Optional.ofNullable(activeWork).orElse(Optional.empty());
-        conflictDisposition = Optional.ofNullable(conflictDisposition).orElse(Optional.empty());
-        harvestLineage = Optional.ofNullable(harvestLineage).orElse(Optional.empty());
-        if (!siteId.value().startsWith("site:") || growthEpoch < 0L || growthStage < 0 || growthStage > MATURE_STAGE) {
-            throw new IllegalArgumentException("resource-site lifecycle value is invalid");
+        Objects.requireNonNull(siteId); Objects.requireNonNull(phase);
+        preparationWork = Objects.requireNonNull(preparationWork);
+        conflictDisposition = Objects.requireNonNull(conflictDisposition);
+        harvestJobs = Map.copyOf(harvestJobs); harvestLineages = Map.copyOf(harvestLineages);
+        if (growthEpoch < 0 || growthStage < 0 || growthStage > MATURE_STAGE || harvestSequence < 0
+                || harvestJobs.size() > MAX_HARVEST_WORKERS || harvestLineages.size() > MAX_HARVEST_WORKERS * 2)
+            throw new IllegalArgumentException("field lifecycle exceeds its declared bounds");
+        var workers = new java.util.HashSet<SubjectId>();
+        var intents = new java.util.HashSet<PhysicalIntentId>();
+        var accounts = new java.util.HashSet<SubjectId>();
+        var targets = new java.util.HashSet<Integer>();
+        for (var entry : harvestJobs.entrySet()) {
+            var job = entry.getValue();
+            if (!entry.getKey().equals(job.id()) || !siteId.equals(job.siteId()) || !workers.add(job.workerId())
+                    || !intents.add(job.intentId()) || !accounts.add(job.actorAccountId())
+                    || harvestLineages.containsKey(job.intentId()))
+                throw new IllegalArgumentException("field executions have foreign or duplicate owners");
+            if (!job.progress().complete() && !job.returningForBatch()
+                    && !targets.add(job.progress().selectedCropSlotIndex()))
+                throw new IllegalArgumentException("field cell has multiple reservation owners");
         }
-        harvestLineage.ifPresent(lineage -> {
-            if (lineage.completedGrowthEpoch() + 1L != growthEpoch) {
-                throw new IllegalArgumentException("resource-site harvest lineage must bind the immediately preceding growth epoch");
-            }
-        });
-        activeWork.ifPresent(work -> {
-            if (!siteId.equals(work.siteId())) throw new IllegalArgumentException("resource-site work must belong to its lifecycle site");
-        });
+        for (var entry : harvestLineages.entrySet())
+            if (!entry.getKey().equals(entry.getValue().predecessorIntentId()))
+                throw new IllegalArgumentException("field history has a foreign physical intent key");
+        if (preparationWork.isPresent() && (!siteId.equals(preparationWork.orElseThrow().siteId()) || !harvestJobs.isEmpty()))
+            throw new IllegalArgumentException("preparation and harvest cannot own the field concurrently");
         switch (phase) {
             case UNPREPARED -> {
-                if (conflictDisposition.isPresent() || harvestLineage.isPresent()) throw new IllegalArgumentException("unprepared resource site cannot retain terminal harvest state");
-                if (growthEpoch != 0L || growthStage != 0 || activeWork.filter(ResourceSitePreparationJob.class::isInstance).isEmpty() && activeWork.isPresent()) {
-                    throw new IllegalArgumentException("unprepared resource site may retain only its initial preparation work");
-                }
+                if (growthEpoch != 0 || growthStage != 0 || !harvestJobs.isEmpty() || !harvestLineages.isEmpty())
+                    throw new IllegalArgumentException("unprepared field retains renewable work");
             }
-            case GROWING -> {
-                if (conflictDisposition.isPresent()) throw new IllegalArgumentException("growing resource site cannot retain a conflict disposition");
-                if (growthEpoch == 0L || growthStage >= MATURE_STAGE || activeWork.isPresent()) throw new IllegalArgumentException("growing resource site state is invalid");
-            }
-            case READY -> {
-                if (conflictDisposition.isPresent()) throw new IllegalArgumentException("ready resource site cannot retain a conflict disposition");
-                if (growthEpoch == 0L || growthStage != MATURE_STAGE || activeWork.isPresent()) throw new IllegalArgumentException("ready resource site state is invalid");
+            case GROWING, READY -> {
+                if (growthEpoch == 0 || preparationWork.isPresent() || !harvestJobs.isEmpty()
+                        || (phase == ResourceSitePhase.READY) != (growthStage == MATURE_STAGE))
+                    throw new IllegalArgumentException("field readiness disagrees with plant or work ownership");
             }
             case HARVESTING -> {
-                if (conflictDisposition.isPresent()) throw new IllegalArgumentException("harvesting resource site cannot retain a conflict disposition");
-                if (growthEpoch == 0L || growthStage != MATURE_STAGE || activeWork.filter(ResourceSiteHarvestJob.class::isInstance).isEmpty()) {
-                    throw new IllegalArgumentException("harvesting resource site must retain one mature harvest job");
-                }
-                ResourceSiteHarvestJob activeHarvest = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).orElseThrow();
-                harvestLineage.ifPresent(lineage -> {
-                    if (lineage.successorJobId().isEmpty() || !lineage.successorJobId().orElseThrow().equals(activeHarvest.id())
-                            || !lineage.successorTaskId().orElseThrow().equals(activeHarvest.taskId()) || !lineage.workerId().equals(activeHarvest.workerId())) {
-                        throw new IllegalArgumentException("harvesting successor must retain its declared prior farmer");
-                    }
-                });
+                if (growthEpoch == 0 || preparationWork.isPresent() || harvestJobs.isEmpty())
+                    throw new IllegalArgumentException("harvesting field lacks independent executions");
             }
             case CONFLICT -> {
-                // A failed harvest retains its exact job only as causal evidence for its
-                // terminal unknown intent. It is never eligible for a new assignment.
-                if (activeWork.isPresent() && activeWork.filter(ResourceSiteHarvestJob.class::isInstance).isEmpty()) {
-                    throw new IllegalArgumentException("resource-site conflict may retain only its failed harvest identity");
-                }
-                if (conflictDisposition.isEmpty()) throw new IllegalArgumentException("resource-site conflict requires one typed disposition");
+                if (conflictDisposition.isEmpty() || preparationWork.isPresent())
+                    throw new IllegalArgumentException("field conflict lacks its disposition");
             }
             case DESTROYED -> {
-                if (conflictDisposition.isPresent()) throw new IllegalArgumentException("destroyed resource site cannot retain a conflict disposition");
-                if (activeWork.isPresent()) throw new IllegalArgumentException("destroyed resource-site condition cannot retain active work");
+                if (preparationWork.isPresent() || !harvestJobs.isEmpty())
+                    throw new IllegalArgumentException("destroyed field retains live work");
             }
         }
+        if (phase != ResourceSitePhase.CONFLICT && conflictDisposition.isPresent())
+            throw new IllegalArgumentException("non-conflicted field retains a disposition");
     }
 
-    public ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, long growthEpoch, int growthStage,
-                                 Optional<ResourceSiteWork> activeWork) {
-        this(siteId, phase, growthEpoch, growthStage, activeWork, Optional.empty(), Optional.empty());
+    /** Explicit initial/fixture construction, not a read projection or alternate executor. */
+    public ResourceSiteLifecycle(SubjectId site, ResourceSitePhase phase, long epoch, int stage,
+                                 Optional<ResourceSiteWork> work, Optional<ResourceSiteConflictDisposition> conflict,
+                                 Optional<ResourceSiteHarvestLineage> lineage) {
+        this(site, phase, epoch, stage, work.filter(ResourceSitePreparationJob.class::isInstance).map(ResourceSitePreparationJob.class::cast),
+                conflict, work.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                        .map(job -> Map.of(job.id(), job)).orElse(Map.of()),
+                lineage.map(value -> Map.of(value.predecessorIntentId(), value)).orElse(Map.of()), work.isPresent() ? 1 : 0);
     }
-
-    public ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, long growthEpoch, int growthStage,
-                                 Optional<ResourceSiteWork> activeWork, Optional<ResourceSiteConflictDisposition> conflictDisposition) {
-        this(siteId, phase, growthEpoch, growthStage, activeWork, conflictDisposition, Optional.empty());
+    public ResourceSiteLifecycle(SubjectId site, ResourceSitePhase phase, long epoch, int stage, Optional<ResourceSiteWork> work) {
+        this(site, phase, epoch, stage, work, Optional.empty(), Optional.empty());
     }
-
-    public static ResourceSiteLifecycle unprepared(SubjectId siteId) { return new ResourceSiteLifecycle(siteId, ResourceSitePhase.UNPREPARED, 0L, 0, Optional.empty(), Optional.empty(), Optional.empty()); }
+    public ResourceSiteLifecycle(SubjectId site, ResourceSitePhase phase, long epoch, int stage,
+                                 Optional<ResourceSiteWork> work, Optional<ResourceSiteConflictDisposition> conflict) {
+        this(site, phase, epoch, stage, work, conflict, Optional.empty());
+    }
+    public static ResourceSiteLifecycle unprepared(SubjectId site) {
+        return new ResourceSiteLifecycle(site, ResourceSitePhase.UNPREPARED, 0, 0, Optional.empty());
+    }
+    public Optional<ResourceSiteHarvestJob> harvestJob(SubjectId jobId) { return Optional.ofNullable(harvestJobs.get(jobId)); }
+    public Optional<ResourceSiteHarvestLineage> harvestLineage(PhysicalIntentId intent) { return Optional.ofNullable(harvestLineages.get(intent)); }
+    public boolean hasWork() { return preparationWork.isPresent() || !harvestJobs.isEmpty(); }
+    /** Derived reservation view; changing a target changes its sole persisted owner. */
+    public boolean targetAvailable(int slot, SubjectId execution) {
+        return harvestJobs.values().stream().noneMatch(job -> !job.id().equals(execution)
+                && !job.progress().complete() && !job.returningForBatch()
+                && job.progress().selectedCropSlotIndex() == slot);
+    }
     public ResourceSiteLifecycle preparing(ResourceSitePreparationJob job) {
-        if (phase != ResourceSitePhase.UNPREPARED || activeWork.isPresent()) throw new IllegalStateException("resource site is not available for preparation");
-        return next(phase, growthEpoch, growthStage, Optional.of(job));
+        if (phase != ResourceSitePhase.UNPREPARED || hasWork()) throw new IllegalStateException("field is not available for preparation");
+        return copy(phase, growthEpoch, growthStage, Optional.of(job), conflictDisposition, harvestJobs, harvestLineages, harvestSequence);
     }
     public ResourceSiteLifecycle prepared() {
-        if (phase != ResourceSitePhase.UNPREPARED || activeWork.filter(ResourceSitePreparationJob.class::isInstance).isEmpty()) throw new IllegalStateException("resource site has no active preparation");
-        return next(ResourceSitePhase.GROWING, 1L, 0, Optional.empty());
+        if (phase != ResourceSitePhase.UNPREPARED || preparationWork.isEmpty()) throw new IllegalStateException("field has no preparation");
+        return copy(ResourceSitePhase.GROWING, 1, 0, Optional.empty(), Optional.empty(), harvestJobs, harvestLineages, harvestSequence);
     }
     public ResourceSiteLifecycle advanceGrowth() {
-        if (phase != ResourceSitePhase.GROWING) throw new IllegalStateException("resource site is not growing");
-        int nextStage = Math.addExact(growthStage, 1);
-        return next(nextStage == MATURE_STAGE ? ResourceSitePhase.READY : ResourceSitePhase.GROWING, growthEpoch, nextStage, Optional.empty());
+        if (phase != ResourceSitePhase.GROWING) throw new IllegalStateException("field is not growing");
+        int stage = growthStage + 1;
+        return copy(stage == MATURE_STAGE ? ResourceSitePhase.READY : ResourceSitePhase.GROWING, growthEpoch, stage,
+                preparationWork, conflictDisposition, harvestJobs, harvestLineages, harvestSequence);
     }
-    /** Plant readiness may change without granting or retiring a farmer's work ownership. */
     public ResourceSiteLifecycle withPlantReadiness(ResourceFieldCycle plants) {
-        if (!siteId.equals(plants.siteId()) || growthEpoch != plants.epoch())
-            throw new IllegalArgumentException("plant readiness has a foreign site or epoch");
-        if (phase != ResourceSitePhase.GROWING && phase != ResourceSitePhase.READY) return this;
+        if (!siteId.equals(plants.siteId()) || growthEpoch != plants.epoch()) throw new IllegalArgumentException("foreign plant readiness");
+        if (phase == ResourceSitePhase.UNPREPARED || phase == ResourceSitePhase.CONFLICT || phase == ResourceSitePhase.DESTROYED) return this;
         int stage = plants.plantGrowthStage();
-        if (stage == growthStage) return this;
-        return next(stage == MATURE_STAGE ? ResourceSitePhase.READY : ResourceSitePhase.GROWING,
-                growthEpoch, stage, Optional.empty(), harvestLineage);
+        var nextPhase = harvestJobs.isEmpty() ? stage == MATURE_STAGE ? ResourceSitePhase.READY : ResourceSitePhase.GROWING : ResourceSitePhase.HARVESTING;
+        return copy(nextPhase, growthEpoch, stage, preparationWork, conflictDisposition, harvestJobs, harvestLineages, harvestSequence);
     }
     public ResourceSiteLifecycle harvesting(ResourceSiteHarvestJob job) {
-        if (phase != ResourceSitePhase.READY) throw new IllegalStateException("resource site is not ready for harvest");
-        Optional<ResourceSiteHarvestLineage> nextLineage = harvestLineage.map(lineage -> lineage.bindSuccessor(job));
-        return next(ResourceSitePhase.HARVESTING, growthEpoch, growthStage, Optional.of(job), nextLineage);
+        if (phase != ResourceSitePhase.READY && phase != ResourceSitePhase.HARVESTING || harvestJobs.containsKey(job.id()))
+            throw new IllegalStateException("field cannot admit this execution");
+        var jobs = new LinkedHashMap<>(harvestJobs); jobs.put(job.id(), job);
+        return copy(ResourceSitePhase.HARVESTING, growthEpoch, growthStage, preparationWork, Optional.empty(), jobs, harvestLineages,
+                Math.addExact(harvestSequence, 1));
     }
-    public ResourceSiteLifecycle advanceHarvest(ResourceSiteHarvestJob expected, int completedCropSlots,
-                                                ResourceSiteHarvestGoal goal, SurfaceAnchor observedStation) {
-        return advanceHarvest(expected, completedCropSlots, goal, observedStation,
-                completedCropSlots == expected.progress().totalCropSlots() ? -1 : completedCropSlots);
+    private ResourceSiteHarvestJob require(ResourceSiteHarvestJob expected) {
+        if (phase != ResourceSitePhase.HARVESTING || !expected.equals(harvestJobs.get(expected.id())))
+            throw new IllegalArgumentException("field transition has a stale exact execution");
+        return expected;
     }
-    public ResourceSiteLifecycle advanceHarvest(ResourceSiteHarvestJob expected, int completedCropSlots,
-                                                ResourceSiteHarvestGoal goal, SurfaceAnchor observedStation,
-                                                int nextSelectedCropSlotIndex) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected)
-                || !active.matchesWorkGoal(goal, observedStation)
-                || completedCropSlots != active.progress().completedCropSlots() + 1) {
-            throw new IllegalArgumentException("resource-site harvest progress is stale or invalid");
+    private ResourceSiteLifecycle replace(ResourceSiteHarvestJob job) {
+        var jobs = new LinkedHashMap<>(harvestJobs); jobs.put(job.id(), job);
+        return copy(phase, growthEpoch, growthStage, preparationWork, conflictDisposition, jobs, harvestLineages, harvestSequence);
+    }
+    public ResourceSiteLifecycle advanceHarvest(ResourceSiteHarvestJob expected, int count, ResourceSiteHarvestGoal goal,
+                                                 SurfaceAnchor station, int nextSlot, ResourceFieldCycle.WorkOutcome outcome,
+                                                 ResourceFieldCycle cycle) {
+        var job = require(expected);
+        if (!job.matchesWorkGoal(goal, station) || count != job.progress().completedCropSlots() + 1)
+            throw new IllegalArgumentException("invalid exact crop completion");
+        return replace(job.withConfirmedCrop(job.progress().confirmPreparedCrop(nextSlot), outcome).bindTarget(cycle));
+    }
+    public ResourceSiteLifecycle returnFullHarvestBatch(ResourceSiteHarvestJob job) { return replace(require(job).withFullBatchReturn()); }
+    public ResourceSiteLifecycle skipBlockedHarvestCell(ResourceSiteHarvestJob job, int count) { return replace(require(job).withBlockedCellsSkipped(count)); }
+    public ResourceSiteLifecycle withHarvestLabour(ResourceSiteHarvestJob job, WorkProgress work) { return replace(require(job).withWork(work)); }
+    public ResourceSiteLifecycle bindHarvestTarget(ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {
+        return replace(require(job).bindTarget(cycle));
+    }
+    /** Selection after one completed/excluded claim; sibling targets are never available work. */
+    public int nextHarvestTarget(ResourceSiteHarvestJob job, ResourceFieldCycle successor) {
+        require(job);
+        if (job.progress().completedCropSlots() + 1 >= job.progress().totalCropSlots()) return -1;
+        return successor.nextWorkSlotAfter(job.progress().nextCropSlotIndex(),
+                index -> targetAvailable(index, job.id())).orElse(-1);
+    }
+    public ResourceSiteLifecycle skipSelectedHarvestCell(ResourceSiteHarvestJob job, int next, ResourceFieldCycle cycle) {
+        return replace(require(job).withSelectedCellSkipped(next).bindTarget(cycle));
+    }
+    public ResourceSiteLifecycle retargetHarvestCell(ResourceSiteHarvestJob job, int next, ResourceFieldCycle cycle) {
+        return replace(require(job).retargetTo(next).bindTarget(cycle));
+    }
+    public ResourceSiteLifecycle deliverFullHarvestBatch(ResourceSiteHarvestJob job, InventoryCustody.ContainerSlot slot,
+                                                         Optional<ResourceSiteHarvestBatchDelivered> receipt, ResourceFieldCycle cycle,
+                                                         SurfaceAnchor worker) {
+        ResourceSiteHarvestJob delivered = require(job).afterFullBatchDelivery(slot, receipt);
+        int next = delivered.progress().completedCropSlots() == delivered.progress().totalCropSlots() ? -1
+                : cycle.nextWorkSlot(worker, index -> targetAvailable(index, job.id())).orElse(-1);
+        return replace(delivered.withProgress(delivered.progress().afterDeliverySelection(next)).bindTarget(cycle));
+    }
+    public ResourceSiteLifecycle deliverFullHarvestBatch(ResourceSiteHarvestJob job, InventoryCustody.ContainerSlot slot,
+                                                         ResourceFieldCycle cycle, SurfaceAnchor worker) {
+        return deliverFullHarvestBatch(job, slot, Optional.empty(), cycle, worker);
+    }
+    public ResourceSiteLifecycle reserveHarvestBatchSuccessor(ResourceSiteHarvestJob job, InventoryCustody.ContainerSlot slot) {
+        return replace(require(job).reserveBatchSuccessorSlot(slot));
+    }
+    public ResourceSiteLifecycle arriveHarvestGoal(ResourceSiteHarvestJob job, ResourceSiteHarvestGoal goal) { return replace(require(job).arriveAtSemanticGoal(goal)); }
+    public ResourceSiteLifecycle blockHarvestRoute(ResourceSiteHarvestJob job, ResourceSiteHarvestNavigationBlock block) { return replace(require(job).withNavigationBlock(block)); }
+    public ResourceSiteLifecycle clearHarvestRouteBlock(ResourceSiteHarvestJob job, ResourceSiteHarvestNavigationBlock block) { return replace(require(job).clearNavigationBlock(block)); }
+    public ResourceSiteLifecycle prepareHarvestCrop(ResourceSiteHarvestJob expected, int index, ResourceSiteHarvestGoal goal, SurfaceAnchor station) {
+        var job = require(expected);
+        if (!job.matchesWorkGoal(goal, station) || job.progress().nextCropSlotIndex() != index)
+            throw new IllegalArgumentException("crop preparation has a foreign target or station");
+        return replace(job.withProgress(job.progress().prepareNextCrop()));
+    }
+    public ResourceSiteLifecycle cancelPreparedHarvestCrop(ResourceFieldLayout.CellId cell, ResourceFieldCycle cycle) {
+        var job = harvestJobs.values().stream().filter(value -> value.progress().hasPendingCrop()
+                && cycle.layout().cells().get(value.progress().pendingCropSlotIndex()).id().equals(cell))
+                .reduce((left, right) -> { throw new IllegalArgumentException("cell has duplicate pending owners"); }).orElseThrow();
+        return replace(require(job).withProgress(job.progress().cancelPreparedCrop()));
+    }
+    public ResourceSiteLifecycle accountObservedLostHarvestCell(ResourceSiteHarvestJob job, int lost, int next, ResourceFieldCycle cycle) {
+        return replace(require(job).withObservedCellLoss(lost, next).bindTarget(cycle));
+    }
+    public ResourceSiteLifecycle harvestedAt(ResourceSiteHarvestGoal goal, BodyPosition body) {
+        return harvestedAt(goal, body, java.util.Set.of());
+    }
+    public ResourceSiteLifecycle harvestedAt(ResourceSiteHarvestGoal goal, BodyPosition body,
+                                              java.util.Set<PhysicalIntentId> reclaimable) {
+        var job = harvestJob(goal.jobId()).orElseThrow();
+        if (goal.kind() != ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE || !goal.workerId().equals(job.workerId())
+                || !goal.arrivedAt(body.supportingSurface())) throw new IllegalArgumentException("terminal field goal lacks actual arrival");
+        return harvestedDeferred(job, true, ResourceSiteHarvestCausality.notCaptured(job), body, reclaimable);
+    }
+    public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob job, boolean resolved, ResourceSiteHarvestCausality causality, BodyPosition body) {
+        return harvestedDeferred(job, resolved, causality, body, java.util.Set.of());
+    }
+    public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob job, boolean resolved, ResourceSiteHarvestCausality causality,
+                                                    BodyPosition body, java.util.Set<PhysicalIntentId> reclaimable) {
+        require(job);
+        if (!job.progress().complete()) throw new IllegalArgumentException("field execution is not complete");
+        var jobs = new LinkedHashMap<>(harvestJobs); jobs.remove(job.id());
+        var histories = new LinkedHashMap<>(harvestLineages);
+        for (PhysicalIntentId id : reclaimable) {
+            var history = histories.get(id);
+            if (history == null || !history.workerId().equals(job.workerId()) || !history.outputReceiptResolved())
+                throw new IllegalArgumentException("history retirement has no resolved exact predecessor");
+            histories.remove(id);
         }
-        return next(phase, growthEpoch, growthStage, Optional.of(active.withProgress(
-                active.progress().confirmPreparedCrop(nextSelectedCropSlotIndex))));
+        histories.put(job.intentId(), ResourceSiteHarvestLineage.completed(job, growthEpoch, resolved, causality, body));
+        var nextPhase = jobs.isEmpty() ? growthStage == MATURE_STAGE ? ResourceSitePhase.READY : ResourceSitePhase.GROWING : ResourceSitePhase.HARVESTING;
+        return copy(nextPhase, growthEpoch, growthStage, preparationWork, Optional.empty(), jobs, histories, harvestSequence);
     }
-    public ResourceSiteLifecycle returnFullHarvestBatch(ResourceSiteHarvestJob expected, int totalYield) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
-            throw new IllegalArgumentException("resource-site full-batch return has a stale job");
-        return next(phase, growthEpoch, growthStage, Optional.of(active.withFullBatchReturn(totalYield)));
+    public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intent) { return confirmDeferredHarvestReceipt(intent, null); }
+    public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intent, io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId observation) {
+        var lineage = harvestLineage(intent).filter(ResourceSiteHarvestLineage::receiptPending).orElseThrow();
+        var histories = new LinkedHashMap<>(harvestLineages); histories.put(intent, lineage.resolveReceipt(observation));
+        return copy(phase, growthEpoch, growthStage, preparationWork, conflictDisposition, harvestJobs, histories, harvestSequence);
     }
-    /** Obstruction accounts one work target; no physical action or worker movement occurs. */
-    public ResourceSiteLifecycle skipBlockedHarvestCell(ResourceSiteHarvestJob expected, int count, int totalYield) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
-                        () -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
-            throw new IllegalArgumentException("blocked field cell has a stale harvest job");
-        return next(phase, growthEpoch, growthStage,
-                Optional.of(active.withBlockedCellsSkipped(count, totalYield)));
-    }
-    public ResourceSiteLifecycle withHarvestLabour(ResourceSiteHarvestJob expected, WorkProgress work) {
-        if (phase != ResourceSitePhase.HARVESTING || !activeWork.equals(Optional.of(expected)))
-            throw new IllegalArgumentException("labour update has a stale field owner");
-        return next(phase, growthEpoch, growthStage, Optional.of(expected.withWork(work)));
-    }
-    public ResourceSiteLifecycle skipSelectedHarvestCell(ResourceSiteHarvestJob expected,
-                                                         int nextSelectedCropSlotIndex, int totalYield) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
-            throw new IllegalArgumentException("unavailable field target has a stale harvest owner");
-        return next(phase, growthEpoch, growthStage,
-                Optional.of(active.withSelectedCellSkipped(nextSelectedCropSlotIndex, totalYield)));
-    }
-    public ResourceSiteLifecycle retargetHarvestCell(ResourceSiteHarvestJob expected, int nextSelectedCropSlotIndex) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
-            throw new IllegalArgumentException("area work retarget has a stale harvest owner");
-        return next(phase, growthEpoch, growthStage, Optional.of(
-                active.retargetTo(nextSelectedCropSlotIndex)));
-    }
-    public ResourceSiteLifecycle deliverFullHarvestBatch(ResourceSiteHarvestJob expected,
-                                                         InventoryCustody.ContainerSlot nextSlot, int totalYield,
-                                                         Optional<ResourceSiteHarvestBatchDelivered> confirmedBatch) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
-            throw new IllegalArgumentException("resource-site batch delivery has a stale job");
-        return next(phase, growthEpoch, growthStage,
-                Optional.of(active.afterFullBatchDelivery(nextSlot, totalYield, confirmedBatch)));
-    }
-
-    public ResourceSiteLifecycle deliverFullHarvestBatch(ResourceSiteHarvestJob expected,
-                                                         InventoryCustody.ContainerSlot nextSlot, int totalYield) {
-        return deliverFullHarvestBatch(expected, nextSlot, totalYield, Optional.empty());
-    }
-    public ResourceSiteLifecycle reserveHarvestBatchSuccessor(ResourceSiteHarvestJob expected,
-                                                              InventoryCustody.ContainerSlot nextSlot, int totalYield) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
-            throw new IllegalArgumentException("resource-site batch reservation has a stale job");
-        return next(phase, growthEpoch, growthStage, Optional.of(active.reserveBatchSuccessorSlot(nextSlot, totalYield)));
-    }
-    public ResourceSiteLifecycle arriveHarvestGoal(ResourceSiteHarvestJob expected, ResourceSiteHarvestGoal goal) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
-                        () -> new IllegalStateException("resource site has no active harvest goal"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
-            throw new IllegalArgumentException("resource-site goal arrival has a stale job");
-        return next(phase, growthEpoch, growthStage, Optional.of(active.arriveAtSemanticGoal(goal)));
-    }
-    public ResourceSiteLifecycle blockHarvestRoute(ResourceSiteHarvestJob expected,
-                                                    ResourceSiteHarvestNavigationBlock block) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
-                        () -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
-            throw new IllegalArgumentException("farmer route block has a stale job");
-        return next(phase, growthEpoch, growthStage, Optional.of(active.withNavigationBlock(block)));
-    }
-    public ResourceSiteLifecycle clearHarvestRouteBlock(ResourceSiteHarvestJob expected,
-                                                         ResourceSiteHarvestNavigationBlock blocked) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
-                        () -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
-            throw new IllegalArgumentException("farmer route clearance has a stale job");
-        return next(phase, growthEpoch, growthStage, Optional.of(active.clearNavigationBlock(blocked)));
-    }
-    public ResourceSiteLifecycle prepareHarvestCrop(ResourceSiteHarvestJob expected, int cropSlotIndex,
-                                                     ResourceSiteHarvestGoal goal, SurfaceAnchor observedStation) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected)
-                || !active.matchesWorkGoal(goal, observedStation)
-                || cropSlotIndex != active.progress().nextCropSlotIndex()) {
-            throw new IllegalArgumentException("resource-site harvest crop preparation is stale or invalid");
-        }
-        return next(phase, growthEpoch, growthStage, Optional.of(active.withProgress(active.progress().prepareNextCrop())));
-    }
-
-    /** Retain the same farmer and work cell after a witnessed external cell change. */
-    public ResourceSiteLifecycle cancelPreparedHarvestCrop(ResourceFieldLayout.CellId cellId,
-                                                           ResourceFieldCycle cycle) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
-        if (phase != ResourceSitePhase.HARVESTING || !active.progress().hasPendingCrop()
-                || !cycle.layout().cells().get(active.progress().pendingCropSlotIndex()).id().equals(cellId))
-            throw new IllegalArgumentException("field interruption lacks the current prepared farmer cell");
-        return next(phase, growthEpoch, growthStage,
-                Optional.of(active.withProgress(active.progress().cancelPreparedCrop())));
-    }
-
-    /** A confirmed crop loss closes one CellId in the same transition as the field ledger. */
-    public ResourceSiteLifecycle accountObservedLostHarvestCell(ResourceSiteHarvestJob expected,
-                                                                int lostSlot, int nextSelectedCropSlotIndex,
-                                                                int totalYield) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
-            throw new IllegalArgumentException("observed crop loss has a stale harvest owner");
-        return next(phase, growthEpoch, growthStage, Optional.of(
-                active.withObservedCellLoss(lostSlot, nextSelectedCropSlotIndex, totalYield)));
-    }
-
-    /** Closes an observed HOT harvest at its actual declared depot service station. */
-    public ResourceSiteLifecycle harvestedAt(ResourceSiteHarvestGoal goal, BodyPosition terminalBody) {
-        ResourceSiteHarvestJob completed = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .filter(job -> job.progress().complete()).orElse(null);
-        if (phase != ResourceSitePhase.HARVESTING || completed == null || goal.kind() != ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
-                || !goal.jobId().equals(completed.id()) || !goal.workerId().equals(completed.workerId())
-                || !goal.arrivedAt(terminalBody.supportingSurface()))
-            throw new IllegalStateException("resource site has no fully observed returned harvest");
-        return next(ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(),
-                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, true,
-                        ResourceSiteHarvestCausality.notCaptured(completed), terminalBody)));
-    }
-    /** Closes COLD semantic work after atomically composing and fencing its exact physical request. */
-    /** Retains the actual returned body, including an alternate legal depot service station. */
-    public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob completed, boolean outputReceiptResolved,
-                                                   ResourceSiteHarvestCausality causality, BodyPosition terminalBody) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.id().equals(completed.id()) || !completed.progress().complete()
-                || !(active.equals(completed) || completed.progress().completedCropSlots() == active.progress().completedCropSlots() + 1)) {
-            throw new IllegalArgumentException("resource site has no exact next complete COLD harvest");
-        }
-        return new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(), Optional.empty(),
-                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, outputReceiptResolved, causality, terminalBody)));
-    }
-    public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intentId) {
-        return confirmDeferredHarvestReceipt(intentId, null);
-    }
-    public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intentId,
-                                                                io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId observationId) {
-        ResourceSiteHarvestLineage lineage = harvestLineage.filter(ResourceSiteHarvestLineage::receiptPending)
-                .filter(value -> value.predecessorIntentId().equals(intentId)).orElseThrow(
-                        () -> new IllegalArgumentException("resource-site deferred harvest receipt has no matching lineage"));
-        return next(phase, growthEpoch, growthStage, activeWork, Optional.of(lineage.resolveReceipt(observationId)));
-    }
-    public ResourceSiteLifecycle withHarvestTrace(RetainedDiagnosticTrace trace) {
-        ResourceSiteHarvestLineage lineage = harvestLineage.orElseThrow(() -> new IllegalArgumentException("resource-site trace has no lineage"));
-        if (!lineage.causality().trace().correlation().equals(trace.correlation())) throw new IllegalArgumentException("resource-site trace has foreign correlation");
-        return next(phase, growthEpoch, growthStage, activeWork, Optional.of(lineage.withTrace(trace)));
+    public ResourceSiteLifecycle withHarvestTrace(PhysicalIntentId intent, RetainedDiagnosticTrace trace) {
+        var lineage = harvestLineage(intent).orElseThrow();
+        if (!lineage.causality().trace().correlation().equals(trace.correlation()))
+            throw new IllegalArgumentException("field trace disagrees with its exact retained intent");
+        var histories = new LinkedHashMap<>(harvestLineages); histories.put(lineage.predecessorIntentId(), lineage.withTrace(trace));
+        return copy(phase, growthEpoch, growthStage, preparationWork, conflictDisposition, harvestJobs, histories, harvestSequence);
     }
     public ResourceSiteLifecycle conflicted(ResourceSiteConflictDisposition disposition) {
-        if (phase == ResourceSitePhase.DESTROYED) throw new IllegalStateException("destroyed resource site cannot become a conflict");
-        Optional<ResourceSiteWork> retainedHarvest = activeWork.filter(ResourceSiteHarvestJob.class::isInstance);
-        return new ResourceSiteLifecycle(siteId, ResourceSitePhase.CONFLICT, growthEpoch, growthStage, retainedHarvest, Optional.of(disposition), harvestLineage);
+        if (phase == ResourceSitePhase.DESTROYED) throw new IllegalStateException("destroyed field cannot conflict");
+        return copy(ResourceSitePhase.CONFLICT, growthEpoch, growthStage, Optional.empty(), Optional.of(disposition), harvestJobs, harvestLineages, harvestSequence);
     }
-    public ResourceSiteLifecycle destroyed() { return next(ResourceSitePhase.DESTROYED, growthEpoch, growthStage, Optional.empty()); }
-
-    private ResourceSiteLifecycle next(ResourceSitePhase nextPhase, long nextEpoch, int nextStage, Optional<ResourceSiteWork> nextWork) {
-        return next(nextPhase, nextEpoch, nextStage, nextWork, harvestLineage);
+    public ResourceSiteLifecycle destroyed() {
+        return copy(ResourceSitePhase.DESTROYED, growthEpoch, growthStage, Optional.empty(), Optional.empty(), Map.of(), harvestLineages, harvestSequence);
     }
-    private ResourceSiteLifecycle next(ResourceSitePhase nextPhase, long nextEpoch, int nextStage, Optional<ResourceSiteWork> nextWork,
-                                       Optional<ResourceSiteHarvestLineage> nextLineage) {
-        return new ResourceSiteLifecycle(siteId, nextPhase, nextEpoch, nextStage, nextWork, Optional.empty(), nextLineage);
+    private ResourceSiteLifecycle copy(ResourceSitePhase next, long epoch, int stage, Optional<ResourceSitePreparationJob> preparation,
+                                        Optional<ResourceSiteConflictDisposition> conflict, Map<SubjectId, ResourceSiteHarvestJob> jobs,
+                                        Map<PhysicalIntentId, ResourceSiteHarvestLineage> histories, long sequence) {
+        return new ResourceSiteLifecycle(siteId, next, epoch, stage, preparation, conflict, jobs, histories, sequence);
     }
 }

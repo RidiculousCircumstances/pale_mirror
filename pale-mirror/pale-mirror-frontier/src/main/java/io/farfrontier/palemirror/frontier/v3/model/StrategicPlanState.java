@@ -230,6 +230,12 @@ public final class StrategicPlanState {
     public HiveSettlementKnowledge hiveSettlementKnowledge() { return hiveSettlementKnowledge; }
     public HiveDoctrineState hiveDoctrine() { return hiveDoctrine; }
     public DecisionAuthorityState decisionAuthorities() { return decisionAuthorities; }
+    public StrategicPlanState withWorkPermissions(SubjectId owner, ResidentWorkPermissions permissions) {
+        var authority = requireDecisionAuthority(owner).withWorkPermissions(permissions);
+        return new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge,
+                hiveOperationKnowledge, hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine,
+                settlementAssaults, decisionAuthorities.replace(authority), frontEffects);
+    }
     public OperationFrontEffectCoordinator frontEffects() { return frontEffects; }
 
     public DecisionAuthority requireDecisionAuthority(SubjectId ownerId) {
@@ -291,6 +297,11 @@ public final class StrategicPlanState {
             }
             decisionAuthorities.authorities().forEach((owner, authority) -> {
                 DecisionAuthority expectedAuthority = expected.require(owner);
+                authority.workPermissions().workers().values().forEach(workers -> workers.forEach(id -> {
+                    ResidentProfile resident = humanPopulation.resident(id);
+                    if (resident == null || !resident.settlementId().equals(owner))
+                        throw new IllegalArgumentException("work permission must reference an exact local resident");
+                }));
                 if (authority.kind() != expectedAuthority.kind() || !authority.policy().equals(expectedAuthority.policy())) {
                     throw new IllegalArgumentException("decision authority policy is not registered for its owner");
                 }

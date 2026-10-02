@@ -76,6 +76,11 @@ public record ProductionJob(
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, next, outputItemId, outputItemKind, outputCount,
                 workProgress, workTraversal, traversalCursor, bakeryWork);
     }
+
+    /** Family-owned reservation view; cargo/return ownership can survive releasing the machine. */
+    public boolean reservesFacility() {
+        return bakeryWork.map(BakeryWorkState::reservesStation).orElse(true);
+    }
     /** Replaces only an unconsumed bakery input allocation; the job, worker and output identity remain stable. */
     public ProductionJob reallocateBakeryInput(ProductionInputHold next) {
         if (bakeryWork.isEmpty() || bakeryWork.orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_PICKUP

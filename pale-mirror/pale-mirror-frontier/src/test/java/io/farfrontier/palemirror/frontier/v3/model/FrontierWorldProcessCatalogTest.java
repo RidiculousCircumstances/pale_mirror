@@ -56,7 +56,7 @@ class FrontierWorldProcessCatalogTest {
                 new WorldId("frontier:worker-meal-fixture"), 125L);
         var state = fixture.initialState();
         var job = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
-                .activeWork().orElseThrow();
+                .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         assertEquals(new SubjectId("job:site-harvest-1-wheat-field-1"), job.id());
         assertEquals(64, job.progress().completedCropSlots());
         assertEquals(64, job.deliveredYieldQuantity());
@@ -83,9 +83,9 @@ class FrontierWorldProcessCatalogTest {
                 engine.status().kind());
         var advanced = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
                 .decode(engine.checkpoint().canonicalState());
-        assertEquals(job.id(), advanced.resourceSites().site(job.siteId()).activeWork().orElseThrow().id());
+        assertEquals(job.id(), advanced.resourceSites().site(job.siteId()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow().id());
         assertEquals(64, ((ResourceSiteHarvestJob) advanced.resourceSites().site(job.siteId())
-                .activeWork().orElseThrow()).progress().completedCropSlots());
+                .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow()).progress().completedCropSlots());
     }
 
 

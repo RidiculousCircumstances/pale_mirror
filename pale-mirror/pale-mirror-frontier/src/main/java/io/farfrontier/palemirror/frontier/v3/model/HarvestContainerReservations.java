@@ -11,8 +11,8 @@ final class HarvestContainerReservations {
 
     static Set<Integer> slots(ResourceSiteState sites, SubjectId containerId) {
         Set<Integer> reserved = new HashSet<>();
-        for (ResourceSiteLifecycle lifecycle : sites.sites().values()) {
-            if (!(lifecycle.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job)) continue;
+        for (ResourceSiteHarvestJob job : sites.sites().values().stream()
+                .flatMap(site -> site.harvestJobs().values().stream()).toList()) {
             if (job.outputSlot().containerId().equals(containerId)) reserved.add(job.outputSlot().slot());
             job.batchSuccessorSlot().filter(slot -> slot.containerId().equals(containerId))
                     .ifPresent(slot -> reserved.add(slot.slot()));
@@ -22,8 +22,8 @@ final class HarvestContainerReservations {
 
     static void validate(ExactInventory inventory, ResourceSiteState sites) {
         Set<InventoryCustody.ContainerSlot> reserved = new HashSet<>();
-        for (ResourceSiteLifecycle lifecycle : sites.sites().values()) {
-            if (!(lifecycle.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job)) continue;
+        for (ResourceSiteHarvestJob job : sites.sites().values().stream()
+                .flatMap(site -> site.harvestJobs().values().stream()).toList()) {
             if (!reserved.add(job.outputSlot()) || job.batchSuccessorSlot().isPresent()
                     && !reserved.add(job.batchSuccessorSlot().orElseThrow()))
                 throw new IllegalArgumentException("active harvest output slot lacks exclusive container capacity");

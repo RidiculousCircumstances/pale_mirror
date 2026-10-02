@@ -10,6 +10,21 @@ import java.util.Optional;
 final class FrontierV3TraversalScheduleGate {
     private FrontierV3TraversalScheduleGate() { }
 
+    static Optional<ScheduledAction> binding(FrontierScheduleView checkpoint,
+            io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job) {
+        try {
+            var action = FrontierV3ContinuationBinding.require(checkpoint,
+                    ResourceSiteHarvestProcess.coldProgress(job, 0L).id(), job.siteId(),
+                    ResourceSiteHarvestProcess.COLD_PROGRESS_KIND);
+            ResourceSiteHarvestProcess.requireContinuationBinding(job, action);
+            return Optional.of(action);
+        } catch (IllegalArgumentException rejected) { return Optional.empty(); }
+    }
+    static Optional<ScheduledAction> dueBinding(FrontierScheduleView checkpoint,
+            io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job) {
+        return binding(checkpoint, job).filter(action -> checkpoint.instant().compareTo(action.dueAt()) >= 0);
+    }
+
     /**
      * A physically observed traversal checkpoint is admissible whenever the job still has its
      * one exact continuation.  It records the real HOT pose/cursor but does not consume or

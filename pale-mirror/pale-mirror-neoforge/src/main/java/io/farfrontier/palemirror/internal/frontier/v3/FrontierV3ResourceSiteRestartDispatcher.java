@@ -76,88 +76,15 @@ final class FrontierV3ResourceSiteRestartDispatcher {
                 if (pending.isEmpty()) { RECOVERY_SITES.remove(runtime); RECOVERY_TURNS.remove(runtime); }
                 return;
             }
-            ResourceSiteLifecycle lifecycle = state.resourceSites().site(siteId);
-            PhysicalIntent intent = state.physicalIntents().values().stream().filter(candidate -> candidate.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION
-                    && candidate.status() == PhysicalIntentStatus.CONFIRMED && candidate.causeSubjectId().equals(siteId)).findFirst().orElse(null);
-            RestartReconciliation result;
-            ResourceSiteHarvestJob harvest = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                    .map(ResourceSiteHarvestJob.class::cast).orElse(null);
-            if (harvest != null && harvest.progress().completedCropSlots() > 0) {
-                FrontierV3ResourceSiteLedger.Claim claim = FrontierV3ResourceSiteLedger.get(level).claim(site.id());
-                Optional<ResourceSiteHarvestJob> unmaterialized = exactUnmaterializedColdHarvest(level, state, site,
-                        ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
-                if (claim != null && claim.projection() != null) {
-                    result = boundedRestartProjection(level, runtime, state, site,
-                            ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
-                } else if (isExactSuccessorRegrowth(level, state, site, ResourceSiteLifecycle.MATURE_STAGE,
-                        harvest.progress().completedCropSlots(), claim)
-                        || isExactTerminalPredecessor(level, state, site, ResourceSiteLifecycle.MATURE_STAGE,
-                                harvest.progress().completedCropSlots(), claim)
-                        || isExactInterruptedStageZeroProjection(level, state, site, ResourceSiteLifecycle.MATURE_STAGE,
-                                harvest.progress().completedCropSlots(), claim)
-                        || isExactUncommittedCurrentHarvest(level, state, site, ResourceSiteLifecycle.MATURE_STAGE,
-                                harvest.progress().completedCropSlots(), claim)
-                        || unmaterialized.isPresent()) {
-                    result = boundedRestartProjection(level, runtime, state, site,
-                            ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
-                } else if (projectionInFlight(runtime, site.id())) {
-                    result = boundedRestartProjection(level, runtime, state, site,
-                            ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
-                } else {
-                    HarvestRestartClassification classification = classifyHarvestRestart(level, FrontierV3ResourceSiteLedger.get(level), site, intent,
-                            harvest.progress().completedCropSlots());
-                    result = switch (classification.state()) {
-                        case UNOBSERVED -> RestartReconciliation.DEFERRED;
-                        case OWNED_EXACT -> RestartReconciliation.CURRENT;
-                        case OWNED_BEHIND -> boundedRestartProjection(level, runtime, state, site,
-                                ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
-                        case NEUTRAL_UNCLAIMED -> intent == null ? RestartReconciliation.CONFLICT
-                                : boundedRestartProjection(level, runtime, state, site,
-                                        ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
-                        case FOREIGN_OR_DAMAGED, UNKNOWN -> RestartReconciliation.CONFLICT;
-                    };
-                }
-            } else if (harvest != null && isExactSuccessorRegrowth(level, state, site, lifecycle.growthStage(), 0,
-                    FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
-                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
-            } else if (isExactDeferredHarvestReceipt(level, state, site, lifecycle.growthStage(), 0,
-                    FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
-                result = RestartReconciliation.DEFERRED;
-            } else if (isExactConfirmedHarvestRegrowth(level, state, site, lifecycle.growthStage(), 0,
-                    FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
-                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
-            } else if (isExactComposedTerminalRegrowth(lifecycle, lifecycle.growthStage(), 0,
-                    FrontierV3ResourceSiteLedger.get(level).claim(site.id())
-                    , FrontierV3ResourceSiteLedger.get(level).claim(site.id()) != null
-                    && matchesClaim(level, site, FrontierV3ResourceSiteLedger.get(level).claim(site.id())))) {
-                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
-            } else if (allowsOwnedStageCatchUp(FrontierV3ResourceSiteLedger.get(level).claim(site.id()),
-                    lifecycle.growthStage(), 0)
-                    && matchesClaim(level, site, FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
-                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
-            } else if (admitsMissingComposedTerminalRehydration(FrontierV3ResourceSiteLedger.get(level).claim(site.id()),
-                    lifecycle, lifecycle.growthStage(), 0,
-                    matches(level, site, lifecycle.growthStage())
-                            || (lifecycle.growthStage() < ResourceSiteLifecycle.MATURE_STAGE
-                            && matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS))
-                            || exactComposedGrowthPredecessorStage(level, site, lifecycle.growthStage()) >= 0,
-                    lifecycle.harvestLineage().map(lineage -> lineage.composedIntoCanonicalSuccessor(state)).orElse(false))) {
-                // This re-enters projectLifecycleBounded, which persists the exact terminal
-                // predecessor claim before writing its successor through the normal eight-cell
-                // bounded cursor.  A retained preparation intent is not competing ownership.
-                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
-            } else if (intent == null) {
-                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
-            } else result = reconcileAfterRestart(level, FrontierV3ResourceSiteLedger.get(level), site, intent.id(), lifecycle.growthStage());
-            if (result != RestartReconciliation.DEFERRED) pending.remove(siteId);
-            if (result == RestartReconciliation.CONFLICT) {
-                FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
-                FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
-                FrontierV3ResourceSiteConflictExecutor.recordLifecycleConflict(level, runtime, ledger, site,
-                        firstMismatch(level, site, lifecycle.growthStage()).orElse(site.cropSlots().getFirst()),
-                        io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.RESTART_OBSERVATION_MISMATCH, LifecycleConflictOrigin.RESTART_RECONCILIATION,
-                        "NOT_EVALUATED", claimPhysicalState(level, ledger, site, claim));
-            }
+            // Unsupported whole-field ownership or a missing non-neutral witness is
+            // ambiguous. Never guess a worker from a harvest count or overwrite blocks.
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            FrontierV3ResourceSiteConflictExecutor.recordLifecycleConflict(level, runtime, ledger, site,
+                    site.cropSlots().getFirst(),
+                    io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.RESTART_OBSERVATION_MISMATCH,
+                    LifecycleConflictOrigin.RESTART_RECONCILIATION,
+                    "RETIRED_STAGE_PREFIX_OWNER", claimPhysicalState(level, ledger, site, ledger.claim(siteId)));
+            pending.remove(siteId);
             if (pending.isEmpty()) { RECOVERY_SITES.remove(runtime); RECOVERY_TURNS.remove(runtime); }
             return;
         }
@@ -166,11 +93,5 @@ final class FrontierV3ResourceSiteRestartDispatcher {
     static Optional<SubjectId> nextRecoverySite(Set<SubjectId> pending, FrontierV3FairTurn<SubjectId> turns,
                                                java.util.function.Predicate<SubjectId> eligible) {
         return turns.next(pending.stream().filter(eligible).toList(), java.util.function.Function.identity());
-    }
-    private static RestartReconciliation boundedRestartProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                                   FrontierWorldState state, ResourceSite site, int desiredStage, int completedCropSlots) {
-        StageProjectionResult projection = projectLifecycleBounded(level, runtime, state, site, desiredStage, completedCropSlots);
-        return projection == StageProjectionResult.CONFLICT ? RestartReconciliation.CONFLICT
-                : projection == StageProjectionResult.DEFERRED ? RestartReconciliation.DEFERRED : RestartReconciliation.CURRENT;
     }
 }

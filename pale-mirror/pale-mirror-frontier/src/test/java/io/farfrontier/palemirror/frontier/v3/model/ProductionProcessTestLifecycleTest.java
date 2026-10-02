@@ -54,8 +54,12 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
             var due = engine.checkpoint().schedules().stream().filter(action -> jobs.contains(action.subject())
                             && action.kind().equals("frontier.settlement.production.task.complete"))
                     .map(ScheduledAction::dueAt).min(java.util.Comparator.naturalOrder()).orElseThrow();
-            assertTrue(due.compareTo(engine.checkpoint().instant()) > 0, "COLD work must retain a future continuation");
-            engine.advanceTo(due, new WorkBudget(256, 1_024));
+            // Bounded execution may retain due work after advancing the clock. Drain it at
+            // the current instant instead of requiring every retained action to be future.
+            var target = due.compareTo(engine.checkpoint().instant()) > 0 ? due : engine.checkpoint().instant();
+            var result = engine.advanceTo(target, new WorkBudget(256, 1_024));
+            assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE,
+                    result.status().kind(), result.status().failureDetail().orElse(""));
             state = codec.decode(engine.checkpoint().canonicalState());
         }
         assertTrue(state.productionJobs().isEmpty(), "retained route and labor budget must reach terminal production");
@@ -264,7 +268,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
     }
 
     @Test
-    void terminalFungibleBreadAndFieldLineageRetainTheirExactWorkersWithoutReselection() {
+    void terminalFungibleBreadAndIndependentFieldAdmissionKeepTheirExactOwners() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production-harvest-relation"), 91L));
         for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         finishRetainedColdWork(engine);
@@ -293,13 +297,13 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 && edge.target().equals(outputLot)));
         assertTrue(view.edges().stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_WORKER
                 && edge.target().equals(farmer)));
-        assertTrue(view.edges().stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_TASK
-                && edge.target().equals(successorTask)));
-        assertTrue(view.edges().stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_JOB
-                && edge.target().equals(successorJob)));
+        assertFalse(view.edges().stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_TASK
+                || edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_JOB),
+                "a fresh field opportunity must not invent a predecessor or pin the preceding worker");
         assertFalse(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_WORKER
                 && edge.target().equals(farmer)), "without a ration allocation, unrelated bread and field work must not be falsely linked");
-        assertEquals(harvest.farmerId(), harvest.successor().workerId(), "the successor retains the completed agricultural worker");
+        assertEquals(harvest.successor().workerId(), harvest.state().resourceSites()
+                .site(harvest.successor().siteId()).harvestJobs().get(harvest.successor().id()).workerId());
         assertFalse(view.edges().stream().filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_JOB)
                 .anyMatch(edge -> !edge.target().equals(successorJob)), "another same-kind harvest job cannot become this lineage successor");
         assertFalse(view.edges().stream().filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_TASK)

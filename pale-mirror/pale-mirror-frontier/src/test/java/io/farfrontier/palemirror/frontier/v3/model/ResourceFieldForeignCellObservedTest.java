@@ -51,8 +51,9 @@ class ResourceFieldForeignCellObservedTest {
             state = ResourceSiteHarvestProcess.reduceHotGoalArrived(state, SITE,
                     new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(),
                             goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+        state = ResourceSiteHarvestProcessTest.completeLabourHot(state, SITE, hot.lease().id());
         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, SITE,
-                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
+                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));
         ResourceFieldCycle cycle = state.resourceSites().cycle(SITE);
         ResourceFieldLayout.CellId cell = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
         var before = cycle.cell(cell);
@@ -63,18 +64,18 @@ class ResourceFieldForeignCellObservedTest {
                 ResourceFieldCycle.Crop.OBSTRUCTED, 0, false, false);
         FrontierWorldState changed = ResourceSiteProcess.reduceForeignCellObserved(waiting, SITE,
                 new ResourceFieldForeignCellObserved(held, obstructed, "minecraft:farmland", "minecraft:stone"));
-        ResourceSiteHarvestJob retained = (ResourceSiteHarvestJob) changed.resourceSites().site(SITE).activeWork().orElseThrow();
+        ResourceSiteHarvestJob retained = (ResourceSiteHarvestJob) changed.resourceSites().site(SITE).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         assertEquals(job.id(), retained.id());
         assertEquals(job.workerId(), retained.workerId());
         assertFalse(retained.progress().hasPendingCrop());
         assertEquals(job.progress().completedCropSlots() + 1, retained.progress().completedCropSlots());
-        assertTrue(changed.resourceSites().cycle(SITE).cell(cell).accounted());
+        assertFalse(changed.resourceSites().cycle(SITE).cell(cell).accounted());
         assertFalse(changed.resourceSites().cycle(SITE).cell(cell).yielded());
-        FrontierWorldState applied = changed;
-        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceForeignChangeAcknowledged(
-                applied, SITE, new ResourceFieldForeignChangeAcknowledged(held, obstructed)));
         changed = ResourceSiteProcess.reduceForeignChangeAcknowledged(changed, SITE,
                 new ResourceFieldForeignChangeAcknowledged(held, changed.resourceSites().cycle(SITE).cell(cell)));
+        FrontierWorldState acknowledged = changed;
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceForeignChangeAcknowledged(
+                acknowledged, SITE, new ResourceFieldForeignChangeAcknowledged(held, obstructed)));
         assertEquals(changed, snapshot(changed));
     }
 

@@ -149,7 +149,13 @@ final class FrontierDevelopmentScenarios {
      */
     static MultiFrontPressureFixture multiFrontPressureFixture(WorldId worldId, long seed) {
         SettlementAssaultFixture assault = settlementAssaultFixture(worldId, seed);
-        FrontierResourceSiteHarvestFixture.Fixture harvest = FrontierResourceSiteHarvestFixture.create(assault.state());
+        SubjectId settlement = new SubjectId("settlement:1");
+        // This boundary fixture requires a disjoint worker, not the bootstrap farmers
+        // already serving as defenders. Declare the fixture roster before admission.
+        ResidentProfile participant = SettlementWorkforce.candidates(assault.state(), settlement,
+                ResidentProfession.AGRICULTURAL_WORKER).getFirst();
+        FrontierWorldState ingress = HarvestFixtureOwners.withSingleParticipant(assault.state(), settlement, participant.id());
+        FrontierResourceSiteHarvestFixture.Fixture harvest = FrontierResourceSiteHarvestFixture.create(ingress);
         SettlementAssault retained = harvest.state().strategicPlans().settlementAssaults().get(assault.assaultId());
         if (retained == null || retained.status() != SettlementAssaultStatus.COLD_COMBAT
                 || harvest.state().coldSettlementAssaultSceneCandidates().size() != 1) {

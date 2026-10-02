@@ -17,9 +17,10 @@ public final class ResourceSiteHarvestRetargeting {
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         return cycle.reachableWorkSlotAfter(job.progress().nextCropSlotIndex(), index -> {
-            ResourceSiteHarvestJob candidate = job.retargetTo(index);
+            if (!lifecycle.targetAvailable(index, job.id())) return false;
+            ResourceSiteHarvestJob candidate = job.retargetTo(index).bindTarget(cycle);
             FrontierWorldState projected = state.withResourceSites(state.resourceSites().replace(
-                    lifecycle.retargetHarvestCell(job, index)));
+                    lifecycle.retargetHarvestCell(job, index, cycle)));
             try {
                 ResourceSiteHarvestKnownNavigation.path(projected, candidate);
                 return true;
@@ -34,8 +35,7 @@ public final class ResourceSiteHarvestRetargeting {
         if (!subject.equals(retargeted.siteId()))
             throw new IllegalArgumentException("area work retarget has a foreign site owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(retargeted.jobId()).orElseThrow();
         ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !job.id().equals(retargeted.jobId())
                 || !job.workerId().equals(retargeted.workerId()) || job.progress().complete()
@@ -48,7 +48,7 @@ public final class ResourceSiteHarvestRetargeting {
             throw new IllegalArgumentException("area work retarget has a stale or unresolved work boundary");
         ResourceFieldLayout.CellId target = cycle.layout().cells().get(retargeted.toSlot()).id();
         ResourceFieldCycle.CellState condition = cycle.cell(target);
-        if (condition.accounted() || condition.workAccessBlocked()
+        if (!lifecycle.targetAvailable(retargeted.toSlot(), job.id()) || condition.accounted() || condition.workAccessBlocked()
                 || condition.crop() == ResourceFieldCycle.Crop.OBSTRUCTED
                 || cycle.pendingPlayerBreaks().containsKey(target))
             throw new IllegalArgumentException("area work retarget has no eligible alternate cell");
@@ -69,6 +69,6 @@ public final class ResourceSiteHarvestRetargeting {
                 throw new IllegalArgumentException("COLD area work retarget lacks an exact known alternative");
         }
         return state.withResourceSites(state.resourceSites().replace(
-                lifecycle.retargetHarvestCell(job, retargeted.toSlot())));
+                lifecycle.retargetHarvestCell(job, retargeted.toSlot(), cycle)));
     }
 }

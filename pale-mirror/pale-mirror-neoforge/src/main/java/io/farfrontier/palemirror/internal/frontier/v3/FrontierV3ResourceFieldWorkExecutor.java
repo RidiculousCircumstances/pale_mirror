@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestCargo;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgressed;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import net.minecraft.core.BlockPos;
@@ -77,7 +78,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
             } else if (retained.pending().isPresent()
                     || observed.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
                 return observeInterruption(level, runtime, job, id, observed, "unprepared-cell-");
-            return handResult(level, state, lease, job, outcome, job.carriedYieldQuantity(cycle.harvestedCount()));
+            return handResult(level, state, lease, job, outcome, ResourceSiteHarvestCargo.quantity(state, job));
         }
         if (retained.pending().isEmpty()) {
             var before = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
@@ -87,7 +88,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
             if (outcome == ResourceFieldCycle.WorkOutcome.HARVESTED) {
                 var handBefore = FrontierV3ActorHandObservation.observe(level, state, lease, job);
                 var effect = new FrontierV3ResourceFieldWitness.HandEffect(job.siteId(), job.id(), job.workerId(),
-                        lease.members().getFirst().entityId(), lease.revision(), job.carriedYieldQuantity(cycle.harvestedCount()));
+                        lease.members().getFirst().entityId(), lease.revision(), ResourceSiteHarvestCargo.quantity(state, job));
                 if (!handBefore.matchesBefore(effect))
                     return Result.conflict("hand-before-" + handBefore.disposition().name().toLowerCase(java.util.Locale.ROOT));
                 witness = witness.beginHarvest(transition.orElseThrow(), cause(job, cycle, id), effect, before, handBefore);
@@ -152,7 +153,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 return Result.conflict("confirmed-hand-" + hand.disposition().name().toLowerCase(java.util.Locale.ROOT));
             return handResult(level, state, lease, job, outcome, effect.afterCount());
         }
-        return handResult(level, state, lease, job, outcome, job.carriedYieldQuantity(cycle.harvestedCount()));
+        return handResult(level, state, lease, job, outcome, ResourceSiteHarvestCargo.quantity(state, job));
     }
 
     /** The preceding physical cause remains retained until its canonical cell is durably accepted. */

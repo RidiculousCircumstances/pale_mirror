@@ -26,6 +26,7 @@ final class ResourceFieldCycleStateCodec {
         output.writeInt(layout.cells().size());
         for (ResourceFieldLayout.Cell cell : layout.cells()) {
             output.writeLong(cell.id().value());
+            output.writeLong(cycle.generation(cell.id()));
             writePosition(output, cell.crop()); writePosition(output, cell.soil().support());
             writePosition(output, cell.workstation().support());
             ResourceFieldCycle.CellState state = cycle.cell(cell.id());
@@ -54,9 +55,13 @@ final class ResourceFieldCycleStateCodec {
             throw new IllegalArgumentException("field snapshot cell count exceeds its bound");
         List<ResourceFieldLayout.Cell> cells = new ArrayList<>(count);
         Map<ResourceFieldLayout.CellId, ResourceFieldCycle.CellState> states = new LinkedHashMap<>();
+        Map<ResourceFieldLayout.CellId, Long> generations = new LinkedHashMap<>();
         Map<ResourceFieldLayout.CellId, ResourceFieldCycle.PendingPlayerBreak> pending = new LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
             ResourceFieldLayout.CellId id = new ResourceFieldLayout.CellId(input.readLong());
+            long generation = input.readLong();
+            if (generation < 0 || generations.put(id, generation) != null)
+                throw new IllegalArgumentException("invalid or duplicate field generation");
             ResourceFieldLayout.Cell cell = new ResourceFieldLayout.Cell(id, readPosition(input),
                     new SurfaceAnchor(readPosition(input)), new SurfaceAnchor(readPosition(input)));
             ResourceFieldCycle.CellState state = new ResourceFieldCycle.CellState(
@@ -78,7 +83,7 @@ final class ResourceFieldCycleStateCodec {
         List<BlockPosition> irrigation = new ArrayList<>(waterCount);
         for (int index = 0; index < waterCount; index++) irrigation.add(readPosition(input));
         return ResourceFieldCycle.restore(siteId, new ResourceFieldLayout(revision, nextCellId, cells, irrigation),
-                epoch, states, pending);
+                epoch, states, pending, generations);
     }
 
     private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {

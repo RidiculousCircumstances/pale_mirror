@@ -56,11 +56,9 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                         if (after != before && transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
                                 && deferredReceipt(before, intent) == null) {
                             ResourceSiteHarvestJob job = harvestJob(before, intent);
-                            ResourceSite site = before.resourceSite(job.siteId());
-                            ResourceFieldYield yield = ResourceFieldYield.fromCompletedCycle(job.siteId(), site.settlementId(),
-                                    before.resourceSites().cycle(job.siteId()));
+                            var part = ResourceSiteHarvestCargo.part(before, job);
                             CustodyAccount depot = after.inventory().fungibleResources().accounts().get(job.depotAccountId());
-                            if (yield.lots().stream().anyMatch(lot -> depot == null
+                            if (part.stream().anyMatch(lot -> depot == null
                                     || !depot.custody().equals(new ResourceCustody.Container(job.outputSlot().containerId()))
                                     || !Integer.valueOf(lot.quantity()).equals(depot.lotQuantities().get(lot.id())))) {
                                 throw new IllegalArgumentException("harvest retirement account did not retain its exact fungible yield in the declared depot");
@@ -129,15 +127,15 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
 
     private static ResourceSiteHarvestJob harvestJob(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(intent.causeSubjectId());
-        ResourceSiteHarvestJob job = lifecycle == null ? null : lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
+        ResourceSiteHarvestJob job = lifecycle == null ? null : lifecycle.harvestJobs().values().stream().filter(value -> value.intentId().equals(intent.id()))
+                .reduce((left, right) -> { throw new IllegalArgumentException("duplicate harvest intent owner"); }).orElse(null);
         if (job == null || !job.intentId().equals(intent.id())) throw new IllegalArgumentException("harvest retirement account has no exact retained harvest job");
         return job;
     }
 
     private static ResourceSiteHarvestLineage deferredReceipt(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(intent.causeSubjectId());
-        return lifecycle == null ? null : lifecycle.harvestLineage()
+        return lifecycle == null ? null : lifecycle.harvestLineage(intent.id())
                 .filter(ResourceSiteHarvestLineage::receiptPending)
                 .filter(value -> value.predecessorIntentId().equals(intent.id()))
                 .orElse(null);
@@ -145,8 +143,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
 
     private static ResourceSitePreparationJob preparation(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(intent.causeSubjectId());
-        ResourceSitePreparationJob job = lifecycle == null ? null : lifecycle.activeWork().filter(ResourceSitePreparationJob.class::isInstance)
-                .map(ResourceSitePreparationJob.class::cast).filter(value -> value.intentId().equals(intent.id())).orElse(null);
+        ResourceSitePreparationJob job = lifecycle == null ? null : lifecycle.preparationWork().filter(value -> value.intentId().equals(intent.id())).orElse(null);
         if (job == null) {
             throw new IllegalArgumentException("resource-site preparation retirement has no exact retained site job");
         }
@@ -551,8 +548,8 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 || !lease.handoffInstant().equals(event.instant())) {
             throw new IllegalArgumentException("resource-site harvest scene lease does not match its retained field-work hand-off");
         }
-        var job = (ResourceSiteHarvestJob) state.resourceSites().site(
-                FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId()).activeWork().orElseThrow();
+        var job = state.resourceSites().site(FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId())
+                .harvestJob(FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId()).orElseThrow();
         return ResourceSiteHarvestLabour.pauseJob(state, job, event.instant().ticks()).prepareSceneLease(lease);
     }
 
@@ -563,8 +560,8 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 || !lease.handoffInstant().equals(event.instant())) {
             throw new IllegalArgumentException("resource-site harvest scene hand-off does not match its retained field work");
         }
-        var job = (ResourceSiteHarvestJob) state.resourceSites().site(
-                FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId()).activeWork().orElseThrow();
+        var job = state.resourceSites().site(FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId())
+                .harvestJob(FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId()).orElseThrow();
         FrontierWorldState paused = ResourceSiteHarvestLabour.pauseJob(state, job, event.instant().ticks());
         FrontierWorldState rebased = ResourceSiteHarvestProcess.rebaseForAmbientHandoff(paused, subject, handoff);
         return rebased.handoffAmbientScene(new SceneLeaseHandoff(lease, handoff.ambientMembers()));
@@ -582,8 +579,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 || !FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(aborted.jobId())
                 || lease.ambientHandoffActorIds().size() != 0
                 || lease.members().size() != 1
-                || state.resourceSites().site(aborted.siteId()).activeWork()
-                        .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                || state.resourceSites().site(aborted.siteId()).harvestJob(aborted.jobId())
                         .filter(job -> job.id().equals(aborted.jobId())
                                 && lease.members().getFirst().actorId().equals(job.workerId())).isEmpty()) {
             throw new IllegalArgumentException("field preparation abort lacks one exact body-free job scene");

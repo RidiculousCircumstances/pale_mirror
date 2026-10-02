@@ -17,8 +17,9 @@ class ResidentLifeStateCodecTest {
         assertEquals(1, FrontierWireTags.tag(SettlementDailySchedule.Window.FREE));
         assertEquals(2, FrontierWireTags.tag(ResidentMeal.Phase.CONSUME));
         assertEquals(3, FrontierWireTags.tag(ResidentActivityChoice.Wait.HAND_OCCUPIED));
+        assertEquals(4, FrontierWireTags.tag(ResidentMeal.Phase.CLEAR_ACCESS));
         assertThrows(IllegalArgumentException.class,
-                () -> FrontierWireTags.require(ResidentMeal.Phase.class, 4));
+                () -> FrontierWireTags.require(ResidentMeal.Phase.class, 5));
     }
 
     @Test void exactPolicyAndRetainedMealSurviveSnapshotAndUnrelatedPopulationMutation() {

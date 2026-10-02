@@ -45,10 +45,9 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         for (var witness : pending) {
             if (continueDelivery(level, runtime, state, ledger, witness)) return;
         }
-        for (ResourceSiteLifecycle lifecycle : state.resourceSites().sites().values().stream()
-                .sorted(Comparator.comparing(ResourceSiteLifecycle::siteId)).toList()) {
-            if (!(lifecycle.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job)
-                    || !ResourceSiteHarvestGoal.actorAtDepot(state, job)) continue;
+        for (ResourceSiteHarvestJob job : state.resourceSites().sites().values().stream()
+                .flatMap(site -> site.harvestJobs().values().stream()).sorted(Comparator.comparing(ResourceSiteHarvestJob::id)).toList()) {
+            if (!ResourceSiteHarvestGoal.actorAtDepot(state, job)) continue;
             if (ledger.fieldDelivery(job.siteId()) != null || ledger.fieldHandProjection(job.siteId()) != null) continue;
             var intent = state.physicalIntents().get(job.intentId());
             if (intent == null || intent.status() != PhysicalIntentStatus.PREPARED
@@ -63,12 +62,12 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             if (!workerAtDepot(level, state, job, scene)) continue;
             ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
             boolean intermediate = job.returningForBatch();
-            if ((!intermediate && !cycle.cycleAccounted()) || !cycle.pendingPlayerBreaks().isEmpty()) continue;
+            if ((!intermediate && !job.progress().complete()) || !cycle.pendingPlayerBreaks().isEmpty()) continue;
             // Delivery is fenced by the actor lot, scene, depot replica and
             // intent; the remote field's block-projection claim is not cargo
             // authority and may lag a completed COLD harvest.
             var hand = FrontierV3ActorHandObservation.observe(level, state, scene, job);
-            int quantity = job.carriedYieldQuantity(cycle.harvestedCount());
+            int quantity = ResourceSiteHarvestCargo.quantity(state, job);
             if (quantity == 0) {
                 if (hand.disposition() == FrontierV3ActorHandObservation.Disposition.EMPTY
                         && !state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())) {
@@ -137,12 +136,11 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
     static void confirmDeferredOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        for (ResourceSiteLifecycle lifecycle : state.resourceSites().sites().values().stream()
-                .sorted(Comparator.comparing(ResourceSiteLifecycle::siteId)).toList()) {
-            ResourceSiteHarvestLineage lineage = lifecycle.harvestLineage()
-                    .filter(ResourceSiteHarvestLineage::receiptPending)
-                    .filter(value -> !value.composedIntoCanonicalSuccessor(state)).orElse(null);
-            if (lineage == null || lineage.causality().hotLeaseIds().isEmpty()) continue;
+        for (ResourceSiteHarvestLineage lineage : state.resourceSites().sites().values().stream()
+                .flatMap(site -> site.harvestLineages().values().stream())
+                .sorted(Comparator.comparing(ResourceSiteHarvestLineage::predecessorIntentId)).toList()) {
+            if (!lineage.receiptPending() || lineage.composedIntoCanonicalSuccessor(state)
+                    || lineage.causality().hotLeaseIds().isEmpty()) continue;
             var intent = state.physicalIntents().get(lineage.predecessorIntentId());
             if (intent == null || intent.status() != PhysicalIntentStatus.RUNNING) continue;
             SubjectId depot = lineage.outputSlot().containerId();
@@ -165,7 +163,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                     || !observed.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(state, depot))) continue;
             var receipt = new ResourceSiteHarvestDeferredObservation(
                     new PhysicalObservationId("observation:field-deferred-" + lineage.predecessorJobId().value().substring("job:".length())),
-                    intent.id(), lifecycle.siteId(), lineage.predecessorJobId(), depot, lineage.completedGrowthEpoch(),
+                    intent.id(), intent.causeSubjectId(), lineage.predecessorJobId(), depot, lineage.completedGrowthEpoch(),
                     custody.authorityEpoch(), replica.emittedCanonicalRevision(), replica.replicaRevision(),
                     observed.fingerprint(), observed.provenance());
             var nextIntents = new java.util.LinkedHashMap<>(state.physicalIntents());
@@ -200,8 +198,8 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         }
         if (intent == null || intent.status() != PhysicalIntentStatus.RUNNING) return false;
         var lifecycle = state.resourceSites().sites().get(witness.siteId());
-        if (lifecycle == null || !(lifecycle.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job)
-                || !job.id().equals(witness.jobId()) || !ResourceSiteHarvestGoal.actorAtDepot(state, job)
+        ResourceSiteHarvestJob job = lifecycle == null ? null : lifecycle.harvestJob(witness.jobId()).orElse(null);
+        if (job == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job)
                 || job.returningForBatch() != witness.intermediate()
                 || job.deliveredYieldQuantity() != witness.deliveredYieldBefore()
                 || witness.intermediate() && job.batchSuccessorSlot().map(InventoryCustody.ContainerSlot::slot)
@@ -209,8 +207,8 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 || !job.outputSlot().containerId().equals(witness.containerId())
                 || job.outputSlot().slot() != witness.slot()) return false;
         ResourceFieldCycle cycle = state.resourceSites().cycle(witness.siteId());
-        if ((!witness.intermediate() && !cycle.cycleAccounted()) || !cycle.pendingPlayerBreaks().isEmpty()
-                || job.carriedYieldQuantity(cycle.harvestedCount()) != witness.quantity()) return false;
+        if ((!witness.intermediate() && !job.progress().complete()) || !cycle.pendingPlayerBreaks().isEmpty()
+                || ResourceSiteHarvestCargo.quantity(state, job) != witness.quantity()) return false;
         SceneLease scene = state.sceneLeases().get(witness.leaseId());
         if (scene == null || scene.status() != SceneLeaseStatus.HOT || scene.revision() != witness.actorEpoch()
                 || scene.members().size() != 1 || !scene.members().getFirst().entityId().equals(witness.entityId())) return false;
@@ -237,8 +235,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-depot-provenance-foreign");
             return true;
         }
-        var part = ResourceFieldYield.currentCarriedLot(job.siteId(), state.resourceSite(job.siteId()).settlementId(),
-                cycle, cycle.accountedCount(), job.deliveredYieldQuantity()).orElse(null);
+        var part = ResourceSiteHarvestCargo.part(state, job).orElse(null);
         var resources = state.inventory().fungibleResources();
         var account = resources.accounts().get(job.actorAccountId());
         var bindings = resources.bindings().values().stream()
@@ -304,8 +301,8 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
     private static boolean acceptedBatchObservation(FrontierWorldState state,
                                                     FrontierV3ResourceSiteDeliveryWitness witness) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(witness.siteId());
-        if (lifecycle == null || !(lifecycle.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job)
-                || !job.id().equals(witness.jobId())
+        ResourceSiteHarvestJob job = lifecycle == null ? null : lifecycle.harvestJob(witness.jobId()).orElse(null);
+        if (job == null
                 || job.deliveredYieldQuantity() != witness.deliveredYieldBefore() + 64) return false;
         return job.lastConfirmedBatch().filter(batch -> batch.deliveredYieldBefore() == witness.deliveredYieldBefore()
                 && batch.receipt().id().equals(batchObservationId(witness.jobId(), witness.deliveredYieldBefore()))

@@ -34,7 +34,8 @@ public final class ResourceFieldGrowthProcess {
         var events = new ArrayList<ProposedEvent>();
         if (grown != cycle || nextSite != site)
             events.add(new ProposedEvent(site.siteId(), new ResourceSiteGrowthAdvanced(site.siteId(), site.growthEpoch(), site.growthStage())));
-        if (site.phase() != ResourceSitePhase.READY && nextSite.phase() == ResourceSitePhase.READY)
+        if (site.phase() != ResourceSitePhase.READY && nextSite.phase() == ResourceSitePhase.READY
+                || nextSite.phase() == ResourceSitePhase.HARVESTING && newlyActionable(cycle, grown))
             events.add(new ProposedEvent(site.siteId(), new ScheduleEffect.Created(
                     StrategicObjectiveProcess.resourceHarvestOpportunity(state, nextSite, Math.addExact(action.dueAt().ticks(), 1L)))));
         // Keep the biological clock when all plants are mature: a later harvest, sowing or
@@ -60,22 +61,37 @@ public final class ResourceFieldGrowthProcess {
                                                  ResourceFieldCellObserved observation, long now) {
         var site = after.resourceSites().site(observation.siteId());
         if (observation.change() != ResourceFieldCellObserved.Change.CROP_GROWN
-                || before.resourceSites().site(site.siteId()).phase() == ResourceSitePhase.READY
-                || site.phase() != ResourceSitePhase.READY) return List.of();
+                || site.phase() != ResourceSitePhase.READY && site.phase() != ResourceSitePhase.HARVESTING
+                || !newlyActionable(before.resourceSites().cycle(site.siteId()), after.resourceSites().cycle(site.siteId())))
+            return List.of();
         return List.of(new ProposedEvent(site.siteId(), new ScheduleEffect.Created(
-                StrategicObjectiveProcess.resourceHarvestOpportunity(after, site, Math.addExact(now, 1L)))));
+                StrategicObjectiveProcess.resourceHarvestOpportunity(after, site, Math.addExact(now, 1L),
+                        "observation|" + observation.cellId().value() + "|" + observation.causationId()))));
     }
 
     /** Work completion retires accounting only; it does not replant or reset plant age. */
     static List<ProposedEvent> afterWork(FrontierWorldState state, ResourceSiteLifecycle terminal,
-                                       ResourceFieldCycle successor, long now) {
+                                       ResourceFieldCycle successor, SubjectId completedJob, long now) {
         var site = terminal.withPlantReadiness(successor);
         var events = new ArrayList<ProposedEvent>();
         // The site clock survives work-epoch retirement unchanged. Delivery neither
         // starts a second clock nor postpones the next biological boundary.
-        if (site.phase() == ResourceSitePhase.READY)
+        if (site.phase() == ResourceSitePhase.READY || site.phase() == ResourceSitePhase.HARVESTING)
             events.add(new ProposedEvent(site.siteId(), new ScheduleEffect.Created(
-                    StrategicObjectiveProcess.resourceHarvestOpportunity(state, site, Math.addExact(now, 1L)))));
+                    StrategicObjectiveProcess.resourceHarvestOpportunity(state, site, Math.addExact(now, 1L),
+                            "completion|" + completedJob.value()))));
         return List.copyOf(events);
+    }
+
+    private static boolean newlyActionable(ResourceFieldCycle before, ResourceFieldCycle after) {
+        return after.layout().cells().stream().anyMatch(cell ->
+                matureWorkAvailable(after.cell(cell.id())) && !matureWorkAvailable(before.cell(cell.id())));
+    }
+
+    private static boolean matureWorkAvailable(ResourceFieldCycle.CellState cell) {
+        // A readiness query cannot ask the execution API to process unknown or
+        // obstructed ground. Those are ordinary unavailable observations, not work.
+        return !cell.accounted() && !cell.workAccessBlocked()
+                && cell.soil() == ResourceFieldCycle.Soil.FARMLAND && cell.crop() == ResourceFieldCycle.Crop.MATURE;
     }
 }

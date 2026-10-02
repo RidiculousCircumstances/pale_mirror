@@ -52,7 +52,7 @@ class ResourceSiteWorkReceiptCodecTest {
         var codec = ResourceSitePayloadCodecs.harvestProgressed();
         var receipt = new ResourceSiteHarvestProgressed(new SubjectId("site:test"), 3,
                 new SubjectId("job:site-harvest-test"), 1,
-                2, new ResourceFieldLayout.CellId(97), ResourceFieldCycle.WorkOutcome.HARVESTED,
+                2, new ResourceFieldLayout.CellId(97), 0L, ResourceFieldCycle.WorkOutcome.HARVESTED,
                 new ScheduleId("schedule:resource-site-harvest-cold-progress-site-harvest-test"), 22_301L,
                 java.util.Optional.of(new ResourceSiteHarvestProgressed.HandObservation(
                         new PhysicalStackAddress.ActorHand(new SubjectId("resident:test"),
@@ -62,7 +62,7 @@ class ResourceSiteWorkReceiptCodecTest {
         assertThrows(IllegalArgumentException.class, () -> codec.decode(Arrays.copyOf(encoded, encoded.length - 1)));
         byte[] unknownHand = encoded.clone();
         int tagOffset = codec.encode(new ResourceSiteHarvestProgressed(receipt.siteId(), receipt.epoch(), receipt.jobId(),
-                receipt.completedCropSlots(), receipt.layoutRevision(), receipt.cellId(), receipt.outcome(),
+                receipt.completedCropSlots(), receipt.layoutRevision(), receipt.cellId(), 0L, receipt.outcome(),
                 receipt.coldScheduleId(), receipt.coldDueAt())).length - 1;
         unknownHand[tagOffset] = 7;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(unknownHand));
@@ -72,7 +72,7 @@ class ResourceSiteWorkReceiptCodecTest {
         var codec = ResourceSitePayloadCodecs.harvestProgressed();
         var receipt = new ResourceSiteHarvestProgressed(new SubjectId("site:test"), 3,
                 new SubjectId("job:site-harvest-test"), 1,
-                2, new ResourceFieldLayout.CellId(97), ResourceFieldCycle.WorkOutcome.TILLED_AND_PLANTED,
+                2, new ResourceFieldLayout.CellId(97), 0L, ResourceFieldCycle.WorkOutcome.TILLED_AND_PLANTED,
                 new ScheduleId("schedule:resource-site-harvest-cold-progress-site-harvest-test"), 22_301L);
         byte[] encoded = codec.encode(receipt);
         assertEquals(receipt, codec.decode(encoded));
@@ -80,7 +80,7 @@ class ResourceSiteWorkReceiptCodecTest {
         byte[] unknownOutcome = encoded.clone();
         int jobLengthOffset = 1 + Byte.toUnsignedInt(unknownOutcome[0]) + Long.BYTES;
         int outcomeOffset = jobLengthOffset + 1 + Byte.toUnsignedInt(unknownOutcome[jobLengthOffset])
-                + Integer.BYTES + Long.BYTES * 2;
+                + Integer.BYTES + Long.BYTES * 3;
         unknownOutcome[outcomeOffset] = 99;
         org.junit.jupiter.api.Assertions.assertTrue(assertThrows(IllegalArgumentException.class,
                 () -> codec.decode(unknownOutcome)).getMessage().contains("work outcome"),

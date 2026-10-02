@@ -353,6 +353,7 @@ export function validateScenario(scenario) {
         throw new Error('wait_until_harvest_result needs exact site, intent, item identities and timeoutMs 0..300000');
       }
       if (action.type === 'observe_harvest_semantics' && (!requiredId(action.siteId, 'site:')
+          || (action.jobId !== undefined && !requiredId(action.jobId, 'job:'))
           || !Number.isInteger(action.durationTicks) || action.durationTicks < 1 || action.durationTicks > 12_000
           || !Number.isInteger(action.sampleEveryTicks) || action.sampleEveryTicks < 1 || action.sampleEveryTicks > 20
           || !Number.isInteger(action.maxCanonicalStallTicks) || action.maxCanonicalStallTicks < 20 || action.maxCanonicalStallTicks > 12_000

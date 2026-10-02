@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.HarvestFixtureOwners;
+
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
@@ -31,7 +33,7 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
         var state = config.initialState();
         var site = new SubjectId("site:1-wheat-field");
         var job = (io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob)
-                state.resourceSites().site(site).activeWork().orElseThrow();
+                state.resourceSites().site(site).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         var body = state.actorLocations().get(job.workerId()).body();
         var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:harvest-recovery-clocks"),
@@ -62,7 +64,7 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
         var state = config.initialState();
         var site = new SubjectId("site:1-wheat-field");
         var job = (io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob)
-                state.resourceSites().site(site).activeWork().orElseThrow();
+                state.resourceSites().site(site).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         var worker = job.workerId();
         var body = state.actorLocations().get(worker).body();
         var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(

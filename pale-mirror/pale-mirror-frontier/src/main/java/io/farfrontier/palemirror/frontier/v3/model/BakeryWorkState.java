@@ -69,6 +69,14 @@ public record BakeryWorkState(Phase phase, SubjectId stationId, SubjectId source
                 stationAccountId, destinationAccountId, completedWorkTicks, pendingPhysicalStep, next);
     }
 
+    /** The reservation ends at confirmed output removal, not delivery or the worker's return. */
+    public boolean reservesStation() {
+        return switch (phase) {
+            case DEPOT_PICKUP, STATION_LOAD, PROCESSING, STATION_UNLOAD -> true;
+            case DEPOT_DELIVERY, DELIVERED -> false;
+        };
+    }
+
     public BakeryWorkState withReallocatedDepotAccount(SubjectId accountId) {
         if (phase != Phase.DEPOT_PICKUP || pendingPhysicalStep.isPresent()
                 || block.map(value -> value.reason() != BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(true))

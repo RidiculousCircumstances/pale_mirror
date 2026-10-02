@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.HarvestFixtureOwners;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
@@ -28,9 +30,8 @@ record FrontierV3OfflineFirstAdmissionRecoveryPlan(FrontierV3ActorFirstAdmission
                 scene.members().stream().anyMatch(member -> member.actorId().equals(actor)))
                 || state.productionJobs().values().stream().anyMatch(job -> job.workerId().equals(actor))
                 || state.serviceWorks().values().stream().anyMatch(work -> work.workerId().equals(actor))
-                || state.resourceSites().sites().values().stream().anyMatch(site -> site.activeWork()
-                    .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                    .map(job -> job.workerId().equals(actor)).orElse(false))
+                || state.resourceSites().sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
+                    .anyMatch(job -> job.workerId().equals(actor))
                 || state.operations().values().stream().anyMatch(operation -> operation.participantIds().contains(actor))
                 || state.routeConstructions().values().stream().anyMatch(work -> work.engineeringTeam()
                     .map(team -> team.memberIds().contains(actor)).orElse(false))

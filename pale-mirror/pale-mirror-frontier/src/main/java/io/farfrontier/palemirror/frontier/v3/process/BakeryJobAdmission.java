@@ -11,12 +11,50 @@ import java.util.Set;
 final class BakeryJobAdmission {
     private BakeryJobAdmission() { }
 
+    static ResidentWorkProvider<ProductionJob> provider(StrategicTask task, Settlement settlement,
+            SettlementStructure workshop, Optional<ExactItemStack> exactInput,
+            Optional<FungibleResourceCustodySupport.LotSelection> fungibleInput) {
+        return new ResidentWorkProvider<>() {
+            @Override public ResidentWorkKind kind() { return ResidentWorkKind.BAKING; }
+            @Override public HumanCapability capability() { return HumanCapability.INDUSTRY; }
+            @Override public Optional<ResidentWorkOffer<ProductionJob>> discover(
+                    FrontierWorldState state, ResidentProfile resident, long atTick) {
+                if (!ProductionFacilityReservations.available(state.productionJobs(), workshop.id())) return Optional.empty();
+                ProductionJob job = propose(state, task, settlement, workshop, exactInput, fungibleInput, resident);
+                var claims = new java.util.ArrayList<WorkReservationClaim>();
+                claims.add(new WorkReservationClaim.StationPlace(job.bakeryWork().orElseThrow().stationId()));
+                switch (job.inputHold()) {
+                    case ProductionInputHold.FungibleCold cold -> cold.inputLots().forEach((lot, quantity) ->
+                            claims.add(new WorkReservationClaim.LotQuantity(cold.accountId(), lot, quantity)));
+                    case ProductionInputHold.FungibleBound bound -> bound.inputLots().forEach((lot, quantity) ->
+                            claims.add(new WorkReservationClaim.LotQuantity(bound.accountId(), lot, quantity)));
+                    case ProductionInputHold.Materialized exact ->
+                            claims.add(new WorkReservationClaim.ExactResource(exact.itemId(), job.outputCount()));
+                    case ProductionInputHold.Cold cold ->
+                            claims.add(new WorkReservationClaim.ExactResource(cold.itemId(), cold.item().count()));
+                }
+                return Optional.of(new ResidentWorkOffer<>(kind(), resident.id(), job, claims));
+            }
+        };
+    }
+
+    /** Read-only family proposal; the selected worker is never rediscovered by a constructor. */
+    static ProductionJob propose(FrontierWorldState state, StrategicTask task, Settlement settlement,
+                                  SettlementStructure workshop, Optional<ExactItemStack> exactInput,
+                                  Optional<FungibleResourceCustodySupport.LotSelection> fungibleInput,
+                                  ResidentProfile worker) {
+        if (ReferenceContainerCustody.hasLiveCustody(state, FrontierWorldState.depotId(settlement.id()))
+                && exactInput.isPresent())
+            return exact(state, task, settlement, workshop, exactInput.orElseThrow(), worker);
+        return fungibleInput.map(input -> fungible(state, task, settlement, workshop, input, worker))
+                .orElseGet(() -> exact(state, task, settlement, workshop, exactInput.orElseThrow(), worker));
+    }
+
     static ProductionJob exact(FrontierWorldState state, StrategicTask task, Settlement settlement,
-                               SettlementStructure workshop, ExactItemStack input) {
+                               SettlementStructure workshop, ExactItemStack input, ResidentProfile worker) {
         if (input.count() != 64 || !input.economicOwnerId().equals(settlement.id())
                 || !"minecraft:wheat".equals(input.itemKind()))
             throw new IllegalArgumentException("bakery exact input must be 64 settlement-owned wheat");
-        ResidentProfile worker = baker(state, settlement);
         SubjectId jobId = ProductionProcess.jobId(task);
         String stem = jobId.value().substring("job:".length());
         return new ProductionJob(jobId, task.id(), settlement.id(), workshop.id(), worker.id(), input.id(),
@@ -28,8 +66,8 @@ final class BakeryJobAdmission {
     }
 
     static ProductionJob fungible(FrontierWorldState state, StrategicTask task, Settlement settlement,
-                                  SettlementStructure workshop, FungibleResourceCustodySupport.LotSelection input) {
-        ResidentProfile worker = baker(state, settlement);
+                                  SettlementStructure workshop, FungibleResourceCustodySupport.LotSelection input,
+                                  ResidentProfile worker) {
         SubjectId jobId = ProductionProcess.jobId(task);
         String stem = jobId.value().substring("job:".length());
         ProductionInputHold hold = ProductionResourceCustody.holdForStart(state, input,
@@ -38,11 +76,6 @@ final class BakeryJobAdmission {
                 new SubjectId("lot:" + stem + "-bread"), "minecraft:bread", 64,
                 ProductionWorkProgress.notStarted(), anchor(jobId, workshop, state.actorLocations().get(worker.id())), 0,
                 Optional.of(work(state, workshop, jobId, input.accountId())));
-    }
-
-    private static ResidentProfile baker(FrontierWorldState state, Settlement settlement) {
-        return FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.BAKER)
-                .orElseThrow(() -> new IllegalStateException("settlement lacks baker"));
     }
 
     private static TraversalTopology anchor(SubjectId jobId, SettlementStructure workshop, ActorLocation actor) {
@@ -76,7 +109,10 @@ final class BakeryJobAdmission {
             throw new IllegalArgumentException("bread production start requires declared bakery station work");
         SettlementStructure workshop = ProductionProcess.workshop(settlement);
         if (!workshop.id().equals(job.facilityId()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production start facility is unavailable");
-        if (!baker(state, settlement).id().equals(job.workerId())) throw new IllegalArgumentException("production start worker is not the deterministic baker");
+        ResidentProfile worker = state.humanPopulation().resident(job.workerId());
+        if (worker == null || !worker.settlementId().equals(settlement.id())
+                || !SettlementWorkPolicy.permissions(state, settlement.id()).permits(ResidentWorkKind.BAKING, worker.id()))
+            throw new IllegalArgumentException("production start worker is not an authorized bakery resident");
         ActorExecutionCoordinator.requireOrdinaryWorkAdmission(state, job.workerId());
         ProductionProcess.validateMarketOrder(state, ProductionProcess.activeTask(state, job), job);
         return BakeryProcess.start(state, job, started.inputItemId());

@@ -616,8 +616,7 @@ public final class FrontierSceneBehaviors {
                                                          Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
                                                          StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs,
                                                          Map<SubjectId, SettlementServiceWork> serviceWorks, SceneLease lease, Set<SubjectId> leasedOperations) {
-            ResourceSiteHarvestJob job = resourceSites.sites().values().stream().map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
-                    .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+            ResourceSiteHarvestJob job = resourceSites.sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
                     .filter(value -> value.id().equals(cause(lease).jobId())).findFirst().orElse(null);
             // A CLOSED lease is retained evidence.  Its matching harvest job is deliberately
             // consumed by the immediately subsequent exact depot receipt, so requiring that
@@ -634,7 +633,10 @@ public final class FrontierSceneBehaviors {
                 }
                 if (lease.status() != SceneLeaseStatus.CLOSED) {
                     var site = FrontierResourceSiteHarvestSceneSupport.terminalReceiptSite(bootstrap, resourceSites, cause(lease));
-                    return Set.of(resourceSites.site(site.id()).harvestLineage().orElseThrow().workerId());
+                    return Set.of(resourceSites.site(site.id()).harvestLineages().values().stream()
+                            .filter(lineage -> lineage.predecessorJobId().equals(cause(lease).jobId()))
+                            .reduce((left, right) -> { throw new IllegalArgumentException("duplicate terminal harvest owner"); })
+                            .orElseThrow().workerId());
                 }
                 return lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toUnmodifiableSet());
             }
@@ -684,7 +686,10 @@ public final class FrontierSceneBehaviors {
         @Override public SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
             if (FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause(lease))) {
                 var site = FrontierResourceSiteHarvestSceneSupport.site(state, cause(lease));
-                if (!state.resourceSites().site(site.id()).harvestLineage().orElseThrow().workerId().equals(actorId)) {
+                if (!state.resourceSites().site(site.id()).harvestLineages().values().stream()
+                        .filter(lineage -> lineage.predecessorJobId().equals(cause(lease).jobId()))
+                        .reduce((left, right) -> { throw new IllegalArgumentException("duplicate terminal harvest owner"); })
+                        .orElseThrow().workerId().equals(actorId)) {
                     throw new IllegalArgumentException("terminal harvest death has a foreign worker");
                 }
                 // The common death owner retires body custody. Completed economic work and

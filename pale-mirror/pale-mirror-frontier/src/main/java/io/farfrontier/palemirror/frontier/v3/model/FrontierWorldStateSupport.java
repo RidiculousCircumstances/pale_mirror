@@ -91,6 +91,11 @@ public final class FrontierWorldStateSupport {
         return SettlementWorkforce.candidates(state, settlementId, profession).stream().findFirst();
     }
 
+    public static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId,
+                                                                 ResidentWorkKind work, HumanCapability capability) {
+        return SettlementWorkforce.candidates(state, settlementId, work, capability).stream().findFirst();
+    }
+
     /** Compatibility selection for callers still holding only the legacy bootstrap affinity. */
     public static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
         return availableWorkResident(state, settlementId, ResidentProfession.fromBootstrapAffinity(role));

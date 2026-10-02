@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.HarvestFixtureOwners;
+
 import com.google.gson.JsonParser;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
@@ -72,7 +74,7 @@ class FrontierV3DiagnosticJsonTest {
         var checkpoint = FrontierEngines.create(configuration).checkpoint();
         var state = configuration.initialState();
         var job = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
-                .activeWork().orElseThrow();
+                .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         var json = JsonParser.parseString(FrontierV3DiagnosticJson.render("process",
                 "job:site-harvest-1-wheat-field-1", checkpoint, state, Optional.empty())
                 .substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();

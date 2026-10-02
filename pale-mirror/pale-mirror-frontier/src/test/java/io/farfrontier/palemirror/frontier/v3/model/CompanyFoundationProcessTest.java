@@ -31,7 +31,7 @@ class CompanyFoundationProcessTest {
             assertEquals(settlement.id(), company.settlementId());
             assertEquals(CompanyStatus.ACTIVE, company.status());
             assertEquals(EconomicOwnerKind.COMPANY, state.inventory().economics().require(companyId).ownerKind());
-            EmploymentContract employment = state.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(settlement.id()));
+            EmploymentContract employment = state.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(settlement.id(), company.founderId()));
             assertEquals(company.founderId(), employment.residentId());
             assertEquals(EconomicOwnerKind.RESIDENT, state.inventory().economics().require(employment.residentId()).ownerKind());
         }
@@ -40,7 +40,8 @@ class CompanyFoundationProcessTest {
         assertEquals(encoded, FrontierWorldRuntimeDefinition.payloadCodecs().decode(encoded.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(encoded)));
         assertTrue(CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(state.bootstrap().settlements().getFirst().id(), 2, 28_000L))
                 .stream().map(event -> event.payload()).anyMatch(ScheduleEffect.Created.class::isInstance));
-        EmploymentContract contract = state.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(state.bootstrap().settlements().getFirst().id()));
+        Company firstCompany = state.companies().companies().get(CompanyFoundationProcess.companyId(state.bootstrap().settlements().getFirst().id()));
+        EmploymentContract contract = state.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(firstCompany.settlementId(), firstCompany.founderId()));
         assertEquals(new EmploymentContractOpened(contract), FrontierWorldRuntimeDefinition.payloadCodecs().decode("frontier.employment_contract_opened",
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(new EmploymentContractOpened(contract))));
         EmploymentContractTerminated terminated = new EmploymentContractTerminated(contract.id(), contract.residentId(), EmploymentTerminationReason.DEATH);
@@ -62,7 +63,7 @@ class CompanyFoundationProcessTest {
         FrontierWorldState registered = CompanyFoundationProcess.reduce(initial, settlement.id(), new CompanyRegistered(company));
         assertTrue(registered.inventory().economics().accounts().containsKey(company.id()));
         assertThrows(IllegalArgumentException.class, () -> CompanyFoundationProcess.reduce(registered, settlement.id(), new CompanyRegistered(company)));
-        EmploymentContract employment = new EmploymentContract(CompanyFoundationProcess.employmentId(settlement.id()), company.id(), founder.id(),
+        EmploymentContract employment = new EmploymentContract(CompanyFoundationProcess.employmentId(settlement.id(), founder.id()), company.id(), founder.id(),
                 FixedScalar.whole(2L), FixedScalar.ONE, EmploymentContractStatus.ACTIVE, 1L, 0L, FixedScalar.ZERO);
         FrontierWorldState employed = CompanyFoundationProcess.reduceEmployment(registered, settlement.id(), new EmploymentContractOpened(employment));
         assertThrows(IllegalArgumentException.class, () -> CompanyFoundationProcess.reduceEmployment(employed, settlement.id(), new EmploymentContractOpened(employment)));
@@ -72,7 +73,7 @@ class CompanyFoundationProcessTest {
     void completedCompanyWorkInvoicesThenPaysOneExactFounderOrBlocksWithoutFunds() {
         FrontierWorldState state = foundedState(); Settlement settlement = state.bootstrap().settlements().getFirst();
         Company company = state.companies().companies().get(CompanyFoundationProcess.companyId(settlement.id()));
-        EmploymentContract contract = state.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(settlement.id()));
+        EmploymentContract contract = state.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(settlement.id(), company.founderId()));
         ProductionJob job = new ProductionJob(new SubjectId("job:production-company-payment"), new SubjectId("task:production-company-payment"), settlement.id(),
                 settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow().id(),
                 company.founderId(), new SubjectId("item:company-payment-wheat"), new SubjectId("item:company-payment-bread"), "minecraft:bread", 64);

@@ -100,6 +100,6 @@ final class FrontierReferenceClosure {
                 || state.bootstrap().hive().bioforms().stream().anyMatch(bioform -> bioform.id().equals(id))
                 || state.bootstrap().hive().organs().stream().anyMatch(organ -> organ.id().equals(id))
                 || state.resourceSites().sites().values().stream()
-                    .anyMatch(site -> site.activeWork().filter(work -> work.id().equals(id)).isPresent());
+                    .anyMatch(site -> site.harvestJobs().containsKey(id) || site.preparationWork().filter(work -> work.id().equals(id)).isPresent());
     }
 }

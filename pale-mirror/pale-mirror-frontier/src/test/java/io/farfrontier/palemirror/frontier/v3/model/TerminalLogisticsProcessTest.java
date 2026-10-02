@@ -34,7 +34,7 @@ class TerminalLogisticsProcessTest {
     @Test
     void terminalDeliveredGraphCompactsIntoOneBoundedPersistentReceipt() {
         FrontierWorldState settled = completedDelivery();
-        RouteOperation operation = settled.operations().get(new SubjectId("operation:supply-1-18"));
+        RouteOperation operation = settled.operations().get(new SubjectId("operation:supply-1-14"));
 
         assertThrows(IllegalArgumentException.class, () -> initial().compactTerminalLogistics(operation.id(), 12L),
                 "an active route and cargo may never be discarded as historical evidence");
@@ -46,7 +46,7 @@ class TerminalLogisticsProcessTest {
         FrontierWorldState detached = settled.compactTerminalLogistics(compacted.operationId(), 1_000L);
 
         assertFalse(detached.operations().containsKey(operation.id()));
-        assertFalse(detached.contracts().containsKey(new SubjectId("contract:supply-1-18")));
+        assertFalse(detached.contracts().containsKey(new SubjectId("contract:supply-1-14")));
         TerminalLogisticsReceipt receipt = detached.logisticsHistory().receipts().get(operation.id());
         assertEquals(TerminalLogisticsReceipt.TerminalLogisticsOutcome.DELIVERED, receipt.outcome());
         assertEquals(1_000L, receipt.terminalAtTick());
@@ -87,8 +87,8 @@ class TerminalLogisticsProcessTest {
                 java.util.Optional.of(new SnapshotRecord(beforeRecovery, beforeRecovery.revision().value())), List.of()));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(recovered.checkpoint().canonicalState());
 
-        assertFalse(state.operations().containsKey(new SubjectId("operation:supply-1-18")));
-        assertFalse(state.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-18")));
+        assertFalse(state.operations().containsKey(new SubjectId("operation:supply-1-14")));
+        assertFalse(state.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-14")));
         assertFalse(state.physicalObservations().containsKey(new PhysicalObservationId("observation:terminal-logistics-confirmed-handoff")));
         assertEquals(1L, state.logisticsHistory().deliveredCount());
         assertEquals(beforeRecovery, recovered.checkpoint());
@@ -97,12 +97,12 @@ class TerminalLogisticsProcessTest {
     @Test
     void terminalCompactionRetiresOnlyTheConfirmedPhysicalReceiptsOwnedByThatDelivery() {
         FrontierWorldState settled = completedDeliveryWithConfirmedHandoff();
-        PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-18");
+        PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-14");
         PhysicalObservationId observationId = new PhysicalObservationId("observation:terminal-logistics-confirmed-handoff");
-        PhysicalIntentId loadingIntentId = new PhysicalIntentId("intent:cargo-loading-supply-1-18");
+        PhysicalIntentId loadingIntentId = new PhysicalIntentId("intent:cargo-loading-supply-1-14");
         PhysicalObservationId loadingObservationId = new PhysicalObservationId("observation:terminal-logistics-confirmed-loading");
 
-        FrontierWorldState detached = settled.compactTerminalLogistics(new SubjectId("operation:supply-1-18"), 1_000L);
+        FrontierWorldState detached = settled.compactTerminalLogistics(new SubjectId("operation:supply-1-14"), 1_000L);
 
         assertFalse(detached.physicalIntents().containsKey(intentId));
         assertFalse(detached.physicalObservations().containsKey(observationId));
@@ -119,10 +119,10 @@ class TerminalLogisticsProcessTest {
 
     private static FrontierWorldState completedDeliveryWithConfirmedHandoff(WorldId world) {
         FrontierWorldState delivered = completedDelivery(world);
-        SubjectId operationId = new SubjectId("operation:supply-1-18");
-        SubjectId cargoId = new SubjectId("cargo:supply-1-18");
+        SubjectId operationId = new SubjectId("operation:supply-1-14");
+        SubjectId cargoId = new SubjectId("cargo:supply-1-14");
         SubjectId itemId = new SubjectId("item:production-1-1-bread");
-        PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-18");
+        PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-14");
         PhysicalObservationId observationId = new PhysicalObservationId("observation:terminal-logistics-confirmed-handoff");
         FungibleCargoHandoffObservation observation = new FungibleCargoHandoffObservation(observationId, intentId, cargoId, 1L, List.of(
                 new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
@@ -133,11 +133,11 @@ class TerminalLogisticsProcessTest {
                 .withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observationId));
         Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(delivered.physicalIntents()); intents.put(intentId, intent);
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(delivered.physicalObservations()); observations.put(observationId, observation);
-        PhysicalIntentId loadingIntentId = new PhysicalIntentId("intent:cargo-loading-supply-1-18");
+        PhysicalIntentId loadingIntentId = new PhysicalIntentId("intent:cargo-loading-supply-1-14");
         PhysicalObservationId loadingObservationId = new PhysicalObservationId("observation:terminal-logistics-confirmed-loading");
-        CargoLoadObservation loading = new CargoLoadObservation(loadingObservationId, loadingIntentId, new SubjectId("contract:supply-1-18"), cargoId, itemId, 1);
+        CargoLoadObservation loading = new CargoLoadObservation(loadingObservationId, loadingIntentId, new SubjectId("contract:supply-1-14"), cargoId, itemId, 1);
         intents.put(loadingIntentId, new PhysicalIntent(loadingIntentId, PhysicalIntentKind.CARGO_LOADING, PhysicalIntentStatus.PREPARED,
-                new SubjectId("contract:supply-1-18"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.cargoLoading(new SubjectId("contract:supply-1-18"), cargoId, itemId),
+                new SubjectId("contract:supply-1-14"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.cargoLoading(new SubjectId("contract:supply-1-14"), cargoId, itemId),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_OPERATION)
                 .withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(loadingObservationId)));
@@ -149,8 +149,8 @@ class TerminalLogisticsProcessTest {
     }
 
     private static FrontierWorldState completedDelivery(WorldId world) {
-        FrontierWorldState state = initial(world); RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-18"));
-        SupplyContract contract = state.contracts().get(new SubjectId("contract:supply-1-18"));
+        FrontierWorldState state = initial(world); RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-14"));
+        SupplyContract contract = state.contracts().get(new SubjectId("contract:supply-1-14"));
         SubjectId receiver = FrontierCargoValidation.receiverStore(state.bootstrap(), operation);
         ExactInventory inventory = state.inventory().completeFungibleCargoHandoff(operation.cargoId(), receiver);
         Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>(state.contracts()); contracts.put(contract.id(), contract.withStatus(ContractStatus.DELIVERED));

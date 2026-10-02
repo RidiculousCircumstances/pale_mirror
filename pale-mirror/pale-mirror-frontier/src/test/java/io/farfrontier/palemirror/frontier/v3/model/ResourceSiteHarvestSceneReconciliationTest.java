@@ -12,14 +12,14 @@ class ResourceSiteHarvestSceneReconciliationTest {
     @Test void inspectedUntouchedPreparedCropResumesWithoutCreditingOrReplayingYield() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         var state = oneObservedCrop(hot);
-        var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).activeWork().orElseThrow();
+        var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         var goal = ResourceSiteHarvestGoal.current(state, job);
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHotGoalArrived(state, hot.site(),
                 new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(), goal.layoutRevision(),
                         goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
-                new ResourceSiteHarvestCropPrepared(job.id(), goal.nextWorkSlot()));
+                new ResourceSiteHarvestCropPrepared(job.id(), goal.nextWorkSlot(), job.target().generation()));
         state = state.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.CONFLICT);
         var lease = state.sceneLeases().get(hot.lease().id());
         long epoch = state.fencedRecovery().current().get(
@@ -32,7 +32,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
         assertEquals(SceneLeaseStatus.HOT, restored.sceneLeases().get(lease.id()).status());
         assertEquals(state.resourceSites(), restored.resourceSites());
         assertEquals(state.inventory(), restored.inventory());
-        assertTrue(((ResourceSiteHarvestJob) restored.resourceSites().site(hot.site()).activeWork().orElseThrow())
+        assertTrue(((ResourceSiteHarvestJob) restored.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow())
                 .progress().hasPendingCrop());
         var isolated = state;
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestSceneReconciliation.reduce(isolated, hot.site(),
@@ -51,7 +51,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
                 ? ResourceSiteHarvestProcessTest.completeHarvestWorkHot(hot.state(), hot.site(), hot.job(), hot.lease().id())
                 : oneObservedCrop(hot);
         var state = complete.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.CONFLICT);
-        var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).activeWork().orElseThrow();
+        var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         var lease = state.sceneLeases().get(hot.lease().id());
         var bindingId = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(job.workerId());
         long epoch = state.fencedRecovery().current().get(bindingId).authorityEpoch();
@@ -90,12 +90,12 @@ class ResourceSiteHarvestSceneReconciliationTest {
                             goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
-                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
+                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));
         var cycle = state.resourceSites().cycle(hot.site());
         var cell = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
         var due = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
         return io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceProgressed(state, hot.site(),
-                new ResourceSiteHarvestProgressed(hot.site(), cycle.epoch(), job.id(), 1, cycle.layout().revision(), cell,
+                new ResourceSiteHarvestProgressed(hot.site(), cycle.epoch(), job.id(), 1, cycle.layout().revision(), cell, job.target().generation(),
                         ResourceFieldCycle.WorkOutcome.HARVESTED, due.id(), due.dueAt().ticks(), java.util.Optional.of(
                         new ResourceSiteHarvestProgressed.HandObservation(new PhysicalStackAddress.ActorHand(job.workerId(),
                                 hot.lease().members().getFirst().entityId()), hot.lease().revision(), 1))));

@@ -42,29 +42,18 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteLifecycle> sites,
                 throw new IllegalArgumentException("resource-site cell cycle declares another site owner");
             if (cycle.epoch() != lifecycle.growthEpoch())
                 throw new IllegalArgumentException("resource-site cell cycle must share its lifecycle epoch");
-            if (lifecycle.phase() == ResourceSitePhase.HARVESTING) {
-                ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                        .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+            for (ResourceSiteHarvestJob job : lifecycle.harvestJobs().values()) {
                 if (job.progress().totalCropSlots() != cycle.layout().cells().size())
                     throw new IllegalArgumentException("field worker must retain its exact admitted layout size");
                 if (job.navigationBlock().isPresent()
                         && job.navigationBlock().orElseThrow().layoutRevision() != cycle.layout().revision())
                     throw new IllegalArgumentException("farmer's blocked goal has a foreign field layout revision");
-                if (cycle.accountedCount() != job.progress().completedCropSlots())
-                    throw new IllegalArgumentException("field cell work and retained farmer cursor disagree");
-                if (!job.progress().complete() && cycle.cell(cycle.layout().cells().get(
-                        job.progress().nextCropSlotIndex()).id()).accounted()
-                        || job.progress().lastCompletedCropSlotIndex() >= 0
-                        && !cycle.cell(cycle.layout().cells().get(
-                                job.progress().lastCompletedCropSlotIndex()).id()).accounted())
-                    throw new IllegalArgumentException("field target selection disagrees with the cell work pool");
-                // The job's delivered offset is authority for the next part identity.  It
-                // cannot outrun observed yield or leave more than one physical hand stack
-                // outstanding, including when completed cells had no crop to collect.
-                job.carriedYieldQuantity(cycle.harvestedCount());
-            } else if ((lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY)
-                    && cycle.accountedCount() != 0) {
-                throw new IllegalArgumentException("non-harvesting field retains unretired cell work");
+                if (!job.progress().complete() && !job.returningForBatch()) {
+                    ResourceFieldLayout.CellId selected = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+                    if (cycle.cell(selected).accounted() || !job.target().current(cycle)
+                            || !job.target().cellId().equals(selected))
+                        throw new IllegalArgumentException("field target has a stale generation or disagrees with its work pool");
+                }
             }
         }
         for (var entry : pendingWorldChanges.entrySet()) {
@@ -147,10 +136,9 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteLifecycle> sites,
 
     /** This field owner supplies exact effect fences; the plant clock knows no farmer job phases. */
     public java.util.Set<ResourceFieldLayout.CellId> growthProtectedCells(SubjectId id) {
-        var work = site(id).activeWork().orElse(null);
-        if (work instanceof ResourceSiteHarvestJob harvest && harvest.progress().hasPendingCrop())
-            return java.util.Set.of(cycle(id).layout().cells().get(harvest.progress().pendingCropSlotIndex()).id());
-        return java.util.Set.of();
+        return site(id).harvestJobs().values().stream().filter(job -> job.progress().hasPendingCrop())
+                .map(job -> cycle(id).layout().cells().get(job.progress().pendingCropSlotIndex()).id())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     public ResourceFieldCycle cycle(SubjectId id) {

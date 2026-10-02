@@ -180,8 +180,12 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 return FrontierWorldCommandPlanner.rejected("bakery physical receipt requires the physical executor");
             try {
                 ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(observed.jobId()));
-                ProductionProcess.reduceBakeryHotEffectObserved(state, job.settlementId(), observed);
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), observed)));
+                var successor = ProductionProcess.reduceBakeryHotEffectObserved(state, job.settlementId(), observed);
+                var events = new java.util.ArrayList<ProposedEvent>();
+                events.add(new ProposedEvent(job.settlementId(), observed));
+                events.addAll(BakeryCompletionPlanning.stationReleaseWake(state, successor, job.id(),
+                        command.id().value(), command.submittedAt().ticks()));
+                return new CommandPlan.Accepted(List.copyOf(events));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof BakeryHotWorkTick tick) {

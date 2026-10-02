@@ -23,7 +23,7 @@ public final class ResourceSiteHarvestKnownNavigation {
         Objects.requireNonNull(job, "known field navigation job");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING
-                || lifecycle.activeWork().filter(job::equals).isEmpty())
+                || lifecycle.harvestJob(job.id()).filter(job::equals).isEmpty())
             throw new IllegalArgumentException("known field navigation has no current job owner");
         ActorLocation actor = state.actorLocations().get(job.workerId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)

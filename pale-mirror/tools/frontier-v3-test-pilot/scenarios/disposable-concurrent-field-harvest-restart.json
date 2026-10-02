@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "id": "disposable_concurrent_field_harvest_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 126 },
+  "server": { "host": "127.0.0.1", "port": 26620, "profile": "concurrent-field-harvest", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "site", "id": "site:1-wheat-field", "expect": {
+        "status": "ok", "activeWork": ["job:site-harvest-1-wheat-field-1", "job:site-harvest-1-wheat-field-2"]
+      } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } },
+      "offset": { "x": -2, "y": 0, "z": 9 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1",
+      "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 120000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-2",
+      "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 120000 },
+    { "type": "release_fast_forward_hold" },
+    { "type": "observe_harvest_semantics", "siteId": "site:1-wheat-field", "jobId": "job:site-harvest-1-wheat-field-1",
+      "durationTicks": 400, "sampleEveryTicks": 20, "maxCanonicalStallTicks": 1200, "timeoutMs": 180000 },
+    { "type": "observe_harvest_semantics", "siteId": "site:1-wheat-field", "jobId": "job:site-harvest-1-wheat-field-2",
+      "durationTicks": 400, "sampleEveryTicks": 20, "maxCanonicalStallTicks": 1200, "timeoutMs": 180000 },
+    { "type": "look", "at": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } } },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 0, "y": 63, "z": 0 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1",
+      "expect": { "status": "ok", "claims": { "lease": null } }, "timeoutMs": 120000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-2",
+      "expect": { "status": "ok", "claims": { "lease": null } }, "timeoutMs": 120000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } },
+      "offset": { "x": -2, "y": 0, "z": 9 }, "settleMs": 1000 },
+    { "type": "observe_harvest_semantics", "siteId": "site:1-wheat-field", "jobId": "job:site-harvest-1-wheat-field-1",
+      "durationTicks": 400, "sampleEveryTicks": 20, "maxCanonicalStallTicks": 1200, "timeoutMs": 180000 },
+    { "type": "observe_harvest_semantics", "siteId": "site:1-wheat-field", "jobId": "job:site-harvest-1-wheat-field-2",
+      "durationTicks": 400, "sampleEveryTicks": 20, "maxCanonicalStallTicks": 1200, "timeoutMs": 180000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1",
+      "expect": { "status": "not_found" }, "timeoutMs": 300000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-2",
+      "expect": { "status": "not_found" }, "timeoutMs": 300000 },
+    { "type": "wait_until_diagnostic", "view": "intent", "id": "intent:site-harvest-1-wheat-field-1",
+      "expect": { "status": "ok", "intentStatus": "CONFIRMED" }, "timeoutMs": 120000 },
+    { "type": "wait_until_diagnostic", "view": "intent", "id": "intent:site-harvest-1-wheat-field-2",
+      "expect": { "status": "ok", "intentStatus": "CONFIRMED" }, "timeoutMs": 120000 },
+    { "type": "inspect", "view": "site", "id": "site:1-wheat-field" },
+    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot" }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 10 },
+  "assertions": [
+    { "after": 18, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok", "activeWork": [] } },
+    { "after": 19, "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 128, "claims": [] } }
+  ],
+  "frames": [{ "after": 7, "name": "two-independent-farmers-working" }]
+}

@@ -17,8 +17,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         if (assignment.kind() != HumanAssignmentKind.FIELD_HARVEST)
             throw new IllegalArgumentException("field checkpoint requires a declared field assignment");
         ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
-                .map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .flatMap(site -> site.harvestJobs().values().stream())
                 .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("field checkpoint lost its exact job"));
         if (!job.workerId().equals(assignment.residentId()))
@@ -32,8 +31,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
     static Optional<ActorCarriedResources.Presentation> carriedResources(FrontierWorldState state, HumanAssignment assignment) {
         executionCheckpoint(state, assignment); // owner validates the exact worker/job relation
         ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
-                .map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .flatMap(site -> site.harvestJobs().values().stream())
                 .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
         if (!state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())) return Optional.empty();
         var carried = new ActorCarriedResources.Presentation(job.workerId(), job.actorAccountId(),
@@ -51,8 +49,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
      */
     public static List<Candidate> candidates(FrontierWorldState state) {
         return state.resourceSites().sites().values().stream().sorted(java.util.Comparator.comparing(ResourceSiteLifecycle::siteId))
-                .map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .flatMap(site -> site.harvestJobs().values().stream())
                 .map(job -> candidate(state, job)).flatMap(Optional::stream).toList();
     }
 
@@ -71,8 +68,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         if (!ResourceSitePhysicalIntentStateSupport.admitsTraversal(state.physicalIntents().get(job.intentId()))) return Optional.empty();
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING
-                || lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .filter(job::equals).isEmpty()) return Optional.empty();
+                || lifecycle.harvestJob(job.id()).filter(job::equals).isEmpty()) return Optional.empty();
         ResourceSite site = state.resourceSite(job.siteId());
         ActorLocation worker = state.actorLocations().get(job.workerId());
         if (site == null || state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT
@@ -114,16 +110,13 @@ public final class FrontierResourceSiteHarvestSceneSupport {
     public static boolean isTerminalReceiptRelease(FrontierBootstrap bootstrap, ResourceSiteState resourceSites,
                                                    ResourceSiteHarvestSceneCause cause) {
         ResourceSiteLifecycle lifecycle = resourceSites.sites().get(cause.siteId());
-        return lifecycle != null && lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).filter(job -> job.id().equals(cause.jobId())).isEmpty()
+        return lifecycle != null && lifecycle.harvestJob(cause.jobId()).isEmpty()
                 && terminalReceiptSite(bootstrap, resourceSites, cause) != null;
     }
 
     private static Optional<ResourceSiteHarvestJob> activeJob(FrontierWorldState state, ResourceSiteHarvestSceneCause cause) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(cause.siteId());
-        return lifecycle == null ? Optional.empty() : lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast)
-                .filter(job -> job.id().equals(cause.jobId()) && job.siteId().equals(cause.siteId()));
+        return lifecycle == null ? Optional.empty() : lifecycle.harvestJob(cause.jobId()).filter(job -> job.siteId().equals(cause.siteId()));
     }
 
     public static SubjectId owner(FrontierWorldState state, ResourceSiteHarvestSceneCause cause) {
@@ -148,11 +141,9 @@ public final class FrontierResourceSiteHarvestSceneSupport {
     static ResourceSite terminalReceiptSite(FrontierBootstrap bootstrap, ResourceSiteState resourceSites,
                                                     ResourceSiteHarvestSceneCause cause) {
         ResourceSiteLifecycle lifecycle = resourceSites.sites().get(cause.siteId());
-        if (lifecycle == null || (lifecycle.phase() != ResourceSitePhase.GROWING
-                && lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.CONFLICT)
-                || lifecycle.activeWork().isPresent() || lifecycle.growthEpoch() <= 0L
-                || lifecycle.harvestLineage().filter(lineage -> lineage.predecessorJobId().equals(cause.jobId())
-                        && lineage.completedGrowthEpoch() == lifecycle.growthEpoch() - 1L).isEmpty()) return null;
+        if (lifecycle == null || lifecycle.harvestJob(cause.jobId()).isPresent()
+                || lifecycle.harvestLineages().values().stream().noneMatch(lineage ->
+                        lineage.predecessorJobId().equals(cause.jobId()))) return null;
         return resourceSites.descriptor(bootstrap, cause.siteId());
     }
 

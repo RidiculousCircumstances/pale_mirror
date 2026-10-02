@@ -9,6 +9,27 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorCarriedResourcesTest {
+    @Test void stackQuantityBelongsToTheExactCarrierNotTheSharedResourceKind() {
+        SubjectId owner = new SubjectId("settlement:owner");
+        SubjectId first = new SubjectId("resident:first"), second = new SubjectId("resident:second");
+        SubjectId firstAccount = new SubjectId("custody:first"), secondAccount = new SubjectId("custody:second");
+        SubjectId firstLot = new SubjectId("lot:first"), secondLot = new SubjectId("lot:second");
+        FungibleResourceLedger ledger = FungibleResourceLedger.empty()
+                .issue(new ResourceLot(firstLot, owner, "minecraft:wheat", 17, "test:first", List.of()),
+                        new CustodyAccount(firstAccount, new ResourceCustody.Actor(first), Map.of(firstLot, 17), Map.of()))
+                .issue(new ResourceLot(secondLot, owner, "minecraft:wheat", 31, "test:second", List.of()),
+                        new CustodyAccount(secondAccount, new ResourceCustody.Actor(second), Map.of(secondLot, 31), Map.of()));
+        assertEquals(17, ActorCarriedResources.stackQuantity(ledger, first, firstAccount, owner, "minecraft:wheat"));
+        assertEquals(31, ActorCarriedResources.stackQuantity(ledger, second, secondAccount, owner, "minecraft:wheat"));
+        assertEquals(0, ActorCarriedResources.stackQuantity(ledger, first, new SubjectId("custody:absent"), owner, "minecraft:wheat"));
+        assertThrows(IllegalArgumentException.class, () -> ActorCarriedResources.stackQuantity(
+                ledger, first, secondAccount, owner, "minecraft:wheat"));
+        assertThrows(IllegalArgumentException.class, () -> ActorCarriedResources.stackQuantity(
+                ledger, first, firstAccount, new SubjectId("settlement:foreign"), "minecraft:wheat"));
+        assertThrows(IllegalArgumentException.class, () -> ActorCarriedResources.stackQuantity(
+                ledger, first, firstAccount, owner, "minecraft:bread"));
+    }
+
     @Test void consumingFoodDoesNotConsumeOrRebindCarriedOre() {
         SubjectId actor = new SubjectId("resident:carrier");
         SubjectId economy = new SubjectId("settlement:owner");

@@ -10,6 +10,13 @@ public interface SettlementOperationPlanner {
     String id();
     Assessment assess(FrontierWorldState state, Settlement settlement);
 
+    /** Family-owned expansion of an existing objective; no new lane or waiting resident is acquired. */
+    default List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> expandActiveTasks(
+            FrontierWorldState state, Settlement settlement,
+            io.farfrontier.palemirror.frontier.v3.api.ScheduleId cause, long atTick) {
+        return List.of();
+    }
+
     enum Priority { CRITICAL, IMPORTANT, NORMAL, BACKGROUND }
     enum Reason { ROUTE_RECOVERY_ALREADY_OWNED, ROUTE_OBSERVATION_ALREADY_OWNED }
     record Offer(SubjectId ownerId, StrategicOperationProposal proposal, Priority priority, List<SubjectId> replacePendingTasks) {

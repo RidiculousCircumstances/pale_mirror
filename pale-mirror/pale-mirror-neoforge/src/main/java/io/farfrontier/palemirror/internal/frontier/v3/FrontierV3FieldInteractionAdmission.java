@@ -24,9 +24,7 @@ public final class FrontierV3FieldInteractionAdmission {
                     || ledger.fieldWorldChange(cycle.siteId()) != null
                     || ledger.fieldForeignChange(cycle.siteId()) != null
                     || ledger.fieldPlayerBreak(cycle.siteId()) != null) return false;
-            var active = state.resourceSites().site(cycle.siteId()).activeWork().orElse(null);
-            if (active instanceof ResourceSiteHarvestJob job && job.progress().hasPendingCrop()
-                    && job.progress().pendingCropSlotIndex() == cycle.layout().workIndex(cell.id())) return false;
+            if (state.resourceSites().growthProtectedCells(cycle.siteId()).contains(cell.id())) return false;
             if (!(ledger.fieldClaim(cycle.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership)) return false;
             var projected = FrontierV3ResourceFieldGrowthProjector.projectCurrentOne(level, runtime, cycle.siteId(), cell.id());
             if (projected != FrontierV3ResourceFieldGrowthProjector.Result.CURRENT

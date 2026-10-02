@@ -14,6 +14,15 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 final class FrontierV3ContinuationBinding {
     private FrontierV3ContinuationBinding() { }
 
+    static ScheduledAction require(FrontierScheduleView checkpoint,
+            io.farfrontier.palemirror.frontier.v3.api.ScheduleId id, SubjectId subject, String kind) {
+        var matches = checkpoint.schedules().stream().filter(action -> action.id().equals(id))
+                .filter(action -> action.subject().equals(subject) && action.kind().equals(kind)).toList();
+        if (matches.size() != 1)
+            throw new IllegalArgumentException("declared continuation must resolve exactly one engine action");
+        return matches.getFirst();
+    }
+
     static ScheduledAction require(FrontierScheduleView checkpoint, SubjectId subject, String kind) {
         var matches = checkpoint.schedules().stream()
                 .filter(action -> action.subject().equals(subject))

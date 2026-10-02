@@ -50,10 +50,9 @@ public final class ResourceSiteHarvestLabour {
             throw new IllegalArgumentException("field labour suspension has a foreign assignment");
         // The assignment already declares its job owner; site discovery is constrained to that owner's exact retained job.
         var lifecycle = state.resourceSites().sites().values().stream()
-                .filter(site -> site.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                        .map(ResourceSiteHarvestJob.class::cast).filter(job -> job.id().equals(assignment.ownerId().orElseThrow())).isPresent())
+                .filter(site -> site.harvestJob(assignment.ownerId().orElseThrow()).isPresent())
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("field labour owner lost its job"));
-        var job = (ResourceSiteHarvestJob) lifecycle.activeWork().orElseThrow();
+        var job = lifecycle.harvestJob(assignment.ownerId().orElseThrow()).orElseThrow();
         if (!job.workerId().equals(assignment.residentId())) throw new IllegalArgumentException("foreign field worker");
         return job;
     }

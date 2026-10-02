@@ -40,6 +40,18 @@ public final class SettlementManagement {
         return new Decision(settlement.id(), chosen.map(SettlementOperationPlanner.Offer::proposal), offers, holds,
                 chosen.map(SettlementOperationPlanner.Offer::replacePendingTasks).orElse(List.of()));
     }
+    public List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> expandActiveTasks(
+            FrontierWorldState state, Settlement settlement,
+            io.farfrontier.palemirror.frontier.v3.api.ScheduleId cause, long atTick) {
+        requireAuthority(state, settlement.id());
+        // A single selected family expansion is committed against this exact immutable predecessor.
+        // The arbiter does not interpret jobs, machine phases or resource representations.
+        for (SettlementOperationPlanner planner : planners) {
+            var events = planner.expandActiveTasks(state, settlement, cause, atTick);
+            if (!events.isEmpty()) return List.copyOf(events);
+        }
+        return List.of();
+    }
     public static boolean available(FrontierWorldState state, SubjectId owner, StrategicOperationProposal proposal) {
         return available(state, owner, new SettlementOperationPlanner.Offer(owner, proposal, SettlementOperationPlanner.Priority.NORMAL));
     }

@@ -49,7 +49,8 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(BakeryWorkState.Phase.PROCESSING, job.bakeryWork().orElseThrow().phase());
         assertEquals(7, job.bakeryWork().orElseThrow().completedWorkTicks());
         assertEquals(new SubjectId("job:production-" + job.taskId().value().substring("task:".length())), job.id());
-        assertEquals(new SubjectId("resident:1-3"), job.workerId());
+        assertTrue(SettlementWorkPolicy.permissions(state, job.settlementId())
+                .permits(ResidentWorkKind.BAKING, job.workerId()));
         assertEquals(new SubjectId("lot:" + job.id().value().substring("job:".length()) + "-bread"), job.outputItemId());
         assertTrue(state.inventory().fungibleResources().lots().containsKey(job.consumedItemId()));
         assertTrue(!state.inventory().fungibleResources().lots().containsKey(job.outputItemId()));
@@ -124,7 +125,7 @@ class FrontierV3FixtureCatalogTest {
         var configuration = FrontierV3FixtureCatalog.resourceSiteHarvestConfiguration(new WorldId("frontier:harvest-first-crop-fixture"), 41L);
         FrontierWorldState state = configuration.initialState();
         ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
-                .activeWork().orElseThrow();
+                .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         assertTrue(ResourceSiteHarvestGoal.actorAtWorkCell(state, job) && job.progress().completedCropSlots() == 0 && !job.progress().hasPendingCrop(),
                 "the fixture must stop at the actual farmer's first retained crop station, not pre-consume a field cell");
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
@@ -142,7 +143,7 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(2, state.bootstrap().hive().seedNests().size());
         assertEquals(1, state.coldSettlementAssaultSceneCandidates().size());
         ResourceSiteHarvestJob harvest = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
-                .activeWork().orElseThrow();
+                .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         assertTrue(ResourceSiteHarvestGoal.actorAtWorkCell(state, harvest) && state.sceneLeases().isEmpty() && state.ambientLeases().isEmpty(),
                 "one natural visit must be the only physical admission for both retained fronts");
         assertTrue(state.strategicPlans().settlementAssaults().values().stream().allMatch(value -> value.status() == SettlementAssaultStatus.COLD_COMBAT));

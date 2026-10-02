@@ -173,8 +173,10 @@ class ResidentActivityProcessTest {
                 assertInstanceOf(ResidentActivityAdmission.Waiting.class,
                         ResidentActivityProcess.admission(state, action)).reason());
         var planned = FrontierWorldRuntimeDefinition.planScheduled(state, action);
-        assertEquals(1, planned.size());
-        var next = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getFirst().payload()).replacement();
+        assertEquals(2, planned.size());
+        var availability = assertInstanceOf(ScheduleEffect.Created.class, planned.getFirst().payload()).action();
+        assertEquals("frontier.objective.stock_reconsider", availability.kind());
+        var next = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getLast().payload()).replacement();
         assertEquals(action.id(), next.id());
         assertEquals(24_001L, next.dueAt().ticks(),
                 "a held waiter must not inherit an avoidable 200-tick delay after stock arrives");
@@ -222,8 +224,10 @@ class ResidentActivityProcessTest {
 
         var planned = FrontierWorldRuntimeDefinition.planScheduled(state, action);
 
-        assertEquals(1, planned.size());
-        var next = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getFirst().payload()).replacement();
+        assertEquals(2, planned.size());
+        var availability = assertInstanceOf(ScheduleEffect.Created.class, planned.getFirst().payload()).action();
+        assertEquals("frontier.objective.stock_reconsider", availability.kind());
+        var next = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getLast().payload()).replacement();
         assertEquals(action.id(), next.id());
         assertTrue(next.dueAt().ticks() > 24_050L);
     }

@@ -12,6 +12,7 @@ import static io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3Te
 /** Read-only client oracle for one field-work identity and its causal progress. */
 final class FrontierV3HarvestSemanticOracle {
     private final String siteId;
+    private final String requestedJobId;
     private final long durationTicks;
     private final long sampleEveryTicks;
     private final long maxCanonicalStallTicks;
@@ -28,6 +29,7 @@ final class FrontierV3HarvestSemanticOracle {
 
     FrontierV3HarvestSemanticOracle(JsonObject action) {
         this.siteId = action.get("siteId").getAsString();
+        this.requestedJobId = action.has("jobId") ? action.get("jobId").getAsString() : "";
         this.durationTicks = action.get("durationTicks").getAsLong(); this.sampleEveryTicks = action.get("sampleEveryTicks").getAsLong();
         this.maxCanonicalStallTicks = action.get("maxCanonicalStallTicks").getAsLong();
     }
@@ -55,19 +57,28 @@ final class FrontierV3HarvestSemanticOracle {
         long instant = number(site, "instant");
         if (instant <= lastCanonicalInstant) return;
         lastCanonicalInstant = instant;
-        String phase = string(site, "phase"); String active = string(site, "activeWork");
+        String phase = string(site, "phase");
+        var activeJobs = new java.util.ArrayList<String>();
+        site.getAsJsonArray("activeWork").forEach(value -> activeJobs.add(value.getAsString()));
         if (!site.get("conflictDisposition").isJsonNull()) fail("truthful_local_blocker=" + site.get("conflictDisposition"));
-        if ("HARVESTING".equals(phase) && active.isBlank()) fail("false_active_without_current_work");
-        if (sawActive && active.isBlank() && "GROWING".equals(phase)) {
-            if (!sawCanonicalProgress || !sawPhysicalProgress || site.get("terminalHarvest").isJsonNull()) fail("terminal_without_observed_progress");
+        if ("HARVESTING".equals(phase) && activeJobs.isEmpty()) fail("false_active_without_current_work");
+        if (sawActive && !activeJobs.contains(jobId)) {
+            JsonObject terminal = null;
+            for (var receipt : site.getAsJsonArray("terminalHarvest")) {
+                var candidate = receipt.getAsJsonObject();
+                if (jobId.equals(string(candidate, "job"))) terminal = candidate;
+            }
+            if (!sawCanonicalProgress || !sawPhysicalProgress || terminal == null) fail("terminal_without_observed_progress");
+            if (!terminal.get("physicalReceiptResolved").getAsBoolean()) return;
             publish("PASS:TERMINAL");
             semanticSignature = "TERMINAL";
             passed = true;
             return;
         }
-        if (!active.isBlank()) {
-            if (bound && !jobId.equals(active)) fail("current_work_changed=" + active);
-            jobId = active; bound = true; sawActive = true;
+        if (!bound && !activeJobs.isEmpty()) {
+            if (!requestedJobId.isBlank() && !activeJobs.contains(requestedJobId)) return;
+            jobId = requestedJobId.isBlank() ? activeJobs.getFirst() : requestedJobId;
+            bound = true; sawActive = true;
         }
         ObservedDiagnostic process = jobId.isBlank() ? null : diagnostics.get(new DiagnosticIdentity("process", jobId));
         if (process == null) return;

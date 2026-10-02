@@ -42,7 +42,7 @@ class ResidentActivityCoordinatorTest {
         assertTrue(io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.selectSourceAtYield(
                 state, job.workerId(), hungryAt).isEmpty(), "request must not authorize concurrent HOT work and eating");
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state,
-                fixture.site(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
+                fixture.site(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));
         assertTrue(ResidentActivityCoordinator.requestsYield(state, job.workerId(), hungryAt));
         org.junit.jupiter.api.Assertions.assertFalse(ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(
                 state, job.workerId(), hungryAt), "an unfinished physical crop effect still prevents transfer");

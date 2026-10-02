@@ -81,9 +81,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         SceneLease lease = lease(runtime, work);
         if (FrontierSceneAdmission.available(state, work.memberPositions().keySet())) {
             submitBound(runtime, "resource-site-harvest-scene-prepare", lease.id().value(), new ResourceSiteHarvestSceneLeasePrepared(lease),
-                    binding(runtime, work.siteId()));
+                    binding(runtime, state.resourceSites().site(work.siteId()).harvestJob(work.jobId()).orElseThrow()));
         } else {
-            handoff(level, runtime, state, lease, binding(runtime, work.siteId()));
+            handoff(level, runtime, state, lease, binding(runtime, state.resourceSites().site(work.siteId()).harvestJob(work.jobId()).orElseThrow()));
         }
         return true;
     }
@@ -94,8 +94,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         var site = state.resourceSite(candidate.siteId());
         if (lifecycle == null || site == null || state.resourceSites().hasPendingWorldChange(candidate.siteId()))
             return false;
-        var job = lifecycle.activeWork().filter(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob.class::isInstance)
-                .map(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob.class::cast).orElse(null);
+        var job = lifecycle.harvestJob(candidate.jobId()).orElse(null);
         if (job == null || !job.id().equals(candidate.jobId())) return false;
         // Once every crop result is canonical, this scene only follows the retained
         // worker route. It must not force the remote field to load for a depot-side
@@ -288,7 +287,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
         if (supportedExit.isPresent() && ServiceAccessCoordinator.witnessedHarvestExit(
                 state, job, lease.id(), supportedExit.orElseThrow())) {
-            var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job.siteId());
+            var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
             if (binding.isEmpty()) return;
             ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
             var exit = new ResourceSiteHarvestHotTransitObserved(job.id(), lease.id(), job.workerId(),
@@ -339,7 +338,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 if (!FrontierV3ResourceFieldExclusionObservation.immatureCellCurrent(level, state, site, blockedCell.id())) return;
                 FrontierV3GoalNavigation.stop(worker);
                 if (retainInterruptedTransit(level, runtime, state, lease, job, worker)) return;
-                var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job.siteId());
+                var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
                 if (binding.isEmpty()) return;
                 var action = binding.orElseThrow();
                 var skipped = new ResourceSiteHarvestImmatureCellSkipped(job.siteId(), job.id(), job.workerId(),
@@ -356,7 +355,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 var blockedIds = List.of(blockedCell.id());
                 if (!blockedCellsPhysicallyCurrent(level, state, site, blockedIds)) return;
                 if (retainInterruptedTransit(level, runtime, state, lease, job, worker)) return;
-                var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job.siteId());
+                var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
                 if (binding.isEmpty()) return;
                 var action = binding.orElseThrow();
                 var skipped = new ResourceSiteHarvestBlockedCellSkipped(job.siteId(), job.id(), job.workerId(),
@@ -374,11 +373,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             if (blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE) {
                 FrontierV3GoalNavigation.stop(worker);
                 if (state.resourceSites().hasPendingWorldChange(job.siteId())) return;
-                if (level.getGameTime() % 20 != 0) return;
                 var cycle = state.resourceSites().cycle(job.siteId());
                 var prefix = ResourceSiteHarvestProcess.blockedPrefix(cycle, job.progress().nextCropSlotIndex());
                 if (ResourceSiteHarvestProcess.blockedPrefixMeetsPendingPlayerBreak(
-                        cycle, job.progress().nextCropSlotIndex(), prefix)) return;
+                        state, job, prefix)) return;
                 if (!prefix.isEmpty()
                         && goal.equals(ResourceSiteHarvestProcess.blockedPrefixContinuationGoal(state, job, prefix).representative())) {
                     try {
@@ -387,7 +385,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                         return;
                     }
                 }
-                var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job.siteId());
+                var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
                 if (binding.isEmpty()) return;
                 var action = binding.orElseThrow();
                 var cleared = new ResourceSiteHarvestRouteCleared(job.siteId(), job.id(), job.workerId(), blocked,
@@ -400,7 +398,6 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             if (state.resourceSites().hasPendingWorldChange(job.siteId())) return;
             if ((blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE
                     || blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.PATH_STALLED)
-                    && level.getGameTime() % 20 == 0
                     && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
             ResourceSiteHarvestGoal currentGoal = ResourceSiteHarvestGoal.current(state, job);
             var outcome = FrontierV3GoalNavigation.pursue(level, worker,
@@ -456,7 +453,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         tendCurrentCrop(level, worker, crop);
         if (!job.progress().hasPendingCrop()
                 && FrontierV3ResourceFieldLabourExecutor.advance(level, runtime, state, lease, job)) return;
-        var dueBinding = FrontierV3TraversalScheduleGate.dueBinding(runtime.executionView().orElseThrow(), job.siteId());
+        var dueBinding = FrontierV3TraversalScheduleGate.dueBinding(runtime.executionView().orElseThrow(), job);
         if (dueBinding.isEmpty()) {
             if (job.progress().hasPendingCrop()) {
                 conflict(level, runtime, lease, "field-work-pending-crop-continuation-not-due"); return;
@@ -487,7 +484,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             var admittedContinuation = dueBinding.orElseThrow();
             submitBound(runtime, "resource-site-harvest-progress", lease.id().value(),
                     new ResourceSiteHarvestProgressed(job.siteId(), field.epoch(), job.id(), job.progress().completedCropSlots() + 1,
-                            field.layout().revision(), cellId, outcome,
+                            field.layout().revision(), cellId, job.target().generation(), outcome,
                             admittedContinuation.id(), admittedContinuation.dueAt().ticks(), observedHand),
                     admittedContinuation);
             // Accepted final crop work still leaves the retained field-exit corridor.
@@ -498,7 +495,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // releases only an unprepared cursor; a pending crop reaches its observed receipt here
         // before any later COLD hand-off can be considered.
         if (!demand.active()) return;
-        if (level.getGameTime() % 10L != 0L) return;
+        // The family scheduler already bounds and fairly rotates scene attempts. A global
+        // tick-modulo filter aliases with that rotation and can permanently starve a worker.
+        // Completed labour and the exact due continuation, not a tick phase, admit this effect.
         // RUNNING means a non-replayable crop effect may already have begun.  Reaching a
         // station is still reversible retained travel: leaving demand there must release a
         // PREPARED intent so COLD/restart can continue it normally.  Cross the durable effect
@@ -519,7 +518,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         submitBound(runtime, "resource-site-harvest-crop-prepared", lease.id().value(),
-                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()), dueBinding.orElseThrow());
+                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()), dueBinding.orElseThrow());
     }
 
     /** A real goal-station observation takes precedence over stale intermediate route checkpoints. */
@@ -541,7 +540,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 ? ResourceSiteHarvestGoal.actorAtWorkCell(state, job) : ResourceSiteHarvestGoal.actorAtDepot(state, job);
         if (gateAlreadyRetained && job.navigationBlock().isEmpty() && observed.getFirst().standingBody().equals(
                 state.actorLocations().get(job.workerId()).body())) return false;
-        var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job.siteId());
+        var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
         if (binding.isEmpty()) {
             FrontierV3ControlledMobMotion.holdRetainedCheckpoint(level, worker,
                     FrontierV3SemanticMovement.point(level, observed.getFirst()));
@@ -559,7 +558,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if ((reason == FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE
                 || reason == FrontierV3GoalNavigation.BlockReason.PATH_STALLED)
                 && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
-        var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job.siteId());
+        var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
         if (binding.isEmpty()) return;
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         ResourceSiteHarvestNavigationBlock.Reason cause = switch (reason) {
@@ -588,15 +587,16 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         var alternate = cycle.reachableWorkSlotAfter(job.progress().nextCropSlotIndex(), index -> {
                 var cell = cycle.layout().cells().get(index);
                 var access = FrontierV3ResourceFieldWorkAccessExecutor.read(level, cell);
-                if (access.isEmpty() || access.orElseThrow().blocked()) return false;
-                ResourceSiteHarvestJob candidate = job.retargetTo(index);
+                if (access.isEmpty() || access.orElseThrow().blocked()
+                        || !state.resourceSites().site(job.siteId()).targetAvailable(index, job.id())) return false;
+                ResourceSiteHarvestJob candidate = job.retargetTo(index).bindTarget(cycle);
                 FrontierWorldState candidateState = state.withResourceSites(state.resourceSites().replace(
-                        state.resourceSites().site(job.siteId()).retargetHarvestCell(job, index)));
+                        state.resourceSites().site(job.siteId()).retargetHarvestCell(job, index, cycle)));
                 ResourceSiteHarvestGoal candidateGoal = ResourceSiteHarvestGoal.current(candidateState, candidate);
                 return FrontierV3GoalNavigation.canReach(level, worker, hotGoal(candidateState, candidate, candidateGoal));
         });
         if (alternate.isEmpty()) return false;
-        var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job.siteId());
+        var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
         if (binding.isEmpty()) return false;
         var action = binding.orElseThrow();
         var retargeted = new ResourceSiteHarvestTargetRetargeted(job.siteId(), job.id(), job.workerId(),
@@ -631,7 +631,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (supported.isEmpty()) return true;
         var body = supported.orElseThrow();
         if (body.equals(state.actorLocations().get(job.workerId()).body())) return false;
-        var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job.siteId());
+        var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
         if (binding.isEmpty()) return true;
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         var observed = new ResourceSiteHarvestHotTransitObserved(job.id(), lease.id(), job.workerId(),
@@ -650,6 +650,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         var account = resources.accounts().get(job.actorAccountId());
         var ledger = FrontierV3ResourceSiteLedger.get(level);
         var pending = ledger.fieldHandProjection(job.siteId());
+        // The durable physical transaction slot is shared; a sibling's exact pending
+        // projection is temporary serialization, not a foreign hand or a worker conflict.
+        if (pending != null && !pending.jobId().equals(job.id())) return true;
         if (account == null) {
             if (pending != null) { conflict(level, runtime, lease, "cold-carried-hand-lot-lost"); return true; }
             return false;
@@ -657,11 +660,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (pending == null && resources.bindings().values().stream()
                 .anyMatch(binding -> binding.accountId().equals(job.actorAccountId()))) return false;
         var cycle = state.resourceSites().cycle(job.siteId());
-        var part = io.farfrontier.palemirror.frontier.v3.model.ResourceFieldYield.currentCarriedLot(job.siteId(),
-                state.resourceSite(job.siteId()).settlementId(), cycle, cycle.accountedCount(),
-                job.deliveredYieldQuantity()).orElse(null);
+        var part = io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestCargo.part(state, job).orElse(null);
         if (part == null || job.progress().hasPendingCrop()
-                || cycle.accountedCount() != job.progress().completedCropSlots()
                 || !account.custody().equals(new io.farfrontier.palemirror.frontier.v3.model.ResourceCustody.Actor(job.workerId()))
                 || !account.lotQuantities().equals(java.util.Map.of(part.id(), part.quantity()))
                 || !account.claimQuantities().isEmpty()) {
@@ -669,7 +669,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         var expected = new FrontierV3ResourceSiteHandProjectionWitness(job.siteId(), job.id(), job.actorAccountId(),
                 part.id(), job.workerId(), lease.members().getFirst().entityId(), lease.id(), lease.revision(),
-                cycle.epoch(), cycle.accountedCount(), part.quantity());
+                cycle.epoch(), job.progress().completedCropSlots(), part.quantity());
         if (pending != null && !pending.equals(expected)) {
             conflict(level, runtime, lease, "cold-carried-hand-witness-foreign"); return true;
         }
@@ -888,35 +888,6 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         return ordinary != null ? ordinary : FrontierV3StandingPosition.aboveExactHarvestFieldFloor(level, floor);
     }
 
-    /** Reconciles exactly the durable pending farmer visit, including successor planting. */
-    private static boolean observePreparedCrop(ServerLevel level, FrontierWorldState state,
-                                               io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob acceptedJob,
-                                               io.farfrontier.palemirror.frontier.v3.model.BlockPosition cropSlot) {
-        var lifecycle = state.resourceSites().sites().get(acceptedJob.siteId()); if (lifecycle == null) return false;
-        var current = lifecycle.activeWork().filter(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob.class::isInstance)
-                .map(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob.class::cast).filter(job -> job.id().equals(acceptedJob.id())).orElse(null);
-        var site = state.resourceSite(acceptedJob.siteId());
-        if (current == null || site == null || !current.progress().equals(acceptedJob.progress()) || !current.progress().hasPendingCrop()
-                || !site.cropSlots().get(current.progress().pendingCropSlotIndex()).equals(cropSlot)) return false;
-        FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level); FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
-        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                || claim.stage() != io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle.MATURE_STAGE
-                || (claim.harvestedCropSlots() != current.progress().completedCropSlots()
-                && claim.harvestedCropSlots() != current.progress().completedCropSlots() + 1)) return false;
-        BlockPos position = new BlockPos(cropSlot.x(), cropSlot.y(), cropSlot.z());
-        boolean observed = FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, current.progress().completedCropSlots() + 1);
-        if (!observed && level.getBlockState(position).equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,
-                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle.MATURE_STAGE))) {
-            level.setBlock(position, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0), 3);
-            observed = FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, current.progress().completedCropSlots() + 1);
-        }
-        if (!observed) return false;
-        if (claim.harvestedCropSlots() == current.progress().completedCropSlots()) {
-            ledger.harvestOne(site.id(), current.progress().completedCropSlots() + 1);
-        }
-        return true;
-    }
-
     private static io.farfrontier.palemirror.frontier.v3.api.CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                                     String phase, String id, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         return FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
@@ -930,9 +901,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     }
 
     private static ScheduledAction binding(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                           io.farfrontier.palemirror.frontier.v3.api.SubjectId siteId) {
-        return FrontierV3ContinuationBinding.require(runtime.executionView().orElseThrow(), siteId,
-                ResourceSiteHarvestProcess.COLD_PROGRESS_KIND);
+                                           io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job) {
+        return FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job).orElseThrow(
+                () -> new IllegalArgumentException("field scene has no exact retained job continuation"));
     }
 
     /**
@@ -956,8 +927,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return Optional.empty();
         }
         var job = FrontierResourceSiteHarvestSceneSupport.require(state, cause);
-        return releaseBinding(checkpoint, job.siteId(),
-                state.resourceSites().site(job.siteId()).phase());
+        return state.resourceSites().site(job.siteId()).phase() == io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase.HARVESTING
+                ? Optional.of(FrontierV3TraversalScheduleGate.binding(checkpoint, job).orElseThrow(
+                        () -> new IllegalArgumentException("field release has no exact retained job continuation")))
+                : Optional.empty();
     }
 
     static Optional<ScheduledAction> releaseBinding(io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView checkpoint,

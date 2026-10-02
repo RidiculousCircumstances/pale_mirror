@@ -19,8 +19,7 @@ public final class ResourceSiteHarvestWorkProcess {
     }
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestWorkChanged changed) {
         var lifecycle = state.resourceSites().site(subject);
-        var job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+        var job = lifecycle.harvestJob(changed.jobId()).orElseThrow();
         var field = state.resourceSites().cycle(subject);
         if (!subject.equals(changed.siteId()) || !job.id().equals(changed.jobId()) || !job.workerId().equals(changed.workerId())
                 || job.progress().complete() || job.returningForBatch() || job.progress().hasPendingCrop()
@@ -48,8 +47,7 @@ public final class ResourceSiteHarvestWorkProcess {
         var result = new java.util.ArrayList<ProposedEvent>();
         result.add(new ProposedEvent(changed.siteId(), changed));
         if (changed.next().running()) result.add(new ProposedEvent(changed.siteId(), new ScheduleEffect.Rescheduled(binding.id(),
-                ResourceSiteHarvestProcess.coldProgress((ResourceSiteHarvestJob) state.resourceSites().site(changed.siteId())
-                        .activeWork().orElseThrow(), changed.next().activeUntilTick()))));
+                ResourceSiteHarvestProcess.coldProgress(state.resourceSites().site(changed.siteId()).harvestJob(changed.jobId()).orElseThrow(), changed.next().activeUntilTick()))));
         return List.copyOf(result);
     }
 }

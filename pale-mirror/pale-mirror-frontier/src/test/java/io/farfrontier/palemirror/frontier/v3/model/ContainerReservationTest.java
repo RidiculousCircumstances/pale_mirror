@@ -15,7 +15,7 @@ class ContainerReservationTest {
     void activeHarvestReservationConsumesRealCapacityForOtherProducers() {
         FrontierWorldState state = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0).state();
         ResourceSiteHarvestJob harvest = (ResourceSiteHarvestJob) state.resourceSites()
-                .site(new SubjectId("site:1-wheat-field")).activeWork().orElseThrow();
+                .site(new SubjectId("site:1-wheat-field")).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         SubjectId depot = harvest.outputSlot().containerId();
         int added = 0;
         while (state.firstFreeContainerSlot(depot).isPresent()) {
@@ -34,7 +34,7 @@ class ContainerReservationTest {
     void bakeryStockUsesAnotherSlotWithoutStealingActiveHarvestOutput() {
         FrontierWorldState state = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0).state();
         ResourceSiteHarvestJob harvest = (ResourceSiteHarvestJob) state.resourceSites()
-                .site(new SubjectId("site:1-wheat-field")).activeWork().orElseThrow();
+                .site(new SubjectId("site:1-wheat-field")).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         SubjectId depot = harvest.outputSlot().containerId();
         SubjectId accountId = ReferenceContainerCustody.scopeId(depot);
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");

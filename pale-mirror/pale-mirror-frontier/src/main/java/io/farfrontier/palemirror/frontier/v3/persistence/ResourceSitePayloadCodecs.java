@@ -94,6 +94,10 @@ final class ResourceSitePayloadCodecs {
                     output.writeInt(job.progress().lastCompletedCropSlotIndex());
                     WorkStateCodec.writeProgress(output, job.progress().work());
                     output.writeInt(job.deliveredYieldQuantity());
+                    output.writeInt(job.harvestedYieldQuantity());
+                    output.writeLong(job.target().layoutRevision());
+                    output.writeLong(job.target().cellId().value());
+                    output.writeLong(job.target().generation());
                     output.writeBoolean(job.returningForBatch());
                     output.writeBoolean(job.batchSuccessorSlot().isPresent());
                     if (job.batchSuccessorSlot().isPresent()) output.writeByte(job.batchSuccessorSlot().orElseThrow().slot());
@@ -116,7 +120,10 @@ final class ResourceSitePayloadCodecs {
                     int total = input.readInt(), completed = input.readInt(), pending = input.readInt();
                     int selected = input.readInt(), lastCompleted = input.readInt();
                     var workProgress = WorkStateCodec.readProgress(input);
-                    int delivered = input.readInt(); boolean returningForBatch = input.readBoolean();
+                    int delivered = input.readInt(), harvested = input.readInt();
+                    var target = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldWorkTarget(site,
+                            input.readLong(), new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId(input.readLong()), input.readLong());
+                    boolean returningForBatch = input.readBoolean();
                     java.util.Optional<InventoryCustody.ContainerSlot> successorSlot = input.readBoolean()
                             ? java.util.Optional.of(new InventoryCustody.ContainerSlot(depot, input.readUnsignedByte()))
                             : java.util.Optional.empty();
@@ -131,7 +138,7 @@ final class ResourceSitePayloadCodecs {
                     return new ResourceSiteHarvestStarted(new ResourceSiteHarvestJob(id, task, site, worker, actorAccount, depotAccount, output,
                             new InventoryCustody.ContainerSlot(depot, slot), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(intent),
                             new ResourceSiteHarvestProgress(total, completed, pending, selected, lastCompleted, workProgress), delivered,
-                            returningForBatch, successorSlot, lastBatch, java.util.Optional.empty()));
+                            returningForBatch, successorSlot, lastBatch, java.util.Optional.empty(), harvested, target));
                 });
             }
         };
@@ -572,13 +579,13 @@ final class ResourceSitePayloadCodecs {
             @Override public String type() { return "frontier.resource_site_harvest_crop_prepared"; }
             @Override public byte[] encode(FrontierPayload payload) {
                 ResourceSiteHarvestCropPrepared prepared = (ResourceSiteHarvestCropPrepared) payload; byte[] job = bytes(prepared.jobId().value());
-                return ByteBuffer.allocate(1 + job.length + Integer.BYTES).put((byte) job.length).put(job)
-                        .putInt(prepared.cropSlotIndex()).array();
+                return ByteBuffer.allocate(1 + job.length + Integer.BYTES + Long.BYTES).put((byte) job.length).put(job)
+                        .putInt(prepared.cropSlotIndex()).putLong(prepared.generation()).array();
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 ByteBuffer input = ByteBuffer.wrap(bytes); String job = read(input);
-                if (input.remaining() != Integer.BYTES) throw new IllegalArgumentException("malformed resource-site harvest crop preparation payload");
-                return new ResourceSiteHarvestCropPrepared(new SubjectId(job), input.getInt());
+                if (input.remaining() != Integer.BYTES + Long.BYTES) throw new IllegalArgumentException("malformed resource-site harvest crop preparation payload");
+                return new ResourceSiteHarvestCropPrepared(new SubjectId(job), input.getInt(), input.getLong());
             }
         };
     }
@@ -593,10 +600,10 @@ final class ResourceSitePayloadCodecs {
                 byte[] handActor = progressed.observedHand().map(hand -> bytes(hand.address().actorId().value())).orElse(new byte[0]);
                 int handBytes = handActor.length == 0 ? 0 : 1 + handActor.length + Long.BYTES * 3 + 1;
                 ByteBuffer encoded = ByteBuffer.allocate(1 + site.length + Long.BYTES + 1 + job.length + Integer.BYTES
-                                + Long.BYTES * 3 + 1 + 1 + schedule.length + 1 + handBytes)
+                                + Long.BYTES * 4 + 1 + 1 + schedule.length + 1 + handBytes)
                         .put((byte) site.length).put(site).putLong(progressed.epoch())
                         .put((byte) job.length).put(job).putInt(progressed.completedCropSlots())
-                        .putLong(progressed.layoutRevision()).putLong(progressed.cellId().value())
+                        .putLong(progressed.layoutRevision()).putLong(progressed.cellId().value()).putLong(progressed.generation())
                         .put((byte) workOutcomeTag(progressed.outcome()))
                         .put((byte) schedule.length).put(schedule).putLong(progressed.coldDueAt())
                         .put((byte) (handActor.length == 0 ? 0 : 1));
@@ -612,9 +619,10 @@ final class ResourceSitePayloadCodecs {
                 long epoch = input.getLong(); String job = read(input);
                 if (input.remaining() < Integer.BYTES) throw new IllegalArgumentException("truncated resource-site harvest progress payload");
                 int completed = input.getInt();
-                if (input.remaining() < Long.BYTES * 2 + 2) throw new IllegalArgumentException("truncated resource-site cell work receipt");
+                if (input.remaining() < Long.BYTES * 3 + 2) throw new IllegalArgumentException("truncated resource-site cell work receipt");
                 long revision = input.getLong();
                 var cellId = new ResourceFieldLayout.CellId(input.getLong());
+                long generation = input.getLong();
                 var outcome = workOutcome(Byte.toUnsignedInt(input.get()));
                 String schedule = read(input);
                 if (input.remaining() < Long.BYTES + 1) throw new IllegalArgumentException("malformed resource-site harvest progress payload");
@@ -632,7 +640,7 @@ final class ResourceSitePayloadCodecs {
                             new PhysicalStackAddress.ActorHand(new SubjectId(actor), entity), input.getLong(),
                             Byte.toUnsignedInt(input.get())));
                 } else throw new IllegalArgumentException("unknown harvest hand observation tag");
-                return new ResourceSiteHarvestProgressed(new SubjectId(site), epoch, new SubjectId(job), completed, revision, cellId, outcome,
+                return new ResourceSiteHarvestProgressed(new SubjectId(site), epoch, new SubjectId(job), completed, revision, cellId, generation, outcome,
                         new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(schedule), dueAt, hand);
             }
         };

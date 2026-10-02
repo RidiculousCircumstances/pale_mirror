@@ -282,8 +282,7 @@ public final class FrontierReadabilityPlan {
     }
 
     private static FrontierObjectBoard.Tone fieldTone(ResourceSiteLifecycle lifecycle) {
-        if (lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).flatMap(ResourceSiteHarvestJob::navigationBlock).isPresent())
+        if (lifecycle.harvestJobs().values().stream().anyMatch(job -> job.navigationBlock().isPresent()))
             return FrontierObjectBoard.Tone.WARNING;
         return switch (lifecycle.phase()) {
             case CONFLICT, DESTROYED -> FrontierObjectBoard.Tone.WARNING;
@@ -330,8 +329,8 @@ public final class FrontierReadabilityPlan {
             case GROWING -> "GROWING · STAGE " + state.resourceSites().cycle(site.id()).plantGrowthStage()
                     + "/" + ResourceSiteLifecycle.MATURE_STAGE;
             case READY -> readyFieldText(state, site);
-            case HARVESTING -> lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                    .map(ResourceSiteHarvestJob.class::cast).flatMap(ResourceSiteHarvestJob::navigationBlock)
+            case HARVESTING -> lifecycle.harvestJobs().values().stream().sorted(java.util.Comparator.comparing(ResourceSiteHarvestJob::id))
+                    .map(ResourceSiteHarvestJob::navigationBlock).flatMap(java.util.Optional::stream).findFirst()
                     .map(block -> "HARVEST PAUSED · ROUTE BLOCKED\n" + switch (block.reason()) {
                         case TARGET_SUPPORT -> "SUPPORT MISSING";
                         case TARGET_CLEARANCE -> "PATH OBSTRUCTED";
@@ -345,8 +344,8 @@ public final class FrontierReadabilityPlan {
                         case SEARCH_BUDGET_EXHAUSTED -> "LOCAL PATH BUDGET EXCEEDED";
                         case KNOWN_GEOMETRY_UNAVAILABLE -> "AWAITING OBSERVED ROUTE";
                     }).orElseGet(() -> {
-                        var job = (ResourceSiteHarvestJob) lifecycle.activeWork().orElseThrow();
-                        if (!job.progress().complete()) return "HARVEST IN PROGRESS";
+                        if (lifecycle.harvestJobs().values().stream().anyMatch(job -> !job.progress().complete()))
+                            return "HARVEST IN PROGRESS · WORKERS " + lifecycle.harvestJobs().size();
                         int stage = state.resourceSites().cycle(site.id()).plantGrowthStage();
                         return (stage == ResourceSiteLifecycle.MATURE_STAGE ? "CROPS READY" : "GROWING · STAGE " + stage + "/" + ResourceSiteLifecycle.MATURE_STAGE)
                                 + "\nHARVEST COLLECTED · DELIVERY PENDING";
@@ -463,11 +462,34 @@ public final class FrontierReadabilityPlan {
      */
     private static String workshopText(FrontierWorldState state, Settlement settlement, StructureCondition condition) {
         if (condition != StructureCondition.INTACT) return conditionText(condition);
-        ProductionJob job = state.productionJobs().values().stream()
+        var jobs = state.productionJobs().values().stream()
                 .filter(candidate -> candidate.facilityId().equals(workshopId(settlement)))
-                .reduce((left, right) -> { throw new IllegalStateException("workshop has multiple retained production jobs"); })
-                .orElse(null);
-        MarketWorkOrder order = job == null ? null : state.companies().market().acceptedForJob(job.id()).orElse(null);
+                .sorted(Comparator.comparing(ProductionJob::id)).toList();
+        if (jobs.isEmpty()) return "OPERATIONAL";
+        if (jobs.size() == 1) return workshopJobText(state, jobs.getFirst());
+        var phases = jobs.stream().collect(java.util.stream.Collectors.groupingBy(job -> {
+            var task = state.strategicPlans().tasks().get(job.taskId());
+            var work = job.bakeryWork().orElseThrow();
+            if (state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE
+                    || task != null && task.status() == StrategicTaskStatus.BLOCKED
+                    || work.block().isPresent() || ProductionOutputCapacity.depotDeliveryUnavailable(state, job))
+                return "PAUSED";
+            return switch (work.phase()) {
+                case DEPOT_PICKUP -> "PICKUP";
+                case STATION_LOAD -> "LOAD";
+                case PROCESSING -> "BAKING";
+                case STATION_UNLOAD -> "UNLOAD";
+                case DEPOT_DELIVERY -> "DELIVERY";
+                case DELIVERED -> "RETURN";
+            };
+        }, java.util.TreeMap::new, java.util.stream.Collectors.counting()));
+        return "BAKERS · " + jobs.size() + "\n" + phases.entrySet().stream()
+                .map(entry -> entry.getKey() + " · " + entry.getValue())
+                .collect(java.util.stream.Collectors.joining("\n"));
+    }
+
+    private static String workshopJobText(FrontierWorldState state, ProductionJob job) {
+        MarketWorkOrder order = state.companies().market().acceptedForJob(job.id()).orElse(null);
         if (order == null) return "OPERATIONAL";
         MarketDemand demand = state.companies().market().demands().get(order.demandId());
         if (demand == null) throw new IllegalStateException("accepted workshop order has no buyer demand");

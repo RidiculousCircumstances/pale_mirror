@@ -37,7 +37,7 @@
         },
         {
           "view": "operation",
-          "id": "operation:supply-1-18",
+          "id": "operation:supply-1-14",
           "expect": {
             "status": "ok",
             "stage": "EN_ROUTE",
@@ -46,13 +46,13 @@
         },
         {
           "view": "resource",
-          "id": "custody:cargo-supply-1-18",
+          "id": "custody:cargo-supply-1-14",
           "expect": {
             "status": "ok",
             "quantity": 64,
             "custody": {
               "kind": "CARGO",
-              "cargo": "cargo:supply-1-18"
+              "cargo": "cargo:supply-1-14"
             }
           }
         }
@@ -73,7 +73,7 @@
     {
       "type": "wait_until_diagnostic",
       "view": "scene",
-      "id": "operation:supply-1-18",
+      "id": "operation:supply-1-14",
       "expect": {
         "status": "ok",
         "leaseStatus": "HOT"
@@ -82,7 +82,7 @@
     },
     {
       "type": "visit_operation",
-      "operationId": "operation:supply-1-18",
+      "operationId": "operation:supply-1-14",
       "dimension": "pale_mirror:frontier_graybox",
       "anchor": "travelCargo",
       "offset": {
@@ -122,7 +122,7 @@
     {
       "type": "wait_until_diagnostic",
       "view": "operation",
-      "id": "operation:supply-1-18",
+      "id": "operation:supply-1-14",
       "expect": {
         "status": "ok",
         "stage": "INTERRUPTED"
@@ -132,7 +132,7 @@
     {
       "type": "inspect",
       "view": "operation",
-      "id": "operation:supply-1-18"
+      "id": "operation:supply-1-14"
     },
     {
       "type": "attack_nearest_entity",
@@ -160,12 +160,12 @@
     {
       "type": "inspect",
       "view": "operation",
-      "id": "operation:supply-1-18"
+      "id": "operation:supply-1-14"
     },
     {
       "type": "wait_until_diagnostic",
       "view": "scene",
-      "id": "operation:supply-1-18",
+      "id": "operation:supply-1-14",
       "expect": {
         "status": "ok",
         "leaseStatus": "CLOSED",
@@ -212,7 +212,7 @@
     {
       "after": 7,
       "view": "operation",
-      "id": "operation:supply-1-18",
+      "id": "operation:supply-1-14",
       "expect": {
         "status": "ok",
         "stage": "INTERRUPTED"
@@ -221,7 +221,7 @@
     {
       "after": 10,
       "view": "operation",
-      "id": "operation:supply-1-18",
+      "id": "operation:supply-1-14",
       "expect": {
         "status": "ok",
         "stage": "INTERRUPTED"
@@ -230,7 +230,7 @@
     {
       "after": 11,
       "view": "scene",
-      "id": "operation:supply-1-18",
+      "id": "operation:supply-1-14",
       "expect": {
         "status": "ok",
         "leaseStatus": "CLOSED",

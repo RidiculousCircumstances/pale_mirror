@@ -78,8 +78,13 @@ class HumanRoleAssignmentTest {
                 .withProfession(ResidentProfession.BAKER);
         state = HumanPopulationTestFixtures.withResident(state, born, replacementSurface);
         StrategicTask task = productionTask(settlement.id());
-        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective(task, StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD))
+        state = state.withStrategicPlans(state.strategicPlans().addObjective(objective(task, StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD))
                 .addTask(task));
+        var permissionKinds = new java.util.EnumMap<ResidentWorkKind, java.util.Set<SubjectId>>(ResidentWorkKind.class);
+        permissionKinds.putAll(SettlementWorkPolicy.permissions(state, settlement.id()).workers());
+        permissionKinds.put(ResidentWorkKind.BAKING, java.util.Set.of(born.id()));
+        state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(settlement.id(),
+                new ResidentWorkPermissions(permissionKinds)));
 
         List<ProposedEvent> planned = ProductionProcess.planStart(state, ProductionProcess.start(task, 100L));
 

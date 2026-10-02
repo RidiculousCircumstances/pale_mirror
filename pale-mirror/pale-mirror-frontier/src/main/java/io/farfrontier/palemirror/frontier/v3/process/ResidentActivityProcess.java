@@ -175,6 +175,15 @@ public final class ResidentActivityProcess {
             events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Created(
                     ActorMovementProcess.progress(movement, Math.addExact(now, 1L)))));
         });
+        if (!mealStarted && events.stream().noneMatch(event -> event.payload()
+                instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted)
+                && HumanAssignmentProjection.compile(selectedState).idle(resident.id())
+                && ResidentActivityCoordinator.mayStartOrdinaryWork(selectedState, resident.id(), now)
+                && SettlementWorkPolicy.permissions(selectedState, resident.settlementId()).workers().values()
+                    .stream().anyMatch(workers -> workers.contains(resident.id()))) {
+            events.add(new ProposedEvent(resident.settlementId(), new ScheduleEffect.Created(
+                    StrategicObjectiveProcess.workforceReconsideration(resident, action, Math.addExact(now, 1L)))));
+        }
         long next = nextReview(state, resident, now, choice, mealStarted,
                 state.humanPopulation().meals().containsKey(action.subject()));
         events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(),

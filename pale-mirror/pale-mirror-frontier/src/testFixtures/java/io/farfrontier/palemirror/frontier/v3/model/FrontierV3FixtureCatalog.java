@@ -76,6 +76,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("bakeryFreshJob", FrontierV3FixtureCatalog::bakeryFreshJobConfiguration),
             Map.entry("fungibleProductionTwoLotWork", FrontierV3FixtureCatalog::fungibleProductionTwoLotWorkConfiguration),
             Map.entry("resourceSiteHarvest", FrontierV3FixtureCatalog::resourceSiteHarvestConfiguration),
+            Map.entry("concurrentFieldHarvest", FrontierV3FixtureCatalog::concurrentFieldHarvestConfiguration),
             Map.entry("resourceSiteHarvest65", FrontierV3FixtureCatalog::resourceSiteHarvest65Configuration),
             Map.entry("resourceSiteHarvest65AfterColdPart", FrontierV3FixtureCatalog::resourceSiteHarvest65AfterColdPartConfiguration),
             Map.entry("productionInputTheft", FrontierV3FixtureCatalog::productionInputTheftConfiguration),
@@ -362,6 +363,11 @@ public final class FrontierV3FixtureCatalog {
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> concurrentFieldHarvestConfiguration(WorldId worldId, long seed) {
+        var fixture = FrontierResourceSiteHarvestFixture.createConcurrent(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> resourceSiteHarvest65Configuration(WorldId worldId, long seed) {
         FrontierResourceSiteHarvestFixture.Fixture fixture = FrontierResourceSiteHarvestFixture.createWithOneExtraCell(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
@@ -504,7 +510,7 @@ public final class FrontierV3FixtureCatalog {
         FrontierResourceSiteHarvestFixture.Fixture fixture =
                 FrontierResourceSiteHarvestFixture.createWithOneExtraCellAfterColdPart(state);
         state = fixture.state();
-        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) state.resourceSites().site(fixture.siteId()).activeWork().orElseThrow();
+        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) state.resourceSites().site(fixture.siteId()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         SubjectId resident = job.workerId();
         long at = fixture.instant().ticks();
         HumanPopulation people = state.humanPopulation();

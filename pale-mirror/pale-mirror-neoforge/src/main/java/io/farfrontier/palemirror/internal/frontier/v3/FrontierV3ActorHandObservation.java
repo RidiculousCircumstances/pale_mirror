@@ -122,8 +122,7 @@ final class FrontierV3ActorHandObservation {
                 && FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())
                 && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())
                 && site != null && site.phase() == ResourceSitePhase.HARVESTING
-                && site.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                        .map(ResourceSiteHarvestJob.class::cast).filter(job::equals).isPresent()
+                && site.harvestJob(job.id()).filter(job::equals).isPresent()
                 && lease.members().size() == 1
                 && lease.members().getFirst().actorId().equals(job.workerId());
     }

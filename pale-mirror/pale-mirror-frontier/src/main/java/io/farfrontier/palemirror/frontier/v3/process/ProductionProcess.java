@@ -87,15 +87,17 @@ public final class ProductionProcess {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING); Settlement settlement = settlement(state, task.ownerId());
         SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
+        if (!SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id()))
+            return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
+                    state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
         Optional<ResidentProfile> availableBaker = FrontierWorldStateSupport.availableWorkResident(
-                state, settlement.id(), ResidentProfession.BAKER);
+                state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY);
         if (availableBaker.isEmpty()) {
             return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.WORKER_UNAVAILABLE);
         }
-        if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, availableBaker.orElseThrow().id(), action.dueAt().ticks()))
-            return List.of(reschedule(action, start(task, ResidentActivityCoordinator.nextOrdinaryWorkAdmission(
-                    state, availableBaker.orElseThrow().id(), action.dueAt().ticks()))));
-        if (!ActorExecutionCoordinator.ordinaryWorkAdmission(state, availableBaker.orElseThrow().id()).permitted())
+        List<ResidentProfile> eligible = ResidentWorkSelection.eligible(state, settlement.id(),
+                ResidentWorkKind.BAKING, HumanCapability.INDUSTRY, action.dueAt().ticks());
+        if (eligible.isEmpty())
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
                     state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
@@ -121,16 +123,23 @@ public final class ProductionProcess {
         }
         // Exact and fungible stock remain distinct representations. A resource job admitted
         // under physical custody reserves the current bound epoch, never a COLD mirror.
-        ProductionJob job = physicalCustody && input.isPresent()
-                ? BakeryJobAdmission.exact(state, task, settlement, workshop, input.orElseThrow())
-                : fungible.map(value -> BakeryJobAdmission.fungible(state, task, settlement, workshop, value)).orElseGet(() ->
-                BakeryJobAdmission.exact(state, task, settlement, workshop, input.orElseThrow()));
+        Optional<ProductionJob> selectedJob = ResidentWorkSelection.offers(state, settlement.id(), action.dueAt().ticks(),
+                BakeryJobAdmission.provider(task, settlement, workshop, input, fungible)).stream()
+                .map(ResidentWorkOffer::execution)
+                .filter(job -> CompanyWorkPaymentProcess.canReserve(state, job)).findFirst();
         // Finance is a start precondition.  A blocked task must not leave a durable job
         // occupying its workshop: otherwise a later objective review could create a
         // second job for the same facility and quarantine the canonical engine.
-        if (!CompanyWorkPaymentProcess.canReserve(state, job)) {
+        if (selectedJob.isEmpty()) {
+            // A funded but temporarily unavailable worker is not a settlement finance failure.
+            if (SettlementWorkforce.candidates(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY).stream()
+                    .map(worker -> BakeryJobAdmission.propose(state, task, settlement, workshop, input, fungible, worker))
+                    .anyMatch(job -> CompanyWorkPaymentProcess.canReserve(state, job)))
+                return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
+                        state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
             return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.FINANCE_UNAVAILABLE);
         }
+        ProductionJob job = selectedJob.orElseThrow();
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(settlement.id(), new ProductionStarted(job, job.consumedItemId())), schedule(complete(job, action.dueAt().ticks() + 100L)));
     }
 
@@ -154,7 +163,7 @@ public final class ProductionProcess {
         if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), action.dueAt().ticks()))
             return List.of(reschedule(action, complete(job, ResidentActivityCoordinator.nextOrdinaryWorkCheck(
                     state, job.workerId(), action.dueAt().ticks()))));
-        if (job.bakeryWork().isPresent()) return planBakeryCompletion(state, job, action);
+        if (job.bakeryWork().isPresent()) return BakeryCompletionPlanning.plan(state, job, action);
         Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, job); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return failActiveJob(state, task, settlement, workshop, job, ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
         if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlement.id()))) {
@@ -299,35 +308,6 @@ public final class ProductionProcess {
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ProductionStarted started) {
         return BakeryJobAdmission.admitStarted(state, subject, started);
-    }
-
-    private static List<ProposedEvent> planBakeryCompletion(FrontierWorldState state, ProductionJob job,
-                                                             ScheduledAction action) {
-        StrategicTask retainedTask = state.strategicPlans().tasks().get(job.taskId());
-        if (retainedTask != null && retainedTask.status() == StrategicTaskStatus.BLOCKED) return List.of();
-        var step = BakeryProcess.planColdStep(state, job);
-        if (step.isPresent() && step.orElseThrow().action() == BakeryColdStep.Action.FINALIZE)
-            return List.of(new ProposedEvent(job.settlementId(), step.orElseThrow()));
-        if (state.structureConditions().get(job.facilityId()) != StructureCondition.INTACT)
-            return failActiveJob(state, activeTask(state, job), settlement(state, job.settlementId()),
-                    workshop(settlement(state, job.settlementId())), job, ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
-        var actor = state.actorLocations().get(job.workerId());
-        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
-            return failActiveJob(state, activeTask(state, job), settlement(state, job.settlementId()),
-                    workshop(settlement(state, job.settlementId())), job, ProductionDiagnosticProducer.WORKER_UNAVAILABLE);
-        var replacement = BakeryProcess.planInputReallocation(state, job);
-        if (replacement.isPresent()) return List.of(new ProposedEvent(job.settlementId(), replacement.orElseThrow()),
-                reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
-        if (step.isEmpty()) {
-            long interval = job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DELIVERED
-                    && ProductionOutputCapacity.depotDeliveryUnavailable(state, job)
-                    ? state.bootstrap().ruleset().cadence().strategicReviewInterval() : 20L;
-            return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), interval))));
-        }
-        long due = Math.addExact(action.dueAt().ticks(), ProductionWorkProgress.SIMULATION_TICKS_PER_WORK_UNIT);
-        if (step.orElseThrow().action() == BakeryColdStep.Action.FINALIZE)
-            return List.of(new ProposedEvent(job.settlementId(), step.orElseThrow()));
-        return List.of(new ProposedEvent(job.settlementId(), step.orElseThrow()), reschedule(action, complete(job, due)));
     }
 
     public static FrontierWorldState reduceBakeryColdStep(FrontierWorldState state, SubjectId subject, BakeryColdStep step) {
@@ -678,7 +658,7 @@ public final class ProductionProcess {
                     break;
                 }
                 if (!blocked.workId().equals(workshop.id()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
-                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.BAKER).isPresent()) {
+                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY).isPresent()) {
                     throw new IllegalArgumentException("production worker block precondition does not hold");
                 }
             }
@@ -698,12 +678,13 @@ public final class ProductionProcess {
                 Optional<FungibleResourceCustodySupport.LotSelection> prospectiveFungible = FungibleResourceCustodySupport
                         .selectAtContainer(state, depot, settlement.id(), WHEAT, 64);
                 if (!blocked.workId().equals(workshop.id()) || prospectiveInput.isEmpty() && prospectiveFungible.isEmpty()
-                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.BAKER).isEmpty()) {
+                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY).isEmpty()) {
                     throw new IllegalArgumentException("production finance start block precondition does not hold");
                 }
-                ProductionJob prospectiveJob = prospectiveFungible.map(value -> BakeryJobAdmission.fungible(state, pending, settlement, workshop, value))
-                        .orElseGet(() -> BakeryJobAdmission.exact(state, pending, settlement, workshop, prospectiveInput.orElseThrow()));
-                if (CompanyWorkPaymentProcess.canReserve(state, prospectiveJob)) {
+                if (SettlementWorkforce.candidates(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY).stream()
+                        .map(worker -> BakeryJobAdmission.propose(state, pending, settlement, workshop,
+                                prospectiveInput, prospectiveFungible, worker))
+                        .anyMatch(prospective -> CompanyWorkPaymentProcess.canReserve(state, prospective))) {
                     throw new IllegalArgumentException("production finance start block has available funds");
                 }
             }
@@ -768,7 +749,7 @@ public final class ProductionProcess {
     private static List<ProposedEvent> blocked(StrategicTask task, Settlement settlement, SettlementStructure workshop, SubjectId work, ProductionDiagnosticProducer producer) {
         return List.of(new ProposedEvent(settlement.id(), producer.create(settlement.id(), workshop.id(), work, task.id())), transition(task, StrategicTaskStatus.BLOCKED));
     }
-    private static List<ProposedEvent> failActiveJob(FrontierWorldState state, StrategicTask task, Settlement settlement, SettlementStructure workshop,
+    static List<ProposedEvent> failActiveJob(FrontierWorldState state, StrategicTask task, Settlement settlement, SettlementStructure workshop,
                                                       ProductionJob job, ProductionDiagnosticProducer producer) {
         if (job.bakeryWork().isPresent())
             return blocked(task, settlement, workshop, job.id(), producer);
@@ -928,7 +909,7 @@ public final class ProductionProcess {
     private static FrontierWorldState replaceJob(FrontierWorldState state, ProductionJob replacement) {
         return FrontierProductionWorkSceneSupport.replaceJob(state, replacement);
     }
-    private static Settlement settlement(FrontierWorldState state, SubjectId id) { return FrontierWorldStateSupport.settlement(state.bootstrap(), id); }
+    static Settlement settlement(FrontierWorldState state, SubjectId id) { return FrontierWorldStateSupport.settlement(state.bootstrap(), id); }
     private static boolean retainsFungibleInput(FrontierWorldState state, ProductionJob job, SubjectId accountId,
                                                 java.util.Map<SubjectId, Integer> inputLots) {
         FungibleResourceLedger resources = state.inventory().fungibleResources();
@@ -945,8 +926,6 @@ public final class ProductionProcess {
     }
     static SettlementStructure workshop(Settlement settlement) { return settlement.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst()
             .orElseThrow(() -> new IllegalStateException("settlement lacks workshop")); }
-    private static ResidentProfile baker(FrontierWorldState state, Settlement settlement) { return FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.BAKER)
-            .orElseThrow(() -> new IllegalStateException("settlement lacks baker")); }
     private static boolean coldHold(ProductionInputHold hold) {
         return hold instanceof ProductionInputHold.Cold || hold instanceof ProductionInputHold.FungibleCold;
     }
@@ -980,7 +959,7 @@ public final class ProductionProcess {
             new SimInstant(due), 0, job.id(), "frontier.settlement.production.task.complete", 1); }
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
-    private static ProposedEvent reschedule(ScheduledAction current, ScheduledAction replacement) {
+    static ProposedEvent reschedule(ScheduledAction current, ScheduledAction replacement) {
         if (!current.id().equals(replacement.id())) throw new IllegalArgumentException("production completion reschedule must retain its stable identity");
         return new ProposedEvent(current.subject(), new ScheduleEffect.Rescheduled(current.id(), replacement));
     }

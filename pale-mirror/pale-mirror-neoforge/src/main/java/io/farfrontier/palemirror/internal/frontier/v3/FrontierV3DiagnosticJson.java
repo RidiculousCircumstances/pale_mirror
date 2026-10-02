@@ -297,8 +297,7 @@ final class FrontierV3DiagnosticJson {
     private static String process(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         ResourceSiteHarvestJob job = subject == null ? null : state.resourceSites().sites().values().stream()
-                .map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .flatMap(site -> site.harvestJobs().values().stream())
                 .filter(value -> value.id().equals(subject)).findFirst().orElse(null);
         if (job != null) return harvestProcess(checkpoint, state, job);
         ProductionJob production = subject == null ? null : state.productionJobs().get(subject);
@@ -543,9 +542,7 @@ final class FrontierV3DiagnosticJson {
         }
         SubjectId owner = assignment.ownerId().orElseThrow();
         ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
-                .flatMap(site -> site.activeWork().stream())
-                .filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast)
+                .flatMap(site -> site.harvestJobs().values().stream())
                 .filter(candidate -> candidate.id().equals(owner) && candidate.workerId().equals(actor))
                 .findFirst().orElse(null);
         if (job == null) return "UNOBSERVED";

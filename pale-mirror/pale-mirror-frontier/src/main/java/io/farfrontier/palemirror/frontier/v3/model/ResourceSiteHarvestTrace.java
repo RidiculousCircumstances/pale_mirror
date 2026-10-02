@@ -10,7 +10,7 @@ public final class ResourceSiteHarvestTrace {
     private ResourceSiteHarvestTrace() { }
     public static Optional<RetainedDiagnosticTrace> lookup(FrontierWorldState state, String correlation) {
         Objects.requireNonNull(state, "harvest trace state"); Objects.requireNonNull(correlation, "harvest trace correlation");
-        return state.resourceSites().sites().values().stream().map(ResourceSiteLifecycle::harvestLineage).flatMap(Optional::stream)
+        return state.resourceSites().sites().values().stream().flatMap(site -> site.harvestLineages().values().stream())
                 .map(lineage -> lineage.causality().trace()).filter(trace -> trace.correlation().equals(correlation)).findFirst();
     }
     public static FrontierWorldState retain(FrontierWorldState state, FrontierEvent event) {
@@ -18,49 +18,56 @@ public final class ResourceSiteHarvestTrace {
         // attach to a lineage that did not exist yet; retain the actual terminal event as
         // the cold causal boundary once that reducer has published it.
         if (event.payload() instanceof ResourceSiteHarvestReturned returned) {
-            return update(state, "resource-site-harvest:" + returned.jobId().value(), trace -> trace.cold(event));
+            return update(state, event.subject(), returned.jobId(), trace -> trace.cold(event));
         }
         if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced advanced) {
-            return update(state, "resource-site-harvest:" + advanced.jobId().value(), trace -> trace.cold(event));
+            return update(state, event.subject(), advanced.jobId(), trace -> trace.cold(event));
         }
         if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) {
-            return update(state, "resource-site-harvest:" + advanced.jobId().value(), trace -> trace.cold(event));
+            return update(state, event.subject(), advanced.jobId(), trace -> trace.cold(event));
         }
         if (event.payload() instanceof ResourceSiteHarvestProgressed progressed
                 && state.resourceSites().sites().values().stream()
-                        .anyMatch(lifecycle -> lifecycle.harvestLineage().isPresent()
-                                && lifecycle.harvestLineage().orElseThrow().predecessorJobId().equals(progressed.jobId()))) {
-            return update(state, "resource-site-harvest:" + progressed.jobId().value(), trace -> trace.cold(event));
+                        .anyMatch(lifecycle -> lifecycle.harvestLineages().values().stream()
+                                .anyMatch(lineage -> lineage.predecessorJobId().equals(progressed.jobId())))) {
+            return update(state, event.subject(), progressed.jobId(), trace -> trace.cold(event));
         }
         if (event.payload() instanceof PhysicalIntentTransition transition
                 && transition.observation().orElse(null) instanceof ResourceSiteHarvestObservation observation) {
-            return updateIntent(state, observation.intentId(), trace -> trace.observed(observation.id(), event));
+            return updateIntent(state, event.subject(), observation.intentId(), trace -> trace.observed(observation.id(), event));
         }
         if (event.payload() instanceof PhysicalIntentTransition transition
                 && transition.observation().orElse(null) instanceof ResourceSiteHarvestDeliveryObservation observation) {
-            return updateIntent(state, observation.intentId(), trace -> trace.observed(observation.id(), event));
+            return updateIntent(state, event.subject(), observation.intentId(), trace -> trace.observed(observation.id(), event));
         }
         if (event.payload() instanceof PhysicalIntentTransition transition
                 && transition.observation().orElse(null) instanceof ResourceSiteHarvestDeferredObservation observation) {
-            return updateIntent(state, observation.intentId(), trace -> trace.observed(observation.id(), event));
+            return updateIntent(state, event.subject(), observation.intentId(), trace -> trace.observed(observation.id(), event));
         }
         return state;
     }
-    private static FrontierWorldState updateIntent(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intent,
-                                                   java.util.function.UnaryOperator<RetainedDiagnosticTrace> update) {
-        for (ResourceSiteLifecycle lifecycle : state.resourceSites().sites().values()) {
-            if (lifecycle.harvestLineage().isPresent() && lifecycle.harvestLineage().orElseThrow().predecessorIntentId().equals(intent)) {
-                return state.withResourceSites(state.resourceSites().replace(lifecycle.withHarvestTrace(update.apply(lifecycle.harvestLineage().orElseThrow().causality().trace()))));
-            }
-        }
-        return state;
+    private static FrontierWorldState updateIntent(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId site,
+            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intent,
+            java.util.function.UnaryOperator<RetainedDiagnosticTrace> update) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(site);
+        if (lifecycle == null) return state;
+        var lineage = lifecycle.harvestLineage(intent);
+        if (lineage.isEmpty()) return state;
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.withHarvestTrace(intent,
+                update.apply(lineage.orElseThrow().causality().trace()))));
     }
-    private static FrontierWorldState update(FrontierWorldState state, String correlation, java.util.function.UnaryOperator<RetainedDiagnosticTrace> update) {
-        for (ResourceSiteLifecycle lifecycle : state.resourceSites().sites().values()) {
-            if (lifecycle.harvestLineage().isPresent() && lifecycle.harvestLineage().orElseThrow().causality().trace().correlation().equals(correlation)) {
-                return state.withResourceSites(state.resourceSites().replace(lifecycle.withHarvestTrace(update.apply(lifecycle.harvestLineage().orElseThrow().causality().trace()))));
-            }
-        }
-        return state;
+    private static FrontierWorldState update(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId site,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId job,
+            java.util.function.UnaryOperator<RetainedDiagnosticTrace> update) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(site);
+        if (lifecycle == null) return state;
+        var lineage = lifecycle.harvestLineages().values().stream()
+                .filter(value -> value.predecessorJobId().equals(job))
+                .reduce((left, right) -> { throw new IllegalArgumentException("field trace has competing exact job histories"); });
+        if (lineage.isEmpty()) return state;
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.withHarvestTrace(
+                lineage.orElseThrow().predecessorIntentId(), update.apply(lineage.orElseThrow().causality().trace()))));
     }
 }

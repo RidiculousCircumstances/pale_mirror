@@ -85,11 +85,10 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         if (!effectExecutionAdmitted()) return List.of();
         return state.resourceSites().sites().values().stream().sorted(java.util.Comparator.comparing(ResourceSiteLifecycle::siteId))
                 .flatMap(lifecycle -> java.util.stream.Stream.concat(
-                        lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                                .map(ResourceSiteHarvestJob::intentId).stream(),
-                        lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+                        lifecycle.harvestJobs().values().stream().map(ResourceSiteHarvestJob::intentId),
+                        lifecycle.harvestLineages().values().stream().filter(ResourceSiteHarvestLineage::receiptPending)
                                 .filter(lineage -> !lineage.composedIntoCanonicalSuccessor(state))
-                                .map(ResourceSiteHarvestLineage::predecessorIntentId).stream()))
+                                .map(ResourceSiteHarvestLineage::predecessorIntentId)))
                 .map(state.physicalIntents()::get).filter(Objects::nonNull)
                 .filter(intent -> intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST)
                 .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
@@ -220,7 +219,6 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         if (chest == null) { unknown(runtime, intent.id(), "missing-depot"); return; }
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
         if (intent.status() == PhysicalIntentStatus.RUNNING) {
-            if (target.deferredReceipt() && FrontierV3ResourceSiteDeferredTerminalPrefix.awaitingProjection(level, state, target.site(), intent)) return;
             if (completeRunning(level, target.site(), ledger, chest, target.output())) { confirm(runtime, intent, target); }
             else { fail(level, runtime, ledger, target, "completion-postcondition-conflict-"
                     + receiptDisposition(level, target.site(), ledger, chest, target.output()).name().toLowerCase(java.util.Locale.ROOT)); }
@@ -364,7 +362,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         if (intent == null) return null;
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST) return null;
         ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(intent.causeSubjectId()); if (lifecycle == null) return null;
-        ResourceSiteHarvestLineage deferred = lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+        ResourceSiteHarvestLineage deferred = lifecycle.harvestLineage(intent.id()).filter(ResourceSiteHarvestLineage::receiptPending)
                 .filter(lineage -> !lineage.composedIntoCanonicalSuccessor(state))
                 .filter(lineage -> lineage.predecessorIntentId().equals(intent.id())).orElse(null);
         if (deferred != null) {
@@ -375,7 +373,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
             return new Target(intent, site, deferred.workerId(), Optional.empty(), output,
                     new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()), true);
         }
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.RESOURCE_SITE_JOB))
                 .filter(value -> value.intentId().equals(intent.id())).orElse(null);
         if (job == null) return null; ResourceSite site = state.resourceSite(job.siteId());
         ContainerSurface surface = state.inventory().surfaces().get(job.outputSlot().containerId()); if (site == null || surface == null) return null;

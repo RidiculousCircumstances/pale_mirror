@@ -87,8 +87,9 @@ public final class ResourceSiteHarvestProcess {
                                                          ResourceSiteHarvestHandProjected projected) {
         if (!subject.equals(projected.siteId())) throw new IllegalArgumentException("field hand has a foreign site owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(projected.jobId()).orElse(null);
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING
-                || !(lifecycle.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job)
+                || job == null
                 || !job.id().equals(projected.jobId()) || !job.actorAccountId().equals(projected.actorAccountId())
                 || job.progress().hasPendingCrop()) {
             throw new IllegalArgumentException("field hand projection lacks its active declared harvest job");
@@ -104,12 +105,7 @@ public final class ResourceSiteHarvestProcess {
                 || !address.entityId().equals(lease.members().getFirst().entityId())) {
             throw new IllegalArgumentException("field hand projection has a foreign physical farmer or epoch");
         }
-        ResourceFieldCycle field = state.resourceSites().cycle(subject);
-        if (field.accountedCount() != job.progress().completedCropSlots()) {
-            throw new IllegalArgumentException("field hand projection disagrees with completed cell work");
-        }
-        ResourceLot part = ResourceFieldYield.currentCarriedLot(subject, state.resourceSite(subject).settlementId(),
-                field, field.accountedCount(), job.deliveredYieldQuantity()).orElseThrow(
+        ResourceLot part = ResourceSiteHarvestCargo.part(state, job).orElseThrow(
                 () -> new IllegalArgumentException("field hand projection has no positive COLD-carried part"));
         if (part.quantity() != projected.hand().quantity()) {
             throw new IllegalArgumentException("field hand projection changes the accounted crop quantity");
@@ -135,8 +131,9 @@ public final class ResourceSiteHarvestProcess {
         if (!subject.equals(site.settlementId()))
             throw new IllegalArgumentException("harvest hand release has a foreign settlement owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(released.siteId());
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(released.jobId()).orElse(null);
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING
-                || !(lifecycle.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job)
+                || job == null
                 || !job.id().equals(released.jobId()) || !job.actorAccountId().equals(released.actorAccountId())
                 || job.progress().hasPendingCrop())
             throw new IllegalArgumentException("harvest hand release lacks its exact active job");
@@ -164,7 +161,7 @@ public final class ResourceSiteHarvestProcess {
                 || bound.getFirst().quantity() != released.observedHand().quantity()
                 || !bound.getFirst().lotQuantities().equals(account.lotQuantities())
                 || !bound.getFirst().claimQuantities().isEmpty()
-                || job.carriedYieldQuantity(state.resourceSites().cycle(job.siteId()).harvestedCount())
+                || ResourceSiteHarvestCargo.quantity(state, job)
                         != released.observedHand().quantity())
             throw new IllegalArgumentException("harvest hand release disagrees with exact bound wheat custody");
         FrontierWorldState unbound = state.withInventory(state.inventory().withFungibleResources(
@@ -178,8 +175,7 @@ public final class ResourceSiteHarvestProcess {
         // The event already declares its site owner. Never discover authority by
         // scanning for a matching job in another site's active-work collection.
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast)
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(progressed.jobId())
                 .orElseThrow(() -> new IllegalArgumentException("resource-site harvest progress has no active job at its declared site owner"));
         if (!job.id().equals(progressed.jobId()))
             throw new IllegalArgumentException("resource-site harvest progress has a foreign job for its declared site owner");
@@ -190,17 +186,20 @@ public final class ResourceSiteHarvestProcess {
         ResourceFieldCycle field = state.resourceSites().cycle(job.siteId());
         ResourceFieldLayout.Cell cell = field.layout().cells().get(job.progress().nextCropSlotIndex());
         if (progressed.epoch() != field.epoch() || progressed.layoutRevision() != field.layout().revision()
-                || !progressed.cellId().equals(cell.id()))
+                || !progressed.cellId().equals(cell.id()) || progressed.generation() != job.target().generation()
+                || !job.target().current(field))
             throw new IllegalArgumentException("resource-site harvest receipt targets a stale or foreign field cell");
         ResourceFieldCycle worked = field.worked(cell.id(), progressed.outcome());
+        int carriedAfter = Math.addExact(ResourceSiteHarvestCargo.quantity(state, job),
+                worked.harvestedCount() - field.harvestedCount());
         SurfaceAnchor workerStation = state.actorLocations().get(job.workerId()).supportingSurface();
-        int nextSelected = worked.nextWorkSlotAfter(job.progress().nextCropSlotIndex()).orElse(-1);
+        int nextSelected = lifecycle.nextHarvestTarget(job, worked);
         ResourceSiteLifecycle advanced = lifecycle.advanceHarvest(job, progressed.completedCropSlots(),
-                ResourceSiteHarvestGoal.current(state, job), workerStation, nextSelected);
-        ResourceSiteHarvestJob advancedJob = (ResourceSiteHarvestJob) advanced.activeWork().orElseThrow();
+                ResourceSiteHarvestGoal.current(state, job), workerStation, nextSelected, progressed.outcome(), worked);
+        ResourceSiteHarvestJob advancedJob = advanced.harvestJob(job.id()).orElseThrow();
         if (!advancedJob.progress().complete()
-                && advancedJob.carriedYieldQuantity(worked.harvestedCount()) == 64) {
-            advanced = advanced.returnFullHarvestBatch(advancedJob, worked.harvestedCount());
+                && carriedAfter == 64) {
+            advanced = advanced.returnFullHarvestBatch(advancedJob);
         }
         ExactInventory inventory = state.inventory();
         ResourceSite site = site(state, job.siteId());
@@ -222,12 +221,11 @@ public final class ResourceSiteHarvestProcess {
                     || !hand.address().actorId().equals(job.workerId())
                     || !hand.address().entityId().equals(lease.members().getFirst().entityId())
                     || hand.authorityEpoch() != lease.revision()
-                    || hand.quantity() != job.carriedYieldQuantity(worked.harvestedCount()))
+                    || hand.quantity() != carriedAfter)
                 throw new IllegalArgumentException("HOT crop work disagrees with its exact actor hand and custody epoch");
             FungibleResourceLedger resources = inventory.fungibleResources();
             if (worked.harvestedCount() != field.harvestedCount()) {
-                ResourceLot carried = ResourceFieldYield.currentCarriedLot(job.siteId(), site.settlementId(),
-                        worked, worked.accountedCount(), job.deliveredYieldQuantity()).orElseThrow();
+                ResourceLot carried = ResourceSiteHarvestCargo.newPart(state, job, carriedAfter);
                 inventory = inventory.withFungibleResources(resources.accrueObservedActorHarvestPart(carried,
                         actorAccount, job.workerId(), hand.authorityEpoch(),
                         new FungiblePhysicalObservation.Stack(hand.address(), "minecraft:wheat", hand.quantity())));
@@ -249,10 +247,9 @@ public final class ResourceSiteHarvestProcess {
             if (progressed.observedHand().isPresent())
                 throw new IllegalArgumentException("COLD crop work cannot carry a forged Minecraft hand observation");
             if (worked.harvestedCount() != field.harvestedCount()) {
-            ResourceLot carried = ResourceFieldYield.currentCarriedLot(job.siteId(), site.settlementId(),
-                    worked, worked.accountedCount(), job.deliveredYieldQuantity()).orElseThrow();
-            inventory = inventory.withFungibleResources(inventory.fungibleResources()
-                    .accrueColdActorHarvestPart(carried, actorAccount, job.workerId()));
+                ResourceLot carried = ResourceSiteHarvestCargo.newPart(state, job, carriedAfter);
+                inventory = inventory.withFungibleResources(inventory.fungibleResources()
+                        .accrueColdActorHarvestPart(carried, actorAccount, job.workerId()));
             }
         }
         // The last crop is not the final worker position. Return along the retained
@@ -269,16 +266,17 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("resource-site COLD terminal lacks its returned worker");
         requireContinuationBinding(job, action);
         ResourceFieldCycle worked = state.resourceSites().cycle(job.siteId());
-        if (!worked.cycleAccounted())
-            throw new IllegalArgumentException("field harvest cannot complete with unaccounted cells");
         ResourceSite site = site(state, job.siteId());
-        ResourceFieldYield yield = ResourceFieldYield.fromCompletedCycle(job.siteId(), site.settlementId(), worked);
-        ResourceFieldCycle successor = worked.nextEpoch();
+        ResourceFieldCycle successor = worked;
         ExactInventory inventory = state.inventory();
-        if (job.carriedYieldQuantity(yield.quantity()) > 0) {
-            inventory = inventory.withFungibleResources(inventory.fungibleResources().deliverColdActorHarvestPart(
-                    worked, site.settlementId(), job.deliveredYieldQuantity(), job.actorAccountId(), job.workerId(),
-                    job.depotAccountId()));
+        int carried = ResourceSiteHarvestCargo.quantity(state, job);
+        // Confirmed output history belongs to this execution alone. Missing
+        // custody must not silently retire its undelivered yield.
+        if (carried != job.undeliveredYieldQuantity())
+            throw new IllegalArgumentException("field terminal yield disagrees with its exact actor cargo");
+        if (carried > 0) {
+            inventory = inventory.withFungibleResources(inventory.fungibleResources()
+                    .transferActorOrderCold(ResourceSiteHarvestCargo.deliveryOrder(state, job)));
         }
         PhysicalIntent intent = state.physicalIntents().get(job.intentId());
         if (intent == null || (intent.status() != PhysicalIntentStatus.PREPARED && intent.status() != PhysicalIntentStatus.RUNNING)) {
@@ -291,7 +289,7 @@ public final class ResourceSiteHarvestProcess {
         // observed or its local recovery disposition resolves it; neither COLD nor a successor
         // may erase that fact.
         java.util.Map<PhysicalIntentId, PhysicalIntent> intents = new java.util.LinkedHashMap<>(state.physicalIntents());
-        FencedRecoveryState recovery = retireSupersededPendingReceipt(state, lifecycle, intents);
+        FencedRecoveryState recovery = state.fencedRecovery();
         FrontierWorldStateUpdate update = FrontierWorldStateUpdate.begin()
                 .resourceSites(state.resourceSites().replace(next, successor))
                 .inventory(inventory)
@@ -314,7 +312,7 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("COLD field batch has no exclusively returned farmer and depot");
         requireContinuationBinding(job, action);
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-        if (job.carriedYieldQuantity(cycle.harvestedCount()) != 64 || !ResourceSiteHarvestPlanning.batchDeliveryCapacityAvailable(state, job))
+        if (ResourceSiteHarvestCargo.quantity(state, job) != 64 || !ResourceSiteHarvestPlanning.batchDeliveryCapacityAvailable(state, job))
             throw new IllegalArgumentException("COLD field batch lacks a full hand or next depot reservation");
         ResourceSite site = site(state, job.siteId());
         ActorLocation actor = state.actorLocations().get(job.workerId());
@@ -323,12 +321,11 @@ public final class ResourceSiteHarvestProcess {
         InventoryCustody.ContainerSlot nextSlot = job.batchSuccessorSlot().orElseGet(() ->
                 new InventoryCustody.ContainerSlot(job.outputSlot().containerId(),
                         state.firstFreeContainerSlot(job.outputSlot().containerId()).orElseThrow()));
-        FungibleResourceLedger resources = state.inventory().fungibleResources().deliverColdActorHarvestPart(
-                cycle, site.settlementId(), job.deliveredYieldQuantity(), job.actorAccountId(), job.workerId(), job.depotAccountId());
+        FungibleResourceLedger resources = state.inventory().fungibleResources()
+                .transferActorOrderCold(ResourceSiteHarvestCargo.deliveryOrder(state, job));
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         return state.withChanges(FrontierWorldStateUpdate.begin()
-                .resourceSites(state.resourceSites().replace(lifecycle.deliverFullHarvestBatch(job, nextSlot,
-                        cycle.harvestedCount())))
+                .resourceSites(state.resourceSites().replace(lifecycle.deliverFullHarvestBatch(job, nextSlot, cycle, actor.supportingSurface())))
                 .inventory(state.inventory().withFungibleResources(resources)));
     }
 
@@ -340,21 +337,6 @@ public final class ResourceSiteHarvestProcess {
      * a later stale replica without replaying either wheat result, while the new terminal keeps
      * its own exact receipt authority.
      */
-    private static FencedRecoveryState retireSupersededPendingReceipt(FrontierWorldState state,
-                                                                        ResourceSiteLifecycle lifecycle,
-                                                                        java.util.Map<PhysicalIntentId, PhysicalIntent> intents) {
-        ResourceSiteHarvestLineage predecessor = lifecycle.harvestLineage()
-                .filter(ResourceSiteHarvestLineage::receiptPending).orElse(null);
-        if (predecessor == null) return state.fencedRecovery();
-        PhysicalIntent prior = intents.remove(predecessor.predecessorIntentId());
-        if (prior == null || prior.status() != PhysicalIntentStatus.RUNNING
-                || !prior.causeSubjectId().equals(lifecycle.siteId())) {
-            throw new IllegalArgumentException("resource-site successor terminal lacks its exact pending predecessor receipt");
-        }
-        return FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), prior, PhysicalIntentStatus.CONFLICTED,
-                FencedRecoveryAsset.EFFECT);
-    }
-
     private static ResourceSiteLifecycle terminalLifecycle(FrontierWorldState state, ResourceSiteLifecycle advanced,
                                                             ResourceSiteHarvestJob job, ScheduledAction action) {
         PhysicalIntent intent = state.physicalIntents().get(job.intentId());
@@ -362,19 +344,18 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("resource-site COLD terminal lifecycle lacks its exact admissible physical intent");
         }
         requireContinuationBinding(job, action);
-        ResourceSiteHarvestJob completed = advanced.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+        ResourceSiteHarvestJob completed = advanced.harvestJob(job.id()).orElseThrow();
         ActorLocation actor = state.actorLocations().get(completed.workerId());
         if (actor == null || !ResourceSiteHarvestGoal.actorAtDepot(state, completed))
             throw new IllegalArgumentException("resource-site terminal has no legal returned farmer body");
         return advanced.harvestedDeferred(completed, intent.status() == PhysicalIntentStatus.PREPARED,
-                ResourceSiteHarvestCausality.captured(state, completed, action, intent.status() == PhysicalIntentStatus.RUNNING), actor.body());
+                ResourceSiteHarvestCausality.captured(state, completed, action, intent.status() == PhysicalIntentStatus.RUNNING), actor.body(),
+                ResourceSiteHarvestHistoryRetention.reclaimable(state, advanced, completed.workerId()));
     }
 
     public static FrontierWorldState reduceCropPrepared(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestCropPrepared prepared) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast)
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(prepared.jobId())
                 .orElseThrow(() -> new IllegalArgumentException("resource-site harvest crop preparation has no active job at its declared site owner"));
         if (!job.id().equals(prepared.jobId()))
             throw new IllegalArgumentException("resource-site harvest crop preparation has a foreign job for its declared site owner");
@@ -382,6 +363,9 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("resource-site harvest crop preparation requires its actual farmer at the current CellId station");
         if (job.progress().work().filter(WorkProgress::complete).isEmpty())
             throw new IllegalArgumentException("crop effect cannot precede complete admitted labour");
+        if (prepared.generation() != job.target().generation()
+                || !job.target().current(state.resourceSites().cycle(subject)))
+            throw new IllegalArgumentException("crop effect has a stale generation claim");
         return state.withResourceSites(state.resourceSites().replace(lifecycle.prepareHarvestCrop(job, prepared.cropSlotIndex(),
                 ResourceSiteHarvestGoal.current(state, job), state.actorLocations().get(job.workerId()).supportingSurface())));
     }
@@ -402,11 +386,12 @@ public final class ResourceSiteHarvestProcess {
                 || condition.crop() != ResourceFieldCycle.Crop.OBSTRUCTED ? List.of() : List.of(id);
     }
 
-    public static boolean blockedPrefixMeetsPendingPlayerBreak(ResourceFieldCycle cycle, int firstSlot,
+    public static boolean blockedPrefixMeetsPendingPlayerBreak(FrontierWorldState state, ResourceSiteHarvestJob job,
                                                                 List<ResourceFieldLayout.CellId> prefix) {
         if (prefix.isEmpty()) return false;
+        ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
         ResourceFieldCycle worked = cycle.skipBlocked(prefix.getFirst());
-        int next = worked.nextWorkSlotAfter(firstSlot).orElse(-1);
+        int next = state.resourceSites().site(job.siteId()).nextHarvestTarget(job, worked);
         return next >= 0 && cycle.pendingPlayerBreaks().containsKey(cycle.layout().cells().get(next).id());
     }
 
@@ -418,7 +403,8 @@ public final class ResourceSiteHarvestProcess {
         if (prefix.size() != 1 || !cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id().equals(prefix.getFirst()))
             throw new IllegalArgumentException("blocked continuation has no selected CellId");
         ResourceFieldCycle worked = cycle.skipBlocked(prefix.getFirst());
-        int next = worked.nextWorkSlotAfter(job.progress().nextCropSlotIndex()).orElse(cycle.layout().cells().size());
+        int selected = state.resourceSites().site(job.siteId()).nextHarvestTarget(job, worked);
+        int next = selected < 0 ? cycle.layout().cells().size() : selected;
         return ResourceSiteHarvestGoal.forSlot(state, job, next);
     }
 
@@ -433,14 +419,14 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("blocked-cell continuation has no retained farmer body");
         int nextSlot = blockedPrefixContinuationGoal(state, job, prefix).nextWorkSlot();
         ResourceFieldCycle worked = cycle.skipBlocked(prefix.getFirst());
-        int carried = job.carriedYieldQuantity(cycle.harvestedCount());
+        int carried = ResourceSiteHarvestCargo.quantity(state, job);
         if (nextSlot < cycle.layout().cells().size() && carried >= 64)
             throw new IllegalArgumentException("field work continuation cannot exceed its physical hand capacity");
         try {
             ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
             ResourceSiteLifecycle advanced = lifecycle.skipSelectedHarvestCell(job,
-                    nextSlot == cycle.layout().cells().size() ? -1 : nextSlot, cycle.harvestedCount());
-            ResourceSiteHarvestJob nextJob = (ResourceSiteHarvestJob) advanced.activeWork().orElseThrow();
+                    nextSlot == cycle.layout().cells().size() ? -1 : nextSlot, worked);
+            ResourceSiteHarvestJob nextJob = advanced.harvestJob(job.id()).orElseThrow();
             ResourceSiteHarvestKnownNavigation.path(state.withResourceSites(
                     state.resourceSites().replace(advanced, worked)), nextJob);
         } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable noRoute) {
@@ -462,8 +448,7 @@ public final class ResourceSiteHarvestProcess {
                                                          ResourceSiteHarvestRouteBlocked blocked) {
         if (!subject.equals(blocked.siteId())) throw new IllegalArgumentException("farmer route block has foreign site owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(blocked.jobId()).orElseThrow(
                         () -> new IllegalArgumentException("farmer route block has no active job"));
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !job.id().equals(blocked.jobId())
                 || !job.workerId().equals(blocked.workerId()) || job.navigationBlock().isPresent()
@@ -478,7 +463,7 @@ public final class ResourceSiteHarvestProcess {
                 throw new IllegalArgumentException("farmer continuation block cannot overtake pending physical field change");
             List<ResourceFieldLayout.CellId> prefix = blockedPrefix(cycle, job.progress().nextCropSlotIndex());
             if (prefix.isEmpty()
-                    || blockedPrefixMeetsPendingPlayerBreak(cycle, job.progress().nextCropSlotIndex(), prefix)
+                    || blockedPrefixMeetsPendingPlayerBreak(state, job, prefix)
                     || !blocked.block().target().equals(blockedPrefixContinuationGoal(state, job, prefix).representative()))
                 throw new IllegalArgumentException("farmer continuation block lacks its exact observed work prefix");
             boolean unavailable = false;
@@ -502,8 +487,7 @@ public final class ResourceSiteHarvestProcess {
                                                          ResourceSiteHarvestRouteCleared cleared) {
         if (!subject.equals(cleared.siteId())) throw new IllegalArgumentException("farmer route clearance has foreign site owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(cleared.jobId()).orElseThrow(
                         () -> new IllegalArgumentException("farmer route clearance has no active job"));
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !job.id().equals(cleared.jobId())
                 || !job.workerId().equals(cleared.workerId())
@@ -517,7 +501,7 @@ public final class ResourceSiteHarvestProcess {
             if (state.resourceSites().hasPendingWorldChange(subject))
                 throw new IllegalArgumentException("farmer continuation clearance cannot overtake pending physical field change");
             List<ResourceFieldLayout.CellId> prefix = blockedPrefix(cycle, job.progress().nextCropSlotIndex());
-            if (blockedPrefixMeetsPendingPlayerBreak(cycle, job.progress().nextCropSlotIndex(), prefix))
+            if (blockedPrefixMeetsPendingPlayerBreak(state, job, prefix))
                 throw new IllegalArgumentException("farmer continuation clearance would overtake a player break");
             if (!prefix.isEmpty()
                     && cleared.expected().target().equals(blockedPrefixContinuationGoal(state, job, prefix).representative()))
@@ -537,15 +521,14 @@ public final class ResourceSiteHarvestProcess {
                                                          ResourceSiteHarvestBatchPrepared prepared) {
         if (!subject.equals(prepared.siteId())) throw new IllegalArgumentException("field batch reservation has a foreign site owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(prepared.jobId()).orElseThrow(
                         () -> new IllegalArgumentException("field batch reservation has no active worker"));
         PhysicalIntent intent = state.physicalIntents().get(job.intentId());
         ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !job.id().equals(prepared.jobId())
                 || !job.returningForBatch()
                 || job.deliveredYieldQuantity() != prepared.deliveredYieldBefore()
-                || job.batchSuccessorSlot().isPresent() || job.carriedYieldQuantity(cycle.harvestedCount()) != 64
+                || job.batchSuccessorSlot().isPresent() || ResourceSiteHarvestCargo.quantity(state, job) != 64
                 || intent == null || intent.status() != PhysicalIntentStatus.RUNNING)
             throw new IllegalArgumentException("field batch reservation lacks its exact full HOT hand");
         FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, prepared.leaseId());
@@ -557,7 +540,7 @@ public final class ResourceSiteHarvestProcess {
         if (actor == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job))
             throw new IllegalArgumentException("field batch reservation lacks its returned farmer station");
         return state.withResourceSites(state.resourceSites().replace(lifecycle.reserveHarvestBatchSuccessor(job,
-                prepared.nextOutputSlot(), cycle.harvestedCount())));
+                prepared.nextOutputSlot())));
     }
 
     /** Historical cursor events are rejected at the new goal-only schema boundary. */
@@ -568,7 +551,7 @@ public final class ResourceSiteHarvestProcess {
 
     public static FrontierWorldState reduceReturned(FrontierWorldState state, SubjectId subject,
                                                     ResourceSiteHarvestReturned returned) {
-        ResourceSiteHarvestJob job = activeJobAtSite(state, subject);
+        ResourceSiteHarvestJob job = activeJobAtSite(state, subject, returned.jobId());
         if (job == null || !job.id().equals(returned.jobId()) || !job.workerId().equals(returned.workerId()))
             throw new IllegalArgumentException("resource-site COLD terminal has no exact returned job");
         ActorLocation actor = state.actorLocations().get(job.workerId());
@@ -594,8 +577,7 @@ public final class ResourceSiteHarvestProcess {
     public static FrontierWorldState reduceHotGoalArrived(FrontierWorldState state, SubjectId subject,
                                                           ResourceSiteHarvestHotGoalArrived arrived) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(arrived.jobId()).orElseThrow(
                         () -> new IllegalArgumentException("field HOT goal arrival has no active job"));
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !subject.equals(job.siteId())
                 || !job.id().equals(arrived.jobId()) || !job.workerId().equals(arrived.workerId()))
@@ -610,7 +592,7 @@ public final class ResourceSiteHarvestProcess {
 
     public static FrontierWorldState reduceHotTransitObserved(FrontierWorldState state, SubjectId subject,
                                                                ResourceSiteHarvestHotTransitObserved observed) {
-        ResourceSiteHarvestJob job = activeJobAtSite(state, subject);
+        ResourceSiteHarvestJob job = activeJobAtSite(state, subject, observed.jobId());
         if (job == null || !job.id().equals(observed.jobId()) || !job.workerId().equals(observed.workerId())
                 || state.resourceSites().site(subject).phase() != ResourceSitePhase.HARVESTING)
             throw new IllegalArgumentException("interrupted HOT field goal has no current farmer");
@@ -624,8 +606,7 @@ public final class ResourceSiteHarvestProcess {
     public static FrontierWorldState reduceColdGoalAdvanced(FrontierWorldState state, SubjectId subject,
                                                              ResourceSiteHarvestColdGoalAdvanced advanced) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(advanced.jobId()).orElseThrow(
                         () -> new IllegalArgumentException("COLD field goal has no active job"));
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !subject.equals(job.siteId())
                 || !job.id().equals(advanced.jobId()) || !job.workerId().equals(advanced.workerId())
@@ -654,7 +635,7 @@ public final class ResourceSiteHarvestProcess {
         actors.put(job.workerId(), actor.withBody(next));
         ResourceSiteLifecycle resumed = job.navigationBlock().isPresent()
                 ? lifecycle.clearHarvestRouteBlock(job, job.navigationBlock().orElseThrow()) : lifecycle;
-        ResourceSiteHarvestJob active = (ResourceSiteHarvestJob) resumed.activeWork().orElseThrow();
+        ResourceSiteHarvestJob active = resumed.harvestJob(job.id()).orElseThrow();
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                 .resourceSites(state.resourceSites().replace(arrived ? resumed.arriveHarvestGoal(active, goal) : resumed)));
     }
@@ -662,8 +643,7 @@ public final class ResourceSiteHarvestProcess {
     public static FrontierWorldState reduceColdGoalHeld(FrontierWorldState state, SubjectId subject,
                                                         ResourceSiteHarvestColdGoalHeld held) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+        ResourceSiteHarvestJob job = lifecycle.harvestJob(held.jobId()).orElseThrow(
                         () -> new IllegalArgumentException("COLD goal hold has no active field job"));
         if (!subject.equals(held.siteId()) || lifecycle.phase() != ResourceSitePhase.HARVESTING
                 || !job.id().equals(held.jobId()) || !job.workerId().equals(held.workerId())
@@ -678,7 +658,7 @@ public final class ResourceSiteHarvestProcess {
             blockedPrefix = blockedPrefix(cycle, job.progress().nextCropSlotIndex());
             if (state.resourceSites().hasPendingWorldChange(subject)
                     || blockedPrefix.isEmpty()
-                    || blockedPrefixMeetsPendingPlayerBreak(cycle, job.progress().nextCropSlotIndex(), blockedPrefix))
+                    || blockedPrefixMeetsPendingPlayerBreak(state, job, blockedPrefix))
                 throw new IllegalArgumentException("COLD continuation hold lacks a stable blocked work prefix");
             goal = blockedPrefixContinuationGoal(state, job, blockedPrefix);
         } else {
@@ -726,7 +706,7 @@ public final class ResourceSiteHarvestProcess {
 
     public static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
-        if (lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+        if (lifecycle.harvestLineage(intent.id()).filter(ResourceSiteHarvestLineage::receiptPending)
                 .filter(lineage -> lineage.predecessorIntentId().equals(intent.id())).isPresent()) {
             if (transition.status() == PhysicalIntentStatus.RUNNING) {
                 FencedRecoveryPhysicalIntentSupport.requirePreparedExecutionAuthority(state.fencedRecovery(), intent,
@@ -758,7 +738,8 @@ public final class ResourceSiteHarvestProcess {
         if (!ResourceSiteHarvestGoal.actorAtDepot(state, job))
             throw new IllegalArgumentException("resource-site harvest output cannot complete before the worker reaches its depot");
         ResourceSiteLifecycle next = lifecycle.harvestedAt(ResourceSiteHarvestGoal.current(state, job),
-                state.actorLocations().get(job.workerId()).body());
+                state.actorLocations().get(job.workerId()).body(),
+                ResourceSiteHarvestHistoryRetention.reclaimable(state, lifecycle, job.workerId()));
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(new ProposedEvent(lifecycle.siteId(), transition));
         ResourceSiteHarvestDeliveryObservation receipt = transition.observation()
@@ -767,10 +748,11 @@ public final class ResourceSiteHarvestProcess {
                         () -> new IllegalArgumentException("HOT harvest confirmation lacks its exact depot receipt"));
         if (receipt.harvestedQuantity() > 0)
             events.add(ResourceSiteHarvestPlanning.stockWake(state, job, -1, now));
-        events.add(transition(task, StrategicTaskStatus.COMPLETED));
+        if (next.harvestJobs().values().stream().noneMatch(sibling -> sibling.taskId().equals(task.id())))
+            events.add(transition(task, StrategicTaskStatus.COMPLETED));
         events.add(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Cancelled(coldProgress(job, now).id())));
         events.addAll(ResourceFieldGrowthProcess.afterWork(state, next,
-                state.resourceSites().cycle(lifecycle.siteId()).nextEpoch(), now));
+                state.resourceSites().cycle(lifecycle.siteId()), job.id(), now));
         return List.copyOf(events);
     }
 
@@ -789,13 +771,17 @@ public final class ResourceSiteHarvestProcess {
      */
     public static void validateRunningTransition(FrontierWorldState state, PhysicalIntent intent) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
-        if (lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+        if (lifecycle.harvestLineage(intent.id()).filter(ResourceSiteHarvestLineage::receiptPending)
                 .filter(lineage -> lineage.predecessorIntentId().equals(intent.id())).isPresent()) {
-            ActorLocation actor = state.actorLocations().get(lifecycle.harvestLineage().orElseThrow().workerId());
-            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
-                    || !actor.body().equals(lifecycle.harvestLineage().orElseThrow().terminalBody())) {
-                throw new IllegalArgumentException("resource-site deferred terminal admission has no living exact farmer");
-            }
+            var lineage = lifecycle.harvestLineage(intent.id()).orElseThrow();
+            // This receipt confirms an already-delivered depot image. The worker
+            // may own a later job or be dead; its old coordinates cannot own stock.
+            if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                    || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED
+                    || !intent.roles().equals(PhysicalIntentRoleBinding.siteHarvest(lifecycle.siteId(),
+                            lineage.predecessorJobId(), lineage.workerId(),
+                            lineage.actorAccountId(), lineage.depotAccountId())))
+                throw new IllegalArgumentException("deferred harvest receipt has foreign declared roles");
             return;
         }
         validateBinding(state, lifecycle, intent);
@@ -824,14 +810,23 @@ public final class ResourceSiteHarvestProcess {
     }
 
     public static ResourceSiteHarvestJob harvest(ResourceSiteLifecycle lifecycle, PhysicalIntentId intentId) {
-        return lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .filter(job -> job.intentId().equals(intentId)).orElseThrow(() -> new IllegalArgumentException("resource-site harvest has no matching active work"));
+        return lifecycle.harvestJobs().values().stream().filter(job -> job.intentId().equals(intentId))
+                .reduce((left, right) -> { throw new IllegalArgumentException("physical intent has duplicate harvest owners"); })
+                .orElseThrow(() -> new IllegalArgumentException("resource-site harvest has no matching active work"));
     }
 
-    static ResourceSiteHarvestJob activeJobAtSite(FrontierWorldState state, SubjectId siteId) {
+    static ResourceSiteHarvestJob activeJobAtSite(FrontierWorldState state, SubjectId siteId, SubjectId jobId) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(siteId);
-        return lifecycle == null ? null : lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).filter(job -> job.siteId().equals(siteId)).orElse(null);
+        return lifecycle == null ? null : lifecycle.harvestJob(jobId).orElse(null);
+    }
+
+    /** Resolve the exact declared continuation, never pick a preferred execution of the site. */
+    static ResourceSiteHarvestJob jobForContinuation(FrontierWorldState state, ScheduledAction action) {
+        var lifecycle = state.resourceSites().sites().get(action.subject());
+        if (lifecycle == null) return null;
+        return lifecycle.harvestJobs().values().stream()
+                .filter(job -> coldProgress(job, action.dueAt().ticks()).equals(action))
+                .reduce((left, right) -> { throw new IllegalArgumentException("continuation has duplicate field owners"); }).orElse(null);
     }
 
     /**
@@ -843,7 +838,7 @@ public final class ResourceSiteHarvestProcess {
         if (!COLD_PROGRESS_KIND.equals(action.kind()) || action.priority() != 0 || action.weight() != 1) return false;
         ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(action.subject());
         if (lifecycle == null) return false;
-        return lifecycle.harvestLineage().stream().filter(ResourceSiteHarvestLineage::outputReceiptResolved)
+        return lifecycle.harvestLineages().values().stream().filter(ResourceSiteHarvestLineage::outputReceiptResolved)
                 .map(ResourceSiteHarvestLineage::causality)
                 .anyMatch(causality -> action.id().value().equals(causality.coldScheduleId())
                         && action.dueAt().ticks() == causality.coldDueAt());
@@ -870,30 +865,29 @@ public final class ResourceSiteHarvestProcess {
     }
 
     static void validateJob(FrontierWorldState state, ResourceSiteLifecycle lifecycle, ResourceSiteHarvestJob job) {
-        if ((lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING)
-                || lifecycle.growthStage() != ResourceSiteLifecycle.MATURE_STAGE) throw new IllegalArgumentException("resource-site harvest requires a ready field");
-        if (lifecycle.phase() == ResourceSitePhase.HARVESTING && lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).filter(job::equals).isEmpty()) {
+        boolean admitted = lifecycle.harvestJobs().containsKey(job.id());
+        if (lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING) throw new IllegalArgumentException("resource-site harvest requires a ready field");
+        if (admitted && lifecycle.harvestJob(job.id()).filter(job::equals).isEmpty()) {
             throw new IllegalArgumentException("resource-site harvest completion does not match active work");
         }
         ResourceSite site = site(state, job.siteId()); Settlement settlement = settlement(state, site.settlementId());
         if (job.progress().totalCropSlots() != state.resourceSites().cycle(job.siteId()).layout().cells().size())
             throw new IllegalArgumentException("resource-site harvest job has a foreign admitted cell count");
-        if (job.deliveredYieldQuantity() > state.resourceSites().cycle(job.siteId()).harvestedCount()
-                || lifecycle.phase() == ResourceSitePhase.READY && job.deliveredYieldQuantity() != 0)
+        if (!admitted && (job.deliveredYieldQuantity() != 0
+                || job.harvestedYieldQuantity() != 0))
             throw new IllegalArgumentException("resource-site harvest job has an unearned delivered batch cursor");
         StrategicTask task = task(state, job.taskId(), StrategicTaskStatus.ACTIVE);
         if (!task.ownerId().equals(settlement.id()) || !task.resourceSiteTarget().equals(java.util.Optional.of(job.siteId()))) {
             throw new IllegalArgumentException("resource-site harvest job has a foreign strategic task");
         }
         if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) throw new IllegalArgumentException("resource-site harvest farm is unavailable");
-        ResidentProfile worker = lifecycle.phase() == ResourceSitePhase.READY
-                ? ResourceSiteHarvestPlanning.successorFarmer(state, lifecycle, settlement.id())
-                : state.humanPopulation().resident(job.workerId());
-        if (worker == null || !worker.id().equals(job.workerId()) || worker.profession() != ResidentProfession.AGRICULTURAL_WORKER) {
+        ResidentProfile worker = state.humanPopulation().resident(job.workerId());
+        if (worker == null || !worker.settlementId().equals(settlement.id())
+                || !admitted && !SettlementWorkPolicy.permissions(state, settlement.id()).permits(ResidentWorkKind.AGRICULTURE, worker.id())) {
             throw new IllegalArgumentException("resource-site harvest worker is unavailable");
         }
-        if (lifecycle.phase() == ResourceSitePhase.READY) {
+        if (!admitted) {
+            SettlementWorkforce.requireAvailable(state, settlement.id(), List.of(job.workerId()));
             ActorExecutionCoordinator.requireOrdinaryWorkAdmission(state, job.workerId());
             if (state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())
                     || state.inventory().fungibleResources().accounts().values().stream().anyMatch(account ->
@@ -904,40 +898,44 @@ public final class ResourceSiteHarvestProcess {
                 throw new IllegalArgumentException("field start must declare an unstarted semantic job");
             ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
             ActorLocation location = state.actorLocations().get(job.workerId());
-            int selected = cycle.nextWorkSlot(location.supportingSurface()).orElseThrow();
-            if (job.progress().nextCropSlotIndex() != selected)
-                throw new IllegalArgumentException("field start has a foreign area-work selection");
+            int selected = job.progress().nextCropSlotIndex();
+            if (!lifecycle.targetAvailable(selected, job.id())
+                    || cycle.cell(cycle.layout().cells().get(selected).id()).accounted())
+                throw new IllegalArgumentException("field target is already claimed or processed");
+            if (!job.target().current(cycle)
+                    || !job.target().cellId().equals(cycle.layout().cells().get(selected).id()))
+                throw new IllegalArgumentException("field start has a foreign cell-generation claim");
             if (cycle.expectedWorkOutcome(cycle.layout().cells().get(selected).id())
                     != ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED)
                 ResourceSiteHarvestKnownNavigation.path(state.withResourceSites(
                         state.resourceSites().replace(lifecycle.harvesting(job))), job);
         }
-        if (lifecycle.phase() == ResourceSitePhase.HARVESTING) {
+        if (admitted) {
             HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(job.workerId());
             if (assignment.kind() != HumanAssignmentKind.FIELD_HARVEST || !assignment.ownerId().equals(java.util.Optional.of(job.id()))) {
                 throw new IllegalArgumentException("resource-site harvest worker lacks the exact active assignment");
             }
         }
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        if (!job.outputSlot().containerId().equals(depot) || !state.containerSlotAvailable(job.outputSlot())) {
+        if (!job.outputSlot().containerId().equals(depot) || !admitted && !state.containerSlotAvailable(job.outputSlot())) {
             throw new IllegalArgumentException("resource-site harvest output slot is unavailable");
         }
         if (state.inventory().items().containsKey(job.outputItemId())) throw new IllegalArgumentException("resource-site harvest output identity already exists");
     }
 
     static ResourceSiteHarvestJob job(ResourceSite site, ResourceSiteLifecycle lifecycle, StrategicTask task, ResidentProfile farmer,
-                                              InventoryCustody.ContainerSlot outputSlot) {
-        String suffix = lifecycle.siteId().value().substring("site:".length()) + "-" + lifecycle.growthEpoch();
+                                              InventoryCustody.ContainerSlot outputSlot, ResourceFieldCycle field) {
+        String suffix = lifecycle.siteId().value().substring("site:".length()) + "-" + Math.addExact(lifecycle.harvestSequence(), 1);
         SubjectId jobId = harvestJobId(lifecycle);
         return new ResourceSiteHarvestJob(jobId, task.id(), lifecycle.siteId(), farmer.id(),
                 ResourceFieldYield.actorAccountId(jobId),
                 ReferenceContainerCustody.scopeId(outputSlot.containerId()),
                 new SubjectId("item:site-harvest-" + suffix + "-wheat"), outputSlot, new PhysicalIntentId("intent:site-harvest-" + suffix),
-                ResourceSiteHarvestProgress.notStarted(site.layout().cells().size()));
+                ResourceSiteHarvestProgress.notStarted(site.layout().cells().size()), field.target(site.layout().cells().getFirst().id()));
     }
 
     private static SubjectId harvestJobId(ResourceSiteLifecycle lifecycle) {
-        String suffix = lifecycle.siteId().value().substring("site:".length()) + "-" + lifecycle.growthEpoch();
+        String suffix = lifecycle.siteId().value().substring("site:".length()) + "-" + Math.addExact(lifecycle.harvestSequence(), 1L);
         return new SubjectId("job:site-harvest-" + suffix);
     }
 

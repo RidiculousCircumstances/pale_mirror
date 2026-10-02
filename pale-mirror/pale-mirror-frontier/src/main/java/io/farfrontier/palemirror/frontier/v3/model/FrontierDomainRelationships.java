@@ -162,7 +162,8 @@ public final class FrontierDomainRelationships {
             surface(MarketWorkOrder.class, "id", "demandId", "quoteId", "sellerId", "taskId", "jobId", "reservationId"),
             surface(ProductionJob.class, "id", "taskId", "settlementId", "facilityId", "workerId", "consumedItemId", "outputItemId"),
             surface(HiveGrowthJob.class, "id", "taskId", "hiveId", "nestId", "consumedItemId", "consumptionIntentId"),
-            surface(ResourceSiteLifecycle.class, "siteId"),
+            surface(ResourceSiteLifecycle.class, "siteId", "harvestJobs", "harvestLineages"),
+            surface(ResourceFieldWorkTarget.class, "siteId"),
             surface(ResourceSiteHarvestJob.class, "id", "taskId", "siteId", "workerId", "actorAccountId", "depotAccountId", "outputItemId", "intentId"),
             surface(ResourceSiteHarvestLineage.class, "predecessorJobId", "predecessorTaskId", "workerId",
                     "actorAccountId", "depotAccountId", "outputItemId", "predecessorIntentId", "successorTaskId", "successorJobId"),
@@ -455,7 +456,7 @@ public final class FrontierDomainRelationships {
     private static void addHarvest(FrontierWorldState state, List<Edge> edges, List<Incident> incidents) {
         for (ResourceSiteLifecycle lifecycle : state.resourceSites().sites().values()) {
             Endpoint site = subject(EntityKind.RESOURCE_SITE, lifecycle.siteId());
-            lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).ifPresent(job -> {
+            lifecycle.harvestJobs().values().forEach(job -> {
                 Endpoint jobEndpoint = subject(EntityKind.RESOURCE_HARVEST_JOB, job.id());
                 edge(edges, Kind.HARVEST_SITE, site, site, jobEndpoint, Lifecycle.ACTIVE, job.id().value());
                 edge(edges, Kind.HARVEST_TASK, jobEndpoint, jobEndpoint, subject(EntityKind.TASK, job.taskId()), Lifecycle.ACTIVE, job.id().value());
@@ -465,7 +466,7 @@ public final class FrontierDomainRelationships {
                 edge(edges, Kind.HARVEST_DEPOT_ACCOUNT, jobEndpoint, jobEndpoint,
                         subject(EntityKind.RESOURCE_ACCOUNT, job.depotAccountId()), Lifecycle.ACTIVE, job.id().value());
             });
-            lifecycle.harvestLineage().ifPresent(lineage -> {
+            lifecycle.harvestLineages().values().forEach(lineage -> {
                 Endpoint predecessor = subject(EntityKind.RESOURCE_HARVEST_JOB, lineage.predecessorJobId());
                 edge(edges, Kind.HARVEST_PREDECESSOR, site, site, predecessor, Lifecycle.TERMINAL_RETAINED, lineage.predecessorJobId().value());
                 lineage.successorTaskId().ifPresent(task -> {
@@ -473,7 +474,7 @@ public final class FrontierDomainRelationships {
                     else edge(edges, Kind.HARVEST_SUCCESSOR_TASK, site, predecessor, subject(EntityKind.TASK, task), Lifecycle.ACTIVE, lineage.predecessorJobId().value());
                 });
                 lineage.successorJobId().ifPresent(job -> {
-                    ResourceSiteHarvestJob active = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).orElse(null);
+                    ResourceSiteHarvestJob active = lifecycle.harvestJob(job).orElse(null);
                     if (active == null || !active.id().equals(job)) incident(incidents, Kind.HARVEST_SUCCESSOR_JOB, site, IncidentReason.STALE_RELATION, "active retained successor harvest", job.value());
                     else edge(edges, Kind.HARVEST_SUCCESSOR_JOB, site, predecessor, subject(EntityKind.RESOURCE_HARVEST_JOB, job), Lifecycle.ACTIVE, lineage.predecessorJobId().value());
                 });

@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestCargo;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
@@ -125,9 +126,10 @@ final class FrontierV3HarvestDiagnosticJson {
                 + ",\"nextCropSlot\":" + (job.progress().complete() ? -1 : job.progress().nextCropSlotIndex())
                 + ",\"deferredMaterializationSlots\":" + job.progress().completedCropSlots()
                 + ",\"totalCropSlots\":" + job.progress().totalCropSlots()
-                + ",\"harvestedYield\":" + cycle.harvestedCount()
+                + ",\"harvestedYield\":" + job.harvestedYieldQuantity()
+                + ",\"fieldHarvestedYield\":" + cycle.harvestedCount()
                 + ",\"deliveredYield\":" + job.deliveredYieldQuantity()
-                + ",\"carriedYield\":" + job.carriedYieldQuantity(cycle.harvestedCount())
+                + ",\"carriedYield\":" + ResourceSiteHarvestCargo.quantity(state, job)
                 + ",\"returningForBatch\":" + job.returningForBatch() + "}"
                 + ",\"labour\":" + job.progress().work().map(work -> "{\"requiredMilliWork\":" + work.requiredMilliWork()
                         + ",\"completedMilliWork\":" + work.completedMilliWork()
@@ -156,12 +158,14 @@ final class FrontierV3HarvestDiagnosticJson {
         ResourceSiteLifecycle lifecycle = subject == null ? null : state.resourceSites().sites().get(subject);
         ResourceSite site = subject == null ? null : state.resourceSiteDescriptors().get(subject);
         if (lifecycle == null || site == null) return unavailable("site", id, checkpoint, "not_found");
-        String work = lifecycle.activeWork().map(value -> value.id().value()).orElse("");
+        String work = java.util.stream.Stream.concat(lifecycle.preparationWork().stream().map(value -> value.id().value()),
+                lifecycle.harvestJobs().keySet().stream().sorted().map(SubjectId::value))
+                .map(value -> "\"" + quote(value) + "\"").collect(java.util.stream.Collectors.joining(",", "[", "]"));
         // A generic CONFLICT phase cannot tell an operator whether restart reconciliation,
         // a player action, or a foreign/damaged facility caused the isolation.  Surface the
         // durable typed disposition at the site boundary as well as on a process receipt.
         String conflict = lifecycle.conflictDisposition().map(FrontierV3HarvestDiagnosticJson::conflict).orElse("null");
-        String terminal = lifecycle.harvestLineage().map(lineage -> {
+        String terminal = lifecycle.harvestLineages().values().stream().sorted(java.util.Comparator.comparing(value -> value.predecessorIntentId().value())).map(lineage -> {
             var output = state.inventory().items().get(lineage.outputItemId());
             var intent = state.physicalIntents().get(lineage.predecessorIntentId());
             boolean owned = output != null && output.id().equals(lineage.outputItemId()) && output.custody().equals(lineage.outputSlot());
@@ -178,12 +182,12 @@ final class FrontierV3HarvestDiagnosticJson {
                     + ",\"physicalReceiptConfirmed\":" + physicalReceiptConfirmed
                     + ",\"intentStatus\":\"" + (intent == null ? "MISSING" : intent.status().name()) + "\",\"terminalBody\":" + position(lineage.terminalBody())
                     + ",\"causalTrace\":" + harvestCausality(lineage.causality()) + "}";
-        }).orElse("null");
+        }).collect(java.util.stream.Collectors.joining(",", "[", "]"));
         BlockPosition boardPosition = FrontierReadabilityPlan.compile(state).boards().get(subject).position();
         return base("site", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(site.settlementId().value())
                 + "\",\"facility\":\"" + quote(site.facilityId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"growthEpoch\":" + lifecycle.growthEpoch() + ",\"growthStage\":" + lifecycle.growthStage()
-                + ",\"activeWork\":\"" + quote(work) + "\",\"conflictDisposition\":" + conflict + ",\"terminalHarvest\":" + terminal + ",\"firstCrop\":" + position(site.cropSlots().getFirst())
+                + ",\"activeWork\":" + work + ",\"conflictDisposition\":" + conflict + ",\"terminalHarvest\":" + terminal + ",\"firstCrop\":" + position(site.cropSlots().getFirst())
                 + ",\"lastCrop\":" + position(site.cropSlots().getLast()) + ",\"boardPosition\":" + position(boardPosition) + "}";
     }
 

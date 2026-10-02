@@ -19,14 +19,16 @@ class AmbientActorProcessTest {
                 new WorldId("frontier:ambient-worker-activity"), 125L);
         FrontierWorldState state = fixture.initialState();
         var job = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
-                .activeWork().orElseThrow();
+                .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         long workTick = fixture.initialInstant().ticks();
 
         assertEquals(ResidentActivityChoice.Kind.WORK,
                 ResidentActivityCoordinator.assess(state, job.workerId(), workTick).kind());
         assertEquals(AmbientGoalKind.WORK, AmbientActorProcess.goalFor(state, job.workerId(), workTick).kind());
 
-        long freeTick = 12_001L;
+        // The fixture declares this worker's food threshold relative to its actual ingress,
+        // not the travel duration of a previously preferred single farmer.
+        long freeTick = Math.addExact(workTick, 150L);
         assertEquals(ResidentActivityChoice.Kind.EAT,
                 ResidentActivityCoordinator.assess(state, job.workerId(), freeTick).kind());
         assertEquals(AmbientGoalKind.PATROL,

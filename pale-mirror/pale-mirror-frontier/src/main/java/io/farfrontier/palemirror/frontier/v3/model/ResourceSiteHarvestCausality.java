@@ -37,12 +37,13 @@ public record ResourceSiteHarvestCausality(String coldScheduleId, long coldDueAt
     }
 
     public static ResourceSiteHarvestCausality notCaptured(ResourceSiteHarvestJob job) {
-        return notCaptured(job.intentId(), job.outputItemId(), job.outputSlot());
+        return notCaptured(job.intentId(), job.outputItemId(), job.outputSlot())
+                .withTrace(RetainedDiagnosticTrace.pending(job, "not_captured"));
     }
     public static ResourceSiteHarvestCausality notCaptured(PhysicalIntentId intentId, io.farfrontier.palemirror.frontier.v3.api.SubjectId outputItemId,
                                                            InventoryCustody.ContainerSlot outputSlot) {
         return new ResourceSiteHarvestCausality("not_captured", -1L, List.of(), intentId, expected(intentId, outputItemId, outputSlot),
-                "not_observed", "not_captured", new RetainedDiagnosticTrace("resource-site-harvest:not_captured", "not_captured", "not_captured", "not_captured", -1, -1, "not_observed", "not_captured", "not_captured", -1, -1));
+                "not_observed", "not_captured", new RetainedDiagnosticTrace("resource-site-harvest:" + intentId.value(), "not_captured", "not_captured", "not_captured", -1, -1, "not_observed", "not_captured", "not_captured", -1, -1));
     }
 
     public static ResourceSiteHarvestCausality captured(FrontierWorldState state, ResourceSiteHarvestJob job,

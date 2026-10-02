@@ -189,20 +189,6 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 64)
                             && !FrontierV3ResourceSiteExecutor.baseline(level, site),
                     "the COLD terminal receipt retains its exact irrigated/farmland predecessor surface, not a neutral baseline");
-            ResourceSiteHarvestLineage lineage = new ResourceSiteHarvestLineage(
-                    new SubjectId("job:site-harvest-resource-harvest-composed-terminal"), new SubjectId("task:settlement-1-harvest"),
-                    new SubjectId("resident:1-13"),
-                    new SubjectId("custody:field-actor-site-harvest-resource-harvest-composed-terminal"),
-                    new SubjectId("custody:container-1-depot"),
-                    new SubjectId("item:site-harvest-resource-harvest-composed-terminal-wheat"), 1L,
-                    new BodyPosition(site.cropSlots().getLast().x(), site.cropSlots().getLast().y(), site.cropSlots().getLast().z()), intent,
-                    new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 0), true, Optional.empty(), Optional.empty());
-            ResourceSiteLifecycle successor = new ResourceSiteLifecycle(site.id(), ResourceSitePhase.GROWING, 2L, 3,
-                    Optional.empty(), Optional.empty(), Optional.of(lineage));
-            helper.assertTrue(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(successor, 3, 0, true, true),
-                    "only the exact composed terminal lineage may re-establish its current successor projection");
-            helper.assertFalse(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(successor, 3, 0, true, false),
-                    "the same terminal-looking surface without its named canonical consumer remains conflict evidence");
             FrontierV3ResourceSiteLedger successorLedger = FrontierV3ResourceSiteLedger.fixture();
             successorLedger.reserveComposedTerminalSuccessor(site.id(), new PhysicalIntentId("intent:site-projection-resource-harvest-composed-terminal"));
             successorLedger.activate(site.id());

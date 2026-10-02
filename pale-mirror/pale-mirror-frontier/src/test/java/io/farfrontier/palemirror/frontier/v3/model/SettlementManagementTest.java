@@ -55,7 +55,7 @@ class SettlementManagementTest {
                 SettlementManagementPolicy.standard()).decide(state, settlement));
     }
 
-    @Test void retainedFarmerAndFacilityCannotBeBorrowedByAnotherAdmission() {
+    @Test void retainedFarmerCannotBeBorrowedButFieldParticipantAdmissionIsNotAnExclusiveStation() {
         var prepared = ResourceSiteHarvestProcessTest.coldHarvestWithCargo(91L);
         FrontierWorldState state = prepared.state(); var job = prepared.job();
         var field = state.resourceSite(job.siteId());
@@ -64,9 +64,9 @@ class SettlementManagementTest {
         SubjectId other = state.bootstrap().settlements().getFirst().residents().stream()
                 .map(resident -> resident.id()).filter(id -> !id.equals(job.workerId()))
                 .filter(id -> HumanAssignmentProjection.compile(state).idle(id)).findFirst().orElseThrow();
-        assertThrows(IllegalArgumentException.class, () -> SettlementCommitmentComposition.ADMISSION.require(state,
-                new SettlementCommitmentAdmission.Request(job.taskId(), field.settlementId(), field.facilityId(), List.of(other))));
-        assertEquals(job, state.resourceSites().site(job.siteId()).activeWork().orElseThrow());
+        SettlementCommitmentComposition.ADMISSION.require(state,
+                new SettlementCommitmentAdmission.Request(job.taskId(), field.settlementId(), field.facilityId(), List.of(other)));
+        assertEquals(job, state.resourceSites().site(job.siteId()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow());
     }
 
     private static FrontierWorldState initial() {

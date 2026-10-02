@@ -96,7 +96,8 @@ class ResourceSiteProcessTest {
         var clock = ((ScheduleEffect.Rescheduled) planned.get(2).payload()).replacement();
         assertEquals("frontier.resource_site.growth", clock.kind());
         var idleTurn = ResourceSiteProcess.planGrowth(ready, clock);
-        assertEquals(1, idleTurn.size(), "mature plants keep only their clock, not another harvest opportunity");
+        assertEquals(2, idleTurn.size(), "plant readiness and its sole clock remain recorded without another work opportunity");
+        assertTrue(idleTurn.stream().noneMatch(event -> event.payload() instanceof ScheduleEffect.Created));
     }
 
     private static FrontierWorldState prepared(FrontierWorldState state) {

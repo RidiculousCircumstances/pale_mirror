@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.model.HarvestFixtureOwners;
+
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -252,6 +254,10 @@ class FrontierProcessSceneSdkTest {
             SubjectId site = new SubjectId("site:1-wheat-field");
             FrontierWorldState prepared = admitHarvestTask(matureField(FrontierWorldState.initial(FrontierBootstrapper.create(
                     new WorldId("frontier:f0v-sdk-harvest"), 125L)), site), site, 5_000L);
+            SubjectId settlement = new SubjectId("settlement:1");
+            SubjectId participant = SettlementWorkforce.candidates(prepared, settlement,
+                    ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE).getFirst().id();
+            prepared = HarvestFixtureOwners.withSingleParticipant(prepared, settlement, participant);
             StrategicTask task = prepared.strategicPlans().tasks().values().stream()
                     .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
             EngineContext engine = advance(launch(prepared, List.of(ResourceSiteHarvestProcess.start(task, 5_100L))), new SimInstant(5_100L), 8);
@@ -553,7 +559,8 @@ class FrontierProcessSceneSdkTest {
     private static FrontierWorldState state(EngineContext context) { return context.engine().canonicalState().state(); }
     private static SimInstant instant(EngineContext context) { return context.engine().canonicalState().instant(); }
     private static Revision revision(EngineContext context) { return context.engine().canonicalState().revision(); }
-    private static ResourceSiteHarvestJob harvest(EngineContext context, SubjectId site) { return (ResourceSiteHarvestJob) state(context).resourceSites().site(site).activeWork().orElseThrow(); }
+    private static ResourceSiteHarvestJob harvest(EngineContext context, SubjectId site) { return (ResourceSiteHarvestJob) state(context).resourceSites().site(site).harvestJobs().values().stream()
+                .reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow(); }
     private static ResidentMigrationJourney migration(EngineContext context, SubjectId resident) { return state(context).humanPopulation().migration(resident); }
     private static ScheduledAction scheduled(EngineContext context, String kind, SubjectId subject) {
         return context.engine().checkpoint().schedules().stream()

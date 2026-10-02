@@ -9,7 +9,7 @@ import java.util.Optional;
 
 /** One durable exact-farmer crop receipt: observed in HOT or semantically completed by bounded COLD work. */
 public record ResourceSiteHarvestProgressed(SubjectId siteId, long epoch, SubjectId jobId, int completedCropSlots,
-                                            long layoutRevision, ResourceFieldLayout.CellId cellId,
+                                            long layoutRevision, ResourceFieldLayout.CellId cellId, long generation,
                                             ResourceFieldCycle.WorkOutcome outcome,
                                             ScheduleId coldScheduleId, long coldDueAt,
                                             Optional<HandObservation> observedHand) implements FrontierPayload {
@@ -24,10 +24,10 @@ public record ResourceSiteHarvestProgressed(SubjectId siteId, long epoch, Subjec
 
     /** COLD work has no loaded Minecraft hand to observe. */
     public ResourceSiteHarvestProgressed(SubjectId siteId, long epoch, SubjectId jobId, int completedCropSlots,
-                                         long layoutRevision, ResourceFieldLayout.CellId cellId,
+                                         long layoutRevision, ResourceFieldLayout.CellId cellId, long generation,
                                          ResourceFieldCycle.WorkOutcome outcome,
                                          ScheduleId coldScheduleId, long coldDueAt) {
-        this(siteId, epoch, jobId, completedCropSlots, layoutRevision, cellId, outcome,
+        this(siteId, epoch, jobId, completedCropSlots, layoutRevision, cellId, generation, outcome,
                 coldScheduleId, coldDueAt, Optional.empty());
     }
 
@@ -39,7 +39,7 @@ public record ResourceSiteHarvestProgressed(SubjectId siteId, long epoch, Subjec
                 || completedCropSlots > ResourceFieldLayout.MAX_CELLS) {
             throw new IllegalArgumentException("resource-site harvest progress is invalid");
         }
-        if (layoutRevision < 1) throw new IllegalArgumentException("resource-site harvest progress has no field layout revision");
+        if (layoutRevision < 1 || generation < 0) throw new IllegalArgumentException("resource-site harvest progress has no valid layout/generation");
         Objects.requireNonNull(cellId, "resource-site harvest progress cell");
         Objects.requireNonNull(outcome, "resource-site harvest progress outcome");
         coldScheduleId = Objects.requireNonNull(coldScheduleId, "resource-site harvest progress COLD schedule");

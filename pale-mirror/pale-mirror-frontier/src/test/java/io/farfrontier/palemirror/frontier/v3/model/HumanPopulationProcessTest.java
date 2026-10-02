@@ -29,7 +29,7 @@ class HumanPopulationProcessTest {
         assertEquals(state.bootstrap().residentCount(), state.humanPopulation().residents().size());
         assertEquals(state.actorLocations().keySet().stream().filter(id -> id.value().startsWith("resident:")).count(), state.humanPopulation().residents().size());
         for (Settlement settlement : state.bootstrap().settlements()) {
-            assertEquals(1L, state.humanPopulation().residents().values().stream()
+            assertEquals(2L, state.humanPopulation().residents().values().stream()
                     .filter(resident -> resident.settlementId().equals(settlement.id()) && resident.profession() == ResidentProfession.BAKER).count());
             assertTrue(state.humanPopulation().residents().values().stream()
                     .anyMatch(resident -> resident.settlementId().equals(settlement.id())

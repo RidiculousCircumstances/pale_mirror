@@ -55,6 +55,23 @@ public final class StrategicObjectiveProcess {
         return plan(state, action, false, false, action.id().value());
     }
 
+    /** Station release is an availability signal; settlement policy remains the assignment owner. */
+    public static ScheduledAction stationReconsideration(ProductionJob released, String receiptCause, long dueAt) {
+        if (released.reservesFacility()) throw new IllegalArgumentException("station wake precedes actual release");
+        return new ScheduledAction(new ScheduleId("schedule:objective-station-release-"
+                + WorkOpportunityIdentity.digest(released.id().value() + "|" + receiptCause) + "-1"),
+                new SimInstant(dueAt), 0, released.settlementId(), "frontier.objective.stock_reconsider", 1);
+    }
+
+    /** Availability carries an exact resident cause, not authority to choose a concrete job. */
+    public static ScheduledAction workforceReconsideration(ResidentProfile resident, ScheduledAction review, long dueAt) {
+        if (!review.subject().equals(resident.id())) throw new IllegalArgumentException("work wake has a foreign resident");
+        return new ScheduledAction(new ScheduleId("schedule:objective-workforce-"
+                + WorkOpportunityIdentity.digest(resident.id().value() + "|" + review.id().value()
+                + "|" + review.dueAt().ticks()) + "-1"), new SimInstant(dueAt), 0,
+                resident.settlementId(), "frontier.objective.stock_reconsider", 1);
+    }
+
     /** A settled ration wakes only the retained pending field work of that settlement. */
     public static ScheduledAction provisionReconsideration(SettlementProvision provision, long dueAt) {
         String owner = provision.settlementId().value().replace(':', '-');
@@ -167,16 +184,34 @@ public final class StrategicObjectiveProcess {
 
     /** A ready exact field asks its settlement planner for work without bypassing durable task ownership. */
     public static ScheduledAction resourceHarvestOpportunity(FrontierWorldState state, ResourceSiteLifecycle lifecycle, long dueAt) {
+        return resourceHarvestOpportunity(state, lifecycle, dueAt, "clock");
+    }
+
+    public static ScheduledAction resourceHarvestOpportunity(FrontierWorldState state, ResourceSiteLifecycle lifecycle,
+                                                              long dueAt, String cause) {
         ResourceSite site = state.resourceSite(lifecycle.siteId());
-        if (site == null || lifecycle.phase() != ResourceSitePhase.READY) throw new IllegalArgumentException("resource harvest opportunity requires a ready known field");
+        if (site == null || lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING)
+            throw new IllegalArgumentException("resource harvest opportunity requires a workable known field");
         String suffix = lifecycle.siteId().value().substring("site:".length());
-        return new ScheduledAction(new ScheduleId("schedule:objective-resource-harvest-" + suffix + "-" + lifecycle.growthEpoch() + "-" + dueAt),
+        return new ScheduledAction(new ScheduleId("schedule:objective-resource-harvest-" + suffix + "-"
+                + lifecycle.growthEpoch() + "-" + WorkOpportunityIdentity.digest(cause) + "-" + dueAt),
                 new SimInstant(dueAt), 0, lifecycle.siteId(), "frontier.objective.resource_harvest", 1);
     }
 
     public static List<ProposedEvent> planResourceHarvestOpportunity(FrontierWorldState state, ScheduledAction action) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(action.subject());
-        if (lifecycle.phase() != ResourceSitePhase.READY || !action.id().equals(resourceHarvestOpportunity(state, lifecycle, action.dueAt().ticks()).id())) return List.of();
+        if (!action.kind().equals("frontier.objective.resource_harvest"))
+            throw new IllegalArgumentException("field opportunity has a foreign scheduled kind");
+        if (lifecycle.phase() == ResourceSitePhase.HARVESTING) {
+            var retained = state.strategicPlans().tasks().values().stream()
+                    .filter(task -> task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
+                            && task.status() == StrategicTaskStatus.ACTIVE
+                            && task.resourceSiteTarget().equals(Optional.of(lifecycle.siteId())))
+                    .reduce((left, right) -> { throw new IllegalArgumentException("field has competing active tasks"); });
+            return retained.map(task -> ResourceSiteHarvestPlanning.expandActiveTask(state, task, action.dueAt().ticks()))
+                    .orElse(List.of());
+        }
+        if (lifecycle.phase() != ResourceSitePhase.READY) return List.of();
         ResourceSite site = state.resourceSite(lifecycle.siteId());
         SubjectId owner = site.settlementId();
         if (!SettlementManagement.available(state, owner, new StrategicOperationProposal(
@@ -247,6 +282,11 @@ public final class StrategicObjectiveProcess {
         Optional<SettlementManagement.Decision> management = state.bootstrap().hive().id().equals(owner)
                 ? Optional.empty() : Optional.of(SettlementManagementComposition.MANAGEMENT.decide(decisionState,
                         FrontierWorldStateSupport.settlement(state.bootstrap(), owner)));
+        if (management.isPresent()) {
+            var expansion = SettlementManagementComposition.MANAGEMENT.expandActiveTasks(decisionState,
+                    FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.id(), action.dueAt().ticks());
+            if (!expansion.isEmpty()) return concatenate(concatenate(observedAndHealth, expansion), next);
+        }
         Optional<StrategicOperationProposal> candidate = management.isPresent() ? management.orElseThrow().selected()
                 : hiveCandidate(decisionState, allowHiveInterception, action.dueAt().ticks(), interceptSighting);
         if (candidate.map(StrategicOperationProposal::kind).orElse(null) == StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION

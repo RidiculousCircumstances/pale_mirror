@@ -17,14 +17,15 @@ final class FrontierV3ProcessInventoryDiagnostic {
     static String render(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         if (!id.equals("settlements")) return FrontierV3DiagnosticJson.unavailable("process_inventory", id, checkpoint, "not_found");
         var entries = state.resourceSites().sites().values().stream().sorted(java.util.Comparator.comparing(value -> value.siteId().value()))
-                .map(value -> entry(value, checkpoint, state)).toList();
+                .flatMap(value -> value.harvestJobs().isEmpty() ? java.util.stream.Stream.of(entry(value, null, checkpoint, state))
+                        : value.harvestJobs().values().stream().sorted(java.util.Comparator.comparing(ResourceSiteHarvestJob::id))
+                                .map(job -> entry(value, job, checkpoint, state))).toList();
         String rendered = entries.stream().map(Entry::json).reduce((left, right) -> left + "," + right).map(value -> "[" + value + "]").orElse("[]");
         return FrontierV3DiagnosticJson.base("process_inventory", id, checkpoint) + ",\"status\":\"ok\",\"count\":" + entries.size()
                 + ",\"coldEligible\":" + entries.stream().filter(Entry::coldEligible).count() + ",\"entries\":" + rendered + "}";
     }
 
-    private static Entry entry(ResourceSiteLifecycle lifecycle, CheckpointImage checkpoint, FrontierWorldState state) {
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).orElse(null);
+    private static Entry entry(ResourceSiteLifecycle lifecycle, ResourceSiteHarvestJob job, CheckpointImage checkpoint, FrontierWorldState state) {
         if (job == null) return new Entry(false, "{\"site\":\"" + quote(lifecycle.siteId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"waitReason\":\"" + waitReason(lifecycle, null) + "\"}");
         long dueAt = checkpoint.schedules().stream()

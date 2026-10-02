@@ -57,24 +57,26 @@ class ResourceSiteStateTest {
                 ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(new SubjectId("settlement:1"))),
                 new SubjectId("item:site-harvest-1-wheat-field-1"),
                 new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(new SubjectId("settlement:1")), 1),
-                new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"), completeProgress());
+                new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"), completeProgress(),
+                ResourceFieldCycle.seeded(siteId, site.layout(), 1).target(site.layout().cells().getFirst().id()));
         ResourceFieldCycle unworked = ResourceFieldCycle.seeded(siteId, site.layout(), 1);
         ResourceSiteLifecycle ready = growing;
         assertThrows(IllegalArgumentException.class, () -> new ResourceSiteState(Map.of(siteId, ready),
                 Map.of(siteId, ResourceFieldCycle.seeded(new SubjectId("site:foreign"), site.layout(), 1))),
                 "the map key and matching geometry cannot adopt another site's cycle");
         ResourceSiteLifecycle falselyComplete = growing.harvesting(harvest);
-        assertThrows(IllegalArgumentException.class,
-                () -> new ResourceSiteState(Map.of(siteId, falselyComplete), Map.of(siteId, unworked)),
-                "a complete farmer cursor cannot exist without its exact cell work outcomes");
+        assertEquals(harvest, new ResourceSiteState(Map.of(siteId, falselyComplete), Map.of(siteId, unworked))
+                .site(siteId).harvestJob(harvest.id()).orElseThrow(),
+                "execution accounting is independent of collective plant flags");
         SurfaceAnchor depotStation = SurfaceAnchor.at(1, 64, 1);
         ResourceSiteHarvestGoal depotGoal = new ResourceSiteHarvestGoal(harvest.id(), siteId, harvest.workerId(),
                 site.layout().revision(), site.layout().cells().size(), ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE,
                 Optional.empty(), List.of(depotStation), TraversalCapability.PEDESTRIAN,
                 ResourceSiteHarvestGoal.ArrivalContract.ANY_DEPOT_SERVICE_STATION);
         ResourceSiteLifecycle harvested = growing.harvesting(harvest).harvestedAt(depotGoal, depotStation.standingBody());
-        assertEquals(ResourceSitePhase.GROWING, harvested.phase());
-        assertEquals(2L, harvested.growthEpoch()); assertEquals(0, harvested.growthStage());
+        assertEquals(ResourceSitePhase.READY, harvested.phase());
+        assertEquals(1L, harvested.growthEpoch()); assertEquals(7, harvested.growthStage());
+        assertTrue(harvested.harvestJobs().isEmpty());
     }
 
     @Test

@@ -27,7 +27,7 @@ class HeldHarvestSchedulingCompositionTest {
                     io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
             if (complete) state = ResourceSiteHarvestProcessTest.completeHarvestWorkHot(state, hot.site(), hot.job(), hot.lease().id());
             state = state.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.DRAINING);
-            var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).activeWork().orElseThrow();
+            var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
             assertEquals(complete, job.progress().complete());
             var site = FrontierResourceSitePlan.compile(state.bootstrap()).get(hot.site());
             var witness = complete ? site.cropSlots().getLast() : site.cropSlots().get(job.progress().nextCropSlotIndex());
@@ -57,7 +57,7 @@ class HeldHarvestSchedulingCompositionTest {
             assertEquals(witness, disposition.position());
             assertEquals(ResourceSiteConflictReason.CARRIER_FENCE_UNRESOLVED, disposition.reason());
             assertEquals(ResourceSiteConflictPolicy.RECOVERY_INSPECTION_REQUIRED, disposition.policy());
-            assertEquals(job, conflicted.resourceSites().site(hot.site()).activeWork().orElseThrow());
+            assertEquals(job, conflicted.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow());
             var sceneId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:carrier-scene-conflict-" + complete);
             var checkpoint = engine.checkpoint();
             var sceneResult = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, sceneId,
@@ -103,7 +103,7 @@ class HeldHarvestSchedulingCompositionTest {
         assertTrue(engine.checkpoint().schedules().isEmpty());
         var conflicted = engine.canonicalState().state();
         assertEquals(ResourceSitePhase.CONFLICT, conflicted.resourceSites().site(hot.site()).phase());
-        assertEquals(hot.job(), conflicted.resourceSites().site(hot.site()).activeWork().orElseThrow(),
+        assertEquals(hot.job(), conflicted.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow(),
                 "retain the exact work witness until physical release, not runnable work");
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFLICTED,
                 conflicted.physicalIntents().get(hot.job().intentId()).status());
@@ -133,7 +133,7 @@ class HeldHarvestSchedulingCompositionTest {
         var first = engine.advanceTo(new SimInstant(22_302L), new WorkBudget(1, 64));
         assertEquals(EngineStatus.Kind.ACTIVE, first.status().kind(), first.status().failureDetail().orElse(""));
         assertEquals(ResourceSitePhase.GROWING, engine.canonicalState().state().resourceSites().site(other).phase());
-        assertEquals(hot.job(), engine.canonicalState().state().resourceSites().site(hot.site()).activeWork().orElseThrow());
+        assertEquals(hot.job(), engine.canonicalState().state().resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow());
         var cp = engine.checkpoint();
         assertTrue(cp.schedules().contains(retained), "independent work cannot replace the HOT owner's exact deadline");
         var growth = cp.schedules().stream().filter(action -> action.subject().equals(other)).findFirst().orElseThrow();
@@ -142,7 +142,7 @@ class HeldHarvestSchedulingCompositionTest {
         var second = recovered.advanceTo(growth.dueAt(), new WorkBudget(1, 64));
         assertEquals(EngineStatus.Kind.ACTIVE, second.status().kind(), second.status().failureDetail().orElse(""));
         assertEquals(1, recovered.canonicalState().state().resourceSites().site(other).growthStage());
-        assertEquals(hot.job(), recovered.canonicalState().state().resourceSites().site(hot.site()).activeWork().orElseThrow());
+        assertEquals(hot.job(), recovered.canonicalState().state().resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow());
         assertTrue(recovered.checkpoint().schedules().contains(retained));
         var releasedMembers = hot.lease().members().stream().map(member -> {
             var actor = recovered.canonicalState().state().actorLocations().get(member.actorId());
@@ -167,7 +167,7 @@ class HeldHarvestSchedulingCompositionTest {
                         releasedCheckpoint.revision().value())), List.of()));
         var progress = resumed.advanceTo(releasedCheckpoint.instant(), new WorkBudget(1, 64));
         assertEquals(EngineStatus.Kind.ACTIVE, progress.status().kind(), progress.status().failureDetail().orElse(""));
-        var continued = (ResourceSiteHarvestJob) resumed.canonicalState().state().resourceSites().site(hot.site()).activeWork().orElseThrow();
+        var continued = (ResourceSiteHarvestJob) resumed.canonicalState().state().resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         assertEquals(hot.job().id(), continued.id());
         assertEquals(hot.job().workerId(), continued.workerId());
         assertTrue(!hot.job().equals(continued)

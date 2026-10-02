@@ -9,6 +9,26 @@ public final class ActorCarriedResources {
     public static final int MAX_STACK_ACCOUNTS = 10;
     private ActorCarriedResources() { }
 
+    /** Quantity in one exact homogeneous stack account, not in another actor or a work-area counter. */
+    public static int stackQuantity(FungibleResourceLedger ledger, SubjectId actorId, SubjectId accountId,
+                                     SubjectId economicOwnerId, String itemKind) {
+        Objects.requireNonNull(ledger); Objects.requireNonNull(actorId); Objects.requireNonNull(accountId);
+        Objects.requireNonNull(economicOwnerId); Objects.requireNonNull(itemKind);
+        CustodyAccount account = ledger.accounts().get(accountId);
+        if (account == null) return 0;
+        if (!account.custody().equals(new ResourceCustody.Actor(actorId)))
+            throw new IllegalArgumentException("stack quantity has a foreign physical custodian");
+        int quantity = 0;
+        for (var entry : account.lotQuantities().entrySet()) {
+            ResourceLot lot = ledger.lots().get(entry.getKey());
+            if (lot == null || !lot.economicOwnerId().equals(economicOwnerId) || !lot.itemKind().equals(itemKind))
+                throw new IllegalArgumentException("stack quantity has foreign resource identity or ownership");
+            quantity = Math.addExact(quantity, entry.getValue());
+        }
+        if (quantity > 64) throw new IllegalArgumentException("stack account exceeds bounded carrying capacity");
+        return quantity;
+    }
+
     public record Presentation(SubjectId actorId, SubjectId accountId, ActorItemSlot slot) {
         public Presentation {
             Objects.requireNonNull(actorId, "carrying actor");

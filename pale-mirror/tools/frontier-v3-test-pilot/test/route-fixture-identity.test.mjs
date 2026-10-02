@@ -10,7 +10,7 @@ test('assembly scenario declares the current three-person shipment', async () =>
   assert.equal(scenario.isolation.seed, 41);
   assert.doesNotMatch(text, /operation:supply-1-2\b/);
   const check = scenario.setup.find(step => step.type === 'assert_fixture').checks[0];
-  assert.equal(check.id, 'operation:supply-1-18');
+  assert.equal(check.id, 'operation:supply-1-14');
   assert.equal(check.expect.assemblyMembers, 3);
 });
 
@@ -49,7 +49,7 @@ test('route return uses observer cells checked against the real graybox plan', a
   assert.deepEqual(scenario.actions.find(step => step.type === 'visit').position, { x: 0, y: 64, z: 0 });
   assert.deepEqual(scenario.actions.filter(step => step.type === 'visit').slice(1).map(step => step.position), [returnPoint, returnPoint]);
   const withVisit = structuredClone(scenario);
-  withVisit.actions[0] = { type: 'visit_operation', operationId: 'operation:supply-1-18',
+  withVisit.actions[0] = { type: 'visit_operation', operationId: 'operation:supply-1-14',
     dimension: 'pale_mirror:frontier_graybox', anchor: 'travelCargo', offset: { x: 10, y: 0, z: -10 }, settleMs: 500, timeoutMs: 30000 };
   validateScenario(withVisit);
   withVisit.actions[0].anchor = 'unknown';
@@ -67,7 +67,7 @@ test('route/scout scenarios declare the shipment checked by RouteSceneFixtureIde
     if (!profiles.has(scenario.server?.profile)) continue;
     validateScenario(scenario);
     assert.equal(scenario.isolation.seed, 41, file);
-    assert.ok(text.includes('operation:supply-1-18'), file);
+    assert.ok(text.includes('operation:supply-1-14'), file);
     assert.doesNotMatch(text, /(?:operation|cargo|contract):supply-1-2\b/, file);
     checked++;
   }

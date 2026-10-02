@@ -40,90 +40,118 @@ final class ResourceSiteHarvestPlanning {
         if (!action.id().equals(start(task, action.dueAt().ticks()).id())) return List.of();
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(task.resourceSiteTarget().orElseThrow());
         if (lifecycle.phase() != ResourceSitePhase.READY) return blocked(task);
+        if (state.structureConditions().get(site(state, lifecycle.siteId()).facilityId()) != StructureCondition.INTACT)
+            return blocked(task);
+        var admitted = admissions(state, task, action.dueAt().ticks());
+        if (!admitted.isEmpty()) return admitted;
+        if (!livingFarmerExists(state, task.ownerId())) return blocked(task);
+        return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
+                state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
+    }
+
+    /** A free participant joins the retained work pool, not a second strategic objective. */
+    static List<ProposedEvent> expandActiveTask(FrontierWorldState state, StrategicTask task, long atTick) {
+        if (task.kind() != StrategicTaskKind.HARVEST_RESOURCE_SITE || task.status() != StrategicTaskStatus.ACTIVE
+                || !task.equals(state.strategicPlans().tasks().get(task.id())))
+            throw new IllegalArgumentException("field expansion requires its exact active task");
+        if (state.resourceSites().site(task.resourceSiteTarget().orElseThrow()).phase() != ResourceSitePhase.HARVESTING)
+            return List.of();
+        return admissions(state, task, atTick);
+    }
+
+    private static List<ProposedEvent> admissions(FrontierWorldState state, StrategicTask task, long atTick) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(task.resourceSiteTarget().orElseThrow());
         ResourceSite site = site(state, lifecycle.siteId()); Settlement settlement = settlement(state, site.settlementId());
         if (!task.ownerId().equals(settlement.id()) || !task.resourceSiteTarget().equals(java.util.Optional.of(site.id()))) {
             throw new IllegalArgumentException("resource-site harvest task has a foreign field owner");
         }
-        if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) return blocked(task);
-        ResidentProfile farmer = successorFarmer(state, lifecycle, settlement.id());
-        if (farmer == null) {
-            // A meal, starvation or another assignment can temporarily remove every farmer
-            // from the available pool. None of those is evidence that this READY field or its
-            // retained worker has disappeared. Keep the same task/start identity pending until
-            // a living farmer can take it; only a genuinely missing/dead worker is terminal.
-            if (!livingFarmerExists(state, lifecycle, settlement.id())) return blocked(task);
-            long retryAt = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval());
-            return List.of(reschedule(action, start(task, retryAt)));
+        if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) return List.of();
+        var candidates = ResidentWorkSelection.eligible(state, settlement.id(),
+                ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE, atTick);
+        var events = new java.util.ArrayList<ProposedEvent>();
+        boolean activate = task.status() == StrategicTaskStatus.PENDING;
+        FrontierWorldState projected = activate ? state.withStrategicPlans(
+                state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE)) : state;
+        ResidentWorkProvider<ResourceSiteHarvestJob> provider = provider(task, site);
+        for (ResidentProfile farmer : candidates) {
+            var offered = ResidentWorkSelection.offer(projected, farmer, atTick, provider);
+            if (offered.isEmpty()) continue;
+            ResourceSiteHarvestJob job = offered.orElseThrow().execution();
+            PhysicalIntent intent = intent(site, job);
+            if (events.isEmpty() && activate) events.add(transition(task, StrategicTaskStatus.ACTIVE));
+            events.add(new ProposedEvent(site.id(), new ResourceSiteHarvestStarted(job)));
+            events.add(new ProposedEvent(site.id(), new PhysicalIntentPrepared(intent)));
+            long due = Math.addExact(atTick, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge());
+            events.add(schedule(coldProgress(job, due)));
+            // Validate subsequent offers against exactly the successor produced by admission.
+            // This is immutable transaction planning, not a parallel reservation cache.
+            projected = admitStarted(projected, site.id(), new ResourceSiteHarvestStarted(job))
+                    .preparePhysicalIntent(intent);
         }
-        if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), action.dueAt().ticks()))
-            return List.of(reschedule(action, start(task, ResidentActivityCoordinator.nextOrdinaryWorkAdmission(
-                    state, farmer.id(), action.dueAt().ticks()))));
-        // Selecting an idle strategic worker is not enough to take its physical body.  In
-        // particular, an ordinary ambient lease can still be carrying its prior post-work
-        // return goal through restart recovery. Starting a field job from that body would
-        // give COLD and HOT different owners of the same actor.  Keep this durable task pending
-        // and retry its stable start action only after that hand-off is conclusively closed.
-        if (!ActorExecutionCoordinator.ordinaryWorkAdmission(state, farmer.id()).permitted()) {
-            long retryAt = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval());
-            return List.of(reschedule(action, start(task, retryAt)));
-        }
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        return List.copyOf(events);
+    }
+
+    private static ResidentWorkProvider<ResourceSiteHarvestJob> provider(StrategicTask task, ResourceSite site) {
+        return new ResidentWorkProvider<>() {
+            @Override public ResidentWorkKind kind() { return ResidentWorkKind.AGRICULTURE; }
+            @Override public HumanCapability capability() { return HumanCapability.AGRICULTURE; }
+            @Override public java.util.Optional<ResidentWorkOffer<ResourceSiteHarvestJob>> discover(
+                    FrontierWorldState state, ResidentProfile resident, long atTick) {
+                return offer(state, task, site, resident, atTick).map(job -> new ResidentWorkOffer<>(
+                        kind(), resident.id(), job, List.of(new WorkReservationClaim.Cell(job.target()),
+                                new WorkReservationClaim.ContainerCapacity(job.outputSlot()))));
+            }
+        };
+    }
+
+    private static java.util.Optional<ResourceSiteHarvestJob> offer(FrontierWorldState state, StrategicTask task,
+            ResourceSite site, ResidentProfile farmer, long tick) {
+        if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), tick)
+                || !ActorExecutionCoordinator.ordinaryWorkAdmission(state, farmer.id()).permitted())
+            return java.util.Optional.empty();
+        SubjectId depot = FrontierWorldState.depotId(site.settlementId());
         OptionalInt slot = state.firstFreeContainerSlot(depot);
-        if (slot.isEmpty()) {
-            long retryAt = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().strategicReviewInterval());
-            return List.of(reschedule(action, start(task, retryAt)));
-        }
+        if (slot.isEmpty()) return java.util.Optional.empty();
         ActorLocation worker = state.actorLocations().get(farmer.id());
         if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
+        var field = state.resourceSites().cycle(site.id());
         ResourceSiteHarvestJob job = job(site, lifecycle, task, farmer,
-                new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
-        int selected = state.resourceSites().cycle(site.id()).nextWorkSlot(worker.supportingSurface()).orElseThrow();
-        job = job.withProgress(job.progress().withSelectedCropSlot(selected));
-        var selectedOutcome = state.resourceSites().cycle(site.id()).expectedWorkOutcome(site.layout().cells().get(selected).id());
-        if (selectedOutcome != ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED
-                && selectedOutcome != ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE) {
+                new InventoryCustody.ContainerSlot(depot, slot.getAsInt()), field);
+        SubjectId execution = job.id();
+        var selected = field.nextWorkSlot(worker.supportingSurface(), index ->
+                lifecycle.targetAvailable(index, execution) && actionable(field, index));
+        if (selected.isEmpty()) return java.util.Optional.empty();
+        job = job.withProgress(job.progress().withSelectedCropSlot(selected.getAsInt())).bindTarget(field);
+        var outcome = field.expectedWorkOutcome(field.layout().cells().get(selected.getAsInt()).id());
+        if (outcome != ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED
+                && outcome != ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE) {
+            FrontierWorldState admitted = state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
             try {
-                ResourceSiteHarvestKnownNavigation.path(state.withResourceSites(
-                        state.resourceSites().replace(lifecycle.harvesting(job))), job);
+                ResourceSiteHarvestKnownNavigation.path(admitted, job);
             } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
-                FrontierWorldState admitted = state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
                 var alternate = ResourceSiteHarvestRetargeting.coldReachableWorkTarget(admitted, job);
-                if (alternate.isEmpty()) return blocked(task);
-                job = job.withProgress(job.progress().withSelectedCropSlot(alternate.getAsInt()));
+                if (alternate.isEmpty()) return java.util.Optional.empty();
+                job = job.withProgress(job.progress().withSelectedCropSlot(alternate.getAsInt())).bindTarget(field);
             }
         }
-        PhysicalIntent intent = intent(site, job);
-        long firstColdStep = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge());
-        return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(lifecycle.siteId(), new ResourceSiteHarvestStarted(job)),
-                new ProposedEvent(lifecycle.siteId(), new PhysicalIntentPrepared(intent)), schedule(coldProgress(job, firstColdStep)));
+        return java.util.Optional.of(job);
     }
 
-    /**
-     * Policy chooses a farmer only for the first epoch.  A completed epoch has
-     * already admitted its successor identity in the resource-site lifecycle;
-     * loss of that exact resident is a local blocked task, never permission to
-     * select another currently eligible farmer.
-     */
-    static ResidentProfile successorFarmer(FrontierWorldState state, ResourceSiteLifecycle lifecycle, SubjectId settlementId) {
-        if (lifecycle.harvestLineage().isEmpty()) {
-            return FrontierWorldStateSupport.availableFieldResident(state, settlementId, ResidentProfession.AGRICULTURAL_WORKER).orElse(null);
-        }
-        SubjectId workerId = lifecycle.harvestLineage().orElseThrow().workerId();
-        ResidentProfile farmer = state.humanPopulation().resident(workerId);
-        if (farmer == null || !farmer.settlementId().equals(settlementId) || farmer.profession() != ResidentProfession.AGRICULTURAL_WORKER
-                || !FrontierWorldStateSupport.workCapable(state, farmer)
-                || !HumanAssignmentProjection.compile(state).idle(workerId)) {
-            return null;
-        }
-        return farmer;
+    private static boolean actionable(ResourceFieldCycle field, int index) {
+        var cell = field.layout().cells().get(index).id();
+        var condition = field.cell(cell);
+        return !field.pendingPlayerBreaks().containsKey(cell) && !condition.workAccessBlocked()
+                && (condition.crop() == ResourceFieldCycle.Crop.MATURE
+                    || condition.crop() == ResourceFieldCycle.Crop.ABSENT
+                        && (condition.soil() == ResourceFieldCycle.Soil.FARMLAND
+                            || condition.soil() == ResourceFieldCycle.Soil.DIRT));
     }
 
-    private static boolean livingFarmerExists(FrontierWorldState state, ResourceSiteLifecycle lifecycle, SubjectId settlementId) {
+    private static boolean livingFarmerExists(FrontierWorldState state, SubjectId settlementId) {
         return state.humanPopulation().residents().values().stream()
-                .filter(resident -> lifecycle.harvestLineage().isEmpty()
-                        || lifecycle.harvestLineage().orElseThrow().workerId().equals(resident.id()))
                 .anyMatch(resident -> resident.settlementId().equals(settlementId)
-                        && resident.profession() == ResidentProfession.AGRICULTURAL_WORKER
+                        && SettlementWorkPolicy.permissions(state, settlementId).permits(ResidentWorkKind.AGRICULTURE, resident.id())
                         && state.actorLocations().containsKey(resident.id())
                         && state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE);
     }
@@ -169,7 +197,7 @@ final class ResourceSiteHarvestPlanning {
      * reads or writes an unloaded Minecraft crop or depot surface.
      */
     public static List<ProposedEvent> planColdProgress(FrontierWorldState state, ScheduledAction action, long currentTick) {
-        ResourceSiteHarvestJob job = activeJobAtSite(state, action.subject());
+        ResourceSiteHarvestJob job = jobForContinuation(state, action);
         // A terminal receipt retires its recurrent continuation by stable schedule identity.
         // Recovery can still encounter that exact, already-retired action in a pre-transition
         // checkpoint/WAL seam.  It is a bounded terminal disposition only when the owning
@@ -231,7 +259,7 @@ final class ResourceSiteHarvestPlanning {
                 var skipped = new ResourceSiteHarvestImmatureCellSkipped(job.siteId(), job.id(), job.workerId(),
                         currentField.layout().revision(), List.of(nextCell.id()), action.id(), action.dueAt().ticks(), java.util.Optional.empty());
                 FrontierWorldState after = reduceCellSkipped(state, job.siteId(), skipped);
-                var nextJob = (ResourceSiteHarvestJob) after.resourceSites().site(job.siteId()).activeWork().orElseThrow();
+                var nextJob = after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
                 return List.of(new ProposedEvent(job.siteId(), skipped),
                         reschedule(action, coldProgress(nextJob, Math.addExact(now, continuationInterval(after, nextJob)))));
             }
@@ -338,16 +366,18 @@ final class ResourceSiteHarvestPlanning {
             throw new IllegalArgumentException("COLD terminal has no actual depot worker body");
         ResourceSiteLifecycle terminal = lifecycle.harvestedDeferred(returned,
                 terminalIntent.status() == PhysicalIntentStatus.PREPARED,
-                ResourceSiteHarvestCausality.notCaptured(returned), actor.body());
+                ResourceSiteHarvestCausality.notCaptured(returned), actor.body(),
+                ResourceSiteHarvestHistoryRetention.reclaimable(state, lifecycle, returned.workerId()));
         StrategicTask task = task(state, returned.taskId(), StrategicTaskStatus.ACTIVE);
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(terminalEvent);
-        if (state.resourceSites().cycle(returned.siteId()).harvestedCount() > returned.deliveredYieldQuantity())
+        if (returned.undeliveredYieldQuantity() > 0)
             events.add(stockWake(state, returned, -1, now));
-        events.add(transition(task, StrategicTaskStatus.COMPLETED));
+        if (terminal.harvestJobs().values().stream().noneMatch(sibling -> sibling.taskId().equals(task.id())))
+            events.add(transition(task, StrategicTaskStatus.COMPLETED));
         events.add(new ProposedEvent(returned.siteId(), new ScheduleEffect.Cancelled(action.id())));
         events.addAll(ResourceFieldGrowthProcess.afterWork(state, terminal,
-                state.resourceSites().cycle(returned.siteId()).nextEpoch(), now));
+                state.resourceSites().cycle(returned.siteId()), returned.id(), now));
         return List.copyOf(events);
     }
 
@@ -360,7 +390,7 @@ final class ResourceSiteHarvestPlanning {
     }
 
     public static boolean coldProgressHeld(FrontierWorldState state, ScheduledAction action) {
-        ResourceSiteHarvestJob job = activeJobAtSite(state, action.subject());
+        ResourceSiteHarvestJob job = jobForContinuation(state, action);
         return job != null && action.equals(coldProgress(job, action.dueAt().ticks()))
                 && state.resourceSites().site(job.siteId()).phase() == ResourceSitePhase.HARVESTING
                 && (state.resourceSites().hasPendingWorldChange(job.siteId())
@@ -412,13 +442,14 @@ final class ResourceSiteHarvestPlanning {
         ResourceFieldCycle field = state.resourceSites().cycle(job.siteId());
         ResourceFieldLayout.CellId cellId = field.layout().cells().get(job.progress().nextCropSlotIndex()).id();
         ResourceFieldCycle worked = field.worked(cellId, field.expectedWorkOutcome(cellId));
-        int nextSelected = worked.nextWorkSlotAfter(job.progress().nextCropSlotIndex()).orElse(-1);
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
+        int nextSelected = lifecycle.nextHarvestTarget(job, worked);
         ResourceSiteHarvestProgress progressed = job.progress().prepareNextCrop().confirmPreparedCrop(nextSelected);
-        ResourceSiteHarvestJob replacement = job.withProgress(progressed);
+        ResourceSiteHarvestJob replacement = job.withProgress(progressed).bindTarget(worked);
         List<ProposedEvent> events = new java.util.ArrayList<>(List.of(prefix));
-        events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex())));
+        events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation())));
         events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestProgressed(job.siteId(), field.epoch(), job.id(), progressed.completedCropSlots(),
-                field.layout().revision(), cellId, field.expectedWorkOutcome(cellId), action.id(), action.dueAt().ticks())));
+                field.layout().revision(), cellId, job.target().generation(), field.expectedWorkOutcome(cellId), action.id(), action.dueAt().ticks())));
         events.add(reschedule(action, coldProgress(replacement, Math.addExact(now, continuationInterval(state, replacement)))));
         return List.copyOf(events);
     }
@@ -427,7 +458,7 @@ final class ResourceSiteHarvestPlanning {
         ResourceSiteHarvestJob job = started.job(); if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site harvest has a foreign event owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId()); validateJob(state, lifecycle, job);
         ResourceSite descriptor = state.resourceSite(job.siteId());
-        SettlementCommitmentComposition.ADMISSION.require(state, new SettlementCommitmentAdmission.Request(
+        SettlementCommitmentComposition.ADMISSION.requireParticipants(state, new SettlementCommitmentAdmission.Request(
                 job.taskId(), descriptor.settlementId(), descriptor.facilityId(), List.of(job.workerId())));
         return state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
     }

@@ -26,10 +26,9 @@ public record ResourceSiteHarvestProgress(int totalCropSlots, int completedCropS
                 || selectedCropSlotIndex < -1 || selectedCropSlotIndex >= totalCropSlots
                 || lastCompletedCropSlotIndex < -1 || lastCompletedCropSlotIndex >= totalCropSlots
                 || (completedCropSlots == 0) != (lastCompletedCropSlotIndex == -1)
-                || (completedCropSlots == totalCropSlots) != (selectedCropSlotIndex == -1)
+                || completedCropSlots == totalCropSlots && selectedCropSlotIndex != -1
                 || pendingCropSlotIndex >= 0 && pendingCropSlotIndex != selectedCropSlotIndex
-                || pendingCropSlotIndex >= 0 && pendingCropSlotIndex == lastCompletedCropSlotIndex
-                || selectedCropSlotIndex == lastCompletedCropSlotIndex) {
+) {
             throw new IllegalArgumentException("resource-site harvest progress is outside its bounded field");
         }
     }
@@ -48,7 +47,7 @@ public record ResourceSiteHarvestProgress(int totalCropSlots, int completedCropS
         return new ResourceSiteHarvestProgress(totalCropSlots, completedCropSlots, pendingCropSlotIndex,
                 selectedCropSlotIndex, lastCompletedCropSlotIndex, java.util.Optional.of(value));
     }
-    public boolean complete() { return completedCropSlots == totalCropSlots; }
+    public boolean complete() { return selectedCropSlotIndex == -1; }
     public boolean hasPendingCrop() { return pendingCropSlotIndex >= 0; }
     public int nextCropSlotIndex() {
         if (complete()) throw new IllegalStateException("completed harvest has no next crop slot");
@@ -85,6 +84,14 @@ public record ResourceSiteHarvestProgress(int totalCropSlots, int completedCropS
                 lastCompletedCropSlotIndex);
     }
 
+    /** Reacquire from the current pool after a handoff; no crop outcome is credited. */
+    public ResourceSiteHarvestProgress afterDeliverySelection(int next) {
+        if (hasPendingCrop() || complete() || next < -1 || next >= totalCropSlots)
+            throw new IllegalArgumentException("field delivery has no valid successor selection");
+        return new ResourceSiteHarvestProgress(totalCropSlots, completedCropSlots, -1, next,
+                lastCompletedCropSlotIndex);
+    }
+
     /** Account an unavailable selected target without inventing a physical crop effect. */
     public ResourceSiteHarvestProgress skipSelectedCrop(int nextSelectedCropSlotIndex) {
         if (complete() || hasPendingCrop())
@@ -98,8 +105,7 @@ public record ResourceSiteHarvestProgress(int totalCropSlots, int completedCropS
         if (complete() || lostSlot < 0 || lostSlot >= totalCropSlots
                 || lostSlot == selectedCropSlotIndex && hasPendingCrop()
                 || completedCropSlots + 1 == totalCropSlots && nextSelectedCropSlotIndex != -1
-                || completedCropSlots + 1 < totalCropSlots
-                    && (nextSelectedCropSlotIndex < 0 || nextSelectedCropSlotIndex == lostSlot)
+                || completedCropSlots + 1 < totalCropSlots && nextSelectedCropSlotIndex == lostSlot
                 || lostSlot != selectedCropSlotIndex && nextSelectedCropSlotIndex != selectedCropSlotIndex)
             throw new IllegalArgumentException("observed field loss has no consistent outstanding work target");
         // The physical executor may still be acknowledging the preceding farmer

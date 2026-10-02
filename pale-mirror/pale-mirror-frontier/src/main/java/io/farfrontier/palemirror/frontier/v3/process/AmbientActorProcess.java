@@ -248,8 +248,7 @@ public final class AmbientActorProcess {
             HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
             ResourceSiteHarvestJob harvest = assignment.kind() == HumanAssignmentKind.FIELD_HARVEST
                     && choice.kind() == ResidentActivityChoice.Kind.WORK
-                    ? state.resourceSites().sites().values().stream().map(ResourceSiteLifecycle::activeWork).flatMap(java.util.Optional::stream)
-                    .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                    ? state.resourceSites().sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
                     .filter(job -> job.id().equals(assignment.ownerId().orElseThrow(() ->
                             new IllegalStateException("field-harvest assignment lacks its retained job"))))
                     .reduce((left, right) -> { throw new IllegalStateException("field-harvest assignment has duplicate retained jobs"); })

@@ -145,6 +145,8 @@ class BakeryColdVerticalTest {
         for (int turn = 0; turn < 700; turn++, due += 20L) {
             ProductionJob current = state.productionJobs().get(job.id());
             if (current.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY) break;
+            assertFalse(SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, job.facilityId()),
+                    "the protected station stays reserved until confirmed output removal");
             BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, due)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
@@ -159,6 +161,13 @@ class BakeryColdVerticalTest {
         }
         assertEquals(BakeryWorkState.Phase.DEPOT_DELIVERY,
                 state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        assertTrue(SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, job.facilityId()),
+                "carrying the finished bread does not reserve the empty machine");
+        var restoredStationRelease = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertTrue(SettlementCommitmentComposition.ADMISSION.facilityAvailable(restoredStationRelease, job.facilityId()));
+        assertFalse(HumanAssignmentProjection.compile(restoredStationRelease).idle(job.workerId()),
+                "station release must not release the worker or their output custody");
+        assertAnotherBakerCanStartAfterOutputRemoval(restoredStationRelease, task, job, due);
         assertTrue(BakeryKnownNavigation.path(state, state.productionJobs().get(job.id())).size() > 1);
         BakeryColdStep historicalMove = ProductionProcess.planCompletion(state,
                 ProductionProcess.complete(state.productionJobs().get(job.id()), due)).stream()
@@ -258,6 +267,69 @@ class BakeryColdVerticalTest {
         assertEquals(completed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(completed)));
     }
 
+    /** Admission branch of the existing real custody cycle, before the first baker's delivery. */
+    private static void assertAnotherBakerCanStartAfterOutputRemoval(FrontierWorldState state,
+                                                                    StrategicTask originalTask,
+                                                                    ProductionJob originalJob, long due) {
+        var wheat = new SubjectId("lot:second-baker-fixture-input");
+        var resources = state.inventory().fungibleResources();
+        var lots = new java.util.LinkedHashMap<>(resources.lots());
+        lots.put(wheat, new ResourceLot(wheat, originalTask.ownerId(), "minecraft:wheat", 64,
+                "test:second-baker-input", List.of()));
+        var accounts = new java.util.LinkedHashMap<>(resources.accounts());
+        var sourceId = originalJob.bakeryWork().orElseThrow().sourceAccountId();
+        var source = accounts.get(sourceId);
+        var stock = new java.util.LinkedHashMap<SubjectId, Integer>();
+        if (source != null) stock.putAll(source.lotQuantities());
+        stock.put(wheat, 64);
+        accounts.put(sourceId, new CustodyAccount(sourceId,
+                new ResourceCustody.Container(FrontierWorldState.depotId(originalTask.ownerId())), stock,
+                source == null ? java.util.Map.of() : source.claimQuantities()));
+        state = state.withInventory(state.inventory().withFungibleResources(new FungibleResourceLedger(
+                lots, resources.claims(), accounts, resources.bindings())));
+        var wake = StrategicObjectiveProcess.stationReconsideration(
+                state.productionJobs().get(originalJob.id()), "test:confirmed-unload", due);
+        var expansion = StrategicObjectiveProcess.planStockReconsideration(state, wake);
+        var task = expansion.stream().map(ProposedEvent::payload).filter(StrategicTaskPlanned.class::isInstance)
+                .map(StrategicTaskPlanned.class::cast).map(StrategicTaskPlanned::task).findFirst().orElseThrow();
+        assertEquals(originalTask.objectiveId(), task.objectiveId());
+        state = StrategicObjectiveProcess.reduceTask(state, task.ownerId(), new StrategicTaskPlanned(task));
+        var started = expansion.stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        assertNotEquals(originalJob.workerId(), started.job().workerId());
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        var codec = new FrontierWorldStateCodec();
+        var restored = codec.decode(codec.encode(state));
+        assertEquals(2, restored.productionJobs().size());
+        String board = FrontierReadabilityPlan.compile(restored).boards().get(originalJob.facilityId()).text();
+        assertTrue(board.contains("DELIVERY · 1"), board);
+        assertTrue(board.contains("PICKUP · 1"), board);
+        assertFalse(restored.productionJobs().get(originalJob.id()).reservesFacility());
+        assertTrue(restored.productionJobs().get(started.job().id()).reservesFacility());
+        assertFalse(HumanAssignmentProjection.compile(restored).idle(originalJob.workerId()));
+        assertFalse(HumanAssignmentProjection.compile(restored).idle(started.job().workerId()));
+        assertFalse(SettlementCommitmentComposition.ADMISSION.facilityAvailable(restored, originalJob.facilityId()));
+        int breadBefore = restored.inventory().fungibleResources().totalQuantity(task.ownerId(), "minecraft:bread");
+        for (int turn = 1; !restored.productionJobs().isEmpty() && turn <= 750; turn++) {
+            for (var id : List.of(originalJob.id(), started.job().id())) {
+                var current = restored.productionJobs().get(id);
+                if (current == null) continue;
+                var step = ProductionProcess.planCompletion(restored, ProductionProcess.complete(current, due + turn * 20L))
+                        .stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                        .map(BakeryColdStep.class::cast).findFirst();
+                if (step.isPresent()) restored = ProductionProcess.reduceBakeryColdStep(restored, current.settlementId(), step.orElseThrow());
+            }
+        }
+        assertTrue(restored.productionJobs().isEmpty(), "both executions must finish: " + restored.productionJobs());
+        assertEquals(breadBefore + 64, restored.inventory().fungibleResources()
+                .totalQuantity(task.ownerId(), "minecraft:bread"));
+        assertEquals(StrategicTaskStatus.COMPLETED, restored.strategicPlans().tasks().get(originalTask.id()).status());
+        assertEquals(StrategicTaskStatus.COMPLETED, restored.strategicPlans().tasks().get(task.id()).status());
+    }
+
     @Test
     void hotReleasedBakerCanRouteFromObservedRoadSupport() {
         FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
@@ -317,7 +389,7 @@ class BakeryColdVerticalTest {
                 java.util.Map.of(job.workerId(), actor.body()), java.util.Set.of(), Optional.empty());
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
-                lease.members().getFirst().entityId()), "minecraft:wheat", 64);
+                lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN), "minecraft:wheat", 64);
         var observed = new BakeryHotHandMaterialized(job.id(), leaseId, work.actorAccountId(), 1L, hand);
         state = ProductionProcess.reduceBakeryHotHandMaterialized(state, task.ownerId(), observed);
         assertEquals(1, state.inventory().fungibleResources().bindings().values().stream()

@@ -21,7 +21,7 @@ class ResourceFieldCycleTest {
         assertEquals(1, cycle.nextWorkSlotAfter(2).orElseThrow());
         assertEquals(1, cycle.reachableWorkSlotAfter(2, index -> true).orElseThrow());
     }
-    @Test void replantedCellsGrowDuringTheSameBatchWithoutNewYieldOrRepeatedWork() {
+    @Test void renewedMaturityIsAvailableIndependentOfThePreviousDelivery() {
         var geometry = layout(2);
         var first = geometry.cells().getFirst().id();
         var second = geometry.cells().getLast().id();
@@ -37,12 +37,14 @@ class ResourceFieldCycleTest {
         assertEquals(1, grown.harvestedCount());
         for (int stage = 1; stage < 7; stage++) grown = grown.advanceGrowthStage();
         assertEquals(ResourceFieldCycle.Crop.MATURE, grown.cell(first).crop());
-        assertEquals(1, grown.nextWorkSlot(geometry.cells().getFirst().workstation()).orElseThrow());
+        assertFalse(grown.cell(first).accounted());
+        assertFalse(grown.cell(first).yielded());
+        assertEquals(0, grown.nextWorkSlot(geometry.cells().getFirst().workstation()).orElseThrow());
         var completed = grown.harvested(second);
-        var nextBatch = completed.nextEpoch();
-        assertEquals(7, nextBatch.cell(first).growthStage(), "delivery retires work flags, not plant age");
-        assertEquals(0, nextBatch.accountedCount());
-        assertEquals(0, nextBatch.harvestedCount());
+        assertEquals(7, completed.cell(first).growthStage(), "another worker's harvest does not reset plant age");
+        assertFalse(completed.cell(first).accounted());
+        assertEquals(1, completed.accountedCount());
+        assertEquals(1, completed.harvestedCount());
     }
 
     @Test void exactPhysicalFenceDoesNotSuspendGrowthOfOtherPlants() {

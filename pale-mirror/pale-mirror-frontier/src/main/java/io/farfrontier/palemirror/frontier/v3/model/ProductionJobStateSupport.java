@@ -24,7 +24,7 @@ final class ProductionJobStateSupport {
             throw new IllegalArgumentException("cold production job must retain its exact removed input");
         }
         if (state.productionJobs().containsKey(job.id())) throw new IllegalArgumentException("production job identity already exists: " + job.id().value());
-        if (state.productionJobs().values().stream().anyMatch(existing -> existing.facilityId().equals(job.facilityId()))) {
+        if (!ProductionFacilityReservations.available(state.productionJobs(), job.facilityId())) {
             throw new IllegalArgumentException("facility already has an active production job: " + job.facilityId().value());
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(state.productionJobs()); next.put(job.id(), job);
@@ -103,7 +103,7 @@ final class ProductionJobStateSupport {
             throw new IllegalArgumentException("fungible production job has no fungible input hold");
         }
         if (!resources.lots().containsKey(job.consumedItemId()) || state.productionJobs().containsKey(job.id())
-                || state.productionJobs().values().stream().anyMatch(existing -> existing.facilityId().equals(job.facilityId()))) {
+                || !ProductionFacilityReservations.available(state.productionJobs(), job.facilityId())) {
             throw new IllegalArgumentException("fungible production job is unavailable or duplicates its facility");
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(state.productionJobs()); next.put(job.id(), job);

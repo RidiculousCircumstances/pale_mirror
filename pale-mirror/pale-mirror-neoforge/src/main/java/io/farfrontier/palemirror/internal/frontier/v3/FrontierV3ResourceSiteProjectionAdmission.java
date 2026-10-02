@@ -44,13 +44,7 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ResourceS
 final class FrontierV3ResourceSiteProjectionAdmission {
     private FrontierV3ResourceSiteProjectionAdmission() { }
 
-    static String projectionSource(FrontierWorldState state, ResourceSite site) {
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
-        return lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .map(job -> job.id().value()).or(() -> lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
-                        .map(lineage -> lineage.predecessorJobId().value()))
-                .orElse("growth:" + site.id().value() + ":e" + lifecycle.growthEpoch());
-    }
+
     static List<FieldWrite> transitionWrites(ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim,
                                                      int desiredStage, int completedCropSlots, boolean successorRegrowth) {
         List<FieldWrite> writes = new java.util.ArrayList<>();
@@ -106,15 +100,7 @@ final class FrontierV3ResourceSiteProjectionAdmission {
      * a permissive recovery of a damaged field: callers must provide an exact whole-surface
      * observation and a composed successor relation.
      */
-    static boolean allowsComposedTerminalLedgerRehydration(ResourceSiteLifecycle lifecycle, int desiredStage,
-                                                            int completedCropSlots, boolean exactCurrentSurface,
-                                                            boolean composedCanonicalSuccessor) {
-        if (lifecycle == null || completedCropSlots != 0 || desiredStage != lifecycle.growthStage()
-                || !exactCurrentSurface || !composedCanonicalSuccessor) return false;
-        if (lifecycle.phase() != ResourceSitePhase.GROWING && lifecycle.phase() != ResourceSitePhase.READY) return false;
-        return lifecycle.harvestLineage().map(lineage -> lineage.outputReceiptResolved()
-                && lineage.completedGrowthEpoch() + 1L == lifecycle.growthEpoch()).orElse(false);
-    }
+
     /**
      * The restart dispatcher must not route an exact composed terminal predecessor through
      * the legacy preparation-intent reconciler: that reconciler correctly rejects a missing
@@ -122,34 +108,15 @@ final class FrontierV3ResourceSiteProjectionAdmission {
      * physical predecessor surface.  Keep the absent-claim condition explicit so no active
      * or damaged field can borrow this recovery authority.
      */
-    static boolean admitsMissingComposedTerminalRehydration(FrontierV3ResourceSiteLedger.Claim claim,
-                                                             ResourceSiteLifecycle lifecycle, int desiredStage,
-                                                             int completedCropSlots, boolean exactCurrentSurface,
-                                                             boolean composedCanonicalSuccessor) {
-        return claim == null && allowsComposedTerminalLedgerRehydration(lifecycle, desiredStage, completedCropSlots,
-                exactCurrentSurface, composedCanonicalSuccessor);
-    }
-    static boolean admitsMissingComposedGrowthPredecessor(FrontierV3ResourceSiteLedger.Claim claim,
-                                                           ResourceSiteLifecycle lifecycle, int desiredStage,
-                                                           int completedCropSlots, int predecessorStage,
-                                                           boolean exactPredecessorSurface,
-                                                           boolean composedCanonicalSuccessor) {
-        return claim == null && predecessorStage >= 0 && predecessorStage < desiredStage
-                && allowsComposedTerminalLedgerRehydration(lifecycle, desiredStage, completedCropSlots,
-                exactPredecessorSurface, composedCanonicalSuccessor);
-    }
+
+
     /**
      * Finds only a whole physical growth stage strictly preceding the desired successor
      * stage.  A mixed crop surface is deliberately not normalized: it is an unknown write and
      * remains a local conflict.  Walking down from the desired stage preserves the nearest
      * exact predecessor if COLD advanced more than one canonical stage before re-entry.
      */
-    static int exactComposedGrowthPredecessorStage(ServerLevel level, ResourceSite site, int desiredStage) {
-        for (int stage = desiredStage - 1; stage >= 0; stage--) {
-            if (matches(level, site, stage)) return stage;
-        }
-        return -1;
-    }
+
     static String claimPhysicalState(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
         String physical;
         if (claim == null) physical = "MISSING_CLAIM";
@@ -180,79 +147,20 @@ final class FrontierV3ResourceSiteProjectionAdmission {
         for (int age = 0; age < ages.length; age++) surface.append("_A").append(age).append('_').append(ages[age]);
         return surface.append("_AIR_").append(air).append("_OTHER_").append(other).toString();
     }
-    static boolean isExactSuccessorRegrowth(ServerLevel level, FrontierWorldState state, ResourceSite site, int desiredStage,
-                                                    int completedCropSlots, FrontierV3ResourceSiteLedger.Claim claim) {
-        if (claim == null || desiredStage != ResourceSiteLifecycle.MATURE_STAGE
-                || claim.stage() != ResourceSiteLifecycle.MATURE_STAGE
-                || claim.harvestedCropSlots() <= completedCropSlots
-                || !matchesClaim(level, site, claim)) return false;
-        // A canonical successor authorizes a transition of its exact owned predecessor,
-        // never an overwrite of arbitrary blocks. Validate before the first batch too;
-        // persisted-prefix validation only protects subsequent batches/recovery.
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
-        return lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast)
-                .map(job -> job.progress().completedCropSlots() == completedCropSlots).orElse(false);
-    }
-    static boolean isExactTerminalPredecessor(ServerLevel level, FrontierWorldState state, ResourceSite site,
-                                                      int desiredStage, int completedCropSlots, FrontierV3ResourceSiteLedger.Claim claim) {
-        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                || desiredStage != ResourceSiteLifecycle.MATURE_STAGE || completedCropSlots <= 0
-                || !matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS)) return false;
-        return state.resourceSites().site(site.id()).activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast)
-                .map(job -> job.progress().completedCropSlots() == completedCropSlots).orElse(false);
-    }
-    static boolean isExactConfirmedHarvestRegrowth(ServerLevel level, FrontierWorldState state, ResourceSite site,
-                                                           int desiredStage, int completedCropSlots,
-                                                           FrontierV3ResourceSiteLedger.Claim claim) {
-        return confirmedHarvestRegrowthAdmission(level, state, site, desiredStage, completedCropSlots, claim)
-                == ConfirmedHarvestRegrowthAdmission.ADMITTED;
-    }
+
+
+
     /**
      * A COLD terminal has already atomically composed its exact output and retired its
      * PREPARED intent.  The durable owned field can still be the older HOT prefix: after a
      * restart it is lawful to replace that exact prefix with the current growth stage, but only
      * when the immediately preceding lineage proves that canonical terminal hand-off.
      */
-    static boolean isExactComposedTerminalRegrowth(ResourceSiteLifecycle lifecycle, int desiredStage,
-                                                    int completedCropSlots, FrontierV3ResourceSiteLedger.Claim claim,
-                                                    boolean exactPhysicalPredecessor) {
-        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                || claim.stage() != ResourceSiteLifecycle.MATURE_STAGE || claim.harvestedCropSlots() <= 0
-                || completedCropSlots != 0 || !exactPhysicalPredecessor) return false;
-        return awaitingHarvest(lifecycle) && desiredStage == lifecycle.growthStage()
-                && lifecycle.harvestLineage().map(ResourceSiteHarvestLineage::outputReceiptResolved).orElse(false);
-    }
-    static boolean isExactDeferredHarvestReceipt(ServerLevel level, FrontierWorldState state, ResourceSite site,
-                                                          int desiredStage, int completedCropSlots,
-                                                          FrontierV3ResourceSiteLedger.Claim claim) {
-        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                || claim.stage() != ResourceSiteLifecycle.MATURE_STAGE
-                || claim.harvestedCropSlots() != ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
-                || !matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS)) return false;
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
-        return matchesCanonicalProjectionTarget(lifecycle, desiredStage, completedCropSlots)
-                && lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
-                .filter(lineage -> !lineage.composedIntoCanonicalSuccessor(state)).isPresent();
-    }
+
+
     /** Current projection demand does not retire an earlier unresolved physical receipt. */
-    static boolean matchesCanonicalProjectionTarget(ResourceSiteLifecycle lifecycle, int desiredStage, int completedCropSlots) {
-        if (lifecycle == null || desiredStage != lifecycle.growthStage()) return false;
-        if (awaitingHarvest(lifecycle)) return completedCropSlots == 0;
-        return lifecycle.phase() == ResourceSitePhase.HARVESTING && lifecycle.activeWork()
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .map(job -> job.progress().completedCropSlots() == completedCropSlots).orElse(false);
-    }
-    static ConfirmedHarvestRegrowthAdmission confirmedHarvestRegrowthAdmission(ServerLevel level, FrontierWorldState state,
-                                                                                         ResourceSite site, int desiredStage,
-                                                                                         int completedCropSlots,
-                                                                                         FrontierV3ResourceSiteLedger.Claim claim) {
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
-        boolean confirmedReceipt = hasConfirmedHarvestReceipt(state, site.id());
-        return classifyConfirmedHarvestRegrowth(claim, lifecycle, desiredStage, completedCropSlots,
-                matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS), confirmedReceipt);
-    }
+
+
     static boolean hasConfirmedHarvestReceipt(FrontierWorldState state, SubjectId siteId) {
         return state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST
                 && intent.status() == PhysicalIntentStatus.CONFIRMED && intent.causeSubjectId().equals(siteId));
@@ -274,49 +182,11 @@ final class FrontierV3ResourceSiteProjectionAdmission {
         return confirmedHarvestReceipt ? ConfirmedHarvestRegrowthAdmission.ADMITTED
                 : ConfirmedHarvestRegrowthAdmission.MISSING_CONFIRMED_RECEIPT;
     }
-    static boolean isExactInterruptedStageZeroProjection(ServerLevel level, FrontierWorldState state, ResourceSite site,
-                                                                 int desiredStage, int completedCropSlots,
-                                                                 FrontierV3ResourceSiteLedger.Claim claim) {
-        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || claim.stage() != 0
-                || desiredStage != ResourceSiteLifecycle.MATURE_STAGE || completedCropSlots <= 0
-                || !matchesInfrastructure(level, site)) return false;
-        if (!matches(level, site, 0)) return false;
-        return state.resourceSites().site(site.id()).activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast)
-                .map(job -> job.progress().completedCropSlots() == completedCropSlots).orElse(false);
-    }
-    static boolean isExactUncommittedCurrentHarvest(ServerLevel level, FrontierWorldState state, ResourceSite site,
-                                                            int desiredStage, int completedCropSlots,
-                                                            FrontierV3ResourceSiteLedger.Claim claim) {
-        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                ) return false;
-        return exactCurrentHarvestJob(level, state, site, desiredStage, completedCropSlots).isPresent();
-    }
-    static Optional<ResourceSiteHarvestJob> exactCurrentHarvestJob(ServerLevel level, FrontierWorldState state, ResourceSite site,
-                                                                             int desiredStage, int completedCropSlots) {
-        if (desiredStage != ResourceSiteLifecycle.MATURE_STAGE || completedCropSlots <= 0
-                || !matchesHarvestProgress(level, site, completedCropSlots)) return Optional.empty();
-        return namedCurrentHarvestJob(state, site, desiredStage, completedCropSlots);
-    }
-    static Optional<ResourceSiteHarvestJob> namedCurrentHarvestJob(FrontierWorldState state, ResourceSite site,
-                                                                            int desiredStage, int completedCropSlots) {
-        if (desiredStage != ResourceSiteLifecycle.MATURE_STAGE || completedCropSlots <= 0) return Optional.empty();
-        return state.resourceSites().site(site.id()).activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast)
-                .filter(job -> job.progress().completedCropSlots() == completedCropSlots);
-    }
-    static Optional<ResourceSiteHarvestJob> exactUnmaterializedColdHarvest(ServerLevel level, FrontierWorldState state,
-                                                                                     ResourceSite site, int desiredStage,
-                                                                                     int completedCropSlots) {
-        if (!blankManagedSurface(level, site)) return Optional.empty();
-        return namedCurrentHarvestJob(state, site, desiredStage, completedCropSlots).filter(job -> {
-            PhysicalIntent intent = state.physicalIntents().get(job.intentId());
-            return intent != null && intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST
-                    && intent.status() == PhysicalIntentStatus.PREPARED && intent.causeSubjectId().equals(site.id())
-                    && intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(site.id(), job.id(), job.workerId(),
-                    job.actorAccountId(), job.depotAccountId()));
-        });
-    }
+
+
+
+
+
     static boolean blankManagedSurface(ServerLevel level, ResourceSite site) {
         return loaded(level, site) && site.managedSlots().stream().allMatch(slot -> level.getBlockState(minecraft(slot)).isAir());
     }

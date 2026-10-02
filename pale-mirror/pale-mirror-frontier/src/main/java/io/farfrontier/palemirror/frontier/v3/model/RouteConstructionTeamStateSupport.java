@@ -17,8 +17,7 @@ final class RouteConstructionTeamStateSupport {
                          StrategicPlanState plans) {
         Set<SubjectId> assigned = new HashSet<>();
         jobs.values().forEach(job -> assigned.add(job.workerId()));
-        sites.sites().values().stream().filter(site -> site.phase() == ResourceSitePhase.HARVESTING).map(ResourceSiteLifecycle::activeWork).flatMap(java.util.Optional::stream)
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+        sites.sites().values().stream().filter(site -> site.phase() == ResourceSitePhase.HARVESTING).flatMap(site -> site.harvestJobs().values().stream())
                 .forEach(job -> assigned.add(job.workerId()));
         operations.values().stream().filter(operation -> FrontierWorldStateSupport.retainsParticipantClaim(contracts, operation))
                 .forEach(operation -> assigned.addAll(operation.participantIds()));

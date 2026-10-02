@@ -25,6 +25,31 @@ final class FrontierResourceSiteHarvestFixture {
         return create(state);
     }
 
+    /** Ordinary policy adds the second participant; neither worker has a physical effect or body injected. */
+    static Fixture createConcurrent(WorldId worldId, long seed) {
+        Fixture first = create(worldId, seed);
+        FrontierWorldState state = first.state();
+        var settlement = state.bootstrap().settlements().stream()
+                .filter(value -> value.id().equals(new SubjectId("settlement:1"))).findFirst().orElseThrow();
+        var expansion = io.farfrontier.palemirror.frontier.v3.process.SettlementManagementComposition.MANAGEMENT
+                .expandActiveTasks(state, settlement,
+                        new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:concurrent-harvest-ingress"),
+                        first.instant().ticks());
+        var schedules = new java.util.ArrayList<>(first.schedules());
+        for (var event : expansion) {
+            switch (event.payload()) {
+                case ResourceSiteHarvestStarted started -> state = ResourceSiteHarvestProcess.reduceStarted(state, event.subject(), started);
+                case PhysicalIntentPrepared prepared -> state = ResourceSiteHarvestProcess.reducePrepared(
+                        state, event.subject(), prepared.intent());
+                case ScheduleEffect.Created created -> schedules.add(created.action());
+                default -> throw new IllegalArgumentException("concurrent ingress has an unexpected admission event");
+            }
+        }
+        if (state.resourceSites().site(first.siteId()).harvestJobs().size() != 2)
+            throw new IllegalStateException("concurrent ingress did not admit its two permitted workers");
+        return new Fixture(state, first.instant(), List.copyOf(schedules), first.siteId(), first.jobId());
+    }
+
     /** Test-only irregular genesis: one extra stable cell, no injected crop work or receipt. */
     static Fixture createWithOneExtraCell(WorldId worldId, long seed) {
         return create(initialWithOneExtraCell(worldId, seed));
@@ -72,13 +97,13 @@ final class FrontierResourceSiteHarvestFixture {
         SubjectId siteId = original.siteId();
         ScheduledAction continuation = original.schedules().getFirst();
         for (int step = 0; step < 2_048; step++) {
-            ResourceSiteHarvestJob current = (ResourceSiteHarvestJob) state.resourceSites().site(siteId).activeWork().orElseThrow();
+            ResourceSiteHarvestJob current = (ResourceSiteHarvestJob) state.resourceSites().site(siteId).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
             if (current.progress().completedCropSlots() == 64 && current.deliveredYieldQuantity() == 64
                     && !current.returningForBatch()) break;
             Step advanced = advanceCold(state, siteId, continuation);
             state = advanced.state(); continuation = advanced.action();
         }
-        ResourceSiteHarvestJob full = (ResourceSiteHarvestJob) state.resourceSites().site(siteId).activeWork().orElseThrow();
+        ResourceSiteHarvestJob full = (ResourceSiteHarvestJob) state.resourceSites().site(siteId).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         if (full.progress().completedCropSlots() != 64 || full.deliveredYieldQuantity() != 64
                 || full.returningForBatch())
             throw new IllegalStateException("post-part fixture did not enter the exact final segment");
@@ -131,7 +156,7 @@ final class FrontierResourceSiteHarvestFixture {
             Step advanced = advanceCold(state, siteId, continuation);
             state = advanced.state(); continuation = advanced.action();
             instant = continuation.dueAt().ticks() - 1L;
-            job = (ResourceSiteHarvestJob) state.resourceSites().site(siteId).activeWork().orElseThrow();
+            job = (ResourceSiteHarvestJob) state.resourceSites().site(siteId).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         }
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job)
                 || !ResourceSiteHarvestGoal.current(state, job).arrivedAt(

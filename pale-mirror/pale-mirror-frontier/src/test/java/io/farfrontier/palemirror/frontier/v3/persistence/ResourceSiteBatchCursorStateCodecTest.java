@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 
+import io.farfrontier.palemirror.frontier.v3.model.HarvestFixtureOwners;
+
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -54,7 +56,8 @@ class ResourceSiteBatchCursorStateCodecTest {
                 new SubjectId("item:site-harvest-batch-field-1"),
                 new InventoryCustody.ContainerSlot(depot, 1), intent,
                 new ResourceSiteHarvestProgress(65, 65, -1), 64, false,
-                Optional.empty(), Optional.of(new ResourceSiteHarvestBatchDelivered(receipt, 0)), Optional.empty());
+                Optional.empty(), Optional.of(new ResourceSiteHarvestBatchDelivered(receipt, 0)), Optional.empty(), 65,
+                cycle.target(cells.getLast().id()));
         ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(site, ResourceSitePhase.HARVESTING, 1, 7,
                 Optional.of(job));
         ResourceSiteState state = new ResourceSiteState(Map.of(site, lifecycle), Map.of(site, cycle));
@@ -63,21 +66,20 @@ class ResourceSiteBatchCursorStateCodecTest {
         ResourceSiteState recovered = ResourceSiteStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
 
         assertEquals(state, recovered);
-        assertEquals(64, ((ResourceSiteHarvestJob) recovered.site(site).activeWork().orElseThrow()).deliveredYieldQuantity());
+        assertEquals(64, ((ResourceSiteHarvestJob) recovered.site(site).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow()).deliveredYieldQuantity());
         assertEquals(Optional.of(new ResourceSiteHarvestBatchDelivered(receipt, 0)),
-                ((ResourceSiteHarvestJob) recovered.site(site).activeWork().orElseThrow()).lastConfirmedBatch());
-        assertEquals(1, ((ResourceSiteHarvestJob) recovered.site(site).activeWork().orElseThrow()).carriedYieldQuantity(
-                recovered.cycle(site).harvestedCount()));
+                ((ResourceSiteHarvestJob) recovered.site(site).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow()).lastConfirmedBatch());
+        assertEquals(1, ((ResourceSiteHarvestJob) recovered.site(site).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow()).undeliveredYieldQuantity());
 
-        // The same serialized cursor cannot be installed against an accounted prefix
-        // containing fewer real yields: it would silently skip an undelivered part.
+        // Physical cells describe their current plants, not this worker's historical
+        // output. A later crop generation must not invalidate already-carried cargo.
         var nonYielding = new java.util.HashMap<>(worked);
         for (int index = 0; index < 2; index++) {
             nonYielding.put(cells.get(index).id(), new ResourceFieldCycle.CellState(
                     ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.GROWING, 0, true, false));
         }
         ResourceFieldCycle mismatched = ResourceFieldCycle.restore(site, layout, 1, nonYielding);
-        assertThrows(IllegalArgumentException.class,
-                () -> new ResourceSiteState(Map.of(site, lifecycle), Map.of(site, mismatched)));
+        var laterPlants = new ResourceSiteState(Map.of(site, lifecycle), Map.of(site, mismatched));
+        assertEquals(job, laterPlants.site(site).harvestJob(job.id()).orElseThrow());
     }
 }

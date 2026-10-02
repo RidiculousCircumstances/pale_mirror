@@ -64,8 +64,7 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
         state.productionJobs().values().stream().sorted(Comparator.comparing(ProductionJob::id))
                 .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.PRODUCTION, job.id()));
         state.resourceSites().sites().values().stream().filter(site -> site.phase() == ResourceSitePhase.HARVESTING).sorted(Comparator.comparing(ResourceSiteLifecycle::siteId))
-                .map(ResourceSiteLifecycle::activeWork).flatMap(java.util.Optional::stream)
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .flatMap(site -> site.harvestJobs().values().stream())
                 .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.FIELD_HARVEST, job.id()));
         state.operations().values().stream().sorted(Comparator.comparing(RouteOperation::id))
                 .filter(operation -> FrontierWorldStateSupport.retainsParticipantClaim(state, operation)).forEach(operation -> {

@@ -26,7 +26,7 @@ class ResourceSiteHarvestLabourTest {
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
                 base.projectionMapper(), base.limits(), List.of(binding), base.transactionCommitter()));
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceCropPrepared(hot,
-                fixture.site(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex())));
+                fixture.site(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation())));
         var start = ResourceSiteHarvestWorkProcess.change(hot, job, 22_301, true, binding, Optional.of(lease.id()));
         submit(engine, start);
         var coldStart = ResourceSiteHarvestWorkProcess.change(cold, job, 22_301, true, binding, Optional.empty());
@@ -35,19 +35,20 @@ class ResourceSiteHarvestLabourTest {
         long finish = start.next().activeUntilTick();
         engine.advanceTo(new SimInstant(finish), new WorkBudget(100, 100));
         var restored = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        var hotJob = (ResourceSiteHarvestJob) restored.resourceSites().site(fixture.site()).activeWork().orElseThrow();
+        var hotJob = (ResourceSiteHarvestJob) restored.resourceSites().site(fixture.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         var due = engine.checkpoint().schedules().getFirst();
         var stop = ResourceSiteHarvestWorkProcess.change(restored, hotJob, finish, false, due, Optional.of(lease.id()));
         submit(engine, stop);
-        var coldJob = (ResourceSiteHarvestJob) cold.resourceSites().site(fixture.site()).activeWork().orElseThrow();
+        var coldJob = (ResourceSiteHarvestJob) cold.resourceSites().site(fixture.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         cold = ResourceSiteHarvestWorkProcess.reduce(cold, fixture.site(), ResourceSiteHarvestWorkProcess.change(
                 cold, coldJob, finish, false, ResourceSiteHarvestProcess.coldProgress(coldJob, finish), Optional.empty()));
         restored = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertEquals(cold.resourceSites().site(fixture.site()).activeWork(), restored.resourceSites().site(fixture.site()).activeWork());
-        assertTrue(((ResourceSiteHarvestJob) restored.resourceSites().site(fixture.site()).activeWork().orElseThrow())
+        assertEquals(cold.resourceSites().site(fixture.site()).harvestJobs().values().stream()
+                .reduce(HarvestFixtureOwners::rejectMultiple), restored.resourceSites().site(fixture.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple));
+        assertTrue(((ResourceSiteHarvestJob) restored.resourceSites().site(fixture.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow())
                 .progress().work().orElseThrow().complete());
         ResourceSiteHarvestProcess.reduceCropPrepared(restored, fixture.site(),
-                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
+                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));
     }
 
     @Test void modifierEditSettlesOldRateWithoutChangingNutritionAndSurvivesPersistence() {
@@ -64,7 +65,7 @@ class ResourceSiteHarvestLabourTest {
         state = ResidentWorkModifiersProcess.reduce(state, job.workerId(), new ResidentWorkModifiersChanged(
                 job.workerId(), 22_321, ResidentWorkModifiers.initial(), next));
         assertEquals(nutrition, state.humanPopulation().nutrition());
-        job = (ResourceSiteHarvestJob) state.resourceSites().site(fixture.site()).activeWork().orElseThrow();
+        job = (ResourceSiteHarvestJob) state.resourceSites().site(fixture.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         assertEquals(20L * start.next().ratePermille(), job.progress().work().orElseThrow().completedMilliWork());
         assertFalse(job.progress().work().orElseThrow().running());
         var resumed = ResourceSiteHarvestLabour.next(state, job, 22_321, true);
@@ -92,7 +93,7 @@ class ResourceSiteHarvestLabourTest {
                 Revision.ZERO, new SimInstant(22_321), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id),
                 new SceneLeaseTransition(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART))));
         var restored = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        var work = ((ResourceSiteHarvestJob) restored.resourceSites().site(fixture.site()).activeWork().orElseThrow())
+        var work = ((ResourceSiteHarvestJob) restored.resourceSites().site(fixture.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow())
                 .progress().work().orElseThrow();
         assertFalse(work.running());
         assertEquals(20L * start.next().ratePermille(), work.completedAt(100_000));

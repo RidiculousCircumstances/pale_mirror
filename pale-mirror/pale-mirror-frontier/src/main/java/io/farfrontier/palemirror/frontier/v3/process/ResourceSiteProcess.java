@@ -39,7 +39,7 @@ public final class ResourceSiteProcess {
 
     public static List<ProposedEvent> planPreparation(FrontierWorldState state, ScheduledAction action) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(action.subject());
-        if (lifecycle.phase() != ResourceSitePhase.UNPREPARED || lifecycle.activeWork().isPresent() || !action.id().equals(preparation(lifecycle.siteId(), action.dueAt().ticks()).id())) return List.of();
+        if (lifecycle.phase() != ResourceSitePhase.UNPREPARED || lifecycle.hasWork() || !action.id().equals(preparation(lifecycle.siteId(), action.dueAt().ticks()).id())) return List.of();
         String suffix = lifecycle.siteId().value().substring("site:".length()); ResourceSitePreparationJob job = new ResourceSitePreparationJob(
                 new SubjectId("job:site-prepare-" + suffix), lifecycle.siteId(), new PhysicalIntentId("intent:site-prepare-" + suffix));
         ResourceSite site = state.resourceSite(lifecycle.siteId()); BlockPosition origin = site.cropSlots().getFirst();
@@ -60,7 +60,7 @@ public final class ResourceSiteProcess {
         ResourceSitePreparationJob job = prepared.job();
         if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site preparation completion has a foreign event owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
-        ResourceSitePreparationJob active = lifecycle.activeWork().filter(ResourceSitePreparationJob.class::isInstance).map(ResourceSitePreparationJob.class::cast)
+        ResourceSitePreparationJob active = lifecycle.preparationWork()
                 .orElseThrow(() -> new IllegalArgumentException("resource-site preparation completion has no active work"));
         if (!active.equals(job)) throw new IllegalArgumentException("resource-site preparation completion does not match active work");
         ResourceFieldCycle seeded = ResourceFieldCycle.seeded(job.siteId(),
@@ -71,7 +71,7 @@ public final class ResourceSiteProcess {
     public static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_PREPARATION || !subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site preparation intent is invalid");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
-        ResourceSitePreparationJob job = lifecycle.activeWork().filter(ResourceSitePreparationJob.class::isInstance).map(ResourceSitePreparationJob.class::cast)
+        ResourceSitePreparationJob job = lifecycle.preparationWork()
                 .orElseThrow(() -> new IllegalArgumentException("resource-site preparation lacks active work"));
         if (!intent.id().equals(job.intentId()) || !intent.roles().equals(PhysicalIntentRoleBinding.sitePreparation(job.siteId(), job.id())) || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED) {
             throw new IllegalArgumentException("resource-site preparation intent does not bind its active work");
@@ -85,7 +85,7 @@ public final class ResourceSiteProcess {
             if (transition.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) throw new IllegalArgumentException("destroyed resource site can only retain unknown preparation evidence");
             return List.of(new ProposedEvent(lifecycle.siteId(), transition));
         }
-        if (lifecycle.activeWork().filter(ResourceSitePreparationJob.class::isInstance).map(ResourceSitePreparationJob.class::cast)
+        if (lifecycle.preparationWork()
                 .filter(job -> job.intentId().equals(intent.id())).isEmpty()) throw new IllegalArgumentException("resource-site preparation transition has no active work");
         if (transition.status() == PhysicalIntentStatus.CONFIRMED) {
             return List.of(new ProposedEvent(lifecycle.siteId(), transition), new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(
@@ -257,26 +257,33 @@ public final class ResourceSiteProcess {
     private static FrontierWorldState applyObservedCellChange(FrontierWorldState state, ResourceSiteLifecycle lifecycle,
                                                               ResourceFieldCycle cycle, ResourceFieldCycle next,
                                                               ResourceFieldLayout.CellId cellId) {
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
+        ResourceSiteHarvestJob job = lifecycle.harvestJobs().values().stream()
+                .filter(candidate -> !candidate.progress().complete() && !candidate.returningForBatch()
+                        && cycle.layout().cells().get(candidate.progress().selectedCropSlotIndex()).id().equals(cellId))
+                .reduce((left, right) -> { throw new IllegalArgumentException("observed cell has duplicate execution owners"); }).orElse(null);
         ResourceFieldCycle.CellState before = cycle.cell(cellId);
         ResourceFieldCycle.CellState after = next.cell(cellId);
         boolean preparedHere = job != null && job.progress().hasPendingCrop()
                 && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(cellId);
-        if (job != null && lifecycle.phase() == ResourceSitePhase.HARVESTING && !before.accounted()
+        boolean lostPlant = lifecycle.phase() == ResourceSitePhase.HARVESTING && !before.accounted()
                 && (before.crop() == ResourceFieldCycle.Crop.GROWING || before.crop() == ResourceFieldCycle.Crop.MATURE)
                 && (after.crop() == ResourceFieldCycle.Crop.ABSENT || after.crop() == ResourceFieldCycle.Crop.OBSTRUCTED
-                    || after.crop() == ResourceFieldCycle.Crop.GROWING && after.growthStage() < before.growthStage())) {
+                    || after.crop() == ResourceFieldCycle.Crop.GROWING && after.growthStage() < before.growthStage());
+        if (job != null && lostPlant) {
             int lostSlot = cycle.layout().cells().indexOf(cycle.layout().requireCell(cellId));
             if (lostSlot < 0) throw new IllegalArgumentException("observed crop loss has no admitted work slot");
-            next = next.accountExternalCropLoss(cellId);
+            // Close only the execution's obsolete claim. The replacement generation
+            // remains available for sowing; it is not completed work or harvested yield.
             int nextSelected = job.progress().selectedCropSlotIndex() == lostSlot
-                    ? next.nextWorkSlotAfter(lostSlot).orElse(-1)
+                    ? job.progress().completedCropSlots() + 1 >= job.progress().totalCropSlots() ? -1
+                    : next.nextWorkSlotAfter(lostSlot, index -> index != lostSlot
+                            && state.resourceSites().site(cycle.siteId()).targetAvailable(index, job.id())).orElse(-1)
                     : job.progress().selectedCropSlotIndex();
-            lifecycle = lifecycle.accountObservedLostHarvestCell(job, lostSlot, nextSelected, cycle.harvestedCount());
+            lifecycle = lifecycle.accountObservedLostHarvestCell(job, lostSlot, nextSelected, next);
         } else if (preparedHere) {
             lifecycle = lifecycle.cancelPreparedHarvestCrop(cellId, cycle);
         }
+        if (job != null) lifecycle = lifecycle.bindHarvestTarget(lifecycle.harvestJob(job.id()).orElseThrow(), next);
         return state.withResourceSites(state.resourceSites().replace(lifecycle.withPlantReadiness(next), next));
     }
 
@@ -296,9 +303,11 @@ public final class ResourceSiteProcess {
                 || cycle.pendingPlayerBreaks().containsKey(cell.id()))
             throw new IllegalArgumentException("field work access has a stale or unresolved cell observation");
         if (observed.hotLeaseId().isPresent()) {
-            ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                    .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
-                            () -> new IllegalArgumentException("field work access has no physical farmer owner"));
+            SceneLease lease = state.sceneLeases().get(observed.hotLeaseId().orElseThrow());
+            if (lease == null || !FrontierSceneBehaviors.isResourceSiteHarvest(lease))
+                throw new IllegalArgumentException("field work access has no physical farmer owner");
+            ResourceSiteHarvestJob job = lifecycle.harvestJob(
+                    FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId()).orElseThrow();
             FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, observed.hotLeaseId().orElseThrow());
         }
         return state.withResourceSites(state.resourceSites().replace(lifecycle,
@@ -319,7 +328,7 @@ public final class ResourceSiteProcess {
                 ? ResourceSiteConflictDisposition.recovery(conflict.position(), conflict.reason(), incident)
                 : ResourceSiteConflictDisposition.terminal(conflict.position(), conflict.reason(), incident);
         ResourceSiteLifecycle conflicted = lifecycle.conflicted(disposition);
-        if (lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).isEmpty()) {
+        if (lifecycle.harvestJobs().isEmpty()) {
             return state.withResourceSites(state.resourceSites().replace(conflicted));
         }
 
@@ -327,66 +336,56 @@ public final class ResourceSiteProcess {
         // the field worker or its intent to continue.  Install every consequence in the same
         // aggregate transition: after this returns there is no nonterminal harvest intent whose
         // canonical subjects were just retired, and no HOT scene can reinterpret the break.
-        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) lifecycle.activeWork().orElseThrow();
-        PhysicalIntent intent = state.physicalIntents().get(job.intentId());
-        if (intent == null || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST
-                || !intent.causeSubjectId().equals(lifecycle.siteId())
-                || (intent.status() != PhysicalIntentStatus.PREPARED && intent.status() != PhysicalIntentStatus.RUNNING)) {
-            throw new IllegalArgumentException("resource-site player conflict has no active exact harvest intent");
-        }
         Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
-        // A direct physical disposition is not a restart ambiguity.  Both a pre-effect and a
-        // running field intent become terminal under the same exact site owner; only a real
-        // restart path may use UNKNOWN_AFTER_RESTART.
-        intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFLICTED, Optional.empty()));
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
-        leases.replaceAll((id, lease) -> {
-            if (!FrontierSceneBehaviors.isResourceSiteHarvest(lease)
-                    || !FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())
-                    || !FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())) return lease;
-            return switch (lease.status()) {
-                // A generic DRAINING release cannot shed a worker whose physical hand still
-                // owns the harvested lot. Keep the conflict local with that exact body and
-                // stock until a typed transfer/recovery transition resolves the custody.
-                case HOT, UNKNOWN_AFTER_RESTART -> lease.withStatus(
-                        FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)
-                                ? SceneLeaseStatus.CONFLICT : SceneLeaseStatus.DRAINING);
-                case PREPARED -> lease.withStatus(SceneLeaseStatus.CONFLICT);
-                default -> lease;
-            };
-        });
+        StrategicPlanState plans = state.strategicPlans();
+        FencedRecoveryState recovery = state.fencedRecovery();
+        for (ResourceSiteHarvestJob job : lifecycle.harvestJobs().values()) {
+            PhysicalIntent intent = intents.get(job.intentId());
+            if (intent == null || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                    || !intent.causeSubjectId().equals(lifecycle.siteId())
+                    || (intent.status() != PhysicalIntentStatus.PREPARED && intent.status() != PhysicalIntentStatus.RUNNING))
+                throw new IllegalArgumentException("resource-site player conflict has no active exact harvest intent");
+            intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFLICTED, Optional.empty()));
+            leases.replaceAll((id, lease) -> {
+                if (!FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+                        || !FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())) return lease;
+                return switch (lease.status()) {
+                    case HOT, UNKNOWN_AFTER_RESTART -> lease.withStatus(
+                            FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)
+                                    ? SceneLeaseStatus.CONFLICT : SceneLeaseStatus.DRAINING);
+                    case PREPARED -> lease.withStatus(SceneLeaseStatus.CONFLICT);
+                    default -> lease;
+                };
+            });
+            if (plans.tasks().get(job.taskId()).status() != StrategicTaskStatus.BLOCKED)
+                plans = plans.transitionTask(job.taskId(), StrategicTaskStatus.BLOCKED);
+            recovery = FencedRecoveryPhysicalIntentSupport.transition(recovery, intent, PhysicalIntentStatus.CONFLICTED,
+                    FencedRecoveryAsset.EFFECT);
+        }
         return state.withChanges(FrontierWorldStateUpdate.begin()
-                .resourceSites(state.resourceSites().replace(conflicted))
-                .strategicPlans(state.strategicPlans().transitionTask(job.taskId(), StrategicTaskStatus.BLOCKED))
-                .physicalIntents(intents)
-                .sceneLeases(leases)
-                .fencedRecovery(FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), intent, PhysicalIntentStatus.CONFLICTED,
-                        FencedRecoveryAsset.EFFECT)));
+                .resourceSites(state.resourceSites().replace(conflicted)).strategicPlans(plans)
+                .physicalIntents(intents).sceneLeases(leases).fencedRecovery(recovery));
     }
 
     private static boolean lifecycleTraversalSupport(FrontierWorldState state, ResourceSiteConflictObserved conflict) {
         if (conflict.producer().source() != ResourceSiteConflictSource.SCENE_TRAVERSAL) return false;
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(conflict.siteId());
-        return lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast)
-                .map(job -> {
+        return lifecycle.harvestJobs().values().stream().anyMatch(job -> {
                     ActorLocation actor = state.actorLocations().get(job.workerId());
                     return actor != null && actor.supportingSurface().support().equals(conflict.position());
-                }).orElse(false);
+                });
     }
 
     public static List<ProposedEvent> planConflict(FrontierWorldState state, ResourceSiteConflictObserved conflict) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(conflict.siteId());
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
         reduceConflict(state, conflict.siteId(), conflict);
-        // The accepted player disposition retires the one engine-owned continuation in the same
-        // transaction.  Leaving its exact due action behind is not harmless bookkeeping: after
-        // conflict it would remain a durable false claim that the field worker may resume.
-        return job == null
-                ? List.of(new ProposedEvent(conflict.siteId(), conflict))
-                : List.of(new ProposedEvent(conflict.siteId(), conflict), new ProposedEvent(conflict.siteId(),
-                        new ScheduleEffect.Cancelled(ResourceSiteHarvestProcess.coldProgress(job, 0L).id())));
+        var events = new java.util.ArrayList<ProposedEvent>();
+        events.add(new ProposedEvent(conflict.siteId(), conflict));
+        lifecycle.harvestJobs().values().stream().sorted(java.util.Comparator.comparing(ResourceSiteHarvestJob::id))
+                .forEach(job -> events.add(new ProposedEvent(conflict.siteId(),
+                        new ScheduleEffect.Cancelled(ResourceSiteHarvestProcess.coldProgress(job, 0L).id()))));
+        return List.copyOf(events);
     }
 
 }

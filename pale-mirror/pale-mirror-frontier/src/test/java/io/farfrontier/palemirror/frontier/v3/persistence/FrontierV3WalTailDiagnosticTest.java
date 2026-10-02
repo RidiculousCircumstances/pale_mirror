@@ -35,7 +35,7 @@ class FrontierV3WalTailDiagnosticTest {
                         new Revision(1L), new SimInstant(1L), new SubjectId("owner:wal-forensics"), CauseChain.root(commandId),
                         new ScheduleEffect.Cancelled(new ScheduleId("schedule:wal-forensics")))), Optional.empty());
         byte[] wal = FrontierPersistenceCodec.encodeWal(transaction, FrontierWorldRuntimeDefinition.payloadCodecs());
-        assertEquals(96, Byte.toUnsignedInt(wal[4]));
+        assertEquals(97, Byte.toUnsignedInt(wal[4]));
         byte[] priorEnvelope = wal.clone(); priorEnvelope[4] = 95;
         assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeWal(priorEnvelope,
                 FrontierWorldRuntimeDefinition.payloadCodecs()));

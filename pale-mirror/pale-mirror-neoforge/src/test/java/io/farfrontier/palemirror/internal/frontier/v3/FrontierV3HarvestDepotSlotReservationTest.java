@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.HarvestFixtureOwners;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
@@ -20,7 +22,7 @@ class FrontierV3HarvestDepotSlotReservationTest {
         FrontierWorldState state = FrontierV3FixtureCatalog.resourceSiteHarvestConfiguration(
                 new WorldId("frontier:harvest-depot-reservation"), 91L).initialState();
         ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) state.resourceSites()
-                .site(new SubjectId("site:1-wheat-field")).activeWork().orElseThrow();
+                .site(new SubjectId("site:1-wheat-field")).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         SubjectId depot = job.outputSlot().containerId();
         int capacity = state.inventory().containers().get(depot).slotCount();
 

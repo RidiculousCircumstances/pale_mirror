@@ -179,8 +179,8 @@ public final class ServiceAccessCoordinator {
                     || atPort)
                 applicants.add(new Applicant(job.id(), job.workerId(), atPort));
         }
-        for (ResourceSiteLifecycle site : state.resourceSites().sites().values()) {
-            if (!(site.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job)) continue;
+        for (ResourceSiteHarvestJob job : state.resourceSites().sites().values().stream()
+                .flatMap(site -> site.harvestJobs().values().stream()).toList()) {
             if (state.humanPopulation().meals().containsKey(job.workerId())
                     || state.actorMovements().containsKey(job.workerId())) continue;
             ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);

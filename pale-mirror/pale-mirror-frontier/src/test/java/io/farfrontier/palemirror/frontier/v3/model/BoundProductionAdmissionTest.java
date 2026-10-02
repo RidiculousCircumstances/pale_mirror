@@ -12,6 +12,116 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class BoundProductionAdmissionTest {
     @Test
+    void exactPermissionsSurviveSnapshotAndDoNotCancelAnAlreadyAdmittedExecution() {
+        var state = twoBakerFixture();
+        var owner = new SubjectId("settlement:1");
+        var bakers = SettlementWorkforce.candidates(state, owner, ResidentProfession.BAKER);
+        var selected = bakers.get(1).id();
+        var permissions = new ResidentWorkPermissions(Map.of(ResidentWorkKind.BAKING, java.util.Set.of(selected)));
+        state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(owner, permissions));
+        var codec = new FrontierWorldStateCodec();
+        state = codec.decode(codec.encode(state));
+        assertEquals(permissions, SettlementWorkPolicy.permissions(state, owner));
+        var task = state.strategicPlans().tasks().values().iterator().next();
+        var planned = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L));
+        var started = planned.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        assertEquals(selected, started.job().workerId(), "profession alone must not authorize the preferred baker");
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, owner,
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, owner, started);
+        state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(owner, ResidentWorkPermissions.none()));
+        var restored = codec.decode(codec.encode(state));
+        assertEquals(started.job(), restored.productionJobs().get(started.job().id()));
+        assertTrue(ResidentWorkSelection.eligible(restored, owner, ResidentWorkKind.BAKING,
+                HumanCapability.INDUSTRY, 201L).isEmpty());
+        assertFalse(HumanAssignmentProjection.compile(restored).idle(selected));
+    }
+
+    @Test
+    void settlementCannotAuthorizeAForeignResident() {
+        var state = twoBakerFixture();
+        var owner = new SubjectId("settlement:1");
+        var foreign = state.humanPopulation().residents().values().stream()
+                .filter(resident -> !resident.settlementId().equals(owner)).findFirst().orElseThrow().id();
+        var plans = state.strategicPlans().withWorkPermissions(owner,
+                new ResidentWorkPermissions(Map.of(ResidentWorkKind.BAKING, java.util.Set.of(foreign))));
+        assertThrows(IllegalArgumentException.class, () -> state.withStrategicPlans(plans));
+    }
+
+    @Test
+    void unavailablePreferredBakerDoesNotPreventAnotherBakerTakingTheWork() {
+        var state = twoBakerFixture();
+        var settlement = new SubjectId("settlement:1");
+        var candidates = SettlementWorkforce.candidates(state, settlement, ResidentProfession.BAKER);
+        assertEquals(2, candidates.size());
+        var preferred = candidates.getFirst();
+        var body = state.actorLocations().get(preferred.id()).body();
+        state = state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(preferred.id(),
+                new AmbientActorLease(preferred.id(), body, SimInstant.ZERO, 1L,
+                        AmbientLeaseStatus.UNKNOWN_AFTER_RESTART, AmbientGoalKind.WORK, body))));
+        var task = state.strategicPlans().tasks().values().iterator().next();
+        var demand = MarketClearingProcess.foodDemand(state, task, 100L);
+        state = MarketClearingProcess.reduceOpened(state, task.ownerId(), new MarketDemandOpened(demand));
+        var world = state.bootstrap().worldId();
+        var base = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var config = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(world, state, SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(),
+                base.limits(), List.of(MarketClearingProcess.clear(demand, 1, 200L)), base.transactionCommitter());
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(config);
+        engine.advanceTo(new SimInstant(200L), new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(100, 100));
+        var after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(1, after.productionJobs().size());
+        var job = after.productionJobs().values().iterator().next();
+        assertEquals(candidates.get(1).id(), job.workerId());
+        assertTrue(after.companies().market().acceptedForJob(job.id()).isPresent());
+        assertEquals(job.workerId(), CompanyWorkPaymentProcess.contractFor(after, job).orElseThrow().residentId());
+        assertTrue(HumanAssignmentProjection.compile(after).idle(preferred.id()));
+        assertFalse(HumanAssignmentProjection.compile(after).idle(job.workerId()));
+        assertEquals(AmbientLeaseStatus.UNKNOWN_AFTER_RESTART, after.ambientLeases().get(preferred.id()).status());
+    }
+
+    @Test
+    void occupiedBakeryRetainsTheSettlementRequestWithoutAssigningTheOtherBaker() {
+        var state = twoBakerFixture();
+        var task = state.strategicPlans().tasks().values().iterator().next();
+        var planned = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L));
+        var started = assertInstanceOf(ProductionStarted.class, planned.get(1).payload());
+        var active = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload()));
+        state = ProductionProcess.reduceStarted(active, task.ownerId(), started);
+        var another = new StrategicTask(new SubjectId("task:second-bakery-request"), task.objectiveId(),
+                task.ownerId(), task.kind(), task.infectionTarget(), task.operationTarget(), task.resourceSiteTarget(),
+                task.requirements(), task.dependencies(), StrategicTaskStatus.PENDING,
+                task.operationObservationPosition(), task.authorityId(), task.authorityEpoch());
+        state = state.withStrategicPlans(state.strategicPlans().addTask(another));
+        var jobs = state.productionJobs();
+        var stock = state.inventory();
+        var next = ProductionProcess.planStart(state, ProductionProcess.start(another, 201L));
+        assertEquals(1, next.size());
+        assertInstanceOf(ScheduleEffect.Rescheduled.class, next.getFirst().payload());
+        assertSame(jobs, state.productionJobs());
+        assertSame(stock, state.inventory());
+        assertEquals(1, state.productionJobs().size());
+        var assignments = HumanAssignmentProjection.compile(state);
+        assertEquals(1, state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(task.ownerId())
+                        && resident.profession() == ResidentProfession.BAKER)
+                .filter(resident -> assignments.idle(resident.id())).count());
+    }
+
+    private static FrontierWorldState twoBakerFixture() {
+        var state = coldFixture();
+        var settlement = new SubjectId("settlement:1");
+        assertEquals(2, SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.BAKING).size());
+        for (var event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlement, 2, 4_001L))) {
+            if (event.payload() instanceof EmploymentContractOpened opened)
+                state = CompanyFoundationProcess.reduceEmployment(state, settlement, opened);
+        }
+        return state;
+    }
+
+    @Test
     void registeredSchedulerStartsABoundJobAndRetainsItsWorkContinuation() {
         var state = fixture();
         var task = state.strategicPlans().tasks().values().iterator().next();

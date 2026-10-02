@@ -512,7 +512,8 @@ public final class FrontierWorldProcessCatalog {
             if (next.resourceSites().sites().containsKey(event.subject())) siteId = event.subject();
             else {
                 for (ResourceSiteLifecycle lifecycle : next.resourceSites().sites().values()) {
-                    if (lifecycle.activeWork().filter(work -> work.id().equals(event.subject())).isPresent()) {
+                    if (lifecycle.harvestJobs().containsKey(event.subject())
+                            || lifecycle.preparationWork().filter(work -> work.id().equals(event.subject())).isPresent()) {
                         siteId = lifecycle.siteId();
                         break;
                     }
@@ -831,6 +832,8 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.settlement_service_work_traversal_blocked", "frontier.settlement_service_work_progressed",
                     "frontier.scene_lease_transition", "frontier.strategic_task_transition");
             case "strategy" -> types(
+                    // Registered policy expansion delegates admission to the corresponding family owner.
+                    "frontier.resource_site_harvest_started", "frontier.production_started",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
                     "frontier.resident_transit_advanced", "frontier.resident_migration_blocked", "frontier.resident_migration_resumed", "frontier.resident_birth_started",

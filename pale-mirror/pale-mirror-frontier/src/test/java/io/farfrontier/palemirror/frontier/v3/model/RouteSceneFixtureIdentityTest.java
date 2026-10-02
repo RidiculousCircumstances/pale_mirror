@@ -13,7 +13,7 @@ class RouteSceneFixtureIdentityTest {
     void assemblyScenarioRetainsTheExactThreePersonShipmentBeforeAnyColdStep() {
         var fixture = FrontierDevelopmentScenarios.operationAssemblyFixture(new WorldId("frontier:assembly-identity"), 41L);
         var operation = fixture.state().operations().get(fixture.operationId());
-        assertEquals(new SubjectId("operation:supply-1-18"), operation.id());
+        assertEquals(new SubjectId("operation:supply-1-14"), operation.id());
         assertEquals(java.util.List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16"),
                 new SubjectId("resident:1-28")), operation.participantIds());
         assertEquals(3, operation.activeAssembly().orElseThrow().members().size());
@@ -26,17 +26,17 @@ class RouteSceneFixtureIdentityTest {
     void cargoTheftScenarioUsesTheActualFungibleShipment() {
         var state = FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:route-cargo-identity"), 41L).initialState();
-        var cargoId = new SubjectId("cargo:supply-1-18");
+        var cargoId = new SubjectId("cargo:supply-1-14");
         var cargo = state.inventory().cargo().get(cargoId);
         assertTrue(cargo.fungibleContents());
         assertTrue(cargo.itemIds().isEmpty());
         assertFalse(state.inventory().items().containsKey(new SubjectId("item:production-settlement-1-settlement_produce_bread-1-bread")));
         var account = state.inventory().fungibleResources().accounts()
-                .get(new SubjectId("custody:cargo-supply-1-18"));
+                .get(new SubjectId("custody:cargo-supply-1-14"));
         assertEquals(new ResourceCustody.Cargo(cargoId), account.custody());
-        assertEquals(java.util.Map.of(new SubjectId("lot:production-settlement-1-settlement_produce_bread-1-bread"), 64), account.lotQuantities());
+        assertEquals(java.util.Map.of(new SubjectId("lot:production-objective-workforce-43cecd8243a8fafa0b56ff4b804d352c-1-bread"), 64), account.lotQuantities());
         assertEquals("minecraft:bread", state.inventory().fungibleResources().lots()
-                .get(new SubjectId("lot:production-settlement-1-settlement_produce_bread-1-bread")).itemKind());
+                .get(new SubjectId("lot:production-objective-workforce-43cecd8243a8fafa0b56ff4b804d352c-1-bread")).itemKind());
     }
 
     @Test
@@ -69,9 +69,9 @@ class RouteSceneFixtureIdentityTest {
             var state = configuration.initialState();
             var operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state).orElseThrow();
             // Explicit native-scenario precondition, not an ordinal used to discover ownership.
-            assertEquals(new SubjectId("operation:supply-1-18"), operation.id());
-            assertEquals(new SubjectId("cargo:supply-1-18"), operation.cargoId());
-            assertEquals(new SubjectId("contract:supply-1-18"), operation.contractId());
+            assertEquals(new SubjectId("operation:supply-1-14"), operation.id());
+            assertEquals(new SubjectId("cargo:supply-1-14"), operation.cargoId());
+            assertEquals(new SubjectId("contract:supply-1-14"), operation.contractId());
             var action = SupplyOperationProcess.operationProgress(operation, configuration.initialInstant().ticks() + 20L);
             var events = configuration.scheduledPlanner().plan(state, action);
             if (index == 0) {

@@ -19,13 +19,12 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             var cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
             var lifecycle = state.resourceSites().sites().get(cause.siteId());
             if (lifecycle == null) continue;
-            var job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                    .map(ResourceSiteHarvestJob.class::cast).orElse(null);
+            var job = lifecycle.harvestJob(cause.jobId()).orElse(null);
             if (job == null || !job.id().equals(cause.jobId())
                     || job.navigationBlock().isPresent()
                     || state.resourceSites().hasPendingWorldChange(job.siteId())) continue;
             var cycle = state.resourceSites().cycle(job.siteId());
-            if (job.progress().complete() && !cycle.cycleAccounted() || !cycle.pendingPlayerBreaks().isEmpty()
+            if (!cycle.pendingPlayerBreaks().isEmpty()
                     || !currentField(level, job, cycle)) continue;
             var member = lease.members().getFirst();
             var entity = level.getEntity(member.entityId());

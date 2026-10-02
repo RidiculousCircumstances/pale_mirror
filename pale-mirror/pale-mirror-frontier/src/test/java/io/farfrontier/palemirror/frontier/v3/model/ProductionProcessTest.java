@@ -121,7 +121,7 @@ class ProductionProcessTest {
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(deathId),
                 new AmbientActorDied(prepared.job().workerId(), position, "entity:test-explosion"))));
         FrontierWorldState afterDeath = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        EmploymentContract terminated = afterDeath.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(prepared.settlementId()));
+        EmploymentContract terminated = afterDeath.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(prepared.settlementId(), prepared.job().workerId()));
         assertEquals(ActorLifeStatus.DEAD, afterDeath.actorLocations().get(prepared.job().workerId()).condition().status());
         assertEquals(EmploymentContractStatus.TERMINATED, terminated.status());
         assertTrue(afterDeath.productionJobs().containsKey(prepared.job().id()));
@@ -162,7 +162,7 @@ class ProductionProcessTest {
         FrontierWorldState released = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
 
         assertEquals(EmploymentContractStatus.TERMINATED, released.companies().employmentContracts()
-                .get(CompanyFoundationProcess.employmentId(prepared.settlementId())).status());
+                .get(CompanyFoundationProcess.employmentId(prepared.settlementId(), prepared.job().workerId())).status());
         assertFalse(released.productionJobs().containsKey(prepared.job().id()));
         assertEquals(prepared.input(), released.inventory().items().get(prepared.input().id()));
         assertTrue(released.inventory().economics().reservations().isEmpty());
@@ -185,7 +185,7 @@ class ProductionProcessTest {
         FrontierWorldState cancelled = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
 
         assertEquals(EmploymentContractStatus.TERMINATED, cancelled.companies().employmentContracts()
-                .get(CompanyFoundationProcess.employmentId(prepared.settlementId())).status());
+                .get(CompanyFoundationProcess.employmentId(prepared.settlementId(), prepared.job().workerId())).status());
         assertTrue(cancelled.productionJobs().isEmpty());
         assertFalse(cancelled.physicalIntents().containsKey(prepared.intent().id()));
         assertEquals(prepared.state().inventory().items().get(prepared.job().consumedItemId()),
@@ -894,6 +894,10 @@ class ProductionProcessTest {
                     harvesting = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(harvesting, siteId, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced advanced)
                     harvesting = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(harvesting, siteId, advanced);
+                else if (event.payload() instanceof ResourceSiteHarvestWorkChanged changed)
+                    harvesting = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(harvesting, siteId, changed);
+                else if (event.payload() instanceof ResourceSiteHarvestSegmentRenewed renewed)
+                    harvesting = ResourceSiteHarvestProcess.reduceSegmentRenewed(harvesting, siteId, renewed);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared prepared)
                     harvesting = ResourceSiteHarvestProcess.reduceCropPrepared(harvesting, siteId, prepared);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed advanced)
@@ -910,7 +914,7 @@ class ProductionProcessTest {
         }
         assertEquals(ResourceSitePhase.GROWING, harvesting.resourceSites().site(siteId).phase(),
                 "the farmer must deliver the harvested part before successor lineage exists");
-        ResourceSiteHarvestLineage completed = harvesting.resourceSites().site(siteId).harvestLineage().orElseThrow();
+        ResourceSiteHarvestLineage completed = harvesting.resourceSites().site(siteId).harvestLineages().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         assertFalse(harvesting.physicalIntents().containsKey(firstPrepared.intent().id()),
                 "terminal COLD composition cannot leave its prior physical subject unowned before the next growth epoch");
         FrontierWorldState grown = harvesting;

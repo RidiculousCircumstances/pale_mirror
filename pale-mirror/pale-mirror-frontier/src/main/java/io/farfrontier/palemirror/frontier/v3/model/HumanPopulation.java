@@ -133,6 +133,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         Map<SubjectId, Household> households = new LinkedHashMap<>();
         Map<SubjectId, ResidentProfile> residents = new LinkedHashMap<>();
         for (Settlement settlement : bootstrap.settlements()) {
+            ResidentWorkPermissions initialWork = SettlementWorkPolicy.initial(settlement);
             int householdOrdinal = 0;
             for (int ordinal = 0; ordinal < settlement.residents().size(); ordinal++) {
                 if (ordinal % 4 == 0) householdOrdinal++;
@@ -141,11 +142,11 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                 households.putIfAbsent(householdId, new Household(householdId, settlement.id()));
                 ResidentProfile profile = new ResidentProfile(resident.id(), householdId, settlement.id(), resident.role(),
                         -((long) (18 + (ordinal % 43)) * 24_000L * 360L), skills(resident.role(), ordinal));
-                // The first named crafter is the settlement's baker and bread-works
-                // founder; other crafters keep their non-food industrial affinity.
+                // Vocational presentation follows fresh staffing. Authorization remains
+                // independently persisted under the settlement decision owner.
                 profile = profile.withCharacteristics(ResidentCharacteristics.initial(
                         bootstrap.ruleset().residentLife(), resident.id()));
-                residents.put(resident.id(), ordinal == 2 && resident.role() == ResidentRole.CRAFTER
+                residents.put(resident.id(), initialWork.permits(ResidentWorkKind.BAKING, resident.id())
                         ? profile.withProfession(ResidentProfession.BAKER) : profile);
             }
         }

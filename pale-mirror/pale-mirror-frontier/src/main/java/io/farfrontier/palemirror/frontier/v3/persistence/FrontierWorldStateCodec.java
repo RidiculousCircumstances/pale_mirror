@@ -40,7 +40,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 217 replaces missed-meal deficit with bounded satiety; fresh test worlds only.
     // Version 220 separates pre-consumption service clearance from confirmed eating.
     // Version 221 retains shared operation labour and resident work modifiers; fresh test worlds only.
-    static final int VERSION = 221; private static final int MAX_ENTRIES = 65_535;
+    // Version 222 retains exact settlement work authorization; old test worlds are rejected.
+    static final int VERSION = 224; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

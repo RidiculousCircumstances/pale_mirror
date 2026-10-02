@@ -28,15 +28,24 @@ public final class CompanyFoundationProcess {
                 && candidate.purpose() == CompanyPurpose.WORKS).sorted(java.util.Comparator.comparing(Company::id)).findFirst().orElse(null);
         if (company == null) {
             ResidentProfile founder = state.humanPopulation().residents().values().stream()
-                    .filter(resident -> resident.settlementId().equals(settlement.id()) && resident.profession() == ResidentProfession.BAKER)
+                    .filter(resident -> resident.settlementId().equals(settlement.id())
+                            && SettlementWorkPolicy.permissions(state, settlement.id()).permits(ResidentWorkKind.BAKING, resident.id()))
                     .sorted(java.util.Comparator.comparing(ResidentProfile::id)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("settlement has no canonical works founder"));
             company = new Company(companyId(settlement.id()), settlement.id(), founder.id(), CompanyPurpose.WORKS, CompanyStatus.ACTIVE, action.dueAt().ticks());
             events.add(new ProposedEvent(settlement.id(), new CompanyRegistered(company)));
         }
-        if (company.status() == CompanyStatus.ACTIVE && !state.companies().employmentContracts().containsKey(employmentId(settlement.id()))
-                && state.actorLocations().get(company.founderId()).condition().status() == ActorLifeStatus.ALIVE) {
-            events.add(new ProposedEvent(settlement.id(), new EmploymentContractOpened(employment(state, company, action.dueAt().ticks()))));
+        if (company.status() == CompanyStatus.ACTIVE) {
+            Company employer = company;
+            state.humanPopulation().residents().values().stream()
+                    .filter(resident -> resident.settlementId().equals(settlement.id())
+                            && SettlementWorkPolicy.permissions(state, settlement.id()).permits(ResidentWorkKind.BAKING, resident.id()))
+                    .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                    .filter(resident -> !state.companies().employmentContracts().containsKey(
+                            employmentId(settlement.id(), resident.id())))
+                    .sorted(java.util.Comparator.comparing(ResidentProfile::id))
+                    .forEach(resident -> events.add(new ProposedEvent(settlement.id(), new EmploymentContractOpened(
+                            employment(state, employer, resident.id(), action.dueAt().ticks())))));
         }
         events.add(new ProposedEvent(settlement.id(), new ScheduleEffect.Created(review(settlement.id(), nextOrdinal(action),
                 Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().companyFoundationReviewInterval())))));
@@ -52,7 +61,8 @@ public final class CompanyFoundationProcess {
             throw new IllegalArgumentException("company foundation must register the one active deterministic works company");
         }
         ResidentProfile founder = state.humanPopulation().resident(company.founderId());
-        if (founder == null || !founder.settlementId().equals(company.settlementId()) || founder.profession() != ResidentProfession.BAKER) {
+        if (founder == null || !founder.settlementId().equals(company.settlementId())
+                || !SettlementWorkPolicy.permissions(state, company.settlementId()).permits(ResidentWorkKind.BAKING, founder.id())) {
             throw new IllegalArgumentException("bread-works founder must be a current settlement baker");
         }
         return state.registerCompany(company);
@@ -60,10 +70,15 @@ public final class CompanyFoundationProcess {
 
     public static FrontierWorldState reduceEmployment(FrontierWorldState state, SubjectId subject, EmploymentContractOpened opened) {
         EmploymentContract contract = opened.contract(); Company company = state.companies().companies().get(contract.companyId());
-        if (company == null || !subject.equals(company.settlementId()) || !contract.residentId().equals(company.founderId())) {
-            throw new IllegalArgumentException("works employment must be opened by its founder's settlement");
+        ResidentProfile resident = state.humanPopulation().resident(contract.residentId());
+        ActorLocation actor = state.actorLocations().get(contract.residentId());
+        if (company == null || company.status() != CompanyStatus.ACTIVE || !subject.equals(company.settlementId())
+                || resident == null || !resident.settlementId().equals(company.settlementId())
+                || !SettlementWorkPolicy.permissions(state, company.settlementId()).permits(ResidentWorkKind.BAKING, resident.id()) || actor == null
+                || actor.condition().status() != ActorLifeStatus.ALIVE) {
+            throw new IllegalArgumentException("works employment requires a living authorized baker in the employer's settlement");
         }
-        EmploymentContract expected = employment(state, company, contract.openedAtTick());
+        EmploymentContract expected = employment(state, company, resident.id(), contract.openedAtTick());
         if (!expected.equals(contract)) throw new IllegalArgumentException("works employment must use canonical exact terms");
         return state.openEmployment(contract);
     }
@@ -89,9 +104,11 @@ public final class CompanyFoundationProcess {
 
     public static SubjectId companyId(SubjectId settlementId) { return new SubjectId("company:" + suffix(settlementId) + "-works"); }
 
-    public static SubjectId employmentId(SubjectId settlementId) { return new SubjectId("contract:employment-" + suffix(settlementId) + "-works-founder"); }
-    private static EmploymentContract employment(FrontierWorldState state, Company company, long tick) {
-        return new EmploymentContract(employmentId(company.settlementId()), company.id(), company.founderId(),
+    public static SubjectId employmentId(SubjectId settlementId, SubjectId residentId) {
+        return new SubjectId("contract:employment-" + suffix(settlementId) + "-works-" + residentId.value().replace(':', '-'));
+    }
+    private static EmploymentContract employment(FrontierWorldState state, Company company, SubjectId residentId, long tick) {
+        return new EmploymentContract(employmentId(company.settlementId(), residentId), company.id(), residentId,
                 state.bootstrap().ruleset().rates().worksJobPrice(), FixedScalar.ONE,
                 EmploymentContractStatus.ACTIVE, tick, 0L, FixedScalar.ZERO);
     }

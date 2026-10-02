@@ -19,22 +19,24 @@ class ResourceSiteHarvestProgressTest {
                 new SubjectId("custody:field-actor-large-field-1"), new SubjectId("custody:container-large-field-1"),
                 new SubjectId("item:site-harvest-large-field-1"),
                 new InventoryCustody.ContainerSlot(new SubjectId("container:large-field-1"), 0),
-                new PhysicalIntentId("intent:site-harvest-large-field-1"), progress);
+                new PhysicalIntentId("intent:site-harvest-large-field-1"), progress,
+                0, false, Optional.empty(), Optional.empty(), Optional.empty(), progress.completedCropSlots(),
+                new ResourceFieldWorkTarget(site, 1L, new ResourceFieldLayout.CellId(1L), 0L));
     }
 
     @Test void deliveredBatchIsBoundedByActualHandAndRoundTripsWithoutRouteCache() {
         ResourceSiteHarvestJob base = job(new ResourceSiteHarvestProgress(65, 64, -1));
-        ResourceSiteHarvestJob returning = base.withFullBatchReturn(64);
+        ResourceSiteHarvestJob returning = base.withFullBatchReturn();
         InventoryCustody.ContainerSlot nextSlot = new InventoryCustody.ContainerSlot(base.outputSlot().containerId(), 1);
-        ResourceSiteHarvestJob reserved = returning.reserveBatchSuccessorSlot(nextSlot, 64);
-        ResourceSiteHarvestJob continued = reserved.afterFullBatchDelivery(nextSlot, 64, Optional.empty());
+        ResourceSiteHarvestJob reserved = returning.reserveBatchSuccessorSlot(nextSlot);
+        ResourceSiteHarvestJob continued = reserved.afterFullBatchDelivery(nextSlot, Optional.empty());
         assertEquals(64, continued.progress().completedCropSlots());
         assertEquals(64, continued.deliveredYieldQuantity());
-        assertEquals(0, continued.carriedYieldQuantity(64));
+        assertEquals(0, continued.undeliveredYieldQuantity());
         assertEquals(nextSlot, continued.outputSlot());
         assertFalse(continued.returningForBatch());
         assertThrows(IllegalArgumentException.class, () -> reserved.afterFullBatchDelivery(
-                new InventoryCustody.ContainerSlot(base.outputSlot().containerId(), 2), 64, Optional.empty()));
+                new InventoryCustody.ContainerSlot(base.outputSlot().containerId(), 2), Optional.empty()));
         ResourceSiteHarvestStarted started = new ResourceSiteHarvestStarted(continued);
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
@@ -52,9 +54,13 @@ class ResourceSiteHarvestProgressTest {
         assertThrows(IllegalArgumentException.class,
                 () -> before.prepareHarvestCrop(approaching, 0, goal, SurfaceAnchor.at(0, 64, 0)));
         ResourceSiteHarvestJob prepared = (ResourceSiteHarvestJob) before.prepareHarvestCrop(approaching, 0, goal, station)
-                .activeWork().orElseThrow();
+                .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         assertEquals(1, before.prepareHarvestCrop(approaching, 0, goal, station)
-                .advanceHarvest(prepared, 1, goal, station).activeWork()
+                .advanceHarvest(prepared, 1, goal, station, -1, ResourceFieldCycle.WorkOutcome.HARVESTED,
+                        ResourceFieldCycle.seeded(approaching.siteId(), new ResourceFieldLayout(1L, 2L,
+                                List.of(new ResourceFieldLayout.Cell(new ResourceFieldLayout.CellId(1L),
+                                        new BlockPosition(1, 65, 0), station, station)), List.of()), 1L))
+                .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple)
                 .map(ResourceSiteHarvestJob.class::cast).orElseThrow().progress().completedCropSlots());
     }
 
@@ -66,9 +72,9 @@ class ResourceSiteHarvestProgressTest {
         assertTrue(sixtyFive.prepareNextCrop().confirmPreparedCrop().complete());
         assertThrows(IllegalArgumentException.class, () -> new ResourceSiteHarvestProgress(65, 66, -1));
         SubjectId id = new SubjectId("job:site-harvest-large-field-1");
-        ResourceSiteHarvestCropPrepared prepared = new ResourceSiteHarvestCropPrepared(id, 256);
+        ResourceSiteHarvestCropPrepared prepared = new ResourceSiteHarvestCropPrepared(id, 256, 0L);
         ResourceSiteHarvestProgressed progressed = new ResourceSiteHarvestProgressed(new SubjectId("site:large-field-1"), 3,
-                id, 257, 2, new ResourceFieldLayout.CellId(257), ResourceFieldCycle.WorkOutcome.HARVESTED,
+                id, 257, 2, new ResourceFieldLayout.CellId(257), 0L, ResourceFieldCycle.WorkOutcome.HARVESTED,
                 new ScheduleId("schedule:resource-site-harvest-cold-progress-site-harvest-large-field-1"), 22_301L);
         assertEquals(prepared, FrontierWorldRuntimeDefinition.payloadCodecs().decode(prepared.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(prepared)));

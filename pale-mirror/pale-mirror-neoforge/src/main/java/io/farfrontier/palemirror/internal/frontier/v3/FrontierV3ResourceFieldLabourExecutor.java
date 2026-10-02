@@ -26,7 +26,7 @@ final class FrontierV3ResourceFieldLabourExecutor {
     }
     private static boolean submit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, SceneLease lease, ResourceSiteHarvestJob job, boolean run) {
-        var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job.siteId());
+        var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
         if (binding.isEmpty()) return true;
         var value = ResourceSiteHarvestWorkProcess.change(state, job, runtime.canonicalState().orElseThrow().instant().ticks(),
                 run, binding.orElseThrow(), Optional.of(lease.id()));

@@ -12,9 +12,9 @@ import java.util.Collection;
  * The one retained predecessor/successor relationship for a renewable field.
  *
  * <p>The resource-site lifecycle owns this small history.  It is deliberately
- * not an assignment cache: the completed job already owns the original worker
- * and output, while this record prevents the next epoch from discovering a
- * different farmer merely because several are currently eligible.</p>
+ * not an assignment policy: the completed job owns the original worker and
+ * output. A successor retains its own exact selection; it need not employ
+ * the predecessor's farmer.</p>
  */
 public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId predecessorTaskId,
                                          SubjectId workerId, SubjectId actorAccountId, SubjectId depotAccountId,
@@ -71,8 +71,8 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
 
     public ResourceSiteHarvestLineage bindSuccessor(ResourceSiteHarvestJob job) {
         Objects.requireNonNull(job, "harvest lineage successor job");
-        if (successorTaskId.isPresent() || !workerId.equals(job.workerId())) {
-            throw new IllegalArgumentException("resource-site successor must retain its one completed farmer");
+        if (successorTaskId.isPresent()) {
+            throw new IllegalArgumentException("resource-site predecessor already has an exact successor");
         }
         return new ResourceSiteHarvestLineage(predecessorJobId, predecessorTaskId, workerId, actorAccountId, depotAccountId,
                 outputItemId, completedGrowthEpoch,
@@ -90,7 +90,7 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
      */
     public static boolean hasPendingOutputReceipt(Collection<ResourceSiteLifecycle> lifecycles, SubjectId outputItemId) {
         Objects.requireNonNull(lifecycles, "resource-site lifecycles"); Objects.requireNonNull(outputItemId, "resource-site output item");
-        return lifecycles.stream().flatMap(lifecycle -> lifecycle.harvestLineage().stream())
+        return lifecycles.stream().flatMap(lifecycle -> lifecycle.harvestLineages().values().stream())
                 .anyMatch(lineage -> lineage.receiptPending() && lineage.outputItemId().equals(outputItemId));
     }
 
