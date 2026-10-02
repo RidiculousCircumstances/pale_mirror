@@ -21,7 +21,7 @@ final class FrontierResourceSiteHarvestFixture {
     private FrontierResourceSiteHarvestFixture() { }
 
     static Fixture create(WorldId worldId, long seed) {
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        FrontierWorldState state = FrontierWorldState.initial(smallFieldBootstrap(worldId, seed));
         return create(state);
     }
 
@@ -56,7 +56,7 @@ final class FrontierResourceSiteHarvestFixture {
     }
 
     static FrontierWorldState initialWithOneExtraCell(WorldId worldId, long seed) {
-        FrontierBootstrap baseline = FrontierBootstrapper.create(worldId, seed);
+        FrontierBootstrap baseline = smallFieldBootstrap(worldId, seed);
         SubjectId siteId = new SubjectId("site:1-wheat-field");
         ResourceFieldLayout original = FrontierResourceSitePlan.compile(baseline).get(siteId).layout();
         BlockPosition last = original.cells().getLast().crop();
@@ -80,6 +80,17 @@ final class FrontierResourceSiteHarvestFixture {
             return FrontierWorldState.initial(authored);
         }
         throw new IllegalStateException("65-cell test fixture has no free adjacent field cell");
+    }
+
+    /** This bounded single-batch scenario declares its size independently of the live default. */
+    static FrontierBootstrap smallFieldBootstrap(WorldId worldId, long seed) {
+        var baseline = FrontierBootstrapper.create(worldId, seed);
+        var site = new SubjectId("site:1-wheat-field");
+        var original = FrontierResourceSitePlan.compile(baseline).get(site).layout();
+        var cells = original.cells().subList(0, 64);
+        var layout = new ResourceFieldLayout(1, 65, cells, original.irrigationSlots());
+        return new FrontierBootstrap(baseline.worldId(), baseline.seed(), baseline.bounds(),
+                baseline.settlements(), baseline.hive(), baseline.ruleset(), baseline.terrain(), java.util.Map.of(site, layout));
     }
 
     /**

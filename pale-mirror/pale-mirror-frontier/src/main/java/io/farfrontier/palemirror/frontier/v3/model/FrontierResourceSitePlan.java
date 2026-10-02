@@ -13,7 +13,7 @@ import java.util.Set;
 
 /** Pure immutable source-site geometry derived from the stable fresh-world bootstrap. */
 public final class FrontierResourceSitePlan {
-    private static final int FIELD_SIDE = 8;
+    private static final int FIELD_SIDE = 16;
     /** Leaves a two-cell field edge clear of the Farm shell and the three-wide public route. */
     private static final int FIELD_CLEARANCE = 2;
     /**
@@ -97,7 +97,7 @@ public final class FrontierResourceSitePlan {
     private static ResourceSite availableField(WorldBounds bounds, SubjectId id, Settlement settlement, SettlementStructure farm,
                                                Set<BlockPosition> occupied) {
         for (FacilityFacing side : candidateSides(farm.facing())) {
-            ResourceSite candidate = new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, initialGrayboxLayout(cropSlots(farm, side)));
+            ResourceSite candidate = new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, initialLargeGrayboxLayout(cropSlots(farm, side)));
             if (candidate.managedSlots().stream().allMatch(bounds::contains) && candidate.managedSlots().stream().noneMatch(occupied::contains)) {
                 return candidate;
             }
@@ -105,15 +105,15 @@ public final class FrontierResourceSitePlan {
         throw new IllegalArgumentException("resource site has no clear bounded field side for " + farm.id().value());
     }
 
-    /** Current bootstrap choice only; generic field geometry never assumes this rectangle. */
+    /** Explicit small authored layout used by existing isolated fixtures, not the default producer. */
     public static ResourceFieldLayout initialGrayboxLayout(List<BlockPosition> crops) {
-        if (crops.size() != FIELD_SIDE * FIELD_SIDE) throw new IllegalArgumentException("graybox bootstrap requires its 8x8 layout");
+        if (crops.size() != 64) throw new IllegalArgumentException("small authored graybox requires its 8x8 layout");
         int minX = crops.stream().mapToInt(BlockPosition::x).min().orElseThrow();
         int maxX = crops.stream().mapToInt(BlockPosition::x).max().orElseThrow();
         int minZ = crops.stream().mapToInt(BlockPosition::z).min().orElseThrow();
         int maxZ = crops.stream().mapToInt(BlockPosition::z).max().orElseThrow();
         int soilY = crops.getFirst().y() - 1;
-        if (maxX - minX != FIELD_SIDE - 1 || maxZ - minZ != FIELD_SIDE - 1
+        if (maxX - minX != 7 || maxZ - minZ != 7
                 || crops.stream().anyMatch(crop -> crop.y() != soilY + 1))
             throw new IllegalArgumentException("graybox producer cannot supply irregular field irrigation");
         var cells = new java.util.ArrayList<ResourceFieldLayout.Cell>(crops.size());
@@ -124,6 +124,24 @@ public final class FrontierResourceSitePlan {
         return new ResourceFieldLayout(1L, crops.size() + 1L, cells,
                 List.of(new BlockPosition(minX + 2, soilY, minZ - 1), new BlockPosition(maxX - 1, soilY, minZ - 1),
                         new BlockPosition(minX + 2, soilY, maxZ + 1), new BlockPosition(maxX - 1, soilY, maxZ + 1)));
+    }
+
+    /** Default 16x16 footprint with four ordinary water sources covering every crop. */
+    private static ResourceFieldLayout initialLargeGrayboxLayout(List<BlockPosition> footprint) {
+        int minX = footprint.stream().mapToInt(BlockPosition::x).min().orElseThrow();
+        int minZ = footprint.stream().mapToInt(BlockPosition::z).min().orElseThrow();
+        int soilY = footprint.getFirst().y() - 1;
+        var irrigation = new java.util.ArrayList<BlockPosition>();
+        for (int x : List.of(3, 11)) for (int z : List.of(3, 11))
+            irrigation.add(new BlockPosition(minX + x, soilY, minZ + z));
+        var water = Set.copyOf(irrigation);
+        var cells = new java.util.ArrayList<ResourceFieldLayout.Cell>();
+        for (BlockPosition crop : footprint) {
+            var soil = new SurfaceAnchor(crop.offset(0, -1, 0));
+            if (!water.contains(soil.support())) cells.add(new ResourceFieldLayout.Cell(
+                    new ResourceFieldLayout.CellId(cells.size() + 1L), crop, soil, soil));
+        }
+        return new ResourceFieldLayout(1L, cells.size() + 1L, cells, irrigation);
     }
 
     /**
@@ -141,7 +159,7 @@ public final class FrontierResourceSitePlan {
     }
 
     private static List<BlockPosition> cropSlots(SettlementStructure farm, FacilityFacing side) {
-        java.util.ArrayList<BlockPosition> slots = new java.util.ArrayList<>(ResourceSiteKind.WHEAT_FIELD.cropSlotCount());
+        java.util.ArrayList<BlockPosition> slots = new java.util.ArrayList<>(FIELD_SIDE * FIELD_SIDE);
         int halfWidth = SettlementStructureFootprint.width(farm.kind()) / 2;
         int halfDepth = SettlementStructureFootprint.depth(farm.kind()) / 2;
         int minX;
@@ -160,9 +178,8 @@ public final class FrontierResourceSitePlan {
             minZ = farm.anchor().z() - halfDepth - FIELD_CLEARANCE - FIELD_SIDE;
         }
         for (int x = minX; x < minX + FIELD_SIDE; x++) {
-            // This stable index is also the worker's physical work order.  A serpentine row
-            // order keeps every subsequent crop station adjacent; row-major order would make
-            // each row boundary an invisible seven-cell jump or require a second navigator.
+            // Stable declaration order only; spatial selection and the shared navigator
+            // own work targets and movement independently of this list order.
             int startZ = (x - minX) % 2 == 0 ? minZ : minZ + FIELD_SIDE - 1;
             int endZ = (x - minX) % 2 == 0 ? minZ + FIELD_SIDE : minZ - 1;
             int step = (x - minX) % 2 == 0 ? 1 : -1;

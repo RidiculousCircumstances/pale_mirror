@@ -108,7 +108,9 @@ class ResourceSiteHarvestProcessTest {
         return state;
     }
     static ColdHarvest coldHarvestAfterSteps(long seed, int coldSteps) {
-        FrontierWorldState state = ready(initial(seed));
+        // Single-batch helpers keep an explicit 64-cell fixture; live bootstrap size is independent.
+        FrontierWorldState state = ready(FrontierWorldState.initial(FrontierResourceSiteHarvestFixture.smallFieldBootstrap(
+                new WorldId("frontier:resource-site-harvest-" + seed), seed)));
         SubjectId site = new SubjectId("site:1-wheat-field");
         // These older harvest fixtures exercise the 22k work instant. Keep that
         // instant within a declared WORK window instead of bypassing activity policy.
