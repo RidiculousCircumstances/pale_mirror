@@ -46,6 +46,14 @@ class ActorMovementProcessTest {
             var advanced = assertInstanceOf(ActorMovementColdAdvanced.class,
                     ActorMovementProcess.plan(state, ActorMovementProcess.progress(order, due), due).getFirst().payload());
             state = ActorMovementProcess.reduceColdAdvanced(state, actor, advanced);
+            if (state.actorMovements().get(actor) != null
+                    && state.actorMovements().get(actor).coldTravel().isPresent()) {
+                assertInstanceOf(ActivityInterruptionPlanner.Waiting.class,
+                        new ActorMovementInterruptionPlanner().assess(state, actor, 1L));
+                FrontierWorldState travelling = state;
+                assertDoesNotThrow(() -> ResidentActivityProcess.admission(travelling,
+                        ResidentActivityProcess.review(actor, 1L)));
+            }
         }
         assertFalse(state.actorMovements().containsKey(actor));
         assertEquals(movement.order().legalStations().getFirst(), state.actorLocations().get(actor).supportingSurface());

@@ -29,6 +29,10 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
         SubjectId actorId = movement.order().actorId();
         if (atTick < movement.issuedAtTick() || state.humanPopulation().meals().containsKey(actorId)
                 || ActorExecutionCoordinator.sceneOwns(state, actorId)) return Optional.empty();
+        // Admission may inspect an older parked activity wake after this route was committed.
+        // That historical instant cannot authorize interrupting the newer travel checkpoint.
+        if (movement.coldTravel().filter(travel -> atTick < travel.departedAtTick()).isPresent())
+            return Optional.empty();
         // This typed context explicitly declares an optional personal journey after service.
         // Future mandatory movement kinds must supply their own interruption capability.
         if (!(movement.context() instanceof ActorMovementContext.ServiceExit exit)) return Optional.empty();
