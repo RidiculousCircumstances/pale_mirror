@@ -107,9 +107,14 @@ class ResidentFoodPortionTest {
         state = ResidentMealProcess.reduceHotPrepared(state, resident, prepared);
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorPocket(resident,
                 SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident), 0), FOOD, 9);
-        state = ResidentActivityProcess.reduceMealEffectObserved(state, resident, new ResidentMealHotEffectObserved(resident,
+        roundtrip(new ResidentMealHotHandMaterialized(resident, 1, hand));
+        for (var equipmentHand : ActorContainerItemOrder.Hand.values())
+            roundtrip(new ResidentMealHotHandReleased(resident, 1, new FungiblePhysicalObservation.Stack(
+                    new PhysicalStackAddress.ActorHand(resident,
+                            SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident), equipmentHand), FOOD, 9)));
+        state = ResidentActivityProcess.reduceMealEffectObserved(state, resident, roundtrip(new ResidentMealHotEffectObserved(resident,
                 ResidentMeal.Phase.TAKE, 1, fixture.service().standingBody(),
-                List.of(new FungiblePhysicalObservation.Stack(slots.getLast().address(), FOOD, 2)), List.of(hand)), 96_001);
+                List.of(new FungiblePhysicalObservation.Stack(slots.getLast().address(), FOOD, 2)), List.of(hand))), 96_001);
         var eating = state.humanPopulation().meals().get(resident).clearingSurface().standingBody();
         var atService = state;
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotPrepared(atService, resident,

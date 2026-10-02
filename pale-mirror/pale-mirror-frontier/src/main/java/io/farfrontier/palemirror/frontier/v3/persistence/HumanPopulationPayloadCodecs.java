@@ -162,8 +162,8 @@ final class HumanPopulationPayloadCodecs {
                     output.writeByte(FrontierWireTags.tag(observed.phase())); output.writeLong(observed.ambientRevision());
                     output.writeInt(observed.observedBody().x()); output.writeInt(observed.observedBody().y());
                     output.writeInt(observed.observedBody().z());
-                    BakeryHotEffectObservedCodec.writeStacks(output, observed.remainingSource());
-                    BakeryHotEffectObservedCodec.writeStacks(output, observed.destination());
+                    PhysicalObservationStackCodec.writeStacks(output, observed.remainingSource());
+                    PhysicalObservationStackCodec.writeStacks(output, observed.destination());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
@@ -171,7 +171,7 @@ final class HumanPopulationPayloadCodecs {
                         FrontierWorldPayloadCodecs.readSubject(input).value(),
                         FrontierWireTags.require(ResidentMeal.Phase.class, input.readUnsignedByte()),
                         input.readLong(), new BodyPosition(input.readInt(), input.readInt(), input.readInt()),
-                        BakeryHotEffectObservedCodec.readStacks(input), BakeryHotEffectObservedCodec.readStacks(input)));
+                        PhysicalObservationStackCodec.readStacks(input), PhysicalObservationStackCodec.readStacks(input)));
             }
         };
     }
@@ -238,13 +238,13 @@ final class HumanPopulationPayloadCodecs {
                         id = value.residentId(); revision = value.ambientRevision(); hand = value.observedHand();
                     }
                     FrontierWorldPayloadCodecs.writeSubject(output, id); output.writeLong(revision);
-                    BakeryHotEffectObservedCodec.writeStacks(output, java.util.List.of(hand));
+                    PhysicalObservationStackCodec.writeStacks(output, java.util.List.of(hand));
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                     var id = FrontierWorldPayloadCodecs.readSubject(input).value(); long revision = input.readLong();
-                    var hands = BakeryHotEffectObservedCodec.readStacks(input);
+                    var hands = PhysicalObservationStackCodec.readStacks(input);
                     if (hands.size() != 1) throw new IllegalArgumentException("meal hand witness needs one exact stack");
                     return materialized ? new ResidentMealHotHandMaterialized(id, revision, hands.getFirst())
                             : new ResidentMealHotHandReleased(id, revision, hands.getFirst());
