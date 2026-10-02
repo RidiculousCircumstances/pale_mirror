@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /** Exact-resident wake for schedule, need and safe-checkpoint arbitration. */
 public final class ResidentActivityProcess {
@@ -34,23 +35,59 @@ public final class ResidentActivityProcess {
      * independent need clock still integrates each hunger threshold.
      */
     public static boolean held(FrontierWorldState state, ScheduledAction action) {
-        if (!REVIEW.equals(action.kind())) return false;
+        return admission(state, action) instanceof ResidentActivityAdmission.Waiting;
+    }
+
+    /** Evaluate actual admission once when due/woken, never turn an unchanged refusal into WAL work. */
+    public static ResidentActivityAdmission admission(FrontierWorldState state, ScheduledAction action) {
+        if (!REVIEW.equals(action.kind())) return new ResidentActivityAdmission.Ready();
         SubjectId residentId = action.subject();
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         ActorLocation actor = state.actorLocations().get(residentId);
         if (resident == null || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
-            return false;
+            return new ResidentActivityAdmission.Ready();
         long now = Math.max(action.dueAt().ticks(), state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
-        if (state.humanPopulation().meals().containsKey(residentId)) return true;
+        if (state.humanPopulation().meals().containsKey(residentId))
+            return waiting(state, residentId, ResidentActivityAdmission.Reason.RETAINED_MEAL);
         if (state.actorMovements().containsKey(residentId))
-            return !(interruption(state, residentId, now,
-                    ResidentActivityExecutionComposition.INTERRUPTION, true) instanceof ActivityInterruptionPlanner.Ready);
+            return interruption(state, residentId, now,
+                    ResidentActivityExecutionComposition.INTERRUPTION) instanceof ActivityInterruptionPlanner.Ready
+                    ? new ResidentActivityAdmission.Ready()
+                    : waiting(state, residentId, ResidentActivityAdmission.Reason.MOVEMENT_HANDOFF);
         ResidentNutrition nutrition = state.humanPopulation().nutrition(residentId).accrueThrough(now,
                 state.bootstrap().ruleset().residentLife(), resident.characteristics().effectiveMetabolismPermille(now));
-        if (!nutrition.wantsFood(state.bootstrap().ruleset().residentLife())) return false;
-        if (ResidentMealOpportunity.candidate(state, residentId, now).isEmpty()) return true;
-        return ResidentActivityCoordinator.assessEligibility(state, residentId, now).pending()
-                .filter(wait -> wait == ResidentActivityChoice.Wait.SAFE_CHECKPOINT).isPresent();
+        if (!nutrition.wantsFood(state.bootstrap().ruleset().residentLife()))
+            return new ResidentActivityAdmission.Ready();
+        var source = ResidentMealOpportunity.candidateAdmission(state, residentId, now);
+        if (source.pending().isPresent()) return waiting(state, residentId, switch (source.pending().orElseThrow()) {
+            case RESIDENT_STATE -> ResidentActivityAdmission.Reason.RESIDENT_STATE;
+            case CONTAINER_CUSTODY -> ResidentActivityAdmission.Reason.CONTAINER_CUSTODY;
+            case SERVICE_ACCESS -> ResidentActivityAdmission.Reason.SERVICE_ACCESS;
+            case FOOD_STOCK -> ResidentActivityAdmission.Reason.FOOD_STOCK;
+        });
+        if (ResidentActivityCoordinator.assessEligibility(state, residentId, now).pending()
+                .filter(wait -> wait == ResidentActivityChoice.Wait.SAFE_CHECKPOINT).isPresent())
+            return waiting(state, residentId, ResidentActivityAdmission.Reason.WORK_CHECKPOINT);
+        return ResidentMealOpportunity.find(state, residentId, now).isPresent()
+                ? new ResidentActivityAdmission.Ready()
+                : waiting(state, residentId, ResidentActivityAdmission.Reason.MEAL_CLEARANCE);
+    }
+
+    /** No route search here: queue indexing and operator diagnostics share these causal addresses. */
+    public static Set<SubjectId> wakeDependencies(FrontierWorldState state, SubjectId residentId) {
+        ResidentProfile resident = state.humanPopulation().resident(residentId);
+        if (resident == null) return Set.of(residentId);
+        var keys = new java.util.HashSet<SubjectId>();
+        keys.add(residentId);
+        keys.add(FrontierWorldState.depotId(resident.settlementId()));
+        keys.add(resident.settlementId());
+        HumanAssignmentProjection.compile(state).assignment(residentId).ownerId().ifPresent(keys::add);
+        return Set.copyOf(keys);
+    }
+
+    private static ResidentActivityAdmission.Waiting waiting(FrontierWorldState state, SubjectId residentId,
+            ResidentActivityAdmission.Reason reason) {
+        return new ResidentActivityAdmission.Waiting(reason, wakeDependencies(state, residentId));
     }
 
     /** Activity ownership changes here; the meal owner only changes meal and bread state. */
@@ -137,21 +174,13 @@ public final class ResidentActivityProcess {
 
     private static ActivityInterruptionPlanner.Assessment interruption(FrontierWorldState state,
             SubjectId residentId, long now, ActivityInterruptionPlanner planner) {
-        return interruption(state, residentId, now, planner, false);
-    }
-
-    private static ActivityInterruptionPlanner.Assessment interruption(FrontierWorldState state,
-            SubjectId residentId, long now, ActivityInterruptionPlanner planner, boolean eligibilityOnly) {
         var assessment = planner.assess(state, residentId, now);
         if (!(assessment instanceof ActivityInterruptionPlanner.Ready ready)) return assessment;
         ready.validate(state, residentId);
-        ResidentActivityChoice next = eligibilityOnly
-                ? ResidentActivityCoordinator.assessEligibility(ready.following(), residentId, now)
-                : ResidentActivityCoordinator.assess(ready.following(), residentId, now);
+        ResidentActivityChoice next = ResidentActivityCoordinator.assess(ready.following(), residentId, now);
         if (next.kind() == ResidentActivityChoice.Kind.WORK
                 || next.kind() == ResidentActivityChoice.Kind.EAT
-                    && (eligibilityOnly ? ResidentMealOpportunity.candidate(ready.following(), residentId, now).isPresent()
-                        : ResidentMealOpportunity.find(ready.following(), residentId, now).isPresent())) return ready;
+                    && ResidentMealOpportunity.find(ready.following(), residentId, now).isPresent()) return ready;
         // An optional idle journey continues unless a real higher-priority activity can replace it.
         return new ActivityInterruptionPlanner.Waiting(ActivityInterruptionPlanner.Reason.AUTHORITY_HANDOFF);
     }

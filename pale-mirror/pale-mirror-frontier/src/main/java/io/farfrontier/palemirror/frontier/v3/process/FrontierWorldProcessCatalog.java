@@ -445,12 +445,7 @@ public final class FrontierWorldProcessCatalog {
         ResidentProfile resident = state.humanPopulation().resident(action.subject());
         if (resident == null) return Set.of(action.subject());
         if (action.kind().equals(ResidentActivityProcess.REVIEW)) {
-            if (state.humanPopulation().meals().containsKey(action.subject())) return Set.of(action.subject());
-            if (state.actorMovements().containsKey(action.subject()))
-                return Set.of(action.subject(), FrontierWorldState.depotId(resident.settlementId()));
-            // A safe-checkpoint wait depends on its work owner, not just food.
-            // Keep that rare action directly runnable until work-owner invalidation is indexed.
-            if (ResidentMealOpportunity.find(state, action.subject(), Math.max(action.dueAt().ticks(), state.humanPopulation().nutrition(action.subject()).lastEvaluatedTick())).isPresent()) return Set.of();
+            return ResidentActivityProcess.wakeDependencies(state, action.subject());
         } else {
             ResidentMeal meal = state.humanPopulation().meals().get(action.subject());
             if (meal == null) return Set.of(action.subject());
@@ -475,6 +470,14 @@ public final class FrontierWorldProcessCatalog {
         if (resident == null) resident = previous.humanPopulation().resident(event.subject());
         if (resident != null) keys.add(resident.id());
 
+        // Geometry affects clearance independently of stock/access. This bounded settlement
+        // dependency also covers observed player edits whose event subject is the executor.
+        if (previous.physicalDeltas() != next.physicalDeltas()
+                || previous.structureDamage() != next.structureDamage()
+                || previous.routeTopology() != next.routeTopology()
+                || previous.hiveColony().addedOrgans() != next.hiveColony().addedOrgans())
+            next.bootstrap().settlements().forEach(settlement -> keys.add(settlement.id()));
+
         boolean accessChanged = previous.actorLocations() != next.actorLocations()
                 || previous.ambientLeases() != next.ambientLeases()
                 || previous.humanPopulation().meals() != next.humanPopulation().meals()
@@ -484,6 +487,7 @@ public final class FrontierWorldProcessCatalog {
         boolean stockChanged = previous.inventory().fungibleResources() != next.inventory().fungibleResources();
         boolean custodyChanged = previous.replicaCustody() != next.replicaCustody();
         boolean sceneChanged = previous.sceneLeases() != next.sceneLeases();
+        if (accessChanged || stockChanged || custodyChanged || sceneChanged) keys.add(event.subject());
         if (!accessChanged && !stockChanged && !custodyChanged && !sceneChanged)
             return Set.copyOf(keys);
         if (sceneChanged) {

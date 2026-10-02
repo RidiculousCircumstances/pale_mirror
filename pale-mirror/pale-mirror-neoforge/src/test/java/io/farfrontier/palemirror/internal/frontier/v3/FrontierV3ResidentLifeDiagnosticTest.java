@@ -32,6 +32,10 @@ class FrontierV3ResidentLifeDiagnosticTest {
         assertEquals("IDLE", json.get("activity").getAsString(),
                 "hunger remains visible, but an unavailable meal is not an executable activity");
         assertEquals("NONE", json.get("mealPhase").getAsString());
+        assertEquals("WAIT", json.get("activityAdmission").getAsString());
+        assertEquals("FOOD_STOCK", json.get("activityWait").getAsString());
+        assertTrue(json.getAsJsonArray("activityWakeKeys").asList().stream()
+                .anyMatch(key -> key.getAsString().equals(profile.settlementId().value())));
         assertTrue(json.get("mealActionDueAt").isJsonNull());
         assertTrue(json.get("mealTravelArrivalAt").isJsonNull());
         assertFalse(json.get("mealActionHeld").getAsBoolean());

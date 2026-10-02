@@ -4,6 +4,8 @@ import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentActivityAdmission;
 import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext;
@@ -29,12 +31,22 @@ final class FrontierV3ResidentLifeDiagnostic {
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(subject);
         ResidentMeal meal = state.humanPopulation().meals().get(subject);
         String activity, pending = "", activityError = "", workYield = "";
+        String activityAdmission = "UNAVAILABLE", activityWait = "", activityWakeKeys = "[]";
         try {
             if (!living) throw new IllegalArgumentException("resident is dead; need and activity timers are retired");
             workYield = ResidentWorkYield.assess(state, assignment).status().name();
             ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, subject, now);
             activity = choice.kind().name();
             pending = choice.pending().map(Enum::name).orElse("");
+            var admission = ResidentActivityProcess.admission(state,
+                    ResidentActivityProcess.review(subject, Math.max(1L, now)));
+            activityAdmission = admission instanceof ResidentActivityAdmission.Ready ? "READY" : "WAIT";
+            if (admission instanceof ResidentActivityAdmission.Waiting wait) {
+                activityWait = wait.reason().name();
+                activityWakeKeys = wait.dependencies().stream().sorted()
+                        .map(key -> "\"" + quote(key.value()) + "\"")
+                        .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+            }
         } catch (IllegalArgumentException invalid) {
             activity = living ? "UNAVAILABLE" : "DEAD";
             activityError = String.valueOf(invalid.getMessage());
@@ -89,7 +101,9 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + "\",\"executionAdmission\":\"" + quote(ActorExecutionCoordinator.ordinaryWorkAdmission(state, subject).toString())
                 + "\",\"activity\":\"" + activity + "\",\"pending\":\"" + pending
                 + "\",\"workYield\":\"" + workYield + "\",\"activityError\":\"" + quote(activityError)
-                + "\",\"mealPhase\":\"" + (meal == null ? "NONE" : meal.phase().name())
+                + "\",\"activityAdmission\":\"" + activityAdmission
+                + "\",\"activityWait\":\"" + activityWait + "\",\"activityWakeKeys\":" + activityWakeKeys
+                + ",\"mealPhase\":\"" + (meal == null ? "NONE" : meal.phase().name())
                 + "\",\"mealWait\":\"" + (meal == null ? "" : meal.waitReason().map(Enum::name).orElse(""))
                 + "\",\"mealClaim\":\"" + (meal == null ? "" : quote(meal.claimId().value()))
                 + "\",\"mealActionDueAt\":" + (mealAction.isPresent() ? mealAction.orElseThrow().dueAt().ticks() : "null")

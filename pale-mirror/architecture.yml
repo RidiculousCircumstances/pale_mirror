@@ -17,6 +17,7 @@ components:
     owns:
       - Frontier v3 canonical world, typed commands and events, deterministic schedules, exact actors/resources, autonomous human and hive processes, immutable projections and pure persistence codecs
       - Meal consumption after service clearance is independent of an exact eating waypoint; the physical receipt checkpoints the supported observed body
+      - Resident activity admission owns explicit source, access, clearance and work-checkpoint waits; the generic queue parks the unchanged exact action by causal owner keys with a bounded audit, without retry WAL writes or food-specific scheduling logic
       - Resource-site owners may resume an inspected completed harvest scene only under the same exact job, worker, resource bindings and unreplaced recovery epoch; generic recovery does not infer family safety
     may_depend_on:
       - Java standard library

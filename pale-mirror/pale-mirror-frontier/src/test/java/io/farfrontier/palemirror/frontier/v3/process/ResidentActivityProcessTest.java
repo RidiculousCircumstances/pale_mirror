@@ -20,7 +20,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResidentActivityProcessTest {
-    @Test void queueEligibilityDoesNotPlanGeometryOrAdmitAnUnsafeMeal() {
+    @Test void unavailableClearanceParksWithoutTransactionsAndBodyChangeStartsSameDueMeal() {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:meal-eligibility-without-geometry"), 421L));
         var settlement = initial.bootstrap().settlements().getFirst();
@@ -30,19 +30,71 @@ class ResidentActivityProcessTest {
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 1), Map.of(),
                 new ResourceLot(new SubjectId("lot:eligibility-bread"), settlement.id(),
                         ResidentMeal.BREAD_KIND, 1, "test", List.of()));
-        var state = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        var available = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        var state = available;
         var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
                 .findFirst().orElseThrow();
-        for (var surface : SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces())
-            state = state.recordPhysicalDelta(new PhysicalDelta(surface.support(), PhysicalDeltaKind.UNKNOWN_SCAR,
-                    java.util.Optional.empty(), java.util.Optional.empty(), "test:blocked-clearance"));
+        var surfaces = SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces();
+        var blockers = settlement.residents().stream().filter(value -> !value.id().equals(resident)).toList();
+        assertTrue(blockers.size() >= surfaces.size());
+        for (int index = 0; index < surfaces.size(); index++)
+            state = state.withActorBody(blockers.get(index).id(), surfaces.get(index).standingBody());
         assertTrue(ResidentMealOpportunity.candidate(state, resident, 24_000L).isPresent());
         assertTrue(ResidentMealOpportunity.find(state, resident, 24_000L).isEmpty());
         var action = ResidentActivityProcess.review(resident, 24_000L);
-        assertFalse(ResidentActivityProcess.held(state, action), "eligibility permits a cheap admission attempt");
-        assertTrue(ResidentActivityProcess.plan(state, action).stream()
-                .noneMatch(event -> event.payload() instanceof ResidentMealStarted),
-                "actual admission still proves a safe clearing destination");
+        var wait = assertInstanceOf(ResidentActivityAdmission.Waiting.class,
+                ResidentActivityProcess.admission(state, action));
+        assertEquals(ResidentActivityAdmission.Reason.MEAL_CLEARANCE, wait.reason());
+        assertTrue(wait.dependencies().contains(settlement.id()));
+        var blocked = state;
+        var queue = new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledActionQueue();
+        queue.schedule(action);
+        var checks = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.function.Predicate<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> eligible = due -> {
+            checks.incrementAndGet();
+            return !FrontierWorldRuntimeDefinition.scheduledHeld(blocked, due);
+        };
+        for (long tick = 24_000L; tick < 25_000L; tick++)
+            assertTrue(queue.selectDue(new SimInstant(tick),
+                    new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(1, 1), eligible,
+                    due -> FrontierWorldRuntimeDefinition.holdWakeKeys(blocked, due)).admitted().isEmpty());
+        assertEquals(1, checks.get(), "unchanged geometry is not searched or committed every tick");
+        assertEquals(List.of(action), queue.snapshot(), "waiting retains the original durable action");
+
+        var departing = blockers.getFirst().id();
+        var restored = blocked.withActorBody(departing, available.actorLocations().get(departing).body());
+        FrontierEvent event = new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
+                new EventId("event:clearance-restored"), new TransactionId("transaction:clearance-restored"),
+                initial.bootstrap().worldId(), new Revision(1L), new SimInstant(25_000L),
+                departing,
+                CauseChain.root(new CommandId("command:clearance-restored")),
+                new AmbientActorObserved(departing, restored.actorLocations().get(departing).body(),
+                        io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ONE));
+        queue.wake(FrontierWorldRuntimeDefinition.wakeKeys(blocked, restored, event));
+        assertEquals(List.of(action), queue.selectDue(new SimInstant(25_000L),
+                new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(1, 1),
+                due -> !FrontierWorldRuntimeDefinition.scheduledHeld(restored, due),
+                due -> FrontierWorldRuntimeDefinition.holdWakeKeys(restored, due)).admitted());
+        assertTrue(ResidentActivityProcess.plan(restored, action, 25_000L).stream()
+                .anyMatch(planned -> planned.payload() instanceof ResidentMealStarted),
+                "restoring clearance admits the same retained resident without reconnect or replay");
+        var recovered = new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledActionQueue();
+        queue.snapshot().forEach(recovered::schedule);
+        assertEquals(List.of(action), recovered.selectDue(new SimInstant(25_000L),
+                new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(1, 1),
+                due -> !FrontierWorldRuntimeDefinition.scheduledHeld(restored, due),
+                due -> FrontierWorldRuntimeDefinition.holdWakeKeys(restored, due)).admitted(),
+                "the derived wait index needs no persisted compatibility state");
+        var delta = new PhysicalDelta(surfaces.getFirst().support(), PhysicalDeltaKind.UNKNOWN_SCAR,
+                java.util.Optional.empty(), java.util.Optional.empty(), "test:changed-clearance");
+        var changedGeometry = restored.recordPhysicalDelta(delta);
+        var geometryEvent = new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
+                new EventId("event:geometry-wake"), new TransactionId("transaction:geometry-wake"),
+                initial.bootstrap().worldId(), new Revision(2L), new SimInstant(25_001L),
+                FrontierExecutionSubjects.PHYSICAL_EXECUTOR,
+                CauseChain.root(new CommandId("command:geometry-wake")), new PhysicalDeltaObserved(delta));
+        assertTrue(FrontierWorldRuntimeDefinition.wakeKeys(restored, changedGeometry, geometryEvent)
+                .contains(settlement.id()), "geometry observation needs no resident event subject to wake admission");
     }
     @Test void depotStockChangeWakesOnlyItsSettlementWaiters() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
@@ -70,7 +122,7 @@ class ResidentActivityProcessTest {
         var keys = FrontierWorldRuntimeDefinition.wakeKeys(initial, restocked, event);
         assertTrue(keys.contains(depot));
         assertFalse(keys.contains(FrontierWorldState.depotId(second.id())));
-        assertEquals(java.util.Set.of(first.residents().getFirst().id(), depot),
+        assertEquals(java.util.Set.of(first.residents().getFirst().id(), depot, first.id()),
                 FrontierWorldRuntimeDefinition.holdWakeKeys(initial,
                         ResidentActivityProcess.review(first.residents().getFirst().id(), 24_000L)));
     }
@@ -114,6 +166,9 @@ class ResidentActivityProcessTest {
         var action = ResidentActivityProcess.review(resident, 24_000L);
         assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(state, action),
                 "an unchanged empty depot must not emit another resident retry transaction");
+        assertEquals(ResidentActivityAdmission.Reason.FOOD_STOCK,
+                assertInstanceOf(ResidentActivityAdmission.Waiting.class,
+                        ResidentActivityProcess.admission(state, action)).reason());
         var planned = FrontierWorldRuntimeDefinition.planScheduled(state, action);
         assertEquals(1, planned.size());
         var next = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getFirst().payload()).replacement();
