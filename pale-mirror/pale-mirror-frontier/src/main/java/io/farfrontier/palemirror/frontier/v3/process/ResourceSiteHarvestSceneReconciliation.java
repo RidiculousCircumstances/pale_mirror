@@ -4,7 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import java.util.LinkedHashMap;
 
-/** Field-owned recovery of a completed batch, never permission to replay a crop or mint stock. */
+/** Field-owned recovery of an inspected safe batch/checkpoint, never permission to replay a crop or mint stock. */
 public final class ResourceSiteHarvestSceneReconciliation {
     private ResourceSiteHarvestSceneReconciliation() { }
 
@@ -17,11 +17,14 @@ public final class ResourceSiteHarvestSceneReconciliation {
         var lease = state.sceneLeases().get(receipt.leaseId());
         var cycle = state.resourceSites().cycle(receipt.siteId());
         if (!subject.equals(receipt.siteId()) || lifecycle.phase() != ResourceSitePhase.HARVESTING
-                || !job.id().equals(receipt.jobId()) || !job.progress().complete() || job.progress().hasPendingCrop()
-                || job.navigationBlock().isPresent() || !cycle.cycleAccounted()
+                || !job.id().equals(receipt.jobId()) || job.progress().hasPendingCrop()
+                || job.progress().completedCropSlots() != cycle.accountedCount()
+                || job.navigationBlock().isPresent() || job.progress().complete() && !cycle.cycleAccounted()
                 || state.physicalIntents().get(job.intentId()) == null
                 || state.physicalIntents().get(job.intentId()).status()
                     != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
+                    && state.physicalIntents().get(job.intentId()).status()
+                    != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING
                 || state.resourceSites().hasPendingWorldChange(subject) || !cycle.pendingPlayerBreaks().isEmpty()
                 || lease == null || lease.status() != SceneLeaseStatus.CONFLICT
                 || lease.revision() != receipt.leaseRevision() || lease.members().size() != 1
@@ -29,7 +32,7 @@ public final class ResourceSiteHarvestSceneReconciliation {
                 || !FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(subject)
                 || !FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())
                 || !lease.members().getFirst().actorId().equals(job.workerId()))
-            throw new IllegalArgumentException("harvest reconciliation lacks its exact completed isolated job");
+            throw new IllegalArgumentException("harvest reconciliation lacks its exact isolated safe job checkpoint");
         var actor = state.actorLocations().get(job.workerId());
         var hand = (PhysicalStackAddress.ActorHand) receipt.observedHand().address();
         var account = state.inventory().fungibleResources().accounts().get(job.actorAccountId());

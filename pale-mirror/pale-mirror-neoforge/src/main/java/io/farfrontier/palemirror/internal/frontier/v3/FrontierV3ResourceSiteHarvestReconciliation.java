@@ -7,7 +7,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/** Read-only inspection; only the field owner can resume its exact retained completed batch. */
+/** Read-only complete field/hand inspection; only the field owner may resume its exact safe checkpoint. */
 final class FrontierV3ResourceSiteHarvestReconciliation {
     private FrontierV3ResourceSiteHarvestReconciliation() { }
 
@@ -21,11 +21,11 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             if (lifecycle == null) continue;
             var job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
                     .map(ResourceSiteHarvestJob.class::cast).orElse(null);
-            if (job == null || !job.id().equals(cause.jobId()) || !job.progress().complete()
+            if (job == null || !job.id().equals(cause.jobId())
                     || job.progress().hasPendingCrop() || job.navigationBlock().isPresent()
                     || state.resourceSites().hasPendingWorldChange(job.siteId())) continue;
             var cycle = state.resourceSites().cycle(job.siteId());
-            if (!cycle.cycleAccounted() || !cycle.pendingPlayerBreaks().isEmpty()
+            if (job.progress().complete() && !cycle.cycleAccounted() || !cycle.pendingPlayerBreaks().isEmpty()
                     || !currentField(level, job, cycle)) continue;
             var member = lease.members().getFirst();
             var entity = level.getEntity(member.entityId());

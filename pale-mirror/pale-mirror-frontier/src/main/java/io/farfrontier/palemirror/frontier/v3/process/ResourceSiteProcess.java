@@ -262,6 +262,7 @@ public final class ResourceSiteProcess {
                 throw new IllegalArgumentException("world field observation overlaps an unresolved player action");
         }
         ResourceFieldCycle next = switch (observed.change()) {
+            case CROP_REPLANTED -> ready.cropReplanted(observed.cellId());
             case CROP_REMOVED -> ready.cropRemoved(observed.cellId());
             case SOIL_BECAME_DIRT -> ready.soilBecameDirt(observed.cellId());
             case UNCHANGED -> ready;
@@ -282,7 +283,8 @@ public final class ResourceSiteProcess {
                 && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(cellId);
         if (job != null && lifecycle.phase() == ResourceSitePhase.HARVESTING && !before.accounted()
                 && (before.crop() == ResourceFieldCycle.Crop.GROWING || before.crop() == ResourceFieldCycle.Crop.MATURE)
-                && (after.crop() == ResourceFieldCycle.Crop.ABSENT || after.crop() == ResourceFieldCycle.Crop.OBSTRUCTED)) {
+                && (after.crop() == ResourceFieldCycle.Crop.ABSENT || after.crop() == ResourceFieldCycle.Crop.OBSTRUCTED
+                    || after.crop() == ResourceFieldCycle.Crop.GROWING && after.growthStage() < before.growthStage())) {
             int lostSlot = cycle.layout().cells().indexOf(cycle.layout().requireCell(cellId));
             if (lostSlot < 0) throw new IllegalArgumentException("observed crop loss has no admitted work slot");
             next = next.accountExternalCropLoss(cellId);

@@ -18,6 +18,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
@@ -55,14 +56,18 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
             if (canonical.soil() == ResourceFieldCycle.Soil.OBSTRUCTED
                     || canonical.crop() == ResourceFieldCycle.Crop.OBSTRUCTED) continue;
             boolean cropLoss = minecraft(cell.crop()).equals(position) && replacement.is(Blocks.AIR);
+            boolean cropReplant = minecraft(cell.crop()).equals(position) && replacement.is(Blocks.WHEAT)
+                    && replacement.getValue(CropBlock.AGE) == 0 && canonical.growthStage() > 0;
             boolean soilLoss = minecraft(cell.soil().support()).equals(position) && replacement.is(Blocks.DIRT);
-            if (!cropLoss && !soilLoss) continue;
+            if (!cropLoss && !soilLoss && !cropReplant) continue;
             var before = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell.id()));
             var after = soilLoss
                     ? new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.DIRT, ResourceFieldCycle.Crop.ABSENT, 0)
-                    : new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.ABSENT, 0);
+                    : new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
+                            cropReplant ? ResourceFieldCycle.Crop.GROWING : ResourceFieldCycle.Crop.ABSENT, 0);
             var change = classify(before, after);
             if (change == null || change != (soilLoss ? ResourceFieldCellObserved.Change.SOIL_BECAME_DIRT
+                    : cropReplant ? ResourceFieldCellObserved.Change.CROP_REPLANTED
                     : ResourceFieldCellObserved.Change.CROP_REMOVED)) return;
             var ledger = FrontierV3ResourceSiteLedger.get(level);
             if (state.resourceSites().hasPendingWorldChange(owner.siteId())
@@ -222,6 +227,10 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
     static ResourceFieldCellObserved.Change classify(ResourceFieldPhysicalSurface.Condition before,
                                                      ResourceFieldPhysicalSurface.Condition after) {
         if (before.soil() != ResourceFieldCycle.Soil.FARMLAND) return null;
+        if ((before.crop() == ResourceFieldCycle.Crop.GROWING || before.crop() == ResourceFieldCycle.Crop.MATURE)
+                && before.growthStage() > 0 && after.equals(new ResourceFieldPhysicalSurface.Condition(
+                        ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.GROWING, 0)))
+            return ResourceFieldCellObserved.Change.CROP_REPLANTED;
         if (after.equals(new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.DIRT,
                 ResourceFieldCycle.Crop.ABSENT, 0))) return ResourceFieldCellObserved.Change.SOIL_BECAME_DIRT;
         if ((before.crop() == ResourceFieldCycle.Crop.GROWING || before.crop() == ResourceFieldCycle.Crop.MATURE)

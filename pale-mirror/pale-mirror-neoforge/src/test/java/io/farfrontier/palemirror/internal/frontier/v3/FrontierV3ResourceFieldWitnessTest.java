@@ -21,6 +21,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ResourceFieldWitnessTest {
+    @Test void externalHarvestAndReplantHasExactRecoverableWorldWitness() {
+        var after = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.GROWING, 0);
+        var change = FrontierV3ResourceFieldWorldChangeExecutor.classify(RIPE, after);
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Change.CROP_REPLANTED, change);
+        var observed = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved(SITE, 1,
+                layout().revision(), FIRST, RIPE, after, change,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Source.WORLD, "world:replant-test");
+        var witness = new FrontierV3ResourceFieldWorldChangeWitness(observed);
+        assertEquals(witness, FrontierV3ResourceFieldWorldChangeWitness.read(witness.write()));
+        assertEquals(null, FrontierV3ResourceFieldWorldChangeExecutor.classify(after, RIPE),
+                "ordinary growth cannot be classified as external harvest");
+        assertEquals(null, FrontierV3ResourceFieldWorldChangeExecutor.classify(after, after));
+    }
     private static final SubjectId SITE = new SubjectId("site:field-witness-test");
     private static final ResourceFieldLayout.CellId FIRST = new ResourceFieldLayout.CellId(1);
     private static final ResourceFieldLayout.CellId SECOND = new ResourceFieldLayout.CellId(2);

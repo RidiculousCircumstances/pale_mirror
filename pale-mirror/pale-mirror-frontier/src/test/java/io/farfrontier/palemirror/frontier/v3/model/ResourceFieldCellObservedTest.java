@@ -15,6 +15,41 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ResourceFieldCellObservedTest {
+    @Test void externalReplantCancelsPreparedCropAndChoosesAnotherCellWithoutYield() {
+        var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
+        var job = hot.job();
+        var goal = ResourceSiteHarvestGoal.current(hot.state(), job);
+        var state = hot.state();
+        if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
+            state = ResourceSiteHarvestProcess.reduceHotGoalArrived(state, hot.site(),
+                    new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(),
+                            goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+        state = ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
+                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
+        var cycle = state.resourceSites().cycle(hot.site());
+        var id = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+        var before = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(id));
+        var after = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.GROWING, 0);
+        var observed = new ResourceFieldCellObserved(hot.site(), cycle.epoch(), cycle.layout().revision(), id,
+                before, after, ResourceFieldCellObserved.Change.CROP_REPLANTED, ResourceFieldCellObserved.Source.WORLD,
+                "world:external-harvest-replant");
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(observed, codecs.decode(observed.type(), codecs.encode(observed)));
+        var held = ResourceSiteProcess.reduceWorldChangeHeld(state, hot.site(), new ResourceFieldWorldChangeHeld(observed));
+        assertEquals(held, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(held)));
+        var changed = ResourceSiteProcess.reduceCellObserved(held, hot.site(), observed);
+        var retained = (ResourceSiteHarvestJob) changed.resourceSites().site(hot.site()).activeWork().orElseThrow();
+        assertFalse(retained.progress().hasPendingCrop());
+        assertTrue(changed.resourceSites().cycle(hot.site()).cell(id).accounted());
+        assertEquals(ResourceFieldCycle.Crop.GROWING, changed.resourceSites().cycle(hot.site()).cell(id).crop());
+        assertEquals(0, changed.resourceSites().cycle(hot.site()).harvestedCount());
+        assertFalse(cycle.layout().cells().get(retained.progress().nextCropSlotIndex()).id().equals(id));
+        assertEquals(state.actorLocations(), changed.actorLocations());
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceCellObserved(changed, hot.site(), observed));
+        assertThrows(IllegalArgumentException.class, () -> new ResourceFieldCellObserved(hot.site(), cycle.epoch(),
+                cycle.layout().revision(), id, after, after, ResourceFieldCellObserved.Change.CROP_REPLANTED,
+                ResourceFieldCellObserved.Source.WORLD, "world:no-new-loss"));
+    }
     @Test void playerBreakOfActiveTargetClosesOnlyThatCellAfterExactPostcondition() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         SubjectId site = hot.site();

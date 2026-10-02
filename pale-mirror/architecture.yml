@@ -19,7 +19,8 @@ components:
       - Meal consumption after service clearance is independent of an exact eating waypoint; the physical receipt checkpoints the supported observed body
       - Resident activity admission owns explicit source, access, clearance and work-checkpoint waits; the generic queue parks the unchanged exact action by causal owner keys with a bounded audit, without retry WAL writes or food-specific scheduling logic
       - Service access derives temporary-buffer turnover requests; geometry chooses reachable unoccupied resting destinations outside every buffer, activity admits optional relocation, and the shared interruptible HOT/COLD movement owner executes it independently of food consumption
-      - Resource-site owners may resume an inspected completed harvest scene only under the same exact job, worker, resource bindings and unreplaced recovery epoch; generic recovery does not infer family safety
+      - Resource-site owners may resume an inspected safe harvest checkpoint or completed batch only under the same exact job, worker, resource bindings and unreplaced recovery epoch, with no pending crop effect; generic recovery does not infer family safety
+      - Observed external crop removal or age-zero replant accounts only that current harvest cell without settlement yield and selects another outstanding target; growth is not an external harvest
     may_depend_on:
       - Java standard library
     must_not_depend_on:

@@ -55,6 +55,8 @@ record FrontierV3ResourceFieldWorldChangeWitness(ResourceFieldCellObserved obser
                 ResourceFieldCycle.Crop.valueOf(tag.getString("beforeCrop")), tag.getInt("beforeStage"));
         var change = ResourceFieldCellObserved.Change.valueOf(tag.getString("change"));
         var after = switch (change) {
+            case CROP_REPLANTED -> new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
+                    ResourceFieldCycle.Crop.GROWING, 0);
             case CROP_REMOVED -> new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
                     ResourceFieldCycle.Crop.ABSENT, 0);
             case SOIL_BECAME_DIRT -> new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.DIRT,

@@ -260,10 +260,21 @@ public final class ResourceFieldCycle {
         return replace(id, new CellState(prior.soil(), Crop.ABSENT, 0, prior.accounted(), prior.yielded()));
     }
 
+    /** External removal/replant is not settlement yield and cannot retain the current harvest target. */
+    public ResourceFieldCycle cropReplanted(ResourceFieldLayout.CellId id) {
+        CellState prior = cell(id);
+        if (prior.soil() != Soil.FARMLAND || prior.growthStage() <= 0
+                || prior.crop() != Crop.GROWING && prior.crop() != Crop.MATURE)
+            throw new IllegalArgumentException("external replant has no older owned crop");
+        return replace(id, new CellState(prior.soil(), Crop.GROWING, 0, prior.accounted(), prior.yielded(),
+                prior.workAccessBlocked()));
+    }
+
     /** A witnessed external loss closes this harvest epoch's cell without a farmer visit or yield. */
     public ResourceFieldCycle accountExternalCropLoss(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
         if (prior.soil() == Soil.UNKNOWN || prior.crop() != Crop.ABSENT && prior.crop() != Crop.OBSTRUCTED
+                && !(prior.crop() == Crop.GROWING && prior.growthStage() == 0)
                 || prior.accounted() || prior.yielded())
             throw new IllegalArgumentException("external crop loss is not outstanding zero-yield work");
         return replace(id, new CellState(prior.soil(), prior.crop(), prior.growthStage(), true, false,

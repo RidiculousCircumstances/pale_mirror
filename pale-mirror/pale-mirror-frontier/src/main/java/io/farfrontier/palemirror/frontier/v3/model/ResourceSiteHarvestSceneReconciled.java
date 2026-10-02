@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
-/** Fresh inspection of the exact isolated farmer and its already bound terminal crop batch. */
+/** Fresh inspection of the exact isolated farmer and its already bound safe crop batch/checkpoint. */
 public record ResourceSiteHarvestSceneReconciled(SubjectId siteId, SubjectId jobId, SceneLeaseId leaseId,
         long leaseRevision, long bodyEpoch, BodyPosition observedBody,
         FungiblePhysicalObservation.Stack observedHand) implements FrontierPayload {

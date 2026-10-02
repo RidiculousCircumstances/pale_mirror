@@ -49,7 +49,7 @@ record FrontierV3ResourceFieldPlayerBreakWitness(SubjectId siteId, long epoch, l
             case CROP_REMOVED -> new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
                     ResourceFieldCycle.Crop.ABSENT, 0);
             case UNCHANGED -> before;
-            case SOIL_BECAME_DIRT -> throw new IllegalStateException("soil damage is not a crop-break outcome");
+            case SOIL_BECAME_DIRT, CROP_REPLANTED -> throw new IllegalStateException("soil damage/replant is not a crop-break outcome");
         };
     }
 

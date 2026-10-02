@@ -10,7 +10,7 @@ public record ResourceFieldCellObserved(SubjectId siteId, long epoch, long layou
                                         ResourceFieldPhysicalSurface.Condition before,
                                         ResourceFieldPhysicalSurface.Condition after,
                                         Change change, Source source, String causationId) implements FrontierPayload {
-    public enum Change { CROP_REMOVED, SOIL_BECAME_DIRT, UNCHANGED }
+    public enum Change { CROP_REMOVED, SOIL_BECAME_DIRT, UNCHANGED, CROP_REPLANTED }
     public enum Source { PLAYER, WORLD }
 
     public ResourceFieldCellObserved {
@@ -24,6 +24,14 @@ public record ResourceFieldCellObserved(SubjectId siteId, long epoch, long layou
         if (!siteId.value().startsWith("site:") || epoch < 1 || layoutRevision < 1 || causationId.isBlank())
             throw new IllegalArgumentException("field observation has invalid owner, epoch, revision or cause");
         ResourceFieldPhysicalSurface.Condition required = switch (change) {
+            case CROP_REPLANTED -> {
+                if (source != Source.WORLD || before.soil() != ResourceFieldCycle.Soil.FARMLAND
+                        || before.crop() != ResourceFieldCycle.Crop.GROWING && before.crop() != ResourceFieldCycle.Crop.MATURE
+                        || before.growthStage() <= 0)
+                    throw new IllegalArgumentException("external replant has no older owned live crop predecessor");
+                yield new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
+                        ResourceFieldCycle.Crop.GROWING, 0);
+            }
             case CROP_REMOVED -> {
                 if (before.soil() != ResourceFieldCycle.Soil.FARMLAND
                         || before.crop() != ResourceFieldCycle.Crop.GROWING
