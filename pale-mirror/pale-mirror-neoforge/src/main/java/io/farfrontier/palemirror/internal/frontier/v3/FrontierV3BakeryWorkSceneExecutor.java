@@ -8,6 +8,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.npc.Villager;
 
 import java.util.List;
+import java.util.Optional;
 
 /** HOT movement to the same semantic bakery goals as the COLD order; effects remain job-owned. */
 final class FrontierV3BakeryWorkSceneExecutor {
@@ -95,22 +96,42 @@ final class FrontierV3BakeryWorkSceneExecutor {
             FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "known-route:" + unavailable.getMessage());
             return; // The job remains retained; an unsupported path is not a fabricated arrival.
         }
-        FrontierV3PhysicalWaitTrace.clear(worker);
         MovementOrder order = new MovementOrder(job.id(), job.workerId(), goal.phase().wireTag(),
                 1L, List.of(goal.station()), TraversalCapability.PEDESTRIAN,
                 MovementOrder.ArrivalPolicy.EXACT_STATION);
         FrontierV3GoalNavigation.Result movement = FrontierV3GoalNavigation.pursue(level, worker,
                 FrontierV3GoalNavigation.Goal.routed(order, known, state.bootstrap().bounds()));
-        if (movement.status() == FrontierV3GoalNavigation.Status.BLOCKED
-                && movement.blockReason().orElseThrow() != FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED) {
+        BakeryWorkState work = job.bakeryWork().orElseThrow();
+        // Delivery is an already confirmed inventory effect. Clearance can wait for
+        // navigation, but cannot retroactively block that completed production.
+        if (work.phase() == BakeryWorkState.Phase.DELIVERED
+                && movement.status() == FrontierV3GoalNavigation.Status.BLOCKED) {
+            FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "delivered-clearance:" + movement.reason());
+        } else {
+            FrontierV3PhysicalWaitTrace.clear(worker);
+        }
+        switch (navigationBlockChange(work.phase(), work.block(), movement)) {
+        case BLOCK -> {
             FrontierV3BakeryPhysicalEffect.block(level, runtime, lease, job,
                     new BakeryWorkBlock(BakeryWorkBlock.Reason.ROUTE_BLOCKED,
                             job.facilityId(), -1, "minecraft:air", 0));
-        } else if (job.bakeryWork().orElseThrow().block()
-                .map(value -> value.reason() == BakeryWorkBlock.Reason.ROUTE_BLOCKED).orElse(false)
-                && movement.status() != FrontierV3GoalNavigation.Status.BLOCKED) {
-            FrontierV3BakeryPhysicalEffect.clearBlock(level, runtime, lease, job);
+        }
+        case CLEAR -> FrontierV3BakeryPhysicalEffect.clearBlock(level, runtime, lease, job);
+        case NONE -> { }
         }
     }
 
+    enum NavigationBlockChange { NONE, BLOCK, CLEAR }
+
+    /** Bakery-owned interpretation; navigation itself does not decide production outcomes. */
+    static NavigationBlockChange navigationBlockChange(BakeryWorkState.Phase phase,
+            Optional<BakeryWorkBlock> current, FrontierV3GoalNavigation.Result movement) {
+        if (phase == BakeryWorkState.Phase.DELIVERED) return NavigationBlockChange.NONE;
+        if (movement.status() == FrontierV3GoalNavigation.Status.BLOCKED) {
+            return movement.blockReason().orElseThrow() == FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED
+                    ? NavigationBlockChange.NONE : NavigationBlockChange.BLOCK;
+        }
+        return current.filter(block -> block.reason() == BakeryWorkBlock.Reason.ROUTE_BLOCKED).isPresent()
+                ? NavigationBlockChange.CLEAR : NavigationBlockChange.NONE;
+    }
 }
