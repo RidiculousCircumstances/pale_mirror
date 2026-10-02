@@ -644,7 +644,9 @@ final class FrontierV3DiagnosticJson {
         if (address instanceof PhysicalStackAddress.HopperSlot value) return "{\"kind\":\"HOPPER_SLOT\",\"position\":"
                 + position(value.position()) + ",\"slot\":" + value.slot() + "}";
         if (address instanceof PhysicalStackAddress.ActorHand value) return "{\"kind\":\"ACTOR_HAND\",\"actor\":\""
-                + quote(value.actorId().value()) + "\",\"entity\":\"" + value.entityId() + "\"}";
+                + quote(value.actorId().value()) + "\",\"entity\":\"" + value.entityId() + "\",\"hand\":\"" + value.hand() + "\"}";
+        if (address instanceof PhysicalStackAddress.ActorPocket value) return "{\"kind\":\"ACTOR_POCKET\",\"actor\":\""
+                + quote(value.actorId().value()) + "\",\"entity\":\"" + value.entityId() + "\",\"slot\":" + value.slot() + "}";
         PhysicalStackAddress.WorldEntity value = (PhysicalStackAddress.WorldEntity) address;
         return "{\"kind\":\"WORLD_ENTITY\",\"entity\":\"" + value.entityId() + "\"}";
     }

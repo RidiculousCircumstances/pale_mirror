@@ -105,8 +105,8 @@ class ResidentFoodPortionTest {
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotPrepared(before, resident,
                 new ResidentMealHotEffectPrepared(resident, new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, 7, 3, 1, 1, 1))));
         state = ResidentMealProcess.reduceHotPrepared(state, resident, prepared);
-        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(resident,
-                SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident)), FOOD, 9);
+        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorPocket(resident,
+                SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident), 0), FOOD, 9);
         state = ResidentActivityProcess.reduceMealEffectObserved(state, resident, new ResidentMealHotEffectObserved(resident,
                 ResidentMeal.Phase.TAKE, 1, fixture.service().standingBody(),
                 List.of(new FungiblePhysicalObservation.Stack(slots.getLast().address(), FOOD, 2)), List.of(hand)), 96_001);

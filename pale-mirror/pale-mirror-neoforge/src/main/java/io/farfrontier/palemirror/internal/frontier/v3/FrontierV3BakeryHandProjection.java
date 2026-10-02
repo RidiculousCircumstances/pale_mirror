@@ -23,7 +23,7 @@ final class FrontierV3BakeryHandProjection {
     static boolean prepareAmbientNew(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId,
                                      Mob body) {
         ProductionJob job = bakeryForActor(state, actorId);
-        return job == null || projectNew(state, job, body);
+        return job == null || !(job.inputHold() instanceof ProductionInputHold.Materialized) || projectNew(state, job, body);
     }
 
     static boolean matchesAmbient(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId,

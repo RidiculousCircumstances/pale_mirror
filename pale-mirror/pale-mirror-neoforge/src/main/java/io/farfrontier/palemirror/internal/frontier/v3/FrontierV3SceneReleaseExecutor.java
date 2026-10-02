@@ -207,7 +207,8 @@ final class FrontierV3SceneReleaseExecutor {
                         job.id(), work.actorAccountId(), bindings.getFirst().authorityEpoch(),
                         new io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation.Stack(
                                 new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(
-                                        job.workerId(), lease.members().getFirst().entityId()),
+                                        job.workerId(), lease.members().getFirst().entityId(),
+                                        io.farfrontier.palemirror.frontier.v3.model.ActorContainerItemOrder.Hand.MAIN),
                                 net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem()).toString(), held.getCount()),
                         new SceneLeaseReleased(lease.id(), positions));
                 try {
@@ -268,6 +269,11 @@ final class FrontierV3SceneReleaseExecutor {
         CommandResult result = releaseLoaded(runtime, lease, positions, binding, harvestHandRelease, bakeryHandRelease);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released", lease, result);
         if (result instanceof CommandResult.Accepted) {
+            FrontierWorldState releasedState = runtime.decodedState().orElseThrow();
+            for (SceneMember member : lease.members()) {
+                if (level.getEntity(member.entityId()) instanceof Mob body)
+                    FrontierV3ActorCarryProjection.rememberConfirmed(releasedState, member.actorId(), body);
+            }
             for (Mob body : retireLoadedBodies) {
                 FrontierV3ControlledMobMotion.stop(body);
                 body.discard();

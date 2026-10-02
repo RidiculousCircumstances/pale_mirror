@@ -274,10 +274,10 @@ class BakeryHotVerticalTest {
                 preparedPickup, task.ownerId(), new BakeryHotEffectObserved(job.id(), leaseId,
                         BakeryWorkState.Phase.DEPOT_PICKUP, actor.body(), 1L, 1L, List.of(),
                         List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
-                                lease.members().getFirst().entityId()), "minecraft:wheat", 63)))),
+                                lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN), "minecraft:wheat", 63)))),
                 "a depleted depot batch cannot be recorded as a complete baker pickup");
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
-                lease.members().getFirst().entityId()), "minecraft:wheat", 64);
+                lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN), "minecraft:wheat", 64);
         BakeryHotEffectObserved observed = new BakeryHotEffectObserved(job.id(), leaseId,
                 BakeryWorkState.Phase.DEPOT_PICKUP, actor.body(), 1L, 1L, List.of(), List.of(hand));
         state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), observed);
@@ -365,7 +365,7 @@ class BakeryHotVerticalTest {
         state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), new BakeryHotEffectObserved(
                 job.id(), leaseId, BakeryWorkState.Phase.STATION_UNLOAD, station.workerStation().standingBody(),
                 1L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
-                new PhysicalStackAddress.ActorHand(job.workerId(), lease.members().getFirst().entityId()),
+                new PhysicalStackAddress.ActorHand(job.workerId(), lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN),
                 "minecraft:bread", 64))));
         assertEquals(BakeryWorkState.Phase.DEPOT_DELIVERY, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
         assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().get(task.id()).status());

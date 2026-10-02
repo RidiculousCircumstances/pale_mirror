@@ -26,6 +26,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         }
         requireKeys(lots, ResourceLot::id, "resource lot"); requireKeys(claims, ClaimAllocation::id, "claim allocation");
         requireKeys(accounts, CustodyAccount::id, "custody account"); requireKeys(bindings, PhysicalStackBinding::id, "physical stack binding");
+        ActorCarriedResources.validateCapacity(accounts.values());
         validateAccounts(lots, claims, accounts); validateBindings(lots, claims, accounts, bindings);
     }
 
@@ -56,8 +57,8 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         }
         CustodyAccount account = accounts.get(accountId);
         if (account == null) {
-            if (next.quantity() != 1 || lots.containsKey(next.id()) || accounts.values().stream().anyMatch(existing ->
-                    existing.custody() instanceof ResourceCustody.Actor actor && actor.actorId().equals(actorId))) {
+            ActorCarriedResources.requireNewAccountCapacity(this, actorId, accountId);
+            if (next.quantity() != 1 || lots.containsKey(next.id())) {
                 throw new IllegalArgumentException("first actor harvest yield must create one new unit and account");
             }
             return issue(next, new CustodyAccount(accountId, new ResourceCustody.Actor(actorId),
@@ -65,8 +66,6 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         }
         ResourceLot prior = lots.get(next.id());
         if (!(account.custody() instanceof ResourceCustody.Actor actor) || !actor.actorId().equals(actorId)
-                || accounts.values().stream().anyMatch(other -> !other.id().equals(accountId)
-                        && other.custody() instanceof ResourceCustody.Actor owner && owner.actorId().equals(actorId))
                 || prior == null || !account.lotQuantities().equals(Map.of(next.id(), prior.quantity()))
                 || !account.claimQuantities().isEmpty() || bindings.values().stream().anyMatch(binding -> binding.accountId().equals(accountId))
                 || prior.quantity() >= 64 || next.quantity() != prior.quantity() + 1
@@ -94,7 +93,8 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Objects.requireNonNull(actorId, "observed harvest actor");
         Objects.requireNonNull(observed, "observed actor hand stack");
         if (authorityEpoch < 1 || !(observed.address() instanceof PhysicalStackAddress.ActorHand hand)
-                || !hand.actorId().equals(actorId) || !observed.itemKind().equals("minecraft:wheat")
+                || !hand.actorId().equals(actorId) || hand.hand() != ActorContainerItemOrder.Hand.OFF
+                || !observed.itemKind().equals("minecraft:wheat")
                 || observed.quantity() != next.quantity() || next.quantity() > 64 || !next.lineage().isEmpty()
                 || !next.itemKind().equals("minecraft:wheat")) {
             throw new IllegalArgumentException("observed harvest part lacks its exact actor hand or bounded wheat quantity");
@@ -109,8 +109,6 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         List<PhysicalStackBinding> current = bindings.values().stream()
                 .filter(binding -> binding.accountId().equals(accountId)).toList();
         if (!(account.custody() instanceof ResourceCustody.Actor actor) || !actor.actorId().equals(actorId)
-                || accounts.values().stream().anyMatch(other -> !other.id().equals(accountId)
-                        && other.custody() instanceof ResourceCustody.Actor owner && owner.actorId().equals(actorId))
                 || prior == null || !account.lotQuantities().equals(Map.of(next.id(), prior.quantity()))
                 || !account.claimQuantities().isEmpty() || prior.quantity() >= 64
                 || next.quantity() != prior.quantity() + 1 || !next.withQuantity(prior.quantity()).equals(prior)
@@ -332,6 +330,8 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
                                                               List<PhysicalStackBinding> remainingSource,
                                                               List<PhysicalStackBinding> destinationBindings) {
         FungibleActorOrderTransfer.Accounts transfer = FungibleActorOrderTransfer.accounts(this, order);
+        FungibleActorOrderTransfer.validateBindingAddresses(order, transfer.source().custody(), remainingSource);
+        FungibleActorOrderTransfer.validateBindingAddresses(order, transfer.destination().custody(), destinationBindings);
         FungibleActorOrderTransfer.requireDeclaredStationPort(this, order, transfer, destinationBindings);
         return transferObserved(transfer.source().id(), transfer.destination(), transfer.destinationExists(),
                 sourceEpoch, destinationEpoch, transfer.lots(), transfer.claims(), remainingSource, destinationBindings);
@@ -896,6 +896,8 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
                     && owner.carrierId().equals(entity.entityId());
             case PhysicalStackAddress.ActorHand hand -> custody instanceof ResourceCustody.Actor owner
                     && owner.actorId().equals(hand.actorId());
+            case PhysicalStackAddress.ActorPocket pocket -> custody instanceof ResourceCustody.Actor owner
+                    && owner.actorId().equals(pocket.actorId());
         };
     }
 

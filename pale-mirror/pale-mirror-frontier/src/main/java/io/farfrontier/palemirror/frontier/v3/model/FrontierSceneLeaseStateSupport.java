@@ -144,8 +144,8 @@ public final class FrontierSceneLeaseStateSupport {
         Set<SubjectId> members = lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
         return state.inventory().fungibleResources().bindings().values().stream()
                 .map(PhysicalStackBinding::address)
-                .filter(PhysicalStackAddress.ActorHand.class::isInstance)
-                .map(PhysicalStackAddress.ActorHand.class::cast)
+                .filter(PhysicalStackAddress.ActorStack.class::isInstance)
+                .map(PhysicalStackAddress.ActorStack.class::cast)
                 .anyMatch(hand -> members.contains(hand.actorId()));
     }
 

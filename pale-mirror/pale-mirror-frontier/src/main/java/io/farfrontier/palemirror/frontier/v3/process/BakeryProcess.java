@@ -373,6 +373,7 @@ public final class BakeryProcess {
                 .filter(binding -> binding.accountId().equals(work.actorAccountId())).toList();
         String kind = work.phase() == BakeryWorkState.Phase.STATION_LOAD ? "minecraft:wheat" : "minecraft:bread";
         if (!address.actorId().equals(job.workerId()) || !address.entityId().equals(lease.members().getFirst().entityId())
+                || address.hand() != ActorContainerItemOrder.Hand.MAIN
                 || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
                 || bindings.size() != 1 || !bindings.getFirst().address().equals(address)
                 || bindings.getFirst().authorityEpoch() != released.actorEpoch()
@@ -401,6 +402,7 @@ public final class BakeryProcess {
                 && work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY)
                 || work.pendingPhysicalStep().isPresent() || !work.actorAccountId().equals(observed.actorAccountId())
                 || !address.actorId().equals(job.workerId())
+                || address.hand() != ActorContainerItemOrder.Hand.MAIN
                 || !address.entityId().equals(lease.members().getFirst().entityId())
                 || observed.actorEpoch() != Math.max(1L, lease.revision())
                 || !kind.equals(observed.observedHand().itemKind())

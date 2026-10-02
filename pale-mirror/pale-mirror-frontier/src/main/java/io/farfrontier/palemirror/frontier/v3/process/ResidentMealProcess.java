@@ -211,7 +211,7 @@ public final class ResidentMealProcess {
                         new ResourceCustody.Actor(meal.residentId()), Optional.of(meal.claimId()),
                         meal.portion().itemKind(), meal.portion().lotQuantities()),
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(meal.depotId()),
-                serviceSurface(state, meal), ActorContainerItemOrder.Hand.OFF,
+                serviceSurface(state, meal), ResidentMeal.CARRIED_PORTION_SLOT,
                 FrontierWireTags.tag(meal.phase()), 1L);
     }
 
@@ -264,7 +264,8 @@ public final class ResidentMealProcess {
             if (step.consumptionQuantity() != meal.portion().quantity()
                     || bindings.size() != 1 || bindings.getFirst().authorityEpoch() != step.sourceEpoch()
                     || step.destinationEpoch() != 0 || !bindings.getFirst().lotQuantities().equals(meal.portion().lotQuantities())
-                    || !(bindings.getFirst().address() instanceof PhysicalStackAddress.ActorHand hand)
+                    || !(bindings.getFirst().address() instanceof PhysicalStackAddress.ActorPocket hand)
+                    || hand.slot() != ResidentMeal.CARRIED_PORTION_SLOT.index()
                     || !hand.actorId().equals(subject)
                     || !hand.entityId().equals(SceneLease.deterministicEntityId(state.bootstrap().worldId(), subject)))
                 throw new IllegalArgumentException("meal consumption fence lacks its exact bound HOT hand");
@@ -282,8 +283,8 @@ public final class ResidentMealProcess {
                 : !observed.observedBody().equals(goalSurface(state, meal).standingBody())))
             throw new IllegalArgumentException("HOT meal receipt differs from its exact phase or resident body");
         if (step.phase() == ResidentMeal.Phase.TAKE) {
-            PhysicalStackAddress.ActorHand hand = new PhysicalStackAddress.ActorHand(subject,
-                    SceneLease.deterministicEntityId(state.bootstrap().worldId(), subject));
+            PhysicalStackAddress.ActorPocket hand = new PhysicalStackAddress.ActorPocket(subject,
+                    SceneLease.deterministicEntityId(state.bootstrap().worldId(), subject), ResidentMeal.CARRIED_PORTION_SLOT.index());
             if (observed.destination().size() != 1
                     || !observed.destination().getFirst().address().equals(hand)
                     || !observed.destination().getFirst().itemKind().equals(meal.portion().itemKind())
@@ -435,7 +436,8 @@ public final class ResidentMealProcess {
 
     private static void requireMealHand(FrontierWorldState state, ResidentMeal meal,
                                         FungiblePhysicalObservation.Stack observed) {
-        if (!(observed.address() instanceof PhysicalStackAddress.ActorHand hand)
+        if (!(observed.address() instanceof PhysicalStackAddress.ActorPocket hand)
+                || hand.slot() != ResidentMeal.CARRIED_PORTION_SLOT.index()
                 || !hand.actorId().equals(meal.residentId())
                 || !hand.entityId().equals(SceneLease.deterministicEntityId(state.bootstrap().worldId(), meal.residentId()))
                 || !observed.itemKind().equals(meal.portion().itemKind()) || observed.quantity() != meal.portion().quantity())

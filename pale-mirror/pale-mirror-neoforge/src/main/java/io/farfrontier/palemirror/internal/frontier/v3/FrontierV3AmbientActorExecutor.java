@@ -364,7 +364,8 @@ final class FrontierV3AmbientActorExecutor {
             if (!owned(existing, actorId, bioform)) return Result.CONFLICT;
             if (existing instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
             if (existing instanceof Mob body) {
-                if (!FrontierV3BakeryHandProjection.matchesAmbient(state, actorId, body)
+                if (!FrontierV3ActorCarryProjection.matches(state, actorId, body)
+                        || !FrontierV3BakeryHandProjection.matchesAmbient(state, actorId, body)
                         || !FrontierV3ResidentMealHandProjection.matchesAmbient(state, actorId, body)) return Result.CONFLICT;
                 Result placed = FrontierV3AmbientBodyHandoff.place(level, state, actorId, body,
                         canonicalBody, standingPositionProvider);
@@ -389,7 +390,8 @@ final class FrontierV3AmbientActorExecutor {
         body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
         hydrateExactHeldEquipment(body, state, actorId);
-        if (!FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)
+        if (!FrontierV3ActorCarryProjection.prepareNew(state, actorId, body)
+                || !FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)
                 || !FrontierV3ResidentMealHandProjection.prepareAmbientNew(state, actorId, body)) return Result.CONFLICT;
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
@@ -789,24 +791,7 @@ final class FrontierV3AmbientActorExecutor {
         // inactive-carrier evidence before closing canonical custody or removing the body.
         if (!(body.level() instanceof ServerLevel level)) return Optional.empty();
         AmbientActorLease lease = state.ambientLeases().get(actorId);
-        ResidentMeal retainedMeal = state.humanPopulation().meals().get(actorId);
-        if (retainedMeal != null) {
-            if (retainedMeal.pendingPhysicalStep().isPresent()) return Optional.empty();
-            if (retainedMeal.carriesFood()) {
-                var bindings = state.inventory().fungibleResources().bindings().values().stream()
-                        .filter(binding -> binding.accountId().equals(retainedMeal.actorAccountId())).toList();
-                if (!bindings.isEmpty()) {
-                    ItemStack held = body.getItemBySlot(EquipmentSlot.OFFHAND);
-                    if (bindings.size() != 1 || !FrontierV3ResidentMealItems.matches(held, retainedMeal.portion())) return Optional.empty();
-                    var witness = new io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation.Stack(
-                            new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(actorId, body.getUUID()),
-                            retainedMeal.portion().itemKind(), retainedMeal.portion().quantity());
-                    if (!(submit(runtime, "ambient-meal-hand-release", actorId.value(),
-                            new ResidentMealHotHandReleased(actorId, lease.revision(), witness))
-                            instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
-                }
-            }
-        }
+        if (!FrontierV3ResidentMealPhysicalEffect.release(level, runtime, state, actorId, body, lease)) return Optional.empty();
         long epoch = body.getPersistentData().getLong(CUSTODY_EPOCH_KEY);
         if (epoch < 1L || !FrontierV3ActorCarrierComposition.owns(body,
                 carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,

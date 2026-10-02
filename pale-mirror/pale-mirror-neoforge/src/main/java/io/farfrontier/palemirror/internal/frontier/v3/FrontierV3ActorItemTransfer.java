@@ -105,8 +105,8 @@ final class FrontierV3ActorItemTransfer {
                         || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation station
                         && address.slot().slot() != station.spec().outputSlot()))
                     throw new IllegalArgumentException("fungible TAKE has a foreign source slot");
-            } else if (source.size() != 1 || !(source.getFirst().address() instanceof PhysicalStackAddress.ActorHand hand)
-                    || !hand.actorId().equals(order.actorId()) || !hand.entityId().equals(declaredBodyId)
+            } else if (source.size() != 1 || !source.getFirst().address().equals(
+                    FrontierV3ActorResourceSlots.address(order.actorId(), actor, order.actorSlot()))
                     || destinationSlot < 0 || destinationSlot >= chest.getContainerSize()
                     || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation station
                     && destinationSlot != station.spec().inputSlot()) {
@@ -117,13 +117,13 @@ final class FrontierV3ActorItemTransfer {
         boolean before() {
             if (!sourceMatches(false)) return false;
             return order.direction() == ActorContainerItemOrder.Direction.TAKE
-                    ? actor.getItemBySlot(hand()).isEmpty() : chest.getItem(destinationSlot).isEmpty();
+                    ? held().isEmpty() : chest.getItem(destinationSlot).isEmpty();
         }
 
         boolean after() {
             if (!sourceMatches(true)) return false;
             return order.direction() == ActorContainerItemOrder.Direction.TAKE
-                    ? plain(actor.getItemBySlot(hand()), order.portion().quantity())
+                    ? plain(held(), order.portion().quantity())
                     : plain(chest.getItem(destinationSlot), order.portion().quantity());
         }
 
@@ -135,11 +135,11 @@ final class FrontierV3ActorItemTransfer {
                     ItemStack stack = chest.getItem(slot);
                     stack.shrink(slice.moved()); chest.setItem(slot, stack);
                 }
-                actor.setItemSlot(hand(), new ItemStack(item, order.portion().quantity()));
+                FrontierV3ActorResourceSlots.set(actor, order.actorSlot(), new ItemStack(item, order.portion().quantity()));
             } else {
-                ItemStack held = actor.getItemBySlot(hand());
+                ItemStack held = held();
                 chest.setItem(destinationSlot, held.copyWithCount(order.portion().quantity()));
-                actor.setItemSlot(hand(), held.getCount() == order.portion().quantity()
+                FrontierV3ActorResourceSlots.set(actor, order.actorSlot(), held.getCount() == order.portion().quantity()
                         ? ItemStack.EMPTY : held.copyWithCount(held.getCount() - order.portion().quantity()));
             }
             chest.setChanged();
@@ -151,7 +151,8 @@ final class FrontierV3ActorItemTransfer {
                 int expected = slice.before() - (after ? slice.moved() : 0);
                 ItemStack actual = switch (slice.address()) {
                     case PhysicalStackAddress.ContainerSlot address -> chest.getItem(address.slot().slot());
-                    case PhysicalStackAddress.ActorHand ignored -> actor.getItemBySlot(hand());
+                    case PhysicalStackAddress.ActorHand ignored -> held();
+                    case PhysicalStackAddress.ActorPocket ignored -> held();
                     default -> throw new IllegalArgumentException("fungible step source is not a chest or actor hand");
                 };
                 if (expected == 0 ? !actual.isEmpty() : !plain(actual, expected)) return false;
@@ -163,8 +164,8 @@ final class FrontierV3ActorItemTransfer {
             return stack.getCount() == count && ItemStack.isSameItemSameComponents(stack, new ItemStack(item, count));
         }
 
-        private EquipmentSlot hand() {
-            return order.hand() == ActorContainerItemOrder.Hand.MAIN ? EquipmentSlot.MAINHAND : EquipmentSlot.OFFHAND;
+        private ItemStack held() {
+            return FrontierV3ActorResourceSlots.get(actor, order.actorSlot());
         }
     }
 

@@ -745,7 +745,8 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                                                         FungibleResourceLedger fungibleResources) {
         Map<ResourceCustody, SubjectId> accountsByCustody = new HashMap<>();
         for (CustodyAccount account : fungibleResources.accounts().values()) {
-            if (accountsByCustody.put(account.custody(), account.id()) != null) {
+            if (!(account.custody() instanceof ResourceCustody.Actor)
+                    && accountsByCustody.put(account.custody(), account.id()) != null) {
                 throw new IllegalArgumentException("one physical/resource location must have one fungible custody account");
             }
             switch (account.custody()) {

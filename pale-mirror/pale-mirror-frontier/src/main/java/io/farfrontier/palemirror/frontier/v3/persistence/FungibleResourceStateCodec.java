@@ -90,7 +90,8 @@ final class FungibleResourceStateCodec {
             case PhysicalStackAddress.PlayerSlot slot -> { output.writeByte(1); writeString(output, slot.playerId().toString()); output.writeByte(slot.slot()); }
             case PhysicalStackAddress.HopperSlot slot -> { output.writeByte(2); writePosition(output, slot.position()); output.writeByte(slot.slot()); }
             case PhysicalStackAddress.WorldEntity entity -> { output.writeByte(3); writeString(output, entity.entityId().toString()); }
-            case PhysicalStackAddress.ActorHand hand -> { output.writeByte(4); writeString(output, hand.actorId().value()); writeString(output, hand.entityId().toString()); }
+            case PhysicalStackAddress.ActorHand hand -> { output.writeByte(hand.hand() == ActorContainerItemOrder.Hand.OFF ? 4 : 6); writeString(output, hand.actorId().value()); writeString(output, hand.entityId().toString()); }
+            case PhysicalStackAddress.ActorPocket pocket -> { output.writeByte(5); writeString(output, pocket.actorId().value()); writeString(output, pocket.entityId().toString()); output.writeByte(pocket.slot()); }
         }
     }
 
@@ -105,6 +106,8 @@ final class FungibleResourceStateCodec {
             case 2 -> new PhysicalStackAddress.HopperSlot(readPosition(input), input.readUnsignedByte());
             case 3 -> new PhysicalStackAddress.WorldEntity(UUID.fromString(readString(input)));
             case 4 -> new PhysicalStackAddress.ActorHand(new SubjectId(readString(input)), UUID.fromString(readString(input)));
+            case 5 -> new PhysicalStackAddress.ActorPocket(new SubjectId(readString(input)), UUID.fromString(readString(input)), input.readUnsignedByte());
+            case 6 -> new PhysicalStackAddress.ActorHand(new SubjectId(readString(input)), UUID.fromString(readString(input)), ActorContainerItemOrder.Hand.MAIN);
             default -> throw new IllegalArgumentException("unknown physical stack address");
         };
     }

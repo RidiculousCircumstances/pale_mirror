@@ -19,11 +19,21 @@ public final class FrontierProductionWorkSceneSupport {
         ResidentWorkYield.Status status = job.bakeryWork().isEmpty() ? ResidentWorkYield.Status.OWNER_SAFETY_HOLD
                 : job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()
                     ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT
-                    : state.inventory().fungibleResources().accounts().containsKey(job.bakeryWork().orElseThrow().actorAccountId())
-                        ? ResidentWorkYield.Status.CARRYING_RESOURCE : ResidentWorkYield.Status.READY;
+                    : ResidentWorkYield.Status.READY;
         return new ActivityExecutionCheckpoint(state, assignment, status);
     }
     private FrontierProductionWorkSceneSupport() { }
+
+    static Optional<ActorCarriedResources.Presentation> carriedResources(FrontierWorldState state, HumanAssignment assignment) {
+        executionCheckpoint(state, assignment);
+        ProductionJob job = state.productionJobs().get(assignment.ownerId().orElseThrow());
+        if (job.bakeryWork().isEmpty() || !state.inventory().fungibleResources().accounts()
+                .containsKey(job.bakeryWork().orElseThrow().actorAccountId())) return Optional.empty();
+        var carried = new ActorCarriedResources.Presentation(job.workerId(),
+                job.bakeryWork().orElseThrow().actorAccountId(), new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN));
+        carried.requireAccount(state.inventory().fungibleResources());
+        return Optional.of(carried);
+    }
 
     /** Stable canonical inventory; physical demand is selected only by the adapter. */
     public static List<Candidate> candidates(FrontierWorldState state) {

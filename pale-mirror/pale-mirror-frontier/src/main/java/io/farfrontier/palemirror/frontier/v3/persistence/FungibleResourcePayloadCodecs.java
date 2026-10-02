@@ -169,7 +169,8 @@ final class FungibleResourcePayloadCodecs {
             case PhysicalStackAddress.PlayerSlot slot -> { output.writeByte(1); writeString(output, slot.playerId().toString()); output.writeByte(slot.slot()); }
             case PhysicalStackAddress.HopperSlot slot -> { output.writeByte(2); output.writeInt(slot.position().x()); output.writeInt(slot.position().y()); output.writeInt(slot.position().z()); output.writeByte(slot.slot()); }
             case PhysicalStackAddress.WorldEntity entity -> { output.writeByte(3); writeString(output, entity.entityId().toString()); }
-            case PhysicalStackAddress.ActorHand hand -> { output.writeByte(4); writeSubject(output, hand.actorId()); writeString(output, hand.entityId().toString()); }
+            case PhysicalStackAddress.ActorHand hand -> { output.writeByte(hand.hand() == ActorContainerItemOrder.Hand.OFF ? 4 : 6); writeSubject(output, hand.actorId()); writeString(output, hand.entityId().toString()); }
+            case PhysicalStackAddress.ActorPocket pocket -> { output.writeByte(5); writeSubject(output, pocket.actorId()); writeString(output, pocket.entityId().toString()); output.writeByte(pocket.slot()); }
         }
     }
 
@@ -180,6 +181,8 @@ final class FungibleResourcePayloadCodecs {
             case 2 -> new PhysicalStackAddress.HopperSlot(new BlockPosition(input.readInt(), input.readInt(), input.readInt()), input.readUnsignedByte());
             case 3 -> new PhysicalStackAddress.WorldEntity(java.util.UUID.fromString(readString(input)));
             case 4 -> new PhysicalStackAddress.ActorHand(readSubject(input).value(), java.util.UUID.fromString(readString(input)));
+            case 5 -> new PhysicalStackAddress.ActorPocket(readSubject(input).value(), java.util.UUID.fromString(readString(input)), input.readUnsignedByte());
+            case 6 -> new PhysicalStackAddress.ActorHand(readSubject(input).value(), java.util.UUID.fromString(readString(input)), ActorContainerItemOrder.Hand.MAIN);
             default -> throw new IllegalArgumentException("unknown physical stack address");
         };
     }

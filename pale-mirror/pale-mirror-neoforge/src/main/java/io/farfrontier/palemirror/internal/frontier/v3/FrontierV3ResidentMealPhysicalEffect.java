@@ -21,6 +21,24 @@ import java.util.Map;
 final class FrontierV3ResidentMealPhysicalEffect {
     private FrontierV3ResidentMealPhysicalEffect() { }
 
+    static boolean release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                           FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
+        ResidentMeal meal = state.humanPopulation().meals().get(actorId);
+        if (meal == null) return true;
+        if (meal.pendingPhysicalStep().isPresent()) return false;
+        if (!meal.carriesFood()) return true;
+        var bindings = state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(meal.actorAccountId())).toList();
+        if (bindings.isEmpty()) return true;
+        var address = FrontierV3ActorResourceSlots.address(actorId, body, FrontierV3ResidentMealHandProjection.SLOT);
+        if (bindings.size() != 1 || !bindings.getFirst().address().equals(address)
+                || !FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(body,
+                        FrontierV3ResidentMealHandProjection.SLOT), meal.portion())) return false;
+        return accepted(level, runtime, actorId, "ambient-meal-hand-release", new ResidentMealHotHandReleased(
+                actorId, lease.revision(), new FungiblePhysicalObservation.Stack(address,
+                        meal.portion().itemKind(), meal.portion().quantity())));
+    }
+
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                         FrontierWorldState state, SubjectId residentId, Mob body, AmbientActorLease lease) {
         ResidentMeal meal = state.humanPopulation().meals().get(residentId);
@@ -31,11 +49,13 @@ final class FrontierV3ResidentMealPhysicalEffect {
         if (meal.carriesFood() && meal.pendingPhysicalStep().isEmpty()
                 && state.inventory().fungibleResources().bindings().values().stream()
                     .noneMatch(binding -> binding.accountId().equals(meal.actorAccountId()))
-                && FrontierV3ResidentMealItems.matches(worker.getItemBySlot(EquipmentSlot.OFFHAND), meal.portion()))
+                && FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(worker,
+                        FrontierV3ResidentMealHandProjection.SLOT), meal.portion()))
             return accepted(level, runtime, meal.residentId(), "resident-meal-hand-materialized",
                     new ResidentMealHotHandMaterialized(meal.residentId(), lease.revision(),
-                            new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
-                                    meal.residentId(), worker.getUUID()), meal.portion().itemKind(), meal.portion().quantity())));
+                            new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(
+                                    meal.residentId(), worker, FrontierV3ResidentMealHandProjection.SLOT),
+                                    meal.portion().itemKind(), meal.portion().quantity())));
         var observedBody = FrontierV3SupportedBodyCapture.observe(level, body);
         if (observedBody.isEmpty()) return false;
         if (meal.phase() == ResidentMeal.Phase.CONSUME) {
@@ -87,8 +107,8 @@ final class FrontierV3ResidentMealPhysicalEffect {
         }
         List<FungiblePhysicalObservation.Stack> remaining =
                 FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, meal.depotId());
-        var held = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
-                meal.residentId(), worker.getUUID()), meal.portion().itemKind(), meal.portion().quantity());
+        var held = new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(
+                meal.residentId(), worker, FrontierV3ResidentMealHandProjection.SLOT), meal.portion().itemKind(), meal.portion().quantity());
         boolean applied = accepted(level, runtime, meal.residentId(), "resident-meal-take-observed",
                 new ResidentMealHotEffectObserved(meal.residentId(), ResidentMeal.Phase.TAKE,
                         lease.revision(), lease.goalBody(), remaining, List.of(held)));
@@ -103,12 +123,12 @@ final class FrontierV3ResidentMealPhysicalEffect {
         var ledger = state.inventory().fungibleResources();
         List<PhysicalStackBinding> bindings = ledger.bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(meal.actorAccountId())).toList();
-        ItemStack actual = worker.getItemBySlot(EquipmentSlot.OFFHAND);
+        ItemStack actual = FrontierV3ActorResourceSlots.get(worker, FrontierV3ResidentMealHandProjection.SLOT);
         boolean before = FrontierV3ResidentMealItems.matches(actual, meal.portion());
         if (bindings.size() != 1 || bindings.getFirst().quantity() != meal.portion().quantity()
                 || !bindings.getFirst().lotQuantities().equals(meal.portion().lotQuantities())
-                || !(bindings.getFirst().address() instanceof PhysicalStackAddress.ActorHand hand)
-                || !hand.actorId().equals(meal.residentId()) || !hand.entityId().equals(worker.getUUID())) return false;
+                || !bindings.getFirst().address().equals(FrontierV3ActorResourceSlots.address(
+                        meal.residentId(), worker, FrontierV3ResidentMealHandProjection.SLOT))) return false;
         ResidentMealPhysicalStep pending = meal.pendingPhysicalStep().orElse(null);
         if (pending == null) {
             if (!before) return false;
@@ -121,7 +141,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
                 || pending.consumptionQuantity() != meal.portion().quantity()
                 || pending.sourceEpoch() != bindings.getFirst().authorityEpoch()) return false;
         if (before) {
-            worker.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+            FrontierV3ActorResourceSlots.set(worker, FrontierV3ResidentMealHandProjection.SLOT, ItemStack.EMPTY);
             level.playSound(null, worker.blockPosition(), SoundEvents.GENERIC_EAT, SoundSource.NEUTRAL, 0.8F, 1.0F);
         } else if (!actual.isEmpty()) return false;
         return accepted(level, runtime, meal.residentId(), "resident-meal-consume-observed",

@@ -33,7 +33,7 @@ public final class ActorItemCustody {
         if (order.portion() instanceof ActorContainerItemOrder.Portion.Exact)
             return inventory.transferActorOrder(order);
         if (order.direction() == ActorContainerItemOrder.Direction.TAKE
-                && order.hand() == ActorContainerItemOrder.Hand.MAIN
+                && order.actorSlot().equals(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN))
                 && !inventory.actorItems(order.actorId()).isEmpty())
             throw new IllegalArgumentException("actor already holds an exact item");
         return inventory.withFungibleResources(inventory.fungibleResources().transferActorOrderCold(order));
@@ -64,7 +64,7 @@ public final class ActorItemCustody {
             return inventory.transferActorOrder(order);
         }
         if (order.direction() == ActorContainerItemOrder.Direction.TAKE
-                && order.hand() == ActorContainerItemOrder.Hand.MAIN
+                && order.actorSlot().equals(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN))
                 && !inventory.actorItems(order.actorId()).isEmpty())
             throw new IllegalArgumentException("observed actor handoff would overwrite an exact item");
         return inventory.withFungibleResources(inventory.fungibleResources()

@@ -295,13 +295,12 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             submitBound(runtime, "resource-site-harvest-access-cleared", lease.id().value(), exit, binding.orElseThrow());
             return;
         }
-        // The scene owns its safe point: never interrupt a prepared crop or carried wheat.
-        // Once the exact stationary worker is empty-handed, return the same body to the
-        // resident coordinator before beginning another crop or route leg.
+        // The work owner fences unfinished physical effects, not personal cargo.
+        // At a supported actual position the resident may yield without reaching the next goal.
         if (ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(),
                         runtime.canonicalState().orElseThrow().instant().ticks())
-                && ResourceSiteHarvestGoal.current(state, job).legalStations().stream().anyMatch(station ->
-                        FrontierV3SurfaceObservation.at(worker, station))) {
+                && FrontierV3SupportedBodyCapture.observe(level, worker).isPresent()) {
+            FrontierV3GoalNavigation.stop(worker);
             beginImmediateColdRelease(level, runtime, state, lease);
             return;
         }
@@ -670,13 +669,17 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return true;
         }
         if (pending == null) {
-            if (hand.disposition() != FrontierV3ActorHandObservation.Disposition.EMPTY) {
+            Entity existingBody = level.getEntity(lease.members().getFirst().entityId());
+            boolean retainedCargo = existingBody instanceof Mob retained
+                    && FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), retained);
+            if (hand.disposition() != FrontierV3ActorHandObservation.Disposition.EMPTY && !retainedCargo) {
                 conflict(level, runtime, lease, "cold-carried-hand-unwitnessed-item"); return true;
             }
             // The already-accounted COLD wheat belongs to the actor account. A
             // first-visibility field writer is a separate physical owner and may
             // still be initializing while this worker appears by the depot.
             ledger.beginFieldHandProjection(expected); ledger.persist(level);
+            if (retainedCargo) return true; // next turn binds the witnessed stack; never issues another one
             Entity entity = level.getEntity(lease.members().getFirst().entityId());
             if (!(entity instanceof Mob worker) || !FrontierV3SceneExecutor.owned(entity, state, lease, lease.members().getFirst())) {
                 conflict(level, runtime, lease, "cold-carried-hand-body-foreign"); return true;

@@ -138,6 +138,18 @@ class ResourceSiteHarvestProcessTest {
         return new ColdHarvest(state, site, (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow());
     }
     static HotHarvest hotHarvestAfterColdSteps(int coldSteps) { return hotHarvestAfterColdSteps(125L, coldSteps); }
+    static ColdHarvest coldHarvestWithCargo(long seed) {
+        ColdHarvest start = coldHarvestAfterSteps(seed, 0);
+        FrontierWorldState state = start.state();
+        ScheduledAction due = ResourceSiteHarvestProcess.coldProgress(start.job(), 22_301L);
+        for (int turn = 0; turn < 256 && !state.inventory().fungibleResources().accounts()
+                .containsKey(start.job().actorAccountId()); turn++) {
+            Step step = stepCold(state, start.site(), due); state = step.state(); due = step.next();
+        }
+        assertTrue(state.inventory().fungibleResources().accounts().containsKey(start.job().actorAccountId()),
+                "fixture must stop on an actual harvested cargo receipt, not an estimated number of travel steps");
+        return new ColdHarvest(state, start.site(), (ResourceSiteHarvestJob) state.resourceSites().site(start.site()).activeWork().orElseThrow());
+    }
     static HotHarvest hotHarvestAfterColdSteps(long seed, int coldSteps) {
         ColdHarvest cold = coldHarvestAfterSteps(seed, coldSteps);
         SceneLease lease = newHarvestLease(cold.state(), cold.site(), cold.job(), "hot-goal-" + seed + "-" + coldSteps);

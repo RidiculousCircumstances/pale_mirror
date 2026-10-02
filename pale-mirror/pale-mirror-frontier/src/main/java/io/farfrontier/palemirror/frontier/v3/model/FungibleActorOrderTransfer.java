@@ -23,9 +23,8 @@ final class FungibleActorOrderTransfer {
         if (!source.custody().equals(portion.sourceCustody())
                 || existing != null && !existing.custody().equals(portion.destinationCustody()))
             throw new IllegalArgumentException("actor item order has stale source or destination custody");
-        if (order.direction() == ActorContainerItemOrder.Direction.TAKE
-                && ledger.accounts().values().stream().anyMatch(account -> account.custody().equals(portion.destinationCustody())))
-            throw new IllegalArgumentException("actor already has a live resource account");
+        if (order.direction() == ActorContainerItemOrder.Direction.TAKE && existing == null)
+            ActorCarriedResources.requireNewAccountCapacity(ledger, order.actorId(), portion.destinationAccountId());
         for (var entry : portion.lotQuantities().entrySet()) {
             ResourceLot lot = ledger.lots().get(entry.getKey());
             if (lot == null || !lot.itemKind().equals(portion.itemKind()))
@@ -89,6 +88,12 @@ final class FungibleActorOrderTransfer {
         if (!exactPort) throw new IllegalArgumentException("observed actor transfer did not use its declared machine port");
     }
 
+    static void validateBindingAddresses(ActorContainerItemOrder order, ResourceCustody custody,
+                                         List<PhysicalStackBinding> bindings) {
+        validateAddresses(order, custody, bindings.stream().map(binding -> new FungiblePhysicalObservation.Stack(
+                binding.address(), binding.itemKind(), binding.quantity())).toList());
+    }
+
     private static void validateAddresses(ActorContainerItemOrder order, ResourceCustody custody,
                                           List<FungiblePhysicalObservation.Stack> stacks) {
         for (FungiblePhysicalObservation.Stack stack : stacks) {
@@ -100,8 +105,13 @@ final class FungibleActorOrderTransfer {
                         && slot.slot().slot() == (station.port() == ActorContainerItemOrder.StationPort.INPUT
                         ? station.spec().inputSlot() : station.spec().outputSlot())
                         : true);
-                case ResourceCustody.Actor actor -> stack.address() instanceof PhysicalStackAddress.ActorHand hand
-                        && hand.actorId().equals(actor.actorId()) && hand.actorId().equals(order.actorId());
+                case ResourceCustody.Actor actor -> actor.actorId().equals(order.actorId())
+                        && switch (order.actorSlot()) {
+                            case ActorItemSlot.Hand declared -> stack.address() instanceof PhysicalStackAddress.ActorHand hand
+                                    && hand.actorId().equals(actor.actorId()) && hand.hand() == declared.hand();
+                            case ActorItemSlot.Pocket pocket -> stack.address() instanceof PhysicalStackAddress.ActorPocket address
+                                    && address.actorId().equals(actor.actorId()) && address.slot() == pocket.index();
+                        };
                 default -> false;
             };
             if (!correct) throw new IllegalArgumentException("observed actor handoff has a foreign physical address");

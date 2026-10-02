@@ -357,8 +357,8 @@ class ResidentMealProcessTest {
         assertEquals(handoff, lease.handoffBody());
         state = AmbientLeaseStateProcess.prepare(state, lease);
         state = AmbientLeaseStateProcess.transition(state, resident, AmbientLeaseStatus.HOT);
-        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(resident,
-                SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident)),
+        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorPocket(resident,
+                SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident), 0),
                 meal.portion().itemKind(), meal.portion().quantity());
         state = ResidentMealProcess.reduceHotHandMaterialized(state, resident,
                 new ResidentMealHotHandMaterialized(resident, lease.revision(), hand));
@@ -489,8 +489,8 @@ class ResidentMealProcessTest {
                         new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, 0, 64, 1L, 1L, 1L)));
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         var remaining = new FungiblePhysicalObservation.Stack(source.address(), "minecraft:bread", 63);
-        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(resident,
-                SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident)), "minecraft:bread", 1);
+        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorPocket(resident,
+                SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident), 0), "minecraft:bread", 1);
         state = ResidentActivityProcess.reduceMealEffectObserved(state, resident, new ResidentMealHotEffectObserved(
                 resident, ResidentMeal.Phase.TAKE, 1L, service.standingBody(), List.of(remaining), List.of(hand)), 48_001L);
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"));

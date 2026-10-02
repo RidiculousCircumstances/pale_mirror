@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ProductionProcess;
@@ -27,10 +28,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteColdHarvestReceiptTest {
     @Test
-    void emptyHandFarmerYieldsAndResumesSameFieldJobAfterColdMeal() {
+    void loadedFarmerYieldsAndResumesSameFieldJobAfterColdMealWithoutLosingCargo() {
         SubjectId site = new SubjectId("site:1-wheat-field");
         SubjectId owner = new SubjectId("settlement:1");
-        FrontierWorldState state = matureField();
+        var harvest = ResourceSiteHarvestProcessTest.coldHarvestWithCargo(125L);
+        FrontierWorldState state = harvest.state();
+        ResourceSiteHarvestJob job = harvest.job();
+        CustodyAccount carried = state.inventory().fungibleResources().accounts().get(job.actorAccountId());
+        assertTrue(carried != null && !carried.lotQuantities().isEmpty());
         SubjectId depot = FrontierWorldState.depotId(owner);
         SubjectId accountId = ReferenceContainerCustody.scopeId(depot);
         SubjectId breadId = new SubjectId("lot:field-yield-meal-bread");
@@ -44,22 +49,7 @@ class ResourceSiteColdHarvestReceiptTest {
         accounts.put(accountId, new CustodyAccount(accountId, account.custody(), quantities, account.claimQuantities()));
         state = state.withInventory(state.inventory().withFungibleResources(new FungibleResourceLedger(
                 lots, prior.claims(), accounts, prior.bindings())));
-        List<ProposedEvent> opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
-                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 5_000L));
-        state = StrategicObjectiveProcess.reduceObjective(state, owner,
-                (StrategicObjectiveSelected) opportunity.getFirst().payload());
-        state = StrategicObjectiveProcess.reduceTask(state, owner,
-                (StrategicTaskPlanned) opportunity.get(1).payload());
-        StrategicTask task = state.strategicPlans().tasks().values().stream()
-                .filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
-        List<ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state,
-                ResourceSiteHarvestProcess.start(task, 5_100L));
-        state = StrategicObjectiveProcess.reduceTaskTransition(state, owner,
-                (StrategicTaskTransition) planned.getFirst().payload());
-        ResourceSiteHarvestJob job = ((ResourceSiteHarvestStarted) planned.get(1).payload()).job();
-        state = ResourceSiteHarvestProcess.reduceStarted(state, site, (ResourceSiteHarvestStarted) planned.get(1).payload());
-        state = prepareThroughRuntime(state, site, (PhysicalIntentPrepared) planned.get(2).payload());
-        ScheduledAction continuation = ((ScheduleEffect.Created) planned.get(3).payload()).action();
+        ScheduledAction continuation = ResourceSiteHarvestProcess.coldProgress(job, 24_001L);
         state = state.withChanges(FrontierWorldStateUpdate.begin()
                 .humanPopulation(state.humanPopulation().accrueHunger(job.workerId(), 24_000L)));
         assertEquals(ResidentWorkYield.Status.READY, ResidentWorkYield.assess(state,
@@ -82,12 +72,15 @@ class ResourceSiteColdHarvestReceiptTest {
             ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, job.workerId(), mealTick)
                     .orElseThrow();
             state = ResidentMealProcess.reduceColdStep(state, job.workerId(), step);
+            state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+            assertEquals(carried, state.inventory().fungibleResources().accounts().get(job.actorAccountId()));
             mealTick++;
         }
         assertFalse(state.humanPopulation().meals().containsKey(job.workerId()));
         assertEquals(job, state.resourceSites().site(site).activeWork().orElseThrow());
-        assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(state, continuation),
-                "confirmed eating transfers the exact body to post-service movement before work resumes");
+        if (state.actorMovements().containsKey(job.workerId()))
+            assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(state, continuation),
+                    "an actual clearance movement retains authority; eating itself does not require one");
         for (int turn = 0; turn < 32 && state.actorMovements().containsKey(job.workerId()); turn++) {
             var movement = state.actorMovements().get(job.workerId());
             long due = movement.coldTravel()
@@ -595,6 +588,8 @@ class ResourceSiteColdHarvestReceiptTest {
             if (current.progress().complete() && !ResourceSiteHarvestGoal.actorAtDepot(state, current)
                     && ResourceSiteHarvestKnownNavigation.path(state, current).size() == 2) break;
             List<ProposedEvent> planned = ResourceSiteHarvestProcess.planColdProgress(state, action);
+            assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(state, action),
+                    "isolated harvest fixture must not wait for an activity process it never executes");
             assertFalse(planned.isEmpty(), "COLD harvest must retain a bounded action before its final return edge");
             for (ProposedEvent event : planned) {
                 switch (event.payload()) {
@@ -625,6 +620,9 @@ class ResourceSiteColdHarvestReceiptTest {
     private static FrontierWorldState matureField() {
         SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:cold-harvest-receipt"), 125L));
+        state = state.withHumanPopulation(state.humanPopulation().withSchedule(new SubjectId("settlement:1"),
+                new SettlementDailySchedule(24_000, List.of(new SettlementDailySchedule.Segment(
+                        0, 24_000, SettlementDailySchedule.Window.WORK)))));
         List<ProposedEvent> preparation = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(site, 4_000L));
         state = ResourceSiteProcess.reducePreparationStarted(state, site, (ResourceSitePreparationStarted) preparation.getFirst().payload());
         state = ResourceSiteProcess.reducePrepared(state, site, (ResourceSitePrepared) preparation.get(1).payload());

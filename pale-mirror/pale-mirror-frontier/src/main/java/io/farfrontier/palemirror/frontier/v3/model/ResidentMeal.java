@@ -17,6 +17,7 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
                            Optional<ResidentMealPhysicalStep> pendingPhysicalStep,
                            Optional<TimedKnownRoute> coldTravel) {
     public static final String BREAD_KIND = "minecraft:bread";
+    public static final ActorItemSlot.Pocket CARRIED_PORTION_SLOT = new ActorItemSlot.Pocket(0);
     /** CLEAR_ACCESS carries the retained portion outside the shared service passage before eating. */
     public enum Phase { MOVE, TAKE, CONSUME, RETURN, CLEAR_ACCESS }
 

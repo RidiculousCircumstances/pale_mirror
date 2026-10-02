@@ -16,10 +16,16 @@ import java.util.Optional;
  */
 public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Direction direction,
                                       Portion portion, ContainerEndpoint containerEndpoint,
-                                      SurfaceAnchor station, Hand hand, long goalOrdinal, long goalRevision) {
+                                      SurfaceAnchor station, ActorItemSlot actorSlot, long goalOrdinal, long goalRevision) {
     public enum Direction { TAKE, PLACE }
     public enum Hand { MAIN, OFF }
     public enum StationPort { INPUT, OUTPUT }
+
+    public ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Direction direction,
+                                   Portion portion, ContainerEndpoint endpoint, SurfaceAnchor station,
+                                   Hand hand, long ordinal, long revision) {
+        this(ownerId, actorId, direction, portion, endpoint, station, new ActorItemSlot.Hand(hand), ordinal, revision);
+    }
 
     /** An exact stack keeps its slot; a fungible lot keeps only its account's container. */
     public sealed interface ContainerEndpoint permits ContainerEndpoint.ExactSlot, ContainerEndpoint.FungibleContainer,
@@ -98,7 +104,7 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
         Objects.requireNonNull(portion, "item order portion");
         Objects.requireNonNull(containerEndpoint, "item order container endpoint");
         Objects.requireNonNull(station, "item order station");
-        Objects.requireNonNull(hand, "item order hand");
+        Objects.requireNonNull(actorSlot, "item order actor slot");
         // Identity syntax is not a type registry. The owning process validates that this
         // subject is its actual actor against canonical state before issuing the order.
         if (goalOrdinal < 0 || goalRevision < 1)
@@ -113,6 +119,8 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
                 || direction == Direction.TAKE && stationPort(containerEndpoint) != StationPort.OUTPUT))
             throw new IllegalArgumentException("actor order uses the wrong declared station surface or port");
         if (portion instanceof Portion.Exact exact) {
+            if (!(actorSlot instanceof ActorItemSlot.Hand))
+                throw new IllegalArgumentException("exact equipment requires a declared hand");
             if (!(containerEndpoint instanceof ContainerEndpoint.ExactSlot)
                     && !(containerEndpoint instanceof ContainerEndpoint.ExactStationSlot))
                 throw new IllegalArgumentException("exact item order requires its exact source or destination slot");

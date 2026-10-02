@@ -74,13 +74,13 @@ class ProductionStationSpecTest {
         assertThrows(IllegalArgumentException.class, () -> new ActorContainerItemOrder(load.ownerId(), actor,
                 load.direction(), wheat,
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(machine, ActorContainerItemOrder.StationPort.OUTPUT),
-                machine.workerStation(), load.hand(), load.goalOrdinal(), load.goalRevision()));
+                machine.workerStation(), load.actorSlot(), load.goalOrdinal(), load.goalRevision()));
         ProductionStationSpec foreign = new ProductionStationSpec(machine.id(), new SubjectId("structure:foreign"),
                 machine.containerId(), machine.capability(), machine.workerStation(), machine.socketSurface(),
                 machine.inputSlot(), machine.outputSlot());
         ActorContainerItemOrder forged = new ActorContainerItemOrder(load.ownerId(), actor, load.direction(), wheat,
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(foreign, ActorContainerItemOrder.StationPort.INPUT),
-                machine.workerStation(), load.hand(), load.goalOrdinal(), load.goalRevision());
+                machine.workerStation(), load.actorSlot(), load.goalOrdinal(), load.goalRevision());
         assertThrows(IllegalArgumentException.class, () -> forged.requireCurrentStation(state.inventory()));
     }
 

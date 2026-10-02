@@ -192,14 +192,14 @@ public final class FrontierWorldStateSupport {
                 throw new IllegalArgumentException("actor-held resource must retain one canonical actor");
             }
         }
-        List<PhysicalStackAddress.ActorHand> hands = new java.util.ArrayList<>();
+        List<PhysicalStackAddress.ActorStack> hands = new java.util.ArrayList<>();
         for (PhysicalStackBinding binding : inventory.fungibleResources().bindings().values()) {
-            if (binding.address() instanceof PhysicalStackAddress.ActorHand hand
+            if (binding.address() instanceof PhysicalStackAddress.ActorStack hand
                     && (!actors.contains(hand.actorId())
                     || !hand.entityId().equals(SceneLease.deterministicEntityId(worldId, hand.actorId())))) {
                 throw new IllegalArgumentException("actor-hand resource binding has a foreign actor or body");
             }
-            if (binding.address() instanceof PhysicalStackAddress.ActorHand hand) hands.add(hand);
+            if (binding.address() instanceof PhysicalStackAddress.ActorStack hand) hands.add(hand);
         }
         if (hands.isEmpty()) return;
         Set<SubjectId> physicalOwners = new HashSet<>();
@@ -212,7 +212,7 @@ public final class FrontierWorldStateSupport {
             if (lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.PREPARED)
                 physicalOwners.add(lease.actorId());
         }
-        for (PhysicalStackAddress.ActorHand hand : hands) {
+        for (PhysicalStackAddress.ActorStack hand : hands) {
             if (!physicalOwners.contains(hand.actorId())) {
                 throw new IllegalArgumentException("actor-hand resource binding lacks an admitted physical owner");
             }

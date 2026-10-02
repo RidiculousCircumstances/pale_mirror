@@ -79,7 +79,7 @@ class FungibleResourceLedgerTest {
         assertEquals(64, delivered.totalQuantity(OWNER, "minecraft:bread"));
         assertThrows(IllegalArgumentException.class, () -> reserved.transferActorOrderCold(new ActorContainerItemOrder(
                 new SubjectId("job:foreign"), worker, ActorContainerItemOrder.Direction.TAKE, take.portion(), take.containerEndpoint(),
-                take.station(), take.hand(), take.goalOrdinal(), take.goalRevision())));
+                take.station(), take.actorSlot(), take.goalOrdinal(), take.goalRevision())));
         assertThrows(IllegalArgumentException.class, () -> delivered.transferActorOrderCold(place),
                 "a completed delivery cannot spend the actor-held output again");
     }
@@ -110,7 +110,7 @@ class FungibleResourceLedgerTest {
                         actorAccount, new ResourceCustody.Actor(worker), Optional.of(claimId), "minecraft:wheat",
                         Map.of(wheatId, 64)), new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(DEPOT),
                 SurfaceAnchor.at(1, 64, 1), ActorContainerItemOrder.Hand.MAIN, 0, 1);
-        PhysicalStackAddress.ActorHand hand = new PhysicalStackAddress.ActorHand(worker, uuid(6));
+        PhysicalStackAddress.ActorHand hand = new PhysicalStackAddress.ActorHand(worker, uuid(6), ActorContainerItemOrder.Hand.MAIN);
         PhysicalStackBinding handWheat = new PhysicalStackBinding(new SubjectId("binding:hot-baker-wheat"), actorAccount,
                 hand, 3, "minecraft:wheat", Map.of(wheatId, 64), Map.of(claimId, 64));
         assertThrows(IllegalArgumentException.class, () -> hot.transferActorOrderObserved(take, 8, 3, List.of(), List.of(handWheat)));
@@ -188,10 +188,11 @@ class FungibleResourceLedgerTest {
                 new ResourceLot(first.id(), OWNER, first.itemKind(), 2, "field:forged-source", List.of()), account, farmer));
         assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorHarvestPart(second, account,
                 new SubjectId("resident:other-farmer")));
-        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorHarvestPart(
+        var independent = one.accrueColdActorHarvestPart(
                 new ResourceLot(new SubjectId("lot:another-field-part"), OWNER, "minecraft:wheat", 1,
-                        "field:one:epoch-1:part-1", List.of()), new SubjectId("custody:second-harvest"), farmer),
-                "one farmer cannot open a second live cargo part before the first is handed off");
+                        "field:one:epoch-1:part-1", List.of()), new SubjectId("custody:second-harvest"), farmer);
+        assertEquals(2, ActorCarriedResources.accounts(independent, farmer).size(),
+                "custody is personal; exclusivity of a field job belongs to its work owner, not the whole inventory");
     }
 
     @Test

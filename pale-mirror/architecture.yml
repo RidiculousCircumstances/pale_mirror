@@ -388,7 +388,7 @@ critical_flows:
   - id: "frontier-v3-fungible-resource-flow"
     lifecycle: "active-development"
     path: "exact resource lot and claim allocation -> custody account -> declared BULK stock or FIXED_PORTS station image -> temporary HOT slot/entity binding; bulk move/split/merge conserves kind totals and rebinds without changing custody, while station ports and exact items retain positional meaning -> declared actor/container/station order -> fenced physical pre/post observation -> typed zero-sum quantity/claim/custody transaction -> allocation completion, interruption or local ambiguity; arbitrary player/automation custody changes require an interaction witness and cannot derive provenance from a later plain-chest snapshot"
-    owner: "pure Frontier v3 resource-lot/allocation/custody ledger plus NeoForge physical inventory bindings; docs/frontier-v3-seamless-foundation.md F0.3"
+    owner: "pure Frontier v3 resource-lot/allocation/custody ledger and ActorCarriedResources; registered work owners declare ActorItemSlot presentation, NeoForge storage/bindings preserve cargo independently of meal activity; docs/frontier-v3-seamless-foundation.md F0.3"
     verification: "critical-code, conservation/property tests and native player inventory scenario"
   - id: "frontier-v3-operation-front-execution"
     lifecycle: "active-development"

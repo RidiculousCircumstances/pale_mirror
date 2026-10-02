@@ -74,7 +74,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(container),
                 take.station(), ActorContainerItemOrder.Hand.MAIN, 2, 1);
         var hand = List.of(new MaterialSourceSelection.Slice(new PhysicalStackAddress.ActorHand(actorId,
-                actor.getUUID()), 20, 12, 1L));
+                actor.getUUID(), ActorContainerItemOrder.Hand.MAIN), 20, 12, 1L));
         var delivery = new FrontierV3ActorItemTransfer.FungibleStep(place, chest, actor, actor.getUUID(), hand, 6);
         helper.assertTrue(delivery.before() && delivery.apply() && delivery.after()
                         && chest.getItem(6).is(Items.WHEAT) && chest.getItem(6).getCount() == 12

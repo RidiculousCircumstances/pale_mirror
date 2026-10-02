@@ -41,7 +41,9 @@ class ActorHandCustodyTest {
                 "replay/reducer must reject the same dangling physical hand");
     }
 
-    @Test void worldAcceptsOnlyItsNamedActorsDeterministicHandBody() {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void worldAcceptsOnlyItsNamedActorsDeterministicHandBody(boolean pocket) {
         ResourceSiteHarvestProcessTest.HotHarvest hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         FrontierWorldState world = hot.state();
         SubjectId actor = hot.job().workerId();
@@ -53,7 +55,8 @@ class ActorHandCustodyTest {
         FungibleResourceLedger stock = world.inventory().fungibleResources().issue(lot, account);
         UUID correctBody = SceneLease.deterministicEntityId(world.bootstrap().worldId(), actor);
         PhysicalStackBinding correct = new PhysicalStackBinding(new SubjectId("binding:actor-hand-test"), accountId,
-                new PhysicalStackAddress.ActorHand(actor, correctBody), 1L, "minecraft:wheat", Map.of(lotId, 1), Map.of());
+                pocket ? new PhysicalStackAddress.ActorPocket(actor, correctBody, 3)
+                        : new PhysicalStackAddress.ActorHand(actor, correctBody), 1L, "minecraft:wheat", Map.of(lotId, 1), Map.of());
         FrontierWorldState accepted = world.withInventory(world.inventory().withFungibleResources(
                 stock.rebind(accountId, 1L, List.of(correct))));
         assertEquals(correct, accepted.inventory().fungibleResources().bindings().get(correct.id()));

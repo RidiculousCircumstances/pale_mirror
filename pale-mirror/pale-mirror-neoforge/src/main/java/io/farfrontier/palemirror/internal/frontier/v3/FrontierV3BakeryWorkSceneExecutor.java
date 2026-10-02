@@ -43,19 +43,20 @@ final class FrontierV3BakeryWorkSceneExecutor {
                     new BakeryHotAccessCleared(job.id(), lease.id(), FrontierV3SurfaceObservation.observedBody(worker)));
             return;
         }
+        if (ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(),
+                        runtime.canonicalState().orElseThrow().instant().ticks())
+                && FrontierV3SupportedBodyCapture.observe(level, worker).isPresent()) {
+            FrontierV3GoalNavigation.stop(worker);
+            FrontierV3CommandSubmission.submit(runtime, "bakery-resident-yield", lease.id().value(),
+                    new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+            return;
+        }
         if ((goal.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || goal.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
                 && !ServiceAccessCoordinator.depotAvailableForWork(state,
                         FrontierWorldState.depotId(job.settlementId()), job.id(), job.workerId())) {
             FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "depot-service-unavailable");
             FrontierV3GoalNavigation.stop(worker);
-            return;
-        }
-        if (ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(),
-                        runtime.canonicalState().orElseThrow().instant().ticks())
-                && FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
-            FrontierV3CommandSubmission.submit(runtime, "bakery-resident-yield", lease.id().value(),
-                    new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             return;
         }
         if (FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {

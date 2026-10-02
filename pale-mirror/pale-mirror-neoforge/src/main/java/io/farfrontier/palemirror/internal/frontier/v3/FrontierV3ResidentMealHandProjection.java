@@ -8,30 +8,31 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.Map;
 
-/** The resident's self-care offhand is projected only from one unbound COLD edible-portion account. */
+/** Self-care portion uses an inventory slot independent of carried work resources and equipment. */
 final class FrontierV3ResidentMealHandProjection {
     private FrontierV3ResidentMealHandProjection() { }
+    static final ActorItemSlot SLOT = ResidentMeal.CARRIED_PORTION_SLOT;
 
     static boolean prepareAmbientNew(FrontierWorldState state, SubjectId actorId, Mob body) {
         ResidentMeal meal = state.humanPopulation().meals().get(actorId);
         if (meal == null) return true;
         if (meal.pendingPhysicalStep().isPresent()) return false;
-        if (!meal.carriesFood()) return body.getItemBySlot(EquipmentSlot.OFFHAND).isEmpty();
+        if (!meal.carriesFood()) return FrontierV3ActorResourceSlots.get(body, SLOT).isEmpty();
         CustodyAccount account = state.inventory().fungibleResources().accounts().get(meal.actorAccountId());
         if (account == null || !account.custody().equals(new ResourceCustody.Actor(actorId))
                 || !account.lotQuantities().equals(meal.portion().lotQuantities())
                 || !account.claimQuantities().equals(Map.of(meal.claimId(), meal.portion().quantity()))
                 || state.inventory().fungibleResources().bindings().values().stream()
                     .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId()))
-                || !body.getItemBySlot(EquipmentSlot.OFFHAND).isEmpty()) return false;
-        body.setItemSlot(EquipmentSlot.OFFHAND, FrontierV3ResidentMealItems.stack(meal.portion()));
+                || !FrontierV3ActorResourceSlots.get(body, SLOT).isEmpty()) return false;
+        FrontierV3ActorResourceSlots.set(body, SLOT, FrontierV3ResidentMealItems.stack(meal.portion()));
         return true;
     }
 
     static boolean matchesAmbient(FrontierWorldState state, SubjectId actorId, Mob body) {
         ResidentMeal meal = state.humanPopulation().meals().get(actorId);
         if (meal == null) return true;
-        ItemStack held = body.getItemBySlot(EquipmentSlot.OFFHAND);
+        ItemStack held = FrontierV3ActorResourceSlots.get(body, SLOT);
         boolean food = FrontierV3ResidentMealItems.matches(held, meal.portion());
         if (meal.pendingPhysicalStep().isPresent())
             return meal.phase() == ResidentMeal.Phase.TAKE || meal.phase() == ResidentMeal.Phase.CONSUME

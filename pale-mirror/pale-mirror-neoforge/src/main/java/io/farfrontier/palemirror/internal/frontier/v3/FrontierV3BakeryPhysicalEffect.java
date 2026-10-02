@@ -168,7 +168,7 @@ final class FrontierV3BakeryPhysicalEffect {
             return true;
         }
         var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
-                lease.members().getFirst().entityId()), kind, job.outputCount());
+                lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN), kind, job.outputCount());
         var observed = new BakeryHotHandMaterialized(job.id(), lease.id(), work.actorAccountId(),
                 Math.max(1L, lease.revision()), stack);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_cold_hand_materialized", lease,
@@ -381,7 +381,8 @@ final class FrontierV3BakeryPhysicalEffect {
                     destination = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
                             new InventoryCustody.ContainerSlot(containerId, destinationSlot)), "minecraft:bread", job.outputCount()));
                 else destination = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
-                        job.workerId(), lease.members().getFirst().entityId()), kind, job.outputCount()));
+                        job.workerId(), lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN),
+                        kind, job.outputCount()));
             }
             return new BakeryHotEffectObserved(job.id(), lease.id(), phase(),
                     BakeryWorkGoal.current(state, job).station().standingBody(), sourceEpoch, destinationEpoch,

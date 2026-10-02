@@ -26,8 +26,20 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         return new ActivityExecutionCheckpoint(state, assignment,
                 job.progress().hasPendingCrop() || state.resourceSites().hasPendingWorldChange(job.siteId())
                         ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT
-                        : state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())
-                            ? ResidentWorkYield.Status.CARRYING_RESOURCE : ResidentWorkYield.Status.READY);
+                        : ResidentWorkYield.Status.READY);
+    }
+
+    static Optional<ActorCarriedResources.Presentation> carriedResources(FrontierWorldState state, HumanAssignment assignment) {
+        executionCheckpoint(state, assignment); // owner validates the exact worker/job relation
+        ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
+                .map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
+                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
+        if (!state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())) return Optional.empty();
+        var carried = new ActorCarriedResources.Presentation(job.workerId(), job.actorAccountId(),
+                new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.OFF));
+        carried.requireAccount(state.inventory().fungibleResources());
+        return Optional.of(carried);
     }
 
     /**
