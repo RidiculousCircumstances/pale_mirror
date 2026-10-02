@@ -13,7 +13,14 @@ class HarvestInspectionDescriptorUpgradeTest {
         var codec = new FrontierWorldStateCodec();
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:descriptor-upgrade"), 125L));
         byte[] current = codec.encode(state);
-        assertEquals(ServiceTurnoverDescriptorUpgrade.AFTER, FrontierDurationProcessDriverRegistry.inventoryFingerprint());
+        assertEquals(HarvestCellExclusionDescriptorUpgrade.AFTER, FrontierDurationProcessDriverRegistry.inventoryFingerprint());
+        byte[] exclusionBefore = current.clone();
+        replaceFingerprint(exclusionBefore, HarvestCellExclusionDescriptorUpgrade.BEFORE);
+        assertEquals(FrontierWorldSnapshotHeader.read(current), FrontierWorldSnapshotHeader.read(exclusionBefore));
+        assertEquals(state, codec.decode(exclusionBefore));
+        assertArrayEquals(current, codec.encode(codec.decode(exclusionBefore)));
+        assertFalse(HarvestCellExclusionDescriptorUpgrade.accepts("future-registry", HarvestCellExclusionDescriptorUpgrade.BEFORE));
+        assertFalse(HarvestCellExclusionDescriptorUpgrade.accepts(HarvestCellExclusionDescriptorUpgrade.BEFORE, HarvestCellExclusionDescriptorUpgrade.AFTER));
         byte[] serviceBefore = current.clone();
         replaceFingerprint(serviceBefore, ServiceTurnoverDescriptorUpgrade.BEFORE);
         assertEquals(FrontierWorldSnapshotHeader.read(current), FrontierWorldSnapshotHeader.read(serviceBefore));
