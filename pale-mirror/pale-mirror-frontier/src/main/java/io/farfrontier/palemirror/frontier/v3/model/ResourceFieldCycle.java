@@ -256,6 +256,18 @@ public final class ResourceFieldCycle {
                     ? distance + (Long.MAX_VALUE >>> 3) : distance;
         });
     }
+    /** Shared area ranking, with field eligibility kept in its domain owner. */
+    public java.util.OptionalInt spatialWorkSlot(SurfaceAnchor from, java.util.function.IntPredicate available,
+                                                List<SurfaceAnchor> peers, AreaWorkSelection.SpatialPolicy policy) {
+        var preferred = AreaWorkSelection.spatiallySeparated(layout.cells().size(), index -> {
+            var id = layout.cells().get(index).id();
+            var condition = cell(id);
+            return !condition.accounted() && available.test(index) && !pendingPlayerBreaks.containsKey(id)
+                    && !condition.workAccessBlocked() && condition.crop() != Crop.OBSTRUCTED
+                    && condition.crop() != Crop.GROWING;
+        }, from, index -> layout.cells().get(index).workstation(), peers, policy);
+        return preferred.isPresent() ? preferred : nextWorkSlot(from, available);
+    }
     /** Continuation starts after the last CellId slot and does not rescore the whole area by distance. */
     public java.util.OptionalInt nextWorkSlotAfter(int previousIndex) {
         return nextWorkSlotAfter(previousIndex, index -> true);

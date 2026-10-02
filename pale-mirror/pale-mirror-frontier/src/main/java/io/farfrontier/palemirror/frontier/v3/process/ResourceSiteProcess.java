@@ -276,8 +276,8 @@ public final class ResourceSiteProcess {
             // remains available for sowing; it is not completed work or harvested yield.
             int nextSelected = job.progress().selectedCropSlotIndex() == lostSlot
                     ? job.progress().completedCropSlots() + 1 >= job.progress().totalCropSlots() ? -1
-                    : next.nextWorkSlotAfter(lostSlot, index -> index != lostSlot
-                            && state.resourceSites().site(cycle.siteId()).targetAvailable(index, job.id())).orElse(-1)
+                    : lifecycle.selectHarvestTarget(job, next, state.actorLocations().get(job.workerId()).supportingSurface(),
+                            index -> index != lostSlot).orElse(-1)
                     : job.progress().selectedCropSlotIndex();
             lifecycle = lifecycle.accountObservedLostHarvestCell(job, lostSlot, nextSelected, next);
         } else if (preparedHere) {

@@ -88,6 +88,12 @@ class ConcurrentFieldExecutionTest {
         assertEquals(2, admitted.size());
         assertEquals(2, admitted.values().stream().map(ResourceSiteHarvestJob::workerId).distinct().count());
         assertEquals(2, admitted.values().stream().map(ResourceSiteHarvestJob::target).distinct().count());
+        var ordered = admitted.values().stream().sorted(Comparator.comparing(ResourceSiteHarvestJob::id)).toList();
+        var layout = engine.canonicalState().state().resourceSites().cycle(site).layout();
+        var firstTarget = layout.requireCell(ordered.getFirst().target().cellId()).workstation();
+        var secondTarget = layout.requireCell(ordered.getLast().target().cellId()).workstation();
+        assertEquals(layout.cells().stream().mapToLong(cell -> distance(firstTarget, cell.workstation())).max().orElseThrow(),
+                distance(firstTarget, secondTarget), "registered admission spreads starts instead of following the same row");
         assertIndependentTerminalTraces(engine.canonicalState().state(), site, admitted);
 
         for (int turn = 0; turn < 256; turn++) {
@@ -155,5 +161,8 @@ class ConcurrentFieldExecutionTest {
 
     private static void requireActive(EngineStatus status) {
         assertEquals(EngineStatus.Kind.ACTIVE, status.kind(), status.failureDetail().orElse(""));
+    }
+    private static long distance(SurfaceAnchor a, SurfaceAnchor b) {
+        return Math.abs((long) a.x() - b.x()) + Math.abs((long) a.y() - b.y()) + Math.abs((long) a.z() - b.z());
     }
 }

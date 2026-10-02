@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import java.util.Objects;
 import java.util.OptionalInt;
+import java.util.List;
+import java.util.function.IntFunction;
 import java.util.function.IntPredicate;
 import java.util.function.IntToLongFunction;
 
@@ -15,6 +17,41 @@ import java.util.function.IntToLongFunction;
  */
 public final class AreaWorkSelection {
     private AreaWorkSelection() { }
+
+    public enum SpatialPolicy { SPREAD_STARTS, LOCAL_CONTINUATION }
+
+    /** Soft spatial ownership: prefer targets nearer this worker than any peer's work target.
+     * No target is excluded by proximity; once the local region is exhausted, share the rest.
+     * This is target ranking only, not a path, reservation or persisted territory.
+     */
+    public static OptionalInt spatiallySeparated(int targetCount, IntPredicate pending,
+            SurfaceAnchor origin, IntFunction<SurfaceAnchor> targets, List<SurfaceAnchor> peers, SpatialPolicy policy) {
+        Objects.requireNonNull(origin); Objects.requireNonNull(targets); Objects.requireNonNull(peers);
+        Objects.requireNonNull(pending); Objects.requireNonNull(policy);
+        if (targetCount < 0) throw new IllegalArgumentException("area work target count is outside its bound");
+        IntToLongFunction distance = index -> distance(origin, targets.apply(index));
+        if (policy == SpatialPolicy.SPREAD_STARTS && !peers.isEmpty()) {
+            int choice = -1; long separation = -1; long travel = Long.MAX_VALUE;
+            for (int index = 0; index < targetCount; index++) {
+                if (!pending.test(index)) continue;
+                SurfaceAnchor target = targets.apply(index);
+                long spacing = peers.stream().mapToLong(peer -> distance(peer, target)).min().orElseThrow();
+                long approach = distance.applyAsLong(index);
+                if (spacing > separation || spacing == separation && approach < travel) {
+                    choice = index; separation = spacing; travel = approach;
+                }
+            }
+            return choice < 0 ? OptionalInt.empty() : OptionalInt.of(choice);
+        }
+        OptionalInt local = choose(targetCount, index -> pending.test(index)
+                && peers.stream().allMatch(peer -> distance(peer, targets.apply(index)) > distance.applyAsLong(index)), distance);
+        return local.isPresent() ? local : choose(targetCount, pending, distance);
+    }
+
+    private static long distance(SurfaceAnchor from, SurfaceAnchor to) {
+        return Math.abs((long) from.x() - to.x()) + Math.abs((long) from.y() - to.y())
+                + Math.abs((long) from.z() - to.z());
+    }
 
     public static OptionalInt choose(int targetCount, IntPredicate pending,
                                      IntToLongFunction priority) {

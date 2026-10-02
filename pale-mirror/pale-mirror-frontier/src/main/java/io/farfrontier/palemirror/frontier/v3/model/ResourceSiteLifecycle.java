@@ -154,8 +154,24 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
     public int nextHarvestTarget(ResourceSiteHarvestJob job, ResourceFieldCycle successor) {
         require(job);
         if (job.progress().completedCropSlots() + 1 >= job.progress().totalCropSlots()) return -1;
-        return successor.nextWorkSlotAfter(job.progress().nextCropSlotIndex(),
-                index -> targetAvailable(index, job.id())).orElse(-1);
+        return selectHarvestTarget(job, successor,
+                successor.layout().cells().get(job.progress().nextCropSlotIndex()).workstation(), index -> true).orElse(-1);
+    }
+    /** Admission and continuation share soft separation; exact job claims still own exclusion. */
+    public java.util.OptionalInt selectHarvestTarget(ResourceSiteHarvestJob job, ResourceFieldCycle cycle,
+            SurfaceAnchor origin, java.util.function.IntPredicate eligible) {
+        return selectHarvestTarget(job, cycle, origin, eligible, AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION);
+    }
+    public java.util.OptionalInt selectHarvestStart(ResourceSiteHarvestJob job, ResourceFieldCycle cycle,
+            SurfaceAnchor origin, java.util.function.IntPredicate eligible) {
+        return selectHarvestTarget(job, cycle, origin, eligible, AreaWorkSelection.SpatialPolicy.SPREAD_STARTS);
+    }
+    private java.util.OptionalInt selectHarvestTarget(ResourceSiteHarvestJob job, ResourceFieldCycle cycle,
+            SurfaceAnchor origin, java.util.function.IntPredicate eligible, AreaWorkSelection.SpatialPolicy policy) {
+        var peers = harvestJobs.values().stream().filter(peer -> !peer.id().equals(job.id())
+                && !peer.progress().complete() && !peer.returningForBatch())
+                .map(peer -> cycle.layout().cells().get(peer.progress().selectedCropSlotIndex()).workstation()).toList();
+        return cycle.spatialWorkSlot(origin, index -> targetAvailable(index, job.id()) && eligible.test(index), peers, policy);
     }
     public ResourceSiteLifecycle skipSelectedHarvestCell(ResourceSiteHarvestJob job, int next, ResourceFieldCycle cycle) {
         return replace(require(job).withSelectedCellSkipped(next).bindTarget(cycle));
@@ -168,7 +184,7 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
                                                          SurfaceAnchor worker) {
         ResourceSiteHarvestJob delivered = require(job).afterFullBatchDelivery(slot, receipt);
         int next = delivered.progress().completedCropSlots() == delivered.progress().totalCropSlots() ? -1
-                : cycle.nextWorkSlot(worker, index -> targetAvailable(index, job.id())).orElse(-1);
+                : selectHarvestTarget(job, cycle, worker, index -> true).orElse(-1);
         return replace(delivered.withProgress(delivered.progress().afterDeliverySelection(next)).bindTarget(cycle));
     }
     public ResourceSiteLifecycle deliverFullHarvestBatch(ResourceSiteHarvestJob job, InventoryCustody.ContainerSlot slot,
