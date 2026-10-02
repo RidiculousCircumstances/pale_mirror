@@ -319,8 +319,8 @@ final class ResourceSiteHarvestPlanning {
             events.add(stockWake(state, returned, -1, now));
         events.add(transition(task, StrategicTaskStatus.COMPLETED));
         events.add(new ProposedEvent(returned.siteId(), new ScheduleEffect.Cancelled(action.id())));
-        events.add(new ProposedEvent(returned.siteId(), new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(terminal,
-                Math.addExact(now, state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
+        events.addAll(ResourceFieldGrowthProcess.afterWork(state, terminal,
+                state.resourceSites().cycle(returned.siteId()).nextEpoch(), now));
         return List.copyOf(events);
     }
 

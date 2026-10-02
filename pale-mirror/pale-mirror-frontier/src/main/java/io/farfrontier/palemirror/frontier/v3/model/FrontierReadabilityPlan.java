@@ -327,7 +327,8 @@ public final class FrontierReadabilityPlan {
     private static String fieldStateText(FrontierWorldState state, ResourceSite site, ResourceSiteLifecycle lifecycle) {
         return switch (lifecycle.phase()) {
             case UNPREPARED -> "PREPARING SOIL · KEEP CLEAR";
-            case GROWING -> "GROWING · STAGE " + lifecycle.growthStage() + "/" + ResourceSiteLifecycle.MATURE_STAGE;
+            case GROWING -> "GROWING · STAGE " + state.resourceSites().cycle(site.id()).plantGrowthStage()
+                    + "/" + ResourceSiteLifecycle.MATURE_STAGE;
             case READY -> readyFieldText(state, site);
             case HARVESTING -> lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
                     .map(ResourceSiteHarvestJob.class::cast).flatMap(ResourceSiteHarvestJob::navigationBlock)
@@ -343,7 +344,13 @@ public final class FrontierReadabilityPlan {
                         case UNSUPPORTED_CAPABILITY -> "NO PEDESTRIAN NAVIGATOR";
                         case SEARCH_BUDGET_EXHAUSTED -> "LOCAL PATH BUDGET EXCEEDED";
                         case KNOWN_GEOMETRY_UNAVAILABLE -> "AWAITING OBSERVED ROUTE";
-                    }).orElse("HARVEST IN PROGRESS");
+                    }).orElseGet(() -> {
+                        var job = (ResourceSiteHarvestJob) lifecycle.activeWork().orElseThrow();
+                        if (!job.progress().complete()) return "HARVEST IN PROGRESS";
+                        int stage = state.resourceSites().cycle(site.id()).plantGrowthStage();
+                        return (stage == ResourceSiteLifecycle.MATURE_STAGE ? "CROPS READY" : "GROWING · STAGE " + stage + "/" + ResourceSiteLifecycle.MATURE_STAGE)
+                                + "\nHARVEST COLLECTED · DELIVERY PENDING";
+                    });
             case CONFLICT -> conflictFieldText(lifecycle);
             case DESTROYED -> "LOST · REBUILD NEEDED";
         };

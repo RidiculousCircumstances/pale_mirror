@@ -96,6 +96,16 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         int nextStage = Math.addExact(growthStage, 1);
         return next(nextStage == MATURE_STAGE ? ResourceSitePhase.READY : ResourceSitePhase.GROWING, growthEpoch, nextStage, Optional.empty());
     }
+    /** Plant readiness may change without granting or retiring a farmer's work ownership. */
+    public ResourceSiteLifecycle withPlantReadiness(ResourceFieldCycle plants) {
+        if (!siteId.equals(plants.siteId()) || growthEpoch != plants.epoch())
+            throw new IllegalArgumentException("plant readiness has a foreign site or epoch");
+        if (phase != ResourceSitePhase.GROWING && phase != ResourceSitePhase.READY) return this;
+        int stage = plants.plantGrowthStage();
+        if (stage == growthStage) return this;
+        return next(stage == MATURE_STAGE ? ResourceSitePhase.READY : ResourceSitePhase.GROWING,
+                growthEpoch, stage, Optional.empty(), harvestLineage);
+    }
     public ResourceSiteLifecycle harvesting(ResourceSiteHarvestJob job) {
         if (phase != ResourceSitePhase.READY) throw new IllegalStateException("resource site is not ready for harvest");
         Optional<ResourceSiteHarvestLineage> nextLineage = harvestLineage.map(lineage -> lineage.bindSuccessor(job));

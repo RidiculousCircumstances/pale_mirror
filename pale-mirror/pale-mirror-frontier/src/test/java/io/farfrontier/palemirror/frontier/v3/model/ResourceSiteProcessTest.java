@@ -33,23 +33,24 @@ class ResourceSiteProcessTest {
         assertEquals(2, planned.size());
         ResourceSiteGrowthAdvanced advanced = (ResourceSiteGrowthAdvanced) planned.getFirst().payload();
         assertEquals(before.growthEpoch(), advanced.growthEpoch()); assertEquals(before.growthStage(), advanced.growthStage());
-        assertTrue(planned.get(1).payload() instanceof ScheduleEffect.Created);
+        assertTrue(planned.get(1).payload() instanceof ScheduleEffect.Rescheduled);
         FrontierWorldState next = ResourceSiteProcess.reduceGrowth(state, site, advanced);
         assertEquals(1, next.resourceSites().site(site).growthStage());
-        ScheduledAction successor = ((ScheduleEffect.Created) planned.get(1).payload()).action();
+        ScheduledAction successor = ((ScheduleEffect.Rescheduled) planned.get(1).payload()).replacement();
         assertEquals(5_000L + state.bootstrap().ruleset().cadence().resourceGrowthStageInterval(), successor.dueAt().ticks());
         assertEquals(next, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(next)));
     }
 
     @Test
-    void staleOrReadyGrowthActionIsConsumedWithoutInventingAStage() {
+    void plantClockIdentitySurvivesStageChanges() {
         FrontierWorldState state = prepared(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site);
         ScheduledAction due = ResourceSiteProcess.nextGrowth(lifecycle, 1_000L);
         FrontierWorldState advanced = ResourceSiteProcess.reduceGrowth(state, site,
                 new ResourceSiteGrowthAdvanced(site, lifecycle.growthEpoch(), lifecycle.growthStage()));
 
-        assertTrue(ResourceSiteProcess.planGrowth(advanced, due).isEmpty());
+        assertEquals(due.id(), ResourceSiteProcess.nextGrowth(advanced.resourceSites().site(site), 2_000L).id());
+        assertEquals(2, ResourceSiteProcess.planGrowth(advanced, due).size());
     }
 
     @Test
@@ -75,7 +76,7 @@ class ResourceSiteProcessTest {
     }
 
     @Test
-    void matureStageBecomesReadyAndSchedulesOneStrategicHarvestOpportunityInsteadOfAnEighthGrowth() {
+    void matureStageSchedulesOneHarvestOpportunityAndKeepsThePlantClockWithoutAnEighthStage() {
         FrontierWorldState state = prepared(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE - 1; stage++) {
             ResourceSiteLifecycle current = state.resourceSites().site(site);
@@ -85,13 +86,17 @@ class ResourceSiteProcessTest {
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteProcess.planGrowth(state,
                 ResourceSiteProcess.nextGrowth(finalGrowing, 10_000L));
 
-        assertEquals(2, planned.size());
+        assertEquals(3, planned.size());
         FrontierWorldState ready = ResourceSiteProcess.reduceGrowth(state, site, (ResourceSiteGrowthAdvanced) planned.getFirst().payload());
         assertEquals(ResourceSitePhase.READY, ready.resourceSites().site(site).phase());
         ScheduledAction harvest = ((ScheduleEffect.Created) planned.get(1).payload()).action();
         assertEquals("frontier.objective.resource_harvest", harvest.kind());
         assertEquals(site, harvest.subject());
         assertEquals(10_001L, harvest.dueAt().ticks());
+        var clock = ((ScheduleEffect.Rescheduled) planned.get(2).payload()).replacement();
+        assertEquals("frontier.resource_site.growth", clock.kind());
+        var idleTurn = ResourceSiteProcess.planGrowth(ready, clock);
+        assertEquals(1, idleTurn.size(), "mature plants keep only their clock, not another harvest opportunity");
     }
 
     private static FrontierWorldState prepared(FrontierWorldState state) {

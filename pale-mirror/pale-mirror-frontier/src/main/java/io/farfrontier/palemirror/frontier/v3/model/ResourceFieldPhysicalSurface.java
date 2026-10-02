@@ -22,6 +22,14 @@ public final class ResourceFieldPhysicalSurface {
         public static Condition of(ResourceFieldCycle.CellState cell) {
             return new Condition(cell.soil(), cell.crop(), cell.growthStage());
         }
+        /** Same accepted plant, possibly older; not permission to accept soil/crop loss or replanting. */
+        public boolean equalsOrGrowsFrom(Condition predecessor) {
+            Objects.requireNonNull(predecessor, "plant predecessor");
+            return equals(predecessor) || soil == predecessor.soil
+                    && predecessor.crop == ResourceFieldCycle.Crop.GROWING
+                    && (crop == ResourceFieldCycle.Crop.GROWING || crop == ResourceFieldCycle.Crop.MATURE)
+                    && growthStage > predecessor.growthStage;
+        }
     }
 
     private final ResourceFieldLayout layout;

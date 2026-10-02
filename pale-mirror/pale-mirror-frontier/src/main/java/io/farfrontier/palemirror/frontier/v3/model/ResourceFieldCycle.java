@@ -376,26 +376,42 @@ public final class ResourceFieldCycle {
 
     public ResourceFieldCycle advanceGrowth(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
-        if (prior.soil() != Soil.FARMLAND || prior.crop() != Crop.GROWING || prior.accounted())
+        if (prior.soil() != Soil.FARMLAND || prior.crop() != Crop.GROWING || pendingPlayerBreaks.containsKey(id))
             throw new IllegalArgumentException("field cell cannot grow from its current condition");
         int next = Math.addExact(prior.growthStage(), 1);
         return replace(id, new CellState(prior.soil(), next == ResourceSiteLifecycle.MATURE_STAGE ? Crop.MATURE : Crop.GROWING,
-                next, false, false));
+                next, prior.accounted(), prior.yielded(), prior.workAccessBlocked()));
     }
 
     /** The existing stage clock advances only live planted cells. */
     public ResourceFieldCycle advanceGrowthStage() {
+        return advanceGrowthStage(Set.of());
+    }
+
+    /** Plant biology ignores work accounting; only unresolved effects fence their exact cells. */
+    public ResourceFieldCycle advanceGrowthStage(Set<ResourceFieldLayout.CellId> protectedCells) {
+        Objects.requireNonNull(protectedCells, "growth protected cells");
+        boolean changed = false;
         var groups = new LinkedHashMap<ResourceFieldLayout.ChunkColumn, Map<ResourceFieldLayout.CellId, CellState>>();
         for (ResourceFieldLayout.Cell cell : layout.cells()) {
             CellState current = cell(cell.id());
-            if (current.crop() == Crop.GROWING && !current.accounted() && !pendingPlayerBreaks.containsKey(cell.id())) {
+            if (current.crop() == Crop.GROWING && !pendingPlayerBreaks.containsKey(cell.id())
+                    && !protectedCells.contains(cell.id())) {
+                changed = true;
                 int next = Math.addExact(current.growthStage(), 1);
                 current = new CellState(current.soil(), next == ResourceSiteLifecycle.MATURE_STAGE ? Crop.MATURE : Crop.GROWING,
-                        next, false, false, current.workAccessBlocked());
+                        next, current.accounted(), current.yielded(), current.workAccessBlocked());
             }
             groups.computeIfAbsent(chunkOf(cell), ignored -> new LinkedHashMap<>()).put(cell.id(), current);
         }
-        return new ResourceFieldCycle(siteId, layout, epoch, groups, pendingPlayerBreaks, true);
+        return changed ? new ResourceFieldCycle(siteId, layout, epoch, groups, pendingPlayerBreaks, true) : this;
+    }
+
+    /** Read-only plant readiness, not the retained work epoch's historical maturity. */
+    public int plantGrowthStage() {
+        return byChunk.values().stream().flatMap(values -> values.values().stream())
+                .filter(cell -> cell.crop() == Crop.GROWING || cell.crop() == Crop.MATURE)
+                .mapToInt(CellState::growthStage).max().orElse(0);
     }
 
     /** The farmer harvests one ripe crop and plants its successor at the same station. */

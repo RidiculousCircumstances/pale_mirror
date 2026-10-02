@@ -427,7 +427,7 @@ final class FrontierV3ResourceFieldWitness {
                 || pending.completedSteps() != pending.transition().steps().size()
                 || !prior.committed().equals(pending.transition().after())
                 || !cycle.cell(id).accounted()
-                || !prior.committed().equals(ResourceFieldPhysicalSurface.Condition.of(cycle.cell(id)))
+                || !ResourceFieldPhysicalSurface.Condition.of(cycle.cell(id)).equalsOrGrowsFrom(prior.committed())
                 || fieldReview.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT
                 || !fieldReview.matches(this, id))
             throw new IllegalArgumentException("farmer work lacks its accepted cell and physical postcondition");
@@ -464,7 +464,7 @@ final class FrontierV3ResourceFieldWitness {
                 || pending.completedSteps() != pending.transition().steps().size()
                 || prior.foreign().isPresent() || pending.handEffect().isPresent()
                 || !prior.committed().equals(pending.transition().after())
-                || !prior.committed().equals(ResourceFieldPhysicalSurface.Condition.of(cycle.cell(id)))
+                || !ResourceFieldPhysicalSurface.Condition.of(cycle.cell(id)).equalsOrGrowsFrom(prior.committed())
                 || observed.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT
                 || !observed.matches(this, id))
             throw new IllegalArgumentException("field projection lacks the same accepted canonical and loaded physical result");

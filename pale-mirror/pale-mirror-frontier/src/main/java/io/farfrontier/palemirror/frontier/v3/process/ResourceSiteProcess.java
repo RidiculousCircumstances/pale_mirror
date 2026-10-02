@@ -28,12 +28,8 @@ import java.util.Optional;
 public final class ResourceSiteProcess {
     public static final String PREPARATION_ACTION = "frontier.resource_site.prepare";
     private ResourceSiteProcess() { }
-
     public static ScheduledAction nextGrowth(ResourceSiteLifecycle lifecycle, long dueAt) {
-        if (lifecycle.phase() != ResourceSitePhase.GROWING) throw new IllegalArgumentException("only growing resource sites can schedule growth");
-        return new ScheduledAction(new ScheduleId("schedule:resource-site-growth-" + lifecycle.siteId().value().substring("site:".length())
-                + "-" + lifecycle.growthEpoch() + "-" + lifecycle.growthStage()), new SimInstant(dueAt), 0, lifecycle.siteId(),
-                "frontier.resource_site.growth", 1);
+        return ResourceFieldGrowthProcess.next(lifecycle, dueAt);
     }
 
     public static ScheduledAction preparation(SubjectId siteId, long dueAt) {
@@ -99,26 +95,11 @@ public final class ResourceSiteProcess {
     }
 
     public static List<ProposedEvent> planGrowth(FrontierWorldState state, ScheduledAction action) {
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(action.subject());
-        if (lifecycle.phase() != ResourceSitePhase.GROWING || !action.id().equals(nextGrowth(lifecycle, action.dueAt().ticks()).id())) return List.of();
-        ResourceSiteGrowthAdvanced advanced = new ResourceSiteGrowthAdvanced(lifecycle.siteId(), lifecycle.growthEpoch(), lifecycle.growthStage());
-        ResourceSiteLifecycle next = lifecycle.advanceGrowth();
-        if (next.phase() == ResourceSitePhase.READY) return List.of(new ProposedEvent(lifecycle.siteId(), advanced), new ProposedEvent(lifecycle.siteId(),
-                new ScheduleEffect.Created(StrategicObjectiveProcess.resourceHarvestOpportunity(state, next, Math.addExact(action.dueAt().ticks(), 1L)))));
-        return List.of(new ProposedEvent(lifecycle.siteId(), advanced), new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(nextGrowth(next,
-                Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
+        return ResourceFieldGrowthProcess.plan(state, action);
     }
 
     public static FrontierWorldState reduceGrowth(FrontierWorldState state, SubjectId subject, ResourceSiteGrowthAdvanced advanced) {
-        if (!subject.equals(advanced.siteId())) throw new IllegalArgumentException("resource-site growth has a foreign event owner");
-        if (state.resourceSites().hasPendingWorldChange(subject))
-            throw new IllegalArgumentException("resource-site growth overlaps an unresolved world field change");
-        ResourceSiteLifecycle current = state.resourceSites().site(advanced.siteId());
-        if (current.phase() != ResourceSitePhase.GROWING || current.growthEpoch() != advanced.growthEpoch() || current.growthStage() != advanced.growthStage()) {
-            throw new IllegalArgumentException("resource-site growth event is stale or invalid");
-        }
-        ResourceFieldCycle cycle = state.resourceSites().cycle(current.siteId());
-        return state.withResourceSites(state.resourceSites().replace(current.advanceGrowth(), cycle.advanceGrowthStage()));
+        return ResourceFieldGrowthProcess.reduce(state, subject, advanced);
     }
 
     /** Persists one exact permission before Vanilla can remove the owned crop. */

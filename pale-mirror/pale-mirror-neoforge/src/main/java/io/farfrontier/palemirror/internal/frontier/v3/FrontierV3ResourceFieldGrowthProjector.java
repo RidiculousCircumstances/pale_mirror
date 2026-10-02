@@ -74,7 +74,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
         if (cell.pending().isPresent()) {
             var pending = cell.pending().orElseThrow();
             if (pending.canonicalSource().isEmpty()) return Result.PENDING_WORK;
-            if (!pending.transition().after().equals(target)
+            if (!target.equalsOrGrowsFrom(pending.transition().after())
                     || !pending.canonicalSource().orElseThrow().worldId().equals(accepted.worldId())
                     || pending.canonicalSource().orElseThrow().revision().compareTo(accepted.revision()) > 0)
                 return Result.STALE_CANONICAL;

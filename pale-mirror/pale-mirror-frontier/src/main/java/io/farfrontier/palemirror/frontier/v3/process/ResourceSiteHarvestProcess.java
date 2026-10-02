@@ -287,7 +287,7 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("resource-site COLD completion lacks its exact admissible physical intent");
         }
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
-        ResourceSiteLifecycle next = terminalLifecycle(state, lifecycle, job, action);
+        ResourceSiteLifecycle next = terminalLifecycle(state, lifecycle, job, action).withPlantReadiness(successor);
         // Only an untouched request can be composed away.  A running effect already has a
         // physical history, so its terminal lineage stays pending until that exact receipt is
         // observed or its local recovery disposition resolves it; neither COLD nor a successor
@@ -801,8 +801,8 @@ public final class ResourceSiteHarvestProcess {
             events.add(ResourceSiteHarvestPlanning.stockWake(state, job, -1, now));
         events.add(transition(task, StrategicTaskStatus.COMPLETED));
         events.add(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Cancelled(coldProgress(job, now).id())));
-        events.add(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(next, Math.addExact(now,
-                state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
+        events.addAll(ResourceFieldGrowthProcess.afterWork(state, next,
+                state.resourceSites().cycle(lifecycle.siteId()).nextEpoch(), now));
         return List.copyOf(events);
     }
 

@@ -145,6 +145,14 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteLifecycle> sites,
         return lifecycle;
     }
 
+    /** This field owner supplies exact effect fences; the plant clock knows no farmer job phases. */
+    public java.util.Set<ResourceFieldLayout.CellId> growthProtectedCells(SubjectId id) {
+        var work = site(id).activeWork().orElse(null);
+        if (work instanceof ResourceSiteHarvestJob harvest && harvest.progress().hasPendingCrop())
+            return java.util.Set.of(cycle(id).layout().cells().get(harvest.progress().pendingCropSlotIndex()).id());
+        return java.util.Set.of();
+    }
+
     public ResourceFieldCycle cycle(SubjectId id) {
         ResourceFieldCycle cycle = cycles.get(Objects.requireNonNull(id, "resource-site id"));
         if (cycle == null) throw new IllegalArgumentException("unknown resource-site cell cycle: " + id.value());

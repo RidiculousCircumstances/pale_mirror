@@ -248,9 +248,17 @@ class ResourceSiteColdHarvestReceiptTest {
                 "the final return station is a receipt boundary, not a new crop or traversal scene");
 
         var base = FrontierWorldRuntimeDefinition.configuration(pending.state().bootstrap().worldId(), 125L);
-        var configuration = new FrontierEngineConfiguration<>(pending.state().bootstrap().worldId(), pending.state(), base.initialInstant(),
+        var growingDuringReturn = pending.state();
+        for (int stage = 0; stage < 3; stage++) {
+            var lifecycle = growingDuringReturn.resourceSites().site(site);
+            growingDuringReturn = ResourceSiteProcess.reduceGrowth(growingDuringReturn, site,
+                    new ResourceSiteGrowthAdvanced(site, lifecycle.growthEpoch(), lifecycle.growthStage()));
+        }
+        var plantClock = ResourceSiteProcess.nextGrowth(growingDuringReturn.resourceSites().site(site),
+                returnAction.dueAt().ticks() + base.initialState().bootstrap().ruleset().cadence().resourceGrowthStageInterval());
+        var configuration = new FrontierEngineConfiguration<>(pending.state().bootstrap().worldId(), growingDuringReturn, base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
-                List.of(pending.action()), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+                List.of(pending.action(), plantClock), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
         var engine = FrontierEngines.create(configuration);
         var target = new io.farfrontier.palemirror.frontier.v3.api.SimInstant(returnAction.dueAt().ticks() + 10L);
         var result = engine.advanceTo(target, new WorkBudget(256, 2_048));
@@ -273,8 +281,11 @@ class ResourceSiteColdHarvestReceiptTest {
                         + " schedules=" + engine.checkpoint().schedules());
         assertFalse(engine.checkpoint().schedules().stream().anyMatch(action -> action.id().equals(pending.action().id())),
                 "the same WAL transaction must cancel the retired job's durable continuation");
-        assertTrue(engine.checkpoint().schedules().stream().anyMatch(action -> action.kind().equals("frontier.resource_site.growth")),
-                "terminal retirement retains only the next lifecycle owner's growth continuation");
+        assertEquals(List.of(plantClock), engine.checkpoint().schedules().stream()
+                        .filter(action -> action.kind().equals("frontier.resource_site.growth")).toList(),
+                "work retirement neither replaces nor postpones the independent plant clock");
+        assertEquals(3, terminal.resourceSites().cycle(site).plantGrowthStage());
+        assertEquals(3, terminal.resourceSites().site(site).growthStage());
         assertEquals(List.of(new ScheduleEffect.Consumed(returnAction.id())),
                 ResourceSiteHarvestProcess.planColdProgress(terminal, returnAction).stream().map(ProposedEvent::payload).toList(),
                 "a recovery tail is consumable only through the retained resolved terminal lineage");

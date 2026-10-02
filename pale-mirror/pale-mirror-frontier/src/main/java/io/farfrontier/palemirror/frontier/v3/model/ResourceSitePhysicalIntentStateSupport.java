@@ -144,8 +144,10 @@ public final class ResourceSitePhysicalIntentStateSupport {
         observations.put(receipt.id(), receipt);
         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> scenes = new LinkedHashMap<>(state.sceneLeases());
         scenes.put(lease.id(), lease.withStatus(SceneLeaseStatus.DRAINING));
+        ResourceFieldCycle successor = cycle.nextEpoch();
         FrontierWorldState published = state.withChanges(FrontierWorldStateUpdate.begin()
-                .resourceSites(state.resourceSites().replace(lifecycle.harvestedAt(ResourceSiteHarvestGoal.current(state, job), actor.body()), cycle.nextEpoch()))
+                .resourceSites(state.resourceSites().replace(lifecycle.harvestedAt(ResourceSiteHarvestGoal.current(state, job), actor.body())
+                        .withPlantReadiness(successor), successor))
                 .inventory(state.inventory().withFungibleResources(resources))
                 .physicalIntents(nextIntents).physicalObservations(observations).sceneLeases(scenes));
         if (carried == 0) return published;

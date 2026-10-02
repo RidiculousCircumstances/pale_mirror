@@ -12,6 +12,40 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceFieldCycleTest {
+    @Test void replantedCellsGrowDuringTheSameBatchWithoutNewYieldOrRepeatedWork() {
+        var geometry = layout(2);
+        var first = geometry.cells().getFirst().id();
+        var second = geometry.cells().getLast().id();
+        var cycle = ResourceFieldCycle.seeded(SITE, geometry, 1);
+        for (int stage = 0; stage < 7; stage++) cycle = cycle.advanceGrowthStage();
+        cycle = cycle.harvested(first);
+        var grown = cycle.advanceGrowthStage();
+        assertEquals(1, grown.cell(first).growthStage());
+        assertEquals(7, grown.cell(second).growthStage());
+        assertTrue(grown.cell(first).accounted());
+        assertTrue(grown.cell(first).yielded());
+        assertEquals(1, grown.accountedCount());
+        assertEquals(1, grown.harvestedCount());
+        for (int stage = 1; stage < 7; stage++) grown = grown.advanceGrowthStage();
+        assertEquals(ResourceFieldCycle.Crop.MATURE, grown.cell(first).crop());
+        assertEquals(1, grown.nextWorkSlot(geometry.cells().getFirst().workstation()).orElseThrow());
+        var completed = grown.harvested(second);
+        var nextBatch = completed.nextEpoch();
+        assertEquals(7, nextBatch.cell(first).growthStage(), "delivery retires work flags, not plant age");
+        assertEquals(0, nextBatch.accountedCount());
+        assertEquals(0, nextBatch.harvestedCount());
+    }
+
+    @Test void exactPhysicalFenceDoesNotSuspendGrowthOfOtherPlants() {
+        var geometry = layout(2);
+        var first = geometry.cells().getFirst().id();
+        var second = geometry.cells().getLast().id();
+        var cycle = ResourceFieldCycle.seeded(SITE, geometry, 1);
+        var grown = cycle.advanceGrowthStage(java.util.Set.of(first));
+        assertEquals(0, grown.cell(first).growthStage());
+        assertEquals(1, grown.cell(second).growthStage());
+    }
+
     private static final SubjectId SITE = new SubjectId("site:field-cycle-test");
     private static ResourceFieldLayout layout(int count) {
         var cells = new ArrayList<ResourceFieldLayout.Cell>();
