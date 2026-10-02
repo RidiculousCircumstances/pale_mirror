@@ -52,7 +52,7 @@ public final class ResourceSiteHarvestSceneReconciliation {
         var recovery = state.fencedRecovery().current().get(recoveryId);
         if (recovery == null || recovery.asset() != FencedRecoveryAsset.BODY
                 || !recovery.ownerId().equals(FrontierSceneLeaseStateSupport.recoveryOwner(lease))
-                || recovery.ownerRevision() != lease.revision() || recovery.authorityEpoch() != receipt.bodyEpoch()
+                || recovery.ownerRevision() != lease.revision() || recovery.authorityEpoch() != receipt.recoveryEpoch()
                 || recovery.phase() != FencedRecoveryPhase.AMBIGUOUS)
             throw new IllegalArgumentException("harvest reconciliation has a stale or foreign recovery epoch");
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), receipt.observedBody().supportingSurface().support());
@@ -63,6 +63,6 @@ public final class ResourceSiteHarvestSceneReconciliation {
         var leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(lease.id(), lease.withMemberPositions(positions).withStatus(SceneLeaseStatus.HOT));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).sceneLeases(leases)
-                .fencedRecovery(state.fencedRecovery().inspectedRunning(recoveryId, receipt.bodyEpoch())));
+                .fencedRecovery(state.fencedRecovery().inspectedRunning(recoveryId, receipt.recoveryEpoch())));
     }
 }

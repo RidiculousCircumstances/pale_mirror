@@ -25,6 +25,37 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class FrontierV3ResourceSiteHarvestSceneExecutorTest {
     private static final SubjectId SITE = new SubjectId("site:test");
 
+    @Test void inspectedRecoveryUsesItsCanonicalFenceNotTheIndependentCarrierClock() {
+        var config = io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog
+                .resourceSiteHarvestConfiguration(new WorldId("frontier:harvest-recovery-clocks"), 421L);
+        var state = config.initialState();
+        var site = new SubjectId("site:1-wheat-field");
+        var job = (io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob)
+                state.resourceSites().site(site).activeWork().orElseThrow();
+        var body = state.actorLocations().get(job.workerId()).body();
+        var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(
+                new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:harvest-recovery-clocks"),
+                config.worldId(), new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause(site, job.id()),
+                state.resourceSite(site).cropSlots().get(job.progress().nextCropSlotIndex()), config.initialInstant(), 17L,
+                io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
+                List.of(new io.farfrontier.palemirror.frontier.v3.model.SceneMember(job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(config.worldId(), job.workerId()))),
+                java.util.Map.of(job.workerId(), body), java.util.Set.of(), java.util.Optional.empty());
+        state = state.prepareSceneLease(lease);
+        assertTrue(FrontierV3ResourceSiteHarvestReconciliation.recoveryEpoch(state, lease).isEmpty());
+        state = state.transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CONFLICT);
+        var conflict = state.sceneLeases().get(lease.id());
+        long canonicalEpoch = state.fencedRecovery().current().get(
+                io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(job.workerId()))
+                .authorityEpoch();
+        var carrier = FrontierV3AmbientActorExecutor.carrierDeclaration(state, job.workerId(),
+                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, lease.members().getFirst().entityId(),
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), canonicalEpoch + 5L);
+        assertTrue(carrier.epoch() != canonicalEpoch);
+        assertEquals(canonicalEpoch, FrontierV3ResourceSiteHarvestReconciliation.recoveryEpoch(state, conflict).orElseThrow());
+        assertTrue(FrontierV3ResourceSiteHarvestReconciliation.recoveryEpoch(config.initialState(), conflict).isEmpty());
+    }
+
     @Test void genericRecoveryReleaseUsesTheRegisteredHarvestContinuationAndRejectsMissingAuthority() {
         var config = io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog
                 .resourceSiteHarvestConfiguration(new WorldId("frontier:recovery-release-binding"), 421L);

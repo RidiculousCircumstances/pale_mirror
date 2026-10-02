@@ -38,8 +38,13 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                     hand.is(Items.WHEAT) ? "minecraft:wheat" : "", hand.getCount(),
                     ItemStack.isSameItemSameComponents(hand, new ItemStack(Items.WHEAT, hand.getCount())));
             if (reviewed.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT) continue;
+            // owned() already proves the live carrier epoch against its physical ledger.
+            // The canonical recovery fence advances on scene admission, not carrier recreation;
+            // these are independent clocks and must never be compared for equality.
+            var recoveryEpoch = recoveryEpoch(state, lease);
+            if (recoveryEpoch.isEmpty()) continue;
             var receipt = new ResourceSiteHarvestSceneReconciled(job.siteId(), job.id(), lease.id(), lease.revision(),
-                    worker.getPersistentData().getLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY),
+                    recoveryEpoch.getAsLong(),
                     observed.orElseThrow(), reviewed.stack().orElseThrow());
             try { ResourceSiteHarvestSceneReconciliation.reduce(state, job.siteId(), receipt); }
             catch (IllegalArgumentException unresolved) { continue; }
@@ -48,6 +53,17 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             return true;
         }
         return false;
+    }
+
+    static java.util.OptionalLong recoveryEpoch(FrontierWorldState state, SceneLease lease) {
+        if (lease.status() != SceneLeaseStatus.CONFLICT || lease.members().size() != 1)
+            return java.util.OptionalLong.empty();
+        var recovery = state.fencedRecovery().current().get(
+                FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(lease.members().getFirst().actorId()));
+        return recovery != null && recovery.asset() == FencedRecoveryAsset.BODY
+                && recovery.ownerId().equals(FrontierSceneLeaseStateSupport.recoveryOwner(lease))
+                && recovery.ownerRevision() == lease.revision() && recovery.phase() == FencedRecoveryPhase.AMBIGUOUS
+                ? java.util.OptionalLong.of(recovery.authorityEpoch()) : java.util.OptionalLong.empty();
     }
 
     private static boolean currentField(ServerLevel level, ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {

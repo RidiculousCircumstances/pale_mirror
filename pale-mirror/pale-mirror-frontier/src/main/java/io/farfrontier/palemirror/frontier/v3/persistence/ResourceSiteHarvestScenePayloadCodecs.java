@@ -53,7 +53,7 @@ final class ResourceSiteHarvestScenePayloadCodecs {
                 FrontierWorldPayloadCodecs.writeSubject(output, receipt.siteId());
                 FrontierWorldPayloadCodecs.writeSubject(output, receipt.jobId());
                 FrontierWorldPayloadCodecs.writeString(output, receipt.leaseId().value());
-                output.writeLong(receipt.leaseRevision()); output.writeLong(receipt.bodyEpoch());
+                output.writeLong(receipt.leaseRevision()); output.writeLong(receipt.recoveryEpoch());
                 writeBody(output, receipt.observedBody());
                 var address = (PhysicalStackAddress.ActorHand) receipt.observedHand().address();
                 FrontierWorldPayloadCodecs.writeSubject(output, address.actorId());
