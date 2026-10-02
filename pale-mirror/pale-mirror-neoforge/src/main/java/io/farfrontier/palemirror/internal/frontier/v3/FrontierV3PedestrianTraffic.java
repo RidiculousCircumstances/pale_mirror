@@ -1,0 +1,86 @@
+package io.farfrontier.palemirror.internal.frontier.v3;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.PathNavigationRegion;
+import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.level.pathfinder.PathFinder;
+import net.minecraft.world.level.pathfinder.PathType;
+import net.minecraft.world.level.pathfinder.PathfindingContext;
+import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
+import net.minecraft.world.phys.AABB;
+import java.util.List;
+import java.util.Set;
+
+/** Query-local living-body obstacles for native HOT pathfinding; never durable terrain. */
+final class FrontierV3PedestrianTraffic {
+    private static final int MAX_QUERY_RADIUS = FrontierV3PhysicalPathPolicy.MAX_PATH_NODES;
+    private static final int MAX_VISITED_NODES = 4_096;
+    private static final int MAX_BODIES = 256;
+    private FrontierV3PedestrianTraffic() { }
+
+    record Body(java.util.UUID id, AABB bounds) { }
+
+    static List<Body> goalOccupants(ServerLevel level, Mob actor,
+            List<io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor> stations) {
+        return stations.stream().flatMap(station -> level.getEntitiesOfClass(LivingEntity.class,
+                bodyAt(actor, new BlockPos(station.x(), station.y() + 1, station.z())),
+                other -> other != actor && other.isAlive() && !other.isSpectator()).stream())
+                .map(other -> new Body(other.getUUID(), other.getBoundingBox())).distinct()
+                .sorted(java.util.Comparator.comparing(Body::id)).toList();
+    }
+
+    static boolean blockedAhead(ServerLevel level, Mob actor, Path path) {
+        return blocked(level, actor, path, 2);
+    }
+
+    private static boolean blocked(ServerLevel level, Mob actor, Path path, int nodes) {
+        if (path == null || path.isDone()) return false;
+        int end = Math.min(path.getNodeCount(), path.getNextNodeIndex() + nodes);
+        for (int index = path.getNextNodeIndex(); index < end; index++) {
+            AABB body = bodyAt(actor, path.getNode(index).asBlockPos());
+            if (!level.getEntitiesOfClass(LivingEntity.class, body,
+                    other -> other != actor && other.isAlive() && !other.isSpectator()).isEmpty()) return true;
+        }
+        return false;
+    }
+
+    static Path createPath(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope) {
+        Path ordinary = actor.getNavigation().createPath(target, 0);
+        if (!blocked(level, actor, ordinary, FrontierV3PhysicalPathPolicy.MAX_PATH_NODES)) return ordinary;
+        // Use the same native graph and block/step semantics, adding only ephemeral body
+        // clearance. The native region uses getChunkNow: no tickets or unloaded reads.
+        int radius = Math.min(MAX_QUERY_RADIUS, Math.max(8,
+                (int) actor.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE) + 8));
+        BlockPos origin = actor.blockPosition();
+        AABB query = new AABB(origin.getX() - radius, origin.getY() - radius, origin.getZ() - radius,
+                origin.getX() + radius + 1, origin.getY() + radius + 1, origin.getZ() + radius + 1);
+        List<AABB> bodies = level.getEntitiesOfClass(LivingEntity.class, query,
+                other -> other != actor && other.isAlive() && !other.isSpectator())
+                .stream().limit(MAX_BODIES + 1L).map(LivingEntity::getBoundingBox).toList();
+        if (bodies.size() > MAX_BODIES) return null; // visible bounded retry, never ignored occupants
+        WalkNodeEvaluator evaluator = new WalkNodeEvaluator() {
+            @Override public PathType getPathTypeOfMob(PathfindingContext context, int x, int y, int z, Mob mob) {
+                BlockPos feet = new BlockPos(x, y, z);
+                if (!level.hasChunkAt(feet) || !scope.permits(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(x, y - 1, z)))
+                    return PathType.BLOCKED;
+                if (!feet.equals(origin) && bodies.stream().anyMatch(body -> body.intersects(bodyAt(mob, feet))))
+                    return PathType.BLOCKED;
+                return super.getPathTypeOfMob(context, x, y, z, mob);
+            }
+        };
+        evaluator.setCanPassDoors(actor.getNavigation().getNodeEvaluator().canPassDoors());
+        evaluator.setCanOpenDoors(actor.getNavigation().getNodeEvaluator().canOpenDoors());
+        evaluator.setCanFloat(actor.getNavigation().getNodeEvaluator().canFloat());
+        return new PathFinder(evaluator, MAX_VISITED_NODES).findPath(
+                new PathNavigationRegion(level, origin.offset(-radius, -radius, -radius), origin.offset(radius, radius, radius)),
+                actor, Set.of(target), radius, 0, 1.0F);
+    }
+
+    private static AABB bodyAt(Mob actor, BlockPos feet) {
+        return actor.getBoundingBox().move(feet.getX() + 0.5D - actor.getX(),
+                feet.getY() - actor.getY(), feet.getZ() + 0.5D - actor.getZ());
+    }
+}

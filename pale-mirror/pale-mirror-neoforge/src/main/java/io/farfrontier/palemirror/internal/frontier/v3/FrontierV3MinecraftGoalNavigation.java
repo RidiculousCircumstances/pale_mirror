@@ -98,6 +98,13 @@ final class FrontierV3MinecraftGoalNavigation {
             Control observed = current.observed(activePath, actor.position(), level.getGameTime());
             if (observed.lastProgressAt() > current.lastProgressAt()) FAILURES.remove(actor);
             current = observed;
+            // Vanilla's ordinary graph ignores living bodies. Replan around a current
+            // occupant before the no-motion deadline, without changing the semantic goal.
+            if (activePath != null && !actor.getNavigation().isDone()
+                    && FrontierV3PedestrianTraffic.blockedAhead(level, actor, activePath)) {
+                stopPath(actor);
+                activePath = null;
+            }
             if (current.lastProgressAt() + STALLED_TICKS <= level.getGameTime()) {
                 stopPath(actor);
                 return new Result(Status.BLOCKED, "minecraft-path-stalled",
@@ -114,6 +121,7 @@ final class FrontierV3MinecraftGoalNavigation {
         failed = FAILURES.get(actor);
         FrontierV3BodyObservation.refreshGroundContact(level, actor);
         if (failed != null && failed.groundedAtAttempt() == actor.onGround()
+                && failed.goalOccupants().equals(FrontierV3PedestrianTraffic.goalOccupants(level, actor, legalStations))
                 && level.getGameTime() - failed.lastAttemptAt() < RETRY_TICKS)
             return failureResult(failed, level.getGameTime());
         // The old custom actuator must not race the Minecraft path. This removes only an
@@ -133,7 +141,7 @@ final class FrontierV3MinecraftGoalNavigation {
         for (SurfaceAnchor station : legalStations) {
             BlockPos feet = new BlockPos(station.x(), station.y() + 1, station.z());
             if (!level.hasChunkAt(feet)) { unloaded = true; continue; }
-            Path candidate = actor.getNavigation().createPath(feet, 0);
+            Path candidate = FrontierV3PedestrianTraffic.createPath(level, actor, feet, scope);
             var refused = FrontierV3PhysicalPathPolicy.reject(level, candidate, scope);
             if (refused.isPresent()) {
                 if (rejection.isEmpty()) {
@@ -147,12 +155,12 @@ final class FrontierV3MinecraftGoalNavigation {
                 target = station;
             }
         }
-        if (path == null) return retry(actor, legalStations, scope, order, level.getGameTime(),
+        if (path == null) return retry(level, actor, legalStations, scope, order, level.getGameTime(),
                 unloaded ? "target-chunk-unloaded" : "minecraft-path-unavailable[" + rejection + "]",
                 unloaded ? FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED
                         : rejectionReason);
         if (!actor.getNavigation().moveTo(path, SPEED))
-            return retry(actor, legalStations, scope, order, level.getGameTime(),
+            return retry(level, actor, legalStations, scope, order, level.getGameTime(),
                     "minecraft-path-refused", FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE);
         // Finding another path is not progress. Keep the same no-motion deadline
         // across path recomputations; only a real body displacement can reset it.
@@ -244,14 +252,16 @@ final class FrontierV3MinecraftGoalNavigation {
         actor.getNavigation().stop();
     }
 
-    private static Result retry(Mob actor, List<SurfaceAnchor> legalStations, FrontierV3NavigationScope scope,
+    private static Result retry(ServerLevel level, Mob actor, List<SurfaceAnchor> legalStations, FrontierV3NavigationScope scope,
                                 Optional<MovementOrder> order, long tick,
                                 String reason, FrontierV3GoalNavigation.BlockReason blockReason) {
         Failure previous = FAILURES.get(actor);
         Failure next = previous == null || !previous.legalStations().equals(legalStations) || !previous.scope().equals(scope)
                 || !previous.order().equals(order)
-                ? new Failure(legalStations, scope, order, tick, tick, reason, blockReason, actor.onGround())
-                : new Failure(legalStations, scope, order, previous.since(), tick, reason, blockReason, actor.onGround());
+                ? new Failure(legalStations, scope, order, tick, tick, reason, blockReason, actor.onGround(),
+                        FrontierV3PedestrianTraffic.goalOccupants(level, actor, legalStations))
+                : new Failure(legalStations, scope, order, previous.since(), tick, reason, blockReason, actor.onGround(),
+                        FrontierV3PedestrianTraffic.goalOccupants(level, actor, legalStations));
         FAILURES.put(actor, next);
         return failureResult(next, tick);
     }
@@ -317,5 +327,6 @@ final class FrontierV3MinecraftGoalNavigation {
     }
     private record Failure(List<SurfaceAnchor> legalStations, FrontierV3NavigationScope scope,
                            Optional<MovementOrder> order, long since, long lastAttemptAt, String reason,
-                           FrontierV3GoalNavigation.BlockReason blockReason, boolean groundedAtAttempt) { }
+                           FrontierV3GoalNavigation.BlockReason blockReason, boolean groundedAtAttempt,
+                           List<FrontierV3PedestrianTraffic.Body> goalOccupants) { }
 }

@@ -37,7 +37,7 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
         // aggregate snapshots, but no changed state or retained action becomes durable until
         // every declared relationship, exact current physical subject, and scheduled owner is
         // closed against the final canonical state.
-        FrontierReferenceClosure.validate(next, schedulesAfter);
+        FrontierReferenceClosure.validateTransition(previous, next, schedulesAfter);
         for (FrontierEvent event : events) {
             if (!(event.payload() instanceof PhysicalIntentTransition transition) || !terminal(transition.status())) continue;
             PhysicalIntentRetirementProof proof = transition.retirementProof().orElseThrow(() ->

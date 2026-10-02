@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
@@ -16,23 +16,23 @@ final class FrontierV3TraversalScheduleGate {
      * reschedule that continuation: semantic crop work remains due-gated below.  This keeps
      * the scheduler out of the body's movement clock without creating a second route or timer.
      */
-    static boolean traversalCheckpointBound(CheckpointImage checkpoint, SubjectId siteId) {
+    static boolean traversalCheckpointBound(FrontierScheduleView checkpoint, SubjectId siteId) {
         return binding(checkpoint, siteId).isPresent();
     }
 
     /** A physically arrived exact next cell and its one engine binding are both necessary. */
-    static boolean shouldCommitObservedTraversal(CheckpointImage checkpoint, SubjectId siteId, boolean atExactNextCell) {
+    static boolean shouldCommitObservedTraversal(FrontierScheduleView checkpoint, SubjectId siteId, boolean atExactNextCell) {
         return atExactNextCell && traversalCheckpointBound(checkpoint, siteId);
     }
 
-    static Optional<ScheduledAction> binding(CheckpointImage checkpoint, SubjectId siteId) {
+    static Optional<ScheduledAction> binding(FrontierScheduleView checkpoint, SubjectId siteId) {
         try { return Optional.of(FrontierV3ContinuationBinding.require(checkpoint, siteId,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND)); }
         catch (IllegalArgumentException rejected) { return Optional.empty(); }
     }
 
     /** Irreversible crop mutation may consume the continuation only at its ordinary due turn. */
-    static Optional<ScheduledAction> dueBinding(CheckpointImage checkpoint, SubjectId siteId) {
+    static Optional<ScheduledAction> dueBinding(FrontierScheduleView checkpoint, SubjectId siteId) {
         return binding(checkpoint, siteId).filter(action -> checkpoint.instant().compareTo(action.dueAt()) >= 0);
     }
 }

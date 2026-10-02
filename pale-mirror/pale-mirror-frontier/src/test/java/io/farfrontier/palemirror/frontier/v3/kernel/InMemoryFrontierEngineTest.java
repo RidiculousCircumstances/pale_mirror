@@ -573,6 +573,13 @@ class InMemoryFrontierEngineTest {
         assertEquals(List.of(schedule), engine.checkpoint().schedules());
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:cache", new Revision(1L), 2)));
         assertEquals(1, encodes.get(), "a WAL-backed state change waits for the next explicit checkpoint");
+        var execution = engine.executionView();
+        assertEquals(new Revision(2L), execution.revision());
+        assertEquals(List.of(schedule), execution.schedules());
+        engine.advanceTo(new SimInstant(1L), new WorkBudget(8, 8));
+        assertEquals(new SimInstant(1L), engine.executionView().instant());
+        assertEquals(List.of(schedule), execution.schedules(), "retained execution views remain immutable");
+        assertEquals(1, encodes.get(), "ordinary current execution reads must never encode the world");
         engine.checkpoint(); engine.checkpoint();
         assertEquals(2, encodes.get());
     }

@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
@@ -18,7 +18,7 @@ import java.util.Optional;
 final class FrontierV3ResourceSiteHarvestReleaseBinding {
     private FrontierV3ResourceSiteHarvestReleaseBinding() { }
 
-    static Optional<ScheduledAction> forPhase(CheckpointImage checkpoint, SubjectId siteId,
+    static Optional<ScheduledAction> forPhase(FrontierScheduleView checkpoint, SubjectId siteId,
                                               ResourceSitePhase phase) {
         return phase == ResourceSitePhase.HARVESTING
                 ? Optional.of(FrontierV3ContinuationBinding.require(checkpoint, siteId,

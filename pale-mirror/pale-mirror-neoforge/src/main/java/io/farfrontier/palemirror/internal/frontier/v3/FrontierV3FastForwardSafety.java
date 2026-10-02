@@ -19,6 +19,8 @@ import java.util.function.Predicate;
 
 /** Prevents test-only canonical time travel from skipping a physically executable v3 effect. */
 final class FrontierV3FastForwardSafety {
+    /** Empty logical time may advance cheaply; callers still bound executed boundaries and wall time. */
+    static final int MAX_COLD_INTERVAL_TICKS = 10_000;
     private FrontierV3FastForwardSafety() { }
 
     /**

@@ -7,7 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Collections;
-import java.util.IdentityHashMap;
+import java.util.HashMap;
+import java.util.List;
 
 /**
  * Canonical read model for exclusive retained human work. It introduces no
@@ -16,8 +17,27 @@ import java.util.IdentityHashMap;
  */
 public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignments) {
     private static final int MAX_CACHED_REVISIONS = 128;
-    private static final Map<FrontierWorldState, HumanAssignmentProjection> CACHE =
-            Collections.synchronizedMap(new IdentityHashMap<>());
+    private static final Map<Dependencies, HumanAssignmentProjection> CACHE =
+            Collections.synchronizedMap(new HashMap<>());
+    /** Identity comparisons of exactly the immutable sources read by compileFresh; no world-state hashing. */
+    private record Dependencies(List<Object> sources) {
+        static Dependencies of(FrontierWorldState state) {
+            return new Dependencies(List.of(state.humanPopulation().residents(), state.productionJobs(),
+                    state.resourceSites().sites(), state.operations(), state.strategicPlans().routePatrols(),
+                    state.strategicPlans().settlementAssaults(), state.routeConstructions(), state.routeMaintenances(),
+                    state.serviceWorks(), state.humanPopulation().medicalOperations(), state.humanPopulation().migrations()));
+        }
+        @Override public boolean equals(Object other) {
+            if (!(other instanceof Dependencies value) || sources.size() != value.sources.size()) return false;
+            for (int index = 0; index < sources.size(); index++) if (sources.get(index) != value.sources.get(index)) return false;
+            return true;
+        }
+        @Override public int hashCode() {
+            int hash = 1;
+            for (Object source : sources) hash = 31 * hash + System.identityHashCode(source);
+            return hash;
+        }
+    }
     public HumanAssignmentProjection {
         assignments = Map.copyOf(Objects.requireNonNull(assignments, "human assignments"));
         assignments.forEach((resident, assignment) -> {
@@ -28,11 +48,12 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
     public static HumanAssignmentProjection compile(FrontierWorldState state) {
         Objects.requireNonNull(state, "assignment state");
         synchronized (CACHE) {
-            HumanAssignmentProjection cached = CACHE.get(state);
+            Dependencies dependencies = Dependencies.of(state);
+            HumanAssignmentProjection cached = CACHE.get(dependencies);
             if (cached != null) return cached;
             if (CACHE.size() >= MAX_CACHED_REVISIONS) CACHE.clear();
             HumanAssignmentProjection compiled = compileFresh(state);
-            CACHE.put(state, compiled);
+            CACHE.put(dependencies, compiled);
             return compiled;
         }
     }

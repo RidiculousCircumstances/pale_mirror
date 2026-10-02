@@ -350,6 +350,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 || state.inventory().itemAt(depot, target).isPresent()
                 || ReferenceContainerCustody.expectedFungibleSlot(state, depot, target).isPresent()) return ChestState.FOREIGN;
         List<ReferenceContainerCustody.ObservedSlot> observed = new ArrayList<>();
+        var projectedSlots = ReferenceContainerCustody.expectedFungibleSlots(state, depot);
         ChestState targetState = ChestState.FOREIGN;
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ItemStack stack = chest.getItem(slot);
@@ -367,7 +368,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 observed.add(new ReferenceContainerCustody.ObservedSlot(slot, exact.id().value(), exact.itemKind(), exact.count()));
                 continue;
             }
-            var projected = ReferenceContainerCustody.expectedFungibleSlot(state, depot, slot).orElse(null);
+            var projected = projectedSlots.get(slot);
             if (projected == null) {
                 if (!stack.isEmpty()) return ChestState.FOREIGN;
                 observed.add(ReferenceContainerCustody.ObservedSlot.empty(slot));
@@ -394,10 +395,11 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
     private static String futureFingerprint(FrontierWorldState state, SubjectId depot, int target, int quantity) {
         List<ReferenceContainerCustody.ObservedSlot> next = new ArrayList<>();
         int size = state.inventory().containers().get(depot).slotCount();
+        var projectedSlots = ReferenceContainerCustody.expectedFungibleSlots(state, depot);
         for (int slot = 0; slot < size; slot++) {
             if (slot == target) { next.add(ReferenceContainerCustody.ObservedSlot.fungible(slot, "minecraft:wheat", quantity)); continue; }
             ExactItemStack exact = state.inventory().itemAt(depot, slot).orElse(null);
-            var fungible = ReferenceContainerCustody.expectedFungibleSlot(state, depot, slot).orElse(null);
+            var fungible = projectedSlots.get(slot);
             next.add(exact != null ? new ReferenceContainerCustody.ObservedSlot(slot, exact.id().value(), exact.itemKind(), exact.count())
                     : fungible != null ? ReferenceContainerCustody.ObservedSlot.fungible(slot, fungible.itemKind(), fungible.quantity())
                     : ReferenceContainerCustody.ObservedSlot.empty(slot));

@@ -1,7 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import java.util.Map;
-
 /** Cross-owner proof that each retained meal names its current bread and custody stage. */
 public final class ResidentMealReferenceClosure {
     private ResidentMealReferenceClosure() { }
@@ -10,7 +8,29 @@ public final class ResidentMealReferenceClosure {
         FungibleResourceLedger ledger = state.inventory().fungibleResources();
         HumanAssignmentProjection assignments = state.humanPopulation().meals().isEmpty()
                 ? null : HumanAssignmentProjection.compile(state);
-        for (ResidentMeal meal : state.humanPopulation().meals().values()) {
+        for (ResidentMeal meal : state.humanPopulation().meals().values()) validateMeal(state, ledger, assignments, meal);
+    }
+
+    static void validateTransition(FrontierWorldState before, FrontierWorldState after) {
+        if (after.humanPopulation().meals().isEmpty()) return;
+        var ledger = after.inventory().fungibleResources();
+        var assignments = HumanAssignmentProjection.compile(after);
+        var previousAssignments = HumanAssignmentProjection.compile(before);
+        boolean stockChanged = before.inventory().fungibleResources() != ledger
+                || before.bootstrap().ruleset().residentLife().foods() != after.bootstrap().ruleset().residentLife().foods();
+        for (ResidentMeal meal : after.humanPopulation().meals().values()) {
+            var id = meal.residentId();
+            if (!stockChanged && before.humanPopulation().meals().get(id) == meal
+                    && before.actorLocations().get(id) == after.actorLocations().get(id)
+                    && before.ambientLeases().get(id) == after.ambientLeases().get(id)
+                    && previousAssignments.assignments().get(id) != null
+                    && previousAssignments.assignment(id).equals(assignments.assignment(id))) continue;
+            validateMeal(after, ledger, assignments, meal);
+        }
+    }
+
+    private static void validateMeal(FrontierWorldState state, FungibleResourceLedger ledger,
+                                     HumanAssignmentProjection assignments, ResidentMeal meal) {
             meal.portion().validate(state.bootstrap().ruleset().residentLife().foods());
             ActorLocation actor = state.actorLocations().get(meal.residentId());
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
@@ -40,7 +60,6 @@ public final class ResidentMealReferenceClosure {
             } else if (claim != null || held != null) {
                 throw new IllegalArgumentException("returning resident meal still owns a bread claim or hand");
             }
-        }
     }
 
     private static boolean currentClaim(FungibleResourceLedger ledger, ResidentMeal meal,

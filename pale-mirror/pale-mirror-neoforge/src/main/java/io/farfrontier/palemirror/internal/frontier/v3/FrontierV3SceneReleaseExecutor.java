@@ -85,7 +85,7 @@ final class FrontierV3SceneReleaseExecutor {
         SceneLease lease = state.sceneLeases().get(selectedLease.id());
         if (lease == null || lease.status() != SceneLeaseStatus.DRAINING) return;
         release(level, runtime, lease, FrontierV3SceneBehaviorRegistry.releaseBinding(
-                runtime.checkpointImage().orElseThrow(), state, lease));
+                runtime.executionView().orElseThrow(), state, lease));
     }
     /** Generic lifecycle release; an enforced descriptor may supply one exact engine action binding. */
     static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease selectedLease,

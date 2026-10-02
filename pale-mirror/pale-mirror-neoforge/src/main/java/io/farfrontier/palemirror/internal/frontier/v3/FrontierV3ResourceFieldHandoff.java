@@ -13,13 +13,13 @@ final class FrontierV3ResourceFieldHandoff {
     static List<FrontierV3HotHandoff.Check> inspect(ServerLevel level, FrontierWorldState state, ChunkPos chunk) {
         var checks = new ArrayList<FrontierV3HotHandoff.Check>();
         var ledger = FrontierV3ResourceSiteLedger.get(level);
-        for (var entry : state.resourceSites().cycles().entrySet()) {
+        for (var siteId : FrontierV3HandoffIndex.fields(level, state.resourceSites(), chunk)) {
+            var entry = java.util.Map.entry(siteId, state.resourceSites().cycles().get(siteId));
             var phase = state.resourceSites().site(entry.getKey()).phase();
             if (phase != ResourceSitePhase.GROWING && phase != ResourceSitePhase.READY
                     && phase != ResourceSitePhase.HARVESTING) continue;
             var cycle = entry.getValue();
-            var cells = cycle.layout().cells().stream().filter(cell ->
-                    new ChunkPos(cell.crop().x() >> 4, cell.crop().z() >> 4).equals(chunk)).toList();
+            var cells = cycle.layout().cellsIn(new ResourceFieldLayout.ChunkColumn(chunk.x, chunk.z));
             if (cells.isEmpty()) continue;
             if (state.resourceSites().hasPendingWorldChange(entry.getKey()) || !cycle.pendingPlayerBreaks().isEmpty()
                     || ledger.fieldWorldChange(entry.getKey()) != null || ledger.fieldPlayerBreak(entry.getKey()) != null

@@ -318,7 +318,7 @@ final class FrontierV3GrayboxExecutor {
                 continue;
             }
             firstVisibilityWork(runtime).remove(chunk);
-            long revision = runtime.checkpointImage().orElseThrow().revision().value();
+            long revision = runtime.canonicalState().orElseThrow().revision().value();
             if (records.replace(chunk, record, new FirstVisibilityRecord(result, revision, work.cells()))
                     && result == FirstVisibility.STATIC_CURRENT) DYNAMIC_CATCH_UP.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
         }
@@ -395,12 +395,14 @@ final class FrontierV3GrayboxExecutor {
         int cells() { return cells; }
     }
     static void completeDynamicCatchUp(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        long revision = runtime.checkpointImage().orElseThrow().revision().value();
+        long revision = runtime.canonicalState().orElseThrow().revision().value();
         Map<ChunkPos, FirstVisibilityRecord> records = FIRST_VISIBILITY.get(runtime);
         if (records == null) return;
         ChunkPos chunk;
         var pending = DYNAMIC_CATCH_UP.get(runtime);
-        int attempts = pending == null ? 0 : pending.size();
+        // Allocation safety ceiling: bound discovery as well as mutation. Requeued owners
+        // retain FIFO fairness; a stalled chunk cannot multiply this turn's proof work.
+        int attempts = pending == null ? 0 : Math.min(pending.size(), 32);
         while (attempts-- > 0 && (chunk = poll(pending)) != null) {
             FirstVisibilityRecord record = records.get(chunk);
             if (record != null && record.status() == FirstVisibility.STATIC_CURRENT) {

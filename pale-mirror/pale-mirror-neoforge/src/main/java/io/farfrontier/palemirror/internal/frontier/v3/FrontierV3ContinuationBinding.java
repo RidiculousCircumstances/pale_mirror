@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
@@ -14,7 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 final class FrontierV3ContinuationBinding {
     private FrontierV3ContinuationBinding() { }
 
-    static ScheduledAction require(CheckpointImage checkpoint, SubjectId subject, String kind) {
+    static ScheduledAction require(FrontierScheduleView checkpoint, SubjectId subject, String kind) {
         var matches = checkpoint.schedules().stream()
                 .filter(action -> action.subject().equals(subject))
                 .filter(action -> action.kind().equals(kind)).toList();

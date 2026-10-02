@@ -10,7 +10,7 @@ import java.util.Arrays;
 public record CheckpointImage(
         WorldId worldId, Revision revision, SimInstant instant, byte[] canonicalState,
         List<ScheduledAction> schedules, List<CommandReceipt> receipts
-) {
+) implements FrontierScheduleView {
     public CheckpointImage {
         Objects.requireNonNull(worldId, "world id");
         Objects.requireNonNull(revision, "revision");

@@ -52,10 +52,8 @@ public final class FrontierV3ServerLifecycle {
     private static final Map<MinecraftServer, Boolean> INITIAL_CANONICAL_HOLDS = new IdentityHashMap<>();
     public static final int MAX_FAST_FORWARD_TICKS = 24_000;
     /**
-     * Admission is paced by vanilla server ticks; ten canonical ticks retain the existing
-     * 20ms wall-time cap while allowing a declared cold receipt to finish before its own
-     * bounded diagnostic window.  The cap, rather than this count, remains the live-thread
-     * safety boundary when a canonical tick becomes expensive.
+     * Each vanilla turn admits at most ten due/audit/save-boundary steps under the existing
+     * 20ms cap. Empty canonical intervals do not consume one step per skipped tick.
      */
     private static final int FAST_FORWARD_SLICE_TICKS = 10;
     private static final long MAX_FAST_FORWARD_SLICE_NANOS = 20_000_000L;
@@ -273,7 +271,7 @@ public final class FrontierV3ServerLifecycle {
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         if (requiresPhysicalStep(physicalWorld, runtime)) {
             String blocker = physicalBlocker(physicalWorld, runtime);
-            long admitted = runtime.checkpointImage().orElseThrow().instant().ticks();
+            long admitted = runtime.canonicalState().orElseThrow().instant().ticks();
             recordFastForwardRequest(server, "RELATIVE", ticks, admitted + ticks, admitted, admitted,
                     "REJECTED", "physical work is pending at admission: " + blocker);
             PaleMirrorMod.LOGGER.warn("Frontier v3 rejected relative fast-forward at admission because physical work is pending: {}", blocker);
@@ -284,7 +282,7 @@ public final class FrontierV3ServerLifecycle {
         FAST_FORWARD_FAILURES.remove(server);
         INITIAL_CANONICAL_HOLDS.remove(server);
         FAST_FORWARD_REMAINING.put(server, ticks);
-        long admitted = runtime.checkpointImage().orElseThrow().instant().ticks();
+        long admitted = runtime.canonicalState().orElseThrow().instant().ticks();
         recordFastForwardRequest(server, "RELATIVE", ticks, admitted + ticks, admitted, null, "QUEUED", null);
         PaleMirrorMod.LOGGER.info("Frontier v3 queued operator fast-forward ticks={}", ticks);
         return true;
@@ -304,11 +302,11 @@ public final class FrontierV3ServerLifecycle {
         }
         if (requiresPhysicalStep(FrontierV3PhysicalWorld.require(server), runtime)) {
             rejectFastForwardTarget(server, targetInstant, "physical work is pending at admission");
-            recordFastForwardRequest(server, "ABSOLUTE", 0, targetInstant, runtime.checkpointImage().orElseThrow().instant().ticks(), null,
+            recordFastForwardRequest(server, "ABSOLUTE", 0, targetInstant, runtime.canonicalState().orElseThrow().instant().ticks(), null,
                     "REJECTED", "physical work is pending at admission");
             return false;
         }
-        long admittedCheckpoint = runtime.checkpointImage().orElseThrow().instant().ticks();
+        long admittedCheckpoint = runtime.canonicalState().orElseThrow().instant().ticks();
         OptionalInt delta = absoluteFastForwardDelta(admittedCheckpoint, targetInstant);
         if (delta.isEmpty()) {
             rejectFastForwardTarget(server, targetInstant, "target is crossed or unbounded");
@@ -328,7 +326,7 @@ public final class FrontierV3ServerLifecycle {
         if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_REMAINING.containsKey(server)) return false;
         Long target = FAST_FORWARD_TARGETS.remove(server);
         FastForwardTargetOutcome prior = FAST_FORWARD_OUTCOMES.get(server);
-        Long checkpoint = RUNTIMES.containsKey(server) ? RUNTIMES.get(server).checkpointImage().map(image -> image.instant().ticks()).orElse(null) : null;
+        Long checkpoint = RUNTIMES.containsKey(server) ? RUNTIMES.get(server).canonicalState().map(image -> image.instant().ticks()).orElse(null) : null;
         if (target == null) {
             // A pilot initial hold protects fixture construction from ordinary ticks before the
             // first real client can establish HOT ownership.  Its release is a control-only
@@ -492,36 +490,37 @@ public final class FrontierV3ServerLifecycle {
                 FAST_FORWARD_REMAINING.remove(server);
                 FAST_FORWARD_FAILURES.put(server, "physical work became pending before the absolute target: " + physicalBlocker);
                 recordFastForwardTarget(server, target, null, null, "REJECTED", FAST_FORWARD_FAILURES.get(server));
-                updateFastForwardRequest(server, "ABSOLUTE", runtime.checkpointImage().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
+                updateFastForwardRequest(server, "ABSOLUTE", runtime.canonicalState().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
                 PaleMirrorMod.LOGGER.warn("Frontier v3 rejected absolute fast-forward target because physical work became pending: {}", physicalBlocker);
             } else {
                 FAST_FORWARD_REMAINING.remove(server);
                 FAST_FORWARD_FAILURES.put(server, "physical work became pending during the relative interval: " + physicalBlocker);
                 PaleMirrorMod.LOGGER.warn("Frontier v3 rejected relative fast-forward because physical work became pending: {}", physicalBlocker);
-                updateFastForwardRequest(server, "RELATIVE", runtime.checkpointImage().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
+                updateFastForwardRequest(server, "RELATIVE", runtime.canonicalState().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
             }
             recordFastForwardSlice(server, sliceStarted, safetyNanos, advanceNanos, 0);
             return;
         }
-        int allowed = Math.min(remaining, FAST_FORWARD_SLICE_TICKS); int advanced = 0;
-        while (advanced < allowed && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+        int allowed = Math.min(remaining, FrontierV3FastForwardSafety.MAX_COLD_INTERVAL_TICKS); int advanced = 0; int steps = 0;
+        while (advanced < allowed && steps < FAST_FORWARD_SLICE_TICKS && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
             safetyStarted = System.nanoTime();
             physicalStepRequired = requiresPhysicalStep(physicalWorld, runtime);
             safetyNanos += elapsedNanos(safetyStarted);
             if (physicalStepRequired) break;
             long advanceStarted = System.nanoTime();
-            boolean advancedOne = runtime.advance(1, FrontierV3RuntimeBudgets.fastForwardTick()).isPresent();
+            long before = runtime.canonicalState().orElseThrow().instant().ticks();
+            var result = runtime.advanceColdInterval(allowed - advanced, FrontierV3RuntimeBudgets.fastForwardTick());
             advanceNanos += elapsedNanos(advanceStarted);
-            if (!advancedOne) break;
-            advanced++;
+            if (result.isEmpty()) break;
+            advanced += Math.toIntExact(result.orElseThrow().instant().ticks() - before); steps++;
             if (!fastForwardSliceTimeRemaining(elapsedNanos(sliceStarted))) break;
         }
         int next = remaining - advanced;
         if (next <= 0) {
             FAST_FORWARD_REMAINING.remove(server);
             Long target = FAST_FORWARD_TARGETS.get(server);
-            if (target != null) recordFastForwardTarget(server, target, null, runtime.checkpointImage().orElseThrow().instant().ticks(), "HELD", null);
-            long reached = runtime.checkpointImage().orElseThrow().instant().ticks();
+            if (target != null) recordFastForwardTarget(server, target, null, runtime.canonicalState().orElseThrow().instant().ticks(), "HELD", null);
+            long reached = runtime.canonicalState().orElseThrow().instant().ticks();
             updateFastForwardRequest(server, target == null ? "RELATIVE" : "ABSOLUTE", reached,
                     target == null ? "COMPLETED" : "HELD", null);
             PaleMirrorMod.LOGGER.info("Frontier v3 completed operator fast-forward{}", FAST_FORWARD_TARGETS.containsKey(server) ? " at held absolute target" : "");

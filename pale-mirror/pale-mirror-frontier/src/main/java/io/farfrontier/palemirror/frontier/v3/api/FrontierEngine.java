@@ -14,8 +14,14 @@ public interface FrontierEngine<P extends FrontierProjection> {
 
     CheckpointImage checkpoint();
 
+    /** Ordinary execution reads must not request serialized persistence state. */
+    FrontierExecutionView executionView();
+
     /** Read-only next due instant for bounded background drivers; it never exposes mutable schedule state. */
     Optional<SimInstant> nextScheduledInstantAfter(SimInstant instant);
+
+    /** Earliest runnable deadline or parked-work audit, including an already-due backlog. */
+    Optional<SimInstant> nextExecutionBoundary();
 
     /** Discards only transactions already covered by a durably installed snapshot. */
     void compact(Revision coveredRevision);

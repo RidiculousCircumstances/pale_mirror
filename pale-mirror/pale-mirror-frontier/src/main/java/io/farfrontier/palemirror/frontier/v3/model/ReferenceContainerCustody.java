@@ -163,11 +163,12 @@ public final class ReferenceContainerCustody {
         ContainerRecord container = state.inventory().containers().get(Objects.requireNonNull(containerId, "container id"));
         if (container == null) throw new IllegalArgumentException("unknown reference container");
         java.util.ArrayList<MaterialContainerImage.Slot> image = new java.util.ArrayList<>(container.slotCount());
+        Map<Integer, ProjectedFungibleSlot> projected = expectedFungibleSlots(state, containerId);
         for (int slot = 0; slot < container.slotCount(); slot++) {
             ExactItemStack item = state.inventory().itemAt(containerId, slot).orElse(null);
             if (item != null) image.add(MaterialContainerImage.Slot.exact(slot, item.id().value(), item.itemKind(), item.count()));
             else {
-                ProjectedFungibleSlot fungible = expectedFungibleSlot(state, containerId, slot).orElse(null);
+                ProjectedFungibleSlot fungible = projected.get(slot);
                 image.add(fungible == null ? MaterialContainerImage.Slot.empty(slot)
                         : MaterialContainerImage.Slot.fungible(slot, fungible.itemKind(), fungible.quantity()));
             }
@@ -207,8 +208,12 @@ public final class ReferenceContainerCustody {
         ContainerRecord container = state.inventory().containers().get(Objects.requireNonNull(containerId, "container id"));
         if (container == null || slot < 0 || slot >= container.slotCount())
             throw new IllegalArgumentException("fungible reference slot is invalid");
-        return Optional.ofNullable(expectedFungibleSlots(state.inventory(), containerId,
-                state.reservedContainerSlots(containerId)).get(slot));
+        return Optional.ofNullable(expectedFungibleSlots(state, containerId).get(slot));
+    }
+
+    /** One immutable image per container observation, not one full layout compilation per slot. */
+    public static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(FrontierWorldState state, SubjectId containerId) {
+        return expectedFungibleSlots(state.inventory(), Objects.requireNonNull(containerId), state.reservedContainerSlots(containerId));
     }
 
     private static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(ExactInventory inventory, SubjectId containerId,

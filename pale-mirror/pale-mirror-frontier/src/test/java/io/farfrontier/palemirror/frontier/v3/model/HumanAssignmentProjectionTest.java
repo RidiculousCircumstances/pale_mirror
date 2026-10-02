@@ -48,5 +48,8 @@ class HumanAssignmentProjectionTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:assignment-cache"), 91L));
         assertSame(HumanAssignmentProjection.compile(state), HumanAssignmentProjection.compile(state),
                 "a physical tick may reuse only the exact immutable state projection, never a stale later state");
+        var moved = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(new java.util.LinkedHashMap<>(state.actorLocations())));
+        assertSame(HumanAssignmentProjection.compile(state), HumanAssignmentProjection.compile(moved),
+                "a pose-only state change must not rebuild unrelated work assignments");
     }
 }

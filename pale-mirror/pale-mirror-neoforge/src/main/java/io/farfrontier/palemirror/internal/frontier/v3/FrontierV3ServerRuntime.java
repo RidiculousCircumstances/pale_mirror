@@ -139,16 +139,21 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     }
 
     /**
-     * Returns an immutable image of the current canonical revision for a server-thread adapter.
+     * Returns an encoded image for persistence or explicit diagnostic/export boundaries.
      *
-     * <p>The image deliberately exposes bytes rather than mutable domain state. Adapters must
-     * decode only the data they need and route every resulting mutation back through
-     * {@link #submit(FrontierCommand)}.</p>
+     * <p>Ordinary server-thread adapters use {@link #canonicalState()} or {@link #executionView()}
+     * without encoding. All mutations still enter {@link #submit(FrontierCommand)}.</p>
      */
     Optional<CheckpointImage> checkpointImage() {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         if (cachedCheckpoint == null) cachedCheckpoint = engine.checkpoint();
         return Optional.of(cachedCheckpoint);
+    }
+
+    /** Read-only continuation metadata without snapshot encoding or resource-image copying. */
+    Optional<io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView> executionView() {
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        return Optional.of(engine.executionView());
     }
 
     /** Returns the exact immutable state/revision/instant for an owning server-thread adapter. */
@@ -223,18 +228,33 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     }
 
     private Optional<AdvanceResult> advanceOne(WorkBudget budget, boolean checkpointWhenDue) {
+        return advanceInterval(1, budget, checkpointWhenDue);
+    }
+
+    /** Caller has excluded executable physical work on the owning thread. Never crosses due/audit/save boundaries. */
+    Optional<AdvanceResult> advanceColdInterval(int maxTicks, WorkBudget budget) {
+        if (maxTicks < 1) throw new IllegalArgumentException("cold interval must be positive");
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        long boundary = engine.nextExecutionBoundary().map(value -> Math.max(1L, value.ticks() - instant.ticks()))
+                .orElse((long) maxTicks);
+        int interval = Math.toIntExact(Math.min(Math.min(maxTicks, boundary),
+                Math.max(1, checkpointIntervalTicks - ticksSinceCheckpoint)));
+        return advanceInterval(interval, budget, true);
+    }
+
+    private Optional<AdvanceResult> advanceInterval(int intervalTicks, WorkBudget budget, boolean checkpointWhenDue) {
         Objects.requireNonNull(budget, "budget");
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         try {
             AdvanceResult result;
             try (DiagnosticCaptureScope ignored = DiagnosticCaptureScope.open(diagnosticRuntimeIdentity)) {
-                result = engine.advanceTo(instant.plus(1L), budget);
+                result = engine.advanceTo(instant.plus(intervalTicks), budget);
             }
             // SimInstant advances even when no due action mutates the aggregate, so each server
             // tick has a distinct immutable checkpoint image for adapter observation.
             cachedCheckpoint = null;
             instant = result.instant();
-            ticksSinceCheckpoint = Math.addExact(ticksSinceCheckpoint, 1);
+            ticksSinceCheckpoint = Math.addExact(ticksSinceCheckpoint, intervalTicks);
             if (result.status().kind() == io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.QUARANTINED) {
                 status = new FrontierV3RuntimeStatus(FrontierV3RuntimeStatus.Kind.QUARANTINED, result.status().failureDetail());
                 return Optional.of(result);

@@ -269,8 +269,9 @@ final class FrontierV3ContainerSurfaceExecutor {
         if (overlapsHarvestOutputReservation(state, observed)) return false;
         if (accounts.isEmpty()) return observed.isEmpty();
         if (state.inventory().containers().get(containerId).productionStation().isPresent()) {
+            var projected = ReferenceContainerCustody.expectedFungibleSlots(state, containerId);
             for (int slot = 0; slot < chest.getContainerSize(); slot++) {
-                var expectedSlot = ReferenceContainerCustody.expectedFungibleSlot(state, containerId, slot).orElse(null);
+                var expectedSlot = projected.get(slot);
                 ItemStack actual = chest.getItem(slot);
                 if (expectedSlot == null) {
                     if (state.inventory().itemAt(containerId, slot).isEmpty() && !actual.isEmpty()) return false;
@@ -309,8 +310,9 @@ final class FrontierV3ContainerSurfaceExecutor {
         if (accounts.size() > 1) return Optional.empty();
         if (accounts.isEmpty()) return Optional.of(List.copyOf(planned));
         if (state.inventory().containers().get(containerId).productionStation().isPresent()) {
+            var projected = ReferenceContainerCustody.expectedFungibleSlots(state, containerId);
             for (int slot = 0; slot < capacity; slot++) {
-                var expected = ReferenceContainerCustody.expectedFungibleSlot(state, containerId, slot).orElse(null);
+                var expected = projected.get(slot);
                 if (expected == null) continue;
                 ResourceLocation id = ResourceLocation.tryParse(expected.itemKind());
                 if (id == null || !BuiltInRegistries.ITEM.containsKey(id)

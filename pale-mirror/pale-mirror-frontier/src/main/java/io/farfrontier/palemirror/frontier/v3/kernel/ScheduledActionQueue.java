@@ -33,6 +33,7 @@ public final class ScheduledActionQueue {
     private final Map<SubjectId, Set<ScheduleId>> parkedByKey = new HashMap<>();
     private final NavigableMap<Long, Set<ScheduleId>> auditAt = new TreeMap<>();
     private long auditReadyWithoutWake;
+    private List<ScheduledAction> immutableSnapshot;
 
     private record Parked(ScheduledAction action, Set<SubjectId> keys, long auditTick) { }
 
@@ -46,11 +47,13 @@ public final class ScheduledActionQueue {
             throw new IllegalStateException("scheduled action ordering collision: " + action.id().value());
         }
         runnable.add(action);
+        immutableSnapshot = null;
     }
 
     public boolean cancel(ScheduleId id) {
         ScheduledAction action = byId.remove(Objects.requireNonNull(id, "schedule id"));
         if (action == null) return false;
+        immutableSnapshot = null;
         runnable.remove(action);
         forgetParked(action.id());
         return ordered.remove(action);
@@ -213,13 +216,15 @@ public final class ScheduledActionQueue {
             throw new IllegalStateException("scheduled action acknowledgement is not the queue head: " + action.id().value());
         }
         ordered.pollFirst();
+        immutableSnapshot = null;
         byId.remove(action.id());
         runnable.remove(action);
         forgetParked(action.id());
     }
 
     public List<ScheduledAction> snapshot() {
-        return List.copyOf(ordered);
+        if (immutableSnapshot == null) immutableSnapshot = List.copyOf(ordered);
+        return immutableSnapshot;
     }
 
     public int size() {
@@ -228,6 +233,13 @@ public final class ScheduledActionQueue {
 
     /** Diagnostic only: parked actions remain canonical members but are not runnable work. */
     public int parkedCount() { return parked.size(); }
+
+    public Optional<SimInstant> nextExecutionBoundary() {
+        Long due = runnable.isEmpty() ? null : runnable.first().dueAt().ticks();
+        Long audit = auditAt.isEmpty() ? null : auditAt.firstKey();
+        if (due == null && audit == null) return Optional.empty();
+        return Optional.of(new SimInstant(due == null ? audit : audit == null ? due : Math.min(due, audit)));
+    }
 
     /** Lower bound: an audit found an eligible wait that no owner signal had woken. */
     public long auditReadyWithoutWake() { return auditReadyWithoutWake; }

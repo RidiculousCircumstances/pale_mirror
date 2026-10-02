@@ -33,6 +33,17 @@ final class FrontierReferenceClosure {
         validateScheduledSubjects(state, schedules);
     }
 
+    static void validateTransition(FrontierWorldState before, FrontierWorldState after, List<ScheduledAction> schedules) {
+        FrontierDomainRelationships.verifyCurrentOwnerSurfaces();
+        FrontierDomainRelationships.validateTransition(before, after);
+        // Each cross-owner check uses its own exact dependency set. Scheduled subjects
+        // retain the full audit: a retired owner can invalidate an unchanged future action.
+        ResidentMealReferenceClosure.validateTransition(before, after);
+        if (before.physicalIntents() != after.physicalIntents() || before.inventory().items() != after.inventory().items())
+            validateExactPhysicalCustody(after);
+        validateScheduledSubjects(after, schedules);
+    }
+
     private static void validateExactPhysicalCustody(FrontierWorldState state) {
         Map<SubjectId, PhysicalIntent> ownerByCurrentItem = new HashMap<>();
         for (PhysicalIntent intent : state.physicalIntents().values()) {

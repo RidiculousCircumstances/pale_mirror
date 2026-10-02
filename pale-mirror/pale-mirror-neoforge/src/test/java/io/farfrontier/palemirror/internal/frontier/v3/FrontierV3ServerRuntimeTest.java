@@ -90,6 +90,29 @@ class FrontierV3ServerRuntimeTest {
     private static final SubjectId SUBJECT = new SubjectId("settlement:runtime");
 
     @Test
+    void boundedColdIntervalsMatchOrdinaryTicksAndRecoverTheSameWorld(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:cold-interval-equivalence");
+        var definition = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var ordinary = FrontierV3ServerRuntime.start(definition,
+                new FrontierFileStore(directory.resolve("ordinary"), FrontierWorldRuntimeDefinition.payloadCodecs()), 37);
+        var store = new FrontierFileStore(directory.resolve("interval"), FrontierWorldRuntimeDefinition.payloadCodecs());
+        var interval = FrontierV3ServerRuntime.start(definition, store, 37);
+        var budget = new WorkBudget(4, 64);
+        for (int tick = 0; tick < 120; tick++) ordinary.tick(budget).orElseThrow();
+        while (interval.canonicalState().orElseThrow().instant().ticks() < 120) {
+            int remaining = Math.toIntExact(120 - interval.canonicalState().orElseThrow().instant().ticks());
+            interval.advanceColdInterval(remaining, budget).orElseThrow();
+        }
+        assertEquals(ordinary.checkpointImage().orElseThrow(), interval.checkpointImage().orElseThrow(),
+                "skipping only empty intervals must preserve exact events, due/backlog order and current state");
+        var expected = interval.checkpointImage().orElseThrow();
+        ordinary.shutdown(); interval.shutdown();
+        var recovered = FrontierV3ServerRuntime.start(definition, store, 37);
+        assertEquals(expected, recovered.checkpointImage().orElseThrow());
+        recovered.shutdown();
+    }
+
+    @Test
     void rejectedBakeryPhysicalCommandCanBeClassifiedWithoutQuarantiningRuntime(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:rejected-bakery-observation-local");
         var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L),

@@ -52,7 +52,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
             return;
         }
         if (ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(),
-                        runtime.checkpointImage().orElseThrow().instant().ticks())
+                        runtime.canonicalState().orElseThrow().instant().ticks())
                 && FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
             FrontierV3CommandSubmission.submit(runtime, "bakery-resident-yield", lease.id().value(),
                     new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));

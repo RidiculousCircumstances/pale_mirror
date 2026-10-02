@@ -27,6 +27,40 @@ public final class FrontierV3RouteNavigationGameTests {
     private FrontierV3RouteNavigationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 110)
+    public static void pedestrianDetoursAroundResidentWithoutChangingItsGoal(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(2, 0, 3));
+        for (int x = 1; x <= 6; x++) for (int z = 1; z <= 6; z++) {
+            BlockPos support = helper.absolutePos(new BlockPos(x, 0, z));
+            level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(2.5D, 1.0D, 3.5D));
+        Villager occupant = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5D, 1.0D, 3.5D));
+        SurfaceAnchor from = SurfaceAnchor.at(start.getX(), start.getY(), start.getZ());
+        SurfaceAnchor to = SurfaceAnchor.at(start.getX() + 3, start.getY(), start.getZ());
+        var goal = new FrontierV3GoalNavigation.Goal(to,
+                io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN,
+                LocalNavigationEnvelope.around(from.standingBody(), to.standingBody()));
+        helper.runAfterDelay(1, () -> {
+            boolean detoured = false;
+            for (int turn = 0; turn < 90 && !FrontierV3SemanticMovement.arrived(level, worker, to); turn++) {
+                var result = FrontierV3GoalNavigation.pursue(level, worker, goal);
+                helper.assertTrue(result.status() == FrontierV3GoalNavigation.Status.IN_PROGRESS,
+                        "a resident is a transient physical obstacle, not an impossible task: " + result);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(worker);
+                worker.aiStep();
+                if (Math.abs(worker.getZ() - (start.getZ() + .5D)) > .35D) detoured = true;
+            }
+            helper.assertTrue(detoured, "the native path must go around the resident's occupied body volume");
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, to), "the same goal must be reached");
+            FrontierV3GoalNavigation.stop(worker); worker.discard(); occupant.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void sharedGoalBypassesBlockedHintBeyondOldStripeWithoutFalseIntermediateArrival(GameTestHelper helper) {
         floor(helper);

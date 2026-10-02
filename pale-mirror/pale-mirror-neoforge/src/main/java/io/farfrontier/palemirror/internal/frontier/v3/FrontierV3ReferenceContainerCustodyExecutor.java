@@ -69,6 +69,9 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
      * the normal checkpoint/release path rather than retaining HOT custody indefinitely.
      */
     private static final Map<ServerLevel, Map<SubjectId, Long>> OBSERVED_CUSTODY_EPOCHS = new WeakHashMap<>();
+    private static final int MAX_DISCOVERY_PER_TURN = 8;
+    private static final Map<ServerLevel, FrontierV3IndexedWorkWindow<SubjectId, PhysicalCustodyLease>> LEASE_WINDOWS = new WeakHashMap<>();
+    private static final Map<ServerLevel, FrontierV3IndexedWorkWindow<SubjectId, ContainerSurface>> SURFACE_WINDOWS = new WeakHashMap<>();
 
     private FrontierV3ReferenceContainerCustodyExecutor() { }
 
@@ -77,7 +80,8 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         if (state == null) return;
         // An unloaded serialized chest is evidence, never a live custodian.  Drain one exact
         // scope per tick so unrelated containers keep progressing.
-        for (PhysicalCustodyLease lease : state.replicaCustody().custodyByScope().values().stream()
+        for (PhysicalCustodyLease lease : LEASE_WINDOWS.computeIfAbsent(level, ignored -> new FrontierV3IndexedWorkWindow<>())
+                .next(state.replicaCustody().custodyByScope(), MAX_DISCOVERY_PER_TURN).stream()
                 .filter(lease -> lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID) && lease.live())
                 .sorted(Comparator.comparing(PhysicalCustodyLease::scopeId)).toList()) {
             if (BakeryPhysicalAuthority.pendingForContainer(state, lease.objectId())) continue;
@@ -108,13 +112,14 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             }
             rememberCurrentProcessObservation(level, lease);
         }
-        List<ContainerSurface> loaded = state.inventory().surfaces().values().stream()
+        List<ContainerSurface> loaded = SURFACE_WINDOWS.computeIfAbsent(level, ignored -> new FrontierV3IndexedWorkWindow<>())
+                .next(state.inventory().surfaces(), MAX_DISCOVERY_PER_TURN).stream()
                 .filter(surface -> (naturallyTicking(level, position(surface))
                             || FrontierV3ReferenceContainerPresentation.needsReconciliation(level, state, surface))
                         && !BakeryPhysicalAuthority.pendingForContainer(state, surface.containerId())
                         && !FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(surface.containerId())).toList();
         List<ContainerSurface> eligible = eligibleReferenceSurfaces(state, loaded);
-        if (!eligible.isEmpty()) reconcile(level, runtime, state, selectRoundRobin(eligible, level.getGameTime()));
+        if (!eligible.isEmpty()) reconcile(level, runtime, state, eligible.getFirst());
     }
 
     static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -479,13 +484,14 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 .map(id -> state.inventory().fungibleResources().lots().get(id).itemKind())
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         List<ReferenceContainerCustody.ObservedSlot> slots = new ArrayList<>(chest.getContainerSize());
+        var projected = ReferenceContainerCustody.expectedFungibleSlots(state, containerId);
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ItemStack stack = chest.getItem(slot);
             if (stack.isEmpty()) slots.add(ReferenceContainerCustody.ObservedSlot.empty(slot));
             else {
                 CustomData custom = stack.get(DataComponents.CUSTOM_DATA);
                 String kind = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-                ReferenceContainerCustody.ProjectedFungibleSlot fungible = ReferenceContainerCustody.expectedFungibleSlot(state, containerId, slot).orElse(null);
+                ReferenceContainerCustody.ProjectedFungibleSlot fungible = projected.get(slot);
                 if (custom == null && (retainedImage || bulk && ownedKinds.contains(kind)
                         && state.inventory().itemAt(containerId, slot).isEmpty()
                         || fungible != null && fungible.itemKind().equals(kind)

@@ -300,9 +300,21 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     }
 
     @Override
+    public io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView executionView() {
+        requireOwnerThread();
+        return new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(
+                worldId, revision, instant, schedules.snapshot());
+    }
+
+    @Override
     public Optional<SimInstant> nextScheduledInstantAfter(SimInstant after) {
         requireOwnerThread();
         return schedules.nextDueAfter(after);
+    }
+
+    @Override public Optional<SimInstant> nextExecutionBoundary() {
+        requireOwnerThread();
+        return schedules.nextExecutionBoundary();
     }
 
     @Override

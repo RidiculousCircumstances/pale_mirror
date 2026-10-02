@@ -32,7 +32,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
         Optional<FrontierProductionWorkSceneSupport.Candidate> candidate = FrontierV3SceneTurnScheduler.candidate(
                 runtime, SceneCauseKind.PRODUCTION_WORK, FrontierProductionWorkSceneSupport.candidates(state).stream()
                 .filter(value -> !ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, value.workerId(),
-                        runtime.checkpointImage().orElseThrow().instant().ticks()))
+                        runtime.canonicalState().orElseThrow().instant().ticks()))
                 // A current exact depot custody epoch is physical eligibility, not presentation
                 // demand.  It may therefore admit the same retained worker/workshop cycle while
                 // the naturally loaded depot is ticking without a nearby player.  Both anchors
@@ -191,7 +191,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
             else pursueRetainedTraversalEdge(level, worker, current, next);
             return;
         }
-        var checkpoint = runtime.checkpointImage().orElseThrow();
+        var checkpoint = runtime.executionView().orElseThrow();
         var binding = FrontierV3ContinuationBinding.require(checkpoint, job.id(), "frontier.settlement.production.task.complete");
         if (job.workProgress().stage() == ProductionWorkProgress.Stage.PROCESSING
                 && checkpoint.instant().compareTo(binding.dueAt()) < 0) return;

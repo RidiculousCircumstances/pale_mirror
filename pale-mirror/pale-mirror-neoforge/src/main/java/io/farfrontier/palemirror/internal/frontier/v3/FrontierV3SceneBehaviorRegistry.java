@@ -110,7 +110,7 @@ final class FrontierV3SceneBehaviorRegistry {
 
     /** Recovery and ordinary lifecycle release use the same family-owned continuation policy. */
     static Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> releaseBinding(
-            io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint,
+            io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView checkpoint,
             FrontierWorldState state, SceneLease lease) {
         for (Behavior behavior : CURRENT.ordered) {
             if (behavior.kind() == lease.cause().kind())
@@ -218,7 +218,7 @@ final class FrontierV3SceneBehaviorRegistry {
     @FunctionalInterface
     interface ReleaseBinding {
         Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> resolve(
-                io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint,
+                io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView checkpoint,
                 FrontierWorldState state, SceneLease lease);
     }
 

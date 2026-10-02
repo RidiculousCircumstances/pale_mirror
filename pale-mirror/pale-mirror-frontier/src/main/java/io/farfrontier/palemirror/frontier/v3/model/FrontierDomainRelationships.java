@@ -176,7 +176,13 @@ public final class FrontierDomainRelationships {
     public static List<OwnerSurface> currentOwnerSurfaces() { return CURRENT_OWNER_SURFACES; }
 
     /** Static recurrence gate for the closed current-family inventory. */
-    public static void verifyCurrentOwnerSurfaces() { CURRENT_OWNER_SURFACES.forEach(OwnerSurface::validate); }
+    public static void verifyCurrentOwnerSurfaces() { StaticOwnerValidation.requireValid(); }
+
+    private static final class StaticOwnerValidation {
+        private static final boolean VALID = validate();
+        private static boolean validate() { CURRENT_OWNER_SURFACES.forEach(OwnerSurface::validate); return true; }
+        private static void requireValid() { if (!VALID) throw new IllegalStateException("invalid owner manifest"); }
+    }
 
     /** Visible for the negative architecture fixture; production callers use the closed manifest above. */
     static void validateOwnerSurface(Class<?> ownerType, Set<String> registeredIdentityComponents) {
@@ -302,6 +308,41 @@ public final class FrontierDomainRelationships {
             throw new IllegalArgumentException("domain relationship " + first.kind().tag() + " " + first.reason() + ": " + first.expected() + " / " + first.observed());
         }
     }
+
+    /** Equivalent owned-family checks, invalidated by every source and target read by that family. */
+    static void validateTransition(FrontierWorldState before, FrontierWorldState after) {
+        var edges = new ArrayList<Edge>();
+        var incidents = new ArrayList<Incident>();
+        for (var family : VALIDATION_FAMILIES) {
+            List<Object> old = family.dependencies().apply(before), next = family.dependencies().apply(after);
+            boolean changed = false;
+            for (int index = 0; index < old.size(); index++) if (old.get(index) != next.get(index)) { changed = true; break; }
+            if (changed) family.collect().collect(after, edges, incidents);
+        }
+        // Sorting is diagnostic work only; a valid transition never sorts a whole relation view.
+        incidents.stream().filter(incident -> incident.traceCorrelation().startsWith("relationship:"))
+                .sorted(Comparator.comparing((Incident incident) -> incident.kind().tag())
+                        .thenComparing(incident -> incident.owner().stableKey())).findFirst().ifPresent(first -> {
+                    throw new IllegalArgumentException("domain relationship " + first.kind().tag() + " " + first.reason()
+                            + ": " + first.expected() + " / " + first.observed());
+                });
+    }
+
+    private interface ValidationCollector { void collect(FrontierWorldState state, List<Edge> edges, List<Incident> incidents); }
+    private record ValidationFamily(java.util.function.Function<FrontierWorldState, List<Object>> dependencies,
+                                    ValidationCollector collect) { }
+    private static final List<ValidationFamily> VALIDATION_FAMILIES = List.of(
+            new ValidationFamily(s -> List.of(s.strategicPlans()), FrontierDomainRelationships::addStrategic),
+            new ValidationFamily(s -> List.of(s.companies().market(), s.productionJobs(), s.strategicPlans().tasks(),
+                    s.inventory().economics().reservations(), s.humanPopulation().residents(), s.hiveColony().growthJobs()),
+                    FrontierDomainRelationships::addMarketAndProduction),
+            new ValidationFamily(s -> List.of(s.resourceSites().sites(), s.strategicPlans().tasks(), s.humanPopulation().residents()),
+                    FrontierDomainRelationships::addHarvest),
+            new ValidationFamily(s -> List.of(s.humanPopulation().provisions(), s.humanPopulation().residents(),
+                    s.inventory().items(), s.inventory().fungibleResources().lots()), FrontierDomainRelationships::addProvision),
+            new ValidationFamily(s -> List.of(s.sceneLeases(), s.ambientLeases()), (s, edges, incidents) -> addLeases(s, edges)),
+            new ValidationFamily(s -> List.of(s.contracts(), s.operations(), s.serviceWorks(), s.hiveColony().mobilizations()),
+                    (s, edges, incidents) -> addCurrentRetirementFamilies(s, edges)));
 
     /**
      * Non-authoritative consistency check for owner-declared exact edges.  Callers supply the

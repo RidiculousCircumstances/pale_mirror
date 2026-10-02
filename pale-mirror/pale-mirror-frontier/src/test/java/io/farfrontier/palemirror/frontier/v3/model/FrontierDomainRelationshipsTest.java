@@ -13,6 +13,22 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 class FrontierDomainRelationshipsTest {
     @Test
+    void dependencyAwareValidationRejectsRetiredTargetsOfUnchangedJobsLikeTheFullAudit() {
+        var before = FrontierV3FixtureCatalog.productionWorkConfiguration(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:dependency-validation"), 91L).initialState();
+        assertTrue(!before.productionJobs().isEmpty());
+        assertDoesNotThrow(() -> FrontierDomainRelationships.validate(before));
+        assertDoesNotThrow(() -> FrontierDomainRelationships.validateTransition(before, before));
+        var after = FrontierWorldState.duringReducerTransition(() ->
+                before.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(StrategicPlanState.empty())));
+        assertTrue(before.productionJobs() == after.productionJobs(), "the owning jobs did not change");
+        var full = assertThrows(IllegalArgumentException.class, () -> FrontierDomainRelationships.validate(after));
+        var incremental = assertThrows(IllegalArgumentException.class,
+                () -> FrontierDomainRelationships.validateTransition(before, after));
+        assertEquals(full.getMessage(), incremental.getMessage(), "changed targets must invalidate unchanged owners");
+    }
+
+    @Test
     void everyStableKindHasAnExecutableClosedDeclarationAndRejectsWrongTypedEndpoints() {
         assertEquals(Set.of(FrontierDomainRelationships.Kind.values()), FrontierDomainRelationships.declarations().keySet());
         FrontierDomainRelationships.Endpoint order = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.MARKET_ORDER, new SubjectId("order:relationship-test"));

@@ -14,7 +14,8 @@ final class FrontierV3ReferenceContainerHandoff {
     private FrontierV3ReferenceContainerHandoff() { }
     static List<FrontierV3HotHandoff.Check> inspect(ServerLevel level, FrontierWorldState state, ChunkPos chunk) {
         var checks = new ArrayList<FrontierV3HotHandoff.Check>();
-        for (var surface : state.inventory().surfaces().values()) {
+        for (var id : FrontierV3HandoffIndex.containers(level, state.inventory().surfaces(), chunk)) {
+            var surface = state.inventory().surfaces().get(id);
             if (!ReferenceContainerCustody.isReferenceContainer(state, surface.containerId())) continue;
             var pos = surface.position();
             if (!chunk.equals(new ChunkPos(pos.x() >> 4, pos.z() >> 4))) continue;
