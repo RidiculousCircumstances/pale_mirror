@@ -60,7 +60,7 @@ final class FrontierV3SceneDemand {
         Objects.requireNonNull(demandAnchor, "scene demand anchor");
         return candidates.stream().filter(candidate -> {
             BlockPosition anchor = Objects.requireNonNull(demandAnchor.apply(candidate), "candidate demand anchor");
-            return FrontierV3ServerLifecycle.sceneEligible(level, anchor) && observe(level, anchor).active();
+            return FrontierV3ServerLifecycle.newSceneAdmissionReady(level, anchor) && observe(level, anchor).active();
         }).toList();
     }
 

@@ -109,6 +109,13 @@ class FrontierV3ResourceFieldWitnessTest {
         assertThrows(IllegalArgumentException.class, () -> claim.acknowledgeForeignChange(change, accepted,
                 new FrontierV3ResourceFieldForeignChangeWitness.Blocks(block("minecraft:farmland"), block("minecraft:diamond_block")), reading));
         var blockedClaim = claim.acknowledgeForeignChange(change, accepted, physical, reading);
+        assertEquals(FrontierV3HotHandoff.Status.READY, FrontierV3ResourceFieldHandoff.inspectCells(
+                accepted, blockedClaim, List.of(layout().requireCell(FIRST)), ignored -> reading).status(),
+                "an exactly observed canonical obstruction excludes one cell, not the whole field's handoff");
+        assertEquals(FrontierV3HotHandoff.Status.CONFLICT, FrontierV3ResourceFieldHandoff.inspectCells(
+                accepted, blockedClaim, List.of(layout().requireCell(FIRST)), ignored ->
+                        new FrontierV3ResourceFieldObservation.Foreign(new FrontierV3ResourceFieldWitness.ForeignIncident(
+                                physical.soil(), block("minecraft:diamond_block"), "world:new-drift"))).status());
         assertEquals(physical.crop(), blockedClaim.cell(FIRST).foreign().orElseThrow().observedCrop());
         assertEquals(PLANTED, blockedClaim.cell(FIRST).committed(),
                 "a foreign block cannot become an owned projection predecessor");

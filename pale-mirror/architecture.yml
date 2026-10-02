@@ -36,9 +36,11 @@ components:
     path: "pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror"
     owns:
       - SavedData persistence, Minecraft observation, materialization execution, scheduling, and commands
-      - Reference-container initial writes confirm their actual chest and custody in the same lifecycle turn and only begin in block-ticking chunks
+      - Reference-container initial writes confirm their actual chest and custody in the same lifecycle turn; naturally loaded current presentation demand may prepare an out-of-date image outside block-ticking range, without ongoing HOT acquisition for unchanged images
       - Field initialization and canonical projection are acknowledged by the field owner, not replayed as physical farmer work; actual physical-first work retains its cause and hand witness
       - Registered scene behaviors own release continuation binding; generic stored-body recovery uses that same policy and never releases an active harvest without its retained engine action
+      - Read-only current-revision field and reference-container handoff checks gate initial chunk presentation and new scene admission, never existing physical-effect recovery
+      - PREPARED ambient admission reprojects a verified retained body to its current placement zone without teleporting an already HOT body or granting semantic completion
     may_depend_on:
       - domain
       - Minecraft

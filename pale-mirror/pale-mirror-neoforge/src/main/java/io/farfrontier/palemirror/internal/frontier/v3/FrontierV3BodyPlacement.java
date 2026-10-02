@@ -18,6 +18,23 @@ final class FrontierV3BodyPlacement {
         Selection { rejections = List.copyOf(rejections); }
     }
     private FrontierV3BodyPlacement() { }
+    /** Admission-only relocation: a failed selection must not leave a retained body at a probe point. */
+    static boolean placeRetained(ServerLevel level, Mob body, List<SurfaceAnchor> surfaces,
+                                 FrontierV3NavigationScope scope,
+                                 java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing) {
+        var previous = body.position();
+        boolean placed = false;
+        try {
+            placed = select(level, body, surfaces, scope, standing).isPresent();
+            if (placed) FrontierV3BodyObservation.refreshGroundContact(level, body);
+            return placed;
+        } finally {
+            if (!placed) {
+                body.setPos(previous.x, previous.y, previous.z);
+                FrontierV3BodyObservation.refreshGroundContact(level, body);
+            }
+        }
+    }
     static Optional<SurfaceAnchor> select(ServerLevel level, Mob candidate, List<SurfaceAnchor> surfaces,
                                           FrontierV3NavigationScope scope,
                                           java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing) {

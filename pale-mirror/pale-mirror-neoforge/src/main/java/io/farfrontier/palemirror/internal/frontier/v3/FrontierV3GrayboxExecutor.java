@@ -220,6 +220,11 @@ final class FrontierV3GrayboxExecutor {
         if (naturalFirstVisibilityCandidate(cursor, chunk)) retainFirstVisibility(runtime, chunk, false);
         FirstVisibilityRecord record = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
         if (record != null && record.status() == FirstVisibility.PENDING) firstVisibilityQueue(runtime, true).add(chunk);
+        if (record != null && record.status() == FirstVisibility.READY) {
+            FIRST_VISIBILITY.get(runtime).put(chunk, new FirstVisibilityRecord(
+                    FirstVisibility.STATIC_CURRENT, record.revision(), record.cells()));
+            DYNAMIC_CATCH_UP.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
+        }
     }
     static boolean naturalFirstVisibilityCandidate(Cursor cursor, ChunkPos chunk) {
         return cursor != null && !cursor.cellsIn(chunk).isEmpty();
@@ -257,8 +262,10 @@ final class FrontierV3GrayboxExecutor {
     static boolean resourceSiteProjectionDemanded(FrontierV3ServerRuntime<?, ?> runtime, ServerLevel level, ResourceSite site) {
         boolean currentPlayerDemand = level.players().stream()
                 .filter(player -> !player.isSpectator())
-                .map(player -> new ChunkPos(player.blockPosition()))
-                .anyMatch(playerChunk -> resourceSiteIngressMatches(playerChunk, site));
+                .anyMatch(player -> site.managedSlots().stream().anyMatch(position ->
+                        player.getChunkTrackingView().contains(position.x() >> 4, position.z() >> 4)));
+        // Current presentation demand is wider than physical work eligibility. Holding a
+        // visible chunk while requiring the player to approach it would deadlock preparation.
         return resourceSiteProjectionDemanded(resourceSitePlayerIngressed(runtime, site), currentPlayerDemand);
     }
     static boolean resourceSiteProjectionDemanded(boolean retainedIngress, boolean currentPlayerDemand) {
@@ -387,14 +394,20 @@ final class FrontierV3GrayboxExecutor {
         boolean blocked() { return blocked; }
         int cells() { return cells; }
     }
-    static void completeDynamicCatchUp(FrontierV3ServerRuntime<?, ?> runtime) {
+    static void completeDynamicCatchUp(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         long revision = runtime.checkpointImage().orElseThrow().revision().value();
         Map<ChunkPos, FirstVisibilityRecord> records = FIRST_VISIBILITY.get(runtime);
         if (records == null) return;
         ChunkPos chunk;
-        while ((chunk = poll(DYNAMIC_CATCH_UP.get(runtime))) != null) {
+        var pending = DYNAMIC_CATCH_UP.get(runtime);
+        int attempts = pending == null ? 0 : pending.size();
+        while (attempts-- > 0 && (chunk = poll(pending)) != null) {
             FirstVisibilityRecord record = records.get(chunk);
             if (record != null && record.status() == FirstVisibility.STATIC_CURRENT) {
+                if (!FrontierV3HotHandoff.inspect(level, runtime, chunk).ready()) {
+                    pending.add(chunk);
+                    continue;
+                }
                 records.replace(chunk, record, new FirstVisibilityRecord(FirstVisibility.READY, revision, record.cells()));
             }
         }

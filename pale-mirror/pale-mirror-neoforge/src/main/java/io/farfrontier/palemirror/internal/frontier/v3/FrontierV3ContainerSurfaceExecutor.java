@@ -73,7 +73,8 @@ final class FrontierV3ContainerSurfaceExecutor {
                 .sorted(Comparator.comparing(ContainerSurface::containerId))
                 .filter(surface -> level.hasChunkAt(position(surface))
                         && (!ReferenceContainerCustody.isReferenceContainer(state, surface.containerId())
-                            || level.shouldTickBlocksAt(position(surface))))
+                            || level.shouldTickBlocksAt(position(surface))
+                            || FrontierV3PhysicalDemand.presentationRequested(level, position(surface))))
                 .findFirst().ifPresent(surface -> executeLifecycle(level, runtime, state, surface));
         auditOneActiveSurface(level, runtime, state);
     }

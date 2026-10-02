@@ -366,8 +366,9 @@ final class FrontierV3AmbientActorExecutor {
             if (existing instanceof Mob body) {
                 if (!FrontierV3BakeryHandProjection.matchesAmbient(state, actorId, body)
                         || !FrontierV3ResidentMealHandProjection.matchesAmbient(state, actorId, body)) return Result.CONFLICT;
-                FrontierV3GoalNavigation.stop(body);
-                body.setNoAi(true);
+                Result placed = FrontierV3AmbientBodyHandoff.place(level, state, actorId, body,
+                        canonicalBody, standingPositionProvider);
+                if (placed != Result.CURRENT) return placed;
             }
             return Result.CURRENT;
         }

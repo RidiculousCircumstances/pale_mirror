@@ -410,6 +410,23 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return runtime == null || !FrontierV3PhysicalWorld.isPhysical(level) || FrontierV3GrayboxExecutor.sceneEligible(runtime, position);
     }
+    /** Fresh admission checks current owners even when a chunk stayed loaded across demand loss. */
+    static boolean newSceneAdmissionReady(ServerLevel level, io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
+        var runtime = RUNTIMES.get(level.getServer());
+        if (runtime == null || !FrontierV3PhysicalWorld.isPhysical(level)) return true;
+        return FrontierV3GrayboxExecutor.sceneEligible(runtime, position)
+                && FrontierV3HotHandoff.inspect(level, runtime,
+                        new net.minecraft.world.level.ChunkPos(position.x() >> 4, position.z() >> 4)).ready();
+    }
+    /** Before packet collection: hold presentation, not canonical time or chunk loading. */
+    public static boolean chunkPresentationReady(ServerLevel level, net.minecraft.world.level.ChunkPos chunk) {
+        if (!ownsPhysicalWorld(level.getServer()) || !FrontierV3PhysicalWorld.isPhysical(level)) return true;
+        var runtime = RUNTIMES.get(level.getServer());
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
+        FrontierV3GrayboxExecutor.observePlayerIngress(runtime, chunk);
+        return FrontierV3GrayboxExecutor.staticVisibilityComplete(runtime, chunk)
+                && FrontierV3HotHandoff.inspect(level, runtime, chunk).presentable();
+    }
     static void runPhysicalTurn(ServerLevel physicalWorld, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         FrontierV3PhysicalExecutors.registry().tick(Objects.requireNonNull(physicalWorld, "physical world"),
                 Objects.requireNonNull(runtime, "runtime"));

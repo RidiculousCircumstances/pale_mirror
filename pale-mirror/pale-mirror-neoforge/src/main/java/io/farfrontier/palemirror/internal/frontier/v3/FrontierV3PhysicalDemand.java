@@ -17,6 +17,13 @@ final class FrontierV3PhysicalDemand {
 
     private FrontierV3PhysicalDemand() { }
 
+    /** Current network tracking includes chunks waiting for presentation, unlike sent-chunk queries. */
+    static boolean presentationRequested(ServerLevel level, BlockPos position) {
+        return level.hasChunkAt(position) && level.players().stream()
+                .filter(player -> !player.isSpectator() && !"test-mock-player".equals(player.getGameProfile().getName()))
+                .anyMatch(player -> player.getChunkTrackingView().contains(position.getX() >> 4, position.getZ() >> 4));
+    }
+
     static boolean exists(ServerLevel level, BlockPos position) {
         return readiness(level, position).runnable();
     }

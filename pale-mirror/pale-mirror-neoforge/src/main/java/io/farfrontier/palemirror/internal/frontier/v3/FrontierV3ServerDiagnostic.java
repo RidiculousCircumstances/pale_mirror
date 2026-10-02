@@ -22,8 +22,8 @@ final class FrontierV3ServerDiagnostic {
         }
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         if ("execution".equals(view)) return FrontierV3PhysicalExecutionDiagnostic.render(checkpoint);
-        if ("first_visibility".equals(view)) return FrontierV3DiagnosticJson.firstVisibility(id, checkpoint,
-                FrontierV3GrayboxExecutor.firstVisibility(runtime, id));
+        if ("first_visibility".equals(view)) return FrontierV3HotHandoffDiagnostic.render(
+                FrontierV3PhysicalWorld.require(server), runtime, id, checkpoint);
         if ("status".equals(view)) return FrontierV3DiagnosticJson.operatorStatus(checkpoint, runtime.decodedState().orElseThrow(),
                 fastForwardRequests(server), id);
         FrontierWorldState state = runtime.decodedState().orElseThrow();

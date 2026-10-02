@@ -109,7 +109,8 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             rememberCurrentProcessObservation(level, lease);
         }
         List<ContainerSurface> loaded = state.inventory().surfaces().values().stream()
-                .filter(surface -> naturallyTicking(level, position(surface))
+                .filter(surface -> (naturallyTicking(level, position(surface))
+                            || FrontierV3ReferenceContainerPresentation.needsReconciliation(level, state, surface))
                         && !BakeryPhysicalAuthority.pendingForContainer(state, surface.containerId())
                         && !FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(surface.containerId())).toList();
         List<ContainerSurface> eligible = eligibleReferenceSurfaces(state, loaded);
