@@ -36,6 +36,10 @@ final class FrontierV3ResidentMealNavigation {
         if (route == null || route.leaseRevision() != lease.revision()
                 || route.mealStart() != meal.startedAtTick() || route.phase() != meal.phase()
                 || route.admitted() != admitted
+                || meal.phase() == ResidentMeal.Phase.MOVE
+                    && !route.waypoints().getLast().equals(ResidentMealProcess.serviceSurface(state, meal))
+                    && (!ResidentMealKnownNavigation.waitingStationAvailable(state, meal, route.waypoints().getLast())
+                        || !available(level, body, route.waypoints().getLast()))
                 || completedWaitingLegRequiresReplan(route.waypoints(),
                     FrontierV3SurfaceObservation.observedBody(body).supportingSurface(),
                     ResidentMealProcess.serviceSurface(state, meal), admitted, meal.phase())) {
@@ -43,7 +47,8 @@ final class FrontierV3ResidentMealNavigation {
                 route = new Route(lease.revision(), meal.startedAtTick(), meal.phase(), admitted,
                         meal.phase() == ResidentMeal.Phase.MOVE
                                 ? ResidentMealKnownNavigation.pathFrom(state, meal,
-                                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface())
+                                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface(),
+                                    station -> available(level, body, station))
                                 : ResidentMealKnownNavigation.clearancePathFrom(state, meal,
                                     FrontierV3SurfaceObservation.observedBody(body).supportingSurface()));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
@@ -80,5 +85,10 @@ final class FrontierV3ResidentMealNavigation {
         if (!reason.equals(BLOCKED.put(body, reason)))
             PaleMirrorMod.LOGGER.warn("Resident meal route waits resident={} phase={} reason={}",
                     meal.residentId().value(), meal.phase(), reason);
+    }
+
+    private static boolean available(ServerLevel level, Mob body, SurfaceAnchor station) {
+        return level.hasChunkAt(new net.minecraft.core.BlockPos(station.x(), station.y(), station.z()))
+                && FrontierV3SemanticMovement.targetIsNavigable(level, body, station);
     }
 }

@@ -252,16 +252,7 @@ public final class ServiceAccessCoordinator {
         SettlementDepotServicePort port = port(state, FrontierWorldState.depotId(settlement.id()));
         SettlementStructure depot = settlement.structures().stream()
                 .filter(structure -> structure.id().equals(port.depotId())).findFirst().orElseThrow();
-        java.util.Set<SurfaceAnchor> excluded = new java.util.HashSet<>();
-        state.actorLocations().entrySet().stream()
-                .filter(entry -> !entry.getKey().equals(residentId))
-                .filter(entry -> entry.getValue().condition().status() == ActorLifeStatus.ALIVE)
-                .map(entry -> entry.getValue().supportingSurface()).forEach(excluded::add);
-        state.humanPopulation().meals().values().stream()
-                .filter(meal -> !meal.residentId().equals(residentId))
-                .map(ResidentMeal::clearingSurface).forEach(excluded::add);
-        state.actorMovements().values().stream().filter(movement -> !movement.order().actorId().equals(residentId))
-                .flatMap(movement -> movement.order().legalStations().stream()).forEach(excluded::add);
+        java.util.Set<SurfaceAnchor> excluded = ServiceDestinationClaims.excludedFor(state, residentId);
         var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
                         new KnownPedestrianRouteKnowledge.Passage(depot,
                                 KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));

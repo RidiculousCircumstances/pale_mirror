@@ -491,7 +491,10 @@ public final class ResidentMealProcess {
 
     private static Optional<ResidentMealColdStep> arrivedTravelStep(FrontierWorldState state, ResidentMeal meal, long now) {
         TimedKnownRoute travel = meal.coldTravel().orElseThrow();
-        if (firstKnownBarrier(state, travel) >= 0)
+        if (firstKnownBarrier(state, travel) >= 0
+                || meal.phase() == ResidentMeal.Phase.MOVE
+                    && !travel.route().getLast().equals(serviceSurface(state, meal))
+                    && !ResidentMealKnownNavigation.waitingStationAvailable(state, meal, travel.route().getLast()))
             return Optional.of(new ResidentMealColdStep(meal.residentId(), meal.phase(), now));
         if (!travel.arrivedBy(now)) return Optional.empty();
         if (meal.phase() == ResidentMeal.Phase.MOVE

@@ -34,6 +34,12 @@ public final class ResidentMealKnownNavigation {
 
     /** A HOT release can resume from its last witnessed body without replaying an old path. */
     public static List<SurfaceAnchor> pathFrom(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start) {
+        return pathFrom(state, meal, start, surface -> true);
+    }
+
+    /** HOT supplies read-only physical availability of destinations, never a private terrain graph. */
+    public static List<SurfaceAnchor> pathFrom(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start,
+                                              java.util.function.Predicate<SurfaceAnchor> availableWaitingStation) {
         Objects.requireNonNull(state, "meal navigation state");
         Objects.requireNonNull(meal, "meal navigation owner");
         Objects.requireNonNull(start, "meal navigation start");
@@ -75,7 +81,8 @@ public final class ResidentMealKnownNavigation {
                 + Math.abs(start.z() - port.exteriorApproach().z()) <= 3
                 || waitingSurfaces(state, meal, port, routeKnowledge).contains(start));
         List<SurfaceAnchor> destinations = directService ? List.of(port.exteriorApproach())
-                : waitingSurfaces(state, meal, port, routeKnowledge);
+                : waitingSurfaces(state, meal, port, routeKnowledge).stream()
+                    .filter(availableWaitingStation).toList();
         for (SurfaceAnchor destination : destinations) {
             if (start.equals(destination)) return List.of(start);
             MovementOrder outdoor = new MovementOrder(meal.residentId(), meal.residentId(),
@@ -130,12 +137,19 @@ public final class ResidentMealKnownNavigation {
             }
         }
         SettlementStructure depot = settlement.structures().stream().filter(value -> value.id().equals(port.depotId())).findFirst().orElseThrow();
-        List<SurfaceAnchor> candidates = SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces();
+        var excluded = ServiceDestinationClaims.excludedFor(state, meal.residentId());
+        List<SurfaceAnchor> candidates = SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces()
+                .stream().filter(surface -> !excluded.contains(surface)).toList();
         if (candidates.isEmpty()) return List.of();
         List<SurfaceAnchor> preferred = new ArrayList<>(candidates.size());
         for (int index = 0; index < candidates.size(); index++)
             preferred.add(candidates.get((ordinal + index) % candidates.size()));
         return List.copyOf(preferred);
+    }
+
+    /** A retained approach cannot park on another owner's current or reserved exit. */
+    public static boolean waitingStationAvailable(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor surface) {
+        return !ServiceDestinationClaims.excludedFor(state, meal.residentId()).contains(surface);
     }
 
     private static List<SurfaceAnchor> workshopExit(Settlement settlement, SurfaceAnchor start) {

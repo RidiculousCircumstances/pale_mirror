@@ -12,6 +12,53 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void waitingApproachCannotOccupyAnotherMealsReservedClearanceAndHotCanRejectOccupiedPockets() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:meal-waiting-clearance"), 20260918065L));
+        Settlement settlement = state.bootstrap().settlements().get(6);
+        SubjectId resident = settlement.residents().getFirst().id();
+        SubjectId other = settlement.residents().get(1).id();
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        ResidentMeal meal = testMeal(state, settlement, resident, depot,
+                state.actorLocations().get(resident).supportingSurface());
+        SurfaceAnchor originalPocket = ResidentMealKnownNavigation.path(state, meal).getLast();
+        ResidentMeal departing = testMeal(state, settlement, other, depot, originalPocket);
+        FrontierWorldState reserved = state.withHumanPopulation(state.humanPopulation().withMeal(departing));
+        assertTrue(!ResidentMealKnownNavigation.waitingStationAvailable(reserved, meal, originalPocket));
+        SurfaceAnchor alternative = ResidentMealKnownNavigation.path(reserved, meal).getLast();
+        assertTrue(!alternative.equals(originalPocket), "arrival must not steal a reserved departure destination");
+        assertTrue(!ResidentMealKnownNavigation.pathFrom(reserved, meal,
+                reserved.actorLocations().get(resident).supportingSurface(), station -> !station.equals(alternative))
+                .getLast().equals(alternative), "HOT physical availability must choose another waiting point");
+        assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
+                () -> ResidentMealKnownNavigation.pathFrom(reserved, meal,
+                        reserved.actorLocations().get(resident).supportingSurface(), station -> false));
+
+        List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
+        var order = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(resident, resident,
+                FrontierWireTags.tag(meal.phase()), 1L, List.of(originalPocket), TraversalCapability.PEDESTRIAN,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var travel = new io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute(order, route, 24_001L, 20L, 1L);
+        FrontierWorldState inFlight = reserved.withHumanPopulation(reserved.humanPopulation().withMeal(meal.withColdTravel(travel)));
+        var interrupted = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
+                .planColdStep(inFlight, resident, travel.departedAtTick() + 1L).orElseThrow();
+        assertTrue(interrupted.nextSurface().isEmpty(), "new exit claim invalidates an in-flight waiting destination");
+        FrontierWorldState replannable = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
+                .reduceColdStep(inFlight, resident, interrupted);
+        assertTrue(replannable.humanPopulation().meals().get(resident).coldTravel().isEmpty());
+        assertEquals(meal.claimId(), replannable.humanPopulation().meals().get(resident).claimId(),
+                "replanning preserves the portion claim, it does not cancel or duplicate a meal");
+    }
+
+    private static ResidentMeal testMeal(FrontierWorldState state, Settlement settlement,
+                                         SubjectId resident, SubjectId depot, SurfaceAnchor clearing) {
+        return new ResidentMeal(resident, settlement.id(), depot, clearing,
+                ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-" + resident.value().replace(':', '-')),
+                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:meal-waiting"), 1)),
+                new SubjectId("claim:meal-waiting-" + resident.value().replace(':', '-')), Optional.empty(),
+                ResidentMeal.Phase.MOVE, 24_000L, Optional.empty());
+    }
+
     @Test void admittedShortEntranceStillRespectsAChangedPhysicalServiceCell() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-meal-changed-service"), 421L));
