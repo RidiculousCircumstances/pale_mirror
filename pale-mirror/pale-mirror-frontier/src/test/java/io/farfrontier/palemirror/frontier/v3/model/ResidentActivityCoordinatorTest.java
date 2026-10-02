@@ -12,6 +12,41 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentActivityCoordinatorTest {
+    @Test void hotOwnerSeesHungerRequestBeforeSceneAuthorityIsReleasedButKeepsPhysicalEffectFence() {
+        var fixture = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
+        var job = fixture.job();
+        var state = fixture.state();
+        var goal = ResourceSiteHarvestGoal.current(state, job);
+        state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHotGoalArrived(state,
+                fixture.site(), new ResourceSiteHarvestHotGoalArrived(job.id(), fixture.lease().id(), job.workerId(),
+                        goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+        state = ResourceSiteHarvestProcessTest.completeLabourHot(state, fixture.site(), fixture.lease().id());
+        long hungryAt = 27_000;
+        assertTrue(state.humanPopulation().nutrition(job.workerId()).accrueThrough(hungryAt,
+                state.bootstrap().ruleset().residentLife(), state.humanPopulation().resident(job.workerId())
+                        .characteristics().effectiveMetabolismPermille(hungryAt)).wantsFood(state.bootstrap().ruleset().residentLife()));
+        org.junit.jupiter.api.Assertions.assertFalse(ResidentActivityCoordinator.requestsYield(state, job.workerId(), hungryAt),
+                "no food means hunger alone cannot make the food producer abandon work");
+        var ledger = state.inventory().fungibleResources().transformCold(
+                ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(new SubjectId("settlement:1"))),
+                java.util.Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), java.util.Map.of(),
+                new ResourceLot(new SubjectId("lot:yield-bread"), new SubjectId("settlement:1"),
+                        "minecraft:bread", 64, "test", List.of()));
+        state = state.withInventory(state.inventory().withFungibleResources(ledger));
+        assertTrue(ResidentMealOpportunity.find(state, job.workerId(), hungryAt).isPresent());
+        var waiting = ResidentActivityCoordinator.assess(state, job.workerId(), hungryAt);
+        assertEquals(ResidentActivityChoice.Kind.WORK, waiting.kind());
+        assertEquals(Optional.of(ResidentActivityChoice.Wait.SAFE_CHECKPOINT), waiting.pending());
+        assertTrue(ResidentActivityCoordinator.requestsYield(state, job.workerId(), hungryAt));
+        assertTrue(ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(), hungryAt));
+        assertTrue(io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.selectSourceAtYield(
+                state, job.workerId(), hungryAt).isEmpty(), "request must not authorize concurrent HOT work and eating");
+        state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state,
+                fixture.site(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
+        assertTrue(ResidentActivityCoordinator.requestsYield(state, job.workerId(), hungryAt));
+        org.junit.jupiter.api.Assertions.assertFalse(ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(
+                state, job.workerId(), hungryAt), "an unfinished physical crop effect still prevents transfer");
+    }
     private static final SubjectId RESIDENT = new SubjectId("resident:one");
     private static final SubjectId JOB = new SubjectId("job:field-one");
     private static final HumanAssignment ASSIGNED = new HumanAssignment(RESIDENT,

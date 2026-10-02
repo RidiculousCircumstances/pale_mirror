@@ -35,7 +35,7 @@ public final class ResidentActivityCoordinator {
                 : Math.addExact(assessedAt, 20L);
     }
 
-    /** The scene owner checks this request at its own physical safe point, before new work. */
+    /** Intent precedes authority transfer. Never ask the admission result whether its blocked request exists. */
     public static boolean requestsYield(FrontierWorldState state,
                                         io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId,
                                         long canonicalTick) {
@@ -46,7 +46,11 @@ public final class ResidentActivityCoordinator {
                 || state.actorMovements().containsKey(residentId)
                 || state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)
                     == SettlementDailySchedule.Window.FREE
-                || assess(state, residentId, assessedAt).kind() == ResidentActivityChoice.Kind.EAT;
+                || state.humanPopulation().nutrition(residentId).accrueThrough(assessedAt,
+                        state.bootstrap().ruleset().residentLife(),
+                        resident.characteristics().effectiveMetabolismPermille(assessedAt))
+                    .wantsFood(state.bootstrap().ruleset().residentLife())
+                    && ResidentMealOpportunity.find(state, residentId, assessedAt).isPresent();
     }
 
     /** A work owner asks the same arbiter used by self-care before admitting its next safe step. */
