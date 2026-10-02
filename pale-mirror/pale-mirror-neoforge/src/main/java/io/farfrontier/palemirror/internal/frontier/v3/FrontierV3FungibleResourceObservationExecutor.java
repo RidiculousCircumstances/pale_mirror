@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
-import io.farfrontier.palemirror.frontier.v3.model.BakeryPhysicalAuthority;
 import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
@@ -57,8 +56,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
                 .sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
             ResourceCustody.Container custody = (ResourceCustody.Container) account.custody();
             if (FrontierV3DepotClickLedger.get(level).pending(custody.containerId()) != null) continue;
-            if (BakeryPhysicalAuthority.pendingForContainer(state, custody.containerId())) continue;
-            if (FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(custody.containerId())) continue;
+            if (FrontierV3ContainerEffectFence.pending(level, state, custody.containerId())) continue;
             ContainerSurface surface = state.inventory().surfaces().get(custody.containerId());
             if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) continue;
             BlockPos position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
@@ -79,6 +77,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
     static boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                            CustodyAccount account, ChestBlockEntity chest, long epoch) {
         SubjectId containerId = ((ResourceCustody.Container) account.custody()).containerId();
+        if (FrontierV3ContainerEffectFence.pending(level, state, containerId)) return false;
         if (FrontierV3ContainerSurfaceExecutor.hasForeignFungibleComponents(chest, state, containerId)) {
             FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, containerId);
             return false;

@@ -7,6 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceSurfaceVerified;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceSurfaceRecovery;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.*;
 import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPayloads.*;
 
@@ -17,6 +19,10 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         try {
             return switch (command.payload()) {
+                case ReferenceSurfaceVerified verified -> {
+                    ReferenceSurfaceRecovery.verify(state, verified);
+                    yield accepted(verified.containerId(), verified);
+                }
                 case CargoCleanupSaved saved -> {
                     state.fencedRecovery().acknowledgeCargoCleanupSaved(saved.retirement());
                     yield accepted(saved.retirement().cargoId(), saved);
@@ -79,6 +85,10 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         try {
             return switch (event.payload()) {
+                case ReferenceSurfaceVerified verified -> {
+                    if (!event.subject().equals(verified.containerId())) throw new IllegalArgumentException("surface verification has a foreign subject");
+                    yield ReferenceSurfaceRecovery.verify(state, verified);
+                }
                 case CargoCleanupSaved saved -> {
                     if (!event.subject().equals(saved.retirement().cargoId())) throw new IllegalArgumentException("cargo cleanup has a foreign subject");
                     yield replaceRecovery(state, state.fencedRecovery().acknowledgeCargoCleanupSaved(saved.retirement()));

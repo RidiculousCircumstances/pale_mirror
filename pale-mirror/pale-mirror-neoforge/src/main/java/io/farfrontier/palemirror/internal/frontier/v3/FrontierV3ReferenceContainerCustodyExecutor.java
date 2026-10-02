@@ -6,7 +6,6 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.BakeryPhysicalAuthority;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -84,8 +83,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 .next(state.replicaCustody().custodyByScope(), MAX_DISCOVERY_PER_TURN).stream()
                 .filter(lease -> lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID) && lease.live())
                 .sorted(Comparator.comparing(PhysicalCustodyLease::scopeId)).toList()) {
-            if (BakeryPhysicalAuthority.pendingForContainer(state, lease.objectId())) continue;
-            if (FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(lease.objectId())) continue;
+            if (FrontierV3ContainerEffectFence.pending(level, state, lease.objectId())) continue;
             ContainerSurface surface = state.inventory().surfaces().get(lease.objectId());
             if (surface == null || !naturallyTicking(level, position(surface))) {
                 // Pending or contradictory writes cannot be blindly released. They also
@@ -116,8 +114,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 .next(state.inventory().surfaces(), MAX_DISCOVERY_PER_TURN).stream()
                 .filter(surface -> (naturallyTicking(level, position(surface))
                             || FrontierV3ReferenceContainerPresentation.needsReconciliation(level, state, surface))
-                        && !BakeryPhysicalAuthority.pendingForContainer(state, surface.containerId())
-                        && !FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(surface.containerId())).toList();
+                        && !FrontierV3ContainerEffectFence.pending(level, state, surface.containerId())).toList();
         List<ContainerSurface> eligible = eligibleReferenceSurfaces(state, loaded);
         if (!eligible.isEmpty()) reconcile(level, runtime, state, eligible.getFirst());
     }
@@ -125,6 +122,11 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                   FrontierWorldState state, ContainerSurface surface) {
         SubjectId containerId = surface.containerId();
+        if (FrontierV3ContainerEffectFence.pending(level, state, containerId)) return;
+        if (surface.status() == ContainerSurfaceStatus.CONFLICT) {
+            FrontierV3ReferenceSurfaceRecovery.inspect(level, runtime, state, surface);
+            return;
+        }
         PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(containerId);
         ChestBlockEntity chest = chestAt(level, position(surface));
         if (replica == null) {

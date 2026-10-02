@@ -76,7 +76,7 @@ public final class DiagnosticProducerContract {
         "frontier.operation_travel_advanced", "frontier.operation_travel_segment_completed", "frontier.operation_travel_started",
         "frontier.physical_custody_acquired", "frontier.physical_custody_checkpointed", "frontier.physical_custody_released",
         "frontier.projection_custody_prepared", "frontier.projection_custody_confirmed",
-        "frontier.reference_projection_prepared",
+        "frontier.reference_projection_prepared", "frontier.reference_surface_verified",
         "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared",
         "frontier.physical_replica_declared", "frontier.physical_replica_emitted", "frontier.physical_replica_observed", "frontier.reference_mutation_closed",
         "frontier.production_cold_work_advanced", "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_goal_arrived", "frontier.bakery_hot_access_cleared",

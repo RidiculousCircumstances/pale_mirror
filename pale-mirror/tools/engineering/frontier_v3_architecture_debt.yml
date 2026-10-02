@@ -26,8 +26,11 @@ process_unhashed_tuning_constants:
 # pattern: F0.2 must remove entries as replica realization and custody leases
 # replace ContainerSurfaceStatus.ACTIVE. New files or references fail.
 historical_surface_active_references:
-  max_total: 34
+  # One inspected lifecycle transition, not a grant of custody based on ACTIVE history.
+  # ReferenceSurfaceRecovery requires fresh stock/provenance and exact replica/recovery epochs.
+  max_total: 35
   allowed_files:
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ReferenceSurfaceRecovery.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/CargoLoadingStateSupport.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/DecontaminationStateSupport.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/EngineeringEquipmentStateSupport.java: 1

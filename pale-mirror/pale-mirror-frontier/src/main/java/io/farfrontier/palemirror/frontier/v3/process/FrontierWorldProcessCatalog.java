@@ -50,6 +50,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.physical_replica_declared", "frontier.physical_replica_emitted", "frontier.physical_replica_observed", "frontier.physical_replica_conflict_observed", "frontier.reference_mutation_closed", "frontier.physical_custody_acquired",
             "frontier.projection_custody_prepared", "frontier.projection_custody_confirmed",
             "frontier.reference_projection_prepared",
+            "frontier.reference_surface_verified",
             "frontier.projection_conflict_observed",
             "frontier.physical_custody_checkpointed", "frontier.physical_custody_unresolved", "frontier.physical_custody_released",
             "frontier.fenced_recovery_prepared", "frontier.fenced_recovery_running", "frontier.fenced_recovery_observed", "frontier.fenced_recovery_confirmed",
@@ -485,10 +486,14 @@ public final class FrontierWorldProcessCatalog {
                 || previous.productionJobs() != next.productionJobs()
                 || previous.resourceSites() != next.resourceSites();
         boolean stockChanged = previous.inventory().fungibleResources() != next.inventory().fungibleResources();
+        boolean surfaceChanged = previous.inventory().surfaces() != next.inventory().surfaces();
         boolean custodyChanged = previous.replicaCustody() != next.replicaCustody();
         boolean sceneChanged = previous.sceneLeases() != next.sceneLeases();
-        if (accessChanged || stockChanged || custodyChanged || sceneChanged) keys.add(event.subject());
-        if (!accessChanged && !stockChanged && !custodyChanged && !sceneChanged)
+        if (accessChanged || stockChanged || custodyChanged || sceneChanged || surfaceChanged) keys.add(event.subject());
+        if (surfaceChanged) next.inventory().surfaces().forEach((id, surface) -> {
+            if (!surface.equals(previous.inventory().surfaces().get(id))) keys.add(id);
+        });
+        if (!accessChanged && !stockChanged && !custodyChanged && !sceneChanged && !surfaceChanged)
             return Set.copyOf(keys);
         if (sceneChanged) {
             for (var entry : previous.sceneLeases().entrySet()) {

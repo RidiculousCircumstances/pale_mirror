@@ -27,9 +27,7 @@ final class FrontierV3ReferenceContainerHandoff {
                 checks.add(new FrontierV3HotHandoff.Check(surface.containerId(), CONFLICT, "container_custody_conflict"));
                 continue;
             }
-            if (BakeryPhysicalAuthority.pendingForContainer(state, surface.containerId())
-                    || ResidentMealPhysicalAuthority.pendingForContainer(state, surface.containerId())
-                    || FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(surface.containerId())) {
+            if (FrontierV3ContainerEffectFence.pending(level, state, surface.containerId())) {
                 checks.add(new FrontierV3HotHandoff.Check(surface.containerId(), WAITING, "container_effect_recovery"));
                 continue;
             }

@@ -105,6 +105,21 @@ class ResidentFoodPortionTest {
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotPrepared(before, resident,
                 new ResidentMealHotEffectPrepared(resident, new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, 7, 3, 1, 1, 1))));
         state = ResidentMealProcess.reduceHotPrepared(state, resident, prepared);
+        assertTrue(ContainerPhysicalAuthorityComposition.pending(state, fixture.depot()));
+        assertFalse(ContainerPhysicalAuthorityComposition.pending(state, new SubjectId("container:other")));
+        var isolatedInventory = state.inventory();
+        var isolatedRecovery = state.fencedRecovery();
+        var container = isolatedInventory.containers().get(fixture.depot());
+        for (var phase : List.of(ContainerSurfaceStatus.PREPARED, ContainerSurfaceStatus.ACTIVE, ContainerSurfaceStatus.CONFLICT)) {
+            isolatedInventory = isolatedInventory.withSurfaceStatus(fixture.depot(), phase);
+            isolatedRecovery = FencedRecoveryContainerSupport.transition(isolatedRecovery, container, phase);
+        }
+        var isolated = state.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(isolatedInventory).fencedRecovery(isolatedRecovery));
+        var binding = isolatedRecovery.current().get(FencedRecoveryContainerSupport.bindingId(container));
+        assertThrows(IllegalArgumentException.class, () -> ReferenceSurfaceRecovery.verify(isolated,
+                new ReferenceSurfaceVerified(fixture.depot(), 7, 2, binding.authorityEpoch(),
+                        replica.fingerprint(), replica.provenance())));
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorPocket(resident,
                 SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident), 0), FOOD, 9);
         roundtrip(new ResidentMealHotHandMaterialized(resident, 1, hand));
@@ -115,6 +130,7 @@ class ResidentFoodPortionTest {
         state = ResidentActivityProcess.reduceMealEffectObserved(state, resident, roundtrip(new ResidentMealHotEffectObserved(resident,
                 ResidentMeal.Phase.TAKE, 1, fixture.service().standingBody(),
                 List.of(new FungiblePhysicalObservation.Stack(slots.getLast().address(), FOOD, 2)), List.of(hand))), 96_001);
+        assertFalse(ContainerPhysicalAuthorityComposition.pending(state, fixture.depot()));
         var eating = state.humanPopulation().meals().get(resident).clearingSurface().standingBody();
         var atService = state;
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotPrepared(atService, resident,
