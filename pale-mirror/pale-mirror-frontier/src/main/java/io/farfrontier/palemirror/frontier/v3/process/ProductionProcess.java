@@ -298,18 +298,7 @@ public final class ProductionProcess {
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ProductionStarted started) {
-        ProductionJob job = started.job(); requireOwner(subject, job.settlementId()); Settlement settlement = settlement(state, job.settlementId());
-        // Every fresh-world bread admission must enter the station-custody
-        // vertical. Older route-only fixture jobs cannot reopen a second
-        // successful depot-slot wheat-to-bread path through a forged event.
-        if (job.bakeryWork().isEmpty())
-            throw new IllegalArgumentException("bread production start requires declared bakery station work");
-        SettlementStructure workshop = workshop(settlement);
-        if (!workshop.id().equals(job.facilityId()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production start facility is unavailable");
-        if (!baker(state, settlement).id().equals(job.workerId())) throw new IllegalArgumentException("production start worker is not the deterministic baker");
-        ActorExecutionCoordinator.requireOrdinaryWorkAdmission(state, job.workerId());
-        validateMarketOrder(state, activeTask(state, job), job);
-        return BakeryProcess.start(state, job, started.inputItemId());
+        return BakeryJobAdmission.admitStarted(state, subject, started);
     }
 
     private static List<ProposedEvent> planBakeryCompletion(FrontierWorldState state, ProductionJob job,
@@ -901,7 +890,7 @@ public final class ProductionProcess {
         if (task == null || task.kind() != StrategicTaskKind.PRODUCE_BREAD || task.status() != status) throw new IllegalStateException("production schedule has no matching strategic task");
         return task;
     }
-    private static StrategicTask activeTask(FrontierWorldState state, ProductionJob job) {
+    static StrategicTask activeTask(FrontierWorldState state, ProductionJob job) {
         StrategicTask task = task(state, job.taskId(), StrategicTaskStatus.ACTIVE);
         if (!task.ownerId().equals(job.settlementId()))
             throw new IllegalArgumentException("production job declares a foreign strategic task owner");
@@ -954,7 +943,7 @@ public final class ProductionProcess {
     private static List<SubjectId> inputLineage(java.util.Map<SubjectId, Integer> inputLots) {
         return inputLots.keySet().stream().sorted().toList();
     }
-    private static SettlementStructure workshop(Settlement settlement) { return settlement.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst()
+    static SettlementStructure workshop(Settlement settlement) { return settlement.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst()
             .orElseThrow(() -> new IllegalStateException("settlement lacks workshop")); }
     private static ResidentProfile baker(FrontierWorldState state, Settlement settlement) { return FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.BAKER)
             .orElseThrow(() -> new IllegalStateException("settlement lacks baker")); }
@@ -969,7 +958,7 @@ public final class ProductionProcess {
         // one while a previous commercial order remains in the bounded audit.
         return new SubjectId("job:production-" + task.id().value().substring("task:".length()));
     }
-    private static void validateMarketOrder(FrontierWorldState state, StrategicTask task, ProductionJob job) {
+    static void validateMarketOrder(FrontierWorldState state, StrategicTask task, ProductionJob job) {
         boolean demandExists = state.companies().market().demands().values().stream().anyMatch(demand -> demand.reasonId().equals(task.id()));
         if (!demandExists) return; // Explicit compatibility for old fixtures/snapshots that predate the v3 market boundary.
         MarketWorkOrder order = state.companies().market().acceptedForJob(job.id()).orElseThrow(() ->

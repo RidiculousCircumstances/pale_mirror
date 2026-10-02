@@ -27,6 +27,7 @@ public enum FrontierV3DiagnosticView {
     /** Read-only physical field-claim phase and retained observation fence for one site. */
     FIELD_PHYSICAL("field_physical", true),
     SETTLEMENT("settlement", true),
+    SETTLEMENT_MANAGEMENT("settlement_management", true),
     /** One bounded settlement resident set for a first-visibility audit; read-only and permission-gated. */
     SETTLEMENT_POPULATION("settlement_population", true),
     HIVE("hive", true),

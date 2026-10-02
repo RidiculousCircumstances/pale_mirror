@@ -63,4 +63,22 @@ final class BakeryJobAdmission {
                 new SubjectId("custody:" + suffix + "-baker-hand"), new SubjectId("custody:" + suffix + "-station"),
                 sourceAccount, 0);
     }
+
+    static FrontierWorldState admitStarted(FrontierWorldState state, SubjectId subject, ProductionStarted started) {
+        ProductionJob job = started.job(); if (!subject.equals(job.settlementId())) throw new IllegalArgumentException("production event subject does not own the work");
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
+        SettlementCommitmentComposition.ADMISSION.require(state, new SettlementCommitmentAdmission.Request(
+                job.taskId(), job.settlementId(), job.facilityId(), List.of(job.workerId())));
+        // Every fresh-world bread admission must enter the station-custody
+        // vertical. Older route-only fixture jobs cannot reopen a second
+        // successful depot-slot wheat-to-bread path through a forged event.
+        if (job.bakeryWork().isEmpty())
+            throw new IllegalArgumentException("bread production start requires declared bakery station work");
+        SettlementStructure workshop = ProductionProcess.workshop(settlement);
+        if (!workshop.id().equals(job.facilityId()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production start facility is unavailable");
+        if (!baker(state, settlement).id().equals(job.workerId())) throw new IllegalArgumentException("production start worker is not the deterministic baker");
+        ActorExecutionCoordinator.requireOrdinaryWorkAdmission(state, job.workerId());
+        ProductionProcess.validateMarketOrder(state, ProductionProcess.activeTask(state, job), job);
+        return BakeryProcess.start(state, job, started.inputItemId());
+    }
 }

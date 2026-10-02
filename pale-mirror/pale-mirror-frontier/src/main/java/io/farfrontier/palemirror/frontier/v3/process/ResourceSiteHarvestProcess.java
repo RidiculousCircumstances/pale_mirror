@@ -71,9 +71,7 @@ public final class ResourceSiteHarvestProcess {
     public static boolean coldProgressHeld(FrontierWorldState state, ScheduledAction action) { return ResourceSiteHarvestPlanning.coldProgressHeld(state, action); }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestStarted started) {
-        ResourceSiteHarvestJob job = started.job(); if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site harvest has a foreign event owner");
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId()); validateJob(state, lifecycle, job);
-        return state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
+        return ResourceSiteHarvestPlanning.admitStarted(state, subject, started);
     }
 
     public static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
@@ -896,7 +894,7 @@ public final class ResourceSiteHarvestProcess {
         return List.of(transition(task, StrategicTaskStatus.BLOCKED));
     }
 
-    private static void validateJob(FrontierWorldState state, ResourceSiteLifecycle lifecycle, ResourceSiteHarvestJob job) {
+    static void validateJob(FrontierWorldState state, ResourceSiteLifecycle lifecycle, ResourceSiteHarvestJob job) {
         if ((lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING)
                 || lifecycle.growthStage() != ResourceSiteLifecycle.MATURE_STAGE) throw new IllegalArgumentException("resource-site harvest requires a ready field");
         if (lifecycle.phase() == ResourceSitePhase.HARVESTING && lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)

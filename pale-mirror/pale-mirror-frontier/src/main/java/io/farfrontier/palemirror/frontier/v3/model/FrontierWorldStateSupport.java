@@ -75,12 +75,7 @@ public final class FrontierWorldStateSupport {
     }
 
     public static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
-        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
-        return state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == profession)
-                .filter(resident -> availableForNewAssignment(state, resident))
-                .filter(resident -> assignments.idle(resident.id()))
-                .sorted(byProfessionCapability(profession)).findFirst();
+        return SettlementWorkforce.candidates(state, settlementId, profession).stream().findFirst();
     }
 
     public static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
@@ -89,21 +84,11 @@ public final class FrontierWorldStateSupport {
 
     /** Deterministic exact candidates for one route owner; callers choose a bounded named formation. */
     public static List<ResidentProfile> availableRouteResidents(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
-        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
-        return state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == profession)
-                .filter(resident -> availableForNewAssignment(state, resident))
-                .filter(resident -> assignments.idle(resident.id()))
-                .sorted(byProfessionCapability(profession)).toList();
+        return SettlementWorkforce.candidates(state, settlementId, profession);
     }
 
     public static Optional<ResidentProfile> availableFieldResident(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
-        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
-        return state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == profession)
-                .filter(resident -> availableForNewAssignment(state, resident))
-                .filter(resident -> assignments.idle(resident.id()))
-                .sorted(byProfessionCapability(profession)).findFirst();
+        return SettlementWorkforce.candidates(state, settlementId, profession).stream().findFirst();
     }
 
     /** Compatibility selection for callers still holding only the legacy bootstrap affinity. */
@@ -128,8 +113,7 @@ public final class FrontierWorldStateSupport {
 
     /** New owners cannot borrow a person during retained self-care; existing work keeps its claim. */
     public static boolean availableForNewAssignment(FrontierWorldState state, ResidentProfile resident) {
-        return workCapable(state, resident) && !state.humanPopulation().meals().containsKey(resident.id())
-                && !state.actorMovements().containsKey(resident.id());
+        return SettlementWorkforce.availableForNewAssignment(state, resident);
     }
 
     static boolean retainsParticipantClaim(FrontierWorldState state, RouteOperation operation) {

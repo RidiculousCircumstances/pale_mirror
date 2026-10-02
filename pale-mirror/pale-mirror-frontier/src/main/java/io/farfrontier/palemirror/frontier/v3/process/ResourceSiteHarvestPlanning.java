@@ -395,4 +395,13 @@ final class ResourceSiteHarvestPlanning {
         events.add(reschedule(action, coldProgress(replacement, Math.addExact(now, continuationInterval(state, replacement)))));
         return List.copyOf(events);
     }
+
+    static FrontierWorldState admitStarted(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestStarted started) {
+        ResourceSiteHarvestJob job = started.job(); if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site harvest has a foreign event owner");
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId()); validateJob(state, lifecycle, job);
+        ResourceSite descriptor = state.resourceSite(job.siteId());
+        SettlementCommitmentComposition.ADMISSION.require(state, new SettlementCommitmentAdmission.Request(
+                job.taskId(), descriptor.settlementId(), descriptor.facilityId(), List.of(job.workerId())));
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
+    }
 }

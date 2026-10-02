@@ -776,7 +776,7 @@ class ProductionProcessTest {
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:test-production"), objective.id(), settlement, StrategicTaskKind.PRODUCE_BREAD,
                 Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), status);
-        return state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        return state.withStrategicPlans(StrategicPlanState.initial(state.bootstrap()).addObjective(objective).addTask(task));
     }
 
     static PreparedProduction activePhysicalProduction() {

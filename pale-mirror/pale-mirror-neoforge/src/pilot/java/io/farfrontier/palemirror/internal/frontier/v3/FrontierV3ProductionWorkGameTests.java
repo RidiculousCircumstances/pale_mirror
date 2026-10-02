@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
-import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierProductionWorkSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -188,7 +188,8 @@ public final class FrontierV3ProductionWorkGameTests {
                     new AmbientLeasePrepared(AmbientActorProcess.nextLease(initial, job.workerId(),
                             runtime.canonicalState().orElseThrow().instant())));
             FrontierV3CommandSubmission.submit(runtime, "production-release-fence-ambient-hot", suffix,
-                    new AmbientLeaseTransition(job.workerId(), AmbientLeaseStatus.HOT));
+                    new AmbientBodyConfirmed(job.workerId(), state(runtime).ambientLeases().get(job.workerId()).revision(),
+                            AmbientBodyConfirmed.Boundary.ADMISSION, observed, observed));
             SceneLease lease = SceneLease.forCause(leaseId, world, new ProductionWorkSceneCause(job.id()), observed.supportingSurface().support(),
                     runtime.canonicalState().orElseThrow().instant(), runtime.canonicalState().orElseThrow().revision().value(), SceneLeaseStatus.PREPARED,
                     List.of(member), java.util.Map.of(job.workerId(), observed), java.util.Set.of(job.workerId()), Optional.empty());

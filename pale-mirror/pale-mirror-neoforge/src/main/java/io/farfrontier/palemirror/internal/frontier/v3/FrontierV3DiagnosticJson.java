@@ -145,6 +145,7 @@ final class FrontierV3DiagnosticJson {
             case "process_inventory" -> FrontierV3ProcessInventoryDiagnostic.render(id, checkpoint, state);
             case "site" -> site(id, checkpoint, state);
             case "settlement" -> settlement(id, checkpoint, state);
+            case "settlement_management" -> FrontierV3SettlementManagementDiagnostic.render(id, checkpoint, state);
             case "settlement_population" -> settlementPopulation(checkpoint, state, id, java.util.Map.of());
             case "hive" -> hive(id, checkpoint, state);
             case "hive_transfer" -> hiveTransfer(id, checkpoint, state);

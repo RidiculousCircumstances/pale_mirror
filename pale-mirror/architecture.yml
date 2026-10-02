@@ -365,6 +365,11 @@ invariants:
     statement: "Operator debug reads projections or invokes normal validated state transitions; navigation teleports only by explicit command to a persisted physical anchor; maintenance reset is two-phase, bounded to wholly unmaterialized PM state, rechecks every precondition at commit time, and fails closed without touching Minecraft blocks, entities, chunks or foreign state."
 
 critical_flows:
+  - id: "frontier-v3-settlement-management"
+    lifecycle: "active-development"
+    path: "exact settlement DecisionAuthority -> registered profile offers/typed requirement catalogue -> immutable priority policy and scoped holds -> deterministic lane admission/pending-only replacement -> existing durable objective/task -> shared workforce and injected facility commitment admission -> atomic owner job/resource transaction -> resident activity arbitration and existing navigation/HOT-COLD execution -> owner outcome retires or retains the same commitment"
+    owner: "SettlementManagement, SettlementManagementPolicy, SettlementOperationPlanner, SettlementWorkforce and SettlementCommitmentAdmission; concrete profiles and facility views only in closed composition roots; existing StrategicPlanState/resource ledger remain canonical"
+    verification: "focused policy/negative ownership/recovery tests, existing farmer/bakery regressions and read-only management diagnostic; no future trade/combat implementation claim"
   - id: "frontier-v3-command-event"
     lifecycle: "active-development"
     path: "typed command or persisted due action -> expected-revision and invariant validation -> deterministic events and cause chain -> required WAL durability -> atomic canonical transition -> immutable revisioned projections"

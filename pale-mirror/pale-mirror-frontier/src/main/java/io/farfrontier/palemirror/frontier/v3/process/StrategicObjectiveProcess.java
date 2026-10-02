@@ -179,7 +179,8 @@ public final class StrategicObjectiveProcess {
         if (lifecycle.phase() != ResourceSitePhase.READY || !action.id().equals(resourceHarvestOpportunity(state, lifecycle, action.dueAt().ticks()).id())) return List.of();
         ResourceSite site = state.resourceSite(lifecycle.siteId());
         SubjectId owner = site.settlementId();
-        if (state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.FACILITY)) {
+        if (!SettlementManagement.available(state, owner, new StrategicOperationProposal(
+                StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(), Optional.of(site.id()), FixedScalar.SCALE))) {
             return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(resourceHarvestOpportunity(state, lifecycle,
                     Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval())))));
         }
@@ -190,7 +191,7 @@ public final class StrategicObjectiveProcess {
                     Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().strategicReviewInterval())))));
         }
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
-        Candidate candidate = new Candidate(StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(), Optional.of(lifecycle.siteId()), FixedScalar.SCALE);
+        StrategicOperationProposal candidate = new StrategicOperationProposal(StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(), Optional.of(lifecycle.siteId()), FixedScalar.SCALE);
         DecisionPolicyRegistry.require(state.strategicPlans().requireDecisionAuthority(owner));
         StrategicObjective objective = objective(state, owner, candidate, ordinal); StrategicTask task = task(state, objective);
         // The ready-field opportunity has already passed its durable planner boundary.  The
@@ -243,15 +244,20 @@ public final class StrategicObjectiveProcess {
                 ? List.of(new ProposedEvent(owner, new HiveDoctrineSelected(doctrine))) : List.of();
         List<ProposedEvent> observedAndHealth = concatenate(concatenate(concatenate(concatenate(concatenate(concatenate(perception.events(), hivePerception.events()),
                 territoryPerception.events()), settlementPerception.events()), doctrineEvent), health), medical);
-        Optional<Candidate> candidate = candidate(decisionState, owner, allowHiveInterception, action.dueAt().ticks(), interceptSighting);
-        if (candidate.map(Candidate::kind).orElse(null) == StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION
+        Optional<SettlementManagement.Decision> management = state.bootstrap().hive().id().equals(owner)
+                ? Optional.empty() : Optional.of(SettlementManagementComposition.MANAGEMENT.decide(decisionState,
+                        FrontierWorldStateSupport.settlement(state.bootstrap(), owner)));
+        Optional<StrategicOperationProposal> candidate = management.isPresent() ? management.orElseThrow().selected()
+                : hiveCandidate(decisionState, allowHiveInterception, action.dueAt().ticks(), interceptSighting);
+        if (candidate.map(StrategicOperationProposal::kind).orElse(null) == StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION
                 && HiveRouteEngagementProcess.hasPendingOrActiveInterception(state)) {
             return concatenate(observedAndHealth, next);
         }
         List<ProposedEvent> preempted = new java.util.ArrayList<>(preemptForInterception(state, owner, candidate));
-        candidate.filter(value -> emergencyFoodCandidate(state, owner, value)).ifPresent(ignored -> preempted.addAll(preemptForEmergencyProvision(state, owner)));
+        management.ifPresent(decision -> decision.replacePendingTasks().forEach(id -> preempted.add(
+                new ProposedEvent(owner, new StrategicTaskTransition(id, StrategicTaskStatus.BLOCKED)))));
         if (candidate.isEmpty()) return concatenate(observedAndHealth, next);
-        Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(state, owner, value, ordinal, eventIdentity);
+        StrategicOperationProposal value = candidate.orElseThrow(); StrategicObjective objective = objective(state, owner, value, ordinal, eventIdentity);
         if (state.strategicPlans().hasActiveObjective(owner, objective.lane()) && preempted.isEmpty()) {
             return concatenate(observedAndHealth, next);
         }
@@ -315,26 +321,11 @@ public final class StrategicObjectiveProcess {
         return state.withStrategicPlans(state.strategicPlans().transitionTask(task.id(), transition.status()));
     }
 
-    private static Optional<Candidate> candidate(FrontierWorldState state, SubjectId owner, boolean allowHiveInterception, long now,
-                                                  Optional<HiveOperationKnowledge.Sighting> interceptSighting) {
-        return state.bootstrap().hive().id().equals(owner) ? hiveCandidate(state, allowHiveInterception, now, interceptSighting)
-                : settlementCandidate(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner));
-    }
-    private static List<ProposedEvent> preemptForInterception(FrontierWorldState state, SubjectId owner, Optional<Candidate> candidate) {
-        if (!state.bootstrap().hive().id().equals(owner) || candidate.map(Candidate::kind).orElse(null) != StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION) return List.of();
+    private static List<ProposedEvent> preemptForInterception(FrontierWorldState state, SubjectId owner, Optional<StrategicOperationProposal> candidate) {
+        if (!state.bootstrap().hive().id().equals(owner) || candidate.map(StrategicOperationProposal::kind).orElse(null) != StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION) return List.of();
         return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(owner))
                 .filter(task -> task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE)
                 .sorted(Comparator.comparing(StrategicTask::id)).map(task -> new ProposedEvent(owner, new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED))).toList();
-    }
-    private static boolean emergencyFoodCandidate(FrontierWorldState state, SubjectId owner, Candidate candidate) {
-        return candidate.kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD && !state.bootstrap().hive().id().equals(owner)
-                && SettlementFoodPolicy.reserveCoverageBread(state, owner) < SettlementFoodPolicy.reserveRequirement(state, owner);
-    }
-    private static List<ProposedEvent> preemptForEmergencyProvision(FrontierWorldState state, SubjectId settlementId) {
-        return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlementId))
-                .filter(task -> task.kind() == StrategicTaskKind.DECONTAMINATE_INFECTION_CELL && task.status() == StrategicTaskStatus.PENDING)
-                .sorted(Comparator.comparing(StrategicTask::id)).map(task -> new ProposedEvent(settlementId,
-                        new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED))).toList();
     }
     private static List<ProposedEvent> withPreemption(List<ProposedEvent> preempted, List<ProposedEvent> next, ProposedEvent... events) {
         List<ProposedEvent> result = new java.util.ArrayList<>(preempted);
@@ -357,95 +348,23 @@ public final class StrategicObjectiveProcess {
     private static List<ProposedEvent> concatenate(List<ProposedEvent> first, List<ProposedEvent> second) {
         List<ProposedEvent> result = new java.util.ArrayList<>(first); result.addAll(second); return List.copyOf(result);
     }
-    private static Optional<Candidate> settlementCandidate(FrontierWorldState state, Settlement settlement) {
-        boolean workshop = settlement.structures().stream().anyMatch(structure -> structure.kind() == StructureKind.WORKSHOP
-                && state.structureConditions().get(structure.id()) == StructureCondition.INTACT);
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        boolean reserveShort = SettlementFoodPolicy.reserveCoverageBread(state, settlement.id()) < SettlementFoodPolicy.reserveRequirement(state, settlement.id());
-        boolean wheat = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:wheat")
-                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
-                && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id()))
-                || FungibleResourceCustodySupport.selectAtContainer(state, depot, settlement.id(), "minecraft:wheat", 64).isPresent();
-        boolean constructionActive = state.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement.id()));
-        boolean alreadyConfirmed = state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
-                && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));
-        Optional<RouteLoss> causalLoss = failedRouteLoss(state, settlement.id());
-        boolean blockedRoute = !state.routeTopology().supplyPassable(state.bootstrap(), settlement.id());
-        boolean operationOwnsRouteLoss = state.operations().values().stream()
-                .filter(operation -> operation.stage() == OperationStage.ASSEMBLING || operation.stage() == OperationStage.EN_ROUTE
-                        || operation.stage() == OperationStage.RETURNING || operation.stage() == OperationStage.ARRIVED
-                        || operation.stage() == OperationStage.FAILED || operation.stage() == OperationStage.INTERRUPTED)
-                .anyMatch(operation -> state.physicalDeltas().values().stream().anyMatch(delta -> isOwnedRouteLoss(delta)
-                        && FrontierRouteNetwork.containsOperationSurfaceCell(operation.route(), delta.position())));
-        // A confirmed physical logistics failure outranks ordinary production and containment
-        // selection.  It does not cancel an already active task; lane ownership remains the
-        // sole authority for that decision.
-        // A patrol proves one exact physical loss.  Its independent maintenance owner
-        // repairs that retained cell; it is not authorization to invent a replacement
-        // corridor.  A future re-route policy must be an explicit graph decision with
-        // its own evidence, never an accidental consequence of inspection completion.
-        if (!constructionActive && alreadyConfirmed) return Optional.empty();
-        // An active convoy has the narrower retained cause and will publish its
-        // operation-backed inspection on terminal failure. A periodic review
-        // must not race that source with duplicate generic settlement patrols.
-        if (!constructionActive && !alreadyConfirmed && causalLoss.isEmpty() && operationOwnsRouteLoss) return Optional.empty();
-        if (!constructionActive && !alreadyConfirmed && (blockedRoute || causalLoss.isPresent())) {
-            return Optional.of(causalLoss.map(loss -> new Candidate(StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
-                    Optional.empty(), Optional.empty(), Optional.of(loss.operationId()), Optional.of(loss.position()), Long.MAX_VALUE))
-                    .orElseGet(() -> new Candidate(StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), Long.MAX_VALUE)));
-        }
-        // Food may preempt a pending containment task that is waiting for an infirmary reagent,
-        // but never a physical effect already under execution.
-        boolean breadCapacity = ProductionOutputCapacity.canAdmitBreadBatch(state, settlement.id());
-        if (workshop && wheat && breadCapacity && reserveShort) {
-            return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), Long.MAX_VALUE - 1L));
-        }
-        Optional<SettlementStructure> infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
-                .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED).min(Comparator.comparing(SettlementStructure::id));
-        if (infirmary.isPresent()) {
-            Optional<Candidate> containment = state.strategicPlans().infectionKnowledge().known(settlement.id()).values().stream()
-                    .map(known -> new Candidate(StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, Optional.of(known.cell()), known.intensity().value().raw()))
-                    .sorted(Candidate.HIGHEST_UTILITY).findFirst();
-            if (containment.isPresent()) return containment;
-        }
-        if (workshop && wheat && breadCapacity) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(),
-                reserveShort ? Long.MAX_VALUE - 1L : FixedScalar.SCALE));
-        // A READY site may have lost its one-shot opportunity to an older
-        // terminal blocked task. The recurring review is the liveness fallback;
-        // the serial facility lane prevents a second owner when an ordinary
-        // opportunity is also due in this interval.
-        Optional<ResourceSite> recoverableField = state.resourceSiteDescriptors().values().stream()
-                .filter(site -> site.settlementId().equals(settlement.id()))
-                .filter(site -> state.resourceSites().site(site.id()).phase() == ResourceSitePhase.READY)
-                .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT)
-                .min(Comparator.comparing(ResourceSite::id));
-        if (recoverableField.isPresent() && state.firstFreeContainerSlot(depot).isPresent()
-                && FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentProfession.AGRICULTURAL_WORKER).isPresent())
-            return Optional.of(new Candidate(
-                StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(),
-                Optional.of(recoverableField.orElseThrow().id()), FixedScalar.SCALE));
-        // The development cargo/escort fixture targets the hive, but ordinary settlements
-        // have no treaty, trade demand or recipient-side use for such a shipment. Surplus
-        // bread stays in its owned depot until a real settlement-to-settlement trade policy exists.
-        return Optional.empty();
-    }
-    private static Optional<Candidate> hiveCandidate(FrontierWorldState state, boolean allowInterception, long now,
+    private static Optional<StrategicOperationProposal> hiveCandidate(FrontierWorldState state, boolean allowInterception, long now,
                                                       Optional<HiveOperationKnowledge.Sighting> interceptSighting) {
         Optional<HiveOperationKnowledge.Sighting> sighted = allowInterception
                 ? interceptSighting.or(() -> state.strategicPlans().hiveOperationKnowledge().freshest(now,
                         state.bootstrap().ruleset().cadence().hivePerceptionRefreshInterval())) : Optional.empty();
         if (state.strategicPlans().hiveDoctrine().doctrine() == HiveDoctrine.INTERDICT && sighted.isPresent()) {
             HiveOperationKnowledge.Sighting observation = sighted.orElseThrow();
-            return Optional.of(new Candidate(StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.empty(),
+            return Optional.of(new StrategicOperationProposal(StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.empty(),
                     Optional.of(observation.operationId()), Optional.of(observation.position()), Long.MAX_VALUE));
         }
         if (state.strategicPlans().hiveDoctrine().doctrine() == HiveDoctrine.CONSOLIDATE) return hiveGrowthCandidate(state);
         if (state.strategicPlans().hiveDoctrine().doctrine() != HiveDoctrine.EXPAND) return Optional.empty();
-        return HiveInfectionProcess.expansionTarget(state, now).map(target -> new Candidate(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, Optional.of(target),
+        return HiveInfectionProcess.expansionTarget(state, now).map(target -> new StrategicOperationProposal(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, Optional.of(target),
                 Math.subtractExact(FixedScalar.SCALE, state.strategicPlans().hiveTerritoryKnowledge().freshInfection(state.bootstrap().ruleset(), now)
                         .getOrDefault(target, new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(FixedScalar.ZERO)).value().raw())));
     }
-    private static Optional<Candidate> hiveGrowthCandidate(FrontierWorldState state) {
+    private static Optional<StrategicOperationProposal> hiveGrowthCandidate(FrontierWorldState state) {
         boolean capacity = state.hiveColony().growthJobs().isEmpty() && state.hiveColony().addedOrgans().size() < HiveColony.MAX_ADDED_ORGANS
                 && state.hiveColony().spawnedBioforms().size() < HiveColony.MAX_SPAWNED_BIOFORMS;
         boolean biomass = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:rotten_flesh")
@@ -453,9 +372,9 @@ public final class StrategicObjectiveProcess {
                 || state.inventory().fungibleResources().accounts().values().stream().anyMatch(account -> account.custody() instanceof ResourceCustody.Container container
                 && state.isHiveStore(container.containerId()) && account.lotQuantities().entrySet().stream().anyMatch(entry ->
                 state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind().equals("minecraft:rotten_flesh") && entry.getValue() >= 64));
-        return capacity && biomass ? Optional.of(new Candidate(StrategicObjectiveKind.HIVE_GROW_ORGANISM, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
+        return capacity && biomass ? Optional.of(new StrategicOperationProposal(StrategicObjectiveKind.HIVE_GROW_ORGANISM, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
-    private static StrategicObjective objective(FrontierWorldState state, SubjectId owner, Candidate candidate, int ordinal) {
+    private static StrategicObjective objective(FrontierWorldState state, SubjectId owner, StrategicOperationProposal candidate, int ordinal) {
         return objective(state, owner, candidate, ordinal, null);
     }
     private static ScheduleId interceptOpportunityId(HiveOperationKnowledge.Sighting sighting) {
@@ -470,7 +389,7 @@ public final class StrategicObjectiveProcess {
                 + "-" + sighting.observedAt();
         return new ScheduleId("schedule:objective-assault-opportunity-" + suffix);
     }
-    private static StrategicObjective objective(FrontierWorldState state, SubjectId owner, Candidate candidate, int ordinal, String eventIdentity) {
+    private static StrategicObjective objective(FrontierWorldState state, SubjectId owner, StrategicOperationProposal candidate, int ordinal, String eventIdentity) {
         String stem = eventIdentity == null ? owner.value().replace(':', '-') + "-" + candidate.kind().name().toLowerCase(java.util.Locale.ROOT) + "-" + ordinal
                 : eventIdentity.substring("schedule:".length());
         DecisionAuthority authority = state.strategicPlans().requireDecisionAuthority(owner);
@@ -486,22 +405,7 @@ public final class StrategicObjectiveProcess {
     private static StrategicTask task(FrontierWorldState state, StrategicObjective objective) { return task(state, objective, Optional.empty(), Optional.empty()); }
     private static StrategicTask task(FrontierWorldState state, StrategicObjective objective, Optional<SubjectId> observedOperation,
                                       Optional<BlockPosition> operationObservationPosition) {
-        List<StrategicTaskRequirement> requirements = switch (objective.kind()) {
-            case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY, StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT);
-            case HIVE_EXPAND_INFECTION -> List.of(StrategicTaskRequirement.OPERATIONAL_GANGLION);
-            case HIVE_GROW_ORGANISM -> List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS);
-            case HIVE_INTERCEPT_ROUTE_OPERATION -> List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD, StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER);
-            case HIVE_ASSAULT_SETTLEMENT -> List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD, StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER);
-            // Wheat-to-bread is an exact one-for-one replacement in the same owned
-            // slot. Requiring a second vacant depot slot would incorrectly block a
-            // full warehouse despite a completely safe transformation path.
-            case SETTLEMENT_PRODUCE_BREAD -> List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT);
-            case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
-            case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> List.of(StrategicTaskRequirement.AVAILABLE_GUARD);
-            case SETTLEMENT_CONSTRUCT_ROUTE_BYPASS -> List.of(StrategicTaskRequirement.CONFIRMED_ROUTE_OBSTRUCTION, StrategicTaskRequirement.EXACT_ROUTE_CONSTRUCTION_MATERIAL);
-            case SETTLEMENT_HARVEST_RESOURCE_SITE -> List.of(StrategicTaskRequirement.ACTIVE_FARM, StrategicTaskRequirement.AVAILABLE_FARMER,
-                    StrategicTaskRequirement.FREE_DEPOT_SLOT);
-        };
+        List<StrategicTaskRequirement> requirements = StrategicOperationSpecifications.requirements(objective.kind());
         StrategicTaskKind kind = switch (objective.kind()) {
             case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> StrategicTaskKind.DECONTAMINATE_INFECTION_CELL;
             case HIVE_EXPAND_INFECTION -> StrategicTaskKind.SPREAD_INFECTION_CELL;
@@ -523,23 +427,6 @@ public final class StrategicObjectiveProcess {
         return new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), objective.ownerId(), kind,
                 objective.infectionTarget(), operation, objective.resourceSiteTarget(), requirements, dependencies(state, objective), StrategicTaskStatus.PENDING, observation,
                 objective.authorityId(), objective.authorityEpoch());
-    }
-    /** The patrol cause is an exact retained failed operation, never a nearest visible route. */
-    private static Optional<RouteLoss> failedRouteLoss(FrontierWorldState state, SubjectId settlementId) {
-        return state.operations().values().stream().filter(operation -> operation.settlementId().equals(settlementId))
-                .filter(operation -> operation.stage() == OperationStage.FAILED || operation.stage() == OperationStage.INTERRUPTED)
-                .sorted(Comparator.comparing(RouteOperation::id)).flatMap(operation -> state.physicalDeltas().values().stream()
-                        .filter(StrategicObjectiveProcess::isOwnedRouteLoss)
-                        .map(PhysicalDelta::position).filter(position -> FrontierRouteNetwork.containsOperationSurfaceCell(operation.route(), position))
-                        .sorted(Comparator.comparingInt(BlockPosition::x).thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z))
-                        .map(position -> new RouteLoss(operation.id(), position))).findFirst();
-    }
-    private static boolean isOwnedRouteLoss(PhysicalDelta delta) {
-        return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
-                && delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
-                && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent()
-                && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE
-                || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();
     }
     private static List<SubjectId> dependencies(FrontierWorldState state, StrategicObjective objective) {
         if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS) {
@@ -570,21 +457,4 @@ public final class StrategicObjectiveProcess {
             throw new IllegalArgumentException("strategic review has a foreign owner");
         }
     }
-    private record Candidate(StrategicObjectiveKind kind, Optional<InfectionCell> target, Optional<SubjectId> resourceSiteTarget,
-                             Optional<SubjectId> operationTarget, Optional<BlockPosition> operationObservationPosition, long utility) {
-        Candidate(StrategicObjectiveKind kind, Optional<InfectionCell> target, long utility) {
-            this(kind, target, Optional.empty(), Optional.empty(), Optional.empty(), utility);
-        }
-        Candidate(StrategicObjectiveKind kind, Optional<InfectionCell> target, Optional<SubjectId> resourceSiteTarget, long utility) {
-            this(kind, target, resourceSiteTarget, Optional.empty(), Optional.empty(), utility);
-        }
-        private static final Comparator<Candidate> HIGHEST_UTILITY = Comparator.comparingLong(Candidate::utility).reversed()
-                .thenComparing(Candidate::kind).thenComparing(value -> value.target().map(InfectionCell::x).orElse(Integer.MIN_VALUE))
-                .thenComparing(value -> value.target().map(InfectionCell::z).orElse(Integer.MIN_VALUE))
-                .thenComparing(value -> value.resourceSiteTarget().map(SubjectId::value).orElse(""))
-                .thenComparing(value -> value.operationTarget().map(SubjectId::value).orElse(""))
-                .thenComparing(value -> value.operationObservationPosition().map(BlockPosition::x).orElse(Integer.MIN_VALUE))
-                .thenComparing(value -> value.operationObservationPosition().map(BlockPosition::z).orElse(Integer.MIN_VALUE));
-    }
-    private record RouteLoss(SubjectId operationId, BlockPosition position) { }
 }
