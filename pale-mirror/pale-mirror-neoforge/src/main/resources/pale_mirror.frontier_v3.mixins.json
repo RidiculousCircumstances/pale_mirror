@@ -12,6 +12,7 @@
     "FrontierV3EntityDepartureMixin",
     "FrontierV3FarmlandObservationMixin",
     "FrontierV3FieldBlockWriteMixin",
+    "FrontierV3BonemealAdmissionMixin",
     "FrontierV3EntityStorageMixin",
     "FrontierV3ServerEntityManagerAccessor",
     "FrontierV3EntityPermanentStorageAccessor",

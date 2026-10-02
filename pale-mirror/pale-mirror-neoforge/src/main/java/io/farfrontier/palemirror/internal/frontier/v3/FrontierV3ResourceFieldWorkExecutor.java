@@ -218,6 +218,11 @@ final class FrontierV3ResourceFieldWorkExecutor {
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.OWNED_DRIFT
                 && FrontierV3ResourceFieldWorldChangeExecutor.observeOne(level, runtime, job.siteId(), id))
             return Result.pending();
+        if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.OWNED_DRIFT) {
+            var projection = FrontierV3ResourceFieldGrowthProjector.projectCurrentOne(level, runtime, job.siteId(), id);
+            if (projection == FrontierV3ResourceFieldGrowthProjector.Result.CURRENT
+                    || projection == FrontierV3ResourceFieldGrowthProjector.Result.ADVANCED) return Result.pending();
+        }
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.FOREIGN
                 && FrontierV3ResourceFieldForeignChangeExecutor.observeOne(level, runtime, job.siteId(), id))
             return Result.pending();

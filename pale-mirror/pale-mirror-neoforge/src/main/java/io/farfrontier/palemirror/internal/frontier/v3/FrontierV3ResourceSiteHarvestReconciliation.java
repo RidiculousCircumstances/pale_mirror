@@ -22,7 +22,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             var job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
                     .map(ResourceSiteHarvestJob.class::cast).orElse(null);
             if (job == null || !job.id().equals(cause.jobId())
-                    || job.progress().hasPendingCrop() || job.navigationBlock().isPresent()
+                    || job.navigationBlock().isPresent()
                     || state.resourceSites().hasPendingWorldChange(job.siteId())) continue;
             var cycle = state.resourceSites().cycle(job.siteId());
             if (job.progress().complete() && !cycle.cycleAccounted() || !cycle.pendingPlayerBreaks().isEmpty()

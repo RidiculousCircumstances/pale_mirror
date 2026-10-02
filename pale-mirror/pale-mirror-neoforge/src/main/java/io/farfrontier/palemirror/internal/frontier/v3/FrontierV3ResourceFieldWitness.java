@@ -471,6 +471,27 @@ final class FrontierV3ResourceFieldWitness {
         return replace(id, new Cell(prior.committed(), Optional.empty(), Optional.empty()));
     }
 
+    /** Inspect monotonic plant biology within an already accepted growth target; never infer work or yield. */
+    FrontierV3ResourceFieldWitness acknowledgeObservedGrowth(FrontierCanonicalState<ResourceFieldCycle> accepted,
+                                                            ResourceFieldLayout.CellId id,
+                                                            FrontierV3ResourceFieldObservation.Review observed) {
+        var cycle = accepted.state();
+        var prior = cell(id);
+        var target = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(id));
+        if (!matchesCycle(cycle) || cycle.pendingPlayerBreaks().containsKey(id)
+                || prior.committed().soil() != ResourceFieldCycle.Soil.FARMLAND
+                || prior.pending().isPresent() || prior.foreign().isPresent()
+                || observed.disposition() != FrontierV3ResourceFieldObservation.Disposition.OWNED_DRIFT
+                || !observed.matches(this, id)
+                || !(observed.reading() instanceof FrontierV3ResourceFieldObservation.Owned actual)
+                || actual.condition().equals(prior.committed())
+                || !actual.condition().equalsOrGrowsFrom(prior.committed())
+                || !target.equalsOrGrowsFrom(actual.condition()))
+            throw new IllegalArgumentException("observed growth lacks its owned monotonic accepted biology boundary");
+        return replace(id, new Cell(((FrontierV3ResourceFieldObservation.Owned) observed.reading()).condition(),
+                Optional.empty(), Optional.empty()));
+    }
+
     FrontierV3ResourceFieldWitness foreign(ResourceFieldLayout.CellId id, ForeignIncident incident) {
         Cell prior = cell(id);
         if (prior.foreign().isPresent()) throw new IllegalArgumentException("field cell already retains a foreign incident");

@@ -82,6 +82,16 @@ final class FrontierV3ResourceFieldGrowthProjector {
             var observed = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
                     "projection:growth-predecessor");
             if (observed.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.UNLOADED;
+            if (observed.disposition() == FrontierV3ResourceFieldObservation.Disposition.OWNED_DRIFT) {
+                try { witness = witness.acknowledgeObservedGrowth(accepted, cellId, observed); }
+                catch (IllegalArgumentException unrelatedDrift) { return Result.PHYSICAL_CONFLICT; }
+                ledger.replaceFieldClaim(owner, owner.withWitness(witness));
+                ledger.persist(level);
+                owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(site.id());
+                cell = witness.cell(cellId);
+                observed = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
+                        "projection:observed-growth-predecessor");
+            }
             if (observed.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
                 return Result.PHYSICAL_CONFLICT;
             if (cell.committed().equals(target)) return Result.CURRENT;

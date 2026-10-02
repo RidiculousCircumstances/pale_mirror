@@ -17,7 +17,7 @@ public final class ResourceSiteHarvestSceneReconciliation {
         var lease = state.sceneLeases().get(receipt.leaseId());
         var cycle = state.resourceSites().cycle(receipt.siteId());
         if (!subject.equals(receipt.siteId()) || lifecycle.phase() != ResourceSitePhase.HARVESTING
-                || !job.id().equals(receipt.jobId()) || job.progress().hasPendingCrop()
+                || !job.id().equals(receipt.jobId())
                 || job.progress().completedCropSlots() != cycle.accountedCount()
                 || job.navigationBlock().isPresent() || job.progress().complete() && !cycle.cycleAccounted()
                 || state.physicalIntents().get(job.intentId()) == null
@@ -34,6 +34,13 @@ public final class ResourceSiteHarvestSceneReconciliation {
                 || !lease.members().getFirst().actorId().equals(job.workerId()))
             throw new IllegalArgumentException("harvest reconciliation lacks its exact isolated safe job checkpoint");
         var actor = state.actorLocations().get(job.workerId());
+        if (job.progress().hasPendingCrop()) {
+            var cell = cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id();
+            if (cycle.expectedWorkOutcome(cell) != ResourceFieldCycle.WorkOutcome.HARVESTED
+                    || job.progress().work().filter(WorkProgress::complete).isEmpty()
+                    || !ResourceSiteHarvestGoal.current(state, job).arrivedAt(receipt.observedBody().supportingSurface()))
+                throw new IllegalArgumentException("prepared crop recovery lacks its untouched mature work checkpoint");
+        }
         var hand = (PhysicalStackAddress.ActorHand) receipt.observedHand().address();
         var account = state.inventory().fungibleResources().accounts().get(job.actorAccountId());
         var bindings = state.inventory().fungibleResources().bindings().values().stream()

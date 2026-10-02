@@ -187,6 +187,20 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                             && ((FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId))
                                     .witness().cell(cellId).pending().isEmpty(),
                     "a crash after the block effect confirms the observed later prefix without replaying work");
+            var fifthGrowth = thirdGrowth.advanceGrowth(cellId).advanceGrowth(cellId);
+            var acceptedFifth = new FrontierCanonicalState<>(accepted.worldId(), new Revision(9), new SimInstant(9), fifthGrowth);
+            level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 4), 3);
+            helper.assertTrue(FrontierV3ResourceFieldGrowthProjector.projectAccepted(level, site, acceptedFifth, cellId)
+                            == FrontierV3ResourceFieldGrowthProjector.Result.ADVANCED
+                            && level.getBlockState(soil.above()).getValue(CropBlock.AGE) == 5
+                            && ((FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId))
+                                    .witness().cell(cellId).committed().growthStage() == 5
+                            && fifthGrowth.harvestedCount() == 0,
+                    "external growth inside a lagging accepted biological target is inspected, then projected without yield");
+            level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 6), 3);
+            helper.assertTrue(FrontierV3ResourceFieldGrowthProjector.projectAccepted(level, site, acceptedFifth, cellId)
+                            == FrontierV3ResourceFieldGrowthProjector.Result.PHYSICAL_CONFLICT,
+                    "growth beyond canonical authority requires a world-change receipt, not projection adoption");
             level.setBlock(soil.above(), Blocks.AIR.defaultBlockState(), 3);
             helper.assertTrue(FrontierV3ResourceFieldGrowthProjector.projectAccepted(level, site, acceptedThird,
                             cell(1, soil).id()) == FrontierV3ResourceFieldGrowthProjector.Result.PHYSICAL_CONFLICT

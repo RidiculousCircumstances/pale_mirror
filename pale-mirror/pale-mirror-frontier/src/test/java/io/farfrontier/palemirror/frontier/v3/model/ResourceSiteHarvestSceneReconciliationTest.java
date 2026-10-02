@@ -9,6 +9,41 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceSiteHarvestSceneReconciliationTest {
+    @Test void inspectedUntouchedPreparedCropResumesWithoutCreditingOrReplayingYield() {
+        var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
+        var state = oneObservedCrop(hot);
+        var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).activeWork().orElseThrow();
+        var goal = ResourceSiteHarvestGoal.current(state, job);
+        state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHotGoalArrived(state, hot.site(),
+                new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(), goal.layoutRevision(),
+                        goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+        state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
+        state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
+                new ResourceSiteHarvestCropPrepared(job.id(), goal.nextWorkSlot()));
+        state = state.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.CONFLICT);
+        var lease = state.sceneLeases().get(hot.lease().id());
+        long epoch = state.fencedRecovery().current().get(
+                FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(job.workerId())).authorityEpoch();
+        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
+                lease.members().getFirst().entityId()), "minecraft:wheat", 1);
+        var receipt = new ResourceSiteHarvestSceneReconciled(hot.site(), job.id(), lease.id(), lease.revision(), epoch,
+                goal.representative().standingBody(), hand);
+        var restored = ResourceSiteHarvestSceneReconciliation.reduce(state, hot.site(), receipt);
+        assertEquals(SceneLeaseStatus.HOT, restored.sceneLeases().get(lease.id()).status());
+        assertEquals(state.resourceSites(), restored.resourceSites());
+        assertEquals(state.inventory(), restored.inventory());
+        assertTrue(((ResourceSiteHarvestJob) restored.resourceSites().site(hot.site()).activeWork().orElseThrow())
+                .progress().hasPendingCrop());
+        var isolated = state;
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestSceneReconciliation.reduce(isolated, hot.site(),
+                new ResourceSiteHarvestSceneReconciled(hot.site(), job.id(), lease.id(), lease.revision(), epoch,
+                        goal.representative().standingBody(), new FungiblePhysicalObservation.Stack(hand.address(), "minecraft:wheat", 2))));
+        var body = goal.representative().standingBody();
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestSceneReconciliation.reduce(isolated, hot.site(),
+                new ResourceSiteHarvestSceneReconciled(hot.site(), job.id(), lease.id(), lease.revision(), epoch,
+                        new BodyPosition(body.x() + 1, body.y(), body.z()), hand)));
+    }
+
     @ParameterizedTest @ValueSource(booleans = {true, false})
     void exactInspectedBatchResumesSameWorkerAndEpochWithoutReplayingHarvest(boolean terminal) {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);

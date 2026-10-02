@@ -21,6 +21,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ResourceFieldWitnessTest {
+    @Test void observedBiologyRecoveryCannotUseAFabricatedWorldReview() {
+        var cycle = ResourceFieldCycle.seeded(SITE, layout(), 1);
+        var witness = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.fromCycle(cycle));
+        var grown = cycle.advanceGrowth(FIRST);
+        var accepted = new io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<>(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:test"),
+                new io.farfrontier.palemirror.frontier.v3.api.Revision(1),
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(1), grown);
+        var fabricated = FrontierV3ResourceFieldObservation.compare(witness, layout(), FIRST,
+                new FrontierV3ResourceFieldObservation.Owned(ResourceFieldPhysicalSurface.Condition.of(grown.cell(FIRST))));
+        assertEquals(FrontierV3ResourceFieldObservation.Disposition.OWNED_DRIFT, fabricated.disposition());
+        assertThrows(IllegalArgumentException.class, () -> witness.acknowledgeObservedGrowth(accepted, FIRST, fabricated));
+        assertEquals(0, witness.cell(FIRST).committed().growthStage());
+    }
+
     @Test void acceleratedGrowthRetainsExactSuccessorAcrossPhysicalWitnessRecovery() {
         var change = io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Change.CROP_GROWN;
         var observed = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved(SITE, 1,
