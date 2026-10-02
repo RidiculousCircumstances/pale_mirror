@@ -15,8 +15,8 @@ public final class ResidentActivityCoordinator {
         if (resident == null || state.humanPopulation().meals().containsKey(residentId)
                 || state.actorMovements().containsKey(residentId)) return false;
         long assessedAt = Math.max(dueAt, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
-        return state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)
-                == SettlementDailySchedule.Window.WORK
+        return ResidentActivityPreferences.work(state.humanPopulation().schedule(resident.settlementId()), assessedAt)
+                .outranks(ResidentActivityPreferences.Priority.IDLE)
                 && (state.humanPopulation().nutrition(residentId).accrueThrough(assessedAt,
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(assessedAt)).satietyUnits()
@@ -27,12 +27,8 @@ public final class ResidentActivityCoordinator {
     public static long nextOrdinaryWorkAdmission(FrontierWorldState state,
                                                  io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId,
                                                  long dueAt) {
-        ResidentProfile resident = state.humanPopulation().resident(residentId);
         long assessedAt = Math.max(dueAt, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
-        return state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)
-                == SettlementDailySchedule.Window.FREE
-                ? state.humanPopulation().schedule(resident.settlementId()).nextWindowBoundaryAfter(assessedAt)
-                : Math.addExact(assessedAt, 20L);
+        return Math.addExact(assessedAt, 20L);
     }
 
     /** Intent precedes authority transfer. Never ask the admission result whether its blocked request exists. */
@@ -44,8 +40,6 @@ public final class ResidentActivityCoordinator {
         long assessedAt = Math.max(canonicalTick, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
         return state.humanPopulation().meals().containsKey(residentId)
                 || state.actorMovements().containsKey(residentId)
-                || state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)
-                    == SettlementDailySchedule.Window.FREE
                 || state.humanPopulation().nutrition(residentId).accrueThrough(assessedAt,
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(assessedAt))
@@ -70,15 +64,12 @@ public final class ResidentActivityCoordinator {
         return assess(state, residentId, assessedAt).kind() == ResidentActivityChoice.Kind.WORK;
     }
 
-    /** Preserve the retained job while FREE or EAT owns the person; never spin on a held due action. */
+    /** Preserve the retained job while another executable activity owns the person. */
     public static long nextOrdinaryWorkCheck(FrontierWorldState state,
                                              io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId,
                                              long dueAt) {
         long assessedAt = Math.max(dueAt, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
-        ResidentProfile resident = state.humanPopulation().resident(residentId);
-        return assess(state, residentId, assessedAt).kind() == ResidentActivityChoice.Kind.IDLE
-                ? state.humanPopulation().schedule(resident.settlementId()).nextWindowBoundaryAfter(assessedAt)
-                : Math.addExact(assessedAt, 20L);
+        return Math.addExact(assessedAt, 20L);
     }
 
     /** Derived assessment only; a work owner must acknowledge its yield before EAT starts. */
@@ -114,10 +105,11 @@ public final class ResidentActivityCoordinator {
                     >= state.bootstrap().ruleset().residentLife().eatBelowUnits()
                 || (eligibilityOnly ? ResidentMealOpportunity.candidate(state, residentId, assessedAt).isPresent()
                     : ResidentMealOpportunity.find(state, residentId, assessedAt).isPresent())) return choice;
-        // No executable meal exists. Keep working in WORK, or obey FREE at a safe point;
+        // No executable meal exists. An available work assignment outranks idle in either window;
         // the activity wake still retries food independently without losing the assignment.
-        if (state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)
-                == SettlementDailySchedule.Window.WORK && assignment.active())
+        if (assignment.active() && ResidentActivityPreferences.work(
+                state.humanPopulation().schedule(resident.settlementId()), assessedAt)
+                .outranks(ResidentActivityPreferences.Priority.IDLE))
             return new ResidentActivityChoice(residentId, ResidentActivityChoice.Kind.WORK,
                     assignment.ownerId(), Optional.empty());
         if (choice.kind() == ResidentActivityChoice.Kind.WORK) return choice;
@@ -176,20 +168,16 @@ public final class ResidentActivityCoordinator {
         }
         var need = nutrition.accrueThrough(canonicalTick, rules, metabolismPermille);
         boolean activeWork = assignment.active();
-        if (need.wantsFood(rules)) {
+        var workPriority = ResidentActivityPreferences.work(schedule, canonicalTick);
+        if (need.wantsFood(rules) && ResidentActivityPreferences.Priority.FOOD.outranks(workPriority)) {
             if (!activeWork || safeToYield) return new ResidentActivityChoice(assignment.residentId(),
                     ResidentActivityChoice.Kind.EAT, assignment.ownerId(), Optional.empty());
             return new ResidentActivityChoice(assignment.residentId(), ResidentActivityChoice.Kind.WORK,
                     assignment.ownerId(), Optional.of(ResidentActivityChoice.Wait.SAFE_CHECKPOINT));
         }
-        if (schedule.windowAt(canonicalTick) == SettlementDailySchedule.Window.FREE) {
-            if (!activeWork || safeToYield) return new ResidentActivityChoice(assignment.residentId(),
-                    ResidentActivityChoice.Kind.IDLE, assignment.ownerId(), Optional.empty());
-            return new ResidentActivityChoice(assignment.residentId(), ResidentActivityChoice.Kind.WORK,
-                    assignment.ownerId(), Optional.of(ResidentActivityChoice.Wait.SAFE_CHECKPOINT));
-        }
         return new ResidentActivityChoice(assignment.residentId(),
-                activeWork ? ResidentActivityChoice.Kind.WORK : ResidentActivityChoice.Kind.IDLE,
+                activeWork && workPriority.outranks(ResidentActivityPreferences.Priority.IDLE)
+                        ? ResidentActivityChoice.Kind.WORK : ResidentActivityChoice.Kind.IDLE,
                 assignment.ownerId(), Optional.empty());
     }
 }

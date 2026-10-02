@@ -39,26 +39,16 @@ class ResourceSitePreparationProcessTest {
         assertEquals(12, engine.checkpoint().schedules().stream().filter(action -> action.kind().equals("frontier.resource_site.growth")).count());
     }
 
-    /** First maturity falls in FREE; a retained field cannot fabricate work until eligibility returns. */
+    /** FREE is a preference, not a ban on starting useful ordinary work. */
     @Test
-    void firstMaturityInFreeWindowRetainsReadyFieldWithoutInventingHarvest() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(
-                new WorldId("frontier:resource-site-partial-duty"), 47L));
-        // The live driver takes bounded slices.  Repeating the same absolute target drains
-        // only due work and is therefore the pure equivalent of those small COLD turns.
-        for (int turn = 0; turn < 1_024; turn++) {
-            engine.advanceTo(new SimInstant(21_140L), new WorkBudget(256, 2_048));
-        }
-
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(new SubjectId("site:7-wheat-field"));
-        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind());
-        assertEquals(ResourceSitePhase.READY, lifecycle.phase());
-        assertTrue(lifecycle.activeWork().isEmpty());
+    void readyFieldCanAdmitItsFarmerInFreeWithoutCompetingFood() {
+        FrontierWorldState state = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial(47L));
+        var farmer = FrontierWorldStateSupport.availableFieldResident(state, new SubjectId("settlement:1"),
+                ResidentProfession.AGRICULTURAL_WORKER).orElseThrow();
+        assertEquals(ResourceSitePhase.READY, state.resourceSites().site(new SubjectId("site:1-wheat-field")).phase());
         assertEquals(SettlementDailySchedule.Window.FREE,
-                state.humanPopulation().schedule(new SubjectId("settlement:7")).windowAt(21_140L));
-        assertEquals(64, SettlementFoodPolicy.breadStock(state, new SubjectId("settlement:7")),
-                "the next work window has a finite local meal source, not a hidden ration counter");
+                state.humanPopulation().schedule(new SubjectId("settlement:1")).windowAt(21_140L));
+        assertTrue(ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), 21_140L));
     }
 
     @Test

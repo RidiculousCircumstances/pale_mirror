@@ -52,7 +52,7 @@ class ResidentActivityCoordinatorTest {
     private static final HumanAssignment ASSIGNED = new HumanAssignment(RESIDENT,
             HumanAssignmentKind.FIELD_HARVEST, Optional.of(JOB));
 
-    @Test void scheduleSelectsFreeWithoutDiscardingRetainedJob() {
+    @Test void freeLowersWorkPriorityButDoesNotAbandonRetainedJobForIdle() {
         var policy = SettlementDailySchedule.initial();
         assertEquals(SettlementDailySchedule.Window.WORK, policy.windowAt(11_999));
         assertEquals(SettlementDailySchedule.Window.FREE, policy.windowAt(12_000));
@@ -60,12 +60,21 @@ class ResidentActivityCoordinatorTest {
         assertEquals(24_000, policy.nextWindowBoundaryAfter(12_000));
         var free = ResidentActivityCoordinator.choose(policy, 12_000,
                 ResidentNutrition.nourishedAtTick(12_000), ASSIGNED, true);
-        assertEquals(ResidentActivityChoice.Kind.IDLE, free.kind());
+        assertEquals(ResidentActivityChoice.Kind.WORK, free.kind());
+        assertEquals(Optional.empty(), free.pending());
+        assertTrue(ResidentActivityPreferences.work(policy, 11_999)
+                .outranks(ResidentActivityPreferences.work(policy, 12_000)));
         assertEquals(Optional.of(JOB), free.retainedWorkOwner());
         var pending = ResidentActivityCoordinator.choose(policy, 12_000,
                 ResidentNutrition.nourishedAtTick(12_000), ASSIGNED, false);
         assertEquals(ResidentActivityChoice.Kind.WORK, pending.kind());
-        assertEquals(Optional.of(ResidentActivityChoice.Wait.SAFE_CHECKPOINT), pending.pending());
+        assertEquals(Optional.empty(), pending.pending());
+        var eating = ResidentActivityCoordinator.choose(policy, 37_000,
+                ResidentNutrition.nourishedAtTick(0).accrueThrough(37_000), ASSIGNED, true);
+        assertEquals(ResidentActivityChoice.Kind.EAT, eating.kind());
+        var waitingForCheckpoint = ResidentActivityCoordinator.choose(policy, 37_000,
+                ResidentNutrition.nourishedAtTick(0).accrueThrough(37_000), ASSIGNED, false);
+        assertEquals(Optional.of(ResidentActivityChoice.Wait.SAFE_CHECKPOINT), waitingForCheckpoint.pending());
     }
 
     @Test void hungerWinsWorkWindowOnlyAtSafeCheckpoint() {
@@ -125,6 +134,9 @@ class ResidentActivityCoordinatorTest {
                 ResidentActivityCoordinator.assess(state, resident, 24_000L).kind());
         assertTrue(ResidentActivityCoordinator.mayStartOrdinaryWork(state, resident, 24_000L),
                 "hunger without any executable meal must not fence new work");
+        assertTrue(ResidentActivityCoordinator.mayStartOrdinaryWork(state, resident, 12_000L),
+                "FREE permits available work when there is no competing activity");
+        assertEquals(12_020L, ResidentActivityCoordinator.nextOrdinaryWorkAdmission(state, resident, 12_000L));
         for (HumanAssignmentKind family : List.of(HumanAssignmentKind.CARGO_TRANSPORT,
                 HumanAssignmentKind.ESCORT, HumanAssignmentKind.ROUTE_PATROL,
                 HumanAssignmentKind.SETTLEMENT_DEFENCE, HumanAssignmentKind.ENGINEERING_RECOVERY,

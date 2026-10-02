@@ -485,6 +485,27 @@ class ResourceSiteHarvestProcessTest {
                 ResourceSiteHarvestGoal.current(worked, completed).kind());
         assertEquals(start.workerId(), completed.workerId());
         assertEquals(worked, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(worked)));
+        // The actual reported boundary: all cells collected, wheat retained, FREE starts before delivery.
+        worked = worked.withHumanPopulation(worked.humanPopulation().withSchedule(new SubjectId("settlement:1"),
+                SettlementDailySchedule.initial()));
+        assertEquals(SettlementDailySchedule.Window.FREE,
+                worked.humanPopulation().schedule(new SubjectId("settlement:1")).windowAt(22_301L));
+        assertFalse(ResidentActivityCoordinator.requestsYield(worked, completed.workerId(), 22_301L));
+        assertTrue(ResidentActivityCoordinator.ordinaryWorkPermitted(worked, completed.workerId(), 22_301L));
+        var body = worked.actorLocations().get(completed.workerId());
+        var draining = worked.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.DRAINING);
+        var released = ResourceSiteHarvestProcess.reduceHandRelease(draining, worked.resourceSite(hot.site()).settlementId(),
+                new ResourceSiteHarvestHandRelease(hot.site(), completed.id(), completed.actorAccountId(),
+                        hot.lease().revision(), new FungiblePhysicalObservation.Stack(
+                        new PhysicalStackAddress.ActorHand(completed.workerId(), hot.lease().members().getFirst().entityId()),
+                        "minecraft:wheat", completed.progress().totalCropSlots()),
+                        new SceneLeaseReleased(hot.lease().id(), List.of(new SceneMemberPosition(
+                                completed.workerId(), body.body(), body.condition().health())))));
+        var delivery = ResourceSiteHarvestProcess.planColdProgress(released,
+                ResourceSiteHarvestProcess.coldProgress(completed, 22_301L));
+        assertTrue(delivery.stream().map(ProposedEvent::payload)
+                .anyMatch(ResourceSiteHarvestColdGoalAdvanced.class::isInstance),
+                "FREE must admit actual delivery travel, not defer the batch until next WORK");
     }
     @Test void interruptedHotTravelKeepsActualBodyAcrossColdHandoff() {
         HotHarvest hot = hotHarvestAfterColdSteps(0);

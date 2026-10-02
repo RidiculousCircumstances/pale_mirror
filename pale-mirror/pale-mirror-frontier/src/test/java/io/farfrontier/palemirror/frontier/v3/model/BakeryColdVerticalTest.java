@@ -356,7 +356,7 @@ class BakeryColdVerticalTest {
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(depot),
                 BakeryWorkGoal.current(state, job).station(), ActorContainerItemOrder.Hand.MAIN, 1L, 1L);
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
-                UUID.fromString("00000000-0000-0000-0000-000000000111")), "minecraft:wheat", 64);
+                UUID.fromString("00000000-0000-0000-0000-000000000111"), ActorContainerItemOrder.Hand.MAIN), "minecraft:wheat", 64);
         FungibleResourceLedger arrived = hot.transferActorOrderObservedStacks(order, 1L, 1L, List.of(), List.of(hand));
         assertFalse(arrived.accounts().containsKey(work.sourceAccountId()));
         assertEquals(new ResourceCustody.Actor(job.workerId()), arrived.accounts().get(work.actorAccountId()).custody());

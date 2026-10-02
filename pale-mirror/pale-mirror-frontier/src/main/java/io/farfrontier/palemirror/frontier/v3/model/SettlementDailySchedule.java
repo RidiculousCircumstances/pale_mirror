@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import java.util.List;
 import java.util.Objects;
 
-/** Immutable settlement policy; it chooses available work time, never the current activity. */
+/** Immutable settlement preference windows; arbitration, not the timetable, selects the current activity. */
 public record SettlementDailySchedule(int dayTicks, List<Segment> segments) {
     public enum Window { WORK, FREE }
 
