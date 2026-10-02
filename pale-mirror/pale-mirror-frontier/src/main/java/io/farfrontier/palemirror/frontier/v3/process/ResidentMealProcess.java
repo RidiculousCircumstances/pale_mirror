@@ -196,6 +196,8 @@ public final class ResidentMealProcess {
                 throw new IllegalArgumentException("meal source has no current physical custody");
             ledger = ledger.reserveBound(claim, meal.sourceAccountId(), epoch);
         }
+        state = ActivityExecutionCapabilities.pauseLabour(state,
+                HumanAssignmentProjection.compile(state).assignment(subject), meal.startedAtTick());
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(state.inventory().withFungibleResources(ledger))
                 .humanPopulation(state.humanPopulation().withMeal(meal)));

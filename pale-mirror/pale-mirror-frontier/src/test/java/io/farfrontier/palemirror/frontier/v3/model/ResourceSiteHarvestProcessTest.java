@@ -177,6 +177,8 @@ class ResourceSiteHarvestProcessTest {
                 state = ResourceSiteHarvestProcess.reduceHotGoalArrived(state, site,
                         new ResourceSiteHarvestHotGoalArrived(current.id(), leaseId, current.workerId(),
                                 goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), station));
+            state = completeLabourHot(state, site, leaseId);
+            current = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
             int selected = current.progress().nextCropSlotIndex();
             state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site,
                     new ResourceSiteHarvestCropPrepared(current.id(), selected));
@@ -195,11 +197,29 @@ class ResourceSiteHarvestProcessTest {
         }
         return state;
     }
+    static FrontierWorldState completeLabourHot(FrontierWorldState state, SubjectId site, SceneLeaseId lease) {
+        var job = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
+        long tick = job.progress().work().map(WorkProgress::evaluatedAtTick).orElse(22_301L);
+        for (int interval = 0; interval < 8 && !job.progress().work().map(WorkProgress::complete).orElse(false); interval++) {
+            boolean running = job.progress().work().map(WorkProgress::running).orElse(false);
+            if (running) tick = job.progress().work().orElseThrow().activeUntilTick();
+            else if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), tick))
+                tick = ResidentActivityCoordinator.nextOrdinaryWorkCheck(state, job.workerId(), tick);
+            var changed = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.change(
+                    state, job, tick, !running, ResourceSiteHarvestProcess.coldProgress(job, tick), Optional.of(lease));
+            state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
+            job = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
+        }
+        assertTrue(job.progress().work().orElseThrow().complete());
+        return state;
+    }
     private static Step stepCold(FrontierWorldState state, SubjectId site, ScheduledAction due) {
         ScheduledAction next = null;
         for (ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(state, due)) {
             switch (event.payload()) {
                 case ResourceSiteHarvestColdGoalAdvanced advanced -> state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
+                case ResourceSiteHarvestWorkChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
+                case ResourceSiteHarvestImmatureCellSkipped skipped -> state = ResourceSiteHarvestProcess.reduceCellSkipped(state, site, skipped);
                 case ResourceSiteHarvestCropPrepared prepared -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, prepared);
                 case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
                 case ResourceSiteHarvestReturned returned -> state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned);

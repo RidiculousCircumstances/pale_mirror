@@ -134,9 +134,7 @@ final class ResourceSiteHarvestPlanning {
      * the same due action rather than creating an auxiliary scene journey.
      */
     public static ScheduledAction coldProgress(ResourceSiteHarvestJob job, long dueAt) {
-        return new ScheduledAction(new ScheduleId("schedule:resource-site-harvest-cold-progress-"
-                + job.id().value().substring("job:".length())), new SimInstant(dueAt), 0, job.siteId(),
-                COLD_PROGRESS_KIND, 1);
+        return ResourceSiteHarvestContinuation.at(job, dueAt);
     }
 
     /** Descriptor-owned validation of the one engine action that may continue this field job. */
@@ -198,9 +196,17 @@ final class ResourceSiteHarvestPlanning {
             throw new IllegalArgumentException("resource-site harvest continuation has an active job outside HARVESTING or terminal CONFLICT");
         long now = Math.max(action.dueAt().ticks(), currentTick);
         if (!state.humanPopulation().meals().containsKey(job.workerId())
-                && !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), now))
-            return List.of(reschedule(action, coldProgress(job, ResidentActivityCoordinator.nextOrdinaryWorkCheck(
+                && !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), now)) {
+            var paused = new java.util.ArrayList<ProposedEvent>();
+            if (job.progress().work().filter(WorkProgress::running).isPresent()
+                    && !FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
+                    && ActorExecutionCoordinator.coldAvailable(state, job.workerId()))
+                paused.add(new ProposedEvent(job.siteId(), ResourceSiteHarvestWorkProcess.change(state, job, now, false,
+                        action, java.util.Optional.empty())));
+            paused.add(reschedule(action, coldProgress(job, ResidentActivityCoordinator.nextOrdinaryWorkCheck(
                     state, job.workerId(), now))));
+            return List.copyOf(paused);
+        }
         // A HOT scene held this same action while the body moved physically. Its
         // overdue due instant is binding evidence, not permission to replay
         // unobserved COLD travel or labor in a rapid catch-up burst.
@@ -263,8 +269,19 @@ final class ResourceSiteHarvestPlanning {
         if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("COLD field goal has no living retained worker");
         if (job.navigationBlock().isEmpty() && goal.arrivedAt(worker.supportingSurface())) {
-            if (ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
+            if (ResourceSiteHarvestGoal.actorAtWorkCell(state, job)) {
+                var work = job.progress().work();
+                if (work.isEmpty() || !work.orElseThrow().complete()) {
+                    if (work.filter(WorkProgress::running).isPresent() && now < work.orElseThrow().activeUntilTick())
+                        return List.of(reschedule(action, coldProgress(job, work.orElseThrow().activeUntilTick())));
+                    boolean run = work.isEmpty() || !work.orElseThrow().running();
+                    var changed = ResourceSiteHarvestWorkProcess.change(state, job, now, run, action, java.util.Optional.empty());
+                    var events = new java.util.ArrayList<>(ResourceSiteHarvestWorkProcess.events(state, changed, action));
+                    if (!run) events.add(reschedule(action, coldProgress(job, Math.addExact(now, 1L))));
+                    return List.copyOf(events);
+                }
                 return coldCropReceipt(state, action, job, now);
+            }
             if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE && ResourceSiteHarvestGoal.actorAtDepot(state, job))
                 throw new IllegalStateException("depot arrival must have been handled above");
         }

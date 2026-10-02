@@ -47,6 +47,35 @@ final class ResourceSitePayloadCodecs {
             }
         };
     }
+    static PayloadCodec harvestWorkChanged() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resource_site_harvest_work_changed"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                var value = (ResourceSiteHarvestWorkChanged) payload;
+                return FrontierWorldPayloadCodecs.encodeProduction(out -> {
+                    FrontierWorldPayloadCodecs.writeSubject(out, value.siteId());
+                    FrontierWorldPayloadCodecs.writeSubject(out, value.jobId());
+                    FrontierWorldPayloadCodecs.writeSubject(out, value.workerId());
+                    out.writeLong(value.epoch()); out.writeLong(value.layoutRevision()); out.writeLong(value.cellId().value());
+                    out.writeByte(value.operation().wireTag()); out.writeLong(value.atTick());
+                    WorkStateCodec.writeProgress(out, value.previous()); WorkStateCodec.writeProgress(out, java.util.Optional.of(value.next()));
+                    FrontierWorldPayloadCodecs.writeString(out, value.scheduleId().value()); out.writeLong(value.dueAt());
+                    out.writeBoolean(value.hotLeaseId().isPresent());
+                    if (value.hotLeaseId().isPresent()) FrontierWorldPayloadCodecs.writeString(out, value.hotLeaseId().orElseThrow().value());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new ResourceSiteHarvestWorkChanged(
+                        FrontierWorldPayloadCodecs.readSubject(in).value(), FrontierWorldPayloadCodecs.readSubject(in).value(),
+                        FrontierWorldPayloadCodecs.readSubject(in).value(), in.readLong(), in.readLong(),
+                        new ResourceFieldLayout.CellId(in.readLong()), WorkOperation.fromWireTag(in.readUnsignedByte()), in.readLong(),
+                        WorkStateCodec.readProgress(in), WorkStateCodec.readProgress(in).orElseThrow(),
+                        new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(FrontierWorldPayloadCodecs.readString(in)), in.readLong(),
+                        in.readBoolean() ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(
+                                FrontierWorldPayloadCodecs.readString(in))) : java.util.Optional.empty()));
+            }
+        };
+    }
     static PayloadCodec harvestStarted() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resource_site_harvest_started"; }
@@ -63,6 +92,7 @@ final class ResourceSitePayloadCodecs {
                     output.writeInt(job.progress().pendingCropSlotIndex());
                     output.writeInt(job.progress().selectedCropSlotIndex());
                     output.writeInt(job.progress().lastCompletedCropSlotIndex());
+                    WorkStateCodec.writeProgress(output, job.progress().work());
                     output.writeInt(job.deliveredYieldQuantity());
                     output.writeBoolean(job.returningForBatch());
                     output.writeBoolean(job.batchSuccessorSlot().isPresent());
@@ -85,6 +115,7 @@ final class ResourceSitePayloadCodecs {
                     int slot = input.readUnsignedByte(); String intent = FrontierWorldPayloadCodecs.readString(input);
                     int total = input.readInt(), completed = input.readInt(), pending = input.readInt();
                     int selected = input.readInt(), lastCompleted = input.readInt();
+                    var workProgress = WorkStateCodec.readProgress(input);
                     int delivered = input.readInt(); boolean returningForBatch = input.readBoolean();
                     java.util.Optional<InventoryCustody.ContainerSlot> successorSlot = input.readBoolean()
                             ? java.util.Optional.of(new InventoryCustody.ContainerSlot(depot, input.readUnsignedByte()))
@@ -99,7 +130,7 @@ final class ResourceSitePayloadCodecs {
                     }
                     return new ResourceSiteHarvestStarted(new ResourceSiteHarvestJob(id, task, site, worker, actorAccount, depotAccount, output,
                             new InventoryCustody.ContainerSlot(depot, slot), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(intent),
-                            new ResourceSiteHarvestProgress(total, completed, pending, selected, lastCompleted), delivered,
+                            new ResourceSiteHarvestProgress(total, completed, pending, selected, lastCompleted, workProgress), delivered,
                             returningForBatch, successorSlot, lastBatch, java.util.Optional.empty()));
                 });
             }

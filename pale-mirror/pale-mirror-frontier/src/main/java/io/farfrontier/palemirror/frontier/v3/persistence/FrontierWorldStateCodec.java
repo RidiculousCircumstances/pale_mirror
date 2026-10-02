@@ -39,7 +39,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Test worlds from the former execution grammar are rejected, never silently reinterpreted.
     // Version 217 replaces missed-meal deficit with bounded satiety; fresh test worlds only.
     // Version 220 separates pre-consumption service clearance from confirmed eating.
-    static final int VERSION = 220; private static final int MAX_ENTRIES = 65_535;
+    // Version 221 retains shared operation labour and resident work modifiers; fresh test worlds only.
+    static final int VERSION = 221; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -96,7 +97,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
             if (version != VERSION) throw new IllegalArgumentException("Frontier v3 state schema " + version + " is incompatible with required schema " + VERSION + "; fresh current-schema world required");
-            if (!HarvestCellExclusionDescriptorUpgrade.accepts(FrontierDurationProcessDriverRegistry.inventoryFingerprint(), readString(input))) {
+            if (!FrontierDurationProcessDriverRegistry.inventoryFingerprint().equals(readString(input))) {
                 throw new IllegalArgumentException("Frontier v3 state has an incompatible process/scene descriptor inventory");
             }
             if (!FrontierWorldProcessCatalog.physicalLifecycleFingerprint().equals(readString(input))) {

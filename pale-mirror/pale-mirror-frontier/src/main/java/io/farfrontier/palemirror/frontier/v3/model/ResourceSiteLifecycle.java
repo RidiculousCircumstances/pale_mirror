@@ -146,6 +146,11 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         return next(phase, growthEpoch, growthStage,
                 Optional.of(active.withBlockedCellsSkipped(count, totalYield)));
     }
+    public ResourceSiteLifecycle withHarvestLabour(ResourceSiteHarvestJob expected, WorkProgress work) {
+        if (phase != ResourceSitePhase.HARVESTING || !activeWork.equals(Optional.of(expected)))
+            throw new IllegalArgumentException("labour update has a stale field owner");
+        return next(phase, growthEpoch, growthStage, Optional.of(expected.withWork(work)));
+    }
     public ResourceSiteLifecycle skipSelectedHarvestCell(ResourceSiteHarvestJob expected,
                                                          int nextSelectedCropSlotIndex, int totalYield) {
         ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)

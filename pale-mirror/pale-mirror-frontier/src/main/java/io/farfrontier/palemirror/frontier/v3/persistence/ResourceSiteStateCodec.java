@@ -194,6 +194,7 @@ final class ResourceSiteStateCodec {
             output.writeInt(harvest.progress().pendingCropSlotIndex());
             output.writeInt(harvest.progress().selectedCropSlotIndex());
             output.writeInt(harvest.progress().lastCompletedCropSlotIndex());
+            WorkStateCodec.writeProgress(output, harvest.progress().work());
             output.writeInt(harvest.deliveredYieldQuantity());
             output.writeBoolean(harvest.returningForBatch());
             output.writeBoolean(harvest.batchSuccessorSlot().isPresent());
@@ -236,7 +237,7 @@ final class ResourceSiteStateCodec {
         SubjectId output = new SubjectId(FrontierWorldStateCodec.readString(input));
         InventoryCustody.ContainerSlot slot = readOutputSlot(input);
         ResourceSiteHarvestProgress progress = new ResourceSiteHarvestProgress(input.readInt(), input.readInt(), input.readInt(),
-                input.readInt(), input.readInt());
+                input.readInt(), input.readInt(), WorkStateCodec.readProgress(input));
         int delivered = input.readInt(); boolean returning = input.readBoolean();
         java.util.Optional<InventoryCustody.ContainerSlot> successorSlot = input.readBoolean()
                 ? java.util.Optional.of(readOutputSlot(input)) : java.util.Optional.empty();

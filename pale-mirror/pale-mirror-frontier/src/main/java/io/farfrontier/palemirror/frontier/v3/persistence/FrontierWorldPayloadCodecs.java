@@ -27,7 +27,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             HumanPopulationPayloadCodecs.born(), HumanPopulationPayloadCodecs.migrated(), HumanPopulationPayloadCodecs.birthStarted(), HumanPopulationPayloadCodecs.birthCancelled(),
             HumanPopulationPayloadCodecs.migrationStarted(), HumanPopulationPayloadCodecs.migrationAdvanced(), HumanPopulationPayloadCodecs.transitAdvanced(),
             HumanPopulationPayloadCodecs.migrationBlocked(), HumanPopulationPayloadCodecs.migrationResumed(),
-            HumanPopulationPayloadCodecs.starvationIntegrated(), HumanPopulationPayloadCodecs.needIntegrated(), HumanPopulationPayloadCodecs.metabolismChanged(), HumanPopulationPayloadCodecs.mealStarted(),
+            HumanPopulationPayloadCodecs.starvationIntegrated(), HumanPopulationPayloadCodecs.needIntegrated(),
+            HumanPopulationPayloadCodecs.metabolismChanged(), HumanPopulationPayloadCodecs.workModifiersChanged(), HumanPopulationPayloadCodecs.mealStarted(),
             HumanPopulationPayloadCodecs.mealHotArrived(), HumanPopulationPayloadCodecs.mealHotEffectPrepared(),
             HumanPopulationPayloadCodecs.mealHotEffectObserved(),
             HumanPopulationPayloadCodecs.mealHotHandMaterialized(), HumanPopulationPayloadCodecs.mealHotHandReleased(),
@@ -48,7 +49,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             new BakeryHotHandReleaseCodec(), new BakeryHotHandMaterializedCodec(), new BakeryHotBlockChangedCodec())),
             ProductionWorkScenePayloadCodecs.codecs(), ProductionWorkScenePayloadCodecs.productionEvents()); }
     static PayloadCodecs resourceSiteCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(ResourceSitePayloadCodecs.growthAdvanced(),
-            ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(),
+            ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(), ResourceSitePayloadCodecs.harvestWorkChanged(),
             ResourceSitePayloadCodecs.harvestCropPrepared(), ResourceSitePayloadCodecs.harvestProgressed(),
             ResourceSitePayloadCodecs.harvestColdTraversalAdvanced(), ResourceSitePayloadCodecs.harvestColdGoalAdvanced(),
             ResourceSitePayloadCodecs.harvestColdGoalHeld(), ResourceSitePayloadCodecs.harvestReturned(),

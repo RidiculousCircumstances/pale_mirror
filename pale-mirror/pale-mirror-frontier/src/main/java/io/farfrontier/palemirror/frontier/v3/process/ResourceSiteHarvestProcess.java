@@ -33,7 +33,7 @@ import java.util.OptionalInt;
  * HOT physical hand/depot receipt is a separate cutover obligation before player acceptance.</p>
  */
 public final class ResourceSiteHarvestProcess {
-    public static final String COLD_PROGRESS_KIND = "frontier.resource_site.harvest.cold_progress";
+    public static final String COLD_PROGRESS_KIND = ResourceSiteHarvestContinuation.KIND;
     /** A valid retained farmer has no bounded route to its next semantic goal. */
     public static final class ContinuationUnavailable extends IllegalArgumentException {
         public ContinuationUnavailable(IllegalArgumentException cause) {
@@ -380,6 +380,8 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("resource-site harvest crop preparation has a foreign job for its declared site owner");
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
             throw new IllegalArgumentException("resource-site harvest crop preparation requires its actual farmer at the current CellId station");
+        if (job.progress().work().filter(WorkProgress::complete).isEmpty())
+            throw new IllegalArgumentException("crop effect cannot precede complete admitted labour");
         return state.withResourceSites(state.resourceSites().replace(lifecycle.prepareHarvestCrop(job, prepared.cropSlotIndex(),
                 ResourceSiteHarvestGoal.current(state, job), state.actorLocations().get(job.workerId()).supportingSurface())));
     }
@@ -859,7 +861,7 @@ public final class ResourceSiteHarvestProcess {
             return state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval();
         return !ResourceSiteHarvestGoal.current(state, job).arrivedAt(actor.supportingSurface())
                 ? state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge()
-                : state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval();
+                : state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval();
     }
 
 

@@ -219,6 +219,18 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(journey.originSettlementId(), advanced)));
         }
+        if (command.payload() instanceof ResidentWorkModifiersChanged changed) {
+            try {
+                if (changed.atTick() != command.submittedAt().ticks())
+                    throw new IllegalArgumentException("work modifiers must change at the current command tick");
+                var next = ResidentWorkModifiersProcess.reduce(state, changed.residentId(), changed);
+                var events = new java.util.ArrayList<ProposedEvent>();
+                events.add(new ProposedEvent(changed.residentId(), changed));
+                events.addAll(ActivityExecutionCapabilities.workStatsChanged(next,
+                        HumanAssignmentProjection.compile(next).assignment(changed.residentId()), changed.atTick()));
+                return new CommandPlan.Accepted(List.copyOf(events));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof ResidentMetabolismChanged changed) {
             if (command.submittedAt().ticks() != changed.atTick())
                 return FrontierWorldCommandPlanner.rejected("metabolism edit must use its canonical submission instant");
@@ -290,6 +302,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case SettlementProvisionResolved ignored -> throw new IllegalArgumentException("settlement provision resolution is retired by resident nutrition");
             case ResidentStarvationIntegrated integrated -> ResidentStarvationProcess.reduce(state, event.subject(), integrated);
             case ResidentNeedIntegrated integrated -> ResidentNeedProcess.reduce(state, event.subject(), integrated);
+            case ResidentWorkModifiersChanged changed -> ResidentWorkModifiersProcess.reduce(state, event.subject(), changed);
             case ResidentMetabolismChanged changed -> ResidentMetabolismProcess.reduce(state, event.subject(), changed);
             case ResidentMealStarted started -> ResidentActivityProcess.reduceMealStarted(state, event.subject(), started);
             case ResidentMealColdStep step -> ResidentMealProcess.reduceColdStep(state, event.subject(), step);

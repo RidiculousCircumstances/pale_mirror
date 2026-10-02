@@ -9,10 +9,17 @@ package io.farfrontier.palemirror.frontier.v3.model;
  */
 public record ResourceSiteHarvestProgress(int totalCropSlots, int completedCropSlots,
                                           int pendingCropSlotIndex, int selectedCropSlotIndex,
-                                          int lastCompletedCropSlotIndex) {
+                                          int lastCompletedCropSlotIndex, java.util.Optional<WorkProgress> work) {
     public static final int TOTAL_CROP_SLOTS = ResourceSiteKind.WHEAT_FIELD.cropSlotCount();
 
+    public ResourceSiteHarvestProgress(int total, int completed, int pending, int selected, int last) {
+        this(total, completed, pending, selected, last, java.util.Optional.empty());
+    }
+
     public ResourceSiteHarvestProgress {
+        java.util.Objects.requireNonNull(work, "cell labour progress");
+        if (work.isPresent() && (selectedCropSlotIndex < 0 || pendingCropSlotIndex >= 0 && !work.orElseThrow().complete()))
+            throw new IllegalArgumentException("labour progress has no exact outstanding cell or prepared complete work");
         if (totalCropSlots < 1 || totalCropSlots > ResourceFieldLayout.MAX_CELLS
                 || completedCropSlots < 0 || completedCropSlots > totalCropSlots
                 || pendingCropSlotIndex < -1 || pendingCropSlotIndex >= totalCropSlots
@@ -37,6 +44,10 @@ public record ResourceSiteHarvestProgress(int totalCropSlots, int completedCropS
     public static ResourceSiteHarvestProgress notStarted(int totalCropSlots) {
         return new ResourceSiteHarvestProgress(totalCropSlots, 0, -1, 0, -1);
     }
+    public ResourceSiteHarvestProgress withWork(WorkProgress value) {
+        return new ResourceSiteHarvestProgress(totalCropSlots, completedCropSlots, pendingCropSlotIndex,
+                selectedCropSlotIndex, lastCompletedCropSlotIndex, java.util.Optional.of(value));
+    }
     public boolean complete() { return completedCropSlots == totalCropSlots; }
     public boolean hasPendingCrop() { return pendingCropSlotIndex >= 0; }
     public int nextCropSlotIndex() {
@@ -46,7 +57,7 @@ public record ResourceSiteHarvestProgress(int totalCropSlots, int completedCropS
     public ResourceSiteHarvestProgress prepareNextCrop() {
         if (complete() || hasPendingCrop()) throw new IllegalStateException("harvest cursor cannot prepare its next crop");
         return new ResourceSiteHarvestProgress(totalCropSlots, completedCropSlots, nextCropSlotIndex(), selectedCropSlotIndex,
-                lastCompletedCropSlotIndex);
+                lastCompletedCropSlotIndex, work);
     }
     /** The field changed before its physical work witness began; no cell or yield was credited. */
     public ResourceSiteHarvestProgress cancelPreparedCrop() {
@@ -95,6 +106,7 @@ public record ResourceSiteHarvestProgress(int totalCropSlots, int completedCropS
         // effect. An unrelated lost cell must not replace that witness cursor.
         int retainedWitnessSlot = lastCompletedCropSlotIndex >= 0 ? lastCompletedCropSlotIndex : lostSlot;
         return new ResourceSiteHarvestProgress(totalCropSlots, completedCropSlots + 1,
-                pendingCropSlotIndex, nextSelectedCropSlotIndex, retainedWitnessSlot);
+                pendingCropSlotIndex, nextSelectedCropSlotIndex, retainedWitnessSlot,
+                lostSlot == selectedCropSlotIndex ? java.util.Optional.empty() : work);
     }
 }

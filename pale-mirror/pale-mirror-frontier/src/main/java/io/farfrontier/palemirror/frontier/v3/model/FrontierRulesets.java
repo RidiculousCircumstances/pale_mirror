@@ -11,7 +11,7 @@ public final class FrontierRulesets {
      * semantic checkpoint left a HOT farmer visibly pausing at every grid cell even though the
      * motion actuator was continuous.  Crop work remains a slower, distinct boundary.
      */
-    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r10", 12, 1L, 20L, 20L);
+    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r11", 13, 1L, 20L, 20L);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);

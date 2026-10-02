@@ -352,6 +352,16 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(renewed.siteId(), renewed)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof ResourceSiteHarvestWorkChanged changed) {
+            try {
+                var binding = command.scheduleBinding().orElseThrow(
+                        () -> new IllegalArgumentException("labour command needs an exact continuation binding")).action();
+                if (changed.hotLeaseId().isEmpty() || changed.atTick() != command.submittedAt().ticks()
+                        || !binding.id().equals(changed.scheduleId()) || binding.dueAt().ticks() != changed.dueAt())
+                    throw new IllegalArgumentException("HOT labour has no exact current binding");
+                return new CommandPlan.Accepted(ResourceSiteHarvestWorkProcess.events(state, changed, binding));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof ResourceSiteHarvestCellSkip skipped) {
             try {
                 ScheduledAction binding = command.scheduleBinding().map(
@@ -498,6 +508,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestReturned returned -> ResourceSiteHarvestProcess.reduceReturned(state, event.subject(), returned);
             case ResourceSiteHarvestSegmentRenewed renewed -> ResourceSiteHarvestProcess.reduceSegmentRenewed(state, event.subject(), renewed);
             case ResourceSiteHarvestBlockedCellSkipped skipped -> ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, event.subject(), skipped);
+            case ResourceSiteHarvestWorkChanged changed -> ResourceSiteHarvestWorkProcess.reduce(state, event.subject(), changed);
             case ResourceSiteHarvestImmatureCellSkipped skipped -> ResourceSiteHarvestProcess.reduceCellSkipped(state, event.subject(), skipped);
             case ResourceSiteHarvestTargetRetargeted retargeted -> ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, event.subject(), retargeted);
             case ResourceSiteHarvestRouteBlocked blocked -> ResourceSiteHarvestProcess.reduceRouteBlocked(state, event.subject(), blocked);
@@ -537,7 +548,9 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 || !lease.handoffInstant().equals(event.instant())) {
             throw new IllegalArgumentException("resource-site harvest scene lease does not match its retained field-work hand-off");
         }
-        return state.prepareSceneLease(lease);
+        var job = (ResourceSiteHarvestJob) state.resourceSites().site(
+                FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId()).activeWork().orElseThrow();
+        return ResourceSiteHarvestLabour.pauseJob(state, job, event.instant().ticks()).prepareSceneLease(lease);
     }
 
     private static FrontierWorldState reduceHarvestSceneHandoff(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
@@ -547,7 +560,10 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 || !lease.handoffInstant().equals(event.instant())) {
             throw new IllegalArgumentException("resource-site harvest scene hand-off does not match its retained field work");
         }
-        FrontierWorldState rebased = ResourceSiteHarvestProcess.rebaseForAmbientHandoff(state, subject, handoff);
+        var job = (ResourceSiteHarvestJob) state.resourceSites().site(
+                FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId()).activeWork().orElseThrow();
+        FrontierWorldState paused = ResourceSiteHarvestLabour.pauseJob(state, job, event.instant().ticks());
+        FrontierWorldState rebased = ResourceSiteHarvestProcess.rebaseForAmbientHandoff(paused, subject, handoff);
         return rebased.handoffAmbientScene(new SceneLeaseHandoff(lease, handoff.ambientMembers()));
     }
 

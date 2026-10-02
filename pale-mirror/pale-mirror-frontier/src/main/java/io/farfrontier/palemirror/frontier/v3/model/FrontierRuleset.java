@@ -17,7 +17,7 @@ import java.util.Objects;
  */
 public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                               FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
-                              ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge) {
+                              ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog) {
     /** Retains exact historical R4-and-earlier digests while those selectors remain installed. */
     public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                            FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand) {
@@ -33,11 +33,19 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 residentLife, cadence.resourceHarvestTraversalInterval());
     }
 
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                           ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand,
+                residentLife, resourceHarvestColdTravelTicksPerEdge, WorkCatalog.initial());
+    }
+
     public FrontierRuleset {
         if (id == null || id.isBlank() || !id.matches("[a-z0-9][a-z0-9._-]*")) {
             throw new IllegalArgumentException("ruleset id must be a stable lowercase identifier");
         }
         if (schemaVersion <= 0) throw new IllegalArgumentException("ruleset schema version must be positive");
+        workCatalog = Objects.requireNonNull(workCatalog, "work catalog");
         cadence = Objects.requireNonNull(cadence, "cadence");
         spatial = Objects.requireNonNull(spatial, "spatial");
         rates = Objects.requireNonNull(rates, "rates");
@@ -63,7 +71,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         return id + '|' + schemaVersion + '|' + cadence.canonicalText() + '|' + spatial.canonicalText() + '|' + rates.canonicalText()
                 + '|' + facilityCapacity.canonicalText() + '|' + combat.canonicalText() + '|' + hiveCommand.canonicalText()
                 + (schemaVersion >= 7 ? "|" + residentLife.canonicalText() : "")
-                + (schemaVersion >= 9 ? "|" + resourceHarvestColdTravelTicksPerEdge : "");
+                + (schemaVersion >= 9 ? "|" + resourceHarvestColdTravelTicksPerEdge : "")
+                + (schemaVersion >= 13 ? "|" + workCatalog.canonicalText() : "");
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */

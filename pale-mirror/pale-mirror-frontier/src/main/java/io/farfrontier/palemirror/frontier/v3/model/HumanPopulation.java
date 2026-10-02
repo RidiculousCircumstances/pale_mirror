@@ -199,6 +199,17 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         return new HumanPopulation(households, nextResidents, birthJobs, health, quarantines,
                 migrations, provisions, nextNutrition, medicalOperations, schedules, meals);
     }
+    public HumanPopulation changeWorkModifiers(SubjectId residentId, ResidentWorkModifiers expected,
+                                               ResidentWorkModifiers nextModifiers) {
+        ResidentProfile profile = resident(residentId);
+        if (profile == null || !profile.characteristics().workModifiers().equals(expected))
+            throw new IllegalArgumentException("work-stat edit lacks its exact previous resident state");
+        Map<SubjectId, ResidentProfile> nextResidents = new LinkedHashMap<>(residents);
+        nextResidents.put(residentId, profile.withCharacteristics(
+                profile.characteristics().withWorkModifiers(Objects.requireNonNull(nextModifiers))));
+        return new HumanPopulation(households, nextResidents, birthJobs, health, quarantines,
+                migrations, provisions, nutrition, medicalOperations, schedules, meals);
+    }
     public SettlementDailySchedule schedule(SubjectId settlementId) {
         SettlementDailySchedule policy = schedules.get(Objects.requireNonNull(settlementId, "schedule settlement"));
         if (policy == null) throw new IllegalArgumentException("unknown settlement schedule");

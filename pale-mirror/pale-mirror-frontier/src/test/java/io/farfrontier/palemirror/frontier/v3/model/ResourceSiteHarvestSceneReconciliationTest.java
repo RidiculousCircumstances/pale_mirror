@@ -53,6 +53,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
             state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHotGoalArrived(state, hot.site(),
                     new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(),
                             goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+        state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
         var cycle = state.resourceSites().cycle(hot.site());

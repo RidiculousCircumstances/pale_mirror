@@ -69,6 +69,10 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         return totalYield - deliveredYieldQuantity;
     }
 
+    public ResourceSiteHarvestJob withWork(WorkProgress work) {
+        return copy(progress.withWork(work), deliveredYieldQuantity, returningForBatch,
+                batchSuccessorSlot, lastConfirmedBatch, navigationBlock);
+    }
     public ResourceSiteHarvestJob withProgress(ResourceSiteHarvestProgress next) {
         Objects.requireNonNull(next, "next field progress");
         if (navigationBlock.isPresent() || next.totalCropSlots() != progress.totalCropSlots())

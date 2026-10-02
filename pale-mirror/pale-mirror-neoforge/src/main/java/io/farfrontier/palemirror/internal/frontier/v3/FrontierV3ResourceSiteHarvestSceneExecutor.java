@@ -277,6 +277,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // demand authority; it is the same present body's bounded hand-off on demand loss.
         if (!demand.active() && !job.progress().hasPendingCrop()
                 && immediateColdRelease(demand.active(), playerWithinSafeRadius, job.progress().hasPendingCrop())) {
+            if (FrontierV3ResourceFieldLabourExecutor.pause(level, runtime, state, lease, job)) return;
             beginImmediateColdRelease(level, runtime, state, lease);
             return;
         }
@@ -302,6 +303,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                         runtime.canonicalState().orElseThrow().instant().ticks())
                 && FrontierV3SupportedBodyCapture.observe(level, worker).isPresent()) {
             FrontierV3GoalNavigation.stop(worker);
+            if (FrontierV3ResourceFieldLabourExecutor.pause(level, runtime, state, lease, job)) return;
             beginImmediateColdRelease(level, runtime, state, lease);
             return;
         }
@@ -452,6 +454,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // across a stationary crop dwell.
         FrontierV3ControlledMobMotion.showHarvestStationDuty(level, worker);
         tendCurrentCrop(level, worker, crop);
+        if (!job.progress().hasPendingCrop()
+                && FrontierV3ResourceFieldLabourExecutor.advance(level, runtime, state, lease, job)) return;
         var dueBinding = FrontierV3TraversalScheduleGate.dueBinding(runtime.executionView().orElseThrow(), job.siteId());
         if (dueBinding.isEmpty()) {
             if (job.progress().hasPendingCrop()) {

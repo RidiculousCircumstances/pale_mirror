@@ -379,6 +379,7 @@ final class HumanPopulationStateCodec {
             FrontierWorldStateCodec.writeString(output, entry.getKey().value());
             output.writeInt(entry.getValue().deltaPermille());
         }
+        WorkStateCodec.writeModifiers(output, characteristics.workModifiers());
     }
 
     private static ResidentProfile readProfile(DataInputStream input, boolean hasCapabilityProfile) throws IOException {
@@ -404,6 +405,6 @@ final class HumanPopulationStateCodec {
             if (modifiers.put(source, modifier) != null) throw new IllegalArgumentException("duplicate resident characteristic modifier");
         }
         return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), profession,
-                birthTick, skills, capabilities, new ResidentCharacteristics(version, base, modifiers));
+                birthTick, skills, capabilities, new ResidentCharacteristics(version, base, modifiers, WorkStateCodec.readModifiers(input)));
     }
 }

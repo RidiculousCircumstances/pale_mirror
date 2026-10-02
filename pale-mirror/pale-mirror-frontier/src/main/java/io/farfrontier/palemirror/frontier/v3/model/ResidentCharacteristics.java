@@ -7,10 +7,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-/** Bounded, typed physiological state of one resident. Skills and profession are separate. */
+/** Bounded typed metabolism and work-stat modifiers; capability scores and profession are separate. */
 public record ResidentCharacteristics(int version, int baseMetabolismPermille,
-                                      Map<SubjectId, MetabolismModifier> metabolismModifiers) {
-    public static final int VERSION = 1;
+                                      Map<SubjectId, MetabolismModifier> metabolismModifiers,
+                                      ResidentWorkModifiers workModifiers) {
+    public static final int VERSION = 2;
     public static final int DEFAULT_METABOLISM_PERMILLE = 1_000;
     public static final int MIN_METABOLISM_PERMILLE = 250;
     public static final int MAX_METABOLISM_PERMILLE = 4_000;
@@ -25,7 +26,13 @@ public record ResidentCharacteristics(int version, int baseMetabolismPermille,
         }
     }
 
+    public ResidentCharacteristics(int version, int baseMetabolismPermille,
+                                   Map<SubjectId, MetabolismModifier> metabolismModifiers) {
+        this(version, baseMetabolismPermille, metabolismModifiers, ResidentWorkModifiers.initial());
+    }
+
     public ResidentCharacteristics {
+        Objects.requireNonNull(workModifiers, "work modifiers");
         if (version != VERSION || baseMetabolismPermille < MIN_METABOLISM_PERMILLE
                 || baseMetabolismPermille > MAX_METABOLISM_PERMILLE)
             throw new IllegalArgumentException("unsupported resident characteristic version or base metabolism");
@@ -76,20 +83,24 @@ public record ResidentCharacteristics(int version, int baseMetabolismPermille,
         return (int) Math.clamp(total, MIN_METABOLISM_PERMILLE, MAX_METABOLISM_PERMILLE);
     }
 
+    public ResidentCharacteristics withWorkModifiers(ResidentWorkModifiers value) {
+        return new ResidentCharacteristics(version, baseMetabolismPermille, metabolismModifiers, value);
+    }
+
     public ResidentCharacteristics withBaseMetabolism(int value) {
-        return new ResidentCharacteristics(version, value, metabolismModifiers);
+        return new ResidentCharacteristics(version, value, metabolismModifiers, workModifiers);
     }
 
     public ResidentCharacteristics withModifier(MetabolismModifier modifier) {
         Map<SubjectId, MetabolismModifier> next = new LinkedHashMap<>(metabolismModifiers);
         next.put(modifier.sourceId(), modifier);
-        return new ResidentCharacteristics(version, baseMetabolismPermille, next);
+        return new ResidentCharacteristics(version, baseMetabolismPermille, next, workModifiers);
     }
 
     public ResidentCharacteristics withoutModifier(SubjectId sourceId) {
         if (!metabolismModifiers.containsKey(sourceId)) throw new IllegalArgumentException("unknown metabolism modifier source");
         Map<SubjectId, MetabolismModifier> next = new LinkedHashMap<>(metabolismModifiers);
         next.remove(sourceId);
-        return new ResidentCharacteristics(version, baseMetabolismPermille, next);
+        return new ResidentCharacteristics(version, baseMetabolismPermille, next, workModifiers);
     }
 }

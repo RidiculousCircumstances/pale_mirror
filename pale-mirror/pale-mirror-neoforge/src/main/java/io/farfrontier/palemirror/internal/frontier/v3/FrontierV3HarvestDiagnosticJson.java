@@ -129,6 +129,11 @@ final class FrontierV3HarvestDiagnosticJson {
                 + ",\"deliveredYield\":" + job.deliveredYieldQuantity()
                 + ",\"carriedYield\":" + job.carriedYieldQuantity(cycle.harvestedCount())
                 + ",\"returningForBatch\":" + job.returningForBatch() + "}"
+                + ",\"labour\":" + job.progress().work().map(work -> "{\"requiredMilliWork\":" + work.requiredMilliWork()
+                        + ",\"completedMilliWork\":" + work.completedMilliWork()
+                        + ",\"projectedMilliWork\":" + work.completedAt(Math.max(checkpoint.instant().ticks(), work.evaluatedAtTick()))
+                        + ",\"ratePermille\":" + work.ratePermille() + ",\"evaluatedAtTick\":" + work.evaluatedAtTick()
+                        + ",\"activeUntilTick\":" + work.activeUntilTick() + "}").orElse("null")
                 + ",\"schedule\":{\"count\":" + checkpoint.schedules().stream()
                         .filter(value -> ResourceSiteHarvestProcess.coldProgress(job, value.dueAt().ticks()).equals(value)).count()
                 + ",\"entries\":" + scheduleEntries + "}"

@@ -351,7 +351,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             case SettlementAssaultSceneLeaseHandoff handoff -> reduceAssaultHandoff(state, event.subject(), event, handoff);
             case EngineeringWorkSceneLeasePrepared prepared -> reduceEngineeringPrepared(state, event.subject(), event, prepared);
             case EngineeringWorkSceneLeaseHandoff handoff -> reduceEngineeringHandoff(state, event.subject(), event, handoff);
-            case SceneLeaseTransition transition -> reduceSceneTransition(state, event.subject(), transition);
+            case SceneLeaseTransition transition -> reduceSceneTransition(state, event.subject(), transition, event.instant().ticks());
             case SceneLeaseReleased released -> reduceSceneReleased(state, event.subject(), released);
             case SceneLeaseRecoveryUnresolved unresolved -> reduceRecoveryUnresolved(state, event.subject(), unresolved);
             case SceneLeaseRecoveryRevoked revoked -> reduceRecoveryRevoked(state, event.subject(), revoked);
@@ -545,9 +545,17 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         return state.handoffAmbientScene(new SceneLeaseHandoff(lease, handoff.ambientMembers()));
     }
 
-    private static FrontierWorldState reduceSceneTransition(FrontierWorldState state, SubjectId subject, SceneLeaseTransition transition) {
+    private static FrontierWorldState reduceSceneTransition(FrontierWorldState state, SubjectId subject,
+                                                          SceneLeaseTransition transition, long tick) {
         SceneLease lease = state.sceneLeases().get(transition.leaseId());
         if (lease == null || !subject.equals(FrontierSceneOwnerSupport.owner(state, lease))) throw new IllegalArgumentException("scene lease transition lacks its owning scene");
+        if (transition.status() != SceneLeaseStatus.HOT) {
+            for (SceneMember member : lease.members()) {
+                if (state.humanPopulation().resident(member.actorId()) != null)
+                    state = ActivityExecutionCapabilities.pauseLabour(state,
+                            HumanAssignmentProjection.compile(state).assignment(member.actorId()), tick);
+            }
+        }
         return state.transitionSceneLease(transition.leaseId(), transition.status());
     }
 

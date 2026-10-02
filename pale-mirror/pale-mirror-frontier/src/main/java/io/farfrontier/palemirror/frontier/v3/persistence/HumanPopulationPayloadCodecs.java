@@ -60,6 +60,23 @@ final class HumanPopulationPayloadCodecs {
         };
     }
 
+    static PayloadCodec workModifiersChanged() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_work_modifiers_changed"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                var value = (ResidentWorkModifiersChanged) payload;
+                return FrontierWorldPayloadCodecs.encodeProduction(out -> {
+                    FrontierWorldPayloadCodecs.writeSubject(out, value.residentId()); out.writeLong(value.atTick());
+                    WorkStateCodec.writeModifiers(out, value.previous()); WorkStateCodec.writeModifiers(out, value.next());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new ResidentWorkModifiersChanged(
+                        FrontierWorldPayloadCodecs.readSubject(in).value(), in.readLong(),
+                        WorkStateCodec.readModifiers(in), WorkStateCodec.readModifiers(in)));
+            }
+        };
+    }
     static PayloadCodec metabolismChanged() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resident_metabolism_changed"; }
@@ -87,6 +104,7 @@ final class HumanPopulationPayloadCodecs {
             FrontierWorldPayloadCodecs.writeSubject(output, entry.getKey());
             output.writeInt(entry.getValue().deltaPermille());
         }
+        WorkStateCodec.writeModifiers(output, characteristics.workModifiers());
     }
 
     private static ResidentCharacteristics readCharacteristics(DataInputStream input) throws IOException {
@@ -97,7 +115,7 @@ final class HumanPopulationPayloadCodecs {
             var modifier = new ResidentCharacteristics.MetabolismModifier(source, input.readInt());
             if (modifiers.put(source, modifier) != null) throw new IllegalArgumentException("duplicate metabolism modifier");
         }
-        return new ResidentCharacteristics(version, base, modifiers);
+        return new ResidentCharacteristics(version, base, modifiers, WorkStateCodec.readModifiers(input));
     }
 
     static PayloadCodec mealStarted() {

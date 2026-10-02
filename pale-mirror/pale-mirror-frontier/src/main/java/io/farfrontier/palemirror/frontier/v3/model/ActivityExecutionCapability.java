@@ -4,4 +4,11 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public interface ActivityExecutionCapability {
     HumanAssignmentKind kind();
     ActivityExecutionCheckpoint checkpoint(FrontierWorldState state, HumanAssignment assignment);
+    default FrontierWorldState pauseLabour(FrontierWorldState state, HumanAssignment assignment, long tick) {
+        throw new IllegalStateException("owner has no declared labour suspension strategy");
+    }
+    default java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> workStatsChanged(
+            FrontierWorldState state, HumanAssignment assignment, long tick) {
+        throw new IllegalStateException("owner has no declared work-stat wake strategy");
+    }
 }

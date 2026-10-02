@@ -13,7 +13,8 @@ public final class ActivityExecutionCapabilities {
             registration(HumanAssignmentKind.IDLE, (state, assignment) -> new ActivityExecutionCheckpoint(
                     state, assignment, ResidentWorkYield.Status.READY)),
             registration(HumanAssignmentKind.PRODUCTION, FrontierProductionWorkSceneSupport::executionCheckpoint),
-            registration(HumanAssignmentKind.FIELD_HARVEST, FrontierResourceSiteHarvestSceneSupport::executionCheckpoint),
+            registration(HumanAssignmentKind.FIELD_HARVEST, FrontierResourceSiteHarvestSceneSupport::executionCheckpoint,
+                    ResourceSiteHarvestLabour::pause, ResourceSiteHarvestLabour::workStatsChanged),
             held(HumanAssignmentKind.CARGO_TRANSPORT), held(HumanAssignmentKind.ESCORT),
             held(HumanAssignmentKind.ROUTE_PATROL), held(HumanAssignmentKind.SETTLEMENT_DEFENCE),
             held(HumanAssignmentKind.ENGINEERING_RECOVERY), held(HumanAssignmentKind.SETTLEMENT_SERVICE),
@@ -37,6 +38,25 @@ public final class ActivityExecutionCapabilities {
         return CURRENT.evaluate(state, assignment);
     }
 
+    @FunctionalInterface interface LabourPause {
+        FrontierWorldState apply(FrontierWorldState state, HumanAssignment assignment, long tick);
+    }
+    @FunctionalInterface interface WorkStatsWake {
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> apply(
+                FrontierWorldState state, HumanAssignment assignment, long tick);
+    }
+    public static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> workStatsChanged(
+            FrontierWorldState state, HumanAssignment assignment, long tick) {
+        if (!HumanAssignmentProjection.compile(state).assignment(assignment.residentId()).equals(assignment))
+            throw new IllegalArgumentException("work-stat wake has a stale assignment");
+        return CURRENT.capabilities.get(assignment.kind()).workStatsChanged(state, assignment, tick);
+    }
+    public static FrontierWorldState pauseLabour(FrontierWorldState state, HumanAssignment assignment, long tick) {
+        if (!HumanAssignmentProjection.compile(state).assignment(assignment.residentId()).equals(assignment))
+            throw new IllegalArgumentException("labour suspension has a stale assignment");
+        return CURRENT.capabilities.get(assignment.kind()).pauseLabour(state, assignment, tick);
+    }
+
     ResidentWorkYield evaluate(FrontierWorldState state, HumanAssignment assignment) {
         if (!HumanAssignmentProjection.compile(state).assignment(assignment.residentId()).equals(assignment))
             throw new IllegalArgumentException("checkpoint requested for a foreign current assignment");
@@ -52,9 +72,24 @@ public final class ActivityExecutionCapabilities {
 
     static ActivityExecutionCapability registration(HumanAssignmentKind kind,
             BiFunction<FrontierWorldState, HumanAssignment, ActivityExecutionCheckpoint> strategy) {
-        Objects.requireNonNull(kind, "declared kind"); Objects.requireNonNull(strategy, "strategy");
+        return registration(kind, strategy, (state, assignment, tick) -> state, (state, assignment, tick) -> List.of());
+    }
+
+    private static ActivityExecutionCapability registration(HumanAssignmentKind kind,
+            BiFunction<FrontierWorldState, HumanAssignment, ActivityExecutionCheckpoint> strategy,
+            LabourPause pause, WorkStatsWake wake) {
+        Objects.requireNonNull(kind, "declared kind"); Objects.requireNonNull(strategy, "strategy"); Objects.requireNonNull(pause);
         return new ActivityExecutionCapability() {
             @Override public HumanAssignmentKind kind() { return kind; }
+            @Override public List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> workStatsChanged(
+                    FrontierWorldState state, HumanAssignment assignment, long tick) {
+                if (assignment.kind() != kind) throw new IllegalArgumentException("work-stat wake kind mismatch");
+                return wake.apply(state, assignment, tick);
+            }
+            @Override public FrontierWorldState pauseLabour(FrontierWorldState state, HumanAssignment assignment, long tick) {
+                if (assignment.kind() != kind) throw new IllegalArgumentException("labour suspension kind mismatch");
+                return pause.apply(state, assignment, tick);
+            }
             @Override public ActivityExecutionCheckpoint checkpoint(FrontierWorldState state, HumanAssignment assignment) {
                 if (assignment.kind() != kind) throw new IllegalArgumentException("capability assignment kind mismatch");
                 return strategy.apply(state, assignment);
