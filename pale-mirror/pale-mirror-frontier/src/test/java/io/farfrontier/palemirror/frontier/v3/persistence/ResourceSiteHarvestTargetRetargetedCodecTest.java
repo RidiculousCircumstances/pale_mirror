@@ -11,6 +11,17 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ResourceSiteHarvestTargetRetargetedCodecTest {
+    @Test void immatureExclusionRetainsItsDistinctCauseAndExactBinding() {
+        var codec = ResourceSitePayloadCodecs.harvestImmatureCellSkipped();
+        for (var lease : java.util.List.of(Optional.<SceneLeaseId>empty(), Optional.of(new SceneLeaseId("lease:harvest-1")))) {
+            var fact = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestImmatureCellSkipped(
+                    new SubjectId("site:1-wheat-field"), new SubjectId("job:site-harvest-1"),
+                    new SubjectId("resident:1-1"), 7L,
+                    java.util.List.of(new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId(1L)),
+                    new ScheduleId("schedule:resource-site-harvest-cold-progress-site-harvest-1"), 900L, lease);
+            assertEquals(fact, codec.decode(codec.encode(fact)));
+        }
+    }
     @Test void bothPhysicalAndColdSelectionFactsReplayExactly() {
         var codec = ResourceSitePayloadCodecs.harvestTargetRetargeted();
         for (var lease : java.util.List.of(Optional.<SceneLeaseId>empty(),

@@ -79,8 +79,9 @@ final class ResourceSiteHarvestPlanning {
                 new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
         int selected = state.resourceSites().cycle(site.id()).nextWorkSlot(worker.supportingSurface()).orElseThrow();
         job = job.withProgress(job.progress().withSelectedCropSlot(selected));
-        if (state.resourceSites().cycle(site.id()).expectedWorkOutcome(
-                site.layout().cells().get(selected).id()) != ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED) {
+        var selectedOutcome = state.resourceSites().cycle(site.id()).expectedWorkOutcome(site.layout().cells().get(selected).id());
+        if (selectedOutcome != ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED
+                && selectedOutcome != ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE) {
             try {
                 ResourceSiteHarvestKnownNavigation.path(state.withResourceSites(
                         state.resourceSites().replace(lifecycle.harvesting(job))), job);
@@ -219,6 +220,15 @@ final class ResourceSiteHarvestPlanning {
         }
         if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()) {
             ResourceFieldLayout.Cell nextCell = currentField.layout().cells().get(job.progress().nextCropSlotIndex());
+            if (currentField.expectedWorkOutcome(nextCell.id()) == ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE
+                    && !currentField.pendingPlayerBreaks().containsKey(nextCell.id())) {
+                var skipped = new ResourceSiteHarvestImmatureCellSkipped(job.siteId(), job.id(), job.workerId(),
+                        currentField.layout().revision(), List.of(nextCell.id()), action.id(), action.dueAt().ticks(), java.util.Optional.empty());
+                FrontierWorldState after = reduceCellSkipped(state, job.siteId(), skipped);
+                var nextJob = (ResourceSiteHarvestJob) after.resourceSites().site(job.siteId()).activeWork().orElseThrow();
+                return List.of(new ProposedEvent(job.siteId(), skipped),
+                        reschedule(action, coldProgress(nextJob, Math.addExact(now, continuationInterval(after, nextJob)))));
+            }
             if (currentField.expectedWorkOutcome(nextCell.id()) == ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED) {
                 if (currentField.pendingPlayerBreaks().containsKey(nextCell.id()))
                     return List.of(reschedule(action, action));

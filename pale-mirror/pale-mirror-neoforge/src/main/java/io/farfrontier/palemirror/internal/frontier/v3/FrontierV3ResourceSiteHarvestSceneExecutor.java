@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestCropPrepar
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgressed;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSegmentRenewed;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestBlockedCellSkipped;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestImmatureCellSkipped;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestNavigationBlock;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestRouteBlocked;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestTargetRetargeted;
@@ -332,6 +333,21 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 && !job.returningForBatch() && !job.progress().hasPendingCrop()) {
             var cycle = state.resourceSites().cycle(job.siteId());
             var blockedCell = cycle.layout().cells().get(job.progress().nextCropSlotIndex());
+            if (cycle.expectedWorkOutcome(blockedCell.id()) == ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE) {
+                if (!FrontierV3ResourceFieldExclusionObservation.immatureCellCurrent(level, state, site, blockedCell.id())) return;
+                FrontierV3GoalNavigation.stop(worker);
+                if (retainInterruptedTransit(level, runtime, state, lease, job, worker)) return;
+                var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job.siteId());
+                if (binding.isEmpty()) return;
+                var action = binding.orElseThrow();
+                var skipped = new ResourceSiteHarvestImmatureCellSkipped(job.siteId(), job.id(), job.workerId(),
+                        cycle.layout().revision(), List.of(blockedCell.id()), action.id(),
+                        action.dueAt().ticks(), Optional.of(lease.id()));
+                ResourceSiteHarvestProcess.reduceCellSkipped(state, job.siteId(), skipped);
+                var accepted = submitBound(runtime, "resource-site-harvest-immature-cell-skipped", lease.id().value(), skipped, action);
+                FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_immature_cell_skipped", lease, accepted);
+                return;
+            }
             if (cycle.expectedWorkOutcome(blockedCell.id()) == ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED) {
                 if (state.resourceSites().hasPendingWorldChange(job.siteId())) return;
                 // One witnessed unavailable target cannot hold the whole area task.
@@ -708,6 +724,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         ledger.retireFieldHandProjection(pending); ledger.persist(level);
         return true;
     }
+
 
     private static boolean blockedCellsPhysicallyCurrent(ServerLevel level, FrontierWorldState state,
                                                         io.farfrontier.palemirror.frontier.v3.model.ResourceSite site,

@@ -272,10 +272,17 @@ final class ResourceSitePayloadCodecs {
         };
     }
     static PayloadCodec harvestBlockedCellSkipped() {
+        return harvestCellSkipped(false);
+    }
+    static PayloadCodec harvestImmatureCellSkipped() {
+        return harvestCellSkipped(true);
+    }
+    private static PayloadCodec harvestCellSkipped(boolean immature) {
         return new PayloadCodec() {
-            @Override public String type() { return "frontier.resource_site_harvest_blocked_cell_skipped"; }
+            @Override public String type() { return immature ? "frontier.resource_site_harvest_immature_cell_skipped"
+                    : "frontier.resource_site_harvest_blocked_cell_skipped"; }
             @Override public byte[] encode(FrontierPayload payload) {
-                ResourceSiteHarvestBlockedCellSkipped skipped = (ResourceSiteHarvestBlockedCellSkipped) payload;
+                ResourceSiteHarvestCellSkip skipped = (ResourceSiteHarvestCellSkip) payload;
                 return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                     FrontierWorldPayloadCodecs.writeSubject(output, skipped.siteId());
                     FrontierWorldPayloadCodecs.writeSubject(output, skipped.jobId());
@@ -301,12 +308,13 @@ final class ResourceSitePayloadCodecs {
                         throw new java.io.IOException("blocked field cell prefix exceeds layout bound");
                     var ids = new java.util.ArrayList<ResourceFieldLayout.CellId>(count);
                     for (int index = 0; index < count; index++) ids.add(new ResourceFieldLayout.CellId(input.readLong()));
-                    return new ResourceSiteHarvestBlockedCellSkipped(site, job, worker, revision, ids,
-                            new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(
-                                    FrontierWorldPayloadCodecs.readString(input)),
-                            input.readLong(), input.readBoolean()
+                    var schedule = new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(FrontierWorldPayloadCodecs.readString(input));
+                    long dueAt = input.readLong();
+                    var lease = input.readBoolean()
                                     ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(
-                                    FrontierWorldPayloadCodecs.readString(input))) : java.util.Optional.empty());
+                                    FrontierWorldPayloadCodecs.readString(input))) : java.util.Optional.<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId>empty();
+                    return immature ? new ResourceSiteHarvestImmatureCellSkipped(site, job, worker, revision, ids, schedule, dueAt, lease)
+                            : new ResourceSiteHarvestBlockedCellSkipped(site, job, worker, revision, ids, schedule, dueAt, lease);
                 });
             }
         };

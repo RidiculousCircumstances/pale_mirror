@@ -373,6 +373,52 @@ class ResourceSiteHarvestProcessTest {
         assertTrue(((ResourceSiteHarvestJob) skipped.resourceSites().site(fixture.siteId()).activeWork().orElseThrow())
                 .progress().complete());
     }
+    @Test void immatureFinalCellIsExcludedWithoutTravelYieldOrLosingCarriedHarvest() {
+        var fixture = FrontierResourceSiteHarvestFixture.createWithOneExtraCellAfterColdPart(
+                new WorldId("frontier:immature-final-goal"), 125L);
+        FrontierWorldState original = fixture.state();
+        ResourceFieldCycle cycle = original.resourceSites().cycle(fixture.siteId());
+        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) original.resourceSites()
+                .site(fixture.siteId()).activeWork().orElseThrow();
+        var last = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+        FrontierWorldState state = original.withResourceSites(original.resourceSites().replace(
+                original.resourceSites().site(fixture.siteId()), cycle.cropReplanted(last)));
+        var due = fixture.schedules().getFirst();
+        var exclusion = new ResourceSiteHarvestImmatureCellSkipped(fixture.siteId(), job.id(), job.workerId(),
+                cycle.layout().revision(), List.of(last), due.id(), due.dueAt().ticks(), Optional.empty());
+        assertThrows(IllegalArgumentException.class,
+                () -> ResourceSiteHarvestProcess.reduceCellSkipped(original, fixture.siteId(), exclusion));
+        var planned = ResourceSiteHarvestProcess.planColdProgress(state, due);
+        assertTrue(planned.stream().map(ProposedEvent::payload)
+                .anyMatch(ResourceSiteHarvestImmatureCellSkipped.class::isInstance));
+        assertTrue(planned.stream().map(ProposedEvent::payload)
+                .noneMatch(ResourceSiteHarvestColdGoalAdvanced.class::isInstance));
+        FrontierWorldState skipped = ResourceSiteHarvestProcess.reduceCellSkipped(state, fixture.siteId(), exclusion);
+        var active = (ResourceSiteHarvestJob) skipped.resourceSites().site(fixture.siteId()).activeWork().orElseThrow();
+        assertTrue(active.progress().complete());
+        assertEquals(cycle.harvestedCount(), skipped.resourceSites().cycle(fixture.siteId()).harvestedCount());
+        assertEquals(state.actorLocations(), skipped.actorLocations());
+        assertEquals(state.inventory(), skipped.inventory());
+        assertEquals(ResourceFieldCycle.Crop.GROWING, skipped.resourceSites().cycle(fixture.siteId()).cell(last).crop());
+    }
+
+    @Test void hotImmatureExclusionDoesNotRequireArrivalAtExcludedCell() {
+        HotHarvest hot = hotHarvestAfterColdSteps(0);
+        var cycle = hot.state().resourceSites().cycle(hot.site());
+        var job = hot.job();
+        var id = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+        var state = hot.state().withResourceSites(hot.state().resourceSites().replace(
+                hot.state().resourceSites().site(hot.site()), cycle.cropReplanted(id)));
+        var due = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
+        var skipped = ResourceSiteHarvestProcess.reduceCellSkipped(state, hot.site(),
+                new ResourceSiteHarvestImmatureCellSkipped(hot.site(), job.id(), job.workerId(),
+                        cycle.layout().revision(), List.of(id), due.id(), due.dueAt().ticks(), Optional.of(hot.lease().id())));
+        assertEquals(state.actorLocations(), skipped.actorLocations());
+        assertEquals(state.inventory(), skipped.inventory());
+        assertEquals(1, skipped.resourceSites().cycle(hot.site()).accountedCount());
+        assertEquals(0, skipped.resourceSites().cycle(hot.site()).harvestedCount());
+    }
+
     @Test void unreachableHotTargetCanBeDeferredWithoutCreditingOrLosingItsCell() {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         ResourceSiteHarvestJob job = hot.job();

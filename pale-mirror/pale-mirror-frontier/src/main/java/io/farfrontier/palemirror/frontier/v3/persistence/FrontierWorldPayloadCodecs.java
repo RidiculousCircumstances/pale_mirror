@@ -52,7 +52,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             ResourceSitePayloadCodecs.harvestCropPrepared(), ResourceSitePayloadCodecs.harvestProgressed(),
             ResourceSitePayloadCodecs.harvestColdTraversalAdvanced(), ResourceSitePayloadCodecs.harvestColdGoalAdvanced(),
             ResourceSitePayloadCodecs.harvestColdGoalHeld(), ResourceSitePayloadCodecs.harvestReturned(),
-            ResourceSitePayloadCodecs.harvestSegmentRenewed(), ResourceSitePayloadCodecs.harvestBlockedCellSkipped(),
+            ResourceSitePayloadCodecs.harvestSegmentRenewed(), ResourceSitePayloadCodecs.harvestBlockedCellSkipped(), ResourceSitePayloadCodecs.harvestImmatureCellSkipped(),
             ResourceSitePayloadCodecs.harvestTargetRetargeted(), ResourceSitePayloadCodecs.harvestRouteBlocked(), ResourceSitePayloadCodecs.harvestRouteCleared(), ResourceSitePayloadCodecs.harvestBatchPrepared(),
             ResourceSitePayloadCodecs.harvestBatchDelivered(),
             ResourceSitePayloadCodecs.harvestHotTraversalAdvanced(),

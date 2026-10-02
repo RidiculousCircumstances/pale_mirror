@@ -448,44 +448,12 @@ public final class ResourceSiteHarvestProcess {
 
     public static FrontierWorldState reduceBlockedCellSkipped(FrontierWorldState state, SubjectId subject,
                                                               ResourceSiteHarvestBlockedCellSkipped skipped) {
-        if (!subject.equals(skipped.siteId()))
-            throw new IllegalArgumentException("blocked field cell has a foreign site owner");
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
-                        () -> new IllegalArgumentException("blocked field cell has no active farmer"));
-        ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
-        if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !job.id().equals(skipped.jobId())
-                || !job.workerId().equals(skipped.workerId()) || job.progress().complete()
-                || job.progress().hasPendingCrop() || job.returningForBatch()
-                || state.resourceSites().hasPendingWorldChange(subject)
-                || skipped.layoutRevision() != cycle.layout().revision())
-            throw new IllegalArgumentException("blocked field cell has a stale or physically unresolved work boundary");
-        ResourceFieldLayout.Cell selected = cycle.layout().cells().get(job.progress().nextCropSlotIndex());
-        if (!skipped.cellIds().equals(List.of(selected.id()))
-                || cycle.cell(selected.id()).accounted()
-                || cycle.cell(selected.id()).crop() != ResourceFieldCycle.Crop.OBSTRUCTED
-                    && !cycle.cell(selected.id()).workAccessBlocked()
-                || cycle.pendingPlayerBreaks().containsKey(selected.id()))
-            throw new IllegalArgumentException("blocked field skip lacks its exact selected target obstruction");
-        if (job.navigationBlock().isPresent()
-                && !job.navigationBlock().orElseThrow().target().equals(ResourceSiteHarvestGoal.current(state, job).representative()))
-            throw new IllegalArgumentException("blocked field skip has a different retained movement goal");
-        requireContinuationBinding(job, new ScheduledAction(skipped.coldScheduleId(),
-                new SimInstant(skipped.coldDueAt()), 0, subject, COLD_PROGRESS_KIND, 1));
-        if (skipped.hotLeaseId().isPresent()) {
-            FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, skipped.hotLeaseId().orElseThrow());
-        } else if (FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
-                || !FrontierSceneAdmission.available(state, List.of(job.workerId()))) {
-            throw new IllegalArgumentException("COLD blocked-cell continuation cannot bypass a physical farmer");
-        }
-        ResourceFieldCycle worked = cycle.skipBlocked(selected.id());
-        ActorLocation actor = state.actorLocations().get(job.workerId());
-        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
-            throw new IllegalArgumentException("blocked field skip has no retained worker body");
-        int nextSelected = worked.nextWorkSlotAfter(job.progress().nextCropSlotIndex()).orElse(-1);
-        ResourceSiteLifecycle advanced = lifecycle.skipSelectedHarvestCell(job, nextSelected, cycle.harvestedCount());
-        return state.withResourceSites(state.resourceSites().replace(advanced, worked));
+        return reduceCellSkipped(state, subject, skipped);
+    }
+
+    public static FrontierWorldState reduceCellSkipped(FrontierWorldState state, SubjectId subject,
+                                                       ResourceSiteHarvestCellSkip skipped) {
+        return ResourceSiteHarvestCellExclusion.reduce(state, subject, skipped);
     }
 
     public static FrontierWorldState reduceRouteBlocked(FrontierWorldState state, SubjectId subject,
@@ -884,6 +852,11 @@ public final class ResourceSiteHarvestProcess {
         ActorLocation actor = state.actorLocations().get(job.workerId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("field cadence has no living worker");
+        if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()
+                && state.resourceSites().cycle(job.siteId()).expectedWorkOutcome(
+                        state.resourceSites().cycle(job.siteId()).layout().cells().get(job.progress().nextCropSlotIndex()).id())
+                        == ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE)
+            return state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval();
         return !ResourceSiteHarvestGoal.current(state, job).arrivedAt(actor.supportingSurface())
                 ? state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge()
                 : state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval();

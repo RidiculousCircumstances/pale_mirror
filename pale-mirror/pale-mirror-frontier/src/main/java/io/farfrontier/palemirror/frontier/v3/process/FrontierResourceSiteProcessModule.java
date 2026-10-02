@@ -352,7 +352,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(renewed.siteId(), renewed)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
-        if (command.payload() instanceof ResourceSiteHarvestBlockedCellSkipped skipped) {
+        if (command.payload() instanceof ResourceSiteHarvestCellSkip skipped) {
             try {
                 ScheduledAction binding = command.scheduleBinding().map(
                         io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding::action).orElseThrow(
@@ -362,7 +362,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                         || !binding.id().equals(skipped.coldScheduleId())
                         || binding.dueAt().ticks() != skipped.coldDueAt())
                     throw new IllegalArgumentException("HOT blocked field cell lacks its exact declared owner");
-                ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, skipped.siteId(), skipped);
+                ResourceSiteHarvestProcess.reduceCellSkipped(state, skipped.siteId(), skipped);
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(skipped.siteId(), skipped)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
@@ -498,6 +498,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestReturned returned -> ResourceSiteHarvestProcess.reduceReturned(state, event.subject(), returned);
             case ResourceSiteHarvestSegmentRenewed renewed -> ResourceSiteHarvestProcess.reduceSegmentRenewed(state, event.subject(), renewed);
             case ResourceSiteHarvestBlockedCellSkipped skipped -> ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, event.subject(), skipped);
+            case ResourceSiteHarvestImmatureCellSkipped skipped -> ResourceSiteHarvestProcess.reduceCellSkipped(state, event.subject(), skipped);
             case ResourceSiteHarvestTargetRetargeted retargeted -> ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, event.subject(), retargeted);
             case ResourceSiteHarvestRouteBlocked blocked -> ResourceSiteHarvestProcess.reduceRouteBlocked(state, event.subject(), blocked);
             case ResourceSiteHarvestRouteCleared cleared -> ResourceSiteHarvestProcess.reduceRouteCleared(state, event.subject(), cleared);

@@ -12,6 +12,15 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceFieldCycleTest {
+    @Test void matureTargetsArePreferredOverNearbyImmaturePlants() {
+        var geometry = layout(3);
+        var cycle = ResourceFieldCycle.seeded(SITE, geometry, 1);
+        for (int stage = 0; stage < 7; stage++) cycle = cycle.advanceGrowthStage();
+        cycle = cycle.cropReplanted(geometry.cells().getFirst().id());
+        assertEquals(1, cycle.nextWorkSlot(geometry.cells().getFirst().workstation()).orElseThrow());
+        assertEquals(1, cycle.nextWorkSlotAfter(2).orElseThrow());
+        assertEquals(1, cycle.reachableWorkSlotAfter(2, index -> true).orElseThrow());
+    }
     @Test void replantedCellsGrowDuringTheSameBatchWithoutNewYieldOrRepeatedWork() {
         var geometry = layout(2);
         var first = geometry.cells().getFirst().id();

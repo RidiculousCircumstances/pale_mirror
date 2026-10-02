@@ -215,7 +215,7 @@ public final class ResourceFieldCycle {
             CellState condition = cell(layout.cells().get(index).id());
             if (pendingPlayerBreaks.containsKey(layout.cells().get(index).id()))
                 return distance + (Long.MAX_VALUE >>> 2);
-            return condition.workAccessBlocked() || condition.crop() == Crop.OBSTRUCTED
+            return condition.workAccessBlocked() || condition.crop() == Crop.OBSTRUCTED || condition.crop() == Crop.GROWING
                     ? distance + (Long.MAX_VALUE >>> 3) : distance;
         });
     }
@@ -225,7 +225,7 @@ public final class ResourceFieldCycle {
             ResourceFieldLayout.CellId id = layout.cells().get(index).id();
             CellState condition = cell(id);
             return !pendingPlayerBreaks.containsKey(id) && !condition.workAccessBlocked()
-                    && condition.crop() != Crop.OBSTRUCTED;
+                    && condition.crop() != Crop.OBSTRUCTED && condition.crop() != Crop.GROWING;
         }, index -> !cell(layout.cells().get(index).id()).accounted());
     }
     /** Route-failure fallback keeps the old target pending; it selects only a witnessed alternative. */
@@ -235,7 +235,7 @@ public final class ResourceFieldCycle {
             ResourceFieldLayout.CellId id = layout.cells().get(index).id();
             CellState condition = cell(id);
             return !condition.accounted() && !condition.workAccessBlocked()
-                    && condition.crop() != Crop.OBSTRUCTED && !pendingPlayerBreaks.containsKey(id)
+                    && condition.crop() != Crop.OBSTRUCTED && condition.crop() != Crop.GROWING && !pendingPlayerBreaks.containsKey(id)
                     && reachable.test(index);
         });
     }
