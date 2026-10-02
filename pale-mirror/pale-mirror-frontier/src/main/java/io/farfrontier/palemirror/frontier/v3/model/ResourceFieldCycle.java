@@ -374,6 +374,16 @@ public final class ResourceFieldCycle {
                 prior.accounted(), prior.yielded(), blocked), true);
     }
 
+    /** Physical plant growth changes biology only, never the current batch's accounting or yield. */
+    public ResourceFieldCycle observedGrowth(ResourceFieldLayout.CellId id, ResourceFieldPhysicalSurface.Condition after) {
+        CellState prior = cell(id);
+        var before = ResourceFieldPhysicalSurface.Condition.of(prior);
+        if (prior.soil() != Soil.FARMLAND || after.equals(before) || !after.equalsOrGrowsFrom(before))
+            throw new IllegalArgumentException("observed plant growth needs a strictly older farmland crop");
+        return replace(id, new CellState(after.soil(), after.crop(), after.growthStage(),
+                prior.accounted(), prior.yielded(), prior.workAccessBlocked()));
+    }
+
     public ResourceFieldCycle advanceGrowth(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
         if (prior.soil() != Soil.FARMLAND || prior.crop() != Crop.GROWING || pendingPlayerBreaks.containsKey(id))

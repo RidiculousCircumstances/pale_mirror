@@ -18,6 +18,14 @@ abstract class FrontierV3FieldBlockWriteMixin {
     private void frontierV3$beforeFieldBlockWrite(BlockPos position, BlockState replacement, int flags,
                                                    int recursionLeft, CallbackInfoReturnable<Boolean> callback) {
         if ((Object) this instanceof ServerLevel level)
-            FrontierV3ServerLifecycle.beforeFieldBlockWrite(level, position, replacement);
+            FrontierV3ServerLifecycle.observeFieldBlockWrite(level, position, replacement, false);
+    }
+
+    @Inject(method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z",
+            at = @At("RETURN"), require = 1)
+    private void frontierV3$afterFieldBlockWrite(BlockPos position, BlockState replacement, int flags,
+                                                int recursionLeft, CallbackInfoReturnable<Boolean> callback) {
+        if (callback.getReturnValueZ() && (Object) this instanceof ServerLevel level)
+            FrontierV3ServerLifecycle.observeFieldBlockWrite(level, position, replacement, true);
     }
 }

@@ -243,6 +243,7 @@ public final class ResourceSiteProcess {
                 throw new IllegalArgumentException("world field observation overlaps an unresolved player action");
         }
         ResourceFieldCycle next = switch (observed.change()) {
+            case CROP_GROWN -> ready.observedGrowth(observed.cellId(), observed.after());
             case CROP_REPLANTED -> ready.cropReplanted(observed.cellId());
             case CROP_REMOVED -> ready.cropRemoved(observed.cellId());
             case SOIL_BECAME_DIRT -> ready.soilBecameDirt(observed.cellId());
@@ -276,7 +277,7 @@ public final class ResourceSiteProcess {
         } else if (preparedHere) {
             lifecycle = lifecycle.cancelPreparedHarvestCrop(cellId, cycle);
         }
-        return state.withResourceSites(state.resourceSites().replace(lifecycle, next));
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.withPlantReadiness(next), next));
     }
 
     /** A loaded physical observation changes work access only, never crop or yield. */

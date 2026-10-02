@@ -21,6 +21,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ResourceFieldWitnessTest {
+    @Test void acceleratedGrowthRetainsExactSuccessorAcrossPhysicalWitnessRecovery() {
+        var change = io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Change.CROP_GROWN;
+        var observed = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved(SITE, 1,
+                layout().revision(), FIRST, PLANTED, RIPE, change,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Source.WORLD, "world:bone-meal-test");
+        var witness = new FrontierV3ResourceFieldWorldChangeWitness(observed);
+        var encoded = witness.write();
+        assertEquals(witness, FrontierV3ResourceFieldWorldChangeWitness.read(encoded));
+        encoded.remove("afterStage");
+        assertThrows(IllegalStateException.class, () -> FrontierV3ResourceFieldWorldChangeWitness.read(encoded));
+        assertThrows(IllegalArgumentException.class, () -> new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved(
+                SITE, 1, layout().revision(), FIRST, RIPE, PLANTED, change,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Source.WORLD, "world:backwards"));
+    }
     @Test void externalHarvestAndReplantHasExactRecoverableWorldWitness() {
         var after = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.GROWING, 0);
         var change = FrontierV3ResourceFieldWorldChangeExecutor.classify(RIPE, after);
@@ -30,8 +44,9 @@ class FrontierV3ResourceFieldWitnessTest {
                 io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Source.WORLD, "world:replant-test");
         var witness = new FrontierV3ResourceFieldWorldChangeWitness(observed);
         assertEquals(witness, FrontierV3ResourceFieldWorldChangeWitness.read(witness.write()));
-        assertEquals(null, FrontierV3ResourceFieldWorldChangeExecutor.classify(after, RIPE),
-                "ordinary growth cannot be classified as external harvest");
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Change.CROP_GROWN,
+                FrontierV3ResourceFieldWorldChangeExecutor.classify(after, RIPE),
+                "growth is a separate observation, never an external harvest");
         assertEquals(null, FrontierV3ResourceFieldWorldChangeExecutor.classify(after, after));
     }
     private static final SubjectId SITE = new SubjectId("site:field-witness-test");
@@ -80,7 +95,8 @@ class FrontierV3ResourceFieldWitnessTest {
         var change = new FrontierV3ResourceFieldWorldChangeWitness(observed);
         assertEquals(change, FrontierV3ResourceFieldWorldChangeWitness.read(change.write()));
         assertEquals(observed.change(), FrontierV3ResourceFieldWorldChangeExecutor.classify(before, after));
-        assertEquals(null, FrontierV3ResourceFieldWorldChangeExecutor.classify(before, RIPE));
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Change.CROP_GROWN,
+                FrontierV3ResourceFieldWorldChangeExecutor.classify(before, RIPE));
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Change.SOIL_BECAME_DIRT,
                 FrontierV3ResourceFieldWorldChangeExecutor.classify(before, DIRT));
         var witness = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.fromCycle(cycle));

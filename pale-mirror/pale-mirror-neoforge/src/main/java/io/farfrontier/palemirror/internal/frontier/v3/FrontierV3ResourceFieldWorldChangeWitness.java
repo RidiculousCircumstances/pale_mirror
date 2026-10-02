@@ -39,6 +39,10 @@ record FrontierV3ResourceFieldWorldChangeWitness(ResourceFieldCellObserved obser
         tag.putString("beforeCrop", before().crop().name());
         tag.putInt("beforeStage", before().growthStage());
         tag.putString("change", observation.change().name());
+        if (observation.change() == ResourceFieldCellObserved.Change.CROP_GROWN) {
+            tag.putString("afterCrop", after().crop().name());
+            tag.putInt("afterStage", after().growthStage());
+        }
         tag.putString("cause", observation.causationId());
         return tag;
     }
@@ -55,6 +59,12 @@ record FrontierV3ResourceFieldWorldChangeWitness(ResourceFieldCellObserved obser
                 ResourceFieldCycle.Crop.valueOf(tag.getString("beforeCrop")), tag.getInt("beforeStage"));
         var change = ResourceFieldCellObserved.Change.valueOf(tag.getString("change"));
         var after = switch (change) {
+            case CROP_GROWN -> {
+                if (!tag.contains("afterCrop", Tag.TAG_STRING) || !tag.contains("afterStage", Tag.TAG_INT))
+                    throw new IllegalStateException("growth witness lacks its exact observed successor");
+                yield new ResourceFieldPhysicalSurface.Condition(before.soil(),
+                        ResourceFieldCycle.Crop.valueOf(tag.getString("afterCrop")), tag.getInt("afterStage"));
+            }
             case CROP_REPLANTED -> new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
                     ResourceFieldCycle.Crop.GROWING, 0);
             case CROP_REMOVED -> new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,

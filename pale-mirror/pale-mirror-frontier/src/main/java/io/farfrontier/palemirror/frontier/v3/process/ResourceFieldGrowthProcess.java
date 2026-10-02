@@ -55,6 +55,17 @@ public final class ResourceFieldGrowthProcess {
         return state.withResourceSites(state.resourceSites().replace(site.withPlantReadiness(grown), grown));
     }
 
+    /** A confirmed external maturity uses the same ordinary work-opportunity owner as clock growth. */
+    static List<ProposedEvent> afterObservedGrowth(FrontierWorldState before, FrontierWorldState after,
+                                                 ResourceFieldCellObserved observation, long now) {
+        var site = after.resourceSites().site(observation.siteId());
+        if (observation.change() != ResourceFieldCellObserved.Change.CROP_GROWN
+                || before.resourceSites().site(site.siteId()).phase() == ResourceSitePhase.READY
+                || site.phase() != ResourceSitePhase.READY) return List.of();
+        return List.of(new ProposedEvent(site.siteId(), new ScheduleEffect.Created(
+                StrategicObjectiveProcess.resourceHarvestOpportunity(after, site, Math.addExact(now, 1L)))));
+    }
+
     /** Work completion retires accounting only; it does not replant or reset plant age. */
     static List<ProposedEvent> afterWork(FrontierWorldState state, ResourceSiteLifecycle terminal,
                                        ResourceFieldCycle successor, long now) {

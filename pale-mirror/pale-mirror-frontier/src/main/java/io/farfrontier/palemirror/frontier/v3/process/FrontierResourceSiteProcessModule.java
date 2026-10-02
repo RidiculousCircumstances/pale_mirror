@@ -445,8 +445,11 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
         }
         if (command.payload() instanceof ResourceFieldCellObserved observed) {
             try {
-                ResourceSiteProcess.reduceCellObserved(state, observed.siteId(), observed);
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.siteId(), observed)));
+                var after = ResourceSiteProcess.reduceCellObserved(state, observed.siteId(), observed);
+                var events = new java.util.ArrayList<ProposedEvent>();
+                events.add(new ProposedEvent(observed.siteId(), observed));
+                events.addAll(ResourceFieldGrowthProcess.afterObservedGrowth(state, after, observed, command.submittedAt().ticks()));
+                return new CommandPlan.Accepted(List.copyOf(events));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ResourceFieldWorkAccessObserved observed) {

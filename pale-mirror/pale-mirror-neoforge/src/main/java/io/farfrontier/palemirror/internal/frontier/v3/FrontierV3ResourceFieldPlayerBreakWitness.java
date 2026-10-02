@@ -28,7 +28,8 @@ record FrontierV3ResourceFieldPlayerBreakWitness(SubjectId siteId, long epoch, l
         if (!siteId.value().startsWith("site:") || epoch < 1 || layoutRevision < 1 || actionId.isBlank()
                 || before.soil() != ResourceFieldCycle.Soil.FARMLAND
                 || before.crop() != ResourceFieldCycle.Crop.GROWING && before.crop() != ResourceFieldCycle.Crop.MATURE
-                || observedChange.filter(change -> change == ResourceFieldCellObserved.Change.SOIL_BECAME_DIRT).isPresent())
+                || observedChange.filter(change -> change != ResourceFieldCellObserved.Change.CROP_REMOVED
+                    && change != ResourceFieldCellObserved.Change.UNCHANGED).isPresent())
             throw new IllegalArgumentException("player crop break has an invalid exact predecessor or outcome");
     }
 
@@ -38,7 +39,8 @@ record FrontierV3ResourceFieldPlayerBreakWitness(SubjectId siteId, long epoch, l
     }
 
     FrontierV3ResourceFieldPlayerBreakWitness observed(ResourceFieldCellObserved.Change change) {
-        if (observedChange.isPresent() || change == ResourceFieldCellObserved.Change.SOIL_BECAME_DIRT)
+        if (observedChange.isPresent() || change != ResourceFieldCellObserved.Change.CROP_REMOVED
+                && change != ResourceFieldCellObserved.Change.UNCHANGED)
             throw new IllegalArgumentException("player crop break cannot change or overwrite its observed result");
         return new FrontierV3ResourceFieldPlayerBreakWitness(siteId, epoch, layoutRevision, cellId, playerId,
                 actionId, before, Optional.of(change));
@@ -49,7 +51,7 @@ record FrontierV3ResourceFieldPlayerBreakWitness(SubjectId siteId, long epoch, l
             case CROP_REMOVED -> new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
                     ResourceFieldCycle.Crop.ABSENT, 0);
             case UNCHANGED -> before;
-            case SOIL_BECAME_DIRT, CROP_REPLANTED -> throw new IllegalStateException("soil damage/replant is not a crop-break outcome");
+            case SOIL_BECAME_DIRT, CROP_REPLANTED, CROP_GROWN -> throw new IllegalStateException("soil/replant/growth is not a crop-break outcome");
         };
     }
 

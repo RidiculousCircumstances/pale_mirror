@@ -15,6 +15,68 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ResourceFieldCellObservedTest {
+    @Test void externalGrowthUsesExactReceiptsAndPublishesFirstMatureCellWorkOpportunity() {
+        var state = ResourceSiteHarvestProcessTest.initial();
+        var site = new SubjectId("site:1-wheat-field");
+        var preparation = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(site, 4_000));
+        state = ResourceSiteProcess.reducePreparationStarted(state, site, (ResourceSitePreparationStarted) preparation.getFirst().payload());
+        state = ResourceSiteProcess.reducePrepared(state, site, (ResourceSitePrepared) preparation.get(1).payload());
+        var cell = state.resourceSites().cycle(site).layout().cells().getFirst().id();
+        for (int age : new int[] {3, 7}) {
+            var cycle = state.resourceSites().cycle(site);
+            var before = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell));
+            var after = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
+                    age == 7 ? ResourceFieldCycle.Crop.MATURE : ResourceFieldCycle.Crop.GROWING, age);
+            var observation = new ResourceFieldCellObserved(site, cycle.epoch(), cycle.layout().revision(), cell,
+                    before, after, ResourceFieldCellObserved.Change.CROP_GROWN, ResourceFieldCellObserved.Source.WORLD,
+                    "world:bone-meal-" + age);
+            var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+            assertEquals(observation, codecs.decode(observation.type(), codecs.encode(observation)));
+            var held = ResourceSiteProcess.reduceWorldChangeHeld(state, site, new ResourceFieldWorldChangeHeld(observation));
+            assertEquals(held, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(held)));
+            var id = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:external-growth-" + age);
+            var command = new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, id, state.bootstrap().worldId(),
+                    io.farfrontier.palemirror.frontier.v3.api.Revision.ZERO, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(4_001),
+                    FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(id), observation);
+            var planned = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                    io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
+                    FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), state.bootstrap().seed())
+                            .commandPlanner().plan(held, command));
+            assertEquals(age == 7 ? 2 : 1, planned.events().size());
+            state = ResourceSiteProcess.reduceCellObserved(held, site, observation);
+            var changed = state;
+            assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceCellObserved(changed, site, observation));
+            state = ResourceSiteProcess.reduceWorldChangeAcknowledged(state, site,
+                    new ResourceFieldWorldChangeAcknowledged(observation, after));
+            assertFalse(state.resourceSites().hasPendingWorldChange(site));
+            assertEquals(age, state.resourceSites().cycle(site).cell(cell).growthStage());
+            assertEquals(0, state.resourceSites().cycle(site).harvestedCount());
+        }
+        assertEquals(ResourceSitePhase.READY, state.resourceSites().site(site).phase());
+        assertEquals(ResourceFieldCycle.WorkOutcome.HARVESTED, state.resourceSites().cycle(site).expectedWorkOutcome(cell));
+        var ripe = ResourceFieldPhysicalSurface.Condition.of(state.resourceSites().cycle(site).cell(cell));
+        assertThrows(IllegalArgumentException.class, () -> new ResourceFieldCellObserved(site, 1, 1, cell,
+                ripe, ripe, ResourceFieldCellObserved.Change.CROP_GROWN, ResourceFieldCellObserved.Source.WORLD, "world:no-growth"));
+    }
+
+    @Test void regrownAccountedCellPreservesOldYieldAndBecomesNewWorkOnlyInNextBatch() {
+        var state = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());
+        var cycle = state.resourceSites().cycle(new SubjectId("site:1-wheat-field"));
+        var cell = cycle.layout().cells().getFirst().id();
+        cycle = cycle.harvested(cell);
+        var regrown = cycle.observedGrowth(cell, new ResourceFieldPhysicalSurface.Condition(
+                ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.MATURE, 7));
+        assertEquals(1, regrown.harvestedCount());
+        assertTrue(regrown.cell(cell).accounted());
+        var currentBatch = regrown;
+        assertThrows(IllegalArgumentException.class, () -> currentBatch.expectedWorkOutcome(cell));
+        for (var other : regrown.layout().cells()) if (!other.id().equals(cell)) regrown = regrown.harvested(other.id());
+        var successor = regrown.nextEpoch();
+        assertEquals(0, successor.harvestedCount());
+        assertEquals(7, successor.cell(cell).growthStage());
+        assertEquals(ResourceFieldCycle.WorkOutcome.HARVESTED, successor.expectedWorkOutcome(cell));
+    }
+
     @Test void externalReplantCancelsPreparedCropAndChoosesAnotherCellWithoutYield() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         var job = hot.job();
@@ -24,6 +86,7 @@ class ResourceFieldCellObservedTest {
             state = ResourceSiteHarvestProcess.reduceHotGoalArrived(state, hot.site(),
                     new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(),
                             goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+        state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
         var cycle = state.resourceSites().cycle(hot.site());
@@ -112,6 +175,7 @@ class ResourceFieldCellObservedTest {
             state = ResourceSiteHarvestProcess.reduceHotGoalArrived(state, site,
                     new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(),
                             goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+        state = ResourceSiteHarvestProcessTest.completeLabourHot(state, site, hot.lease().id());
         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site,
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
         ResourceFieldCycle cycle = state.resourceSites().cycle(site);

@@ -872,7 +872,7 @@ final class ResourceSitePayloadCodecs {
         };
     }
     private static int changeTag(ResourceFieldCellObserved.Change change) {
-        return switch (change) { case CROP_REMOVED -> 1; case SOIL_BECAME_DIRT -> 2; case UNCHANGED -> 3; case CROP_REPLANTED -> 4; };
+        return switch (change) { case CROP_REMOVED -> 1; case SOIL_BECAME_DIRT -> 2; case UNCHANGED -> 3; case CROP_REPLANTED -> 4; case CROP_GROWN -> 5; };
     }
     private static ResourceFieldCellObserved.Change change(byte tag) {
         return switch (Byte.toUnsignedInt(tag)) {
@@ -880,6 +880,7 @@ final class ResourceSitePayloadCodecs {
             case 2 -> ResourceFieldCellObserved.Change.SOIL_BECAME_DIRT;
             case 3 -> ResourceFieldCellObserved.Change.UNCHANGED;
             case 4 -> ResourceFieldCellObserved.Change.CROP_REPLANTED;
+            case 5 -> ResourceFieldCellObserved.Change.CROP_GROWN;
             default -> throw new IllegalArgumentException("unknown field observation change wire tag");
         };
     }

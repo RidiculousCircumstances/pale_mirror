@@ -874,13 +874,14 @@ public final class FrontierV3ServerLifecycle {
         return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null
                 && FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(runtime, level, position);
     }
-    /** Records an exact owned-cell cause before an external Level block write can become durable. */
-    public static void beforeFieldBlockWrite(ServerLevel level, BlockPos position,
-                                             net.minecraft.world.level.block.state.BlockState replacement) {
+    /** Routes prepare/confirmed phases; the field owner alone decides whether this is an external change. */
+    public static void observeFieldBlockWrite(ServerLevel level, BlockPos position,
+                                              net.minecraft.world.level.block.state.BlockState replacement, boolean committed) {
         if (!FrontierV3PhysicalWorld.isPhysical(level)) return;
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (runtime != null) FrontierV3ResourceFieldWorldChangeExecutor.beforeBlockWrite(level, runtime, position, replacement);
+        if (runtime != null) FrontierV3ResourceFieldWorldChangeExecutor.observeBlockWrite(level, runtime, position, replacement, committed);
     }
+
     /** Cancels only vanilla soil reversion in an active exact managed field footprint. */
     public static boolean blocksNativeSoilReversion(ServerLevel level, BlockPos position) {
         var runtime = RUNTIMES.get(level.getServer());
