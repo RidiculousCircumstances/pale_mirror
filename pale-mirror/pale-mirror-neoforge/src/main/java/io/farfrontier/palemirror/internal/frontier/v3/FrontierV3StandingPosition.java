@@ -83,23 +83,15 @@ final class FrontierV3StandingPosition {
     }
 
     /**
-     * The one field-worker exception to ordinary exact standing columns. A canonical crop cell
-     * occupies the lower feet voxel above the retained farmland floor, but Vanilla actors may
-     * traverse it. This is not a generic obstruction bypass: only a registered harvest scene
-     * may request it, and the retained floor and head cell remain exact.
+     * Harvest compatibility entry point. Standing clearance is shared with ambient admission:
+     * changing activity does not make a collision-free crop become an obstruction.
      */
     static BlockPos aboveExactHarvestFieldFloor(ServerLevel level, BlockPos anchor) {
-        if (!level.hasChunkAt(anchor)) return null;
-        BlockPos feet = anchor.above();
-        if (!level.hasChunkAt(feet)) return null;
-        return !level.getBlockState(anchor).isAir() && clearHarvestWorkerFeetCell(level, feet)
-                && clearExactBodyCell(level, feet.above()) ? feet : null;
+        return aboveExactFloor(level, anchor);
     }
 
     static boolean hasExactHarvestFieldStandingColumn(ServerLevel level, BlockPosition anchor) {
-        BlockPos floor = new BlockPos(anchor.x(), anchor.y(), anchor.z());
-        return level.hasChunkAt(floor) && !level.getBlockState(floor).isAir()
-                && clearHarvestWorkerFeetCell(level, floor.above()) && clearExactBodyCell(level, floor.above(2));
+        return hasExactStandingColumn(level, anchor);
     }
 
     /**
@@ -111,6 +103,10 @@ final class FrontierV3StandingPosition {
     private static boolean clearExactBodyCell(ServerLevel level, BlockPos position) {
         if (level.getBlockState(position).isAir()) return true;
         VoxelShape collision = level.getBlockState(position).getCollisionShape(level, position);
+        // Crop traversal is geometry, not a privilege of the current work executor.
+        // Do not generalize empty collision to fluids, fire or arbitrary unsafe blocks.
+        if (level.getBlockState(position).getBlock() instanceof CropBlock)
+            return collision.isEmpty() && level.getFluidState(position).isEmpty();
         return !collision.isEmpty() && collision.max(Direction.Axis.Y) <= 0.125D;
     }
 
@@ -120,7 +116,4 @@ final class FrontierV3StandingPosition {
         return !collision.isEmpty();
     }
 
-    private static boolean clearHarvestWorkerFeetCell(ServerLevel level, BlockPos position) {
-        return clearExactBodyCell(level, position) || level.getBlockState(position).getBlock() instanceof CropBlock;
-    }
 }

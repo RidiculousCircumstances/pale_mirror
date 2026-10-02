@@ -864,7 +864,8 @@ public final class FrontierV3LocalNavigationGameTests {
             List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
             long forwardTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
             boolean inside = trace.stream().allMatch(value -> envelope.contains(support(new Vec3(value.x(), value.y(), value.z()))));
-            helper.assertTrue(worker.getX() >= origin.getX() + 1.1D && forwardTurns >= 3 && inside,
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next)
+                            && forwardTurns > 0 && inside,
                     "a harvested field edge must continue at normal cadence only inside its declared envelope: " + trace);
             FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
         });

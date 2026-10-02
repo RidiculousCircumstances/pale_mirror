@@ -132,8 +132,7 @@ final class FrontierV3SceneReleaseExecutor {
         var actorLedger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var releasePolicy = FrontierV3SceneBehaviorRegistry.bodyReleasePolicy(lease.cause().kind());
         boolean retainVisible = releasePolicy
-                .retainsLiveBody(demandExists(level, lease.handoffPosition()) || playerWithinSafeRadius(level, lease),
-                        io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease));
+                .retainsLiveBody(demandExists(level, lease.handoffPosition()) || playerWithinSafeRadius(level, lease));
         for (SceneMember member : lease.members()) {
             if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
             Entity entity = level.getEntity(member.entityId());
@@ -182,8 +181,9 @@ final class FrontierV3SceneReleaseExecutor {
             releasePolicy.conflict(level, runtime, state, lease, "release-survivor-fence-conflict"); return;
         }
         // A field worker may still carry an already-accounted HOT wheat part. Its physical
-        // offhand, fungible binding and scene exit must close in the same WAL transition;
-        // the generic release deliberately rejects a bound hand.
+        // offhand, fungible binding and scene exit must close in the same WAL transition.
+        // Visible retention keeps the same stack/body and records its confirmed passive
+        // carry witness below; it is not permission to duplicate or discard the cargo.
         io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease harvestHandRelease = null;
         io.farfrontier.palemirror.frontier.v3.model.BakeryHotHandRelease bakeryHandRelease = null;
         if (io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)) {

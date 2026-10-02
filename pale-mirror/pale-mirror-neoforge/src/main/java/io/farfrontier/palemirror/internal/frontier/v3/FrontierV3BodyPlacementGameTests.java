@@ -25,9 +25,14 @@ public final class FrontierV3BodyPlacementGameTests {
     public static void preparedBodyUsesCurrentTargetButHotBodyIsNeverReprojected(GameTestHelper helper) {
         var level = helper.getLevel();
         BlockPos target = helper.absolutePos(new BlockPos(4, 0, 2));
-        level.setBlock(target, Blocks.STONE.defaultBlockState(), 3);
-        level.setBlock(target.above(), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(target, Blocks.FARMLAND.defaultBlockState(), 3);
+        level.setBlock(target.above(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(target.above(2), Blocks.AIR.defaultBlockState(), 3);
+        helper.assertTrue(FrontierV3StandingPosition.aboveExactFloor(level, target) == null,
+                "a real obstruction still blocks activity handoff");
+        level.setBlock(target.above(), Blocks.WHEAT.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3StandingPosition.aboveExactFloor(level, target), target.above(),
+                "a collision-free crop is valid standing geometry for every body owner");
         var actor = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("resident:1-1");
         var currentBody = SurfaceAnchor.at(target.getX(), target.getY(), target.getZ()).standingBody();
         var lease = new io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease(actor, currentBody,
