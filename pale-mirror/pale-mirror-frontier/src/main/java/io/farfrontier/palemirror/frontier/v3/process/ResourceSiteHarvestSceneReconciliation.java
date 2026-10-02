@@ -48,10 +48,12 @@ public final class ResourceSiteHarvestSceneReconciliation {
                 || !receipt.observedHand().itemKind().equals("minecraft:wheat")
                 || receipt.observedHand().quantity() != ResourceSiteHarvestCargo.quantity(state, job)
                 || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
-                || !account.claimQuantities().isEmpty() || bindings.size() != 1
-                || !bindings.getFirst().address().equals(hand) || bindings.getFirst().authorityEpoch() != lease.revision()
-                || !bindings.getFirst().lotQuantities().equals(account.lotQuantities())
-                || bindings.getFirst().quantity() != receipt.observedHand().quantity())
+                || !account.claimQuantities().isEmpty() || bindings.size() > 1
+                || bindings.isEmpty() && job.progress().hasPendingCrop()
+                || !bindings.isEmpty() && (!bindings.getFirst().address().equals(hand)
+                    || bindings.getFirst().authorityEpoch() != lease.revision()
+                    || !bindings.getFirst().lotQuantities().equals(account.lotQuantities())
+                    || bindings.getFirst().quantity() != receipt.observedHand().quantity()))
             throw new IllegalArgumentException("harvest reconciliation cannot replace its exact bound worker batch");
         SubjectId recoveryId = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(job.workerId());
         var recovery = state.fencedRecovery().current().get(recoveryId);
@@ -67,7 +69,13 @@ public final class ResourceSiteHarvestSceneReconciliation {
         positions.put(job.workerId(), receipt.observedBody());
         var leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(lease.id(), lease.withMemberPositions(positions).withStatus(SceneLeaseStatus.HOT));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).sceneLeases(leases)
+        var restored = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).sceneLeases(leases)
                 .fencedRecovery(state.fencedRecovery().inspectedRunning(recoveryId, receipt.recoveryEpoch())));
+        // Admission can fail before the already-witnessed carried part gets its hand binding.
+        // Use the ordinary exact projection reducer in this SAME recovery event: no second
+        // resource issuer, no partially resumed scene and no replacement of an existing binding.
+        return bindings.isEmpty() ? ResourceSiteHarvestProcess.reduceHandProjected(restored, subject,
+                new ResourceSiteHarvestHandProjected(subject, job.id(), job.actorAccountId(), lease.id(),
+                        lease.revision(), receipt.observedHand())) : restored;
     }
 }

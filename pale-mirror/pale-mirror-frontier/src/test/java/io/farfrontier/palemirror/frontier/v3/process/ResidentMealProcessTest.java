@@ -378,7 +378,8 @@ class ResidentMealProcessTest {
         }
         assertFalse(state.humanPopulation().meals().containsKey(resident));
         assertFalse(state.actorMovements().containsKey(resident));
-        assertEquals(meal.clearingSurface().standingBody(), state.actorLocations().get(resident).body());
+        assertTrue(ServiceAccessCoordinator.boundary(state, meal.depotId()).cleared(state.actorLocations().get(resident).body()),
+                "eating retires outside access, not at an exact parking destination");
         assertFalse(state.inventory().fungibleResources().claims().containsKey(meal.claimId()));
         assertFalse(state.inventory().fungibleResources().accounts().containsKey(meal.actorAccountId()));
         assertEquals(ResidentNutritionStatus.NOURISHED, state.humanPopulation().nutrition(resident).status());
@@ -503,8 +504,12 @@ class ResidentMealProcessTest {
                 new ResidentMealHotAccessCleared(resident, 1, firstExit.standingBody()));
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"),
                 "releasing the access point is not consumption");
-        state = ResidentMealProcess.reduceHotAccessCleared(state, resident,
-                new ResidentMealHotAccessCleared(resident, 1, meal.clearingSurface().standingBody()));
+        assertEquals(ResidentMeal.Phase.CONSUME, state.humanPopulation().meals().get(resident).phase(),
+                "a supported exit permits eating without waiting for the exact parking point");
+        FrontierWorldState outside = state;
+        assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotAccessCleared(outside, resident,
+                new ResidentMealHotAccessCleared(resident, 1, meal.clearingSurface().standingBody())),
+                "a duplicate clearance cannot advance an already consumable portion");
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         state = ResidentMealProcess.reduceHotPrepared(state, resident,
                 new ResidentMealHotEffectPrepared(resident,
@@ -609,7 +614,8 @@ class ResidentMealProcessTest {
                     events.getLast().payload()).replacement();
             state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         }
-        assertEquals(meal.clearingSurface().standingBody(), state.actorLocations().get(resident).body());
+        assertTrue(ResidentMealProcess.mayConsumeAt(state, state.humanPopulation().meals().get(resident),
+                state.actorLocations().get(resident).body()), "COLD also eats at the supported service exit");
         var consumeEvents = ResidentMealProcess.planProgress(state, due);
         ResidentMealColdStep consume = (ResidentMealColdStep) consumeEvents.getFirst().payload();
         assertEquals(ResidentMeal.Phase.CONSUME, consume.expectedPhase());

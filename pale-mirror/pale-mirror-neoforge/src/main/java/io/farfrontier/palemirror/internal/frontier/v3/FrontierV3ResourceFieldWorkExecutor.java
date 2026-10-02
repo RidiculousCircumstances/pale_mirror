@@ -176,12 +176,11 @@ final class FrontierV3ResourceFieldWorkExecutor {
         FrontierV3ResourceFieldWitness witness = owner.witness();
         var pending = witness.cell(id).pending();
         if (pending.isEmpty()) {
-            if (!cycle.cell(id).accounted()) return Disposition.CONFLICT;
-            if (cycle.cell(id).crop() == ResourceFieldCycle.Crop.OBSTRUCTED)
-                return witness.cell(id).foreign().isPresent() ? Disposition.READY : Disposition.CONFLICT;
             // A completed work/projection cause already observed this physical cell before
             // clearing its pending witness. Re-reading it on every return-route tick would
             // incorrectly require the field chunk to stay loaded all the way to the depot.
+            // The job retains the accepted historical work; the cell owns its NEW growth.
+            // Its biology and later work epochs cannot revoke that historical receipt.
             return Disposition.READY;
         }
         if (pending.orElseThrow().canonicalSource().isPresent()) return Disposition.READY;

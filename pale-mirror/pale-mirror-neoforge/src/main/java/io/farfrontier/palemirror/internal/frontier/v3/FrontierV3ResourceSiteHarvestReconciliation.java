@@ -37,6 +37,12 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                     hand.is(Items.WHEAT) ? "minecraft:wheat" : "", hand.getCount(),
                     ItemStack.isSameItemSameComponents(hand, new ItemStack(Items.WHEAT, hand.getCount())));
             if (reviewed.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT) continue;
+            boolean unbound = state.inventory().fungibleResources().bindings().values().stream()
+                    .noneMatch(binding -> binding.accountId().equals(job.actorAccountId()));
+            if (unbound && (job.progress().hasPendingCrop()
+                    || FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()) != null
+                    || FrontierV3ResourceSiteLedger.get(level).fieldHandProjection(job.siteId()) != null
+                    || !FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), worker))) continue;
             // owned() already proves the live carrier epoch against its physical ledger.
             // The canonical recovery fence advances on scene admission, not carrier recreation;
             // these are independent clocks and must never be compared for equality.

@@ -365,18 +365,20 @@ public final class ResidentMealProcess {
         return meal.phase() == ResidentMeal.Phase.CONSUME && port(state, meal).accessBoundary().cleared(observedBody);
     }
 
-    /** Release the service turn at its witnessed boundary; begin eating only at the exact eating target. */
+    /** Supported exit releases access and permits eating; further parking travel is not a meal prerequisite. */
     public static FrontierWorldState reduceHotAccessCleared(FrontierWorldState state, SubjectId subject,
                                                              ResidentMealHotAccessCleared cleared) {
         ResidentMeal meal = hotMeal(state, subject, cleared.residentId(), cleared.ambientRevision());
         boolean reached = ServiceAccessCoordinator.cleared(state, meal, cleared.observedBody());
+        boolean readyToEat = meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
+                && port(state, meal).accessBoundary().cleared(cleared.observedBody());
         if (!meal.movesToClearance() || meal.pendingPhysicalStep().isPresent()
-                || !reached && !ServiceAccessCoordinator.witnessedMealExit(state, meal, cleared.observedBody()))
+                || !reached && !readyToEat && !ServiceAccessCoordinator.witnessedMealExit(state, meal, cleared.observedBody()))
             throw new IllegalArgumentException("HOT meal access clearance lacks a witnessed route exit");
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(subject, actors.get(subject).withBody(cleared.observedBody()));
         FrontierWorldStateUpdate update = FrontierWorldStateUpdate.begin().actorLocations(actors);
-        if (reached && meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS)
+        if (readyToEat)
             update.humanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.CONSUME)));
         return state.withChanges(update);
     }
@@ -468,6 +470,9 @@ public final class ResidentMealProcess {
                     .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId()))))
             return Optional.empty();
         if (meal.movesToClearance()) {
+            if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
+                    && port(state, meal).accessBoundary().cleared(actor.body()))
+                return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now));
             if (meal.coldTravel().isPresent()) return arrivedTravelStep(state, meal, now);
             try {
                 ResidentMealKnownNavigation.returnPath(state, meal);
@@ -537,6 +542,9 @@ public final class ResidentMealProcess {
     }
 
     private static long nextColdDue(FrontierWorldState state, ResidentMeal meal, long now) {
+        if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
+                && port(state, meal).accessBoundary().cleared(state.actorLocations().get(meal.residentId()).body()))
+            return Math.addExact(now, 1L);
         if (meal.phase() != ResidentMeal.Phase.MOVE && !meal.movesToClearance())
             return Math.addExact(now, COLD_TICKS_PER_EDGE);
         if (meal.coldTravel().isPresent()) {
@@ -638,7 +646,7 @@ public final class ResidentMealProcess {
                                 meal.advance(ResidentMeal.Phase.CLEAR_ACCESS))));
             }
             case CONSUME -> {
-                if (!ServiceAccessCoordinator.cleared(state, meal, actor.body()))
+                if (!mayConsumeAt(state, meal, actor.body()))
                     throw new IllegalArgumentException("cold meal consumption lacks its retained eating body outside service access");
                 FungibleResourceLedger ledger = state.inventory().fungibleResources()
                         .destroy(meal.actorAccountId(), meal.portion().lotQuantities(),
@@ -654,6 +662,10 @@ public final class ResidentMealProcess {
                         .orElseThrow(() -> new IllegalArgumentException("meal has no current COLD clearing step"));
                 if (!step.equals(expected))
                     throw new IllegalArgumentException("meal COLD clearance differs from its known route");
+                if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
+                        && port(state, meal).accessBoundary().cleared(actor.body()))
+                    yield state.withHumanPopulation(state.humanPopulation().advanceMeal(meal,
+                            meal.advance(ResidentMeal.Phase.CONSUME)));
                 if (meal.coldTravel().isEmpty()) {
                     List<SurfaceAnchor> route = routeToBoundary(state, meal);
                     if (route.size() > 1) {
