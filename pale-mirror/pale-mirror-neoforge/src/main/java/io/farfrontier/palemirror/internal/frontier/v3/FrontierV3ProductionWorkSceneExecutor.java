@@ -19,6 +19,11 @@ import java.util.Set;
 
 /** Naturally loaded, exact-worker workshop cycle; Minecraft observes but never owns job progress. */
 final class FrontierV3ProductionWorkSceneExecutor {
+    static boolean releaseReady(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+        ProductionJob job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
+        return job == null || job.bakeryWork().isEmpty()
+                || job.bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty();
+    }
     private static final double READY_DISTANCE_SQUARED = 2.25D;
     private FrontierV3ProductionWorkSceneExecutor() { }
 

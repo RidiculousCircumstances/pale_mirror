@@ -84,6 +84,7 @@ final class FrontierV3SceneReleaseExecutor {
         if (state == null) return;
         SceneLease lease = state.sceneLeases().get(selectedLease.id());
         if (lease == null || lease.status() != SceneLeaseStatus.DRAINING) return;
+        if (!FrontierV3SceneBehaviorRegistry.releaseReady(level, state, lease)) return;
         release(level, runtime, lease, FrontierV3SceneBehaviorRegistry.releaseBinding(
                 runtime.executionView().orElseThrow(), state, lease));
     }
@@ -94,11 +95,7 @@ final class FrontierV3SceneReleaseExecutor {
         if (state == null) return;
         SceneLease lease = state.sceneLeases().get(selectedLease.id());
         if (lease == null || lease.status() != SceneLeaseStatus.DRAINING) return;
-        if (FrontierSceneBehaviors.isProductionWork(lease)) {
-            ProductionJob bakeryJob = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
-            if (bakeryJob != null && bakeryJob.bakeryWork().isPresent()
-                    && bakeryJob.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()) return;
-        }
+        if (!FrontierV3SceneBehaviorRegistry.releaseReady(level, state, lease)) return;
         var unfinishedStrike = state.physicalIntents().values().stream()
                 .filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
                         && (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART))

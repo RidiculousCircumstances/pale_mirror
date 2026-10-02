@@ -59,6 +59,9 @@ final class FrontierV3SceneStoredRecovery {
     static void progress(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                          FrontierWorldState state, SceneLease lease) {
         if (lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART) return;
+        // A disk-proven empty hand may be the AFTER state of a retained delivery,
+        // not missing cargo. Its owner must settle that effect before any release.
+        if (!FrontierV3SceneBehaviorRegistry.releaseReady(level, state, lease)) return;
         Map<SceneLeaseId, Attempt> attempts = ATTEMPTS.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
         attempts.keySet().removeIf(id -> {
             SceneLease current = state.sceneLeases().get(id);
