@@ -27,7 +27,14 @@ final class FrontierResourceSiteHarvestFixture {
 
     /** Ordinary policy adds the second participant; neither worker has a physical effect or body injected. */
     static Fixture createConcurrent(WorldId worldId, long seed) {
-        Fixture first = create(worldId, seed);
+        var initial = FrontierWorldState.initial(smallFieldBootstrap(worldId, seed));
+        var owner = new SubjectId("settlement:1");
+        var permissions = new java.util.EnumMap<ResidentWorkKind, java.util.Set<SubjectId>>(ResidentWorkKind.class);
+        permissions.putAll(SettlementWorkPolicy.permissions(initial, owner).workers());
+        permissions.put(ResidentWorkKind.AGRICULTURE, permissions.get(ResidentWorkKind.AGRICULTURE).stream()
+                .sorted().limit(2).collect(java.util.stream.Collectors.toSet()));
+        initial = initial.withStrategicPlans(initial.strategicPlans().withWorkPermissions(owner, new ResidentWorkPermissions(permissions)));
+        Fixture first = create(initial);
         FrontierWorldState state = first.state();
         var settlement = state.bootstrap().settlements().stream()
                 .filter(value -> value.id().equals(new SubjectId("settlement:1"))).findFirst().orElseThrow();

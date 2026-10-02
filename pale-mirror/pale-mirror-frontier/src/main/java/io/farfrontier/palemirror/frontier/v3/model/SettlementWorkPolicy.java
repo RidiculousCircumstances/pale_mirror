@@ -11,11 +11,11 @@ public final class SettlementWorkPolicy {
         var farmers = new LinkedHashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
         var bakers = new LinkedHashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
         for (Resident resident : settlement.residents()) {
-            if (resident.role() == ResidentRole.FARMER && farmers.size() < 2) farmers.add(resident.id());
+            if (resident.role() == ResidentRole.FARMER && farmers.size() < 3) farmers.add(resident.id());
             if (resident.role() == ResidentRole.CRAFTER && bakers.size() < 2) bakers.add(resident.id());
         }
-        if (farmers.size() != 2 || bakers.size() != 2)
-            throw new IllegalArgumentException("initial settlement needs two exact farmers and two exact bakers");
+        if (farmers.size() != 3 || bakers.size() != 2)
+            throw new IllegalArgumentException("initial settlement needs three exact farmers and two exact bakers");
         return new ResidentWorkPermissions(Map.of(ResidentWorkKind.AGRICULTURE, farmers, ResidentWorkKind.BAKING, bakers));
     }
 

@@ -40,7 +40,11 @@ class ConcurrentFieldExecutionTest {
                 .map(PhysicalIntentPrepared.class::cast).map(PhysicalIntentPrepared::intent).findFirst().orElseThrow();
         state = state.preparePhysicalIntent(intent);
         // Availability is a fixture precondition; the actual second admission is an ordinary engine action.
-        state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(settlement, permissions));
+        var twoWorkers = new EnumMap<ResidentWorkKind, Set<SubjectId>>(ResidentWorkKind.class);
+        twoWorkers.putAll(permissions.workers());
+        twoWorkers.put(ResidentWorkKind.AGRICULTURE, permissions.workers().get(ResidentWorkKind.AGRICULTURE).stream()
+                .sorted().limit(2).collect(java.util.stream.Collectors.toSet()));
+        state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(settlement, new ResidentWorkPermissions(twoWorkers)));
         var wake = StrategicObjectiveProcess.playerStockReconsideration(settlement,
                 UUID.fromString("00000000-0000-0000-0000-000000000002"), 27_086L);
         var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), 126L);
@@ -64,7 +68,7 @@ class ConcurrentFieldExecutionTest {
         assertEquals(engine.checkpoint().schedules(), recovered.checkpoint().schedules());
     }
 
-    @Test void registeredAdmissionAdvancesBothExactWorkersAndReplaysTheirIndependentCustody() {
+    @Test void registeredAdmissionAdvancesThreeExactWorkersAndReplaysTheirIndependentCustody() {
         FrontierWorldState state = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial(126L));
         SubjectId site = new SubjectId("site:1-wheat-field"), settlement = new SubjectId("settlement:1");
         var opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
@@ -85,20 +89,20 @@ class ConcurrentFieldExecutionTest {
         var initial = engine.checkpoint();
         requireActive(engine.advanceTo(new SimInstant(27_085L), new WorkBudget(1, 64)).status());
         var admitted = engine.canonicalState().state().resourceSites().site(site).harvestJobs();
-        assertEquals(2, admitted.size());
-        assertEquals(2, admitted.values().stream().map(ResourceSiteHarvestJob::workerId).distinct().count());
-        assertEquals(2, admitted.values().stream().map(ResourceSiteHarvestJob::target).distinct().count());
+        assertEquals(3, admitted.size());
+        assertEquals(3, admitted.values().stream().map(ResourceSiteHarvestJob::workerId).distinct().count());
+        assertEquals(3, admitted.values().stream().map(ResourceSiteHarvestJob::target).distinct().count());
         var ordered = admitted.values().stream().sorted(Comparator.comparing(ResourceSiteHarvestJob::id)).toList();
         var layout = engine.canonicalState().state().resourceSites().cycle(site).layout();
         var firstTarget = layout.requireCell(ordered.getFirst().target().cellId()).workstation();
-        var secondTarget = layout.requireCell(ordered.getLast().target().cellId()).workstation();
+        var secondTarget = layout.requireCell(ordered.get(1).target().cellId()).workstation();
         assertEquals(layout.cells().stream().mapToLong(cell -> distance(firstTarget, cell.workstation())).max().orElseThrow(),
                 distance(firstTarget, secondTarget), "registered admission spreads starts instead of following the same row");
         assertIndependentTerminalTraces(engine.canonicalState().state(), site, admitted);
 
         for (int turn = 0; turn < 256; turn++) {
             var jobs = engine.canonicalState().state().resourceSites().site(site).harvestJobs();
-            if (jobs.size() == 2 && jobs.values().stream().allMatch(job -> job.harvestedYieldQuantity() > 0)) break;
+            if (jobs.size() == 3 && jobs.values().stream().allMatch(job -> job.harvestedYieldQuantity() > 0)) break;
             var next = engine.checkpoint().schedules().stream()
                     .min(Comparator.comparing(ScheduledAction::dueAt).thenComparing(ScheduledAction::id)).orElseThrow();
             requireActive(engine.advanceTo(next.dueAt(), new WorkBudget(1, 64)).status());
@@ -107,7 +111,7 @@ class ConcurrentFieldExecutionTest {
         var jobs = worked.resourceSites().site(site).harvestJobs();
         assertEquals(admitted.keySet(), jobs.keySet());
         for (var job : jobs.values()) {
-            assertTrue(job.harvestedYieldQuantity() > 0, "both admitted workers must produce their own confirmed crop");
+            assertTrue(job.harvestedYieldQuantity() > 0, "all three admitted workers must produce their own confirmed crop");
             assertEquals(job.undeliveredYieldQuantity(), ResourceSiteHarvestCargo.quantity(worked, job));
             assertTrue(job.target().current(worked.resourceSites().cycle(site)));
         }
