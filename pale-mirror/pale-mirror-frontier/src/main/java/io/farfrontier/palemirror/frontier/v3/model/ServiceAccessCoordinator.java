@@ -233,6 +233,15 @@ public final class ServiceAccessCoordinator {
         return SettlementDepotServicePort.forDepot(depot);
     }
 
+    /** Derived turnover request; activity owns whether and when this occupant may leave. */
+    public static Optional<ServiceAccessPoint> turnoverPoint(FrontierWorldState state, SubjectId residentId) {
+        ResidentProfile resident = state.humanPopulation().resident(residentId);
+        ActorLocation actor = state.actorLocations().get(residentId);
+        if (resident == null || actor == null) return Optional.empty();
+        return SettlementServiceAccessPoints.forSettlement(state, resident.settlementId()).stream()
+                .filter(point -> ServiceAreaDestinations.temporary(point, actor.supportingSurface())).findFirst();
+    }
+
     /**
      * A personal clear, materialized apron spot, selected before the permit is taken and then
      * retained by the meal. Another resident's current body is never chosen as an exit.
@@ -251,10 +260,13 @@ public final class ServiceAccessCoordinator {
         state.humanPopulation().meals().values().stream()
                 .filter(meal -> !meal.residentId().equals(residentId))
                 .map(ResidentMeal::clearingSurface).forEach(excluded::add);
+        state.actorMovements().values().stream().filter(movement -> !movement.order().actorId().equals(residentId))
+                .flatMap(movement -> movement.order().legalStations().stream()).forEach(excluded::add);
         var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
                         new KnownPedestrianRouteKnowledge.Passage(depot,
                                 KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
-        return ServiceClearanceTargets.select(SettlementServiceAccessPoints.forDepot(settlement, depot, knowledge),
+        return ServiceClearanceTargets.select(SettlementServiceAccessPoints.forDepot(settlement, depot, knowledge,
+                        SettlementServiceAccessPoints.population(state, settlement.id())),
                 residentId, knowledge, excluded);
     }
 

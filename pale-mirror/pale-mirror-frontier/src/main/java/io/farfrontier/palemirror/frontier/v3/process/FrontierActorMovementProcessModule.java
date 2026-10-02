@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementHotObserved;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted;
 
 /** Single canonical reducer for purpose-independent actor goal travel. */
 final class FrontierActorMovementProcessModule implements FrontierWorldProcessModule {
@@ -23,6 +24,7 @@ final class FrontierActorMovementProcessModule implements FrontierWorldProcessMo
 
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {
+            case ActorMovementStarted started -> ActorMovementProcess.reduceStarted(state, event.subject(), started);
             case ActorMovementColdAdvanced advanced -> ActorMovementProcess.reduceColdAdvanced(state, event.subject(), advanced);
             case ActorMovementHotObserved observed -> ActorMovementProcess.reduceHotObserved(state, event.subject(), observed,
                     event.instant().ticks());

@@ -35,7 +35,10 @@ class ResidentActivityProcessTest {
         var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
                 .findFirst().orElseThrow();
         var surfaces = SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces();
-        var blockers = settlement.residents().stream().filter(value -> !value.id().equals(resident)).toList();
+        var blockers = java.util.stream.Stream.concat(settlement.residents().stream(),
+                initial.bootstrap().settlements().stream().filter(value -> !value.id().equals(settlement.id()))
+                        .flatMap(value -> value.residents().stream()))
+                .filter(value -> !value.id().equals(resident)).toList();
         assertTrue(blockers.size() >= surfaces.size());
         for (int index = 0; index < surfaces.size(); index++)
             state = state.withActorBody(blockers.get(index).id(), surfaces.get(index).standingBody());

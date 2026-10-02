@@ -21,6 +21,23 @@ public final class ActorMovementProcess {
     private static final long COLD_TICKS_PER_EDGE = 20L;
     private ActorMovementProcess() { }
 
+    public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject,
+                                                   ActorMovementStarted started) {
+        ActorMovement movement = started.movement();
+        ActorLocation actor = state.actorLocations().get(subject);
+        if (!subject.equals(movement.order().actorId()) || !subject.equals(movement.order().ownerId())
+                || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
+                || state.actorMovements().containsKey(subject) || state.humanPopulation().meals().containsKey(subject)
+                || ActorExecutionCoordinator.sceneOwns(state, subject))
+            throw new IllegalArgumentException("movement start lacks exclusive living actor authority");
+        // Validate the explicitly declared provider and known route before retaining any authority.
+        segmentRoute(state, movement, movement.issuedAtTick());
+        var movements = new LinkedHashMap<>(state.actorMovements());
+        movements.put(subject, movement);
+        return ResidentActivityProcess.retargetHotResident(state.withChanges(
+                FrontierWorldStateUpdate.begin().actorMovements(movements)), subject, movement.issuedAtTick());
+    }
+
     public static ScheduledAction progress(ActorMovement movement, long dueAt) {
         if (dueAt <= movement.issuedAtTick()) throw new IllegalArgumentException("movement progress precedes order");
         MovementOrder order = movement.order();

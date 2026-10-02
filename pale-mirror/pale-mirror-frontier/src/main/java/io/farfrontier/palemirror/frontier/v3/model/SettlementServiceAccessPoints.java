@@ -42,10 +42,14 @@ public final class SettlementServiceAccessPoints {
     public static ServiceAccessPoint forDepot(FrontierWorldState state, Settlement settlement, SettlementStructure depot) {
         var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
                 new KnownPedestrianRouteKnowledge.Passage(depot, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
-        return forDepot(settlement, depot, knowledge);
+        return forDepot(settlement, depot, knowledge, population(state, settlement.id()));
+    }
+    static int population(FrontierWorldState state, SubjectId settlementId) {
+        return (int) state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlementId)).count();
     }
     static ServiceAccessPoint forDepot(Settlement settlement, SettlementStructure depot,
-                                       KnownPedestrianRouteKnowledge knowledge) {
+                                       KnownPedestrianRouteKnowledge knowledge, int population) {
         SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
         SurfaceAnchor apron = port.facing().step(port.exteriorApproach(), -1);
         List<SurfaceAnchor> waiting = new ArrayList<>();
@@ -53,6 +57,18 @@ public final class SettlementServiceAccessPoints {
             for (SurfaceAnchor side : List.of(port.facing().stepLeft(apron, distance), port.facing().stepRight(apron, distance))) {
                 SurfaceAnchor supported = knowledge.supportAt(side.x(), side.z());
                 if (!port.accessBoundary().occupied(supported.standingBody())) waiting.add(supported);
+            }
+        }
+        // A two-dimensional temporary buffer, not a population-sized pair of parking strips.
+        int radius = Math.min(16, Math.max(2, (int) Math.ceil(Math.sqrt(population))));
+        for (int ring = 1; ring <= radius; ring++) {
+            for (int dx = -ring; dx <= ring; dx++) {
+                for (int dz = -ring; dz <= ring; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
+                    SurfaceAnchor supported = knowledge.supportAt(apron.x() + dx, apron.z() + dz);
+                    if (port.accessBoundary().cleared(supported.standingBody()) && !waiting.contains(supported))
+                        waiting.add(supported);
+                }
             }
         }
         return new ServiceAccessPoint(port.depotId(), settlement.id(), port.serviceSurface(), port.accessBoundary(), waiting);

@@ -96,7 +96,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
             if (version != VERSION) throw new IllegalArgumentException("Frontier v3 state schema " + version + " is incompatible with required schema " + VERSION + "; fresh current-schema world required");
-            if (!HarvestInspectionDescriptorUpgrade.accepts(FrontierDurationProcessDriverRegistry.inventoryFingerprint(), readString(input))) {
+            if (!ServiceTurnoverDescriptorUpgrade.accepts(FrontierDurationProcessDriverRegistry.inventoryFingerprint(), readString(input))) {
                 throw new IllegalArgumentException("Frontier v3 state has an incompatible process/scene descriptor inventory");
             }
             if (!FrontierWorldProcessCatalog.physicalLifecycleFingerprint().equals(readString(input))) {

@@ -58,6 +58,10 @@ public final class ResidentActivityProcess {
                 state.bootstrap().ruleset().residentLife(), resident.characteristics().effectiveMetabolismPermille(now));
         if (!nutrition.wantsFood(state.bootstrap().ruleset().residentLife()))
             return new ResidentActivityAdmission.Ready();
+        // An idle obstruction can leave even when food admission is currently blocked.
+        // Parking that resident under FOOD_STOCK/MEAL_CLEARANCE would keep the buffer full forever.
+        if (ResidentServiceTurnover.select(state, residentId, now).isPresent())
+            return new ResidentActivityAdmission.Ready();
         var source = ResidentMealOpportunity.candidateAdmission(state, residentId, now);
         if (source.pending().isPresent()) return waiting(state, residentId, switch (source.pending().orElseThrow()) {
             case RESIDENT_STATE -> ResidentActivityAdmission.Reason.RESIDENT_STATE;
@@ -165,6 +169,12 @@ public final class ResidentActivityProcess {
             });
         }
         boolean mealStarted = events.stream().anyMatch(event -> event.payload() instanceof ResidentMealStarted);
+        if (!mealStarted) ResidentServiceTurnover.select(selectedState, action.subject(), now).ifPresent(movement -> {
+            events.add(new ProposedEvent(action.subject(),
+                    new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted(movement)));
+            events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Created(
+                    ActorMovementProcess.progress(movement, Math.addExact(now, 1L)))));
+        });
         long next = nextReview(state, resident, now, choice, mealStarted,
                 state.humanPopulation().meals().containsKey(action.subject()));
         events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(),

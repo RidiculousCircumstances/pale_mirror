@@ -16,6 +16,42 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorMovementProcessTest {
+    @Test void idleOccupantLeavesTemporaryBufferThroughPersistedInterruptibleMovement() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:service-buffer-turnover"), 421L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SubjectId actor = settlement.residents().getFirst().id();
+        ServiceAccessPoint point = SettlementServiceAccessPoints.forSettlement(state, settlement.id()).getFirst();
+        state = state.withActorBody(actor, point.waitingSurfaces().getFirst().standingBody());
+        ActorMovement movement = ResidentServiceTurnover.select(state, actor, 1L).orElseThrow();
+        assertTrue(point.waitingSurfaces().stream().noneMatch(movement.order()::arrivedAt));
+        assertTrue(point.boundary().cleared(movement.order().legalStations().getFirst().standingBody()));
+        var planned = ResidentActivityProcess.plan(state, ResidentActivityProcess.review(actor, 1L));
+        ActorMovementStarted started = assertInstanceOf(ActorMovementStarted.class, planned.getFirst().payload());
+        assertEquals(movement, started.movement());
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(started, codecs.decode(started.type(), codecs.encode(started)));
+        FrontierWorldState before = state;
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.reduceStarted(before,
+                settlement.residents().get(1).id(), started));
+        state = ActorMovementProcess.reduceStarted(state, actor, started);
+        assertEquals(before.humanPopulation().nutrition(actor), state.humanPopulation().nutrition(actor),
+                "leaving cannot create a feeding receipt");
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        FrontierWorldState retained = state;
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.reduceStarted(retained, actor, started));
+        for (int leg = 0; leg < 4 && state.actorMovements().containsKey(actor); leg++) {
+            var order = state.actorMovements().get(actor);
+            long due = order.coldTravel().map(value -> value.arrivalTick()).orElse(2L);
+            var advanced = assertInstanceOf(ActorMovementColdAdvanced.class,
+                    ActorMovementProcess.plan(state, ActorMovementProcess.progress(order, due), due).getFirst().payload());
+            state = ActorMovementProcess.reduceColdAdvanced(state, actor, advanced);
+        }
+        assertFalse(state.actorMovements().containsKey(actor));
+        assertEquals(movement.order().legalStations().getFirst(), state.actorLocations().get(actor).supportingSurface());
+        assertTrue(ResidentServiceTurnover.select(state, actor, 100L).isEmpty(),
+                "resting outside the temporary area must not start an endless idle journey");
+    }
     @Test void unavailableKnownRouteIsCheckedOnlyWhenAdmittedAndKeepsTheExactOrder() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:actor-movement-route-wait"), 421L));

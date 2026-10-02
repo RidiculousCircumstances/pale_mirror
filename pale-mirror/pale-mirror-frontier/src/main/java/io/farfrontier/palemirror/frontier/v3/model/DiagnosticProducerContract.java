@@ -87,7 +87,7 @@ public final class DiagnosticProducerContract {
         "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
         "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.resident_birth_cancelled", "frontier.resident_birth_started", "frontier.resident_born",
         "frontier.resident_health_transition", "frontier.resident_starvation_integrated", "frontier.resident_need_integrated", "frontier.resident_metabolism_changed",
-        "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted",
+        "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted", "frontier.actor_movement_started",
         "frontier.resident_meal_started", "frontier.resident_meal_cold_step", "frontier.resident_meal_hot_arrived",
         "frontier.resident_meal_hot_effect_prepared", "frontier.resident_meal_hot_effect_observed",
         "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",

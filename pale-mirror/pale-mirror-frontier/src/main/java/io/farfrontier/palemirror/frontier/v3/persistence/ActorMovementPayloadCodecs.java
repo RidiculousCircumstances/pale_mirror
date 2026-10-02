@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementHotObserved;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,7 +17,23 @@ import java.util.Optional;
 final class ActorMovementPayloadCodecs {
     private ActorMovementPayloadCodecs() { }
 
-    static PayloadCodecs create() { return new PayloadCodecs(List.of(coldAdvanced(), hotObserved(), interrupted())); }
+    static PayloadCodecs create() { return new PayloadCodecs(List.of(coldAdvanced(), hotObserved(), interrupted(), started())); }
+
+    private static PayloadCodec started() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.actor_movement_started"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            ActorMovementStarted value = (ActorMovementStarted) payload;
+            return FrontierWorldPayloadCodecs.encodeProduction(out -> ActorMovementStateCodec.write(out,
+                    java.util.Map.of(value.movement().order().actorId(), value.movement())));
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> {
+                var values = ActorMovementStateCodec.read(in);
+                if (values.size() != 1) throw new IllegalArgumentException("movement start needs exactly one declared order");
+                return new ActorMovementStarted(values.values().iterator().next());
+            });
+        }
+    }; }
 
     private static PayloadCodec interrupted() { return new PayloadCodec() {
         @Override public String type() { return "frontier.actor_movement_interrupted"; }
