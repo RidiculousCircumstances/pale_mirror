@@ -69,9 +69,18 @@ public final class ActorExecutionLifecycle {
     }
     /** A group's job and all participant authorities enter one immutable, reference-closed update. */
     public Transition prepareVacantGroup(FrontierWorldState state, ActorExecutionGroup successor) {
+        return prepareGroup(state, state.actorExecutions(), successor);
+    }
+    /** A family acknowledges its old cohort in the same transaction as its successor data.
+     * Cohorts may shrink after casualties or grow by explicitly admitted new participants. */
+    public Transition prepareAcknowledgedGroupHandoff(FrontierWorldState state, ActorExecutionGroup completed,
+                                                       ActorExecutionGroup successor) {
+        return prepareGroup(state, retireCurrentGroup(state.actorExecutions(), completed), successor);
+    }
+    private Transition prepareGroup(FrontierWorldState state, ActorExecutionState executions,
+                                    ActorExecutionGroup successor) {
         Objects.requireNonNull(successor, "successor executions");
         FrontierWorldState prepared = state;
-        ActorExecutionState executions = state.actorExecutions();
         for (var id : successor.members()) {
             capabilities.require(id.activityKind());
             var actor = prepared.actorLocations().get(id.actorId());

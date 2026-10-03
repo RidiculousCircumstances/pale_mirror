@@ -892,8 +892,13 @@ class FrontierV3AmbientAdmissionPolicyTest {
         Map<SubjectId, ActorLocation> locations = new LinkedHashMap<>(state.actorLocations());
         place(locations, cells, state, firstSettlement, first);
         place(locations, cells, state, secondSettlement, second);
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations).strategicPlans(
-                plans.startSettlementAssault(first).startSettlementAssault(second)));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations).strategicPlans(plans));
+        state = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.admit(state, first,
+                io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.admission(state, first), Optional.empty(),
+                FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().startSettlementAssault(first)));
+        return io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.admit(state, second,
+                io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.admission(state, second), Optional.empty(),
+                FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().startSettlementAssault(second)));
     }
 
     private static FrontierWorldState nutrientRuntimeState() {

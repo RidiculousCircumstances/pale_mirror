@@ -23,10 +23,10 @@ final class SettlementAssaultPayloadCodecs {
     static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.settlement_assault_started"; }
         @Override public byte[] encode(FrontierPayload payload) {
-            return FrontierWorldPayloadCodecs.encodeProduction(output -> write(output, ((SettlementAssaultStarted) payload).assault()));
+            return FrontierWorldPayloadCodecs.encodeProduction(output -> { var value = (SettlementAssaultStarted) payload; write(output, value.assault()); ActorExecutionStateCodec.writeGroup(output, value.executions()); });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
-            return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new SettlementAssaultStarted(read(input)));
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new SettlementAssaultStarted(read(input), ActorExecutionStateCodec.readGroup(input)));
         }
     }; }
 
@@ -35,12 +35,12 @@ final class SettlementAssaultPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) {
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 SettlementAssaultAttackerAdvanced value = (SettlementAssaultAttackerAdvanced) payload;
-                subject(output, value.assaultId()); subject(output, value.attackerId()); output.writeByte(value.routeIndex());
+                subject(output, value.assaultId()); subject(output, value.attackerId()); output.writeByte(value.routeIndex()); ActorExecutionStateCodec.writeGroup(output, value.executions());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes,
-                    input -> new SettlementAssaultAttackerAdvanced(subject(input), subject(input), input.readUnsignedByte()));
+                    input -> new SettlementAssaultAttackerAdvanced(subject(input), subject(input), input.readUnsignedByte(), ActorExecutionStateCodec.readGroup(input)));
         }
     }; }
 
@@ -51,13 +51,14 @@ final class SettlementAssaultPayloadCodecs {
                 SettlementAssaultTransition value = (SettlementAssaultTransition) payload;
                 subject(output, value.assaultId()); output.writeByte(value.status().wireTag()); output.writeBoolean(value.diagnostic().isPresent()); if (value.diagnostic().isPresent())
                         FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, value.diagnostic().orElseThrow());
+                ActorExecutionStateCodec.writeGroup(output, value.executions());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId assault = subject(input); int status = input.readUnsignedByte();
                 return new SettlementAssaultTransition(assault, FrontierWireTags.require(SettlementAssaultStatus.class, status), input.readBoolean() ?
-                        java.util.Optional.of(FrontierWorldPayloadCodecs.readDiagnosticTuple(input)) : java.util.Optional.empty());
+                        java.util.Optional.of(FrontierWorldPayloadCodecs.readDiagnosticTuple(input)) : java.util.Optional.empty(), ActorExecutionStateCodec.readGroup(input));
             });
         }
     }; }
@@ -72,6 +73,7 @@ final class SettlementAssaultPayloadCodecs {
                 for (var entry : value.bodies().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
                     subject(output, entry.getKey()); position(output, entry.getValue().supportingSurface().support());
                 }
+                ActorExecutionStateCodec.writeGroup(output, value.executions());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
@@ -79,7 +81,7 @@ final class SettlementAssaultPayloadCodecs {
                 SubjectId assault = subject(input); io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId lease = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(FrontierWorldPayloadCodecs.readString(input));
                 java.util.Map<SubjectId, BodyPosition> bodies = new java.util.LinkedHashMap<>();
                 for (int index = 0, count = input.readUnsignedByte(); index < count; index++) bodies.put(subject(input), BodyPosition.above(new SurfaceAnchor(position(input))));
-                return new SettlementAssaultFormationObserved(assault, lease, bodies);
+                return new SettlementAssaultFormationObserved(assault, lease, bodies, ActorExecutionStateCodec.readGroup(input));
             });
         }
     }; }
@@ -91,7 +93,7 @@ final class SettlementAssaultPayloadCodecs {
                 SettlementAssaultMarchIssueObserved value = (SettlementAssaultMarchIssueObserved) payload;
                 subject(output, value.assaultId()); FrontierWorldPayloadCodecs.writeString(output, value.leaseId().value());
                 output.writeByte(FrontierWireTags.tag(value.issue().kind())); subject(output, value.issue().memberId());
-                FrontierWorldPayloadCodecs.writeString(output, value.issue().edgeId().value()); output.writeShort(value.issue().expectedCursor());
+                FrontierWorldPayloadCodecs.writeString(output, value.issue().edgeId().value()); output.writeShort(value.issue().expectedCursor()); ActorExecutionStateCodec.writeGroup(output, value.executions());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
@@ -99,7 +101,7 @@ final class SettlementAssaultPayloadCodecs {
                 SubjectId assault = subject(input); var lease = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(FrontierWorldPayloadCodecs.readString(input));
                 ExpeditionMarchIssue issue = new ExpeditionMarchIssue(FrontierWireTags.require(ExpeditionMarchIssueKind.class, input.readUnsignedByte()), subject(input),
                         new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
-                return new SettlementAssaultMarchIssueObserved(assault, lease, issue);
+                return new SettlementAssaultMarchIssueObserved(assault, lease, issue, ActorExecutionStateCodec.readGroup(input));
             });
         }
     }; }
@@ -110,12 +112,12 @@ final class SettlementAssaultPayloadCodecs {
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 SettlementAssaultStrike value = (SettlementAssaultStrike) payload;
                 subject(output, value.assaultId()); subject(output, value.attackerId()); subject(output, value.targetId());
-                output.writeInt(value.epoch()); output.writeLong(value.damage().raw());
+                output.writeInt(value.epoch()); output.writeLong(value.damage().raw()); ActorExecutionStateCodec.writeGroup(output, value.executions());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new SettlementAssaultStrike(subject(input), subject(input), subject(input),
-                    input.readInt(), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
+                    input.readInt(), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()), ActorExecutionStateCodec.readGroup(input)));
         }
     }; }
 
@@ -125,13 +127,13 @@ final class SettlementAssaultPayloadCodecs {
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 SettlementAssaultResolved value = (SettlementAssaultResolved) payload;
                 subject(output, value.assaultId()); output.writeByte(value.outcome().wireTag());
-                HiveReturnAdmissionCodec.write(output, value.returnAdmission());
+                HiveReturnAdmissionCodec.write(output, value.returnAdmission()); ActorExecutionStateCodec.writeGroup(output, value.executions());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId assault = subject(input); int outcome = input.readUnsignedByte();
-                return new SettlementAssaultResolved(assault, FrontierWireTags.require(SettlementAssaultOutcome.class, outcome), HiveReturnAdmissionCodec.read(input));
+                return new SettlementAssaultResolved(assault, FrontierWireTags.require(SettlementAssaultOutcome.class, outcome), HiveReturnAdmissionCodec.read(input), ActorExecutionStateCodec.readGroup(input));
             });
         }
     }; }

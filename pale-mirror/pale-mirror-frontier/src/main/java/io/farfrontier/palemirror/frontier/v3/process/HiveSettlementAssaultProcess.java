@@ -87,11 +87,11 @@ public final class HiveSettlementAssaultProcess {
         if (assault == null) {
             return List.of(new ProposedEvent(mobilization.hiveId(), HiveMobilizationDiagnosticProducer.DEPARTURE_UNAVAILABLE.create(mobilization.id())));
         }
-        List<ProposedEvent> events = new ArrayList<>();
+        List<ProposedEvent> events = new ArrayList<>(ProductionProcess.planSettlementDefenceInterruptions(state, assault));
         // One payload owns both ends of the custody transfer. A separate start event would
         // expose a departed roster without a strategic owner between WAL reductions.
         events.add(new ProposedEvent(mobilization.hiveId(), new HiveMobilizationDeparted(mobilization.id(), assault,
-                HiveAssemblyExecutionAuthority.currentGroup(state, mobilization))));
+                HiveAssemblyExecutionAuthority.currentGroup(state, mobilization), SettlementAssaultExecutionAuthority.admission(state, assault))));
         events.addAll(postAdmission(state, assault, now));
         return List.copyOf(events);
     }
@@ -105,23 +105,23 @@ public final class HiveSettlementAssaultProcess {
             List<SubjectId> attackers = livingCombatantAttackers(state, assault), defenders = livingDefenders(state, assault);
             if (attackers.isEmpty() || defenders.isEmpty()) return terminal(state, assault, attackers, defenders, action.dueAt().ticks());
             if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
-                return List.of(new ProposedEvent(assault.hiveId(), TerminalDiagnosticProducer.assaultConflict(assault.id())));
+                return List.of(new ProposedEvent(assault.hiveId(), TerminalDiagnosticProducer.assaultConflict(assault.id(), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault))));
             }
             if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks()
                     + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
-            return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.COLD_COMBAT)),
+            return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.COLD_COMBAT, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault))),
                     schedule(combat(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultCombatInterval())));
         }
         if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks()
                 + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
-        if (assault.march().complete()) return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.WAITING_FOR_BATTLE)),
+        if (assault.march().complete()) return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.WAITING_FOR_BATTLE, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault))),
                 schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
         // COLD advances exactly one shared formation edge per due action.  The event names the
         // Overseer only as the retained command owner; it does not restore independent member
         // cursors.  This gives the same one-edge causality as HOT observations and makes a
         // demand return/restart resume from an unambiguous formation cursor.
         SettlementAssaultAttackerAdvanced advance = new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(),
-                assault.march().cursor() + 1);
+                assault.march().cursor() + 1, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault));
         return List.of(new ProposedEvent(assault.hiveId(), advance), schedule(progress(assault.advanceFormation(),
                 action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
     }
@@ -136,14 +136,14 @@ public final class HiveSettlementAssaultProcess {
         List<SubjectId> attackers = livingCombatantAttackers(state, assault), defenders = livingDefenders(state, assault);
         if (attackers.isEmpty() || defenders.isEmpty()) return terminal(state, assault, attackers, defenders, action.dueAt().ticks());
         if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
-            return List.of(new ProposedEvent(assault.hiveId(), TerminalDiagnosticProducer.assaultConflict(assault.id())));
+            return List.of(new ProposedEvent(assault.hiveId(), TerminalDiagnosticProducer.assaultConflict(assault.id(), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault))));
         }
         if (!coldAvailable(state, assault)) return List.of(schedule(combat(assault, action.dueAt().ticks()
                 + state.bootstrap().ruleset().cadence().hiveSettlementAssaultCombatInterval())));
         boolean hiveTurn = (assault.nextStrikeEpoch() & 1) == 0;
         SubjectId attacker = choose(hiveTurn ? attackers : defenders, assault.nextStrikeEpoch());
         SubjectId target = choose(hiveTurn ? defenders : attackers, assault.nextStrikeEpoch());
-        SettlementAssaultStrike strike = new SettlementAssaultStrike(assault.id(), attacker, target, assault.nextStrikeEpoch(), damage(state, attacker));
+        SettlementAssaultStrike strike = new SettlementAssaultStrike(assault.id(), attacker, target, assault.nextStrikeEpoch(), damage(state, attacker), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault));
         FixedScalar after = state.actorLocations().get(target).condition().health().minus(strike.damage());
         List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(assault.hiveId(), strike)));
         deferredBomberAftermath(state, assault, attacker, action.dueAt().ticks()).ifPresent(aftermath ->
@@ -171,11 +171,13 @@ public final class HiveSettlementAssaultProcess {
         if (mobilization != null) {
             throw new IllegalArgumentException("a cocoon mobilisation may start its assault only through its atomic departure payload");
         }
-        return state.withStrategicPlans(state.strategicPlans().startSettlementAssault(assault));
+        return SettlementAssaultExecutionAuthority.admit(state, assault, started.executions(), Optional.empty(),
+                FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().startSettlementAssault(assault)));
     }
 
     public static FrontierWorldState reduceAdvanced(FrontierWorldState state, SubjectId subject, SettlementAssaultAttackerAdvanced advanced) {
         SettlementAssault assault = assault(state, advanced.assaultId());
+        SettlementAssaultExecutionAuthority.requireCurrent(state, assault, advanced.executions());
         if (!subject.equals(assault.hiveId()) || !assault.tacticalPlan().currentFor(state.strategicPlans()) || !coldAvailable(state, assault)) {
             throw new IllegalArgumentException("COLD assault advance has a foreign owner or leased actor");
         }
@@ -202,6 +204,7 @@ public final class HiveSettlementAssaultProcess {
 
     public static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, SettlementAssaultTransition transition) {
         SettlementAssault assault = assault(state, transition.assaultId());
+        SettlementAssaultExecutionAuthority.requireCurrent(state, assault, transition.executions());
         boolean waiting = transition.status() == SettlementAssaultStatus.WAITING_FOR_BATTLE
                 && (!assault.allAttackersAtBattlefield() || !coldAvailable(state, assault));
         boolean cold = transition.status() == SettlementAssaultStatus.COLD_COMBAT
@@ -215,6 +218,7 @@ public final class HiveSettlementAssaultProcess {
 
     public static FrontierWorldState reduceStrike(FrontierWorldState state, SubjectId subject, SettlementAssaultStrike strike) {
         SettlementAssault assault = assault(state, strike.assaultId());
+        SettlementAssaultExecutionAuthority.requireCurrent(state, assault, strike.executions());
         if (!subject.equals(assault.hiveId()) || !assault.tacticalPlan().currentFor(state.strategicPlans())
                 || assault.status() != SettlementAssaultStatus.COLD_COMBAT || !coldAvailable(state, assault)
                 || strike.epoch() != assault.nextStrikeEpoch()) throw new IllegalArgumentException("invalid COLD settlement assault strike");
@@ -233,6 +237,7 @@ public final class HiveSettlementAssaultProcess {
 
     public static FrontierWorldState reduceResolved(FrontierWorldState state, SubjectId subject, SettlementAssaultResolved resolved) {
         SettlementAssault assault = assault(state, resolved.assaultId());
+        SettlementAssaultExecutionAuthority.requireCurrent(state, assault, resolved.executions());
         if (!subject.equals(assault.hiveId()) || !assault.tacticalPlan().currentFor(state.strategicPlans())
                 || assault.status() == SettlementAssaultStatus.RESOLVED || assault.status() == SettlementAssaultStatus.HOT
                 || resolved.outcome() != SettlementAssaultOutcome.ABORTED && outcome(state, assault) != resolved.outcome()) {
@@ -309,8 +314,8 @@ public final class HiveSettlementAssaultProcess {
     }
 
     private static List<ProposedEvent> admit(FrontierWorldState state, SettlementAssault assault, long now) {
-        List<ProposedEvent> events = new ArrayList<>();
-        events.add(new ProposedEvent(assault.hiveId(), new SettlementAssaultStarted(assault)));
+        List<ProposedEvent> events = new ArrayList<>(ProductionProcess.planSettlementDefenceInterruptions(state, assault));
+        events.add(new ProposedEvent(assault.hiveId(), new SettlementAssaultStarted(assault, SettlementAssaultExecutionAuthority.admission(state, assault))));
         events.addAll(postAdmission(state, assault, now));
         return List.copyOf(events);
     }
@@ -318,7 +323,6 @@ public final class HiveSettlementAssaultProcess {
     /** Effects and schedules that follow an already atomically admitted assault. */
     private static List<ProposedEvent> postAdmission(FrontierWorldState state, SettlementAssault assault, long now) {
         List<ProposedEvent> events = new ArrayList<>();
-        events.addAll(ProductionProcess.planSettlementDefenceInterruptions(state, assault));
         events.add(schedule(progress(assault, now + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
         events.add(schedule(DefenderEquipmentProcess.review(assault, now + 1L)));
         events.add(schedule(DefenderEquipmentReturnProcess.review(assault, now + 1L)));
@@ -355,10 +359,9 @@ public final class HiveSettlementAssaultProcess {
         // returns.  Its child assault is therefore not an independent operation, but it is the
         // sole canonical continuation of that retained parent; treating it as independent here
         // deadlocks every COLD approach immediately after the atomic departure hand-off.
-        boolean retainedParentOwnsThisAssault = currentAssault != null && state.hiveColony().mobilizations().values().stream()
-                .anyMatch(parent -> parent.status() == HiveMobilizationStatus.DEPARTED && parent.taskId().equals(currentAssault.taskId())
-                        && parent.memberIds().contains(id));
-        return (retainedParentOwnsThisAssault || HivePhysiologySupport.availableForIndependentOperation(state, id))
+        var execution = state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.SETTLEMENT_ASSAULT).get(id);
+        boolean declaredAssault = currentAssault != null && execution != null && execution.activityOwnerId().equals(currentAssault.id());
+        return (declaredAssault || HivePhysiologySupport.availableForIndependentOperation(state, id))
                 && ActorExecutionCoordinator.coldAvailable(state, id)
                 && state.strategicPlans().routeEngagements().values().stream().noneMatch(value -> value.status() != RouteEngagementStatus.RESOLVED && value.attackerIds().contains(id))
                 && state.strategicPlans().settlementAssaults().values().stream().noneMatch(value -> !value.equals(currentAssault)
@@ -427,7 +430,8 @@ public final class HiveSettlementAssaultProcess {
     }
     public static SettlementAssaultResolved resolution(FrontierWorldState state, SettlementAssault assault,
                                                       SettlementAssaultOutcome outcome) {
-        return new SettlementAssaultResolved(assault.id(), outcome, HiveReturnExecutionAuthority.planResolution(state, assault));
+        return new SettlementAssaultResolved(assault.id(), outcome, HiveReturnExecutionAuthority.planResolution(state, assault),
+                SettlementAssaultExecutionAuthority.current(state, assault));
     }
     private static FixedScalar damage(FrontierWorldState state, SubjectId actor) { return RouteEngagementCombatRules.damage(state, actor); }
     private static List<BlockPosition> approach(FrontierWorldState state, BlockPosition start, BlockPosition end) {

@@ -6,8 +6,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** One exact attacker's one-step COLD advance toward the retained settlement anchor. */
-public record SettlementAssaultAttackerAdvanced(SubjectId assaultId, SubjectId attackerId, int routeIndex) implements FrontierPayload {
+public record SettlementAssaultAttackerAdvanced(SubjectId assaultId, SubjectId attackerId, int routeIndex,
+        io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions) implements FrontierPayload {
     public SettlementAssaultAttackerAdvanced {
+        SettlementAssaultExecutionAuthority.requireOwner(executions, assaultId);
         Objects.requireNonNull(assaultId, "settlement assault"); Objects.requireNonNull(attackerId, "assault attacker");
         if (routeIndex < 1) throw new IllegalArgumentException("assault route cursor must advance");
     }

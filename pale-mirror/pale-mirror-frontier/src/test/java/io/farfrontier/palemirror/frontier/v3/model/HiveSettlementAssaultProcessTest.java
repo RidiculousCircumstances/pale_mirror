@@ -181,7 +181,7 @@ class HiveSettlementAssaultProcessTest {
         FrontierWorldState state = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
                 assertInstanceOf(StrategicTaskTransition.class, start.getFirst().payload()));
         SettlementAssault assault = assertInstanceOf(SettlementAssaultStarted.class, start.get(1).payload()).assault();
-        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault));
+        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.admission(state, assault)));
 
         assertTrue(HiveSettlementAssaultProcess.planProgress(state, DefenderEquipmentProcess.review(assault, 201L)).isEmpty());
     }
@@ -266,7 +266,7 @@ class HiveSettlementAssaultProcessTest {
         SubjectId defender = started.defenderIds().getFirst();
         state = state.withActorBody(defender, BodyPosition.above(new SurfaceAnchor(started.settlementAnchor().offset(43, 0, 0))));
         List<ProposedEvent> conflict = HiveSettlementAssaultProcess.planProgress(state, next);
-        assertEquals(List.of(TerminalDiagnosticProducer.assaultConflict(started.id())),
+        assertEquals(List.of(TerminalDiagnosticProducer.assaultConflict(started.id(), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, started))),
                 conflict.stream().map(ProposedEvent::payload).toList());
         var transition = (SettlementAssaultTransition) conflict.getFirst().payload();
         assertEquals(DiagnosticReason.SETTLEMENT_ASSAULT_CONFLICT, transition.diagnostic().orElseThrow().reason());

@@ -38,7 +38,7 @@ class HumanTacticalFunctionProjectionTest {
         FrontierWorldState state = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
                 assertInstanceOf(StrategicTaskTransition.class, events.getFirst().payload()));
         SettlementAssault assault = assertInstanceOf(SettlementAssaultStarted.class, events.get(1).payload()).assault();
-        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault));
+        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.admission(state, assault)));
 
         SubjectId leader = assault.defenderUnit().leaderId();
         assertEquals(HumanTacticalFunction.SQUAD_LEADER, HumanTacticalFunctionProjection.derive(state, leader));
@@ -102,7 +102,7 @@ class HumanTacticalFunctionProjectionTest {
         FrontierWorldState state = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
                 assertInstanceOf(StrategicTaskTransition.class, start.getFirst().payload()));
         SettlementAssault assault = assertInstanceOf(SettlementAssaultStarted.class, start.get(1).payload()).assault();
-        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault));
+        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.admission(state, assault)));
         SubjectId leader = assault.defenderUnit().leaderId();
         SubjectId fighter = assault.defenderIds().stream().filter(id -> !id.equals(leader)).findFirst().orElseThrow();
         SubjectId support = assault.defenderIds().stream().filter(id -> !id.equals(leader) && !id.equals(fighter)).findFirst().orElseThrow();
@@ -141,7 +141,7 @@ class HumanTacticalFunctionProjectionTest {
         FrontierWorldState state = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
                 assertInstanceOf(StrategicTaskTransition.class, start.getFirst().payload()));
         SettlementAssault assault = assertInstanceOf(SettlementAssaultStarted.class, start.get(1).payload()).assault();
-        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault));
+        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.admission(state, assault)));
         SubjectId depot = FrontierWorldState.depotId(assault.settlementId()), resident = assault.defenderIds().getFirst();
         int sourceSlot = state.inventory().firstFreeSlot(depot).orElseThrow(); SubjectId sword = new SubjectId("item:tactical-return-sword");
         state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)

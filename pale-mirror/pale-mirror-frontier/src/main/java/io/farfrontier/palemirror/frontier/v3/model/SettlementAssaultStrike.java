@@ -8,8 +8,10 @@ import java.util.Objects;
 
 /** One exact COLD combat strike in a retained settlement assault. */
 public record SettlementAssaultStrike(SubjectId assaultId, SubjectId attackerId, SubjectId targetId, int epoch,
-                               FixedScalar damage) implements FrontierPayload {
+                               FixedScalar damage,
+        io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions) implements FrontierPayload {
     public SettlementAssaultStrike {
+        SettlementAssaultExecutionAuthority.requireOwner(executions, assaultId);
         Objects.requireNonNull(assaultId, "settlement assault"); Objects.requireNonNull(attackerId, "assault attacker");
         Objects.requireNonNull(targetId, "assault target"); Objects.requireNonNull(damage, "assault damage");
         if (epoch < 0 || damage.compareTo(FixedScalar.ZERO) <= 0) throw new IllegalArgumentException("invalid COLD assault strike");

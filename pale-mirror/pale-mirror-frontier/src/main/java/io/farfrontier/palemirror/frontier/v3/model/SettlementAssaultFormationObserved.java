@@ -9,8 +9,10 @@ import java.util.Objects;
 
 /** One physically observed complete expedition edge; partial arrival has no canonical effect. */
 public record SettlementAssaultFormationObserved(SubjectId assaultId, SceneLeaseId leaseId,
-                                                 Map<SubjectId, BodyPosition> bodies) implements FrontierPayload {
+                                                 Map<SubjectId, BodyPosition> bodies,
+        io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions) implements FrontierPayload {
     public SettlementAssaultFormationObserved {
+        SettlementAssaultExecutionAuthority.requireOwner(executions, assaultId);
         assaultId = Objects.requireNonNull(assaultId, "assault id"); leaseId = Objects.requireNonNull(leaseId, "assault lease");
         bodies = Map.copyOf(Objects.requireNonNull(bodies, "expedition bodies"));
         if (bodies.size() < 2 || bodies.values().stream().distinct().count() != bodies.size()) {

@@ -45,16 +45,34 @@ class HiveMobilizationProcessTest {
         SubjectId hive = state.bootstrap().hive().id();
         assertEquals(parent.expeditionId(), assault.expeditionId());
         assertEquals(parent.memberIds(), assault.attackerIds(), "assembly hands the exact retained group to its one parent child");
+        var combatGroup = SettlementAssaultExecutionAuthority.current(state, assault);
+        FrontierWorldState admittedBattle = state;
+        var firstCombatExecution = combatGroup.members().getFirst();
+        assertThrows(IllegalArgumentException.class, () -> admittedBattle.withChanges(FrontierWorldStateUpdate.begin()
+                .actorExecutions(admittedBattle.actorExecutions().finish(firstCombatExecution))),
+                "a retained combat participant cannot lose its owner independently of battle outcome");
+        var staleCombatGroup = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(combatGroup.members().stream()
+                .map(id -> new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                        id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1)).toList());
+        var admittedAssault = assault;
+        var partialCombatGroup = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(List.of(firstCombatExecution));
+        assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceAdvanced(admittedBattle, hive,
+                new SettlementAssaultAttackerAdvanced(admittedAssault.id(), admittedAssault.overseerId(),
+                        admittedAssault.march().cursor() + 1, partialCombatGroup)),
+                "a single participant cannot grant motion to the whole combat formation");
+        assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceAdvanced(admittedBattle, hive,
+                new SettlementAssaultAttackerAdvanced(admittedAssault.id(), admittedAssault.overseerId(),
+                        admittedAssault.march().cursor() + 1, staleCombatGroup)));
 
         while (!assault.allAttackersAtBattlefield()) {
             state = HiveSettlementAssaultProcess.reduceAdvanced(state, hive,
-                    new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(), assault.march().cursor() + 1));
+                    new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(), assault.march().cursor() + 1, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
             assault = state.strategicPlans().settlementAssaults().get(assault.id());
         }
         state = HiveSettlementAssaultProcess.reduceTransition(state, hive,
-                new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.WAITING_FOR_BATTLE));
+                new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.WAITING_FOR_BATTLE, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
         state = HiveSettlementAssaultProcess.reduceTransition(state, hive,
-                new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.COLD_COMBAT));
+                new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.COLD_COMBAT, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
         assault = state.strategicPlans().settlementAssaults().get(assault.id());
 
         SubjectId assaultId = assault.id();
@@ -104,13 +122,15 @@ class HiveMobilizationProcessTest {
                 java.util.Arrays.copyOf(resolvedBytes, resolvedBytes.length - 1)));
         FrontierWorldState beforeReturn = state;
         assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceResolved(beforeReturn, hive,
-                new SettlementAssaultResolved(resolution.assaultId(), resolution.outcome(), new HiveReturnAdmission.Independent())),
+                new SettlementAssaultResolved(resolution.assaultId(), resolution.outcome(), new HiveReturnAdmission.Independent(), resolution.executions())),
                 "resolution cannot forget its exact hive parent");
         state = HiveSettlementAssaultProcess.reduceResolved(state, hive, resolution);
         state = new FrontierWorldStateCodec(state.bootstrap()).decode(new FrontierWorldStateCodec(state.bootstrap()).encode(state));
         HiveMobilization returning = state.hiveColony().mobilizations().get(parent.id());
         assertEquals(HiveMobilizationStatus.RETURNING, returning.status());
         assertEquals(parent.expeditionId(), returning.expeditionId());
+        assertTrue(state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.SETTLEMENT_ASSAULT).isEmpty(),
+                "battle outcome releases defenders and replaces surviving attackers in one closed update");
         returnAdmission.executions().requireCurrent(state.actorExecutions());
         FrontierWorldState retainedReturn = state;
         var firstExecution = returnAdmission.executions().members().getFirst();
@@ -391,6 +411,12 @@ class HiveMobilizationProcessTest {
         assertTrue(finalAssembly != null && started != null && departedEvent != null && completeStaging != null,
                 "the bounded exact assembly must reach one departure transition");
         HiveMobilizationDeparted exactDeparture = departedEvent;
+        var departureCodecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        byte[] departureBytes = departureCodecs.encode(exactDeparture);
+        assertEquals(exactDeparture, departureCodecs.decode(exactDeparture.type(), departureBytes));
+        assertThrows(IllegalArgumentException.class, () -> departureCodecs.decode(exactDeparture.type(),
+                java.util.Arrays.copyOf(departureBytes, departureBytes.length - 1)),
+                "the successor combat authority is mandatory in the durable departure payload");
         SettlementAssault exactAssault = started;
         FrontierWorldState exactStaging = completeStaging;
         assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceDeparted(assembled.state(), hive, exactDeparture),
@@ -399,7 +425,7 @@ class HiveMobilizationProcessTest {
                 exactAssault.sighting(), exactAssault.overseerId(), exactAssault.attackers(), exactAssault.defenderUnit(),
                 SettlementAssaultStatus.WAITING_FOR_BATTLE, exactAssault.nextStrikeEpoch(), exactAssault.outcome());
         assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceDeparted(exactStaging,
-                hive, new HiveMobilizationDeparted(initial.id(), tamperedAssault, exactDeparture.executions())),
+                hive, new HiveMobilizationDeparted(initial.id(), tamperedAssault, exactDeparture.executions(), exactDeparture.assaultExecutions())),
                 "a durable departure payload may not alter its deterministic initial assault state");
         HiveMobilization departed = state.hiveColony().mobilizations().get(initial.id());
         assertEquals(HiveMobilizationStatus.DEPARTED, departed.status());
@@ -420,7 +446,7 @@ class HiveMobilizationProcessTest {
         assertThrows(IllegalArgumentException.class, () -> AmbientLeaseStateProcess.prepare(departedState, unrelatedAmbient),
                 "a direct ambient command may not bypass COLD assault custody");
         assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceDeparted(departedState, hive,
-                new HiveMobilizationDeparted(initial.id(), exactAssault, exactDeparture.executions())), "a completed hand-off cannot be replayed");
+                new HiveMobilizationDeparted(initial.id(), exactAssault, exactDeparture.executions(), exactDeparture.assaultExecutions())), "a completed hand-off cannot be replayed");
         assertEquals(departedState, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(departedState)));
         SubjectId departedTaskId = started.taskId();
         assertThrows(IllegalArgumentException.class, () -> departedState.withStrategicPlans(departedState.strategicPlans()

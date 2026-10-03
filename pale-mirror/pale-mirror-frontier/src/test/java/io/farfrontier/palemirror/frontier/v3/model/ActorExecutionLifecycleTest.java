@@ -41,7 +41,7 @@ class ActorExecutionLifecycleTest {
                 .actorExecutions(admitted.actorExecutions().finish(admitted.actorExecutions().actors().get(actor).current().orElseThrow())
                         .begin(new ActorExecutionId(actor, ActorActivityKind.PRESENCE, new SubjectId("actor:foreign-owner"), 4L), 3L))));
     }
-    @Test void declaredRegistryRejectsMissingDuplicateAndUnadoptedFamilies() {
+    @Test void declaredRegistryRejectsMissingDuplicateAndForeignFamilies() {
         var capability = new HarvestActivityCapability();
         assertThrows(IllegalArgumentException.class, () -> new ActorActivityCapabilities(
                 Set.of(ActorActivityKind.FIELD_HARVEST, ActorActivityKind.PRODUCTION), List.of(capability)));
@@ -49,7 +49,8 @@ class ActorExecutionLifecycleTest {
                 Set.of(ActorActivityKind.FIELD_HARVEST), List.of(capability, capability)));
         assertThrows(IllegalArgumentException.class, () -> new ActorActivityCapabilities(
                 Set.of(ActorActivityKind.PRODUCTION), List.of(capability)));
-        assertThrows(IllegalArgumentException.class, () -> ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.LOGISTICS));
+        var harvestOnly = new ActorActivityCapabilities(Set.of(ActorActivityKind.FIELD_HARVEST), List.of(capability));
+        assertThrows(IllegalArgumentException.class, () -> harvestOnly.require(ActorActivityKind.LOGISTICS));
     }
 
     @Test void farmerMealKeepsTheJobAndRecoveryContinuationAndSelectionAloneResumesIt() {

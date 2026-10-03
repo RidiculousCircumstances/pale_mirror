@@ -60,9 +60,9 @@ final class HiveMobilizationPayloadCodecs {
     private static final class DepartedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_departed"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationDeparted departed = (HiveMobilizationDeparted) payload;
-            writeSubject(output, departed.mobilizationId()); SettlementAssaultPayloadCodecs.write(output, departed.assault()); ActorExecutionStateCodec.writeGroup(output, departed.executions()); }); }
+            writeSubject(output, departed.mobilizationId()); SettlementAssaultPayloadCodecs.write(output, departed.assault()); ActorExecutionStateCodec.writeGroup(output, departed.executions()); ActorExecutionStateCodec.writeGroup(output, departed.assaultExecutions()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes,
-                input -> new HiveMobilizationDeparted(readSubject(input), SettlementAssaultPayloadCodecs.read(input), ActorExecutionStateCodec.readGroup(input))); }
+                input -> new HiveMobilizationDeparted(readSubject(input), SettlementAssaultPayloadCodecs.read(input), ActorExecutionStateCodec.readGroup(input), ActorExecutionStateCodec.readGroup(input))); }
     }
     private static final class ReturnAdvancedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_return_advanced"; }

@@ -50,7 +50,8 @@ public final class HiveReturnExecutionAuthority {
             case HiveReturnAdmission.Independent ignored -> {
                 if (state.hiveColony().mobilizations().values().stream().anyMatch(parent -> parent.taskId().equals(assault.taskId())))
                     throw new IllegalArgumentException("independent resolution cannot discard its declared hive parent");
-                yield state.withStrategicPlans(plans);
+                yield state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(plans).actorExecutions(
+                        ActorExecutionComposition.LIFECYCLE.retireCurrentGroup(state.actorExecutions(), SettlementAssaultExecutionAuthority.current(state, assault))));
             }
             case HiveReturnAdmission.Completed completed -> {
                 var parent = requireParent(state.hiveColony().mobilizations().get(completed.mobilizationId()), assault);
@@ -58,13 +59,15 @@ public final class HiveReturnExecutionAuthority {
                         && !HiveAssemblyCorridor.compileReturn(state, parent).complete())
                     throw new IllegalArgumentException("hive survivors still require their exact return");
                 yield state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(plans)
-                        .hiveColony(state.hiveColony().completeMobilization(parent.id())));
+                        .hiveColony(state.hiveColony().completeMobilization(parent.id())).actorExecutions(
+                                ActorExecutionComposition.LIFECYCLE.retireCurrentGroup(state.actorExecutions(), SettlementAssaultExecutionAuthority.current(state, assault))));
             }
             case HiveReturnAdmission.Returning returning -> {
                 var parent = requireParent(state.hiveColony().mobilizations().get(returning.mobilizationId()), assault);
                 if (!returning.assembly().equals(HiveAssemblyCorridor.compileReturn(state, parent)))
                     throw new IllegalArgumentException("return admission substituted survivor routes or predecessors");
-                yield ActorExecutionComposition.LIFECYCLE.prepareVacantGroup(state, returning.executions()).commit(state,
+                yield ActorExecutionComposition.LIFECYCLE.prepareAcknowledgedGroupHandoff(state,
+                        SettlementAssaultExecutionAuthority.current(state, assault), returning.executions()).commit(state,
                         FrontierWorldStateUpdate.begin().strategicPlans(plans)
                                 .hiveColony(state.hiveColony().beginMobilizationReturn(parent.id(), returning.assembly())));
             }

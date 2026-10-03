@@ -337,7 +337,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             }
         }
         if (arrived) {
-            CommandResult result = submit(runtime, "expedition-march-observed", new SettlementAssaultFormationObserved(assault.id(), lease.id(), targets));
+            CommandResult result = submit(runtime, "expedition-march-observed", new SettlementAssaultFormationObserved(assault.id(), lease.id(), targets, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "expedition_march_formation", lease, result);
         }
 
@@ -490,7 +490,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                                    SettlementAssault assault, SubjectId member, ExpeditionMarchIssueKind kind) {
         ExpeditionMarchIssue issue = new ExpeditionMarchIssue(kind, member, edgeAtCursor(assault, member), assault.march().cursor());
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "expedition_march_" + kind.name().toLowerCase(java.util.Locale.ROOT), lease,
-                submit(runtime, "expedition-march-issue", new SettlementAssaultMarchIssueObserved(assault.id(), lease.id(), issue)));
+                submit(runtime, "expedition-march-issue", new SettlementAssaultMarchIssueObserved(assault.id(), lease.id(), issue, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state(runtime), assault))));
     }
 
     private static io.farfrontier.palemirror.frontier.v3.model.TraversalEdgeId edgeAtCursor(SettlementAssault assault, SubjectId member) {

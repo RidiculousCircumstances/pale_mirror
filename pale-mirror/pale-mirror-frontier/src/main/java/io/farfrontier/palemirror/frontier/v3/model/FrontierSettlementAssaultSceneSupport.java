@@ -92,6 +92,7 @@ public final class FrontierSettlementAssaultSceneSupport {
     public static FrontierWorldState advanceFormationObserved(FrontierWorldState state, SubjectId subject,
                                                                SettlementAssaultFormationObserved observed) {
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(observed.assaultId());
+        if (assault != null) SettlementAssaultExecutionAuthority.requireCurrent(state, assault, observed.executions());
         if (assault == null || !subject.equals(assault.hiveId()) || assault.status() != SettlementAssaultStatus.HOT) {
             throw new IllegalArgumentException("expedition formation observation has no HOT owner");
         }
@@ -105,13 +106,17 @@ public final class FrontierSettlementAssaultSceneSupport {
         if (!next.formationBodies().equals(observed.bodies())) throw new IllegalArgumentException("expedition formation did not reach its retained next edge");
         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(lease.id(), lease.withMemberPositions(observed.bodies()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().replaceSettlementAssault(next)).sceneLeases(leases));
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        observed.bodies().forEach((actor, body) -> actors.put(actor, actors.get(actor).withBody(body)));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+                .strategicPlans(state.strategicPlans().replaceSettlementAssault(next)).sceneLeases(leases));
     }
 
     /** Closes the exact loaded march lease with durable, member/edge-specific evidence. */
     public static FrontierWorldState recordMarchIssue(FrontierWorldState state, SubjectId subject,
                                                        SettlementAssaultMarchIssueObserved observed) {
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(observed.assaultId());
+        if (assault != null) SettlementAssaultExecutionAuthority.requireCurrent(state, assault, observed.executions());
         if (assault == null || !subject.equals(assault.hiveId()) || assault.status() != SettlementAssaultStatus.HOT
                 || assault.tacticalPlan().phase() != TacticalPlanPhase.TRAVEL) {
             throw new IllegalArgumentException("expedition march issue has no current HOT travel owner");

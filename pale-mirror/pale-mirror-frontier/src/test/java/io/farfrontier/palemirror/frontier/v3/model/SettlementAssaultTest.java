@@ -350,7 +350,7 @@ class SettlementAssaultTest {
                 "the retained approach carries non-flat GROUND_BIOFORM topology rather than an endpoint shortcut");
 
         state = HiveSettlementAssaultProcess.reduceAdvanced(state, state.bootstrap().hive().id(),
-                new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(), assault.march().cursor() + 1));
+                new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(), assault.march().cursor() + 1, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
         assault = state.strategicPlans().settlementAssaults().get(assault.id());
         assertEquals(1, assault.march().cursor());
         FrontierWorldState cold = state;
@@ -375,11 +375,14 @@ class SettlementAssaultTest {
         Map<SubjectId, BodyPosition> forged = new java.util.LinkedHashMap<>(hotAssault.nextFormationBodies());
         forged.put(hotAssault.overseerId(), hotAssault.formationBodies().get(hotAssault.overseerId()));
         assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceFormationObserved(hot, hotAssault.hiveId(),
-                new SettlementAssaultFormationObserved(hotAssault.id(), leaseId, forged)),
+                new SettlementAssaultFormationObserved(hotAssault.id(), leaseId, forged, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(hot, hotAssault))),
                 "one missing retained arrival cannot advance a complete formation");
         FrontierWorldState advanced = HiveSettlementAssaultProcess.reduceFormationObserved(hot, hotAssault.hiveId(),
-                new SettlementAssaultFormationObserved(hotAssault.id(), leaseId, hotAssault.nextFormationBodies()));
+                new SettlementAssaultFormationObserved(hotAssault.id(), leaseId, hotAssault.nextFormationBodies(), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(hot, hotAssault)));
         assertEquals(hotAssault.march().cursor() + 1, advanced.strategicPlans().settlementAssaults().get(hotAssault.id()).march().cursor());
+        assertEquals(hotAssault.nextFormationBodies(), hotAssault.attackerIds().stream().collect(java.util.stream.Collectors.toMap(
+                id -> id, id -> advanced.actorLocations().get(id).body())),
+                "the observed HOT formation advances canonical actor positions, not only scene checkpoints");
     }
 
     @Test void retainsTypedMarchObstructionAndControllerLossOnTheSameHotExpedition() {
@@ -389,7 +392,7 @@ class SettlementAssaultTest {
             SettlementAssault assault = hot.assault();
             ExpeditionMarchIssue issue = new ExpeditionMarchIssue(kind, assault.overseerId(),
                     assault.march().memberTopologies().get(assault.overseerId()).edgeAfterCursor(assault.march().cursor()).id(), assault.march().cursor());
-            SettlementAssaultMarchIssueObserved observed = new SettlementAssaultMarchIssueObserved(assault.id(), hot.lease().id(), issue);
+            SettlementAssaultMarchIssueObserved observed = new SettlementAssaultMarchIssueObserved(assault.id(), hot.lease().id(), issue, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(hot.state(), assault));
             CommandId commandId = new CommandId("command:typed-march-" + kind.name().toLowerCase());
             assertTrue(FrontierWorldProcessCatalog.planCommand("hive", hot.state(), new FrontierCommand(1, commandId,
                     hot.state().bootstrap().worldId(), new Revision(1L), new SimInstant(19L),

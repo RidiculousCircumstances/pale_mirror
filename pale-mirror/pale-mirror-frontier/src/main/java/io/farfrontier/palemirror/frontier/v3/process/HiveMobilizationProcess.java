@@ -32,6 +32,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyExecutionAuthorit
 import io.farfrontier.palemirror.frontier.v3.model.ActorExecutionComposition;
 import io.farfrontier.palemirror.frontier.v3.model.HiveReturnAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.HiveReturnExecutionAuthority;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationReturnAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNest;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrgan;
@@ -301,9 +302,9 @@ public final class HiveMobilizationProcess {
                 leases.put(memberId, lease.withStatus(AmbientLeaseStatus.CLOSED));
             }
         }
-        return state.withChanges(FrontierWorldStateUpdate.begin().hiveColony(state.hiveColony().departMobilization(mobilization.id()))
-                .ambientLeases(leases).strategicPlans(state.strategicPlans().startSettlementAssault(departed.assault()))
-                .actorExecutions(ActorExecutionComposition.LIFECYCLE.retireCurrentGroup(state.actorExecutions(), departed.executions())));
+        return SettlementAssaultExecutionAuthority.admit(state, departed.assault(), departed.assaultExecutions(), Optional.of(departed.executions()),
+                FrontierWorldStateUpdate.begin().hiveColony(state.hiveColony().departMobilization(mobilization.id()))
+                        .ambientLeases(leases).strategicPlans(state.strategicPlans().startSettlementAssault(departed.assault())));
     }
 
     public static FrontierWorldState reduceConflicted(FrontierWorldState state, SubjectId subject, HiveMobilizationConflicted conflicted) {

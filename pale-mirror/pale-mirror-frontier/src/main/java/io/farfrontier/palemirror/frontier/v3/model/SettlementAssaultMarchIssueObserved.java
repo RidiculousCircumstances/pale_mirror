@@ -8,8 +8,10 @@ import java.util.Objects;
 
 /** A loaded scene's exact typed obstruction or owned-body observation. */
 public record SettlementAssaultMarchIssueObserved(SubjectId assaultId, SceneLeaseId leaseId,
-                                                  ExpeditionMarchIssue issue) implements FrontierPayload {
+                                                  ExpeditionMarchIssue issue,
+        io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions) implements FrontierPayload {
     public SettlementAssaultMarchIssueObserved {
+        SettlementAssaultExecutionAuthority.requireOwner(executions, assaultId);
         assaultId = Objects.requireNonNull(assaultId, "assault id"); leaseId = Objects.requireNonNull(leaseId, "assault lease");
         issue = Objects.requireNonNull(issue, "expedition march issue");
     }
