@@ -20,6 +20,39 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResidentActivityProcessTest {
+    @Test void ordinaryReviewAdmitsPresenceOnceWithoutMaterializingMovingOrInventingWork() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:passive-execution-admission"), 421L));
+        var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        var action = ResidentActivityProcess.review(actor, 1L);
+        var events = ResidentActivityProcess.plan(state, action);
+        var presence = events.stream().map(proposed -> proposed.payload())
+                .filter(io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarted.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarted.class::cast)
+                .findFirst().orElseThrow();
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(presence, codecs.decode(presence.type(), codecs.encode(presence)));
+        assertEquals("actor-execution", FrontierWorldRuntimeDefinition.processRegistry().requireReducedEventOwner(presence.type()));
+        var event = new FrontierEvent(FrontierEvent.SCHEMA_VERSION, new EventId("event:presence-admission"),
+                new TransactionId("transaction:presence-admission"), state.bootstrap().worldId(), new Revision(1L),
+                new SimInstant(1L), actor, CauseChain.root(new CommandId("command:presence-admission")), presence);
+        var admitted = FrontierWorldProcessCatalog.reduce("actor-execution", state, event);
+        assertEquals(presence.execution(), admitted.actorExecutions().actors().get(actor).current().orElseThrow());
+        assertSame(state.actorLocations(), admitted.actorLocations());
+        assertSame(state.inventory(), admitted.inventory());
+        assertSame(state.fencedRecovery(), admitted.fencedRecovery());
+        assertSame(state.ambientLeases(), admitted.ambientLeases());
+        assertSame(state.sceneLeases(), admitted.sceneLeases());
+        var snapshotCodec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var snapshot = snapshotCodec.encode(admitted);
+        assertEquals(admitted.actorExecutions(), snapshotCodec.decode(snapshot).actorExecutions());
+        snapshot[4] = (byte) 226;
+        assertThrows(IllegalArgumentException.class, () -> snapshotCodec.decode(snapshot),
+                "old disposable worlds cannot recover with incomplete resume authority");
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldProcessCatalog.reduce("actor-execution", admitted, event));
+        assertTrue(ResidentActivityProcess.plan(admitted, action).stream().noneMatch(proposed ->
+                proposed.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarted));
+    }
     @Test void unavailableClearanceParksWithoutTransactionsAndBodyChangeStartsSameDueMeal() {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:meal-eligibility-without-geometry"), 421L));
@@ -173,8 +206,12 @@ class ResidentActivityProcessTest {
                 assertInstanceOf(ResidentActivityAdmission.Waiting.class,
                         ResidentActivityProcess.admission(state, action)).reason());
         var planned = FrontierWorldRuntimeDefinition.planScheduled(state, action);
-        assertEquals(2, planned.size());
-        var availability = assertInstanceOf(ScheduleEffect.Created.class, planned.getFirst().payload()).action();
+        assertEquals(3, planned.size());
+        assertTrue(planned.stream().noneMatch(proposed -> proposed.payload() instanceof ResidentMealStarted));
+        assertEquals(1L, planned.stream().filter(proposed -> proposed.payload()
+                instanceof io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarted).count());
+        var availability = planned.stream().map(proposed -> proposed.payload()).filter(ScheduleEffect.Created.class::isInstance)
+                .map(ScheduleEffect.Created.class::cast).findFirst().orElseThrow().action();
         assertEquals("frontier.objective.stock_reconsider", availability.kind());
         var next = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getLast().payload()).replacement();
         assertEquals(action.id(), next.id());
@@ -224,8 +261,13 @@ class ResidentActivityProcessTest {
 
         var planned = FrontierWorldRuntimeDefinition.planScheduled(state, action);
 
-        assertEquals(2, planned.size());
-        var availability = assertInstanceOf(ScheduleEffect.Created.class, planned.getFirst().payload()).action();
+        assertEquals(3, planned.size());
+        var presence = planned.stream().map(proposed -> proposed.payload())
+                .filter(io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarted.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarted.class::cast).findFirst().orElseThrow();
+        assertEquals(24_050L, presence.atTick());
+        var availability = planned.stream().map(proposed -> proposed.payload()).filter(ScheduleEffect.Created.class::isInstance)
+                .map(ScheduleEffect.Created.class::cast).findFirst().orElseThrow().action();
         assertEquals("frontier.objective.stock_reconsider", availability.kind());
         var next = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getLast().payload()).replacement();
         assertEquals(action.id(), next.id());

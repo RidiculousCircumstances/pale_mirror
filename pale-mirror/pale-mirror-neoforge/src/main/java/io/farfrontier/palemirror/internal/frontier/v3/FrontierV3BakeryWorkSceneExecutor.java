@@ -38,6 +38,12 @@ final class FrontierV3BakeryWorkSceneExecutor {
         }
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) return;
+        var execution = state.actorExecutions().current(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
+        if (execution == null || !execution.activityOwnerId().equals(job.id()))
+            throw new IllegalArgumentException("bakery command lost its exact admitted execution");
+        var actuation = FrontierV3ActorActuation.capture(state, worker, execution, runtime::decodedState);
+        if (!actuation.current(worker)) return;
         BakeryWorkGoal goal = BakeryWorkGoal.current(state, job);
         if (ServiceAccessCoordinator.witnessedBakeryExit(state, job, FrontierV3SurfaceObservation.observedBody(worker))) {
             FrontierV3CommandSubmission.submit(runtime, "bakery-access-cleared", lease.id().value(),
@@ -47,7 +53,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
         if (ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(),
                         runtime.canonicalState().orElseThrow().instant().ticks())
                 && FrontierV3SupportedBodyCapture.observe(level, worker).isPresent()) {
-            FrontierV3GoalNavigation.stop(worker);
+            FrontierV3GoalNavigation.stop(worker, actuation);
             FrontierV3CommandSubmission.submit(runtime, "bakery-resident-yield", lease.id().value(),
                     new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             return;
@@ -57,12 +63,12 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 && !ServiceAccessCoordinator.depotAvailableForWork(state,
                         FrontierWorldState.depotId(job.settlementId()), job.id(), job.workerId())) {
             FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "depot-service-unavailable");
-            FrontierV3GoalNavigation.stop(worker);
+            FrontierV3GoalNavigation.stop(worker, actuation);
             return;
         }
         if (FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
             FrontierV3PhysicalWaitTrace.clear(worker);
-            FrontierV3GoalNavigation.stop(worker);
+            FrontierV3GoalNavigation.stop(worker, actuation);
             if (job.bakeryWork().orElseThrow().block()
                     .filter(block -> !block.requiresPhysicalReconciliation()).isPresent()) {
                 FrontierV3BakeryPhysicalEffect.clearBlock(level, runtime, lease, job);
@@ -105,7 +111,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 1L, List.of(goal.station()), TraversalCapability.PEDESTRIAN,
                 MovementOrder.ArrivalPolicy.EXACT_STATION);
         FrontierV3GoalNavigation.Result movement = FrontierV3GoalNavigation.pursue(level, worker,
-                FrontierV3GoalNavigation.Goal.routed(order, known, state.bootstrap().bounds()));
+                FrontierV3GoalNavigation.Goal.routed(order, known, state.bootstrap().bounds()), actuation);
         BakeryWorkState work = job.bakeryWork().orElseThrow();
         // Delivery is an already confirmed inventory effect. Clearance can wait for
         // navigation, but cannot retroactively block that completed production.

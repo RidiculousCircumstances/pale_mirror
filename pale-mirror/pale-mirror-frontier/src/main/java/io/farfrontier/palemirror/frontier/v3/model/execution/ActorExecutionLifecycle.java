@@ -147,19 +147,36 @@ public final class ActorExecutionLifecycle {
         return new Transition(state, released, executions);
     }
     public Transition prepareResume(FrontierWorldState state, ActorExecutionId suspended,
-                                    ActorExecutionId successor, long atTick) {
+                                    ActorExecutionId successor, java.util.Optional<ActorExecutionId> releasing, long atTick) {
+        Objects.requireNonNull(releasing, "exact current resume predecessor");
         var retained = state.actorExecutions().actors().get(suspended.actorId());
         var actor = state.actorLocations().get(suspended.actorId());
-        if (atTick < 0 || retained == null || retained.current().isPresent()
+        if (atTick < 0 || retained == null || !retained.current().equals(releasing)
                 || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !retained.suspended().equals(java.util.Optional.of(suspended)))
-            throw new IllegalArgumentException("resume requires vacant exact suspended authority");
+            throw new IllegalArgumentException("resume requires exact current and suspended authorities");
         // Complete successor identity/generation must fail before any owner strategy runs.
-        var executions = state.actorExecutions().resume(suspended, successor);
+        var vacant = releasing.isEmpty() ? state.actorExecutions()
+                : state.actorExecutions().finish(releasing.orElseThrow());
+        var executions = vacant.resume(suspended, successor);
+        FrontierWorldState prepared = state;
+        if (releasing.isPresent()) {
+            var current = releasing.orElseThrow();
+            var passive = capabilities.require(current.activityKind());
+            if (passive.interruption() != ActorActivityCapability.Interruption.RELEASE)
+                throw new IllegalArgumentException("resume cannot displace an active owner without acknowledgement");
+            passive.validateReference(state, current);
+            var checkpoint = Objects.requireNonNull(passive.checkpoint(state, current));
+            checkpoint.validate(state, current);
+            if (!checkpoint.ready()) throw new IllegalArgumentException("resume predecessor retains unfinished effects");
+            prepared = Objects.requireNonNull(passive.release(state, current));
+            if (!prepared.actorExecutions().equals(state.actorExecutions()))
+                throw new IllegalArgumentException("resume predecessor changed shared execution authority");
+        }
         var capability = capabilities.require(suspended.activityKind());
         if (!capability.supportsContinuation()) throw new IllegalArgumentException("owner cannot resume");
-        capability.validateReference(state, suspended);
-        var resumed = Objects.requireNonNull(capability.resume(state, suspended, atTick));
+        capability.validateReference(prepared, suspended);
+        var resumed = Objects.requireNonNull(capability.resume(prepared, suspended, atTick));
         capability.validateReference(resumed, suspended);
         if (!resumed.actorExecutions().equals(state.actorExecutions()))
             throw new IllegalArgumentException("family resume changed common execution authority");

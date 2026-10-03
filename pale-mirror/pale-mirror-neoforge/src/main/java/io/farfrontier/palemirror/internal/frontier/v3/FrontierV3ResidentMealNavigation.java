@@ -14,7 +14,8 @@ import java.util.WeakHashMap;
 
 /** Meal policy supplies a final service goal and known-route hint, never a physical corridor. */
 final class FrontierV3ResidentMealNavigation {
-    private record Route(long leaseRevision, long mealStart, ResidentMeal.Phase phase, boolean admitted,
+    private record Route(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId actuation,
+                         long leaseRevision, long mealStart, ResidentMeal.Phase phase, boolean admitted,
                          List<SurfaceAnchor> waypoints) { }
 
     private static final Map<Mob, Route> ROUTES = new WeakHashMap<>();
@@ -22,13 +23,21 @@ final class FrontierV3ResidentMealNavigation {
 
     private FrontierV3ResidentMealNavigation() { }
 
-    static void pursue(ServerLevel level, FrontierWorldState state, Mob body,
+    static void pursue(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                       FrontierWorldState state, Mob body,
                        AmbientActorLease lease, ResidentMeal meal) {
-        if (meal == null || meal.phase() != ResidentMeal.Phase.MOVE
+        if (meal == null) {
+            ROUTES.remove(body);
+            BLOCKED.remove(body);
+            return; // Its retired command is quiesced at the common entity boundary, never by a new owner.
+        }
+        var actuation = FrontierV3ActorActuation.capture(state, body, meal.executionId(), runtime::decodedState);
+        if (!actuation.current(body)) return;
+        if (meal.phase() != ResidentMeal.Phase.MOVE
                 && !meal.movesToClearance()) {
             ROUTES.remove(body);
             BLOCKED.remove(body);
-            FrontierV3GoalNavigation.stop(body);
+            FrontierV3GoalNavigation.stop(body, actuation);
             return;
         }
         if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS) {
@@ -38,7 +47,7 @@ final class FrontierV3ResidentMealNavigation {
                     .filter(station -> available(level, body, station)).toList();
             if (stations.isEmpty()) {
                 blocked(body, meal, "service_exit:no-available-supported-exit");
-                FrontierV3GoalNavigation.stop(body);
+                FrontierV3GoalNavigation.stop(body, actuation);
                 return;
             }
             String lastReason = "no-reachable-exit";
@@ -48,7 +57,7 @@ final class FrontierV3ResidentMealNavigation {
                         FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, batch,
                         TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
                 var result = FrontierV3GoalNavigation.pursue(level, body,
-                        FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()));
+                        FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()), actuation);
                 if (result.status() != FrontierV3GoalNavigation.Status.BLOCKED) {
                     BLOCKED.remove(body);
                     return;
@@ -60,7 +69,7 @@ final class FrontierV3ResidentMealNavigation {
         }
         Route route = ROUTES.get(body);
         boolean admitted = ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId());
-        if (route == null || route.leaseRevision() != lease.revision()
+        if (route == null || !route.actuation().equals(actuation.id()) || route.leaseRevision() != lease.revision()
                 || route.mealStart() != meal.startedAtTick() || route.phase() != meal.phase()
                 || route.admitted() != admitted
                 || meal.phase() == ResidentMeal.Phase.MOVE
@@ -71,7 +80,7 @@ final class FrontierV3ResidentMealNavigation {
                     FrontierV3SurfaceObservation.observedBody(body).supportingSurface(),
                     ResidentMealProcess.serviceSurface(state, meal), admitted, meal.phase())) {
             try {
-                route = new Route(lease.revision(), meal.startedAtTick(), meal.phase(), admitted,
+                route = new Route(actuation.id(), lease.revision(), meal.startedAtTick(), meal.phase(), admitted,
                         meal.phase() == ResidentMeal.Phase.MOVE
                                 ? ResidentMealKnownNavigation.pathFrom(state, meal,
                                     FrontierV3SurfaceObservation.observedBody(body).supportingSurface(),
@@ -80,21 +89,21 @@ final class FrontierV3ResidentMealNavigation {
                                     FrontierV3SurfaceObservation.observedBody(body).supportingSurface()));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 blocked(body, meal, "known_route:" + unavailable.getMessage());
-                FrontierV3GoalNavigation.stop(body);
+                FrontierV3GoalNavigation.stop(body, actuation);
                 return;
             }
         }
         ROUTES.put(body, route);
         if (FrontierV3SemanticMovement.arrived(level, body, route.waypoints().getLast())) {
             BLOCKED.remove(body);
-            FrontierV3GoalNavigation.stop(body);
+            FrontierV3GoalNavigation.stop(body, actuation);
             return;
         }
         MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
                 FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, List.of(route.waypoints().getLast()),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         FrontierV3GoalNavigation.Result result = FrontierV3GoalNavigation.pursue(level, body,
-                FrontierV3GoalNavigation.Goal.routed(order, route.waypoints(), state.bootstrap().bounds()));
+                FrontierV3GoalNavigation.Goal.routed(order, route.waypoints(), state.bootstrap().bounds()), actuation);
         if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
             blocked(body, meal, "minecraft_path:" + result.reason());
         else BLOCKED.remove(body);

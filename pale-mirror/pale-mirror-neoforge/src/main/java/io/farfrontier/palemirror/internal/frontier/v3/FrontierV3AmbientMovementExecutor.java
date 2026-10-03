@@ -96,7 +96,7 @@ final class FrontierV3AmbientMovementExecutor {
 
     static boolean pursueLocalGoal(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
         if (lease.goal() == AmbientGoalKind.ACTOR_MOVEMENT) {
-            FrontierV3ActorMovementNavigation.pursue(level, state, body, lease,
+            FrontierV3ActorMovementNavigation.pursue(level, runtime, state, body, lease,
                     state.actorMovements().get(actorId));
             return false;
         }
@@ -104,7 +104,7 @@ final class FrontierV3AmbientMovementExecutor {
             ResidentMeal meal = state.humanPopulation().meals().get(actorId);
             if (meal != null && meal.phase() == ResidentMeal.Phase.MOVE
                     && FrontierV3AmbientServiceOccupancy.observe(level, runtime, state, actorId, body, lease)) return true;
-            FrontierV3ResidentMealNavigation.pursue(level, state, body, lease,
+            FrontierV3ResidentMealNavigation.pursue(level, runtime, state, body, lease,
                     meal);
             return false;
         }
@@ -249,7 +249,8 @@ final class FrontierV3AmbientMovementExecutor {
             boolean arrived = movement.order().arrivedAt(observed.supportingSurface());
             boolean exited = ServiceAccessCoordinator.witnessedActorMovementExit(state, movement, observed);
             if (!arrived && !exited) return false;
-            if (arrived) FrontierV3GoalNavigation.stop(body);
+            if (arrived) FrontierV3GoalNavigation.stop(body, FrontierV3ActorActuation.capture(
+                    state, body, movement.executionId(), runtime::decodedState));
             var result = submit(runtime, "ambient-actor-movement-observed", actorId.value(),
                     new ActorMovementHotObserved(actorId, movement.order().goalRevision(), lease.revision(), observed, movement.executionId()));
             FrontierV3DiagnosticTrace.record(level.getServer(), "actor-movement:" + actorId.value(),
@@ -265,14 +266,16 @@ final class FrontierV3AmbientMovementExecutor {
                 // took the turn. Keep its exact meal and body; retry observation
                 // when that turn clears instead of quarantining the whole world.
                 if (!ResidentMealProcess.hotArrivalHasServiceTurn(state, actorId, arrival)) return false;
-                FrontierV3GoalNavigation.stop(body);
+                FrontierV3GoalNavigation.stop(body, FrontierV3ActorActuation.capture(
+                        state, body, meal.executionId(), runtime::decodedState));
                 var result = submit(runtime, "ambient-meal-arrived", actorId.value(), arrival);
                 FrontierV3DiagnosticTrace.record(level.getServer(), "resident-meal:" + actorId.value(),
                         "resident_meal_hot_arrived", actorId, result);
                 return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
             }
             if (meal.phase() == ResidentMeal.Phase.RETURN && observedBody(body).equals(lease.goalBody())) {
-                FrontierV3GoalNavigation.stop(body);
+                FrontierV3GoalNavigation.stop(body, FrontierV3ActorActuation.capture(
+                        state, body, meal.executionId(), runtime::decodedState));
                 var result = submit(runtime, "ambient-meal-cleared", actorId.value(),
                         new ResidentMealHotReturned(actorId, lease.revision(), observedBody(body), meal.executionId()));
                 FrontierV3DiagnosticTrace.record(level.getServer(), "resident-meal:" + actorId.value(),

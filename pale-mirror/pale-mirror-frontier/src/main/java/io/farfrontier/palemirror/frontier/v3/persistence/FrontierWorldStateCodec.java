@@ -45,7 +45,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 222 retains exact settlement work authorization; old test worlds are rejected.
     // Version 225 retains UAE execution identities separately from movement and physical custody.
     // Disposable old worlds are rejected, never given inferred activity authority.
-    static final int VERSION = 226; private static final int MAX_ENTRIES = 65_535;
+    // Version 227 admits selected passive execution and retains exact resume predecessors.
+    static final int VERSION = 227; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

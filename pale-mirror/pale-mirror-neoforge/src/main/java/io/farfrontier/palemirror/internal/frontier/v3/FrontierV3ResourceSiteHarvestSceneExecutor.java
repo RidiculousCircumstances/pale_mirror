@@ -284,6 +284,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) {
             conflict(level, runtime, lease, "hot-worker-unavailable"); return;
         }
+        var actuation = workActuation(state, runtime, job, worker);
+        if (!actuation.current(worker)) return;
         var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
         if (supportedExit.isPresent() && ServiceAccessCoordinator.witnessedHarvestExit(
                 state, job, lease.id(), supportedExit.orElseThrow())) {
@@ -301,7 +303,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(),
                         runtime.canonicalState().orElseThrow().instant().ticks())
                 && FrontierV3SupportedBodyCapture.observe(level, worker).isPresent()) {
-            FrontierV3GoalNavigation.stop(worker);
+            FrontierV3GoalNavigation.stop(worker, actuation);
             if (FrontierV3ResourceFieldLabourExecutor.pause(level, runtime, state, lease, job)) return;
             beginImmediateColdRelease(level, runtime, state, lease);
             return;
@@ -309,7 +311,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         ResourceSiteHarvestGoal serviceGoal = ResourceSiteHarvestGoal.current(state, job);
         if (serviceGoal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
                 && !ServiceAccessCoordinator.depotAvailableForHarvest(state, job)) {
-            FrontierV3GoalNavigation.stop(worker);
+            FrontierV3GoalNavigation.stop(worker, actuation);
             return;
         }
         if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()
@@ -336,7 +338,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             var blockedCell = cycle.layout().cells().get(job.progress().nextCropSlotIndex());
             if (cycle.expectedWorkOutcome(blockedCell.id()) == ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE) {
                 if (!FrontierV3ResourceFieldExclusionObservation.immatureCellCurrent(level, state, site, blockedCell.id())) return;
-                FrontierV3GoalNavigation.stop(worker);
+                FrontierV3GoalNavigation.stop(worker, actuation);
                 if (retainInterruptedTransit(level, runtime, state, lease, job, worker)) return;
                 var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
                 if (binding.isEmpty()) return;
@@ -371,7 +373,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             var blocked = job.navigationBlock().orElseThrow();
             var goal = blocked.target();
             if (blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE) {
-                FrontierV3GoalNavigation.stop(worker);
+                FrontierV3GoalNavigation.stop(worker, actuation);
                 if (state.resourceSites().hasPendingWorldChange(job.siteId())) return;
                 var cycle = state.resourceSites().cycle(job.siteId());
                 var prefix = ResourceSiteHarvestProcess.blockedPrefix(cycle, job.progress().nextCropSlotIndex());
@@ -401,21 +403,18 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                     && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
             ResourceSiteHarvestGoal currentGoal = ResourceSiteHarvestGoal.current(state, job);
             var outcome = FrontierV3GoalNavigation.pursue(level, worker,
-                    hotGoal(state, job, currentGoal));
+                    hotGoal(state, job, currentGoal), actuation);
             if (outcome.status() == FrontierV3GoalNavigation.Status.ARRIVED)
                 acceptObservedSemanticGoal(level, runtime, state, lease, job, worker);
             return;
         }
-        io.farfrontier.palemirror.frontier.v3.model.BlockPosition crop = site.cropSlots().get(
-                job.progress().complete() || job.returningForBatch()
-                        ? Math.max(0, job.progress().lastCompletedCropSlotIndex()) : job.progress().nextCropSlotIndex());
         if (acceptObservedSemanticGoal(level, runtime, state, lease, job, worker)) return;
         ResourceSiteHarvestGoal semanticGoal = ResourceSiteHarvestGoal.current(state, job);
         var atGoal = semanticGoal.legalStations().stream()
                 .filter(station -> FrontierV3SemanticMovement.arrived(level, worker, station)).toList();
         if (atGoal.isEmpty()) {
             var motion = FrontierV3GoalNavigation.pursue(level, worker,
-                    hotGoal(state, job, semanticGoal));
+                    hotGoal(state, job, semanticGoal), actuation);
             if (motion.status() == FrontierV3GoalNavigation.Status.BLOCKED) {
                 // A finite physical failure needs a job-local typed disposition before
                 // COLD can resume.  The old route's waypoint must not be that target.
@@ -444,13 +443,14 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // The semantic crop transition may deliberately span a few durable turns (intent
         // prepare, observed crop postcondition, then receipt).  It is still one declared
         // crop-work phase at the exact station, never permission for a scheduler-paced frozen
-        // body.  Keep the visible, station-bounded tending pose active through those turns as
-        // well as while the next continuation is not due.
+        // body. Preserve the observed station and family-owned work gesture through those
+        // turns without admitting another local locomotion target while the continuation waits.
         // Arrival is the existing observed checkpoint boundary. Publish its station phase
         // before the later due work turn, so the client cannot keep the preceding travel cue
         // across a stationary crop dwell.
         FrontierV3ControlledMobMotion.showHarvestStationDuty(level, worker);
-        tendCurrentCrop(level, worker, crop);
+        // Arrival already holds a supported position. Work may animate here, never
+        // install a second unfenced local target follower while its continuation waits.
         if (!job.progress().hasPendingCrop()
                 && FrontierV3ResourceFieldLabourExecutor.advance(level, runtime, state, lease, job)) return;
         var dueBinding = FrontierV3TraversalScheduleGate.dueBinding(runtime.executionView().orElseThrow(), job);
@@ -531,7 +531,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         List<io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor> observed = goal.legalStations().stream()
                 .filter(station -> FrontierV3SemanticMovement.arrived(level, worker, station)).toList();
         if (observed.isEmpty()) return false;
-        FrontierV3GoalNavigation.stop(worker);
+        var actuation = workActuation(state, runtime, job, worker);
+        if (!FrontierV3GoalNavigation.stop(worker, actuation)) return false;
         if (observed.size() != 1) {
             conflict(level, runtime, lease, "field-work-goal-arrival-ambiguous");
             return true;
@@ -542,8 +543,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 state.actorLocations().get(job.workerId()).body())) return false;
         var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
         if (binding.isEmpty()) {
-            FrontierV3ControlledMobMotion.holdRetainedCheckpoint(level, worker,
-                    FrontierV3SemanticMovement.point(level, observed.getFirst()));
+            // No route or synthetic crop pose: wait at the actual observed station.
             return true;
         }
         var arrived = new ResourceSiteHarvestHotGoalArrived(job.id(), lease.id(), job.workerId(),
@@ -786,21 +786,13 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (!accepted) conflict(level, runtime, lease, "field-work-route-" + FrontierV3SemanticMovement.detail(disposition));
     }
 
-    /**
-     * A visible local crop-tending pose while the one canonical continuation remains in the
-     * future.  It stays strictly inside the current crop's body cell and is intentionally not a
-     * route, semantic action, or time source; the due-gated branches above remain the only
-     * authority that can prepare/progress a crop.
-     */
-    private static void tendCurrentCrop(ServerLevel level, Mob worker,
-                                        io.farfrontier.palemirror.frontier.v3.model.BlockPosition crop) {
-        // A crop slot itself is the non-solid feet cell above its farmland support. The
-        // retained crop position is therefore already the worker's Y datum. The actuator
-        // derives its next local pose every server turn, independent of semantic due cadence.
-        FrontierV3ControlledMobMotion.tendCurrentCrop(level, worker, crop);
-        // The visible work gesture is emitted at PREPARED -> RUNNING above, not by this
-        // per-turn local hold.  This pose must never create a periodic animation cadence of
-        // its own or overlap a subsequently admitted retained traversal.
+    private static FrontierV3ActorActuation workActuation(FrontierWorldState state,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ResourceSiteHarvestJob job, Mob worker) {
+        var execution = state.actorExecutions().current(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId());
+        if (execution == null || !execution.activityOwnerId().equals(job.id()))
+            throw new IllegalArgumentException("field command lost its exact admitted execution");
+        return FrontierV3ActorActuation.capture(state, worker, execution, runtime::decodedState);
     }
 
 

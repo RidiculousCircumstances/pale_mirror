@@ -125,6 +125,7 @@ public final class DiagnosticProducerContract {
         "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.structure_damaged",
         "frontier.supply_contract_abandoned", "frontier.supply_contract_created", "frontier.terminal_logistics_compacted",
         "frontier.actor_execution_resumed",
+        "frontier.actor_presence_started",
         "frontier.actor_body_released",
         "kernel.schedule_consumed", "kernel.schedule_rescheduled", "kernel.schedule_created", "kernel.schedule_cancelled");
     /** SavedData quarantine is a separately persisted producer, explicitly bridged rather than inferred from an adapter status. */

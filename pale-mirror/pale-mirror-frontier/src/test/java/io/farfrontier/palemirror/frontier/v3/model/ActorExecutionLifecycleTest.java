@@ -93,13 +93,33 @@ class ActorExecutionLifecycleTest {
         assertTrue(completedMeal.current().isEmpty(), "meal completion cannot choose or start a work successor");
         assertEquals(execution, completedMeal.suspended().orElseThrow());
         assertEquals(job, state.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow());
+        // Passive presence can coexist with the exact paused claim. It is not a new job
+        // and cannot silently transfer body/cargo or erase the work to be resumed.
+        var presence = state.actorExecutions().next(job.workerId(), ActorActivityKind.PRESENCE, job.workerId());
+        state = ActorExecutionComposition.LIFECYCLE.prepareBegin(state, presence, due)
+                .commit(state, FrontierWorldStateUpdate.begin());
+        assertEquals(execution, state.actorExecutions().actors().get(job.workerId()).suspended().orElseThrow());
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         var review = ResidentActivityProcess.plan(state, ResidentActivityProcess.review(job.workerId(), due + 1L));
         var resumed = review.stream().map(ProposedEvent::payload).filter(ActorExecutionResumed.class::isInstance)
                 .map(ActorExecutionResumed.class::cast).findFirst().orElseThrow();
         assertEquals(execution, resumed.suspended());
-        assertEquals(3L, resumed.successor().generation());
+        assertEquals(4L, resumed.successor().generation());
+        assertEquals(java.util.Optional.of(presence), resumed.releasing());
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         assertEquals(resumed, codecs.decode(resumed.type(), codecs.encode(resumed)));
+        var bytes = codecs.encode(resumed);
+        assertThrows(RuntimeException.class, () -> codecs.decode(resumed.type(), java.util.Arrays.copyOf(bytes, bytes.length - 1)));
+        var stalePredecessor = state;
+        assertThrows(IllegalArgumentException.class, () -> ActorExecutionComposition.LIFECYCLE.prepareResume(
+                stalePredecessor, execution, resumed.successor(), java.util.Optional.empty(), resumed.atTick()),
+                "an older vacancy-based resume cannot displace the current presence");
+        var newerPresence = state.actorExecutions().next(job.workerId(), ActorActivityKind.PRESENCE, job.workerId());
+        var superseded = ActorExecutionComposition.LIFECYCLE.prepareBegin(state, newerPresence, resumed.atTick())
+                .commit(state, FrontierWorldStateUpdate.begin());
+        assertThrows(IllegalArgumentException.class, () -> ActorExecutionComposition.LIFECYCLE.prepareResume(
+                superseded, execution, resumed.successor(), resumed.releasing(), resumed.atTick()),
+                "the full captured predecessor prevents a late resume from stealing its successor");
         var event = new FrontierEvent(FrontierEvent.SCHEMA_VERSION, new EventId("event:execution-resume"),
                 new TransactionId("transaction:execution-resume"), state.bootstrap().worldId(), new Revision(1),
                 new SimInstant(resumed.atTick()), job.workerId(),

@@ -271,7 +271,7 @@ class FrontierWorldProcessCatalogTest {
                         new ActorExecutionId(new SubjectId("resident:representative"), ActorActivityKind.FIELD_HARVEST,
                                 new SubjectId("job:representative"), 1L),
                         new ActorExecutionId(new SubjectId("resident:representative"), ActorActivityKind.FIELD_HARVEST,
-                                new SubjectId("job:representative"), 3L), 2L)),
+                                new SubjectId("job:representative"), 3L), java.util.Optional.empty(), 2L)),
                 Map.entry("actor-movement", new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced(
                         new SubjectId("resident:representative"), 1L, 2L,
                         new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(

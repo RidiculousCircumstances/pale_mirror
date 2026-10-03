@@ -160,11 +160,15 @@ public final class ResidentActivityProcess {
         ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, action.subject(), now);
         var execution = state.actorExecutions().actors().get(action.subject());
         if (choice.kind() == ResidentActivityChoice.Kind.WORK && execution != null
-                && execution.current().isEmpty() && execution.suspended().isPresent()) {
+                && execution.suspended().isPresent()
+                && (execution.current().isEmpty() || ActorExecutionComposition.CAPABILITIES
+                    .require(execution.current().orElseThrow().activityKind()).interruption()
+                        == io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityCapability.Interruption.RELEASE)) {
             var suspended = execution.suspended().orElseThrow();
             var successor = state.actorExecutions().next(action.subject(), suspended.activityKind(), suspended.activityOwnerId());
-            var resumed = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed(suspended, successor, now);
-            state = ActorExecutionComposition.LIFECYCLE.prepareResume(state, suspended, successor, now)
+            var resumed = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed(
+                    suspended, successor, execution.current(), now);
+            state = ActorExecutionComposition.LIFECYCLE.prepareResume(state, suspended, successor, execution.current(), now)
                     .commit(state, FrontierWorldStateUpdate.begin());
             events.add(new ProposedEvent(action.subject(), resumed));
         }
@@ -185,6 +189,15 @@ public final class ResidentActivityProcess {
             events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Created(
                     ActorMovementProcess.progress(movement, Math.addExact(now, 1L)))));
         });
+        var selectedExecution = selectedState.actorExecutions().actors().get(action.subject());
+        if (!mealStarted && events.stream().noneMatch(event -> event.payload()
+                instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted)
+                && (selectedExecution == null || selectedExecution.current().isEmpty())) {
+            var presence = selectedState.actorExecutions().next(action.subject(),
+                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, action.subject());
+            events.add(new ProposedEvent(action.subject(),
+                    new io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarted(presence, now)));
+        }
         if (!mealStarted && events.stream().noneMatch(event -> event.payload()
                 instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted)
                 && HumanAssignmentProjection.compile(selectedState).idle(resident.id())

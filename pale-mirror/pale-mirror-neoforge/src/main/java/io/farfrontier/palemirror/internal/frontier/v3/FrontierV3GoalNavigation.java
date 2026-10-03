@@ -14,6 +14,7 @@ import java.util.List;
 
 /** Provider-neutral HOT boundary: the caller names one retained goal, never a path engine. */
 final class FrontierV3GoalNavigation {
+    private static final java.util.Map<Mob, FrontierV3ActorActuation> ACTUATIONS = new java.util.WeakHashMap<>();
     enum Status { IN_PROGRESS, ARRIVED, BLOCKED, AMBIGUOUS }
     enum BlockReason { PATH_UNAVAILABLE, PATH_STALLED, TARGET_CHUNK_UNLOADED, OFF_CONTRACT,
         UNSUPPORTED_CAPABILITY, UNSUPPORTED_MEDIUM, SEARCH_BUDGET_EXHAUSTED }
@@ -83,11 +84,30 @@ final class FrontierV3GoalNavigation {
     }
 
     static Result pursue(ServerLevel level, Mob actor, Goal goal) {
+        requireUnfenced(actor);
+        return pursueProvider(level, actor, goal);
+    }
+
+    /** A successor may replace a path, but stale authority cannot refresh or cancel that path. */
+    static Result pursue(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation) {
+        Objects.requireNonNull(actuation, "navigation actuation");
+        if (!actuation.current(actor))
+            return new Result(Status.AMBIGUOUS, "stale-body-or-execution-authority", Optional.empty(), Optional.empty());
+        var previous = ACTUATIONS.get(actor);
+        if (previous == null || !previous.id().equals(actuation.id())) {
+            clearProvider(actor);
+            FrontierV3ControlledMobMotion.retireLocalActuation(actor);
+        }
+        ACTUATIONS.put(actor, actuation);
+        return pursueProvider(level, actor, goal);
+    }
+
+    private static Result pursueProvider(ServerLevel level, Mob actor, Goal goal) {
         Objects.requireNonNull(level, "navigation level");
         Objects.requireNonNull(actor, "navigation actor");
         Objects.requireNonNull(goal, "navigation goal");
         if (goal.capability() != TraversalCapability.PEDESTRIAN) {
-            stop(actor);
+            clearProvider(actor);
             return new Result(Status.BLOCKED, "no-registered-provider-for-" + goal.capability(),
                     Optional.of(BlockReason.UNSUPPORTED_CAPABILITY), Optional.empty());
         }
@@ -101,6 +121,7 @@ final class FrontierV3GoalNavigation {
     }
 
     static boolean advanceAtEntityBoundary(Mob actor) {
+        if (!validateRetainedActuation(actor)) return false;
         return FrontierV3MinecraftGoalNavigation.advanceAtEntityBoundary(actor);
     }
     /** Read-only feasibility probe for owner-selected alternatives; never starts movement or awards work. */
@@ -108,8 +129,36 @@ final class FrontierV3GoalNavigation {
         return goal.capability() == TraversalCapability.PEDESTRIAN
                 && FrontierV3MinecraftGoalNavigation.canReach(level, actor, goal.legalStations(), goal.scope());
     }
-    static boolean controls(Mob actor) { return FrontierV3MinecraftGoalNavigation.controls(actor); }
+    static boolean controls(Mob actor) {
+        return validateRetainedActuation(actor) && FrontierV3MinecraftGoalNavigation.controls(actor);
+    }
     static void stop(Mob actor) {
+        requireUnfenced(actor);
+        clearProvider(actor);
+    }
+    static boolean stop(Mob actor, FrontierV3ActorActuation actuation) {
+        Objects.requireNonNull(actuation, "stop actuation");
+        if (!actuation.current(actor)) return false;
+        var retained = ACTUATIONS.get(actor);
+        if (retained != null && !retained.id().equals(actuation.id()) && retained.current(actor)) return false;
+        ACTUATIONS.put(actor, actuation);
+        clearProvider(actor);
+        FrontierV3ControlledMobMotion.retireLocalActuation(actor);
+        return true;
+    }
+    private static boolean validateRetainedActuation(Mob actor) {
+        var retained = ACTUATIONS.get(actor);
+        if (retained == null || retained.current(actor)) return true;
+        // Keep the fence after quiescing: an unversioned legacy refresh cannot revive this path.
+        clearProvider(actor);
+        FrontierV3ControlledMobMotion.retireLocalActuation(actor);
+        return false;
+    }
+    private static void requireUnfenced(Mob actor) {
+        if (ACTUATIONS.containsKey(actor))
+            throw new IllegalArgumentException("actor navigation requires its captured actuation authority");
+    }
+    private static void clearProvider(Mob actor) {
         FrontierV3RouteNavigation.stop(actor);
         FrontierV3MinecraftGoalNavigation.stop(actor);
     }
