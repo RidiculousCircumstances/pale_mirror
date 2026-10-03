@@ -37,8 +37,9 @@ final class FrontierV3ActorCarrierComposition {
 
     /** Closed XACT-001 inventory; every exact body executor must be represented here. */
     enum InventoryEntry {
-        AMBIENT_BODY(FrontierV3AmbientActorExecutor.class, Role.PRODUCER),
-        SCENE_BODY(FrontierV3SceneExecutor.class, Role.PRODUCER),
+        ACTOR_BODY(FrontierV3ActorBodyController.class, Role.PRODUCER),
+        AMBIENT_BODY(FrontierV3AmbientActorExecutor.class, Role.ADOPTER),
+        SCENE_BODY(FrontierV3SceneExecutor.class, Role.ADOPTER),
         RESOURCE_HARVEST(FrontierV3ResourceSiteHarvestSceneExecutor.class, Role.ADOPTER),
         PRODUCTION_WORK(FrontierV3ProductionWorkSceneExecutor.class, Role.ADOPTER),
         SETTLEMENT_SERVICE(FrontierV3SettlementServiceWorkSceneExecutor.class, Role.ADOPTER),

@@ -79,7 +79,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
     private static void assemble(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                  FrontierWorldState state, SceneLease lease) {
         if (!FrontierV3SceneExecutor.demandExists(level, lease.handoffPosition())) return;
-        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3ActorCarrierFactory.materializeSceneBodies(FrontierV3ActorCarrierComposition.InventoryEntry.MEDICAL_TREATMENT, level, state, lease);
+        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.MEDICAL_TREATMENT);
         if (result == FrontierV3SceneExecutor.BodyMaterialization.CONFLICT) { conflict(level, runtime, lease, "prepared-body-conflict"); return; }
         if (result != FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) return;
         if (!atInfirmary(level, runtime, state, lease)) return;

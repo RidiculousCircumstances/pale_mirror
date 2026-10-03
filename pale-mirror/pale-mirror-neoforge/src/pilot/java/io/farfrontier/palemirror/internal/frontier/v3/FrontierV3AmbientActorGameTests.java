@@ -444,7 +444,7 @@ public final class FrontierV3AmbientActorGameTests {
                 FrontierV3ActorOwnerBinding.scene(target, lease.id())), "fixture must retain the exact pending transfer");
         ledger.persist(level, initial.bootstrap().worldId());
         var feet = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, feet);
-        var body = FrontierV3ActorCarrierFactory.create(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY, level, source,
+        var body = FrontierV3ActorCarrierFactory.create(FrontierV3ActorCarrierComposition.InventoryEntry.ACTOR_BODY, level, source,
                 unknown.actorLocations().get(member.actorId()).condition());
         body.setPos(feet.getX() + 0.5D, feet.getY(), feet.getZ() + 0.5D); body.setNoAi(true); body.setHealth(7.0F);
         body.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, member.actorId().value());
@@ -475,7 +475,7 @@ public final class FrontierV3AmbientActorGameTests {
             helper.assertValueEqual(body.position(), pose, "no recovery teleport");
             helper.assertValueEqual(body.getHealth(), 7.0F, "no recovery healing");
             helper.assertTrue(ledger.pendingHandoff(member.actorId()).isPresent(), "retag is not a save acknowledgement");
-            var duplicate = FrontierV3ActorCarrierFactory.create(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY, level, source,
+            var duplicate = FrontierV3ActorCarrierFactory.create(FrontierV3ActorCarrierComposition.InventoryEntry.ACTOR_BODY, level, source,
                     unknown.actorLocations().get(member.actorId()).condition());
             helper.assertFalse(FrontierV3ActorHandoffRecovery.retainsRecordedBody(level, unknown, duplicate),
                     "an indexed body excludes another Java object with the same recorded UUID");

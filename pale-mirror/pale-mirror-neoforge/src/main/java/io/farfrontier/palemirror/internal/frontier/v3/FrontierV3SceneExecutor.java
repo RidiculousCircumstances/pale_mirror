@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
 import io.farfrontier.palemirror.frontier.v3.model.OperationExecutionAuthority;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
@@ -244,7 +245,7 @@ final class FrontierV3SceneExecutor {
         }
     }
     private static void materializePrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
-        BodyMaterialization result = FrontierV3ActorCarrierFactory.materializeSceneBodies(FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY, level, state, lease);
+        BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY);
         BodyMaterialization carrier = result == BodyMaterialization.COMPLETE
                 ? FrontierV3CargoCarrierExecutor.materialize(level, state, lease) : BodyMaterialization.DEFERRED;
         if (result == BodyMaterialization.COMPLETE && carrier == BodyMaterialization.COMPLETE) {
@@ -287,8 +288,8 @@ final class FrontierV3SceneExecutor {
         // never reset a pending attempt or infer creation permission from absence.
         if (FrontierSceneBehaviors.recoveredStatus(state, lease) != SceneLeaseStatus.DRAINING
                 && canResumeUnstartedBodyAdmissions(level, state, lease)) {
-            FrontierV3ActorCarrierFactory.materializeSceneBodies(
-                    FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY, level, state, lease);
+            FrontierV3SceneExecutor.materializeBodies(
+                    level, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY);
         }
         java.util.Set<SubjectId> missing = lease.members().stream()
                 .filter(member -> state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE)
@@ -389,7 +390,7 @@ final class FrontierV3SceneExecutor {
     }
     static BodyMaterialization materializeBodies(ServerLevel level, FrontierWorldState state, SceneLease lease,
                                                  FrontierV3ActorCarrierComposition.InventoryEntry adopter) {
-        FrontierV3ActorCarrierComposition.requireRegistered(adopter);
+        FrontierV3ActorCarrierComposition.requireRole(adopter, FrontierV3ActorCarrierComposition.Role.ADOPTER);
         // Blocks become available before Minecraft has necessarily restored the saved entity
         // columns. A deterministic body UUID must never be admitted into that interval: a saved
         // scene member could still join with the same identity. This only reads readiness; it
@@ -453,64 +454,28 @@ final class FrontierV3SceneExecutor {
                 continue;
             }
             if (lease.ambientHandoffActorIds().contains(member.actorId())) return BodyMaterialization.DEFERRED;
-            // A direct PREPARED scene may be the first natural return after its predecessor
-            // fenced and released the exact body.  Reconstruct it here only from that same
-            // inactive UUID carrier at a newer physical revision.  This shared scene boundary
-            // consumes the carrier after admission, so it cannot leave concurrent custody or
-            // fall back to a newly selected worker.
-            FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-            if (ledger.pendingAdoption(member.actorId()).isPresent() || ledger.pendingHandoff(member.actorId()).isPresent()) return BodyMaterialization.CONFLICT;
-            FrontierV3AmbientCarrierLedger.Reconciliation carrier = ledger.reconciliation(FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
-                    FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
-                    lease.revision(), 1L));
-            if (carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER
-                    && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) return BodyMaterialization.CONFLICT;
+            // The scene owns its participant list and placement constraints, not
+            // the decision to create/reconstruct or physically admit an actor.
             BodyPosition canonical = lease.memberPosition(member.actorId());
-            BlockPos candidate = new BlockPos(canonical.x(), canonical.y() - 1, canonical.z());
-            if (!level.hasChunkAt(candidate)) return BodyMaterialization.DEFERRED;
-            BlockPos position = standingPosition.resolve(level, candidate);
-            // The semantic floor is projected independently and only into naturally loaded
-            // chunks.  A fresh empty support column is therefore a normal materialization
-            // dependency, not permission to substitute a higher terrain surface or to mark a
-            // player/world conflict before the owned projection has had a chance to run.
-            if (position == null) return BodyMaterialization.DEFERRED;
             boolean bioform = bioform(state, member.actorId());
-            if (position.getY() != canonical.y()) return BodyMaterialization.CONFLICT;
             long custodyEpoch = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, member.actorId()).physicalEpoch();
-            var firstDeclaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
-                    FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
-                    FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), custodyEpoch);
-            if (carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY
-                    && !FrontierV3AmbientActorExecutor.hasUnusedFirstAdmission(ledger, firstDeclaration)) return BodyMaterialization.CONFLICT;
-            Mob body = FrontierV3ActorCarrierFactory.create(FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY, level, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
-                    FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
-                    lease.revision(), custodyEpoch), state.actorLocations().get(member.actorId()).condition());
-            body.setPos(canonical.x() + 0.5D, canonical.y(), canonical.z() + 0.5D);
-            body.setPersistenceRequired();
-            body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, custodyEpoch);
-            body.getPersistentData().putString(LEASE_KEY, lease.id().value());
-            body.getPersistentData().putString(ACTOR_KEY, member.actorId().value());
-            body.getPersistentData().putLong(REVISION_KEY, lease.revision());
-            body.setNoAi(true);
-            if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
-                    FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
-            body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform));
-            body.setCustomNameVisible(true);
-            if (!FrontierV3BakeryHandProjection.prepareNew(state, lease, member, body)) return BodyMaterialization.CONFLICT;
-            if (!mark(body, state, lease, member)) return BodyMaterialization.CONFLICT;
             var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
                     FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
                     FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), custodyEpoch);
-            boolean added = carrier == FrontierV3AmbientCarrierLedger.Reconciliation.READY
-                    ? FrontierV3ActorAdoptionAdmission.admit(ledger, FrontierV3ActorOwnerBinding.scene(declaration, lease.id()),
-                        () -> ledger.persist(level, state.bootstrap().worldId()), () -> level.addFreshEntity(body))
-                    : FrontierV3ActorFirstAdmissionBoundary.admit(ledger, FrontierV3ActorOwnerBinding.scene(declaration, lease.id()),
-                        () -> ledger.persist(level, state.bootstrap().worldId()), () -> level.addFreshEntity(body));
-            if (!added) {
-                PaleMirrorMod.LOGGER.warn("Frontier v3 scene body admission failed lease={} actor={} uuid={} body={}",
-                        lease.id().value(), member.actorId().value(), member.entityId(), canonical);
-                return BodyMaterialization.CONFLICT;
-            }
+            var surfaces = List.of(canonical.supportingSurface());
+            var result = FrontierV3ActorBodyController.materialize(level, state,
+                    new FrontierV3ActorBodyController.BirthRequest(FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY,
+                            FrontierV3ActorOwnerBinding.scene(declaration, lease.id()),
+                            surfaces, new FrontierV3NavigationScope.Restricted(LocalNavigationEnvelope.along(surfaces, surfaces)),
+                            standingPosition::resolve, body -> {
+                                if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
+                                        FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
+                                body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform));
+                                body.setCustomNameVisible(true);
+                                return FrontierV3BakeryHandProjection.prepareNew(state, lease, member, body);
+                            }));
+            if (result == FrontierV3ActorBodyController.Result.DEFERRED) return BodyMaterialization.DEFERRED;
+            if (result == FrontierV3ActorBodyController.Result.CONFLICT) return BodyMaterialization.CONFLICT;
         }
         return BodyMaterialization.COMPLETE;
     }
@@ -889,7 +854,7 @@ final class FrontierV3SceneExecutor {
                     || ambient.revision() != from.authorityRevision()) return false;
         }
         FrontierV3ActorCarrierComposition.requireRole(FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY,
-                FrontierV3ActorCarrierComposition.Role.PRODUCER);
+                FrontierV3ActorCarrierComposition.Role.ADOPTER);
         return FrontierV3ActorHandoffAdmission.transfer(level, state.bootstrap().worldId(), entity, FrontierV3ActorOwnerBinding.scene(target, lease.id()));
     }
     /** A loaded-world obstruction or altered owned body is a physical conflict, not restart evidence. */

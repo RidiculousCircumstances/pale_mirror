@@ -352,14 +352,8 @@ final class FrontierV3AmbientActorExecutor {
     }
     private static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody,
                                       FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPositionProvider) {
-        return materialize(level, state, actorId, canonicalBody, standingPositionProvider,
-                io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId).physicalEpoch(), level::addFreshEntity);
-    }
-    private static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody,
-                                      FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPositionProvider,
-                                      long custodyEpoch, java.util.function.Predicate<Mob> admission) {
         FrontierV3ActorCarrierComposition.requireRole(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY,
-                FrontierV3ActorCarrierComposition.Role.PRODUCER);
+                FrontierV3ActorCarrierComposition.Role.ADOPTER);
         if (!state.actorLocations().containsKey(actorId)) return Result.CONFLICT;
         UUID entityId = entityId(state, actorId); Entity existing = level.getEntity(entityId); boolean bioform = bioform(state, actorId);
         if (existing != null) {
@@ -376,29 +370,31 @@ final class FrontierV3AmbientActorExecutor {
             return Result.CURRENT;
         }
         long ambientRevision = state.ambientLeases().containsKey(actorId) ? state.ambientLeases().get(actorId).revision() : 1L;
+        long custodyEpoch = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId).physicalEpoch();
         FrontierV3ActorCarrierComposition.Declaration declaration = carrierDeclaration(state, actorId,
                 FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, entityId,
                 FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambientRevision, custodyEpoch);
-        Mob body = FrontierV3ActorCarrierFactory.create(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY, level, declaration,
-                state.actorLocations().get(actorId).condition());
         var lease = state.ambientLeases().get(actorId);
         var candidates = lease != null && lease.status() == AmbientLeaseStatus.PREPARED && canonicalBody.equals(lease.handoffBody())
                 ? AmbientPlacementPolicy.candidates(state, lease) : List.of(canonicalBody.supportingSurface());
-        var placement = FrontierV3BodyPlacement.select(level, body, candidates,
-                new FrontierV3NavigationScope.Restricted(LocalNavigationEnvelope.along(candidates, candidates)), standingPositionProvider::resolve);
-        if (placement.isEmpty()) return Result.DEFERRED;
-        body.setPersistenceRequired();
-        body.getPersistentData().putLong(CUSTODY_EPOCH_KEY, custodyEpoch);
-        body.setNoAi(true);
-        if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
-        hydrateExactHeldEquipment(body, state, actorId);
-        if (!FrontierV3ActorCarryProjection.prepareNew(state, actorId, body)
-                || !FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)
-                || !FrontierV3ResidentMealHandProjection.prepareAmbientNew(state, actorId, body)) return Result.CONFLICT;
-        FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
-        body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
-        if (!FrontierV3BodyPlacement.available(level, body, body.getBoundingBox())) return Result.DEFERRED;
-        return admission.test(body) ? Result.APPLIED : Result.CONFLICT;
+        var result = FrontierV3ActorBodyController.materialize(level, state,
+                new FrontierV3ActorBodyController.BirthRequest(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY,
+                        FrontierV3ActorOwnerBinding.ambient(declaration), candidates,
+                        new FrontierV3NavigationScope.Restricted(LocalNavigationEnvelope.along(candidates, candidates)),
+                        standingPositionProvider::resolve, body -> {
+                            if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
+                            hydrateExactHeldEquipment(body, state, actorId);
+                            if (!FrontierV3ActorCarryProjection.prepareNew(state, actorId, body)
+                                    || !FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)
+                                    || !FrontierV3ResidentMealHandProjection.prepareAmbientNew(state, actorId, body)) return false;
+                            FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
+                            return true;
+                        }));
+        return switch (result) {
+            case APPLIED -> Result.APPLIED;
+            case DEFERRED -> Result.DEFERRED;
+            case CONFLICT -> Result.CONFLICT;
+        };
     }
     private static void hydrateExactHeldEquipment(Mob body, FrontierWorldState state, SubjectId actorId) {
         if (!body.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return;
@@ -434,29 +430,7 @@ final class FrontierV3AmbientActorExecutor {
                     FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(existing), ledger)) return Result.CONFLICT;
             return materialize(level, state, actorId, canonicalBody, standingPositionProvider);
         }
-        // An unacknowledged creation is not a new inactive-carrier admission.
-        // Its missing body needs recovery, never another attempt at creation.
-        if (ledger.pendingAdoption(actorId).isPresent() || ledger.pendingHandoff(actorId).isPresent()) return Result.CONFLICT;
-        BlockPos position = minecraftBody(canonicalBody);
-        if (!mayCreateFreshBody(level.hasChunkAt(position), level.areEntitiesLoaded(ChunkPos.asLong(position)), true)) return Result.DEFERRED;
-        if (existing == null && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER
-                && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) return Result.CONFLICT;
-        if (carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) {
-            var first = carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                    entityId(state, actorId), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambient.revision(),
-                    io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId).physicalEpoch());
-            if (!hasUnusedFirstAdmission(ledger, first)) return Result.CONFLICT;
-            return materialize(level, state, actorId, canonicalBody, standingPositionProvider, first.epoch(),
-                    body -> FrontierV3ActorFirstAdmissionBoundary.admit(ledger, FrontierV3ActorOwnerBinding.ambient(first),
-                            () -> ledger.persist(level, state.bootstrap().worldId()), () -> level.addFreshEntity(body)));
-        }
-        long reconstructionEpoch = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId).physicalEpoch();
-        var declaration = carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                entityId(state, actorId), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
-                ambient.revision(), reconstructionEpoch);
-        return materialize(level, state, actorId, canonicalBody, standingPositionProvider, reconstructionEpoch,
-                body -> FrontierV3ActorAdoptionAdmission.admit(ledger, FrontierV3ActorOwnerBinding.ambient(declaration),
-                        () -> ledger.persist(level, state.bootstrap().worldId()), () -> level.addFreshEntity(body)));
+        return materialize(level, state, actorId, canonicalBody, standingPositionProvider);
     }
     static UUID entityId(FrontierWorldState state, SubjectId actorId) { return io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId); }
     static FrontierV3ActorCarrierComposition.Declaration carrierDeclaration(FrontierWorldState state, SubjectId actorId,
@@ -841,10 +815,7 @@ final class FrontierV3AmbientActorExecutor {
 
     static boolean hasUnusedFirstAdmission(FrontierV3AmbientCarrierLedger ledger,
                                            FrontierV3ActorCarrierComposition.Declaration declaration) {
-        return ledger.firstAdmission(declaration.actorId()).filter(value ->
-                value.identity().matches(declaration) && (value.phase() == FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED
-                    || value.phase() == FrontierV3ActorFirstAdmission.Phase.PROVEN_ABSENT
-                        && value.attempt().orElseThrow().declaration().equals(declaration))).isPresent();
+        return FrontierV3ActorBodyController.hasUnusedFirstAdmission(ledger, declaration);
     }
     static boolean hasNeverCreatedFirstAdmission(FrontierV3AmbientCarrierLedger ledger,
                                                  FrontierV3ActorCarrierComposition.Declaration declaration) {

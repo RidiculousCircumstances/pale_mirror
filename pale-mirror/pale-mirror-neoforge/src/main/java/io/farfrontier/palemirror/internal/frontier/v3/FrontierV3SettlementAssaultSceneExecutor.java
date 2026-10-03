@@ -251,7 +251,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
 
     private static void materializePrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                             FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3ActorCarrierFactory.materializeSceneBodies(FrontierV3ActorCarrierComposition.InventoryEntry.SETTLEMENT_ASSAULT, level, state, lease);
+        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.SETTLEMENT_ASSAULT);
         if (result == FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) {
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_hot", lease,
                     submit(runtime, "settlement-assault-hot", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));

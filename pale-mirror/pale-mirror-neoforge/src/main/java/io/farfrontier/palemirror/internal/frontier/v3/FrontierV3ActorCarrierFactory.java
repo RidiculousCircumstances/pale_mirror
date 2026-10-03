@@ -1,7 +1,5 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.ActorCondition;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
@@ -10,7 +8,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 
 /**
- * The sole production construction and scene-adoption bridge for exact actor bodies.
+ * Minecraft construction provider used only by the shared body controller.
  * A declaration is deliberately required before a Minecraft type is selected.
  */
 final class FrontierV3ActorCarrierFactory {
@@ -45,9 +43,4 @@ final class FrontierV3ActorCarrierFactory {
         return (float) health;
     }
 
-    static FrontierV3SceneExecutor.BodyMaterialization materializeSceneBodies(FrontierV3ActorCarrierComposition.InventoryEntry entry,
-                                                                                 ServerLevel level, FrontierWorldState state, SceneLease lease) {
-        FrontierV3ActorCarrierComposition.requireRegistered(entry);
-        return FrontierV3SceneExecutor.materializeBodies(level, state, lease, entry);
-    }
 }

@@ -424,9 +424,7 @@ public final class FrontierV3SceneGameTests {
                 var declaration = new FrontierV3ActorCarrierComposition.Declaration(
                         new SubjectId(("actor:health-" + kind.name() + "-" + owner.name()).toLowerCase(java.util.Locale.ROOT)), kind, owner,
                         java.util.UUID.randomUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L, 1L);
-                var producer = owner == FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE
-                        ? FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY
-                        : FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY;
+                var producer = FrontierV3ActorCarrierComposition.InventoryEntry.ACTOR_BODY;
                 var body = FrontierV3ActorCarrierFactory.create(producer, helper.getLevel(), declaration, condition);
                 helper.assertValueEqual(body.getHealth(), 7.25F, "new body must retain canonical injury");
                 var saved = new CompoundTag();
