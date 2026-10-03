@@ -189,6 +189,21 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         long requiredSlots() { return occupied.size() + Math.max(packedStacks, bound.size()); }
     }
 
+    /** Canonical capacity, not a claim that an unloaded chest has been physically observed. */
+    public record ContainerCapacity(int slotCount, int exactSlots, int boundFungibleSlots,
+                                    long packedFungibleSlots, int reservedSlots, long freeCapacitySlots,
+                                    boolean reservationsValid) { }
+
+    public ContainerCapacity containerCapacity(SubjectId containerId, Set<Integer> reservedSlots) {
+        ContainerRecord container = containers.get(Objects.requireNonNull(containerId, "container id"));
+        if (container == null) throw new IllegalArgumentException("unknown container: " + containerId.value());
+        ContainerSlotBudget budget = slotBudget(containerId);
+        boolean valid = validReservations(container, budget, reservedSlots);
+        return new ContainerCapacity(container.slotCount(), budget.occupied().size(), budget.bound().size(),
+                budget.packedStacks(), reservedSlots.size(), valid
+                        ? Math.max(0L, container.slotCount() - budget.requiredSlots() - reservedSlots.size()) : 0L, valid);
+    }
+
     private ContainerSlotBudget slotBudget(SubjectId containerId) {
         return slotBudget(containerId, Map.of());
     }

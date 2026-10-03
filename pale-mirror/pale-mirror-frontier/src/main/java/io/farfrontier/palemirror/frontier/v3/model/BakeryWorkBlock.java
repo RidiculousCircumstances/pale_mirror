@@ -25,4 +25,9 @@ public record BakeryWorkBlock(Reason reason, SubjectId scopeId, int slot, String
                 || !observedKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}"))
             throw new IllegalArgumentException("bakery block needs a bounded physical observation");
     }
+
+    /** A failed physical route is re-evaluated by the next exclusive navigation provider. */
+    public boolean requiresPhysicalReconciliation() {
+        return reason != Reason.ROUTE_BLOCKED;
+    }
 }

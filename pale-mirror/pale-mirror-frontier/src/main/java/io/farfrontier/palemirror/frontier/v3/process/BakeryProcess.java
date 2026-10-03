@@ -109,7 +109,7 @@ public final class BakeryProcess {
     }
 
     private static Optional<String> coldBlocker(FrontierWorldState state, ProductionJob job, boolean checkOutputCapacity) {
-        if (job.bakeryWork().orElseThrow().block().isPresent())
+        if (job.bakeryWork().orElseThrow().block().filter(BakeryWorkBlock::requiresPhysicalReconciliation).isPresent())
             return Optional.of("BAKERY_" + job.bakeryWork().orElseThrow().block().orElseThrow().reason());
         if (job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()) return Optional.of("PENDING_PHYSICAL_EFFECT");
         if (job.inputHold() instanceof ProductionInputHold.FungibleBound
@@ -137,7 +137,8 @@ public final class BakeryProcess {
 
     /** A read-only route diagnostic; no planner state or physical world is changed. */
     public static Optional<String> coldRouteBlocker(FrontierWorldState state, ProductionJob job) {
-        if (coldBlocker(state, job).isPresent()) return Optional.empty();
+        Optional<String> eligibility = coldBlocker(state, job);
+        if (eligibility.isPresent()) return Optional.of("NOT_EVALUATED:" + eligibility.orElseThrow());
         try {
             BakeryKnownNavigation.path(state, job);
             return Optional.empty();
@@ -198,6 +199,13 @@ public final class BakeryProcess {
                 && ProductionOutputCapacity.depotDeliveryUnavailable(state, job))
             throw new IllegalArgumentException("bakery output cannot enter a full depot");
         BakeryWorkState work = job.bakeryWork().orElseThrow();
+        // Only an exact current COLD successor, checked above against navigation and
+        // exclusive authority, can retire a physical route failure. Other blocks stay held.
+        if (work.block().filter(block -> !block.requiresPhysicalReconciliation()).isPresent()) {
+            work = work.withBlock(Optional.empty());
+            job = job.withBakeryWork(work);
+            state = FrontierProductionWorkSceneSupport.replaceJob(state, job);
+        }
         if (step.action() == BakeryColdStep.Action.FINALIZE) return finish(state, job, state.inventory());
         if (step.action() == BakeryColdStep.Action.MOVE) {
             Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());

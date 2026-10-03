@@ -63,6 +63,11 @@ final class FrontierV3BakeryWorkSceneExecutor {
         if (FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
             FrontierV3PhysicalWaitTrace.clear(worker);
             FrontierV3GoalNavigation.stop(worker);
+            if (job.bakeryWork().orElseThrow().block()
+                    .filter(block -> !block.requiresPhysicalReconciliation()).isPresent()) {
+                FrontierV3BakeryPhysicalEffect.clearBlock(level, runtime, lease, job);
+                return;
+            }
             if (!lease.memberPosition(job.workerId()).equals(goal.station().standingBody())) {
                 FrontierV3CommandSubmission.submit(runtime, "bakery-goal-arrived", lease.id().value(),
                         new BakeryHotGoalArrived(job.id(), lease.id(), goal.phase(),

@@ -14,6 +14,33 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExactInventoryTest {
+    @Test void unboundColdStockAndReservationsExplainCapacityWithoutPhysicalBindings() {
+        SubjectId container = new SubjectId("container:capacity"), owner = new SubjectId("settlement:one");
+        var items = new java.util.LinkedHashMap<SubjectId, ExactItemStack>();
+        for (int slot = 20; slot < 24; slot++) {
+            var id = new SubjectId("item:tool-" + slot);
+            items.put(id, new ExactItemStack(id, owner, "minecraft:iron_pickaxe", 1,
+                    new InventoryCustody.ContainerSlot(container, slot)));
+        }
+        var inventory = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 27)),
+                items, Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
+        SubjectId lot = new SubjectId("lot:cold-wheat"), account = new SubjectId("custody:capacity");
+        inventory = inventory.withFungibleResources(new FungibleResourceLedger(
+                Map.of(lot, new ResourceLot(lot, owner, "minecraft:wheat", 1316, "test", List.of())), Map.of(),
+                Map.of(account, new CustodyAccount(account, new ResourceCustody.Container(container),
+                        Map.of(lot, 1316), Map.of())), Map.of()));
+        var reserved = java.util.Set.of(24, 25);
+        var capacity = inventory.containerCapacity(container, reserved);
+        assertEquals(4, capacity.exactSlots());
+        assertEquals(0, capacity.boundFungibleSlots());
+        assertEquals(21, capacity.packedFungibleSlots());
+        assertEquals(2, capacity.reservedSlots());
+        assertTrue(capacity.reservationsValid());
+        assertEquals(0, capacity.freeCapacitySlots());
+        assertTrue(inventory.availableSlots(container, reserved).isEmpty());
+        assertEquals(1, inventory.containerCapacity(container, java.util.Set.of(24)).freeCapacitySlots());
+    }
+
     @Test
     void containerSurfaceCanOnlyAdvanceDurablyOrBecomeAVisibleConflict() {
         SubjectId container = new SubjectId("container:surface");

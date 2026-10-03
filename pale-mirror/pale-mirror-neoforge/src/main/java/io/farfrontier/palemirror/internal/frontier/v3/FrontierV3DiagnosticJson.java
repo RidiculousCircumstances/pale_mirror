@@ -685,11 +685,18 @@ final class FrontierV3DiagnosticJson {
                 + ",\"eligibleObserverCount\":" + value.eligibleObserverCount()
                 + ",\"presentationObserverCount\":" + value.presentationObserverCount() + "}").orElse("");
         String replica = referenceCustody(state, subject);
+        var capacity = state.inventory().containerCapacity(subject, state.reservedContainerSlots(subject));
+        String canonicalCapacity = ",\"canonicalCapacity\":{\"exactSlots\":" + capacity.exactSlots()
+                + ",\"boundFungibleSlots\":" + capacity.boundFungibleSlots()
+                + ",\"packedFungibleSlots\":" + capacity.packedFungibleSlots()
+                + ",\"reservedSlots\":" + capacity.reservedSlots()
+                + ",\"freeCapacitySlots\":" + capacity.freeCapacitySlots()
+                + ",\"reservationsValid\":" + capacity.reservationsValid() + "}";
         return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
                 + "\",\"surface\":\"" + surface.status() + "\",\"position\":" + position(surface.position()) + ",\"slotCount\":" + container.slotCount()
                 + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied
                 + ",\"fungibleOccupiedCount\":" + fungibleBindings.size() + ",\"fungibleOccupied\":" + fungibleOccupied
-                + replica + physical + "}";
+                + canonicalCapacity + replica + physical + "}";
     }
 
     /** Reference scopes report canonical stock separately from replica evidence and temporary lease authority. */

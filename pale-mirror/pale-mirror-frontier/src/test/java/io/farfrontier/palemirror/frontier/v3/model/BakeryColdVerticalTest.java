@@ -20,6 +20,55 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakeryColdVerticalTest {
+    @Test void retainedHotRouteFailureIsRetriedInColdWithoutClearingCustodyFailures() {
+        FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-route-recovery"), 41L)), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        for (long due = 300L; state.productionJobs().get(started.job().id()).bakeryWork().orElseThrow().phase()
+                == BakeryWorkState.Phase.DEPOT_PICKUP && due < 10_000L; due += 20L) {
+            var job = state.productionJobs().get(started.job().id());
+            BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due)).stream()
+                    .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
+        }
+        var job = state.productionJobs().get(started.job().id());
+        assertEquals(BakeryWorkState.Phase.STATION_LOAD, job.bakeryWork().orElseThrow().phase());
+        for (BakeryWorkBlock.Reason reason : BakeryWorkBlock.Reason.values()) {
+            var blockedJob = job.withBakeryWork(job.bakeryWork().orElseThrow().withBlock(Optional.of(
+                    new BakeryWorkBlock(reason, job.facilityId(), -1, "minecraft:air", 0))));
+            var blocked = FrontierProductionWorkSceneSupport.replaceJob(state, blockedJob);
+            blocked = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(blocked));
+            var planned = ProductionProcess.planCompletion(blocked, ProductionProcess.complete(blockedJob, 12_000L));
+            var step = planned.stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst();
+            if (reason != BakeryWorkBlock.Reason.ROUTE_BLOCKED) {
+                assertTrue(step.isEmpty(), reason.name());
+                assertTrue(BakeryProcess.coldRouteBlocker(blocked, blockedJob).orElseThrow().startsWith("NOT_EVALUATED:"));
+                continue;
+            }
+            assertTrue(step.isPresent());
+            assertTrue(blocked.productionJobs().get(job.id()).bakeryWork().orElseThrow().block().isPresent(),
+                    "planning does not mutate retained evidence");
+            var resumed = ProductionProcess.reduceBakeryColdStep(blocked, job.settlementId(), step.orElseThrow());
+            assertTrue(resumed.productionJobs().get(job.id()).bakeryWork().orElseThrow().block().isEmpty());
+            assertEquals(blocked.inventory().fungibleResources(), resumed.inventory().fungibleResources(),
+                    "route recovery awards movement, not a recipe or resource transfer");
+            var body = blocked.actorLocations().get(job.workerId()).body();
+            var hot = blocked.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(java.util.Map.of(job.workerId(),
+                    new AmbientActorLease(job.workerId(), body, SimInstant.ZERO, 1L, AmbientLeaseStatus.HOT,
+                            AmbientGoalKind.WORK, body))));
+            assertTrue(ProductionProcess.planCompletion(hot, ProductionProcess.complete(blockedJob, 12_000L)).stream()
+                    .noneMatch(event -> event.payload() instanceof BakeryColdStep), "HOT remains the exclusive mover");
+        }
+    }
+
     @Test
     void hungryBakerYieldsAtEmptyHandAndResumesSameJobAfterColdMeal() {
         FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
