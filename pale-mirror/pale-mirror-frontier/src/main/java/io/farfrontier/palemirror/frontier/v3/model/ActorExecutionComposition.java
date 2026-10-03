@@ -8,9 +8,11 @@ import java.util.Set;
 public final class ActorExecutionComposition {
     public static final ActorActivityCapabilities CAPABILITIES = new ActorActivityCapabilities(
             Set.of(ActorActivityKind.PRESENCE, ActorActivityKind.MEAL, ActorActivityKind.SERVICE_EXIT,
-                    ActorActivityKind.FIELD_HARVEST, ActorActivityKind.PRODUCTION, ActorActivityKind.TRANSIT),
+                    ActorActivityKind.FIELD_HARVEST, ActorActivityKind.PRODUCTION, ActorActivityKind.TRANSIT,
+                    ActorActivityKind.SCOUT_PATROL),
             List.of(new PresenceActivityCapability(), new MealActivityCapability(), new ServiceExitActivityCapability(),
-                    new HarvestActivityCapability(), new ProductionActivityCapability(), new TransitActivityCapability()));
+                    new HarvestActivityCapability(), new ProductionActivityCapability(), new TransitActivityCapability(),
+                    new ScoutPatrolActivityCapability()));
     public static final ActorExecutionLifecycle LIFECYCLE = new ActorExecutionLifecycle(CAPABILITIES);
     private ActorExecutionComposition() { }
 }

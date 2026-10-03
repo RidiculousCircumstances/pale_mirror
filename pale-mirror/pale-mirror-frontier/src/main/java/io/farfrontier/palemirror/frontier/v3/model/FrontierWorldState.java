@@ -115,6 +115,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(actorExecutions, "actor executions");
         ActorExecutionComposition.CAPABILITIES.validateKinds(actorExecutions);
         PresenceActivityCapability.validateReferences(actorLocations, actorExecutions);
+        ScoutPatrolActivityCapability.validateReferences(bootstrap, hiveColony, actorExecutions);
         ActorMovementStateSupport.validate(actorMovements, actorLocations, humanPopulation, inventory, actorExecutions);
         ResidentMealExecutionAuthority.validate(humanPopulation, actorExecutions);
         TransitActivityCapability.validateReferences(humanPopulation, actorExecutions);
@@ -894,7 +895,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (binding != null) {
             recovery = ActorBodyAuthority.death(recovery, new ActorBodyId(death.actorId(), binding.authorityEpoch()));
         }
-        return withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors).humanPopulation(outcome.humanPopulation())
+        return ActorExecutionComposition.LIFECYCLE.preparePassiveDeath(this, death.actorId(), actorExecutions).commit(this,
+                FrontierWorldStateUpdate.begin().actorLocations(nextActors).humanPopulation(outcome.humanPopulation())
                 .resourceSites(outcome.resourceSites()).strategicPlans(outcome.strategicPlans()).physicalIntents(outcome.physicalIntents())
                 .serviceWorks(outcome.serviceWorks()).fencedRecovery(recovery));
     }

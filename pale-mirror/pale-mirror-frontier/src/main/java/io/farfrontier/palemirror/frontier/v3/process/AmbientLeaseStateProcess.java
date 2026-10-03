@@ -192,10 +192,11 @@ public final class AmbientLeaseStateProcess {
         var recovery = state.fencedRecovery();
         if (recovery.current().containsKey(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(death.actorId())))
             recovery = ActorBodyAuthority.observedDeath(state, ActorBodyAuthority.current(state, death.actorId()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).ambientLeases(leases)
+        return ActorExecutionComposition.LIFECYCLE.preparePassiveDeath(state, death.actorId(),
+                HumanPopulationStateSupport.migrationRetirement(state, death.actorId())).commit(state,
+                FrontierWorldStateUpdate.begin().actorLocations(actors).ambientLeases(leases)
                 .humanPopulation(state.humanPopulation().cancelMigration(death.actorId()))
-                .fencedRecovery(recovery)
-                .actorExecutions(HumanPopulationStateSupport.migrationRetirement(state, death.actorId())));
+                .fencedRecovery(recovery));
     }
 
     public static FrontierWorldState retarget(FrontierWorldState state, SubjectId actorId, AmbientGoalKind goal, BodyPosition goalBody) {

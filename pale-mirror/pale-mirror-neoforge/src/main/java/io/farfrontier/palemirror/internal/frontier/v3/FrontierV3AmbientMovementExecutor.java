@@ -33,7 +33,6 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentTransitAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolAdvanced;
-import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolLeaseRecovered;
 import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunctionProjection;
 import io.farfrontier.palemirror.frontier.v3.model.HivePhysiologySupport;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
@@ -115,6 +114,14 @@ final class FrontierV3AmbientMovementExecutor {
                 FrontierV3GoalNavigation.stop(body);
                 return false;
             }
+        }
+        if (lease.goal() == AmbientGoalKind.SCOUT_PATROL && HiveScoutPatrolProcess.active(state, actorId).isEmpty()) {
+            var started = HiveScoutPatrolProcess.start(state, actorId);
+            try { HiveScoutPatrolProcess.reduceStarted(state, state.bootstrap().hive().id(), started); }
+            catch (IllegalArgumentException unavailable) { FrontierV3GoalNavigation.stop(body); return false; }
+            var result = submit(runtime, "scout-patrol-admission", actorId.value(), started);
+            FrontierV3DiagnosticTrace.record(level.getServer(), "scout-patrol:" + actorId.value(), "scout_patrol_started", actorId, result);
+            return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
         }
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL && !lease.goalBody().equals(state.actorLocations().get(actorId).body())) {
             BlockPos physicalTarget = minecraftBody(lease.goalBody());
@@ -350,15 +357,10 @@ final class FrontierV3AmbientMovementExecutor {
         BlockPosition current = state.actorLocations().get(actorId).supportingSurface().support();
         if (!observedBody(body).equals(lease.goalBody())) return false;
         BlockPosition expected = HiveScoutPatrolProcess.nextPosition(state, actorId, current);
-        if (!lease.goalBody().supportingSurface().support().equals(expected)) {
-            io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-scout-patrol-recover", actorId.value(),
-                    new ScoutPatrolLeaseRecovered(actorId, current, lease.goalBody().supportingSurface().support(),
-                            HiveScoutPatrolProcess.nextPosition(state, actorId, lease.goalBody().supportingSurface().support())));
-            FrontierV3DiagnosticTrace.record(level.getServer(), "scout-patrol:" + actorId.value(), "scout_patrol_lease_recovered", actorId, result);
-            return true;
-        }
+        if (!lease.goalBody().supportingSurface().support().equals(expected)) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-scout-patrol", actorId.value(),
-                new ScoutPatrolAdvanced(actorId, runtime.canonicalState().orElseThrow().instant().ticks(), lease.goalBody().supportingSurface().support(), java.util.Optional.of(current)));
+                new ScoutPatrolAdvanced(HiveScoutPatrolProcess.requireExecution(state, actorId),
+                        runtime.canonicalState().orElseThrow().instant().ticks(), lease.goalBody().supportingSurface().support(), current));
         FrontierV3DiagnosticTrace.record(level.getServer(), "scout-patrol:" + actorId.value(), "scout_patrol_advanced", actorId, result);
         return true;
     }

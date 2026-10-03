@@ -102,23 +102,20 @@ final class StrategicPlanPayloadCodecs {
     static PayloadCodec scoutPatrolAdvanced() { return new PayloadCodec() {
         @Override public String type() { return "frontier.scout_patrol_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            ScoutPatrolAdvanced advanced = (ScoutPatrolAdvanced) payload; subject(output, advanced.scoutId()); output.writeLong(advanced.phase());
+            ScoutPatrolAdvanced advanced = (ScoutPatrolAdvanced) payload; ActorExecutionStateCodec.writeId(output, advanced.executionId()); output.writeLong(advanced.phase());
             output.writeInt(advanced.position().x()); output.writeInt(advanced.position().y()); output.writeInt(advanced.position().z());
-            optionalPosition(output, advanced.priorPosition());
+            position(output, advanced.priorPosition());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ScoutPatrolAdvanced(
-                subject(input), input.readLong(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()),
-                input.available() == 0 ? Optional.empty() : optionalPosition(input))); }
+                ActorExecutionStateCodec.readId(input), input.readLong(), position(input), position(input))); }
     }; }
-    static PayloadCodec scoutPatrolLeaseRecovered() { return new PayloadCodec() {
-        @Override public String type() { return "frontier.scout_patrol_lease_recovered"; }
+    static PayloadCodec scoutPatrolStarted() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.scout_patrol_started"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            ScoutPatrolLeaseRecovered recovered = (ScoutPatrolLeaseRecovered) payload;
-            subject(output, recovered.scoutId()); position(output, recovered.priorCanonicalPosition());
-            position(output, recovered.observedLeasePosition()); position(output, recovered.nextGoalPosition());
+            ActorExecutionStateCodec.writeId(output, ((ScoutPatrolStarted) payload).executionId());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
-                new ScoutPatrolLeaseRecovered(subject(input), position(input), position(input), position(input))); }
+                new ScoutPatrolStarted(ActorExecutionStateCodec.readId(input))); }
     }; }
     private static void position(DataOutputStream output, BlockPosition position) throws IOException {
         output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());

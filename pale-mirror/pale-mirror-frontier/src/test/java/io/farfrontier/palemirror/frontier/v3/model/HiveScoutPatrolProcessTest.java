@@ -33,10 +33,16 @@ class HiveScoutPatrolProcessTest {
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveScoutPatrolProcess.plan(state, action);
         ScoutPatrolAdvanced advanced = (ScoutPatrolAdvanced) events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
                 .filter(ScoutPatrolAdvanced.class::isInstance).findFirst().orElseThrow();
-        assertEquals(FrontierTestPositions.supportOf(state.actorLocations().get(scout.id())), advanced.priorPosition().orElseThrow());
+        assertEquals(FrontierTestPositions.supportOf(state.actorLocations().get(scout.id())), advanced.priorPosition());
         assertEquals(HiveScoutPatrolProcess.nextPosition(state, scout), advanced.position());
         assertEquals(advanced, FrontierWorldRuntimeDefinition.payloadCodecs().decode(advanced.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(advanced)));
 
+        if (HiveScoutPatrolProcess.active(state, scout.id()).isEmpty()) {
+            var started = HiveScoutPatrolProcess.start(state, scout.id());
+            assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(),
+                    FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
+            state = HiveScoutPatrolProcess.reduceStarted(state, state.bootstrap().hive().id(), started);
+        }
         FrontierWorldState moved = HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), advanced);
         assertEquals(advanced.position(), FrontierTestPositions.supportOf(moved.actorLocations().get(scout.id())));
         assertEquals(moved, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(moved)));
@@ -64,6 +70,7 @@ class HiveScoutPatrolProcessTest {
         var advance = (ScoutPatrolAdvanced) HiveScoutPatrolProcess.plan(state, action).stream()
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
                 .filter(ScoutPatrolAdvanced.class::isInstance).findFirst().orElseThrow();
+        state = HiveScoutPatrolProcess.reduceStarted(state, state.bootstrap().hive().id(), HiveScoutPatrolProcess.start(state, scout.id()));
         var retained = ActorBodyAuthority.demand(state, scout.id());
         assertFalse(ActorExecutionCoordinator.coldAvailable(retained, java.util.List.of(scout.id())));
         assertTrue(HiveScoutPatrolProcess.plan(retained, action).stream()
@@ -77,6 +84,10 @@ class HiveScoutPatrolProcessTest {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         Bioform scout = scout(before);
+        CommandId admission = new CommandId("command:scout-patrol-admission");
+        assertTrue(engine.submit(new FrontierCommand(1, admission, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(admission), HiveScoutPatrolProcess.start(before, scout.id())))
+                instanceof CommandResult.Accepted);
         CommandId command = new CommandId("command:scout-patrol-death");
         assertTrue(engine.submit(new FrontierCommand(1, command, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command),
@@ -87,6 +98,7 @@ class HiveScoutPatrolProcessTest {
                 .filter(action -> action.kind().equals("frontier.hive.scout.patrol") && action.subject().equals(scout.id()))
                 .findFirst().orElseThrow();
         FrontierWorldState dead = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(dead.actorExecutions().actors().get(scout.id()).current().isEmpty());
         assertTrue(HiveScoutPatrolProcess.plan(dead, duePatrol).stream()
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
                 .anyMatch(effect -> effect instanceof ScheduleEffect.Cancelled cancelled && cancelled.scheduleId().equals(duePatrol.id())));
@@ -140,7 +152,9 @@ class HiveScoutPatrolProcessTest {
         assertEquals(AmbientGoalKind.SCOUT_PATROL, lease.goal());
         state = AmbientLeaseStateProcess.prepare(state, lease);
         state = AmbientLeaseStateProcess.transition(state, scout.id(), AmbientLeaseStatus.HOT);
-        ScoutPatrolAdvanced advanced = new ScoutPatrolAdvanced(scout.id(), 1L, lease.goalBody().supportingSurface().support(), java.util.Optional.of(prior));
+        state = HiveScoutPatrolProcess.reduceStarted(state, state.bootstrap().hive().id(), HiveScoutPatrolProcess.start(state, scout.id()));
+        ScoutPatrolAdvanced advanced = new ScoutPatrolAdvanced(HiveScoutPatrolProcess.requireExecution(state, scout.id()),
+                1L, lease.goalBody().supportingSurface().support(), prior);
 
         FrontierWorldState moved = HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), advanced);
         assertEquals(lease.goalBody().supportingSurface().support(), FrontierTestPositions.supportOf(moved.actorLocations().get(scout.id())));
@@ -148,52 +162,33 @@ class HiveScoutPatrolProcessTest {
         assertEquals(HiveScoutPatrolProcess.nextPosition(moved, scout), moved.ambientLeases().get(scout.id()).goalBody().supportingSurface().support());
     }
 
-    @Test void observedObsoleteHotLeaseTargetRebasesOnceWithoutForgingAnOrdinaryPatrolStep() {
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-recovery"), 91L));
-        Bioform scout = scout(state); BlockPosition prior = FrontierTestPositions.supportOf(state.actorLocations().get(scout.id()));
-        AmbientActorLease lease = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
-        state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, lease), scout.id(), AmbientLeaseStatus.HOT);
-        // The deployed r41 failure case: a pre-cursor HOT lease still points at the Scout's
-        // current canonical floor.  Minecraft has not moved the body, so recovery may only
-        // durably retarget that same owned body to the deterministic next perimeter cursor.
-        state = AmbientLeaseStateProcess.retarget(state, scout.id(), AmbientGoalKind.SCOUT_PATROL, FrontierTestPositions.bodyAboveSupport(prior));
-        ScoutPatrolLeaseRecovered recovered = new ScoutPatrolLeaseRecovered(scout.id(), prior, prior,
-                HiveScoutPatrolProcess.nextPosition(state, scout, prior));
-
-        FrontierWorldState rebased = HiveScoutPatrolProcess.reduceLeaseRecovered(state, state.bootstrap().hive().id(), recovered);
-        assertEquals(prior, FrontierTestPositions.supportOf(rebased.actorLocations().get(scout.id())));
-        assertEquals(recovered.nextGoalPosition(), rebased.ambientLeases().get(scout.id()).goalBody().supportingSurface().support());
-        assertEquals(recovered, FrontierWorldRuntimeDefinition.payloadCodecs().decode(recovered.type(),
-                FrontierWorldRuntimeDefinition.payloadCodecs().encode(recovered)));
-        assertEquals(rebased, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(rebased)));
-        FrontierWorldState stale = state;
-        BlockPosition forgedObserved = HiveScoutPatrolProcess.nextPosition(stale, scout, prior);
-        assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduceLeaseRecovered(stale, stale.bootstrap().hive().id(),
-                new ScoutPatrolLeaseRecovered(scout.id(), prior, forgedObserved, lease.goalBody().supportingSurface().support())),
-                "a recovery must bind the observed old lease target and its one deterministic successor");
+    @Test void stalePatrolCallbackCannotMoveANewExecutionOfTheSameScout() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-generation"), 91L));
+        var scout = scout(initial);
+        var running = HiveScoutPatrolProcess.reduceStarted(initial, initial.bootstrap().hive().id(), HiveScoutPatrolProcess.start(initial, scout.id()));
+        var key = HiveScoutPatrolProcess.requireExecution(running, scout.id());
+        var oldAdvance = new ScoutPatrolAdvanced(key, 1L, HiveScoutPatrolProcess.nextPosition(running, scout),
+                running.actorLocations().get(scout.id()).supportingSurface().support());
+        var presence = running.actorExecutions().next(scout.id(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, scout.id());
+        var released = ActorExecutionComposition.LIFECYCLE.prepareVacant(running, presence)
+                .commit(running, FrontierWorldStateUpdate.begin());
+        var successor = HiveScoutPatrolProcess.reduceStarted(released, released.bootstrap().hive().id(),
+                HiveScoutPatrolProcess.start(released, scout.id()));
+        assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduce(successor, successor.bootstrap().hive().id(), oldAdvance));
+        assertEquals(running.actorLocations(), successor.actorLocations());
+        assertTrue(HiveScoutPatrolProcess.requireExecution(successor, scout.id()).generation() > key.generation());
     }
 
-    @Test void deployedLegacyPatrolPayloadStillDecodesWithoutGrantingHotMovement() {
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-legacy"), 91L));
-        Bioform scout = scout(state); BlockPosition legacyPosition = state.bootstrap().hive().seedNests().stream()
-                .filter(nest -> nest.id().equals(scout.nestId())).findFirst().orElseThrow().anchor().offset(48, 0, 0);
-        // This is the byte layout emitted by the deployed pre-cursor codec: it ends at
-        // position and therefore contains neither the later optional-present flag nor a
-        // predecessor. Do not construct this with the current encoder, which would hide
-        // a trailing compatibility-field regression.
-        byte[] deployedLegacyBytes = FrontierWorldPayloadCodecs.encodeProduction(output -> {
+    @Test void predecessorLessHistoricalPatrolPayloadIsExplicitlyRejected() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-legacy"), 91L));
+        var scout = scout(state);
+        byte[] old = FrontierWorldPayloadCodecs.encodeProduction(output -> {
             FrontierWorldPayloadCodecs.writeSubject(output, scout.id()); output.writeLong(2_400L);
-            output.writeInt(legacyPosition.x()); output.writeInt(legacyPosition.y()); output.writeInt(legacyPosition.z());
+            output.writeInt(1); output.writeInt(64); output.writeInt(1);
         });
-        ScoutPatrolAdvanced decoded = (ScoutPatrolAdvanced) FrontierWorldRuntimeDefinition.payloadCodecs().decode("frontier.scout_patrol_advanced",
-                deployedLegacyBytes);
-        assertEquals(java.util.Optional.empty(), decoded.priorPosition());
-        assertEquals(legacyPosition, FrontierTestPositions.supportOf(HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), decoded).actorLocations().get(scout.id())));
-
-        AmbientActorLease lease = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
-        FrontierWorldState hot = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, lease), scout.id(), AmbientLeaseStatus.HOT);
-        assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduce(hot, hot.bootstrap().hive().id(), decoded),
-                "old WAL records have no predecessor proof and therefore cannot advance a HOT exact body");
+        assertThrows(IllegalArgumentException.class, () ->
+                FrontierWorldRuntimeDefinition.payloadCodecs().decode("frontier.scout_patrol_advanced", old));
     }
 
     private static Bioform scout(FrontierWorldState state) {

@@ -98,6 +98,27 @@ public final class ActorExecutionLifecycle {
             throw new IllegalArgumentException("family resume changed common execution authority");
         return new Transition(state, resumed, executions);
     }
+    /** Release-only owners have no retained work; other families acknowledge death separately. */
+    public Transition preparePassiveDeath(FrontierWorldState state, SubjectId actor, ActorExecutionState ownedRetirements) {
+        Objects.requireNonNull(ownedRetirements, "owner death retirements");
+        var retained = ownedRetirements.actors().get(Objects.requireNonNull(actor));
+        if (retained == null || retained.current().isEmpty())
+            return new Transition(state, state, ownedRetirements);
+        var current = retained.current().orElseThrow();
+        var capability = capabilities.require(current.activityKind());
+        if (capability.interruption() != ActorActivityCapability.Interruption.RELEASE)
+            return new Transition(state, state, ownedRetirements);
+        state.actorExecutions().requireCurrent(current);
+        capability.validateReference(state, current);
+        var checkpoint = Objects.requireNonNull(capability.checkpoint(state, current));
+        checkpoint.validate(state, current);
+        if (!checkpoint.ready()) throw new IllegalArgumentException("passive death needs its owner effect settlement");
+        var released = Objects.requireNonNull(capability.release(state, current));
+        if (!released.actorExecutions().equals(state.actorExecutions()))
+            throw new IllegalArgumentException("family death release changed common authority");
+        return new Transition(state, released, ownedRetirements.finish(current));
+    }
+
     /** The exact family retires either its current or paused claim, never a successor's authority. */
     public ActorExecutionState retire(FrontierWorldState state, SubjectId actor, ActorActivityKind kind, SubjectId owner) {
         return retire(state.actorExecutions(), actor, kind, owner);

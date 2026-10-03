@@ -115,7 +115,7 @@ public final class DiagnosticProducerContract {
         "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_scene_lease_handoff", "frontier.route_patrol_scene_lease_prepared",
         "frontier.route_patrol_started", "frontier.route_topology_cutover", "frontier.scene_lease_handoff", "frontier.scene_lease_prepared",
         "frontier.scene_lease_recovery_revoked", "frontier.scene_lease_released_v2", "frontier.scene_lease_transition", "frontier.scout_patrol_advanced",
-        "frontier.scout_patrol_lease_recovered", "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_formation_observed",
+        "frontier.scout_patrol_started", "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_formation_observed",
         "frontier.settlement_assault_march_issue_observed", "frontier.settlement_assault_resolved", "frontier.settlement_assault_scene_lease_handoff",
         "frontier.settlement_assault_scene_lease_prepared", "frontier.settlement_assault_started", "frontier.settlement_assault_strike",
         "frontier.settlement_infection_observed", "frontier.settlement_provision_consumed", "frontier.settlement_provision_started",

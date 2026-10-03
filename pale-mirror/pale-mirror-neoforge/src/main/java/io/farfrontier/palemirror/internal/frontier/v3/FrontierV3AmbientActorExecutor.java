@@ -34,7 +34,6 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentMealHotHandReleased;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentTransitAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolAdvanced;
-import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolLeaseRecovered;
 import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunctionProjection;
 import io.farfrontier.palemirror.frontier.v3.model.HivePhysiologySupport;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;

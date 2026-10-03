@@ -125,9 +125,10 @@ public final class AmbientActorProcess {
         var recovery = state.fencedRecovery();
         if (recovery.current().containsKey(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(death.actorId())))
             recovery = ActorBodyAuthority.observedDeath(state, ActorBodyAuthority.current(state, death.actorId()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors).fencedRecovery(recovery)
-                .humanPopulation(state.humanPopulation().cancelMigration(death.actorId()))
-                .actorExecutions(HumanPopulationStateSupport.migrationRetirement(state, death.actorId())));
+        return ActorExecutionComposition.LIFECYCLE.preparePassiveDeath(state, death.actorId(),
+                HumanPopulationStateSupport.migrationRetirement(state, death.actorId())).commit(state,
+                FrontierWorldStateUpdate.begin().actorLocations(nextActors).fencedRecovery(recovery)
+                        .humanPopulation(state.humanPopulation().cancelMigration(death.actorId())));
     }
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, AmbientActorObserved observation) {
