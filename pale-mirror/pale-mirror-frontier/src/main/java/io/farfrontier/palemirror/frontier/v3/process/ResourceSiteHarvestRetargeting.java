@@ -63,7 +63,7 @@ public final class ResourceSiteHarvestRetargeting {
             } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
                 currentUnavailable = true;
             }
-            if (!FrontierSceneAdmission.available(state, List.of(job.workerId()))
+            if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())
                     || !currentUnavailable
                     || !coldReachableWorkTarget(state, job).equals(OptionalInt.of(retargeted.toSlot())))
                 throw new IllegalArgumentException("COLD area work retarget lacks an exact known alternative");

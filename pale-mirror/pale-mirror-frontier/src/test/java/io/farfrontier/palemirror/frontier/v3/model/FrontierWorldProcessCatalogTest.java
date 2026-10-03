@@ -261,6 +261,8 @@ class FrontierWorldProcessCatalogTest {
                 Map.entry("replica-custody", new PhysicalReplicaCustodyPayloads.ReplicaDeclared(PhysicalReplicaRecord.expected(
                         new SubjectId("object:representative"), "crate", 1L, "fingerprint:representative", "provenance:representative"))),
                 Map.entry("ambient-actors", new AmbientActorObserved(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE)),
+                Map.entry("actor-body", new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyReleased(
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(new SubjectId("actor:representative"), 1L))),
                 Map.entry("logistics-scenes", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT)),
                 Map.entry("population", ResidentMigrationDiagnosticProducer.QUARANTINE.create(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
                         new SubjectId("resident:representative"), io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.TRANSIT,

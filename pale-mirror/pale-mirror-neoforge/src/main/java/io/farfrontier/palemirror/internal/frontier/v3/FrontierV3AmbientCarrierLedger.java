@@ -25,7 +25,7 @@ import java.util.Map;
 /** Bounded inactive-body evidence; canonical actors and rosters remain domain-owned. */
 final class FrontierV3AmbientCarrierLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_ambient_carriers";
-    private static final int FORMAT = 7, MAX_CARRIERS = 4_096;
+    private static final int FORMAT = 8, MAX_CARRIERS = 4_096;
     private final Map<SubjectId, Carrier> carriers;
     private final Map<SubjectId, FrontierV3ActorAdoption> pendingAdoptions = new LinkedHashMap<>();
     private final Map<SubjectId, FrontierV3ActorHandoff> pendingHandoffs = new LinkedHashMap<>();
@@ -40,6 +40,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     private final java.util.Set<SubjectId> returnReads = new java.util.HashSet<>();
     private final Map<SubjectId, FrontierV3SceneDeparture> departureConflicts = new LinkedHashMap<>();
     private final Map<SubjectId, FrontierV3AmbientDeparture> ambientDepartures = new LinkedHashMap<>();
+    private final java.util.Set<SubjectId> savedAmbientDepartures = new java.util.HashSet<>();
     private final Map<SubjectId, FrontierV3AmbientDeparture> ambientDepartureConflicts = new LinkedHashMap<>();
     private FrontierV3AmbientCarrierLedger() { this(new LinkedHashMap<>()); }
     private FrontierV3AmbientCarrierLedger(Map<SubjectId, Carrier> carriers) { this.carriers = carriers; }
@@ -284,6 +285,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         return new Carrier(inactive, physicalRevision, ambientRevision).equals(carriers.get(inactive.actorId()));
     }
     boolean hasCarrier(SubjectId actorId) { return carriers.containsKey(actorId); }
+    java.util.Optional<Carrier> inactiveCarrier(SubjectId actorId) { return java.util.Optional.ofNullable(carriers.get(actorId)); }
     /** Historical body cleanup uses the fence's own epoch, not a newer ambient lease revision. */
     boolean fencesBody(FrontierV3ActorCarrierComposition.Declaration live) {
         var carrier = carriers.get(live.actorId());
@@ -402,6 +404,18 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     java.util.Optional<FrontierV3AmbientDeparture> ambientDeparture(SubjectId actor) {
         return java.util.Optional.ofNullable(ambientDepartures.get(actor));
     }
+    List<FrontierV3AmbientDeparture> ambientDepartures() { return List.copyOf(ambientDepartures.values()); }
+    boolean savedAmbientDeparture(FrontierV3AmbientDeparture expected) {
+        var actor = expected.carrier().identity().actorId();
+        return expected.equals(ambientDepartures.get(actor)) && savedAmbientDepartures.contains(actor)
+                && !hasDepartureConflict(actor);
+    }
+    boolean confirmSavedAmbientDeparture(FrontierV3AmbientDeparture expected) {
+        var actor = expected.carrier().identity().actorId();
+        if (!expected.equals(ambientDepartures.get(actor)) || hasDepartureConflict(actor)) return false;
+        if (savedAmbientDepartures.add(actor)) setDirty();
+        return true;
+    }
     boolean resumeAmbientDeparture(FrontierV3AmbientDeparture receipt) {
         SubjectId actor = receipt.carrier().identity().actorId();
         if (hasDepartureConflict(actor) || !receipt.equals(ambientDepartures.get(actor))) return false;
@@ -432,6 +446,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         changed |= returnReads.remove(actor);
         changed |= departureConflicts.remove(actor) != null;
         changed |= ambientDepartures.remove(actor) != null;
+        changed |= savedAmbientDepartures.remove(actor);
         changed |= ambientDepartureConflicts.remove(actor) != null;
         if (changed) setDirty();
     }
@@ -541,7 +556,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     }
     static FrontierV3AmbientCarrierLedger load(CompoundTag tag, HolderLookup.Provider registries) {
         int format = tag.getInt("format");
-        if (format != 5 && format != 6 && format != FORMAT) throw new IllegalStateException("incompatible v3 ambient carrier ledger");
+        if (format != FORMAT) throw new IllegalStateException("incompatible v3 ambient carrier ledger; UAE requires a fresh world");
         ListTag values = inventory(tag, "carriers");
         Map<SubjectId, Carrier> restored = new LinkedHashMap<>();
         for (Tag raw : values) {
@@ -672,6 +687,15 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
                     throw new IllegalStateException("invalid ambient departure conflict evidence");
             }
         }
+        for (Tag raw : inventory(tag, "savedAmbientDepartures")) {
+            var row = (CompoundTag) raw;
+            if (!row.contains("actor", Tag.TAG_STRING) || row.size() != 1)
+                throw new IllegalStateException("invalid saved ambient-departure marker");
+            var actor = new SubjectId(row.getString("actor"));
+            if (!ledger.ambientDepartures.containsKey(actor) || ledger.hasDepartureConflict(actor)
+                    || !ledger.savedAmbientDepartures.add(actor))
+                throw new IllegalStateException("orphan or duplicate saved ambient-departure marker");
+        }
         ledger.setDirty(false);
         return ledger;
     }
@@ -718,6 +742,11 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         ambientDepartures.values().stream().sorted(Comparator.comparing(value -> value.carrier().identity().actorId()))
                 .forEach(value -> ambient.add(value.save()));
         tag.put("ambientDepartures", ambient);
+        var savedAmbient = new ListTag();
+        savedAmbientDepartures.stream().sorted().forEach(actor -> {
+            var row = new CompoundTag(); row.putString("actor", actor.value()); savedAmbient.add(row);
+        });
+        tag.put("savedAmbientDepartures", savedAmbient);
         var ambientConflicts = new ListTag();
         ambientDepartureConflicts.values().stream().sorted(Comparator.comparing(value -> value.carrier().identity().actorId()))
                 .forEach(value -> ambientConflicts.add(value.save()));

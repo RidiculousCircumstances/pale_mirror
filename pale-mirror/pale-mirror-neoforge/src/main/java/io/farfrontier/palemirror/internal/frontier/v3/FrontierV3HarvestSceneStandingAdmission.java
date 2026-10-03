@@ -33,8 +33,11 @@ final class FrontierV3HarvestSceneStandingAdmission {
         if (!obstructedBodyFreeColumn(level, member.entityId(), lease.memberPosition(member.actorId()))) return false;
         ResourceSiteHarvestSceneCause cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
         CommandResult result = FrontierV3CommandSubmission.submit(runtime, "resource-site-harvest-preparation-aborted",
-                lease.id().value(), new ResourceSiteHarvestScenePreparationAborted(lease.id(), cause.siteId(), cause.jobId()));
+                lease.id().value(), new ResourceSiteHarvestScenePreparationAborted(lease.id(), cause.siteId(), cause.jobId(),
+                        new ActorBodyId(member.actorId(), binding.authorityEpoch())));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_preparation_aborted", lease, result);
+        if (result instanceof CommandResult.Accepted)
+            FrontierV3ActorBodyCustody.releaseUnstartedAbsence(level, runtime, member.actorId());
         return result instanceof CommandResult.Accepted;
     }
 

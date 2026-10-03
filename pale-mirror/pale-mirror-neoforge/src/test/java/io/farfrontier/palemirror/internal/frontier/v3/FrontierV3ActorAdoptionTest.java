@@ -28,7 +28,7 @@ class FrontierV3ActorAdoptionTest {
         }
     }
 
-    @Test void rejectsDifferentIdentityRepresentationStaleRevisionAndSkippedEpoch() {
+    @Test void rejectsDifferentIdentityRepresentationStaleRevisionAndRetiredEpoch() {
         for (var invalid : java.util.List.of(
                 new Declaration(new SubjectId("resident:1-2"), ActorKind.RESIDENT, Owner.AMBIENT_LEASE,
                         UUID_1, Representation.LIVE_BODY, 13L, 4L),
@@ -40,9 +40,15 @@ class FrontierV3ActorAdoptionTest {
                 OLD.liveBody(Owner.AMBIENT_LEASE, 12L, 4L),
                 OLD.liveBody(Owner.SCENE_LEASE, 7L, 4L),
                 OLD.liveBody(Owner.AMBIENT_LEASE, 13L, 3L),
-                OLD.liveBody(Owner.AMBIENT_LEASE, 13L, 5L))) {
+                OLD.liveBody(Owner.AMBIENT_LEASE, 13L, 2L))) {
             assertThrows(IllegalArgumentException.class, () -> new FrontierV3ActorAdoption(CARRIER, FrontierV3ActorAdoptionFixture.binding(invalid)));
         }
+    }
+    @Test void skippedUnattemptedCanonicalEpochDoesNotRequireASecondPhysicalAllocator() {
+        var live = OLD.liveBody(Owner.AMBIENT_LEASE, 13L, 5L);
+        var receipt = new FrontierV3ActorAdoption(CARRIER, FrontierV3ActorAdoptionFixture.binding(live));
+        assertEquals(5L, receipt.admitted().epoch());
+        assertEquals(receipt, FrontierV3ActorAdoption.load(receipt.save()));
     }
 
     @Test void rejectsMissingForgedAndWrongTypedPersistedDimensions() {

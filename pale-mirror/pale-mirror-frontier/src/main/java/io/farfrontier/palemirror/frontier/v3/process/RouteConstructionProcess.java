@@ -167,8 +167,7 @@ public final class RouteConstructionProcess {
         // drained.  Compiling from an old COLD location while a loaded body is still governed
         // by WORK/PATROL would create two positions for one person.  The next scan retries
         // after ordinary HOT drain, which records the body's actual final floor first.
-        if (project.team().orElseThrow().memberIds().stream().map(state.ambientLeases()::get)
-                .anyMatch(lease -> lease != null && lease.status() != AmbientLeaseStatus.CLOSED)) return retryOnly(retry);
+        if (!ActorExecutionCoordinator.coldAvailable(state, project.team().orElseThrow().memberIds())) return retryOnly(retry);
         return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
                 new RouteConstructionAssemblyStarted(project.id(), EngineeringWorksite.compile(state, project))),
                 new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(project.id(), nextAssemblyDue(state, action.dueAt().ticks()))))), retry);
@@ -192,10 +191,8 @@ public final class RouteConstructionProcess {
                 .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(project.id())
                         && lease.status() != SceneLeaseStatus.CLOSED);
         if (retainedHotOrRecovery) return List.of(next);
-        SubjectId advancing = assembly.safeAdvances().stream().filter(member -> {
-            AmbientActorLease lease = state.ambientLeases().get(member);
-            return lease == null || lease.status() == AmbientLeaseStatus.CLOSED;
-        }).findFirst().orElse(null);
+        SubjectId advancing = assembly.safeAdvances().stream()
+                .filter(member -> ActorExecutionCoordinator.coldAvailable(state, member)).findFirst().orElse(null);
         if (advancing == null) return List.of(next);
         EngineeringWorkAssembly advanced = assembly.advance(advancing);
         ProposedEvent progressed = advanced.complete() ? new ProposedEvent(project.id(),
@@ -230,8 +227,7 @@ public final class RouteConstructionProcess {
                                                            EngineeringJourneyPurpose purpose, ScheduledAction action, Optional<ProposedEvent> retry) {
         EngineeringWorkAssembly current = project.assembly().orElse(null);
         if (current != null) return retryOnly(retry);
-        if (project.team().orElseThrow().memberIds().stream().map(state.ambientLeases()::get)
-                .anyMatch(lease -> lease != null && lease.status() != AmbientLeaseStatus.CLOSED)) return retryOnly(retry);
+        if (!ActorExecutionCoordinator.coldAvailable(state, project.team().orElseThrow().memberIds())) return retryOnly(retry);
         EngineeringWorkAssembly journey;
         try { journey = EngineeringDepotService.compile(state, project, purpose); }
         catch (IllegalArgumentException unavailable) { return retryOnly(retry); }

@@ -64,7 +64,14 @@ public final class ActorExecutionCoordinator {
     }
 
     public static boolean coldAvailable(FrontierWorldState state, SubjectId actorId) {
-        return ambientAvailable(state, List.of(actorId)) && !sceneOwns(state, actorId);
+        return !ActorBodyAuthority.retainsPhysicalCustody(state, actorId)
+                && ambientAvailable(state, List.of(actorId)) && !sceneOwns(state, actorId);
+    }
+
+    /** A collective COLD transition must exclude physical custody for every participant. */
+    public static boolean coldAvailable(FrontierWorldState state, Collection<SubjectId> actorIds) {
+        Objects.requireNonNull(actorIds, "actors");
+        return actorIds.stream().allMatch(actor -> coldAvailable(state, actor));
     }
 
     public static void requireOrdinaryWorkAdmission(FrontierWorldState state, SubjectId actorId) {
@@ -94,7 +101,7 @@ public final class ActorExecutionCoordinator {
         for (SceneMember member : lease.members()) {
             ActorLocation actor = state.actorLocations().get(member.actorId());
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
-                    || !coldAvailable(state, member.actorId()))
+                    || !ambientAvailable(state, List.of(member.actorId())) || sceneOwns(state, member.actorId()))
                 throw new IllegalArgumentException("scene preparation lacks exclusive living actor authority");
             if (!actor.body().equals(lease.memberPosition(member.actorId())))
                 throw new IllegalArgumentException("scene preparation must retain the exact captured body");

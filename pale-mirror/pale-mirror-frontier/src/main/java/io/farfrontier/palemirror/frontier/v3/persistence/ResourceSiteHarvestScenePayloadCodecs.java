@@ -80,13 +80,17 @@ final class ResourceSiteHarvestScenePayloadCodecs {
                 FrontierWorldPayloadCodecs.writeString(output, aborted.leaseId().value());
                 FrontierWorldPayloadCodecs.writeSubject(output, aborted.siteId());
                 FrontierWorldPayloadCodecs.writeSubject(output, aborted.jobId());
+                FrontierWorldPayloadCodecs.writeSubject(output, aborted.body().actorId());
+                output.writeLong(aborted.body().physicalEpoch());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResourceSiteHarvestScenePreparationAborted(
                     new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)),
                     FrontierWorldPayloadCodecs.readSubject(input).value(),
-                    FrontierWorldPayloadCodecs.readSubject(input).value()));
+                    FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(
+                            FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong())));
         }
     }
 

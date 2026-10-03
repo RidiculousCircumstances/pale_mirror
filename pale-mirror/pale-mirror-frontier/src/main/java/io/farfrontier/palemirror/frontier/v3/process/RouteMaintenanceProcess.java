@@ -117,10 +117,8 @@ public final class RouteMaintenanceProcess {
                 .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(maintenance.id())
                         && lease.status() != SceneLeaseStatus.CLOSED);
         if (retainedHotOrRecovery) return List.of(next);
-        SubjectId advancing = assembly.safeAdvances().stream().filter(member -> {
-            AmbientActorLease lease = state.ambientLeases().get(member);
-            return lease == null || lease.status() == AmbientLeaseStatus.CLOSED;
-        }).findFirst().orElse(null);
+        SubjectId advancing = assembly.safeAdvances().stream()
+                .filter(member -> ActorExecutionCoordinator.coldAvailable(state, member)).findFirst().orElse(null);
         if (advancing == null) return List.of(next);
         EngineeringWorkAssembly advanced = assembly.advance(advancing);
         ProposedEvent progressed = advanced.complete() ? new ProposedEvent(maintenance.id(),
@@ -148,8 +146,7 @@ public final class RouteMaintenanceProcess {
     }
 
     private static List<ProposedEvent> admitAssembly(FrontierWorldState state, RouteMaintenance maintenance, ScheduledAction action, Optional<ProposedEvent> retry) {
-        if (maintenance.team().memberIds().stream().map(state.ambientLeases()::get)
-                .anyMatch(lease -> lease != null && lease.status() != AmbientLeaseStatus.CLOSED)) return retryOnly(retry);
+        if (!ActorExecutionCoordinator.coldAvailable(state, maintenance.team().memberIds())) return retryOnly(retry);
         EngineeringWorkAssembly assembly;
         try { assembly = EngineeringWorksite.compile(state, maintenance); }
         catch (IllegalArgumentException unavailable) { return retryOnly(retry); }
@@ -162,8 +159,7 @@ public final class RouteMaintenanceProcess {
                                                            EngineeringJourneyPurpose purpose, ScheduledAction action, Optional<ProposedEvent> retry) {
         EngineeringWorkAssembly current = maintenance.assembly().orElse(null);
         if (current != null) return retryOnly(retry);
-        if (maintenance.team().memberIds().stream().map(state.ambientLeases()::get)
-                .anyMatch(lease -> lease != null && lease.status() != AmbientLeaseStatus.CLOSED)) return retryOnly(retry);
+        if (!ActorExecutionCoordinator.coldAvailable(state, maintenance.team().memberIds())) return retryOnly(retry);
         EngineeringWorkAssembly journey;
         try { journey = EngineeringDepotService.compile(state, maintenance, purpose); }
         catch (IllegalArgumentException unavailable) { return retryOnly(retry); }

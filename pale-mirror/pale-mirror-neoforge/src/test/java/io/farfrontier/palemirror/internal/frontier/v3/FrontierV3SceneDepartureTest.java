@@ -47,7 +47,7 @@ class FrontierV3SceneDepartureTest {
         assertTrue(FrontierV3AmbientCarrierLedger.load(saved, null).savedDeparture(receipt));
         saved.putInt("format", 5);
         saved.remove("savedDepartures");
-        assertFalse(FrontierV3AmbientCarrierLedger.load(saved, null).savedDeparture(receipt));
+        assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(saved, null));
         saved.putInt("format", 6);
         assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(saved, null));
         ledger.forgetDeparture(ACTOR);

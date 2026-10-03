@@ -617,7 +617,7 @@ public final class ResourceSiteHarvestProcess {
                 || job.navigationBlock().filter(block -> !block.reroutable()).isPresent()
                 || !advanced.coldScheduleId().equals(coldProgress(job, advanced.coldDueAt()).id())
                 || FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
-                || !FrontierSceneAdmission.available(state, List.of(job.workerId())))
+                || !ActorExecutionCoordinator.coldAvailable(state, job.workerId()))
             throw new IllegalArgumentException("COLD field goal has no exclusive current worker and schedule");
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         if (goal.layoutRevision() != advanced.layoutRevision()
@@ -653,7 +653,7 @@ public final class ResourceSiteHarvestProcess {
                 || !job.id().equals(held.jobId()) || !job.workerId().equals(held.workerId())
                 || job.navigationBlock().isPresent()
                 || FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
-                || !FrontierSceneAdmission.available(state, List.of(job.workerId())))
+                || !ActorExecutionCoordinator.coldAvailable(state, job.workerId()))
             throw new IllegalArgumentException("COLD goal hold has no exclusive current field owner");
         ResourceSiteHarvestGoal goal;
         List<ResourceFieldLayout.CellId> blockedPrefix = List.of();

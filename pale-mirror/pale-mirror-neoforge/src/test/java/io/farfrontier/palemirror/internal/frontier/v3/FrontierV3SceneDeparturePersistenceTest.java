@@ -139,10 +139,47 @@ class FrontierV3SceneDeparturePersistenceTest {
         assertTrue(synchronizedStorage.get(), "proof includes the storage synchronization");
         assertFalse(ledger.savedDeparture(receipt), "sync alone is not a durable SavedData acknowledgement");
         var published = new AtomicBoolean();
-        assertTrue(batch.acknowledge(ticket, ledger, receipt::equals, () -> published.set(true)));
+        assertTrue(batch.acknowledge(ticket, ledger, receipt::equals, value -> false, () -> published.set(true)));
         assertTrue(published.get(), "the exact saved receipt must be published before release");
         assertTrue(ledger.savedDeparture(receipt));
         assertTrue(FrontierV3AmbientCarrierLedger.load(ledger.save(new CompoundTag(), null), null).savedDeparture(receipt));
+    }
+    @Test void ambientDepartureAlsoRequiresExactEntityWriteSyncAndPersistedAcknowledgement() {
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        var observed = receipt(9).observed();
+        var identity = new FrontierV3ActorCarrierComposition.Declaration(ACTOR, ActorKind.RESIDENT,
+                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, ID,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 2L);
+        var receipt = new FrontierV3AmbientDeparture(new FrontierV3AmbientCarrierLedger.Carrier(identity, 7L, 7L),
+                observed, observed.body(), FixedScalar.whole(20));
+        var stored = storedChunk(9);
+        var tag = stored.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).getCompound("NeoForgeData");
+        tag.putString(FrontierV3ActorCarrierComposition.OWNER_KEY, "AMBIENT_LEASE");
+        tag.remove(FrontierV3SceneExecutor.LEASE_KEY); tag.remove(FrontierV3SceneExecutor.REVISION_KEY);
+        var written = new CompletableFuture<Void>();
+        var batch = new FrontierV3SceneDeparturePersistence.Batch();
+        batch.observe(new ChunkPos(0, 0), stored, written);
+        assertTrue(ledger.recordAmbientDeparture(receipt));
+        var synced = new AtomicBoolean();
+        var ticket = batch.complete(true, () -> {
+            synced.set(true); return CompletableFuture.completedFuture(null);
+        }, ledger).orElseThrow();
+        assertEquals(java.util.List.of(receipt), ticket.ambientDepartures());
+        assertTrue(ticket.departures().isEmpty());
+        assertFalse(ticket.saved().isDone());
+        assertFalse(ledger.savedAmbientDeparture(receipt));
+        written.complete(null); ticket.saved().join();
+        assertTrue(synced.get());
+        assertFalse(ledger.savedAmbientDeparture(receipt));
+        var published = new AtomicBoolean();
+        assertTrue(batch.acknowledge(ticket, ledger, value -> false, receipt::equals, () -> published.set(true)));
+        assertTrue(published.get()); assertTrue(ledger.savedAmbientDeparture(receipt));
+        var saved = ledger.save(new CompoundTag(), null);
+        assertTrue(FrontierV3AmbientCarrierLedger.load(saved, null).savedAmbientDeparture(receipt));
+        var old = saved.copy(); old.putInt("format", 7);
+        assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(old, null));
+        assertTrue(ledger.resumeAmbientDeparture(receipt));
+        assertFalse(ledger.savedAmbientDeparture(receipt));
     }
 
     @Test void changedHealthOrFailedWriteCannotBecomeSavedDeparture() {
@@ -157,7 +194,7 @@ class FrontierV3SceneDeparturePersistenceTest {
         var ticket = failed.complete(true, () -> CompletableFuture.completedFuture(null), ledger).orElseThrow();
         assertEquals(java.util.List.of(receipt), ticket.departures());
         assertThrows(java.util.concurrent.CompletionException.class, () -> ticket.saved().join());
-        assertFalse(failed.acknowledge(ticket, ledger, value -> true, () -> fail("failed write must not publish")));
+        assertFalse(failed.acknowledge(ticket, ledger, value -> true, value -> false, () -> fail("failed write must not publish")));
         assertFalse(ledger.savedDeparture(receipt));
     }
 

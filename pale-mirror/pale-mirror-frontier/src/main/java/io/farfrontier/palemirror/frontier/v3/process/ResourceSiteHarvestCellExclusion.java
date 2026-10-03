@@ -39,7 +39,7 @@ final class ResourceSiteHarvestCellExclusion {
         if (skipped.hotLeaseId().isPresent()) {
             FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, skipped.hotLeaseId().orElseThrow());
         } else if (FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
-                || !FrontierSceneAdmission.available(state, List.of(job.workerId()))) {
+                || !ActorExecutionCoordinator.coldAvailable(state, job.workerId())) {
             throw new IllegalArgumentException("COLD excluded-cell continuation cannot bypass a physical farmer");
         }
         ResourceFieldCycle worked = cycle.worked(selected.id(), skipped.outcome());

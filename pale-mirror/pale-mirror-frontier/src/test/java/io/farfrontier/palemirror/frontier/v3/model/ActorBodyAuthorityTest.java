@@ -7,6 +7,30 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorBodyAuthorityTest {
+    @Test void exactPhysicalReleaseRetiresOnlyTheIncarnationAndPreservesActivity() {
+        var state = ResourceSiteHarvestProcessTest.initial();
+        var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        var execution = state.actorExecutions().next(actor, ActorActivityKind.PRESENCE, actor);
+        state = ActorExecutionComposition.LIFECYCLE.prepareVacant(state, execution)
+                .commit(state, FrontierWorldStateUpdate.begin());
+        state = ActorBodyAuthority.demand(state, actor);
+        var body = ActorBodyAuthority.current(state, actor);
+        state = ActorBodyAuthority.running(state, body);
+        assertTrue(ActorBodyAuthority.retainsPhysicalCustody(state, actor));
+        var running = state;
+        assertThrows(IllegalArgumentException.class, () -> ActorBodyAuthority.released(running,
+                new ActorBodyId(actor, body.physicalEpoch() + 1L)));
+        var released = ActorBodyAuthority.released(state, body);
+        assertFalse(ActorBodyAuthority.retainsPhysicalCustody(released, actor));
+        assertSame(state.actorExecutions(), released.actorExecutions());
+        assertSame(state.actorLocations(), released.actorLocations());
+        assertSame(state.inventory(), released.inventory());
+        assertThrows(IllegalArgumentException.class, () -> ActorBodyAuthority.released(released, body));
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released));
+        var next = ActorBodyAuthority.current(ActorBodyAuthority.demand(recovered, actor), actor);
+        assertEquals(body.physicalEpoch() + 1L, next.physicalEpoch());
+        assertEquals(execution, recovered.actorExecutions().actors().get(actor).current().orElseThrow());
+    }
     @Test void missingActorForeignOwnerAndSceneRevisionCannotBecomeBodyAuthority() {
         var state = ResourceSiteHarvestProcessTest.initial();
         var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
@@ -43,6 +67,8 @@ class ActorBodyAuthorityTest {
                 actor, state.actorLocations().get(actor).body(), state.actorLocations().get(actor).condition().health())));
         assertSame(authority, ActorBodyAuthority.require(state, identity),
                 "finishing process participation is not physical-body removal");
+        assertFalse(ActorExecutionCoordinator.coldAvailable(state, actor),
+                "a closed scene with a retained live body still excludes background advancement");
         var ambient = io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess.nextLease(
                 state, actor, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO);
         state = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.prepare(state, ambient);

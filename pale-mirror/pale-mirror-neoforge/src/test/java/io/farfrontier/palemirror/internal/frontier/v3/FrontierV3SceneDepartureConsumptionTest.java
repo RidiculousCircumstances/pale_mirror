@@ -132,15 +132,12 @@ class FrontierV3SceneDepartureConsumptionTest {
     }
 
     @Test
-    void priorSavedSceneFormatLoadsWithoutInventingAReturnRead() {
+    void priorSavedSceneFormatIsRejectedWithoutInventingAReturnRead() {
         var receipt = valid(); var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         assertTrue(ledger.recordDeparture(receipt)); assertTrue(ledger.confirmSavedDeparture(receipt));
         var old = ledger.save(new CompoundTag(), null);
         old.putInt("format", 6); old.remove("returnReads");
-        var recovered = FrontierV3AmbientCarrierLedger.load(old, null);
-        assertTrue(recovered.savedDeparture(receipt));
-        assertFalse(recovered.returnRead(ACTOR));
-        assertFalse(recovered.noLoadRecoverableDeparture(receipt), "old format did not fence pre-load returns");
+        assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(old, null));
         var malformed = ledger.save(new CompoundTag(), null); malformed.remove("returnReads");
         assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(malformed, null));
         var unguarded = ledger.save(new CompoundTag(), null); unguarded.remove("readFencedDepartures");

@@ -88,6 +88,7 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> ACTOR_MOVEMENT = types(
             "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted", "frontier.actor_movement_started");
     private static final Set<String> ACTOR_EXECUTION = types("frontier.actor_execution_resumed");
+    private static final Set<String> ACTOR_BODY = types("frontier.actor_body_released");
     private static final Set<String> ECONOMY = types(
             "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
             "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
@@ -150,7 +151,7 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> STRATEGY = types(
             "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
-    private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, LOGISTICS, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ECONOMY, RESOURCE_SITES,
+    private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, LOGISTICS, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
             Map.entry("physical-observation", new FrontierPhysicalProcessModule()),
@@ -160,6 +161,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("population", new FrontierPopulationProcessModule()),
             Map.entry("actor-movement", new FrontierActorMovementProcessModule()),
             Map.entry("actor-execution", new FrontierActorExecutionProcessModule()),
+            Map.entry("actor-body", new FrontierActorBodyProcessModule()),
             Map.entry("economy", new FrontierEconomyProcessModule()),
             Map.entry("resource-sites", new FrontierResourceSiteProcessModule()),
             Map.entry("hive", new FrontierHiveProcessModule()),
@@ -322,6 +324,7 @@ public final class FrontierWorldProcessCatalog {
                 descriptor("actor-movement", types("frontier.actor_movement_hot_observed"), types(ActorMovementProcess.PROGRESS),
                         ACTOR_MOVEMENT, emissions("actor-movement"), ACTOR_MOVEMENT),
                 descriptor("actor-execution", Set.of(), Set.of(), ACTOR_EXECUTION, Set.of(), ACTOR_EXECUTION),
+                descriptor("actor-body", ACTOR_BODY, Set.of(), ACTOR_BODY, ACTOR_BODY, ACTOR_BODY),
                 descriptor("economy", economyCommands(), economySchedules(), ECONOMY, emissions("economy"), ECONOMY),
                 descriptor("resource-sites", resourceCommands(), resourceSchedules(), RESOURCE_SITES, emissions("resource-sites"), RESOURCE_SITES),
                 descriptor("hive", hiveCommands(), hiveSchedules(), HIVE, emissions("hive"), HIVE),

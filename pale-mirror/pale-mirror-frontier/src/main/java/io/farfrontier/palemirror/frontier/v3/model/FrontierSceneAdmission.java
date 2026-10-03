@@ -41,7 +41,7 @@ public final class FrontierSceneAdmission {
         RouteOperation operation = state.operations().get(operationId);
         return operation != null && operation.tacticalPlan().currentFor(state.strategicPlans())
                 && !hasActiveSceneLease(state, operationId) && !hasUnresolvedRouteEngagement(state, operationId)
-                && available(state, operation.participantIds());
+                && ActorExecutionCoordinator.coldAvailable(state, operation.participantIds());
     }
 
     /**
@@ -64,7 +64,7 @@ public final class FrontierSceneAdmission {
         if (operation == null) return false;
         Collection<SubjectId> actors = new ArrayList<>(operation.participantIds());
         actors.addAll(engagement.attackerIds());
-        return available(state, actors);
+        return ActorExecutionCoordinator.coldAvailable(state, actors);
     }
 
     /**

@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
+import io.farfrontier.palemirror.frontier.v3.model.ActorExecutionCoordinator;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
@@ -146,8 +147,7 @@ public final class HiveMobilizationProcess {
         if (returning.complete()) return List.of();
         long nextDue = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval());
         ProposedEvent retry = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(returnProgress(mobilization.id(), nextDue)));
-        if (returning.members().keySet().stream().map(state.ambientLeases()::get)
-                .anyMatch(lease -> lease != null && lease.status() != AmbientLeaseStatus.CLOSED)) return List.of(retry);
+        if (!ActorExecutionCoordinator.coldAvailable(state, returning.members().keySet())) return List.of(retry);
         SubjectId advancing = returning.safeAdvances().stream().findFirst().orElse(null);
         return advancing == null ? List.of(retry) : List.of(new ProposedEvent(mobilization.hiveId(),
                 new HiveMobilizationReturnAdvanced(mobilization.id(), advancing, returning.members().get(advancing).cursor())), retry);
@@ -162,8 +162,7 @@ public final class HiveMobilizationProcess {
         if (assembly.complete()) return List.of();
         long nextDue = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval());
         ProposedEvent retry = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(mobilization.id(), nextDue)));
-        if (mobilization.memberIds().stream().map(state.ambientLeases()::get)
-                .anyMatch(lease -> lease != null && lease.status() != io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED)) return List.of(retry);
+        if (!ActorExecutionCoordinator.coldAvailable(state, mobilization.memberIds())) return List.of(retry);
         SubjectId advancing = assembly.safeAdvances().stream().findFirst().orElse(null);
         if (advancing == null) return List.of(retry);
         HiveTaskAssembly next = assembly.advance(advancing);

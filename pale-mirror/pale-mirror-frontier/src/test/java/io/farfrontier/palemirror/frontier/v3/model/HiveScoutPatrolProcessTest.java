@@ -57,6 +57,21 @@ class HiveScoutPatrolProcessTest {
         assertTrue(events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).anyMatch(ScheduleEffect.Created.class::isInstance));
     }
 
+    @Test void physicalCustodyExcludesColdPatrolEvenWithoutAnAmbientOrSceneLease() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-body-custody"), 91L));
+        var scout = scout(state);
+        var action = HiveScoutPatrolProcess.patrol(scout.id(), 1, 2_400L);
+        var advance = (ScoutPatrolAdvanced) HiveScoutPatrolProcess.plan(state, action).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ScoutPatrolAdvanced.class::isInstance).findFirst().orElseThrow();
+        var retained = ActorBodyAuthority.demand(state, scout.id());
+        assertFalse(ActorExecutionCoordinator.coldAvailable(retained, java.util.List.of(scout.id())));
+        assertTrue(HiveScoutPatrolProcess.plan(retained, action).stream()
+                .noneMatch(event -> event.payload() instanceof ScoutPatrolAdvanced));
+        assertThrows(IllegalArgumentException.class,
+                () -> HiveScoutPatrolProcess.reduce(retained, retained.bootstrap().hive().id(), advance));
+    }
+
     @Test void aDeadScoutRetiresItsDuePatrolInsteadOfQuarantiningTheWorld() {
         WorldId world = new WorldId("frontier:scout-patrol-death");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, 91L));

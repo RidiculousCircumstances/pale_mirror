@@ -125,6 +125,8 @@ public final class SupplyOperationProcess {
         // recheck so an unloaded world never becomes a busy poll or silently skips the block.
         if (assembly.deferral().isPresent()) return List.of(reschedule(action, operationAssembly(operation, action.dueAt().ticks() + 100L)));
         if (assembly.complete()) {
+            if (!ActorExecutionCoordinator.coldAvailable(state, operation.participantIds()))
+                return List.of(reschedule(action, operationAssembly(operation, action.dueAt().ticks() + 20L)));
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
@@ -132,10 +134,9 @@ public final class SupplyOperationProcess {
         // one COLD member one adjacent cell per turn, retaining the same deterministic order;
         // this prevents two independently compiled approaches from passing through the same
         // canonical floor in one transaction. HOT members keep their durable observed cursor.
-        OperationAssembly next = assembly.safeAdvances().stream().map(actor -> {
-            AmbientActorLease lease = state.ambientLeases().get(actor);
-            return lease != null && lease.status() != AmbientLeaseStatus.CLOSED ? null : assembly.advance(actor);
-        }).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        OperationAssembly next = assembly.safeAdvances().stream()
+                .filter(actor -> ActorExecutionCoordinator.coldAvailable(state, actor))
+                .map(assembly::advance).findFirst().orElse(null);
         if (next == null) return List.of(reschedule(action, operationAssembly(operation, action.dueAt().ticks() + 20L)));
         if (next.complete()) {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
@@ -148,6 +149,9 @@ public final class SupplyOperationProcess {
 
     public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
         RouteOperation operation = state.operations().get(action.subject());
+        if (operation != null && !FrontierSceneAdmission.hasActiveSceneLease(state, operation.id())
+                && !ActorExecutionCoordinator.coldAvailable(state, operation.participantIds()))
+            return List.of(reschedule(action, operationProgress(operation, Math.addExact(action.dueAt().ticks(), 20L))));
         if (operation != null && operation.stage() == OperationStage.ARRIVED
                 && contractForOperation(state, operation).status() == ContractStatus.DELIVERED) {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),

@@ -584,6 +584,10 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                                 && lease.members().getFirst().actorId().equals(job.workerId())).isEmpty()) {
             throw new IllegalArgumentException("field preparation abort lacks one exact body-free job scene");
         }
+        if (!lease.members().getFirst().actorId().equals(aborted.body().actorId()))
+            throw new IllegalArgumentException("field preparation abort has a foreign body");
+        if (ActorBodyAuthority.require(state, aborted.body()).phase() != FencedRecoveryPhase.PREPARED)
+            throw new IllegalArgumentException("body-free field abort cannot claim an attempted incarnation");
         return FrontierSceneLeaseStateSupport.abortPrepared(state, aborted.leaseId());
     }
 }

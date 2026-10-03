@@ -475,7 +475,7 @@ final class FrontierV3SceneExecutor {
             if (position == null) return BodyMaterialization.DEFERRED;
             boolean bioform = bioform(state, member.actorId());
             if (position.getY() != canonical.y()) return BodyMaterialization.CONFLICT;
-            long custodyEpoch = carrier == FrontierV3AmbientCarrierLedger.Reconciliation.READY ? ledger.reconstructionEpoch(member.actorId()) : 1L;
+            long custodyEpoch = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, member.actorId()).physicalEpoch();
             var firstDeclaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
                     FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
                     FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), custodyEpoch);

@@ -22,8 +22,17 @@ class FrontierV3PreparedAmbientCancellationTest {
         assertTrue(stale.fence(inactive, lease.revision(), lease.revision() - 1));
         assertFalse(FrontierV3AmbientActorExecutor.restartCustodyIsRetained(unknown, actor, lease, stale));
         assertTrue(ledger.fence(inactive, lease.revision(), lease.revision()));
-        assertTrue(FrontierV3AmbientActorExecutor.restartCustodyIsRetained(unknown, actor, lease, ledger));
+        assertFalse(FrontierV3AmbientActorExecutor.restartCustodyIsRetained(unknown, actor, lease, ledger),
+                "inactive history cannot prove an already-running incarnation was never inserted");
         assertFalse(FrontierV3AmbientActorExecutor.restartCustodyIsRetained(hot, actor, hot.ambientLeases().get(actor), ledger));
+        var unstarted = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.transition(prepared, actor,
+                io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.UNKNOWN_AFTER_RESTART);
+        var unused = FrontierV3AmbientCarrierLedger.emptyForTest();
+        assertTrue(unused.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(
+                new FrontierV3ActorFirstAdmission.Identity(actor, unstarted.actorLocations().get(actor).kind(),
+                        FrontierV3AmbientActorExecutor.entityId(unstarted, actor)))));
+        assertTrue(FrontierV3AmbientActorExecutor.restartCustodyIsRetained(unstarted, actor,
+                unstarted.ambientLeases().get(actor), unused));
     }
     @Test void retainedInactiveCarrierAllowsCancellationWithoutLoadingItsChunk() {
         assertTrue(FrontierV3AmbientActorExecutor.preparedCancellationHasEvidence(

@@ -27,7 +27,7 @@ record FrontierV3ActorAdoption(FrontierV3AmbientCarrierLedger.Carrier predecesso
         if (!old.actorId().equals(admitted.actorId()) || !old.entityId().equals(admitted.entityId())
                 || old.kind() != admitted.kind()
                 || admitted.representation() != FrontierV3ActorCarrierComposition.Representation.LIVE_BODY
-                || old.epoch() == Long.MAX_VALUE || admitted.epoch() != old.epoch() + 1L
+                || admitted.epoch() <= old.epoch()
                 || admitted.authorityRevision() <= priorRevision) {
             throw new IllegalArgumentException("invalid actor adoption endpoints");
         }

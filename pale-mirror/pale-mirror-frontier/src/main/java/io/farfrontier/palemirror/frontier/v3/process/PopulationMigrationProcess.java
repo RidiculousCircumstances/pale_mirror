@@ -152,7 +152,7 @@ public final class PopulationMigrationProcess {
         return FrontierRouteNetwork.isPassable(state.bootstrap(), route, state.physicalDeltas());
     }
     private static boolean coldAvailable(FrontierWorldState state, SubjectId residentId) {
-        return FrontierSceneAdmission.available(state, List.of(residentId))
+        return ActorExecutionCoordinator.coldAvailable(state, residentId)
                 && !FrontierWorldStateSupport.activeOperationClaim(state, residentId)
                 && !FrontierWorldStateSupport.activePatrolClaim(state, residentId)
                 && !FrontierWorldStateSupport.activeEmploymentClaim(state, residentId);

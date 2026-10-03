@@ -39,8 +39,7 @@ public final class HiveScoutPatrolProcess {
         }
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         List<ProposedEvent> events = new java.util.ArrayList<>();
-        AmbientActorLease lease = state.ambientLeases().get(scout.id());
-        if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
+        if (ActorExecutionCoordinator.coldAvailable(state, scout.id())) {
             BlockPosition prior = state.actorLocations().get(scout.id()).supportingSurface().support();
             events.add(new ProposedEvent(state.bootstrap().hive().id(), new ScoutPatrolAdvanced(scout.id(), action.dueAt().ticks(),
                     nextPosition(state, scout, prior), java.util.Optional.of(prior))));
@@ -72,6 +71,8 @@ public final class HiveScoutPatrolProcess {
                     BodyPosition.above(new SurfaceAnchor(nextPosition(state, scout, advanced.position()))));
             return retargeted.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(advanced.position())));
         }
+        if (!ActorExecutionCoordinator.coldAvailable(state, scout.id()))
+            throw new IllegalArgumentException("COLD scout patrol cannot advance a physically retained actor");
         if (advanced.priorPosition().isPresent() && !nextPosition(state, scout, current).equals(advanced.position())) {
             throw new IllegalArgumentException("COLD scout patrol advance skips its exact next cursor");
         }

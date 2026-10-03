@@ -43,6 +43,7 @@ public final class FrontierWorldProcessCodecs {
         result.put("population", FrontierWorldPayloadCodecs.populationCodecs());
         result.put("actor-movement", ActorMovementPayloadCodecs.create());
         result.put("actor-execution", ActorExecutionPayloadCodecs.create());
+        result.put("actor-body", ActorBodyPayloadCodecs.create());
         result.put("economy", FrontierWorldPayloadCodecs.economyCodecs());
         result.put("resource-sites", FrontierWorldPayloadCodecs.resourceSiteCodecs());
         result.put("hive", FrontierWorldPayloadCodecs.hiveCodecs());

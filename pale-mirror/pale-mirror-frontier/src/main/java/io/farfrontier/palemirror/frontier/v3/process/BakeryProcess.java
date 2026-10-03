@@ -118,6 +118,8 @@ public final class BakeryProcess {
         if (!ActorExecutionCoordinator.ambientAvailable(state, List.of(job.workerId()))) return Optional.of("AMBIENT_ACTOR_AUTHORITY");
         if (ActorExecutionCoordinator.sceneOwns(state, job.workerId()))
             return Optional.of("SCENE_ACTOR_AUTHORITY");
+        if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId()))
+            return Optional.of("ACTOR_BODY_CUSTODY");
         ProductionStationSpec station = station(state, job);
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
         BakeryWorkState.Phase phase = job.bakeryWork().orElseThrow().phase();

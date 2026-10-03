@@ -289,6 +289,11 @@ final class FrontierV3SceneReleaseExecutor {
                 FrontierV3ControlledMobMotion.stop(body);
                 body.discard();
             }
+            // Closing the process is not physical absence. Only after removal (or exact
+            // saved departure above) may the common incarnation owner permit COLD again.
+            for (var carrier : releaseCarriers)
+                FrontierV3ActorBodyCustody.releaseFencedAbsence(level, runtime, carrier.identity(),
+                        carrier.physicalRevision(), carrier.ambientRevision());
             for (SceneMember member : departedMembers) {
                 FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).forgetDeparture(member.actorId());
             }

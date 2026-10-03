@@ -354,7 +354,6 @@ public final class HiveSettlementAssaultProcess {
     }
 
     private static boolean availableBioform(FrontierWorldState state, SubjectId id, SettlementAssault currentAssault) {
-        AmbientActorLease ambient = state.ambientLeases().get(id);
         // Strategic COLD movement has no authority to pull an exact identity through an intact
         // cocoon.  Mobilisation is its own lifecycle boundary; until then only deployed forms
         // may be selected for an assault.
@@ -366,7 +365,7 @@ public final class HiveSettlementAssaultProcess {
                 .anyMatch(parent -> parent.status() == HiveMobilizationStatus.DEPARTED && parent.taskId().equals(currentAssault.taskId())
                         && parent.memberIds().contains(id));
         return (retainedParentOwnsThisAssault || HivePhysiologySupport.availableForIndependentOperation(state, id))
-                && (ambient == null || ambient.status() == AmbientLeaseStatus.CLOSED)
+                && ActorExecutionCoordinator.coldAvailable(state, id)
                 && state.strategicPlans().routeEngagements().values().stream().noneMatch(value -> value.status() != RouteEngagementStatus.RESOLVED && value.attackerIds().contains(id))
                 && state.strategicPlans().settlementAssaults().values().stream().noneMatch(value -> !value.equals(currentAssault)
                 && value.status() != SettlementAssaultStatus.RESOLVED && value.attackerIds().contains(id));
@@ -376,7 +375,7 @@ public final class HiveSettlementAssaultProcess {
         List<SubjectId> combatants = new ArrayList<>(assault.attackerIds());
         combatants.addAll(assault.defenderIds());
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
-        return FrontierSceneAdmission.available(state, combatants)
+        return ActorExecutionCoordinator.coldAvailable(state, combatants)
                 && assault.attackerIds().stream().allMatch(id -> availableBioform(state, id, assault))
                 && assault.defenderIds().stream().allMatch(id -> assignments.assignment(id).kind() == HumanAssignmentKind.SETTLEMENT_DEFENCE
                 && assignments.assignment(id).ownerId().filter(assault.id()::equals).isPresent()

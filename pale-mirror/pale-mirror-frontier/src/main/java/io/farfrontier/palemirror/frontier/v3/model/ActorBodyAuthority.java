@@ -68,6 +68,13 @@ public final class ActorBodyAuthority {
         requireLiving(state, actor);
         return new ActorBodyId(actor, state.fencedRecovery().nextEpoch(ActorBodyId.recoveryBindingId(actor)));
     }
+    /** Read-only proposal for representation demand; physical evidence never allocates an epoch. */
+    public static ActorBodyId demandIdentity(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
+        requireLiving(state, actor);
+        return state.fencedRecovery().current().containsKey(ActorBodyId.recoveryBindingId(actor))
+                ? current(state, actor) : next(state, actor);
+    }
     public static FrontierWorldState prepare(FrontierWorldState state, ActorBodyId body) {
         requireLiving(state, body.actorId());
         var id = ActorBodyId.recoveryBindingId(body.actorId());
@@ -137,6 +144,23 @@ public final class ActorBodyAuthority {
         if (require(state, actuation.body()).phase() != FencedRecoveryPhase.RUNNING)
             throw new IllegalArgumentException("body actuator requires current running physical custody");
         state.actorExecutions().requireCurrent(actuation.execution());
+    }
+    /** Includes unstarted/recovery custody: absence of observers never permits a competing writer. */
+    public static boolean retainsPhysicalCustody(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
+        var binding = state.fencedRecovery().current().get(ActorBodyId.recoveryBindingId(actor));
+        if (binding == null) return false;
+        require(state, new ActorBodyId(actor, binding.authorityEpoch()));
+        return true;
+    }
+    /** The physical owner supplies absence only after its exact durable carrier fence. */
+    public static FrontierWorldState released(FrontierWorldState state, ActorBodyId body) {
+        requireLiving(state, body.actorId());
+        var phase = require(state, body).phase();
+        if (phase != FencedRecoveryPhase.RUNNING && phase != FencedRecoveryPhase.PREPARED)
+            throw new IllegalArgumentException("body absence requires an exact unambiguous incarnation");
+        return state.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                state.fencedRecovery().revokeToCold(ActorBodyId.recoveryBindingId(body.actorId()), body.physicalEpoch())));
     }
     public static FrontierWorldState isolate(FrontierWorldState state, ActorBodyId body, String reason) {
         var binding = require(state, body);

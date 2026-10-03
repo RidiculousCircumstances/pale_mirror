@@ -197,14 +197,15 @@ final class FrontierV3ClosedSceneBodyRecovery {
                 ? ambient.revision() : Math.addExact(ambient.revision(), 1L);
         var next = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actorId,
                 FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, member.entityId(),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, nextRevision, ledger.reconstructionEpoch(actorId));
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, nextRevision,
+                io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.demandIdentity(state, actorId).physicalEpoch());
         return retainedClosedReturnAdmission(ledger, next);
     }
     static ClosedSceneReturnRecovery retainedClosedReturnAdmission(FrontierV3AmbientCarrierLedger ledger,
                                                                    FrontierV3ActorCarrierComposition.Declaration next) {
         return next.owner() == FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE
                 && ledger.hasCarrier(next.actorId()) && ledger.pendingAdoption(next.actorId()).isEmpty()
-                && next.epoch() == ledger.reconstructionEpoch(next.actorId())
+                && ledger.inactiveCarrier(next.actorId()).filter(carrier -> next.epoch() > carrier.identity().epoch()).isPresent()
                 && ledger.reconciliation(next) == FrontierV3AmbientCarrierLedger.Reconciliation.READY
                 ? ClosedSceneReturnRecovery.FENCED : ClosedSceneReturnRecovery.CONFLICT;
     }

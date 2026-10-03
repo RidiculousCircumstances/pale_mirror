@@ -335,7 +335,8 @@ class ResourceSiteHarvestProcessTest {
         ScheduledAction due = ResourceSiteHarvestProcess.coldProgress(start.job(), 22_301L);
         assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(state, due));
 
-        var aborted = new ResourceSiteHarvestScenePreparationAborted(lease.id(), start.site(), start.job().id());
+        var aborted = new ResourceSiteHarvestScenePreparationAborted(lease.id(), start.site(), start.job().id(),
+                ActorBodyAuthority.current(state, start.job().workerId()));
         assertEquals(aborted, FrontierWorldRuntimeDefinition.payloadCodecs().decode(aborted.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(aborted)));
         CommandId commandId = new CommandId("command:field-preparation-aborted");
@@ -346,7 +347,7 @@ class ResourceSiteHarvestProcessTest {
                 new FrontierCommand(FrontierCommand.SCHEMA_VERSION, commandId, state.bootstrap().worldId(),
                         Revision.ZERO, new SimInstant(22_300L), start.job().workerId(), CauseChain.root(commandId),
                         new ResourceSiteHarvestScenePreparationAborted(lease.id(), start.site(),
-                                new SubjectId("job:site-harvest-foreign")))));
+                                new SubjectId("job:site-harvest-foreign"), aborted.body()))));
         ProposedEvent planned = assertInstanceOf(CommandPlan.Accepted.class,
                 FrontierWorldProcessCatalog.planCommand("resource-sites", state, command)).events().getFirst();
         FrontierEvent event = new FrontierEvent(FrontierEvent.SCHEMA_VERSION, new EventId("event:field-preparation-aborted"),
@@ -355,6 +356,9 @@ class ResourceSiteHarvestProcessTest {
         FrontierWorldState resumed = FrontierWorldProcessCatalog.reduce("resource-sites", state, event);
         assertEquals(SceneLeaseStatus.CLOSED, resumed.sceneLeases().get(lease.id()).status());
         assertEquals(staleBody, resumed.actorLocations().get(start.job().workerId()).body());
+        assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(resumed, due),
+                "aborting scene admission cannot invent physical absence");
+        resumed = ActorBodyAuthority.released(resumed, ActorBodyAuthority.current(resumed, start.job().workerId()));
         assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(resumed, due));
         assertTrue(ResourceSiteHarvestProcess.planColdProgress(resumed, due).stream()
                 .anyMatch(step -> step.payload() instanceof ResourceSiteHarvestColdGoalAdvanced));
@@ -368,6 +372,9 @@ class ResourceSiteHarvestProcessTest {
                 Revision.ZERO, new SimInstant(22_301L), restartPlan.subject(), CauseChain.root(commandId), restartPlan.payload());
         FrontierWorldState restartResumed = FrontierWorldProcessCatalog.reduce("resource-sites", restarted, restartEvent);
         assertEquals(SceneLeaseStatus.CLOSED, restartResumed.sceneLeases().get(lease.id()).status());
+        assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(restartResumed, due));
+        restartResumed = ActorBodyAuthority.released(restartResumed,
+                ActorBodyAuthority.current(restartResumed, start.job().workerId()));
         assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(restartResumed, due));
 
         FrontierWorldState attempted = state.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
@@ -557,6 +564,9 @@ class ResourceSiteHarvestProcessTest {
                         "minecraft:wheat", completed.progress().totalCropSlots()),
                         new SceneLeaseReleased(hot.lease().id(), List.of(new SceneMemberPosition(
                                 completed.workerId(), body.body(), body.condition().health())))));
+        assertFalse(ActorExecutionCoordinator.coldAvailable(released, completed.workerId()),
+                "process release alone is not physical body absence");
+        released = ActorBodyAuthority.released(released, ActorBodyAuthority.current(released, completed.workerId()));
         var delivery = ResourceSiteHarvestProcess.planColdProgress(released,
                 ResourceSiteHarvestProcess.coldProgress(completed, 22_301L));
         assertTrue(delivery.stream().map(ProposedEvent::payload)

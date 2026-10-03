@@ -23,7 +23,7 @@ import java.util.WeakHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
-/** Confirms a final scene unload only after vanilla's exact entity write and storage sync. */
+/** Confirms exact actor unload evidence only after vanilla's entity write and storage sync. */
 final class FrontierV3SceneDeparturePersistence {
     private static final Map<ServerLevel, Index> INDEXES = new WeakHashMap<>();
     private static final int MAX_CANDIDATES = 4_096;
@@ -72,7 +72,9 @@ final class FrontierV3SceneDeparturePersistence {
                             && value.entityId().equals(receipt.carrier().identity().entityId())).findFirst().orElse(null);
                     return member != null && FrontierV3SceneDepartureObserver.observedDeparture(current, lease, member, currentLedger)
                             .filter(receipt::equals).isPresent();
-                }, () -> currentLedger.persist(level, current.bootstrap().worldId()));
+                }, receipt -> receipt.current(current)
+                        && level.getEntity(receipt.carrier().identity().entityId()) == null,
+                        () -> currentLedger.persist(level, current.bootstrap().worldId()));
             } catch (RuntimeException failedPublication) {
                 PaleMirrorMod.LOGGER.error("Scene departure save proof could not be published; release remains pending", failedPublication);
             }
@@ -120,18 +122,28 @@ final class FrontierV3SceneDeparturePersistence {
                 var appearances = saved.getOrDefault(receipt.carrier().identity().entityId(), List.of());
                 if (appearances.size() == 1 && appearances.getFirst().matches(receipt)) selected.add(receipt);
             }
-            return writes.completePass(complete, selected.isEmpty()
+            var ambient = new ArrayList<FrontierV3AmbientDeparture>();
+            for (var receipt : ledger.ambientDepartures()) {
+                if (ledger.savedAmbientDeparture(receipt)) continue;
+                var appearances = saved.getOrDefault(receipt.carrier().identity().entityId(), List.of());
+                if (appearances.size() == 1 && appearances.getFirst().matches(receipt)) ambient.add(receipt);
+            }
+            return writes.completePass(complete, selected.isEmpty() && ambient.isEmpty()
                     ? () -> CompletableFuture.completedFuture(null) : synchronize)
-                    .map(write -> new Ticket(write, List.copyOf(selected)));
+                    .map(write -> new Ticket(write, List.copyOf(selected), List.copyOf(ambient)));
         }
 
         boolean acknowledge(Ticket ticket, FrontierV3AmbientCarrierLedger ledger,
-                            java.util.function.Predicate<FrontierV3SceneDeparture> currentOwner, Runnable persist) {
+                            java.util.function.Predicate<FrontierV3SceneDeparture> currentOwner,
+                            java.util.function.Predicate<FrontierV3AmbientDeparture> currentAmbientOwner, Runnable persist) {
             if (!writes.current(ticket.write()) || !ticket.saved().isDone()
                     || ticket.saved().isCompletedExceptionally()) return false;
             for (var receipt : ticket.departures()) {
                 if (!currentOwner.test(receipt)) continue;
                 if (ledger.confirmSavedDeparture(receipt)) persist.run();
+            }
+            for (var receipt : ticket.ambientDepartures()) {
+                if (currentAmbientOwner.test(receipt) && ledger.confirmSavedAmbientDeparture(receipt)) persist.run();
             }
             if (!writes.accept(ticket.write())) return false;
             candidates.clear(); candidateCount = 0;
@@ -139,8 +151,9 @@ final class FrontierV3SceneDeparturePersistence {
         }
     }
 
-    record Ticket(FrontierV3EntitySaveBatch.Ticket write, List<FrontierV3SceneDeparture> departures) {
-        Ticket { departures = List.copyOf(departures); }
+    record Ticket(FrontierV3EntitySaveBatch.Ticket write, List<FrontierV3SceneDeparture> departures,
+                  List<FrontierV3AmbientDeparture> ambientDepartures) {
+        Ticket { departures = List.copyOf(departures); ambientDepartures = List.copyOf(ambientDepartures); }
         CompletableFuture<Void> saved() { return write.saved(); }
     }
 
@@ -168,10 +181,14 @@ final class FrontierV3SceneDeparturePersistence {
                     || !entity.contains("NeoForgeData", Tag.TAG_COMPOUND)
                     || !entity.contains("Pos", Tag.TAG_LIST) || !entity.contains("Health", Tag.TAG_FLOAT)) return Optional.empty();
             var tag = entity.getCompound("NeoForgeData");
-            if (!tag.getString(FrontierV3ActorCarrierComposition.OWNER_KEY).equals("SCENE_LEASE")
-                    || !tag.contains(FrontierV3ActorCarrierComposition.REVISION_KEY, Tag.TAG_LONG)
+            final FrontierV3ActorCarrierComposition.Owner declaredOwner;
+            try { declaredOwner = FrontierV3ActorCarrierComposition.Owner.valueOf(
+                    tag.getString(FrontierV3ActorCarrierComposition.OWNER_KEY)); }
+            catch (IllegalArgumentException missingOrUnknown) { return Optional.empty(); }
+            if (!tag.contains(FrontierV3ActorCarrierComposition.REVISION_KEY, Tag.TAG_LONG)
                     || !tag.contains(FrontierV3ActorCarrierComposition.EPOCH_KEY, Tag.TAG_LONG)
-                    || !tag.contains(FrontierV3SceneExecutor.REVISION_KEY, Tag.TAG_LONG)) return Optional.empty();
+                    || declaredOwner == FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE
+                        && !tag.contains(FrontierV3SceneExecutor.REVISION_KEY, Tag.TAG_LONG)) return Optional.empty();
             ListTag position = entity.getList("Pos", Tag.TAG_DOUBLE);
             if (position.size() != 3 || !position.equals(entity.get("Pos"))) return Optional.empty();
             String type = entity.getString("id"), actor = tag.getString(FrontierV3ActorCarrierComposition.ACTOR_KEY);
@@ -180,7 +197,8 @@ final class FrontierV3SceneDeparturePersistence {
             String representation = tag.getString(FrontierV3ActorCarrierComposition.REPRESENTATION_KEY);
             String lease = tag.getString(FrontierV3SceneExecutor.LEASE_KEY);
             if (type.length() > 64 || actor.isEmpty() || actor.length() > 128 || kind.length() > 32
-                    || representation.length() > 32 || lease.isEmpty() || lease.length() > 128) return Optional.empty();
+                    || representation.length() > 32 || lease.length() > 128
+                    || declaredOwner == FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE && lease.isEmpty()) return Optional.empty();
             double x = position.getDouble(0), y = position.getDouble(1), z = position.getDouble(2);
             float health = entity.getFloat("Health");
             if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)
@@ -228,6 +246,15 @@ final class FrontierV3SceneDeparturePersistence {
                     && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health())
                     && (receipt.offhand().isEmpty() || receipt.offhand().equals(offhand))
                     && (receipt.mainhand().isEmpty() || receipt.mainhand().equals(mainhand));
+        }
+        boolean matches(FrontierV3AmbientDeparture receipt) {
+            var declaration = receipt.carrier().identity();
+            return id.equals(declaration.entityId()) && actor.equals(declaration.actorId().value())
+                    && kind.equals(declaration.kind().name()) && owner.equals(declaration.owner().name())
+                    && representation.equals("LIVE_BODY") && revision == declaration.authorityRevision()
+                    && epoch == declaration.epoch()
+                    && type.equals(declaration.kind() == ActorKind.RESIDENT ? "minecraft:villager" : "minecraft:zombie")
+                    && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health());
         }
     }
 
