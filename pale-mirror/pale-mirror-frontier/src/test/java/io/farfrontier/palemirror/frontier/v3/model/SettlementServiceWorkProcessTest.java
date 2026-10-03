@@ -170,6 +170,23 @@ class SettlementServiceWorkProcessTest {
                 "blocking movement cannot erase or rewrite the service's physical-effect obligations");
         assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceHotTraversalAdvanced(held, settlement.id(), advance),
                 "late movement cannot reactivate a terminal service");
+        var base = FrontierWorldRuntimeDefinition.configuration(bootstrap.worldId(), 214L);
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(
+                new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(bootstrap.worldId(), reclaimed,
+                        new SimInstant(1_001L), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
+                        base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:service-worker-death");
+        var death = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, bootstrap.worldId(),
+                engine.checkpoint().revision(), engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId),
+                new ActorDied(lease.id(), work.workerId(), start.standingBody(), "test:service-worker-death")));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, death, death::toString);
+        var deadState = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(deadState.actorExecutions().actors().get(work.workerId()).current().isEmpty());
+        assertEquals(SettlementServiceWorkPhase.BLOCKED, deadState.serviceWorks().get(work.id()).phase());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART,
+                deadState.physicalIntents().get(work.inputIssueIntentId()).status(),
+                "death ends actor authority but retains an explicit physical reconciliation obligation");
     }
 
     @Test
