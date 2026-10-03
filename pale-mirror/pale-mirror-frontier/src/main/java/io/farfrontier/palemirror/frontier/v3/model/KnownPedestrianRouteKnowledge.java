@@ -15,6 +15,9 @@ public final class KnownPedestrianRouteKnowledge {
     // world registry or a record-keyed map that hashes the entire bootstrap on each lookup.
     private static FrontierBootstrap cachedBootstrap;
     private static Set<BlockPosition> cachedStaticOccupancy = Set.of();
+    private record ViewKey(SubjectId settlementId, List<Passage> passages) { }
+    private static Object viewBootstrap, viewOrgans, viewDeltas, viewTopology;
+    private static final java.util.Map<ViewKey, KnownPedestrianRouteKnowledge> VIEWS = new java.util.LinkedHashMap<>();
     private final FrontierBootstrap bootstrap;
     private final Set<BlockPosition> hard;
     private final BoundedPedestrianApproach.SurveyedSurface surveyed;
@@ -43,14 +46,26 @@ public final class KnownPedestrianRouteKnowledge {
     }
 
     /** Reuse one immutable view while trying several legal destinations in one planning turn. */
-    public static KnownPedestrianRouteKnowledge forSettlement(FrontierWorldState state,
+    public static synchronized KnownPedestrianRouteKnowledge forSettlement(FrontierWorldState state,
                                                                SubjectId settlementId, List<Passage> passages) {
         Objects.requireNonNull(state, "pedestrian route state");
         passages = List.copyOf(Objects.requireNonNull(passages, "pedestrian route passages"));
+        if (viewBootstrap != state.bootstrap() || viewOrgans != state.hiveColony().addedOrgans()
+                || viewDeltas != state.physicalDeltas() || viewTopology != state.routeTopology()) {
+            VIEWS.clear();
+            viewBootstrap = state.bootstrap(); viewOrgans = state.hiveColony().addedOrgans();
+            viewDeltas = state.physicalDeltas(); viewTopology = state.routeTopology();
+        }
+        ViewKey key = new ViewKey(settlementId, passages);
+        KnownPedestrianRouteKnowledge prior = VIEWS.get(key);
+        if (prior != null) return prior;
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
         Set<BlockPosition> hard = occupied(state, settlement, passages);
-        return new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
+        KnownPedestrianRouteKnowledge result = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
                 KnownPedestrianGround.forSettlement(state, settlementId));
+        if (VIEWS.size() >= 64) VIEWS.clear();
+        VIEWS.put(key, result);
+        return result;
     }
 
     private static Set<BlockPosition> occupied(FrontierWorldState state, Settlement settlement,

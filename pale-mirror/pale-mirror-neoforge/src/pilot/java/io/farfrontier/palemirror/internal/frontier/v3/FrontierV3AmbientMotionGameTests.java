@@ -371,8 +371,14 @@ public final class FrontierV3AmbientMotionGameTests {
     public static void postHarvestWorkLeaseMovesTheSameFarmerAwayFromTheFinalFieldStation(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos finalStation = helper.absolutePos(new BlockPos(0, 8, 0));
         prepareSquareFloor(level, finalStation, 6);
+        var source = FrontierWorldState.initial(io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper.create(
+                new WorldId("frontier:ambient-post-harvest-return"), 91L));
+        var sourceBody = source.actorLocations().get(new SubjectId("resident:1-1")).body();
+        var bootstrap = FrontierV3CargoLoadingGameTests.translatedBootstrap(source.bootstrap(),
+                finalStation.getX() - sourceBody.x(), finalStation.getY() - sourceBody.y(),
+                finalStation.getZ() - sourceBody.z());
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ambient-post-harvest-return"), 91L), new EphemeralStore(), 10_000);
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(bootstrap), new EphemeralStore(), 10_000);
         FrontierWorldState state = state(runtime); SubjectId farmer = new SubjectId("resident:1-1");
         BodyPosition handoff = bodyAt(finalStation);
         // This fixture is the physical half of ResourceSiteHarvestTraversal.workReturnSurface:

@@ -200,7 +200,7 @@ final class FrontierV3SceneStoredRecovery {
                 receipt = new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(inactive,
                         Math.max(1L, retained.revision()), ambient == null ? 0L : ambient.revision()),
                         retained.id(), retained.revision(), new SceneMemberPosition(member.actorId(), saved.body(), saved.health()),
-                        actor.condition().health(), saved.offhand());
+                        actor.condition().health(), saved.offhand(), saved.mainhand());
             } catch (IllegalArgumentException foreign) { return; }
             if (!saved.matches(receipt)) return;
             recoveredActors.put(member.entityId(), receipt);

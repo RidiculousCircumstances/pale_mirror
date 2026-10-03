@@ -15,7 +15,8 @@ public record BakeryHotHandMaterialized(SubjectId jobId, SceneLeaseId leaseId, S
         Objects.requireNonNull(leaseId, "baker scene");
         Objects.requireNonNull(actorAccountId, "actor resource account");
         Objects.requireNonNull(observedHand, "observed baker hand");
-        if (actorEpoch < 1 || !(observedHand.address() instanceof PhysicalStackAddress.ActorHand))
+        if (actorEpoch < 1 || !(observedHand.address() instanceof PhysicalStackAddress.ActorHand hand)
+                || hand.hand() != ActorContainerItemOrder.Hand.MAIN)
             throw new IllegalArgumentException("bakery materialization requires one physical baker hand");
     }
     @Override public String type() { return "frontier.bakery_hot_hand_materialized"; }

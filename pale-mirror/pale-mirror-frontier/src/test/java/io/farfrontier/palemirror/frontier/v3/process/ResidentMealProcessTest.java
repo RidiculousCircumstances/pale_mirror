@@ -500,6 +500,9 @@ class ResidentMealProcessTest {
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).accessBoundary();
         SurfaceAnchor firstExit = ResidentMealKnownNavigation.returnPath(state, state.humanPopulation().meals().get(resident))
                 .stream().filter(surface -> boundary.cleared(surface.standingBody())).findFirst().orElseThrow();
+        assertEquals(firstExit, ResidentMealKnownNavigation.returnPath(state,
+                state.humanPopulation().meals().get(resident)).getLast(),
+                "HOT navigation must target the first semantic exit, not the remaining parking route");
         state = ResidentMealProcess.reduceHotAccessCleared(state, resident,
                 new ResidentMealHotAccessCleared(resident, 1, firstExit.standingBody()));
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"),

@@ -99,6 +99,26 @@ class FrontierV3SceneDeparturePersistenceTest {
                 () -> CompletableFuture.completedFuture(null), ledger).orElseThrow().departures());
     }
 
+    @Test void savedBakeryMainHandRequiresExactKindQuantityAndComponentsBeforeRelease() {
+        var base = receipt(9);
+        var bakery = new FrontierV3SceneDeparture(base.carrier(), base.leaseId(), base.sceneRevision(),
+                base.observed(), base.canonicalHealthAtCapture(), java.util.Optional.empty(),
+                java.util.Optional.of(new FrontierV3SceneDeparture.HandStack("minecraft:bread", 4)));
+        assertEquals(bakery, FrontierV3SceneDeparture.load(bakery.save()));
+        var chunk = storedChunkWithWheat(4);
+        var entity = chunk.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
+        var hands = entity.getList("HandItems", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        var bread = new CompoundTag(); bread.putString("id", "minecraft:bread"); bread.putInt("count", 4);
+        hands.set(0, bread); hands.set(1, new CompoundTag());
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(bakery));
+        bread.putInt("count", 3);
+        assertFalse(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(bakery));
+        bread.putInt("count", 4); bread.putString("id", "minecraft:wheat");
+        assertFalse(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(bakery));
+        bread.putString("id", "minecraft:bread"); bread.put("components", new CompoundTag());
+        assertFalse(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(bakery));
+    }
+
     @Test void unloadReceiptWaitsForExactWriteAndSuccessfulSync() {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); var receipt = receipt(9);
         var batch = new FrontierV3SceneDeparturePersistence.Batch();

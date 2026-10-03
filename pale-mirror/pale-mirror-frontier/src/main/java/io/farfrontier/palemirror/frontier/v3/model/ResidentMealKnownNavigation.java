@@ -29,7 +29,18 @@ public final class ResidentMealKnownNavigation {
         MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
                 FrontierWireTags.tag(meal.phase()), 1L, List.of(meal.clearingSurface()),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        return KnownServiceExitNavigation.pathFrom(state, meal.settlementId(), meal.depotId(), order, start);
+        List<SurfaceAnchor> route = KnownServiceExitNavigation.pathFrom(state, meal.settlementId(), meal.depotId(), order, start);
+        ServiceAccessBoundary boundary = ServiceAccessCoordinator.boundary(state, meal.depotId());
+        // CLEAR_ACCESS asks for an exit, not an exact parking trip. The retained parking
+        // spot can become unreachable after selection; do not keep the socket hostage
+        // for the remainder of a route after its semantic exit has been reached.
+        if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS) {
+            for (int index = 0; index < route.size(); index++) {
+                if (boundary.cleared(route.get(index).standingBody()))
+                    return List.copyOf(route.subList(0, index + 1));
+            }
+        }
+        return route;
     }
 
     /** A HOT release can resume from its last witnessed body without replaying an old path. */

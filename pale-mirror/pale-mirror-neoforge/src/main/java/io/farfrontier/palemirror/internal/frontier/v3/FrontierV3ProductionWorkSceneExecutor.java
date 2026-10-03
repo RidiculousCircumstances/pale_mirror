@@ -74,7 +74,8 @@ final class FrontierV3ProductionWorkSceneExecutor {
                 else FrontierV3SceneExecutor.release(level, runtime, lease);
             }
             case UNKNOWN_AFTER_RESTART -> FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
-            case CONFLICT, CLOSED -> { }
+            case CONFLICT -> FrontierV3BakerySceneReconciliation.inspect(level, runtime, state, lease);
+            case CLOSED -> { }
         }
     }
     private static void prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {

@@ -13,11 +13,14 @@ final class ResidentServiceTurnover {
     static Optional<ActorMovement> select(FrontierWorldState state, SubjectId actorId, long atTick) {
         ResidentProfile resident = state.humanPopulation().resident(actorId);
         ActorLocation actor = state.actorLocations().get(actorId);
+        if (resident == null || actor == null) return Optional.empty();
+        HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
+        boolean idle = ResidentActivityCoordinator.assess(state, actorId, atTick).kind() == ResidentActivityChoice.Kind.IDLE;
         if (resident == null || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || state.actorMovements().containsKey(actorId) || state.humanPopulation().meals().containsKey(actorId)
                 || ActorExecutionCoordinator.sceneOwns(state, actorId)
-                || ResidentActivityCoordinator.assess(state, actorId, atTick).kind() != ResidentActivityChoice.Kind.IDLE
-                || !ResidentWorkYield.assess(state, HumanAssignmentProjection.compile(state).assignment(actorId)).ready())
+                || !ResidentWorkYield.assess(state, assignment).ready()
+                || !idle && !ActivityExecutionCapabilities.waitingForServiceResource(state, assignment))
             return Optional.empty();
         AmbientActorLease lease = state.ambientLeases().get(actorId);
         if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.HOT)

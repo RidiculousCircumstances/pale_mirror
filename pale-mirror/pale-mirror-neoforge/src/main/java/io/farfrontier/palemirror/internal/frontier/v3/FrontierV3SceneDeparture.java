@@ -13,7 +13,7 @@ import java.util.Optional;
 /** Final observed body departure, not a periodic sample and not itself a COLD authority grant. */
 record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, SceneLeaseId leaseId, long sceneRevision,
                                 SceneMemberPosition observed, FixedScalar canonicalHealthAtCapture,
-                                Optional<HandStack> offhand) {
+                                Optional<HandStack> offhand, Optional<HandStack> mainhand) {
     record HandStack(String itemKind, int quantity) {
         HandStack {
             if (itemKind == null || !itemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")
@@ -23,7 +23,12 @@ record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, 
 
     FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, SceneLeaseId leaseId, long sceneRevision,
                              SceneMemberPosition observed, FixedScalar canonicalHealthAtCapture) {
-        this(carrier, leaseId, sceneRevision, observed, canonicalHealthAtCapture, Optional.empty());
+        this(carrier, leaseId, sceneRevision, observed, canonicalHealthAtCapture, Optional.empty(), Optional.empty());
+    }
+
+    FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, SceneLeaseId leaseId, long sceneRevision,
+                            SceneMemberPosition observed, FixedScalar canonicalHealthAtCapture, Optional<HandStack> offhand) {
+        this(carrier, leaseId, sceneRevision, observed, canonicalHealthAtCapture, offhand, Optional.empty());
     }
 
     FrontierV3SceneDeparture {
@@ -32,6 +37,7 @@ record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, 
         Objects.requireNonNull(observed);
         Objects.requireNonNull(canonicalHealthAtCapture);
         Objects.requireNonNull(offhand);
+        Objects.requireNonNull(mainhand);
         if (carrier.identity().owner() != FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE
                 || sceneRevision < 0 || carrier.physicalRevision() != Math.max(1L, sceneRevision)
                 || !carrier.identity().actorId().equals(observed.actorId())
@@ -56,6 +62,12 @@ record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, 
             held.putInt("quantity", hand.quantity());
             tag.put("offhand", held);
         });
+        mainhand.ifPresent(hand -> {
+            CompoundTag held = new CompoundTag();
+            held.putString("itemKind", hand.itemKind());
+            held.putInt("quantity", hand.quantity());
+            tag.put("mainhand", held);
+        });
         return tag;
     }
 
@@ -76,8 +88,16 @@ record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, 
                 throw new IllegalStateException("incomplete scene departure hand evidence");
             hand = Optional.of(new HandStack(held.getString("itemKind"), held.getInt("quantity")));
         }
+        Optional<HandStack> main = Optional.empty();
+        if (tag.contains("mainhand")) {
+            if (!tag.contains("mainhand", Tag.TAG_COMPOUND)) throw new IllegalStateException("invalid scene main hand evidence");
+            CompoundTag held = tag.getCompound("mainhand");
+            if (!held.contains("itemKind", Tag.TAG_STRING) || !held.contains("quantity", Tag.TAG_INT))
+                throw new IllegalStateException("incomplete scene main hand evidence");
+            main = Optional.of(new HandStack(held.getString("itemKind"), held.getInt("quantity")));
+        }
         return new FrontierV3SceneDeparture(carrier, new SceneLeaseId(tag.getString("lease")), tag.getLong("sceneRevision"),
                 new SceneMemberPosition(carrier.identity().actorId(), new BodyPosition(tag.getInt("x"), tag.getInt("y"), tag.getInt("z")),
-                        new FixedScalar(tag.getLong("health"))), new FixedScalar(tag.getLong("canonicalHealth")), hand);
+                        new FixedScalar(tag.getLong("health"))), new FixedScalar(tag.getLong("canonicalHealth")), hand, main);
     }
 }

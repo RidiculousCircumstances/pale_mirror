@@ -7,6 +7,13 @@ output=${3:-pale-mirror-runtime.jfr}
 
 [[ "$pid" =~ ^[0-9]+$ ]] || { printf 'Server PID must be numeric\n' >&2; exit 2; }
 [[ -d "/proc/$pid" ]] || { printf 'No live process with PID %s\n' "$pid" >&2; exit 2; }
+# systemd MainPID can name run.sh rather than its Java child. HotSpot attach may
+# send SIGQUIT before rejecting a non-JVM target; validate before invoking jcmd.
+executable=$(readlink -f "/proc/$pid/exe")
+[[ "${executable##*/}" == java ]] || {
+  printf 'Refusing JFR attach: PID %s is not Java (%s). Resolve the actual JVM child.\n' "$pid" "$executable" >&2
+  exit 2
+}
 [[ "$duration" =~ ^[1-9][0-9]*[smh]$ ]] || { printf 'Duration must look like 120s, 5m or 1h\n' >&2; exit 2; }
 command -v jcmd >/dev/null || { printf 'jcmd from JDK 21 is required\n' >&2; exit 2; }
 

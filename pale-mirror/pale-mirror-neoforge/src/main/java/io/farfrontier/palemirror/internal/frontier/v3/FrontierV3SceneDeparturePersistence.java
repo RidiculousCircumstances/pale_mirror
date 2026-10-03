@@ -146,12 +146,19 @@ final class FrontierV3SceneDeparturePersistence {
     record SavedBody(UUID id, String type, String actor, String kind, String owner, String representation,
                      long revision, long epoch, String lease, long sceneRevision,
                      BodyPosition body, FixedScalar health,
-                     Optional<FrontierV3SceneDeparture.HandStack> offhand) {
+                     Optional<FrontierV3SceneDeparture.HandStack> offhand,
+                     Optional<FrontierV3SceneDeparture.HandStack> mainhand) {
+        SavedBody(UUID id, String type, String actor, String kind, String owner, String representation,
+                  long revision, long epoch, String lease, long sceneRevision,
+                  BodyPosition body, FixedScalar health, Optional<FrontierV3SceneDeparture.HandStack> offhand) {
+            this(id, type, actor, kind, owner, representation, revision, epoch, lease, sceneRevision,
+                    body, health, offhand, Optional.empty());
+        }
         SavedBody(UUID id, String type, String actor, String kind, String owner, String representation,
                   long revision, long epoch, String lease, long sceneRevision,
                   BodyPosition body, FixedScalar health) {
             this(id, type, actor, kind, owner, representation, revision, epoch, lease, sceneRevision,
-                    body, health, Optional.empty());
+                    body, health, Optional.empty(), Optional.empty());
         }
 
         static Optional<SavedBody> from(CompoundTag entity) {
@@ -179,10 +186,18 @@ final class FrontierV3SceneDeparturePersistence {
             var observedBody = FrontierV3BodyObservationSave.read(entity, x, y, z);
             if (observedBody.isEmpty()) return Optional.empty();
             Optional<FrontierV3SceneDeparture.HandStack> offhand = Optional.empty();
+            Optional<FrontierV3SceneDeparture.HandStack> mainhand = Optional.empty();
             if (entity.contains("HandItems", Tag.TAG_LIST)) {
                 ListTag hands = entity.getList("HandItems", Tag.TAG_COMPOUND);
                 if (hands.size() != 2) return Optional.empty();
                 CompoundTag held = hands.getCompound(1);
+                CompoundTag main = hands.getCompound(0);
+                if (main.contains("id", Tag.TAG_STRING) && main.contains("count", Tag.TAG_INT)
+                        && !main.contains("components")) {
+                    try {
+                        mainhand = Optional.of(new FrontierV3SceneDeparture.HandStack(main.getString("id"), main.getInt("count")));
+                    } catch (IllegalArgumentException invalidHand) { return Optional.empty(); }
+                }
                 if (held.contains("id", Tag.TAG_STRING) && held.contains("count", Tag.TAG_INT)
                         && !held.contains("components")) {
                     try {
@@ -196,7 +211,7 @@ final class FrontierV3SceneDeparturePersistence {
                     tag.getLong(FrontierV3ActorCarrierComposition.EPOCH_KEY), lease,
                     tag.getLong(FrontierV3SceneExecutor.REVISION_KEY),
                     observedBody.orElseThrow(),
-                    new FixedScalar(Math.round((double) health * FixedScalar.SCALE)), offhand));
+                    new FixedScalar(Math.round((double) health * FixedScalar.SCALE)), offhand, mainhand));
         }
 
         boolean matches(FrontierV3SceneDeparture receipt) {
@@ -209,7 +224,8 @@ final class FrontierV3SceneDeparturePersistence {
                     && type.equals(declaration.kind() == FrontierV3ActorCarrierComposition.ActorKind.RESIDENT
                         ? "minecraft:villager" : "minecraft:zombie")
                     && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health())
-                    && (receipt.offhand().isEmpty() || receipt.offhand().equals(offhand));
+                    && (receipt.offhand().isEmpty() || receipt.offhand().equals(offhand))
+                    && (receipt.mainhand().isEmpty() || receipt.mainhand().equals(mainhand));
         }
     }
 

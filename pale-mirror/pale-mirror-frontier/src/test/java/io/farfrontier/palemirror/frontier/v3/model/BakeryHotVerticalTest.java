@@ -282,6 +282,28 @@ class BakeryHotVerticalTest {
                 BakeryWorkState.Phase.DEPOT_PICKUP, actor.body(), 1L, 1L, List.of(), List.of(hand));
         state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), observed);
         assertEquals(BakeryWorkState.Phase.STATION_LOAD, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        // The actual pickup batch survives a failed no-demand release. Fresh recovery
+        // may resume this exact body/hand, never clear an unknown pending recipe effect.
+        var conflicted = state.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
+        var fence = conflicted.fencedRecovery().current().get(
+                FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(job.workerId()));
+        var reconciled = new BakerySceneReconciled(job.id(), leaseId, lease.revision(),
+                fence.authorityEpoch(), actor.body(), hand);
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(reconciled, codecs.decode(reconciled.type(), codecs.encode(reconciled)));
+        var materialized = new BakeryHotHandMaterialized(job.id(), leaseId, work.actorAccountId(), 1L, hand);
+        assertEquals(materialized, codecs.decode(materialized.type(), codecs.encode(materialized)),
+                "WAL recovery must retain the baker's main hand");
+        var resumed = io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation.reduce(
+                conflicted, task.ownerId(), reconciled);
+        assertEquals(SceneLeaseStatus.HOT, resumed.sceneLeases().get(leaseId).status());
+        assertEquals(state.inventory(), resumed.inventory(), "recovery cannot mint or move cargo");
+        assertEquals(state.productionJobs(), resumed.productionJobs());
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation.reduce(
+                conflicted, task.ownerId(), new BakerySceneReconciled(job.id(), leaseId, lease.revision(),
+                        fence.authorityEpoch(), actor.body(), new FungiblePhysicalObservation.Stack(hand.address(), "minecraft:wheat", 63))));
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation.reduce(
+                resumed, task.ownerId(), reconciled), "a duplicate inspection cannot reset the fence");
         SubjectId nextResident = state.bootstrap().settlements().getFirst().residents().stream()
                 .map(Resident::id).filter(id -> !id.equals(job.workerId())).findFirst().orElseThrow();
         assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, nextResident),
@@ -293,8 +315,10 @@ class BakeryHotVerticalTest {
                 .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
         var release = new SceneLeaseReleased(leaseId, List.of(new SceneMemberPosition(job.workerId(), actor.body(),
                 actor.condition().health())));
-        blockedWithCargo = ProductionProcess.reduceBakeryHotHandRelease(blockedWithCargo, task.ownerId(),
-                new BakeryHotHandRelease(job.id(), work.actorAccountId(), 1L, hand, release));
+        var handRelease = new BakeryHotHandRelease(job.id(), work.actorAccountId(), 1L, hand, release);
+        assertEquals(handRelease, codecs.decode(handRelease.type(), codecs.encode(handRelease)),
+                "scene release replay must retain the baker's main hand");
+        blockedWithCargo = ProductionProcess.reduceBakeryHotHandRelease(blockedWithCargo, task.ownerId(), handRelease);
         blockedWithCargo = ProductionProcess.reduceWorkSceneFinalized(blockedWithCargo, task.ownerId(),
                 new ProductionWorkSceneFinalized(leaseId, job.id()));
         assertTrue(blockedWithCargo.productionJobs().containsKey(job.id()),

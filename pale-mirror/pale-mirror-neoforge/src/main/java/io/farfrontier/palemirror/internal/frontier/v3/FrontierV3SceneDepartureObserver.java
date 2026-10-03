@@ -44,10 +44,18 @@ final class FrontierV3SceneDepartureObserver {
                 offhand = java.util.Optional.of(new FrontierV3SceneDeparture.HandStack("minecraft:wheat", held.getCount()));
             }
         }
+        java.util.Optional<FrontierV3SceneDeparture.HandStack> mainhand = java.util.Optional.empty();
+        if (FrontierSceneBehaviors.isProductionWork(binding.lease())
+                && FrontierSceneLeaseStateSupport.hasBoundActorHand(state, binding.lease())
+                && FrontierV3BakeryHandProjection.matchesCurrent(state, binding.lease(), binding.member(), body)) {
+            var held = body.getMainHandItem();
+            if (!held.isEmpty()) mainhand = java.util.Optional.of(new FrontierV3SceneDeparture.HandStack(
+                    net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem()).toString(), held.getCount()));
+        }
         var receipt = new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(inactive, revision,
                 ambient == null ? 0L : ambient.revision()), binding.lease().id(), binding.lease().revision(),
                 new SceneMemberPosition(binding.member().actorId(), observedBody,
-                        new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE))), actor.condition().health(), offhand);
+                        new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE))), actor.condition().health(), offhand, mainhand);
         return FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).recordDeparture(receipt);
     }
 
@@ -61,6 +69,15 @@ final class FrontierV3SceneDepartureObserver {
         if (binding != null && FrontierV3ActorCarrierComposition.owns(entity, binding.live())) {
             var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
             var departure = ledger.departure(binding.member().actorId()).orElse(null);
+            if (departure != null && departure.mainhand().isPresent()) {
+                var held = body.getMainHandItem();
+                var expected = departure.mainhand().orElseThrow();
+                if (held.isEmpty() || !expected.itemKind().equals(
+                        net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem()).toString())
+                        || expected.quantity() != held.getCount()
+                        || !net.minecraft.world.item.ItemStack.isSameItemSameComponents(held,
+                            new net.minecraft.world.item.ItemStack(held.getItem(), held.getCount()))) return;
+            }
             if (departure != null && departure.offhand().isPresent()) {
                 var held = body.getOffhandItem();
                 var expected = departure.offhand().orElseThrow();

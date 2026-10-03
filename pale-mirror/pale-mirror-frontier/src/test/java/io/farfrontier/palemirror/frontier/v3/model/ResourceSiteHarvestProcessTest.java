@@ -108,9 +108,14 @@ class ResourceSiteHarvestProcessTest {
         return state;
     }
     static ColdHarvest coldHarvestAfterSteps(long seed, int coldSteps) {
+        return coldHarvestAfterSteps(seed, coldSteps, true);
+    }
+    private static ColdHarvest coldHarvestAfterSteps(long seed, int coldSteps, boolean small) {
         // Single-batch helpers keep an explicit 64-cell fixture; live bootstrap size is independent.
-        FrontierWorldState state = ready(FrontierWorldState.initial(FrontierResourceSiteHarvestFixture.smallFieldBootstrap(
-                new WorldId("frontier:resource-site-harvest-" + seed), seed)));
+        WorldId world = new WorldId("frontier:resource-site-harvest-" + seed);
+        FrontierWorldState state = ready(FrontierWorldState.initial(small
+                ? FrontierResourceSiteHarvestFixture.smallFieldBootstrap(world, seed)
+                : FrontierBootstrapper.create(world, seed)));
         SubjectId site = new SubjectId("site:1-wheat-field");
         // These older harvest fixtures exercise the 22k work instant. Keep that
         // instant within a declared WORK window instead of bypassing activity policy.
@@ -138,6 +143,53 @@ class ResourceSiteHarvestProcessTest {
             state = step.state(); due = step.next();
         }
         return new ColdHarvest(state, site, (ResourceSiteHarvestJob) state.resourceSites().site(site).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow());
+    }
+    @Test void capacityBlockedBatchRelinquishesServiceWithoutLosingItsCargoOrJob() {
+        var start = coldHarvestAfterSteps(125L, 0, false);
+        FrontierWorldState state = start.state();
+        ScheduledAction due = ResourceSiteHarvestProcess.coldProgress(start.job(), 22_301L);
+        ResourceSiteHarvestJob job = start.job();
+        for (int step = 0; step < 1024 && !job.returningForBatch(); step++) {
+            Step next = stepCold(state, start.site(), due);
+            state = next.state(); due = next.next();
+            job = state.resourceSites().site(start.site()).harvestJob(job.id()).orElseThrow();
+        }
+        assertTrue(job.returningForBatch());
+        assertEquals(64, job.undeliveredYieldQuantity());
+        state = state.withActorBody(job.workerId(), ResourceSiteHarvestGoal.depotPort(state, job).stations().getFirst().standingBody());
+        var depot = job.outputSlot().containerId();
+        for (int stack = 0; stack < 54 && state.firstFreeContainerSlot(depot).isPresent(); stack++) {
+            var resources = state.inventory().fungibleResources();
+            var lots = new java.util.LinkedHashMap<>(resources.lots());
+            var id = new SubjectId("lot:capacity-turnover-bread-" + stack);
+            lots.put(id, new ResourceLot(id, new SubjectId("settlement:1"), "minecraft:bread", 64, "test", List.of()));
+            var accounts = new java.util.LinkedHashMap<>(resources.accounts());
+            var account = accounts.get(job.depotAccountId());
+            var quantities = new java.util.LinkedHashMap<>(account.lotQuantities()); quantities.put(id, 64);
+            accounts.put(account.id(), new CustodyAccount(account.id(), account.custody(), quantities, account.claimQuantities()));
+            state = state.withInventory(state.inventory().withFungibleResources(new FungibleResourceLedger(
+                    lots, resources.claims(), accounts, resources.bindings())));
+        }
+        assertTrue(state.firstFreeContainerSlot(depot).isEmpty());
+        state = state.withHumanPopulation(state.humanPopulation().consumeResidentFood(job.workerId(),
+                27_000L, 1000, state.bootstrap().ruleset().residentLife()));
+        var originalCargo = state.inventory().fungibleResources().accounts().get(job.actorAccountId());
+        assertTrue(ActivityExecutionCapabilities.waitingForServiceResource(state,
+                HumanAssignmentProjection.compile(state).assignment(job.workerId())));
+        assertTrue(ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(), 27_000L),
+                "a HOT owner must relinquish the same capacity-blocked service turn before turnover admission");
+        var events = io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.plan(state,
+                io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(job.workerId(), 27_000L));
+        var movement = events.stream().map(ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::cast)
+                .findFirst().orElseThrow();
+        var after = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.reduceStarted(state,
+                job.workerId(), movement);
+        assertEquals(job, after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow());
+        assertEquals(originalCargo, after.inventory().fungibleResources().accounts().get(job.actorAccountId()));
+        assertTrue(ServiceAccessCoordinator.boundary(after, depot).cleared(
+                movement.movement().order().legalStations().getFirst().standingBody()));
     }
     static HotHarvest hotHarvestAfterColdSteps(int coldSteps) { return hotHarvestAfterColdSteps(125L, coldSteps); }
     static ColdHarvest coldHarvestWithCargo(long seed) {

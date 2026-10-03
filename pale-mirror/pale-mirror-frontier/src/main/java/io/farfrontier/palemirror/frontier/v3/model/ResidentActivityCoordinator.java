@@ -40,6 +40,9 @@ public final class ResidentActivityCoordinator {
         long assessedAt = Math.max(canonicalTick, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
         return state.humanPopulation().meals().containsKey(residentId)
                 || state.actorMovements().containsKey(residentId)
+                || ServiceAccessCoordinator.turnoverPoint(state, residentId).isPresent()
+                    && ActivityExecutionCapabilities.waitingForServiceResource(state,
+                        HumanAssignmentProjection.compile(state).assignment(residentId))
                 || state.humanPopulation().nutrition(residentId).accrueThrough(assessedAt,
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(assessedAt))

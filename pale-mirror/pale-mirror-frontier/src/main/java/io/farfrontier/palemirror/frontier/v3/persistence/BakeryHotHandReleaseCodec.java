@@ -37,7 +37,7 @@ final class BakeryHotHandReleaseCodec implements PayloadCodec {
             long epoch = input.readLong();
             var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
                     FrontierWorldPayloadCodecs.readSubject(input).value(),
-                    UUID.fromString(FrontierWorldStateCodec.readString(input))),
+                    UUID.fromString(FrontierWorldStateCodec.readString(input)), ActorContainerItemOrder.Hand.MAIN),
                     FrontierWorldStateCodec.readString(input), input.readUnsignedByte());
             var scene = new SceneLeaseId(FrontierWorldStateCodec.readString(input));
             var actor = FrontierWorldPayloadCodecs.readSubject(input).value();

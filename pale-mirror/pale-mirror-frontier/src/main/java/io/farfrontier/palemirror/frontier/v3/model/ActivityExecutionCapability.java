@@ -4,6 +4,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public interface ActivityExecutionCapability {
     HumanAssignmentKind kind();
     ActivityExecutionCheckpoint checkpoint(FrontierWorldState state, HumanAssignment assignment);
+    /** Owner says whether a resource wait may relinquish a temporary service position. */
+    default boolean waitingForServiceResource(FrontierWorldState state, HumanAssignment assignment) { return false; }
     default FrontierWorldState pauseLabour(FrontierWorldState state, HumanAssignment assignment, long tick) {
         throw new IllegalStateException("owner has no declared labour suspension strategy");
     }

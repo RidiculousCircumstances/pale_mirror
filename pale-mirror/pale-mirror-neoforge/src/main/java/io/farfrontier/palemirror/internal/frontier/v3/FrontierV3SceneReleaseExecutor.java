@@ -191,13 +191,27 @@ final class FrontierV3SceneReleaseExecutor {
                 }
                 var work = job.bakeryWork().orElseThrow();
                 Entity carrier = level.getEntity(lease.members().getFirst().entityId());
-                if (!(carrier instanceof Mob worker) || !owned(carrier, state, lease, lease.members().getFirst())) {
+                FrontierV3SceneDeparture.HandStack hand;
+                if (carrier instanceof Mob worker && owned(carrier, state, lease, lease.members().getFirst())) {
+                    var held = worker.getMainHandItem();
+                    if (held.isEmpty()) {
+                        releasePolicy.conflict(level, runtime, state, lease, "release-bakery-hand-binding-unavailable"); return;
+                    }
+                    hand = new FrontierV3SceneDeparture.HandStack(
+                            net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem()).toString(), held.getCount());
+                } else if (carrier == null && departedMembers.contains(lease.members().getFirst())) {
+                    var departure = FrontierV3SceneDepartureObserver.validDeparture(state, lease,
+                            lease.members().getFirst(), actorLedger).orElse(null);
+                    if (departure == null || departure.mainhand().isEmpty()) {
+                        releasePolicy.conflict(level, runtime, state, lease, "release-bakery-saved-hand-unavailable"); return;
+                    }
+                    hand = departure.mainhand().orElseThrow();
+                } else {
                     releasePolicy.conflict(level, runtime, state, lease, "release-bakery-hand-body-unavailable"); return;
                 }
-                var held = worker.getMainHandItem();
                 var bindings = state.inventory().fungibleResources().bindings().values().stream()
                         .filter(value -> value.accountId().equals(work.actorAccountId())).toList();
-                if (bindings.size() != 1 || held.isEmpty()) {
+                if (bindings.size() != 1) {
                     releasePolicy.conflict(level, runtime, state, lease, "release-bakery-hand-binding-unavailable"); return;
                 }
                 bakeryHandRelease = new io.farfrontier.palemirror.frontier.v3.model.BakeryHotHandRelease(
@@ -206,7 +220,7 @@ final class FrontierV3SceneReleaseExecutor {
                                 new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(
                                         job.workerId(), lease.members().getFirst().entityId(),
                                         io.farfrontier.palemirror.frontier.v3.model.ActorContainerItemOrder.Hand.MAIN),
-                                net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem()).toString(), held.getCount()),
+                                hand.itemKind(), hand.quantity()),
                         new SceneLeaseReleased(lease.id(), positions));
                 try {
                     io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.reduceBakeryHotHandRelease(

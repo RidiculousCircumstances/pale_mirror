@@ -195,6 +195,16 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), tick)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof BakerySceneReconciled receipt) {
+            if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR))
+                return FrontierWorldCommandPlanner.rejected("bakery reconciliation requires physical inspection");
+            try {
+                var job = state.productionJobs().get(receipt.jobId());
+                if (job == null) return FrontierWorldCommandPlanner.rejected("bakery reconciliation lost its job");
+                BakerySceneReconciliation.reduce(state, job.settlementId(), receipt);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), receipt)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof BakeryHotHandRelease released) {
             try {
                 ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(released.jobId()));
@@ -250,6 +260,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case BakeryHotEffectObserved observed -> ProductionProcess.reduceBakeryHotEffectObserved(state, event.subject(), observed);
             case BakeryHotWorkTick tick -> ProductionProcess.reduceBakeryHotWorkTick(state, event.subject(), tick);
             case BakeryHotHandRelease released -> ProductionProcess.reduceBakeryHotHandRelease(state, event.subject(), released);
+            case BakerySceneReconciled receipt -> BakerySceneReconciliation.reduce(state, event.subject(), receipt);
             case BakeryHotHandMaterialized observed -> ProductionProcess.reduceBakeryHotHandMaterialized(state, event.subject(), observed);
             case BakeryHotBlockChanged changed -> ProductionProcess.reduceBakeryHotBlockChanged(state, event.subject(), changed);
             case ProductionWorkTraversalBlocked blocked -> ProductionProcess.reduceWorkTraversalBlocked(state, event.subject(), blocked);

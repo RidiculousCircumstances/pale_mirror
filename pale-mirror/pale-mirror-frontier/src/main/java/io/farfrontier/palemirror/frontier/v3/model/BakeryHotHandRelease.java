@@ -14,7 +14,8 @@ public record BakeryHotHandRelease(SubjectId jobId, SubjectId actorAccountId, lo
         Objects.requireNonNull(actorAccountId, "bakery release actor account");
         Objects.requireNonNull(observedHand, "bakery release physical hand");
         Objects.requireNonNull(sceneRelease, "bakery release scene");
-        if (actorEpoch < 1 || !(observedHand.address() instanceof PhysicalStackAddress.ActorHand))
+        if (actorEpoch < 1 || !(observedHand.address() instanceof PhysicalStackAddress.ActorHand hand)
+                || hand.hand() != ActorContainerItemOrder.Hand.MAIN)
             throw new IllegalArgumentException("bakery hand release needs one current exact actor hand");
     }
     @Override public String type() { return "frontier.bakery_hot_hand_release"; }

@@ -243,7 +243,7 @@ class ResourceSiteColdHarvestReceiptTest {
         assertTrue(FrontierResourceSiteHarvestSceneSupport.candidate(hotReturned, awaitingReceipt).isEmpty(),
                 "the final return station is a receipt boundary, not a new crop or traversal scene");
 
-        var base = FrontierWorldRuntimeDefinition.configuration(pending.state().bootstrap().worldId(), 125L);
+        var base = FrontierWorldRuntimeDefinition.configuration(pending.state().bootstrap());
         var growingDuringReturn = pending.state();
         for (int stage = 0; stage < 3; stage++) {
             var lifecycle = growingDuringReturn.resourceSites().site(site);
@@ -635,7 +635,10 @@ class ResourceSiteColdHarvestReceiptTest {
 
     private static FrontierWorldState matureField() {
         SubjectId site = new SubjectId("site:1-wheat-field");
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:cold-harvest-receipt"), 125L));
+        // This receipt fixture asserts one 64-cell batch (128 wheat with bootstrap stock),
+        // not the independent 252-cell live graybox layout and its intermediate returns.
+        FrontierWorldState state = FrontierWorldState.initial(FrontierResourceSiteHarvestFixture.smallFieldBootstrap(
+                new WorldId("frontier:cold-harvest-receipt"), 125L));
         state = state.withHumanPopulation(state.humanPopulation().withSchedule(new SubjectId("settlement:1"),
                 new SettlementDailySchedule(24_000, List.of(
                         new SettlementDailySchedule.Segment(0, 12_000, SettlementDailySchedule.Window.WORK),

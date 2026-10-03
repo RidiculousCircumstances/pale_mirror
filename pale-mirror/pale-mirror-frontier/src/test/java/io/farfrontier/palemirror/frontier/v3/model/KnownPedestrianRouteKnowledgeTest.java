@@ -36,6 +36,11 @@ class KnownPedestrianRouteKnowledgeTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:clearwater-road-support"), 20260918065L));
         var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, new SubjectId("settlement:7"), List.of());
+        org.junit.jupiter.api.Assertions.assertSame(knowledge,
+                KnownPedestrianRouteKnowledge.forSettlement(state.withActorBody(new SubjectId("resident:7-1"),
+                        state.actorLocations().get(new SubjectId("resident:7-1")).body()),
+                        new SubjectId("settlement:7"), List.of()),
+                "actor-only changes must not recompile immutable ground/obstacles");
         BlockPosition road = new BlockPosition(115, 64, 14);
         assertTrue(FrontierRouteNetwork.footprint(state.bootstrap(), state.routeTopology()).surfaceCells().contains(road));
         assertEquals(new SurfaceAnchor(road), knowledge.supportAt(road.x(), road.z()));

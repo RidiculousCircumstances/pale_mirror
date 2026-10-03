@@ -12,6 +12,16 @@ import java.util.Set;
 public final class FrontierResourceSiteHarvestSceneSupport {
     private FrontierResourceSiteHarvestSceneSupport() { }
 
+    /** Holding cargo does not entitle a capacity-blocked worker to monopolize the depot. */
+    static boolean waitingForServiceResource(FrontierWorldState state, HumanAssignment assignment) {
+        executionCheckpoint(state, assignment);
+        ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
+                .flatMap(site -> site.harvestJobs().values().stream())
+                .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
+        return job.returningForBatch() && job.batchSuccessorSlot().isEmpty()
+                && state.firstFreeContainerSlot(job.outputSlot().containerId()).isEmpty();
+    }
+
     /** Field owner proves its own safe stop; generic execution never reads crop stages. */
     static ActivityExecutionCheckpoint executionCheckpoint(FrontierWorldState state, HumanAssignment assignment) {
         if (assignment.kind() != HumanAssignmentKind.FIELD_HARVEST)

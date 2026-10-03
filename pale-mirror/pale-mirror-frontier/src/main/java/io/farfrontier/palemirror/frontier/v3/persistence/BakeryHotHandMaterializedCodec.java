@@ -32,7 +32,8 @@ final class BakeryHotHandMaterializedCodec implements PayloadCodec {
                 FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong(),
                 new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
                         FrontierWorldPayloadCodecs.readSubject(input).value(),
-                        UUID.fromString(FrontierWorldStateCodec.readString(input))),
+                        UUID.fromString(FrontierWorldStateCodec.readString(input)),
+                        io.farfrontier.palemirror.frontier.v3.model.ActorContainerItemOrder.Hand.MAIN),
                         FrontierWorldStateCodec.readString(input), input.readUnsignedByte())));
     }
 }
