@@ -11,13 +11,15 @@ public final class ActorExecutionComposition {
                     ActorActivityKind.FIELD_HARVEST, ActorActivityKind.PRODUCTION, ActorActivityKind.TRANSIT,
                     ActorActivityKind.SCOUT_PATROL, ActorActivityKind.OPERATION_ASSEMBLY, ActorActivityKind.LOGISTICS,
                     ActorActivityKind.ROUTE_PATROL, ActorActivityKind.HIVE_TASK_ASSEMBLY, ActorActivityKind.HIVE_TASK_RETURN,
-                    ActorActivityKind.SETTLEMENT_ASSAULT),
+                    ActorActivityKind.SETTLEMENT_ASSAULT, ActorActivityKind.ENGINEERING_ASSEMBLY, ActorActivityKind.ENGINEERING_WORK),
             List.of(new PresenceActivityCapability(), new MealActivityCapability(), new ServiceExitActivityCapability(),
                     new HarvestActivityCapability(), new ProductionActivityCapability(), new TransitActivityCapability(),
                     new ScoutPatrolActivityCapability(), OperationExecutionAuthority.assemblyCapability(),
                     OperationExecutionAuthority.logisticsCapability(), RoutePatrolExecutionAuthority.capability(),
                     HiveAssemblyExecutionAuthority.capability(), HiveReturnExecutionAuthority.capability(),
-                    SettlementAssaultExecutionAuthority.capability()));
+                    SettlementAssaultExecutionAuthority.capability(),
+                    EngineeringExecutionAuthority.capability(ActorActivityKind.ENGINEERING_ASSEMBLY),
+                    EngineeringExecutionAuthority.capability(ActorActivityKind.ENGINEERING_WORK)));
     public static final ActorExecutionLifecycle LIFECYCLE = new ActorExecutionLifecycle(CAPABILITIES);
     private ActorExecutionComposition() { }
 }

@@ -25,6 +25,7 @@ public final class FrontierEngineeringWorkSceneSupport {
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
         if (assembly.purpose() != EngineeringJourneyPurpose.WORKSITE || !assembly.complete() || !EngineeringToolCustody.ready(state, team)
                 || project.confirmedCells() >= project.workCells().size()) return Optional.empty();
+        EngineeringExecutionAuthority.requireWork(state, project);
         Map<SubjectId, BlockPosition> positions = assembly.positions();
         if (!positions.keySet().equals(Set.copyOf(team.memberIds())) || positions.entrySet().stream()
                 .anyMatch(entry -> !state.actorLocations().get(entry.getKey()).supportingSurface().support().equals(entry.getValue()))) return Optional.empty();

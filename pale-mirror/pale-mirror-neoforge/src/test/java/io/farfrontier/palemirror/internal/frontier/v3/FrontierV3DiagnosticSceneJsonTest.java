@@ -199,7 +199,7 @@ class FrontierV3DiagnosticSceneJsonTest {
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:diagnostic-route"), settlement,
                 bypass, workCells, 0, RouteConstructionStatus.BUILDING, Optional.empty(), Optional.empty(), Optional.empty());
         FrontierWorldState changed = RouteConstructionStateSupport.reduceStarted(baseline, FrontierRouteNetwork.OWNER,
-                new RouteConstructionStarted(project));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionStarted(baseline, project));
 
         String route = FrontierV3DiagnosticJson.render("route_construction", settlement.value(), checkpoint, changed, Optional.empty());
         String missing = FrontierV3DiagnosticJson.render("route_construction", "settlement:missing", checkpoint, changed, Optional.empty());

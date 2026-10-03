@@ -22,9 +22,9 @@ final class RouteMaintenanceFairnessScenario {
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "fixture:loaded-repair"));
 
         RouteMaintenance first = maintenanceStarted(state, 1, 100L, firstLoss);
-        state = RouteMaintenanceStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, new RouteMaintenanceStarted(first));
+        state = RouteMaintenanceStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(state, first));
         RouteMaintenance second = maintenanceStarted(state, 2, 200L, secondLoss);
-        state = RouteMaintenanceStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, new RouteMaintenanceStarted(second));
+        state = RouteMaintenanceStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(state, second));
 
         ExactInventory inventory = state.inventory().withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE);
@@ -55,12 +55,12 @@ final class RouteMaintenanceFairnessScenario {
         state = state.withInventory(inventory);
         EngineeringWorkAssembly initialAssembly = EngineeringWorksite.compile(state, second);
         state = RouteMaintenanceStateSupport.reduceAssemblyStarted(state, FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceAssemblyStarted(second.id(), initialAssembly));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyStarted(state, second.id(), initialAssembly));
         while (!state.routeMaintenances().get(second.id()).assembly().orElseThrow().complete()) {
             EngineeringWorkAssembly current = state.routeMaintenances().get(second.id()).assembly().orElseThrow();
             SubjectId advancing = current.safeAdvances().getFirst();
             state = RouteMaintenanceStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER,
-                    new RouteMaintenanceAssemblyAdvanced(second.id(), current.advance(advancing)));
+                    io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyAdvanced(state, second.id(), current.advance(advancing)));
         }
         Map<SubjectId, RouteMaintenance> maintenances = new LinkedHashMap<>(state.routeMaintenances());
         maintenances.put(second.id(), maintenances.get(second.id()).withCargo(secondCargo.id()));

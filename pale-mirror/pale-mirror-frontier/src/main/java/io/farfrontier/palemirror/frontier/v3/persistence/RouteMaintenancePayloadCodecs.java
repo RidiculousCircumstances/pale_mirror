@@ -14,12 +14,12 @@ final class RouteMaintenancePayloadCodecs {
     static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_maintenance_started"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            RouteMaintenance maintenance = ((RouteMaintenanceStarted) payload).maintenance(); RouteMaintenanceStateCodec.write(output, Map.of(maintenance.id(), maintenance));
+            RouteMaintenance maintenance = ((RouteMaintenanceStarted) payload).maintenance(); RouteMaintenanceStateCodec.write(output, Map.of(maintenance.id(), maintenance)); ActorExecutionStateCodec.writeGroup(output, ((RouteMaintenanceStarted) payload).executions());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             Map<SubjectId, RouteMaintenance> values = RouteMaintenanceStateCodec.read(input);
             if (values.size() != 1) throw new IllegalArgumentException("route maintenance start payload requires one operation");
-            return new RouteMaintenanceStarted(values.values().iterator().next());
+            return new RouteMaintenanceStarted(values.values().iterator().next(), ActorExecutionStateCodec.readGroup(input));
         }); }
     }; }
     static PayloadCodec materialLoaded() { return new PayloadCodec() {
@@ -37,21 +37,21 @@ final class RouteMaintenancePayloadCodecs {
     static PayloadCodec assemblyAdvanced() { return assembly("frontier.route_maintenance_assembly_advanced", RouteMaintenanceAssemblyAdvanced::new); }
     static PayloadCodec closed() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_maintenance_closed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output ->
-                FrontierWorldPayloadCodecs.writeSubject(output, ((RouteMaintenanceClosed) payload).maintenanceId())); }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { var value = (RouteMaintenanceClosed) payload; FrontierWorldPayloadCodecs.writeSubject(output, value.maintenanceId()); ActorExecutionStateCodec.writeGroup(output, value.executions()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
-                new RouteMaintenanceClosed(FrontierWorldPayloadCodecs.readSubject(input).value())); }
+                new RouteMaintenanceClosed(FrontierWorldPayloadCodecs.readSubject(input).value(), ActorExecutionStateCodec.readGroup(input))); }
     }; }
-    private static PayloadCodec assembly(String type, java.util.function.BiFunction<SubjectId, EngineeringWorkAssembly, FrontierPayload> factory) { return new PayloadCodec() {
+    private interface AssemblyFactory { FrontierPayload apply(SubjectId id, EngineeringWorkAssembly assembly, io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions, java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> workExecutions); }
+    private static PayloadCodec assembly(String type, AssemblyFactory factory) { return new PayloadCodec() {
         @Override public String type() { return type; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            SubjectId id; EngineeringWorkAssembly assembly;
-            if (payload instanceof RouteMaintenanceAssemblyStarted started) { id = started.maintenanceId(); assembly = started.assembly(); }
-            else if (payload instanceof RouteMaintenanceAssemblyAdvanced advanced) { id = advanced.maintenanceId(); assembly = advanced.assembly(); }
+            SubjectId id; EngineeringWorkAssembly assembly; io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions; java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> work;
+            if (payload instanceof RouteMaintenanceAssemblyStarted started) { id = started.maintenanceId(); assembly = started.assembly(); executions = started.executions(); work = started.workExecutions(); }
+            else if (payload instanceof RouteMaintenanceAssemblyAdvanced advanced) { id = advanced.maintenanceId(); assembly = advanced.assembly(); executions = advanced.executions(); work = advanced.workExecutions(); }
             else throw new IllegalArgumentException("route maintenance assembly codec received foreign payload");
-            FrontierWorldPayloadCodecs.writeSubject(output, id); RouteConstructionPayloadCodecs.writeAssembly(output, assembly);
+            FrontierWorldPayloadCodecs.writeSubject(output, id); RouteConstructionPayloadCodecs.writeAssembly(output, assembly); ActorExecutionStateCodec.writeGroup(output, executions); ActorExecutionStateCodec.writeOptionalGroup(output, work);
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> factory.apply(
-                FrontierWorldPayloadCodecs.readSubject(input).value(), RouteConstructionPayloadCodecs.readAssembly(input))); }
+                FrontierWorldPayloadCodecs.readSubject(input).value(), RouteConstructionPayloadCodecs.readAssembly(input), ActorExecutionStateCodec.readGroup(input), ActorExecutionStateCodec.readOptionalGroup(input))); }
     }; }
 }

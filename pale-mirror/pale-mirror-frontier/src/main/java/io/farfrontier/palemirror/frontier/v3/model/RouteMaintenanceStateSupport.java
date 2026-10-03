@@ -81,18 +81,19 @@ public final class RouteMaintenanceStateSupport {
         }
     }
 
-    static FrontierWorldState begin(FrontierWorldState state, RouteMaintenance maintenance) {
+    static FrontierWorldState begin(FrontierWorldState state, RouteMaintenance maintenance,
+                                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions) {
         if (state.routeMaintenances().containsKey(maintenance.id()) || state.routeConstructions().containsKey(maintenance.id())
                 || state.routeMaintenances().values().stream().anyMatch(current -> current.repairCell().equals(maintenance.repairCell()))) {
             throw new IllegalArgumentException("route maintenance identity or repair cell is already active");
         }
         Map<SubjectId, RouteMaintenance> next = new LinkedHashMap<>(state.routeMaintenances()); next.put(maintenance.id(), maintenance);
-        return state.withChanges(FrontierWorldStateUpdate.begin().routeMaintenances(next));
+        return EngineeringExecutionAuthority.admit(state, maintenance, Optional.of(executions), FrontierWorldStateUpdate.begin().routeMaintenances(next));
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, RouteMaintenanceStarted started) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route maintenance must be owned by the route network");
-        return begin(state, started.maintenance());
+        return begin(state, started.maintenance(), started.executions());
     }
 
     public static FrontierWorldState reduceMaterialLoaded(FrontierWorldState state, SubjectId subject, RouteMaintenanceMaterialLoaded loaded) {
@@ -127,7 +128,8 @@ public final class RouteMaintenanceStateSupport {
         }
         EngineeringWorksite.validate(state.bootstrap(), state.routeTopology(), maintenance.withAssembly(started.assembly()));
         Map<SubjectId, RouteMaintenance> next = new LinkedHashMap<>(state.routeMaintenances()); next.put(maintenance.id(), maintenance.withAssembly(started.assembly()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().routeMaintenances(next));
+        return EngineeringExecutionAuthority.assembled(state, maintenance, started.assembly(), started.executions(), started.workExecutions(),
+                FrontierWorldStateUpdate.begin().routeMaintenances(next));
     }
 
     public static FrontierWorldState reduceAssemblyAdvanced(FrontierWorldState state, SubjectId subject, RouteMaintenanceAssemblyAdvanced advanced) {
@@ -143,6 +145,12 @@ public final class RouteMaintenanceStateSupport {
         if (!current.advance(moved).equals(advanced.assembly())) throw new IllegalArgumentException("route maintenance advances outside its exact corridor");
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations()); ActorLocation prior = actors.get(moved);
         if (prior == null || prior.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("route maintenance advances a nonliving member");
+        AmbientActorLease authority = state.ambientLeases().get(moved);
+        if ((authority == null || authority.status() == AmbientLeaseStatus.CLOSED) && !ActorExecutionCoordinator.coldAvailable(state, moved))
+            throw new IllegalArgumentException("COLD engineering assembly cannot advance its physically held member");
+        if (authority != null && authority.status() != AmbientLeaseStatus.CLOSED
+                && (authority.status() != AmbientLeaseStatus.HOT || authority.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY))
+            throw new IllegalArgumentException("engineering arrival has no exact HOT assembly authority");
         actors.put(moved, new ActorLocation(BodyPosition.above(new SurfaceAnchor(advanced.assembly().members().get(moved).currentPosition())), prior.condition(), prior.kind()));
         Map<SubjectId, RouteMaintenance> next = new LinkedHashMap<>(state.routeMaintenances()); next.put(maintenance.id(), maintenance.withAdvancedAssembly(advanced.assembly()));
         Map<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>(state.ambientLeases());
@@ -152,7 +160,8 @@ public final class RouteMaintenanceStateSupport {
             BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
             ambient.put(moved, lease.withGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, BodyPosition.above(new SurfaceAnchor(target))));
         }
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).routeMaintenances(next).ambientLeases(ambient));
+        return EngineeringExecutionAuthority.assembled(state, maintenance, advanced.assembly(), advanced.executions(), advanced.workExecutions(),
+                FrontierWorldStateUpdate.begin().actorLocations(actors).routeMaintenances(next).ambientLeases(ambient));
     }
 
     public static FrontierWorldState reduceClosed(FrontierWorldState state, SubjectId subject, RouteMaintenanceClosed closed) {
@@ -169,6 +178,7 @@ public final class RouteMaintenanceStateSupport {
                 .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(maintenance.id())
                         && lease.status() != SceneLeaseStatus.CLOSED);
         if (retainedScene) throw new IllegalArgumentException("route maintenance close cannot discard a retained worksite lease");
+        EngineeringExecutionAuthority.requireTerminal(state, maintenance, Optional.of(closed.executions()));
         Map<SubjectId, RouteMaintenance> maintenances = new LinkedHashMap<>(state.routeMaintenances()); maintenances.remove(maintenance.id());
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
         Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> retired = intents.values().stream().filter(intent -> ownsIntent(intent)
@@ -182,7 +192,7 @@ public final class RouteMaintenanceStateSupport {
                 && FrontierSceneBehaviors.engineeringWorksite(entry.getValue()).projectId().equals(maintenance.id())
                 && entry.getValue().status() == SceneLeaseStatus.CLOSED);
         return state.withChanges(FrontierWorldStateUpdate.begin().routeMaintenances(maintenances).physicalIntents(intents)
-                .physicalObservations(observations).sceneLeases(leases));
+                .physicalObservations(observations).sceneLeases(leases).actorExecutions(EngineeringExecutionAuthority.retired(state, maintenance)));
     }
 
     public static void validateWorkIntent(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
@@ -191,6 +201,7 @@ public final class RouteMaintenanceStateSupport {
             throw new IllegalArgumentException("route maintenance work intent has invalid route ownership");
         }
         RouteMaintenance maintenance = workOperation(state, intent);
+        EngineeringExecutionAuthority.requireWork(state, maintenance);
         SubjectId cargoId = maintenance.cargoId().orElseThrow(() -> new IllegalArgumentException("route maintenance work intent has no cargo"));
         SubjectId itemId = intent.roles().require(PhysicalIntentSubjectRole.MATERIAL);
         ExactItemStack item = state.inventory().items().get(itemId); CargoBatch cargo = state.inventory().cargo().get(cargoId);
@@ -329,7 +340,7 @@ public final class RouteMaintenanceStateSupport {
         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = FrontierEngineeringWorkSceneSupport.drainProjectWorksites(state, maintenance.id());
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(observation.id())));
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(observation.id(), observation);
-        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().consumeCargoUnit(maintenance.cargoId().orElseThrow(), observation.itemId()))
+        return EngineeringExecutionAuthority.workSettled(state, maintenance, FrontierWorldStateUpdate.begin().inventory(state.inventory().consumeCargoUnit(maintenance.cargoId().orElseThrow(), observation.itemId()))
                 .physicalIntents(intents).physicalObservations(observations).physicalDeltas(deltas).routeMaintenances(maintenances).sceneLeases(leases)
                 .routeTopology(state.routeTopology().reconcileSupplyAvailability(state.bootstrap(), deltas)));
     }

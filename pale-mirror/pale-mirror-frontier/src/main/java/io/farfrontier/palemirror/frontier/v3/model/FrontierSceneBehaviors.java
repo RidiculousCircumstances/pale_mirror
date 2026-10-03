@@ -497,10 +497,7 @@ public final class FrontierSceneBehaviors {
                                                          ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs,
                                                          Map<SubjectId, SettlementServiceWork> serviceWorks, SceneLease lease, Set<SubjectId> leasedOperations) {
             EngineeringWorkSceneCause cause = cause(lease);
-            EngineeringWorkOrder project = constructions.get(cause.projectId());
-            RouteMaintenance maintenance = maintenances.get(cause.projectId());
-            if (project != null && maintenance != null) throw new IllegalArgumentException("engineering scene owner is ambiguous");
-            if (project == null) project = maintenance;
+            EngineeringWorkOrder project = EngineeringWorkOrderSupport.registry(constructions, maintenances).get(cause.projectId());
             if (project == null || project.engineeringTeam().isEmpty()) {
                 throw new IllegalArgumentException("engineering scene must bind its current exact crew");
             }

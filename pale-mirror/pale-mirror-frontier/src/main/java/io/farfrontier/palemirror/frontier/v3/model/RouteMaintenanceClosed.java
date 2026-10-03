@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Bounded terminal compaction after the repaired crew has returned or lost its exact tools. */
-public record RouteMaintenanceClosed(SubjectId maintenanceId) implements FrontierPayload {
-    public RouteMaintenanceClosed { Objects.requireNonNull(maintenanceId, "route maintenance id"); }
+public record RouteMaintenanceClosed(SubjectId maintenanceId, io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions) implements FrontierPayload {
+    public RouteMaintenanceClosed { Objects.requireNonNull(maintenanceId, "route maintenance id"); Objects.requireNonNull(executions, "maintenance terminal executions"); }
     @Override public String type() { return "frontier.route_maintenance_closed"; }
 }

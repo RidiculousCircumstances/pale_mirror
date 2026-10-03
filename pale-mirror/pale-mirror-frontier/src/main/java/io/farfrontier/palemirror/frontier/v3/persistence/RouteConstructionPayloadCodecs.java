@@ -17,13 +17,13 @@ final class RouteConstructionPayloadCodecs {
     private RouteConstructionPayloadCodecs() { }
     static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_construction_started"; }
-        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> write(output, ((RouteConstructionStarted) payload).project())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RouteConstructionStarted(read(input))); }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { var value = (RouteConstructionStarted) payload; write(output, value.project()); ActorExecutionStateCodec.writeOptionalGroup(output, value.executions()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RouteConstructionStarted(read(input), ActorExecutionStateCodec.readOptionalGroup(input))); }
     }; }
     static PayloadCodec cutover() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_topology_cutover"; }
-        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> FrontierWorldPayloadCodecs.writeString(output, ((RouteTopologyCutover) payload).projectId().value())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RouteTopologyCutover(new SubjectId(FrontierWorldPayloadCodecs.readString(input)))); }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { var value = (RouteTopologyCutover) payload; FrontierWorldPayloadCodecs.writeString(output, value.projectId().value()); ActorExecutionStateCodec.writeOptionalGroup(output, value.executions()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RouteTopologyCutover(new SubjectId(FrontierWorldPayloadCodecs.readString(input)), ActorExecutionStateCodec.readOptionalGroup(input))); }
     }; }
     static PayloadCodec materialLoaded() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_construction_material_loaded"; }
@@ -48,18 +48,19 @@ final class RouteConstructionPayloadCodecs {
     static PayloadCodec assemblyStarted() { return assembly("frontier.route_construction_assembly_started", RouteConstructionAssemblyStarted::new); }
     static PayloadCodec assemblyAdvanced() { return assembly("frontier.route_construction_assembly_advanced", RouteConstructionAssemblyAdvanced::new); }
 
-    private static PayloadCodec assembly(String type, java.util.function.BiFunction<SubjectId, EngineeringWorkAssembly, FrontierPayload> factory) {
+    private interface AssemblyFactory { FrontierPayload apply(SubjectId id, EngineeringWorkAssembly assembly, io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions, java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> workExecutions); }
+    private static PayloadCodec assembly(String type, AssemblyFactory factory) {
         return new PayloadCodec() {
             @Override public String type() { return type; }
             @Override public byte[] encode(FrontierPayload payload) {
-                SubjectId project; EngineeringWorkAssembly assembly;
-                if (payload instanceof RouteConstructionAssemblyStarted started) { project = started.projectId(); assembly = started.assembly(); }
-                else if (payload instanceof RouteConstructionAssemblyAdvanced advanced) { project = advanced.projectId(); assembly = advanced.assembly(); }
+                SubjectId project; EngineeringWorkAssembly assembly; io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions; java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> work;
+                if (payload instanceof RouteConstructionAssemblyStarted started) { project = started.projectId(); assembly = started.assembly(); executions = started.executions(); work = started.workExecutions(); }
+                else if (payload instanceof RouteConstructionAssemblyAdvanced advanced) { project = advanced.projectId(); assembly = advanced.assembly(); executions = advanced.executions(); work = advanced.workExecutions(); }
                 else throw new IllegalArgumentException("route construction assembly codec received foreign payload");
-                return FrontierWorldPayloadCodecs.encodeProduction(output -> { FrontierWorldPayloadCodecs.writeSubject(output, project); writeAssembly(output, assembly); });
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> { FrontierWorldPayloadCodecs.writeSubject(output, project); writeAssembly(output, assembly); ActorExecutionStateCodec.writeGroup(output, executions); ActorExecutionStateCodec.writeOptionalGroup(output, work); });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
-                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> factory.apply(FrontierWorldPayloadCodecs.readSubject(input).value(), readAssembly(input)));
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> factory.apply(FrontierWorldPayloadCodecs.readSubject(input).value(), readAssembly(input), ActorExecutionStateCodec.readGroup(input), ActorExecutionStateCodec.readOptionalGroup(input)));
             }
         };
     }
@@ -75,10 +76,9 @@ final class RouteConstructionPayloadCodecs {
         int marker = input.readUnsignedByte();
         java.util.Optional<EngineeringRecoveryTeam> team = java.util.Optional.empty();
         int status;
-        if (marker == 0xFF) {
-            if (input.readBoolean()) team = java.util.Optional.of(readTeam(input));
-            status = input.readUnsignedByte();
-        } else status = marker;
+        if (marker != 0xFF) throw new IllegalArgumentException("obsolete construction admission schema");
+        if (input.readBoolean()) team = java.util.Optional.of(readTeam(input));
+        status = input.readUnsignedByte();
         int confirmed = input.readUnsignedShort(), points = input.readUnsignedByte();
         if (status >= RouteConstructionStatus.values().length || points < RouteTopology.MIN_WAYPOINTS || points > RouteTopology.MAX_WAYPOINTS) {
             throw new IllegalArgumentException("route construction payload is invalid");

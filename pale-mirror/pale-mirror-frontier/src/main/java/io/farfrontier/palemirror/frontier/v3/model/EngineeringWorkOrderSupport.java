@@ -7,11 +7,20 @@ public final class EngineeringWorkOrderSupport {
     private EngineeringWorkOrderSupport() { }
 
     public static EngineeringWorkOrder require(FrontierWorldState state, SubjectId id) {
-        RouteConstruction construction = state.routeConstructions().get(id);
-        RouteMaintenance maintenance = state.routeMaintenances().get(id);
-        if (construction != null && maintenance != null) throw new IllegalArgumentException("engineering owner identity is ambiguous");
-        if (construction != null) return construction;
-        if (maintenance != null) return maintenance;
-        throw new IllegalArgumentException("equipment owner is not an active engineering work order");
+        var owner = registry(state.routeConstructions(), state.routeMaintenances()).get(id);
+        if (owner == null) throw new IllegalArgumentException("equipment owner is not a registered engineering work order");
+        return owner;
+    }
+    /** Registers already nominally declared owners; lookup never guesses a missing owner type. */
+    static java.util.Map<SubjectId, EngineeringWorkOrder> registry(java.util.Map<SubjectId, RouteConstruction> constructions,
+                                                               java.util.Map<SubjectId, RouteMaintenance> maintenances) {
+        var owners = new java.util.LinkedHashMap<SubjectId, EngineeringWorkOrder>();
+        constructions.forEach((id, owner) -> register(owners, id, owner));
+        maintenances.forEach((id, owner) -> register(owners, id, owner));
+        return java.util.Map.copyOf(owners);
+    }
+    private static void register(java.util.Map<SubjectId, EngineeringWorkOrder> owners, SubjectId id, EngineeringWorkOrder owner) {
+        if (!id.equals(owner.id()) || owners.putIfAbsent(id, owner) != null)
+            throw new IllegalArgumentException("engineering owner registration has an ambiguous or foreign identity");
     }
 }

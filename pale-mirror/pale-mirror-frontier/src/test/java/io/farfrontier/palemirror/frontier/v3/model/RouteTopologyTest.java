@@ -117,12 +117,12 @@ class RouteTopologyTest {
         List<BlockPosition> replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0),
                 baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4));
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:route-1"), settlement, replacement, 0, RouteConstructionStatus.BUILDING);
-        FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project);
+        FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project, java.util.Optional.empty());
         assertEquals(FrontierRouteNetwork.constructionCells(bootstrap, state.routeTopology(), settlement, replacement),
                 state.routeConstructions().get(project.id()).workCells());
         assertEquals(FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement), state.routeTopology().supplyWaypoints(bootstrap, settlement));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
-        assertThrows(IllegalArgumentException.class, () -> RouteConstructionStateSupport.begin(state, project));
+        assertThrows(IllegalArgumentException.class, () -> RouteConstructionStateSupport.begin(state, project, java.util.Optional.empty()));
     }
 
     @Test
@@ -133,7 +133,7 @@ class RouteTopologyTest {
                 List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0), baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4)),
                 0, RouteConstructionStatus.BUILDING);
         SubjectId materialId = new SubjectId("item:route-work-concrete");
-        FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project).withInventory(FrontierWorldState.initial(bootstrap).inventory());
+        FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project, java.util.Optional.empty()).withInventory(FrontierWorldState.initial(bootstrap).inventory());
         state = state.withInventory(state.inventory().withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE)
                 .store(new ExactItemStack(materialId, FrontierRouteNetwork.OWNER, "minecraft:gray_concrete", 2, new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
@@ -205,7 +205,7 @@ class RouteTopologyTest {
                 baseline.get(2), baseline.get(3), baseline.get(4));
         int required = FrontierRouteNetwork.constructionCells(bootstrap, RouteTopology.initial(), settlement, replacement).size();
         RouteConstruction ready = new RouteConstruction(new SubjectId("construction:cutover"), settlement, replacement, required, RouteConstructionStatus.READY);
-        FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), ready);
+        FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), ready, java.util.Optional.empty());
         FrontierWorldState cutOver = RouteConstructionStateSupport.cutover(state, ready.id());
         assertEquals(replacement, cutOver.routeTopology().supplyWaypoints(bootstrap, settlement));
         assertTrue(cutOver.routeConstructions().isEmpty());
@@ -239,7 +239,7 @@ class RouteTopologyTest {
         RouteConstruction ready = new RouteConstruction(new SubjectId("construction:cutover-patrol"), settlement.id(), replacement, required,
                 RouteConstructionStatus.READY);
 
-        FrontierWorldState cutOver = RouteConstructionStateSupport.cutover(RouteConstructionStateSupport.begin(state, ready), ready.id());
+        FrontierWorldState cutOver = RouteConstructionStateSupport.cutover(RouteConstructionStateSupport.begin(state, ready, java.util.Optional.empty()), ready.id());
         assertEquals(terminal, cutOver.strategicPlans().routePatrols().get(patrolTask));
         assertEquals(cutOver, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(cutOver)),
                 "the completed patrol is historical evidence and must survive route-replacement recovery");

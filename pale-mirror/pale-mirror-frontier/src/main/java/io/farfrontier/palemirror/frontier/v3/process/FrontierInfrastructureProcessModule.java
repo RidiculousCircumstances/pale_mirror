@@ -327,11 +327,13 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
         if (command.payload() instanceof RouteConstructionAssemblyAdvanced advanced) {
             RouteConstruction project = state.routeConstructions().get(advanced.projectId());
             return planEngineeringAssemblyAdvance(state, command, project, advanced.assembly(), advanced,
+                    () -> RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER, advanced),
                     "route construction assembly observation has no active project");
         }
         if (command.payload() instanceof RouteMaintenanceAssemblyAdvanced advanced) {
             RouteMaintenance maintenance = state.routeMaintenances().get(advanced.maintenanceId());
             return planEngineeringAssemblyAdvance(state, command, maintenance, advanced.assembly(), advanced,
+                    () -> RouteMaintenanceStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER, advanced),
                     "route maintenance assembly observation has no active operation");
         }
         return FrontierWorldCommandPlanner.rejected("infrastructure process does not admit command: " + command.payload().type());
@@ -423,10 +425,12 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
     private static CommandPlan planEngineeringAssemblyAdvance(FrontierWorldState state, FrontierCommand command,
                                                                EngineeringWorkOrder project, EngineeringWorkAssembly next,
                                                                io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload,
+                                                               Runnable validatePayload,
                                                                String missingOwner) {
         if (project == null) return FrontierWorldCommandPlanner.rejected(missingOwner);
         try {
             SubjectId observed = validateHotEngineeringAssemblyObservation(state, project, next);
+            validatePayload.run();
             List<ProposedEvent> events = next.complete()
                     ? List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, payload), new ProposedEvent(project.id(),
                     new ScheduleEffect.Created(progress(project, command.submittedAt().ticks() + 1L))))

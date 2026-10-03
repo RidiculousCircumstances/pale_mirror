@@ -214,11 +214,10 @@ public final class AmbientActorProcess {
             SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
             return new AmbientGoal(AmbientGoalKind.HIVE_TASK_RETURN, target.support());
         }
-        EngineeringWorkOrder engineering = java.util.stream.Stream.concat(state.routeConstructions().values().stream(), state.routeMaintenances().values().stream())
-                .filter(project -> project.building() || project.readyForToolReturn())
-                .filter(project -> project.assembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
-                .findFirst().orElse(null);
+        EngineeringWorkOrder engineering = io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionAuthority.owner(state, actorId).orElse(null);
         if (engineering != null) {
+            if (engineering.assembly().isEmpty()) return new AmbientGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY,
+                    state.actorLocations().get(actorId).supportingSurface().support());
             EngineeringWorkAssembly.Member member = engineering.assembly().orElseThrow().members().get(actorId);
             BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
             return new AmbientGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target);

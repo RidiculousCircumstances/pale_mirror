@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Durable switch to a fully constructed replacement corridor. */
-public record RouteTopologyCutover(SubjectId projectId) implements FrontierPayload {
-    public RouteTopologyCutover { Objects.requireNonNull(projectId, "route construction project id"); }
+public record RouteTopologyCutover(SubjectId projectId, java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> executions) implements FrontierPayload {
+    public RouteTopologyCutover { Objects.requireNonNull(projectId, "route construction project id"); Objects.requireNonNull(executions, "construction terminal executions"); }
     @Override public String type() { return "frontier.route_topology_cutover"; }
 }

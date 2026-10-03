@@ -41,7 +41,7 @@ class RouteConstructionPayloadCodecTest {
         assertEquals(loadTransition, codecs.decode(loadTransition.type(), codecs.encode(loadTransition)));
         RouteConstruction routeProject = new RouteConstruction(project, new SubjectId("settlement:1"), List.of(new BlockPosition(0, 64, 0),
                 new BlockPosition(1, 64, 0), new BlockPosition(2, 64, 0)), 0, RouteConstructionStatus.BUILDING);
-        RouteConstructionStarted started = new RouteConstructionStarted(routeProject); RouteTopologyCutover cutover = new RouteTopologyCutover(routeProject.id());
+        RouteConstructionStarted started = new RouteConstructionStarted(routeProject, Optional.empty()); RouteTopologyCutover cutover = new RouteTopologyCutover(routeProject.id(), Optional.empty());
         RouteConstructionMaterialLoaded loaded = new RouteConstructionMaterialLoaded(project, new CargoBatch(cargo, FrontierRouteNetwork.OWNER, List.of(cargoItem)));
         assertEquals(started, codecs.decode(started.type(), codecs.encode(started))); assertEquals(cutover, codecs.decode(cutover.type(), codecs.encode(cutover)));
         assertEquals(loaded, codecs.decode(loaded.type(), codecs.encode(loaded)));

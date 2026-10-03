@@ -55,7 +55,8 @@ public final class RouteConstructionStateSupport {
         RouteConstructionTeamStateSupport.validate(population, constructions, Map.of(), jobs, sites, operations, contracts, plans);
     }
 
-    static FrontierWorldState begin(FrontierWorldState state, RouteConstruction project) {
+    static FrontierWorldState begin(FrontierWorldState state, RouteConstruction project,
+                                    java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> executions) {
         if (state.routeConstructions().containsKey(project.id()) || state.routeConstructions().values().stream()
                 .anyMatch(current -> current.settlementId().equals(project.settlementId()))) {
             throw new IllegalArgumentException("route construction is already active for this identity or settlement");
@@ -64,7 +65,7 @@ public final class RouteConstructionStateSupport {
                 state.bootstrap(), state.routeTopology(), project.settlementId(), project.waypoints())) : project;
         if (admitted.workCells().isEmpty()) throw new IllegalArgumentException("route construction has no immutable work plan");
         Map<SubjectId, RouteConstruction> next = new LinkedHashMap<>(state.routeConstructions()); next.put(admitted.id(), admitted);
-        return state.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(next));
+        return EngineeringExecutionAuthority.admit(state, admitted, executions, FrontierWorldStateUpdate.begin().routeConstructions(next));
     }
 
     /** Legacy hydration derives absent pre-schema-86 work plans once; current snapshots retain theirs verbatim. */
@@ -87,6 +88,7 @@ public final class RouteConstructionStateSupport {
                 .filter(java.util.Objects::nonNull)
                 .orElseThrow(() -> new IllegalArgumentException("route construction intent lacks an active project"));
         SubjectId cargoId = project.cargoId().orElseThrow(() -> new IllegalArgumentException("route construction intent has no loaded material cargo"));
+        EngineeringExecutionAuthority.requireWork(state, project);
         if (!intent.roles().require(PhysicalIntentSubjectRole.CARGO).equals(cargoId)) throw new IllegalArgumentException("route construction intent lacks its material cargo");
         SubjectId materialId = intent.roles().require(PhysicalIntentSubjectRole.MATERIAL);
         ExactItemStack material = state.inventory().items().get(materialId);
@@ -201,7 +203,7 @@ public final class RouteConstructionStateSupport {
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observation.id())));
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
         observations.put(observation.id(), observation);
-        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().consumeCargoUnit(project.cargoId().orElseThrow(), observation.itemId()))
+        return EngineeringExecutionAuthority.workSettled(state, project, FrontierWorldStateUpdate.begin().inventory(state.inventory().consumeCargoUnit(project.cargoId().orElseThrow(), observation.itemId()))
                 .physicalIntents(intents).physicalObservations(observations).routeConstructions(projects).sceneLeases(leases));
     }
 
@@ -222,20 +224,49 @@ public final class RouteConstructionStateSupport {
         RouteConstruction project = state.routeConstructions().get(projectId);
         if (project == null || project.status() != RouteConstructionStatus.READY) throw new IllegalArgumentException("route topology cutover requires ready construction");
         if (project.confirmedCells() != project.workCells().size()) throw new IllegalArgumentException("route topology cutover has incomplete physical construction");
+        if (!readyToCutover(state, project))
+            throw new IllegalArgumentException("route topology cutover cannot discard tools, unsettled effects or retained worksite leases");
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions()); projects.remove(projectId);
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
         java.util.Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> retired = intents.values().stream()
-                .filter(intent -> intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT).equals(projectId)).map(PhysicalIntent::id).collect(java.util.stream.Collectors.toSet());
+                .filter(intent -> ownsIntent(intent, projectId)).map(PhysicalIntent::id).collect(java.util.stream.Collectors.toSet());
         retired.forEach(intents::remove);
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
         observations.entrySet().removeIf(entry -> retired.contains(entry.getValue().intentId()));
+        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
+        leases.entrySet().removeIf(entry -> FrontierSceneBehaviors.isEngineeringWorksite(entry.getValue())
+                && FrontierSceneBehaviors.engineeringWorksite(entry.getValue()).projectId().equals(projectId)
+                && entry.getValue().status() == SceneLeaseStatus.CLOSED);
         return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).physicalObservations(observations)
-                .routeConstructions(projects).routeTopology(state.routeTopology().replaceSupplyRoute(state.bootstrap(), project.settlementId(), project.waypoints())));
+                .sceneLeases(leases)
+                .routeConstructions(projects).routeTopology(state.routeTopology().replaceSupplyRoute(state.bootstrap(), project.settlementId(), project.waypoints()))
+                .actorExecutions(EngineeringExecutionAuthority.retired(state, project)));
+    }
+
+    public static boolean readyToCutover(FrontierWorldState state, RouteConstruction project) {
+        return project.status() == RouteConstructionStatus.READY
+                && project.engineeringTeam().stream().flatMap(team -> team.memberIds().stream())
+                .noneMatch(member -> EngineeringToolCustody.holdsTool(state, member))
+                && state.physicalIntents().values().stream().noneMatch(intent -> ownsIntent(intent, project.id())
+                && intent.status() != PhysicalIntentStatus.CONFIRMED)
+                && state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
+                .noneMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(project.id())
+                        && lease.status() != SceneLeaseStatus.CLOSED);
+    }
+
+    private static boolean ownsIntent(PhysicalIntent intent, SubjectId projectId) {
+        return switch (intent.roles().schema()) {
+            case ROUTE_CONSTRUCTION, ROUTE_CONSTRUCTION_LOADING ->
+                    intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT).equals(projectId);
+            case ENGINEERING_EQUIPMENT_ISSUE, ENGINEERING_EQUIPMENT_RETURN ->
+                    intent.roles().require(PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER).equals(projectId);
+            default -> false;
+        };
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, RouteConstructionStarted started) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction must be owned by the route network");
-        return begin(state, started.project());
+        return begin(state, started.project(), started.executions());
     }
     public static FrontierWorldState reduceMaterialLoaded(FrontierWorldState state, SubjectId subject, RouteConstructionMaterialLoaded loaded) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction material cargo must be owned by the route network");
@@ -267,7 +298,8 @@ public final class RouteConstructionStateSupport {
         EngineeringWorksite.validate(state.bootstrap(), state.routeTopology(), project.withAssembly(started.assembly()));
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withAssembly(started.assembly()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(projects));
+        return EngineeringExecutionAuthority.assembled(state, project, started.assembly(), started.executions(), started.workExecutions(),
+                FrontierWorldStateUpdate.begin().routeConstructions(projects));
     }
 
     public static FrontierWorldState reduceAssemblyAdvanced(FrontierWorldState state, SubjectId subject, RouteConstructionAssemblyAdvanced advanced) {
@@ -284,6 +316,12 @@ public final class RouteConstructionStateSupport {
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         ActorLocation prior = actors.get(moved);
         if (prior == null || prior.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("engineering assembly advances a nonliving member");
+        AmbientActorLease authority = state.ambientLeases().get(moved);
+        if ((authority == null || authority.status() == AmbientLeaseStatus.CLOSED) && !ActorExecutionCoordinator.coldAvailable(state, moved))
+            throw new IllegalArgumentException("COLD engineering assembly cannot advance its physically held member");
+        if (authority != null && authority.status() != AmbientLeaseStatus.CLOSED
+                && (authority.status() != AmbientLeaseStatus.HOT || authority.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY))
+            throw new IllegalArgumentException("engineering arrival has no exact HOT assembly authority");
         actors.put(moved, new ActorLocation(BodyPosition.above(new SurfaceAnchor(advanced.assembly().members().get(moved).currentPosition())), prior.condition(), prior.kind()));
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withAdvancedAssembly(advanced.assembly()));
@@ -294,11 +332,13 @@ public final class RouteConstructionStateSupport {
             BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
             ambient.put(moved, lease.withGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, BodyPosition.above(new SurfaceAnchor(target))));
         }
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).routeConstructions(projects).ambientLeases(ambient));
+        return EngineeringExecutionAuthority.assembled(state, project, advanced.assembly(), advanced.executions(), advanced.workExecutions(),
+                FrontierWorldStateUpdate.begin().actorLocations(actors).routeConstructions(projects).ambientLeases(ambient));
     }
 
     public static FrontierWorldState reduceCutover(FrontierWorldState state, SubjectId subject, RouteTopologyCutover cutover) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route topology cutover must be owned by the route network");
+        EngineeringExecutionAuthority.requireTerminal(state, state.routeConstructions().get(cutover.projectId()), cutover.executions());
         return cutover(state, cutover.projectId());
     }
 

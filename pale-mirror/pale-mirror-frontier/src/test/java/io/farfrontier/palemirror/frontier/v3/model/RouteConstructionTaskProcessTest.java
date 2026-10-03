@@ -125,7 +125,7 @@ class RouteConstructionTaskProcessTest {
             EngineeringWorkAssembly journey = state.routeConstructions().get(project.id()).assembly().orElseThrow();
             SubjectId advancing = journey.nextSafeAdvance().orElseThrow();
             state = RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER,
-                    new RouteConstructionAssemblyAdvanced(project.id(), journey.advance(advancing)));
+                    io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyAdvanced(state, project.id(), journey.advance(advancing)));
         }
         PhysicalIntentPrepared toolIssue = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(2, 201L)).stream()
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance)
@@ -192,7 +192,7 @@ class RouteConstructionTaskProcessTest {
             EngineeringWorkAssembly advanced = assembly.advance(advancing);
             if (advanced.complete()) break;
             travelling = RouteConstructionStateSupport.reduceAssemblyAdvanced(travelling, FrontierRouteNetwork.OWNER,
-                    new RouteConstructionAssemblyAdvanced(project.id(), advanced));
+                    io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyAdvanced(travelling, project.id(), advanced));
         }
         var completion = RouteConstructionProcess.planAssemblyProgress(travelling,
                 RouteConstructionProcess.assemblyProgress(project.id(), 300L));
@@ -258,8 +258,8 @@ class RouteConstructionTaskProcessTest {
         SubjectId member = project.team().orElseThrow().memberIds().getFirst();
 
         AmbientActorLease ordinary = AmbientActorProcess.nextLease(state, member, new SimInstant(0L));
-        assertEquals(AmbientGoalKind.PATROL, ordinary.goal(),
-                "before the retained engineering assembly exists, profession alone may not invent a visible work route");
+        assertEquals(AmbientGoalKind.ENGINEERING_ASSEMBLY, ordinary.goal(),
+                "the admitted engineering owner holds its member in place until it declares an actual journey");
         assertEquals(state.actorLocations().get(member).body().supportingSurface().support(), ordinary.goalBody().supportingSurface().support(),
                 "the ordinary predecessor must retain the exact canonical station until the engineering owner admits its assembly");
         state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, ordinary), member, AmbientLeaseStatus.HOT);
@@ -287,7 +287,7 @@ class RouteConstructionTaskProcessTest {
 
         EngineeringWorkAssembly advanced = assembly.advance(member);
         state = RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER,
-                new RouteConstructionAssemblyAdvanced(project.id(), advanced));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyAdvanced(state, project.id(), advanced));
         EngineeringWorkAssembly.Member after = state.routeConstructions().get(project.id()).assembly().orElseThrow().members().get(member);
         AmbientActorLease retargeted = state.ambientLeases().get(member);
         BlockPosition expectedGoal = after.arrived() ? after.currentPosition() : after.corridor().get(after.cursor() + 1);
@@ -321,15 +321,24 @@ class RouteConstructionTaskProcessTest {
                 world, state, new SimInstant(400L), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
                 base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
         var engine = FrontierEngines.create(configuration);
+        var arrivalPayload = EngineeringExecutionEvents.constructionAssemblyAdvanced(state, project.id(), next);
+        var staleExecutions = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(arrivalPayload.executions().members().stream()
+                .map(id -> new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                        id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1)).toList());
+        CommandId wrongAuthority = new CommandId("executor:engineering-arrival-wrong-generation");
+        assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(1, wrongAuthority, world, engine.checkpoint().revision(),
+                engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(wrongAuthority),
+                new RouteConstructionAssemblyAdvanced(project.id(), next, staleExecutions, arrivalPayload.workExecutions()))));
+        assertEquals(state, state(engine), "stale execution rejection cannot move the crew or admit a work successor");
         CommandId arrival = new CommandId("executor:engineering-arrival");
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, arrival, world, engine.checkpoint().revision(),
                 engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(arrival),
-                new RouteConstructionAssemblyAdvanced(project.id(), next))));
+                arrivalPayload)));
 
         CommandId stale = new CommandId("executor:engineering-arrival-stale");
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(1, stale, world, engine.checkpoint().revision(),
                 engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(stale),
-                new RouteConstructionAssemblyAdvanced(project.id(), next))),
+                arrivalPayload)),
                 "a physical executor cannot replay an already observed engineering cursor");
     }
 
@@ -342,6 +351,22 @@ class RouteConstructionTaskProcessTest {
                         "frontier.route_patrol_formation_observed", "frontier.route_patrol_blocked", "frontier.route_patrol_obstruction_confirmed"),
                 infrastructure.commandPayloadTypes(),
                 "every physical engineering or patrol arrival must remain explicitly owned by the infrastructure command boundary");
+    }
+
+    @Test
+    void readyConstructionCannotRetireItsCrewWhileToolsRemainInTheirCustody() {
+        FrontierWorldState equipped = issueAllFixtureTools(FrontierV3FixtureCatalog.engineeringEquipmentConfiguration(
+                new WorldId("frontier:construction-terminal-tools"), 41L).initialState());
+        RouteConstruction project = equipped.routeConstructions().values().stream().findFirst().orElseThrow();
+        RouteConstruction ready = project.withConfirmedCells(project.workCells().size(), RouteConstructionStatus.READY);
+        FrontierWorldState terminal = equipped.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(java.util.Map.of(ready.id(), ready)));
+        var declaration = EngineeringExecutionEvents.cutover(terminal, ready.id());
+        assertThrows(IllegalArgumentException.class, () -> RouteConstructionStateSupport.reduceCutover(
+                terminal, FrontierRouteNetwork.OWNER, declaration));
+        assertEquals(equipped.actorExecutions(), terminal.actorExecutions());
+        assertTrue(ready.team().orElseThrow().memberIds().stream().allMatch(actor -> EngineeringToolCustody.holdsTool(terminal, actor)));
+        assertThrows(IllegalArgumentException.class, () -> terminal.withChanges(FrontierWorldStateUpdate.begin().actorExecutions(
+                EngineeringExecutionAuthority.retired(terminal, ready))), "a retained team cannot lose its execution group");
     }
 
     private static FrontierWorldState stateWithConfirmedPatrol() {

@@ -332,7 +332,7 @@ final class FrontierV3AmbientMovementExecutor {
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
         if (!assembly.safeAdvances().contains(actorId)) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-engineering-assembly", actorId.value(),
-                assemblyAdvanced(project, assembly.advance(actorId)));
+                assemblyAdvanced(state, project, assembly.advance(actorId)));
         FrontierV3DiagnosticTrace.record(level.getServer(), "engineering:" + project.id().value(),
                 "engineering_assembly_advanced", actorId, result);
         return true;
@@ -386,9 +386,8 @@ final class FrontierV3AmbientMovementExecutor {
         return lease.goalBody().equals(expected.standingBody()) ? member : null;
     }
     private static EngineeringWorkOrder engineeringProject(FrontierWorldState state, SubjectId actorId) {
-        return java.util.stream.Stream.concat(state.routeConstructions().values().stream(), state.routeMaintenances().values().stream())
-                .filter(project -> project.assembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
-                .reduce((left, right) -> { throw new IllegalStateException("engineering assembly owner is ambiguous"); }).orElse(null);
+        return io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionAuthority.owner(state, actorId)
+                .filter(project -> project.assembly().isPresent()).orElse(null);
     }
     static EngineeringWorkAssembly.Member engineeringAssemblyMember(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
         EngineeringWorkOrder project = engineeringProject(state, actorId);
@@ -409,10 +408,10 @@ final class FrontierV3AmbientMovementExecutor {
         SurfaceAnchor expected = member.arrived() ? member.currentSurface() : member.nextSurface();
         return lease.goalBody().equals(expected.standingBody()) ? member : null;
     }
-    private static FrontierPayload assemblyAdvanced(EngineeringWorkOrder project, EngineeringWorkAssembly assembly) {
+    private static FrontierPayload assemblyAdvanced(FrontierWorldState state, EngineeringWorkOrder project, EngineeringWorkAssembly assembly) {
         return switch (project) {
-            case RouteConstruction construction -> new RouteConstructionAssemblyAdvanced(construction.id(), assembly);
-            case RouteMaintenance maintenance -> new RouteMaintenanceAssemblyAdvanced(maintenance.id(), assembly);
+            case RouteConstruction construction -> io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyAdvanced(state, construction.id(), assembly);
+            case RouteMaintenance maintenance -> io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyAdvanced(state, maintenance.id(), assembly);
         };
     }
 }

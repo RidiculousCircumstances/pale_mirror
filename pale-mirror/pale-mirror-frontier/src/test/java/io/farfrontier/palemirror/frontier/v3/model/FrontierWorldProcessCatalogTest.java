@@ -281,7 +281,7 @@ class FrontierWorldProcessCatalogTest {
                 Map.entry("economy", new MarketDemandExpired(new SubjectId("demand:representative"))),
                 Map.entry("resource-sites", new ResourceSiteGrowthAdvanced(new SubjectId("site:representative"), 1L, 0)),
                 Map.entry("hive", new InfectionChanged(new InfectionCell(1, 1), new FixedRatio(FixedScalar.ONE))),
-                Map.entry("infrastructure", new RouteTopologyCutover(new SubjectId("route-construction:representative"))),
+                Map.entry("infrastructure", new RouteTopologyCutover(new SubjectId("route-construction:representative"), Optional.empty())),
                 Map.entry("settlement-service-work", serviceWorkRepresentative()),
                 Map.entry("strategy", new StrategicTaskTransition(new SubjectId("task:representative"), StrategicTaskStatus.ACTIVE)));
         assertEquals(FrontierWorldProcessCatalog.descriptors().stream().map(

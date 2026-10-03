@@ -90,7 +90,7 @@ public final class RouteConstructionProcess {
         } catch (IllegalArgumentException unavailable) {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         }
-        return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteConstructionStarted(project)));
+        return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionStarted(state, project)));
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
@@ -118,6 +118,7 @@ public final class RouteConstructionProcess {
 
     private static List<ProposedEvent> planBuilding(FrontierWorldState state, RouteConstruction current,
                                                      ScheduledAction action, Optional<ProposedEvent> retry) {
+        if (!EngineeringExecutionAuthority.crewLiving(state, current)) return retryOnly(retry);
         if (current.team().isPresent() && !EngineeringToolCustody.ready(state, current.team().orElseThrow())) {
             if (!EngineeringDepotService.atStations(state, current, EngineeringJourneyPurpose.MUSTER_DEPOT)) {
                 return admitDepotJourney(state, current, EngineeringJourneyPurpose.MUSTER_DEPOT, action, retry);
@@ -169,7 +170,7 @@ public final class RouteConstructionProcess {
         // after ordinary HOT drain, which records the body's actual final floor first.
         if (!ActorExecutionCoordinator.coldAvailable(state, project.team().orElseThrow().memberIds())) return retryOnly(retry);
         return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
-                new RouteConstructionAssemblyStarted(project.id(), EngineeringWorksite.compile(state, project))),
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyStarted(state, project.id(), EngineeringWorksite.compile(state, project))),
                 new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(project.id(), nextAssemblyDue(state, action.dueAt().ticks()))))), retry);
     }
 
@@ -184,6 +185,7 @@ public final class RouteConstructionProcess {
                 || (project.status() != RouteConstructionStatus.BUILDING && project.status() != RouteConstructionStatus.READY)
                 || project.team().isEmpty() || project.assembly().isEmpty()) return List.of();
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
+        if (!EngineeringExecutionAuthority.crewLiving(state, project)) return List.of();
         if (assembly.complete()) return List.of();
         ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(project.id(), nextAssemblyDue(state, action.dueAt().ticks()))));
         boolean retainedHotOrRecovery = assembly.purpose() == EngineeringJourneyPurpose.WORKSITE && state.sceneLeases().values().stream()
@@ -198,8 +200,8 @@ public final class RouteConstructionProcess {
         ProposedEvent progressed = advanced.complete() ? new ProposedEvent(project.id(),
                 new ScheduleEffect.Created(progress(project, Math.addExact(action.dueAt().ticks(), 1)))) : null;
         return progressed == null ? List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
-                new RouteConstructionAssemblyAdvanced(project.id(), advanced)), next) : List.of(
-                new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteConstructionAssemblyAdvanced(project.id(), advanced)), progressed, next);
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyAdvanced(state, project.id(), advanced)), next) : List.of(
+                new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyAdvanced(state, project.id(), advanced)), progressed, next);
     }
 
     /** Runs a retained construction owner after a local state transition, without a strategic review. */
@@ -231,7 +233,7 @@ public final class RouteConstructionProcess {
         EngineeringWorkAssembly journey;
         try { journey = EngineeringDepotService.compile(state, project, purpose); }
         catch (IllegalArgumentException unavailable) { return retryOnly(retry); }
-        return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteConstructionAssemblyStarted(project.id(), journey)),
+        return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyStarted(state, project.id(), journey)),
                 new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(project.id(), nextAssemblyDue(state, action.dueAt().ticks()))))), retry);
     }
 
@@ -366,13 +368,15 @@ public final class RouteConstructionProcess {
                                                    ScheduledAction action, Optional<ProposedEvent> retry) {
         StrategicTask task = constructionTask(state, value.settlementId(), StrategicTaskStatus.ACTIVE);
         if (value.team().isPresent() && !EngineeringEquipmentProcess.returnedOrLost(state, value)) {
+            if (!EngineeringExecutionAuthority.crewLiving(state, value)) return retryOnly(retry);
             if (!EngineeringDepotService.atStations(state, value, EngineeringJourneyPurpose.RETURN_DEPOT)) {
                 return admitDepotJourney(state, value, EngineeringJourneyPurpose.RETURN_DEPOT, action, retry);
             }
             return EngineeringEquipmentProcess.returnOne(state, value).map(intent -> withRetry(List.of(new ProposedEvent(value.settlementId(),
                     new PhysicalIntentPrepared(intent))), retry)).orElseGet(() -> retryOnly(retry));
         }
-        ProposedEvent cutover = new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteTopologyCutover(value.id()));
+        if (!RouteConstructionStateSupport.readyToCutover(state, value)) return retryOnly(retry);
+        ProposedEvent cutover = new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.cutover(state, value.id()));
         ProposedEvent completed = transition(task, StrategicTaskStatus.COMPLETED);
         return action.kind().equals("frontier.route_construction.return_progress") ? List.of(cutover, completed) : withRetry(List.of(cutover, completed), retry);
     }

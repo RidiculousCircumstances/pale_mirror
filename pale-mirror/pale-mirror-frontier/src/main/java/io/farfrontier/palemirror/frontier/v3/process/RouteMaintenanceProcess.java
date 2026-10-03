@@ -64,7 +64,7 @@ public final class RouteMaintenanceProcess {
         java.util.ArrayList<ProposedEvent> events = new java.util.ArrayList<>();
         nextMaintainedOwner(state, scanOrdinal).ifPresent(maintenance -> events.addAll(maintenance.status() == RouteMaintenanceStatus.READY
                 ? planReady(state, maintenance, action, Optional.empty()) : planBuilding(state, maintenance, action, Optional.empty())));
-        candidate(state).ifPresent(value -> events.add(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceStarted(value))));
+        candidate(state).ifPresent(value -> events.add(new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(state, value))));
         events.add(next);
         return List.copyOf(events);
     }
@@ -84,6 +84,7 @@ public final class RouteMaintenanceProcess {
 
     private static List<ProposedEvent> planBuilding(FrontierWorldState state, RouteMaintenance maintenance,
                                                      ScheduledAction action, Optional<ProposedEvent> retry) {
+        if (!EngineeringExecutionAuthority.crewLiving(state, maintenance)) return retryOnly(retry);
         if (state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE
                 || intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING)
                 && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(maintenance.id())
@@ -110,6 +111,7 @@ public final class RouteMaintenanceProcess {
                 || maintenance.assembly().isEmpty()
                 || (!maintenance.building() && maintenance.status() != RouteMaintenanceStatus.READY)) return List.of();
         EngineeringWorkAssembly assembly = maintenance.assembly().orElseThrow();
+        if (!EngineeringExecutionAuthority.crewLiving(state, maintenance)) return List.of();
         if (assembly.complete()) return List.of();
         ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(maintenance.id(), action.dueAt().ticks()
                 + state.bootstrap().ruleset().cadence().migrationStepInterval())));
@@ -124,8 +126,8 @@ public final class RouteMaintenanceProcess {
         ProposedEvent progressed = advanced.complete() ? new ProposedEvent(maintenance.id(),
                 new ScheduleEffect.Created(progress(maintenance, Math.addExact(action.dueAt().ticks(), 1)))) : null;
         return progressed == null ? List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceAssemblyAdvanced(maintenance.id(), advanced)), next) : List.of(
-                new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceAssemblyAdvanced(maintenance.id(), advanced)), progressed, next);
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyAdvanced(state, maintenance.id(), advanced)), next) : List.of(
+                new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyAdvanced(state, maintenance.id(), advanced)), progressed, next);
     }
 
     /** Runs a retained owner after a local state transition without re-running strategic admission. */
@@ -150,7 +152,7 @@ public final class RouteMaintenanceProcess {
         EngineeringWorkAssembly assembly;
         try { assembly = EngineeringWorksite.compile(state, maintenance); }
         catch (IllegalArgumentException unavailable) { return retryOnly(retry); }
-        return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceAssemblyStarted(maintenance.id(), assembly)),
+        return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyStarted(state, maintenance.id(), assembly)),
                 new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(maintenance.id(), action.dueAt().ticks()
                         + state.bootstrap().ruleset().cadence().migrationStepInterval())))), retry);
     }
@@ -163,7 +165,7 @@ public final class RouteMaintenanceProcess {
         EngineeringWorkAssembly journey;
         try { journey = EngineeringDepotService.compile(state, maintenance, purpose); }
         catch (IllegalArgumentException unavailable) { return retryOnly(retry); }
-        return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceAssemblyStarted(maintenance.id(), journey)),
+        return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyStarted(state, maintenance.id(), journey)),
                 new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(maintenance.id(), action.dueAt().ticks()
                         + state.bootstrap().ruleset().cadence().migrationStepInterval())))), retry);
     }
@@ -300,6 +302,7 @@ public final class RouteMaintenanceProcess {
     private static List<ProposedEvent> planReady(FrontierWorldState state, RouteMaintenance completed,
                                                    ScheduledAction action, Optional<ProposedEvent> retry) {
         if (!EngineeringEquipmentProcess.returnedOrLost(state, completed)) {
+            if (!EngineeringExecutionAuthority.crewLiving(state, completed)) return retryOnly(retry);
             if (!EngineeringDepotService.atStations(state, completed, EngineeringJourneyPurpose.RETURN_DEPOT)) {
                 return admitDepotJourney(state, completed, EngineeringJourneyPurpose.RETURN_DEPOT, action, retry);
             }
@@ -310,7 +313,7 @@ public final class RouteMaintenanceProcess {
                 .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(completed.id())
                         && lease.status() != SceneLeaseStatus.CLOSED);
         if (retainedScene) return retryOnly(retry);
-        ProposedEvent closed = new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceClosed(completed.id()));
+        ProposedEvent closed = new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceClosed(state, completed.id()));
         return action.kind().equals("frontier.route_maintenance.return_progress") ? List.of(closed) : withRetry(List.of(closed), retry);
     }
 

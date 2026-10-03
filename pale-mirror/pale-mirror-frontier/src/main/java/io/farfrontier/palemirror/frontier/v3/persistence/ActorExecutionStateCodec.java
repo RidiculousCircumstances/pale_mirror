@@ -52,6 +52,13 @@ final class ActorExecutionStateCodec {
         out.writeShort(group.members().size());
         for (var id : group.members()) writeId(out, id);
     }
+    static void writeOptionalGroup(DataOutputStream out, Optional<ActorExecutionGroup> group) throws IOException {
+        out.writeBoolean(group.isPresent());
+        if (group.isPresent()) writeGroup(out, group.orElseThrow());
+    }
+    static Optional<ActorExecutionGroup> readOptionalGroup(DataInputStream in) throws IOException {
+        return in.readBoolean() ? Optional.of(readGroup(in)) : Optional.empty();
+    }
     static ActorExecutionGroup readGroup(DataInputStream in) throws IOException {
         int count = in.readUnsignedShort();
         if (count < 1 || count > ActorExecutionState.MAX_ACTORS) throw new IOException("invalid execution group retention bound");

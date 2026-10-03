@@ -89,6 +89,24 @@ class RouteMaintenanceProcessTest {
                 "one repair receipt never clears a different retained route loss");
         assertFalse(confirmed.inventory().cargo().containsKey(maintenance.plannedCargoId()),
                 "the confirmed repair consumes its one exact cargo unit once");
+        var nextCrew = EngineeringExecutionAuthority.assemblyCurrent(confirmed, confirmed.routeMaintenances().get(maintenance.id()));
+        assertTrue(nextCrew.members().stream().allMatch(id -> id.generation() == EngineeringExecutionAuthority.current(recovered, maintenance)
+                .members().stream().filter(previous -> previous.actorId().equals(id.actorId())).findFirst().orElseThrow().generation() + 1),
+                "the same receipt atomically replaces work authority with the exact return preparation");
+        assertEquals(recovered.actorLocations(), confirmed.actorLocations(), "cell completion cannot recreate or teleport the crew");
+        SubjectId victim = maintenance.team().memberIds().getFirst();
+        var casualtyLocations = new java.util.LinkedHashMap<>(recovered.actorLocations());
+        var victimLocation = casualtyLocations.get(victim);
+        casualtyLocations.put(victim, victimLocation.deadAt(victimLocation.body()));
+        var casualty = recovered.withChanges(FrontierWorldStateUpdate.begin().actorLocations(casualtyLocations));
+        var casualtySettled = RouteMaintenanceStateSupport.complete(casualty, recoveredIntent, observation,
+                new java.util.LinkedHashMap<>(casualty.physicalIntents()));
+        assertFalse(casualtySettled.inventory().cargo().containsKey(maintenance.plannedCargoId()),
+                "an already-observed work effect still consumes its exact material after a crew casualty");
+        assertEquals(casualty.actorExecutions(), casualtySettled.actorExecutions(),
+                "settlement preserves the owner's death obligation instead of admitting a dead actor to a new journey");
+        assertTrue(RouteMaintenanceProcess.planProgress(casualtySettled, RouteMaintenanceProcess.progress(
+                casualtySettled.routeMaintenances().get(maintenance.id()), 500L)).isEmpty());
 
         FrontierWorldState conflicted = RouteMaintenanceStateSupport.conflict(recovered, recoveredIntent,
                 new java.util.LinkedHashMap<>(recovered.physicalIntents()));
@@ -218,6 +236,9 @@ class RouteMaintenanceProcessTest {
         assertTrue(compacted.routeMaintenances().isEmpty());
         assertTrue(compacted.physicalIntents().isEmpty());
         assertTrue(compacted.physicalObservations().isEmpty());
+        assertTrue(completed.team().memberIds().stream().allMatch(actor ->
+                compacted.actorExecutions().actors().get(actor).current().isEmpty()),
+                "terminal owner removal must retire its exact crew in the same transition");
     }
 
     @Test
@@ -232,7 +253,7 @@ class RouteMaintenanceProcessTest {
                 .map(ProposedEvent::payload).filter(RouteMaintenanceStarted.class::isInstance).map(RouteMaintenanceStarted.class::cast)
                 .findFirst().orElseThrow().maintenance();
         FrontierWorldState admitted = RouteMaintenanceStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceStarted(maintenance));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(damaged, maintenance));
         RouteMaintenance ready = maintenance.ready();
         FrontierWorldState terminalWithoutTool = admitted.withChanges(FrontierWorldStateUpdate.begin()
                 .routeMaintenances(Map.of(ready.id(), ready)).physicalDeltas(Map.of()));
@@ -289,7 +310,7 @@ class RouteMaintenanceProcessTest {
         ExactItemStack tool = damaged.inventory().items().values().stream().filter(item -> item.economicOwnerId().equals(settlement))
                 .filter(item -> EngineeringToolCustody.isTool(item.itemKind())).findFirst().orElseThrow();
         FrontierWorldState ready = RouteMaintenanceStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER,
-                        new RouteMaintenanceStarted(maintenance))
+                        io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(damaged, maintenance))
                 .withInventory(damaged.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
                         .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE).moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(engineer)))
                 .withChanges(FrontierWorldStateUpdate.begin().routeMaintenances(Map.of(maintenance.id(), maintenance)).physicalDeltas(Map.of()));
@@ -337,7 +358,7 @@ class RouteMaintenanceProcessTest {
             EngineeringWorkAssembly advanced = assembly.advance(advancing);
             if (advanced.complete()) break;
             travelling = RouteMaintenanceStateSupport.reduceAssemblyAdvanced(travelling, FrontierRouteNetwork.OWNER,
-                    new RouteMaintenanceAssemblyAdvanced(current.id(), advanced));
+                    io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyAdvanced(travelling, current.id(), advanced));
             current = travelling.routeMaintenances().get(maintenance.id());
         }
         var completion = RouteMaintenanceProcess.planAssemblyProgress(travelling,
@@ -377,7 +398,7 @@ class RouteMaintenanceProcessTest {
         assertEquals("READY", readiness.reason(), readiness.detail());
         EngineeringWorkAssembly assembly = EngineeringWorksite.compile(equipped, started.maintenance());
         FrontierWorldState assembled = RouteMaintenanceStateSupport.reduceAssemblyStarted(equipped, FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceAssemblyStarted(started.maintenance().id(), assembly));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyStarted(equipped, started.maintenance().id(), assembly));
         assertEquals(AmbientGoalKind.ENGINEERING_ASSEMBLY, AmbientActorProcess.goalFor(assembled, engineer, 100L).kind(),
                 "a restart/re-entry must recover the retained maintenance assembly rather than inventing ordinary work");
         assertTrue(RouteMaintenanceProcess.plan(equipped, RouteMaintenanceProcess.scan(2, 200L)).stream()
@@ -440,7 +461,7 @@ class RouteMaintenanceProcessTest {
                 .map(ProposedEvent::payload).filter(RouteMaintenanceStarted.class::isInstance).map(RouteMaintenanceStarted.class::cast)
                 .findFirst().orElseThrow().maintenance();
         FrontierWorldState admitted = RouteMaintenanceStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceStarted(maintenance));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(state, maintenance));
         PhysicalIntent intent = RouteMaintenanceProcess.workIntent(maintenance, maintenance.plannedCargoId(), maintenance.plannedCargoItemId());
 
         assertEquals(FrontierRouteNetwork.OWNER, intent.causeSubjectId());
@@ -464,15 +485,15 @@ class RouteMaintenanceProcessTest {
         ExactItemStack tool = damaged.inventory().items().values().stream().filter(item -> EngineeringToolCustody.isTool(item.itemKind()))
                 .filter(item -> item.economicOwnerId().equals(settlement)).findFirst().orElseThrow();
         FrontierWorldState equipped = RouteMaintenanceStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceStarted(maintenance)).withInventory(damaged.inventory().moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(engineer)));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(damaged, maintenance)).withInventory(damaged.inventory().moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(engineer)));
         EngineeringWorkAssembly assembly = EngineeringWorksite.compile(equipped, maintenance);
         FrontierWorldState assembled = RouteMaintenanceStateSupport.reduceAssemblyStarted(equipped, FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceAssemblyStarted(maintenance.id(), assembly));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyStarted(equipped, maintenance.id(), assembly));
         while (!assembled.routeMaintenances().get(maintenance.id()).assembly().orElseThrow().complete()) {
             EngineeringWorkAssembly current = assembled.routeMaintenances().get(maintenance.id()).assembly().orElseThrow();
             SubjectId advancing = current.nextSafeAdvance().orElseThrow();
             assembled = RouteMaintenanceStateSupport.reduceAssemblyAdvanced(assembled, FrontierRouteNetwork.OWNER,
-                    new RouteMaintenanceAssemblyAdvanced(maintenance.id(), current.advance(advancing)));
+                    io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyAdvanced(assembled, maintenance.id(), current.advance(advancing)));
         }
         EngineeringWorkSceneCandidate candidate = FrontierEngineeringWorkSceneSupport.candidates(assembled).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:maintenance-hot-worksite");
@@ -502,17 +523,17 @@ class RouteMaintenanceProcessTest {
         ExactItemStack tool = damaged.inventory().items().values().stream().filter(item -> EngineeringToolCustody.isTool(item.itemKind()))
                 .filter(item -> item.economicOwnerId().equals(settlement)).findFirst().orElseThrow();
         FrontierWorldState assembled = RouteMaintenanceStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceStarted(maintenance)).withInventory(damaged.inventory().moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(engineer)));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(damaged, maintenance)).withInventory(damaged.inventory().moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(engineer)));
         FrontierWorldState approachState = assembled;
         EngineeringWorkAssembly assembly = assertTimeoutPreemptively(Duration.ofSeconds(2),
                 () -> EngineeringWorksite.compile(approachState, maintenance),
                 "one local engineering approach must not compile the complete world route footprint");
         assembled = RouteMaintenanceStateSupport.reduceAssemblyStarted(assembled, FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceAssemblyStarted(maintenance.id(), assembly));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyStarted(assembled, maintenance.id(), assembly));
         while (!assembled.routeMaintenances().get(maintenance.id()).assembly().orElseThrow().complete()) {
             EngineeringWorkAssembly current = assembled.routeMaintenances().get(maintenance.id()).assembly().orElseThrow();
             assembled = RouteMaintenanceStateSupport.reduceAssemblyAdvanced(assembled, FrontierRouteNetwork.OWNER,
-                    new RouteMaintenanceAssemblyAdvanced(maintenance.id(), current.advance(current.nextSafeAdvance().orElseThrow())));
+                    io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyAdvanced(assembled, maintenance.id(), current.advance(current.nextSafeAdvance().orElseThrow())));
         }
         EngineeringWorkSceneCandidate candidate = FrontierEngineeringWorkSceneSupport.candidates(assembled).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:maintenance-conflict-drain");
@@ -570,10 +591,10 @@ class RouteMaintenanceProcessTest {
         ExactItemStack tool = damaged.inventory().items().values().stream().filter(item -> EngineeringToolCustody.isTool(item.itemKind()))
                 .filter(item -> item.economicOwnerId().equals(settlement)).findFirst().orElseThrow();
         FrontierWorldState equipped = RouteMaintenanceStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceStarted(maintenance)).withInventory(damaged.inventory().moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(engineer)));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(damaged, maintenance)).withInventory(damaged.inventory().moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(engineer)));
         EngineeringWorkAssembly assembly = EngineeringWorksite.compile(equipped, maintenance);
         FrontierWorldState assembled = RouteMaintenanceStateSupport.reduceAssemblyStarted(equipped, FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceAssemblyStarted(maintenance.id(), assembly));
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyStarted(equipped, maintenance.id(), assembly));
         RouteMaintenance conflicted = assembled.routeMaintenances().get(maintenance.id()).conflict();
 
         assertDoesNotThrow(() -> assembled.withChanges(FrontierWorldStateUpdate.begin().routeMaintenances(Map.of(conflicted.id(), conflicted))),
