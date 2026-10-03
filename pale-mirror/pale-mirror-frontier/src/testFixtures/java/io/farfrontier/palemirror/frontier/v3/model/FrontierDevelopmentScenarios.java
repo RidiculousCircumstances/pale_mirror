@@ -87,7 +87,9 @@ final class FrontierDevelopmentScenarios {
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE);
         RoutePatrol patrol = RoutePatrol.planned(state, task, settlement,
                 RouteUnitManifest.patrol(taskId, guards.getFirst().id(), List.of(guards.get(1).id())));
-        state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task).startPatrol(patrol));
+        state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
+        state = RoutePatrolProcess.reduceStarted(state, settlement.id(),
+                new RoutePatrolStarted(patrol, RoutePatrolExecutionAuthority.admission(state, patrol)));
         int maximumTransitions = patrol.assembly().members().values().stream()
                 .mapToInt(member -> member.corridor().size() - 1).sum();
         for (int transition = 0; transition <= maximumTransitions; transition++) {
@@ -98,7 +100,8 @@ final class FrontierDevelopmentScenarios {
             if (current.status() != RoutePatrolStatus.ASSEMBLING) {
                 throw new IllegalStateException("route-patrol fixture ingress cannot reach its retained formation");
             }
-            state = RoutePatrolProcess.reduceFormationAdvanced(state, settlement.id(), new RoutePatrolFormationAdvanced(taskId));
+            state = RoutePatrolProcess.reduceFormationAdvanced(state, settlement.id(),
+                    new RoutePatrolFormationAdvanced(taskId, RoutePatrolExecutionAuthority.current(state, current)));
         }
         throw new IllegalStateException("route-patrol fixture ingress did not reach its declared bounded formation");
     }

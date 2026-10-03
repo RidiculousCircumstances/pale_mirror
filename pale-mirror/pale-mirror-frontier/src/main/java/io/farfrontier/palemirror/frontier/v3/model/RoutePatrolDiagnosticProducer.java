@@ -13,9 +13,9 @@ public enum RoutePatrolDiagnosticProducer {
     RECOVERY_UNRESOLVED(RoutePatrolBlockReason.RECOVERY_UNRESOLVED);
     private final RoutePatrolBlockReason reason;
     RoutePatrolDiagnosticProducer(RoutePatrolBlockReason reason) { this.reason = reason; }
-    public RoutePatrolBlocked create(SubjectId taskId) {
+    public RoutePatrolBlocked create(SubjectId taskId, io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions) {
         return new RoutePatrolBlocked(taskId, reason, new DiagnosticTuple(DiagnosticReason.ROUTE_PATROL_BLOCKED,
                 DiagnosticCategory.WAIT_OR_BLOCKED, new DiagnosticOwner(DiagnosticOwnerKind.ROUTE_PATROL, taskId),
-                new DiagnosticSubject(DiagnosticSubjectKind.ROUTE_MEMBER, taskId), DiagnosticDisposition.RETRY));
+                new DiagnosticSubject(DiagnosticSubjectKind.ROUTE_MEMBER, taskId), DiagnosticDisposition.RETRY), executions);
     }
 }

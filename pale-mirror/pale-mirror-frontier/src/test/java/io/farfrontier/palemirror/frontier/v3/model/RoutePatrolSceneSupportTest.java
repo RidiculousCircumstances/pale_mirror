@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Pure M2 boundary: one retained full-roster patrol edge, no generic guard or actor-location rewrite. */
+/** Pure patrol boundary: exact full-roster arrival updates its canonical pose and checkpoint together. */
 class RoutePatrolSceneSupportTest {
     @Test
     void observedFormationArrivalAdvancesTheWholeRetainedRosterAndLeaseFormation() {
@@ -48,11 +48,13 @@ class RoutePatrolSceneSupportTest {
         RoutePatrol expected = before.advanceFormation();
         var targets = FrontierRoutePatrolSceneSupport.bodies(expected);
 
-        FrontierWorldState advanced = FrontierRoutePatrolSceneSupport.advanceFormationObserved(state, before, leaseId, targets);
+        FrontierWorldState advanced = FrontierRoutePatrolSceneSupport.advanceFormationObserved(state, before, leaseId, targets,
+                RoutePatrolExecutionAuthority.current(state, before));
 
         assertEquals(expected, advanced.strategicPlans().routePatrols().get(candidate.taskId()));
         assertEquals(FrontierRoutePatrolSceneSupport.bodies(expected), advanced.sceneLeases().get(leaseId).memberPositions());
-        assertEquals(state.actorLocations(), advanced.actorLocations(), "HOT owns the body cursor; COLD actor locations update only on release");
+        targets.forEach((actor, body) -> assertEquals(body, advanced.actorLocations().get(actor).body(),
+                "the observed HOT pose and retained checkpoint share one canonical position"));
         assertNotEquals(before, expected);
     }
 
@@ -72,9 +74,23 @@ class RoutePatrolSceneSupportTest {
 
         FrontierWorldState hot = state;
         assertThrows(IllegalArgumentException.class, () -> FrontierRoutePatrolSceneSupport.advanceFormationObserved(hot, patrol, leaseId,
-                FrontierRoutePatrolSceneSupport.bodies(patrol)));
+                FrontierRoutePatrolSceneSupport.bodies(patrol), RoutePatrolExecutionAuthority.current(hot, patrol)));
         assertEquals(patrol, state.strategicPlans().routePatrols().get(candidate.taskId()));
         assertEquals(candidate.memberBodies(), state.sceneLeases().get(leaseId).memberPositions());
+        var current = RoutePatrolExecutionAuthority.current(hot, patrol);
+        var stale = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(current.members().stream()
+                .map(id -> new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                        id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1)).toList());
+        var next = FrontierRoutePatrolSceneSupport.bodies(patrol.advanceFormation());
+        var codec = new FrontierWorldStateCodec();
+        byte[] before = codec.encode(hot);
+        assertThrows(IllegalArgumentException.class, () -> FrontierRoutePatrolSceneSupport.advanceFormationObserved(
+                hot, patrol, leaseId, next, stale));
+        assertThrows(IllegalArgumentException.class, () -> hot.withChanges(FrontierWorldStateUpdate.begin()
+                .actorExecutions(hot.actorExecutions().finish(current.members().getFirst()))));
+        assertThrows(IllegalArgumentException.class, () -> new RoutePatrolFormationObserved(patrol.taskId(), leaseId, next,
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(java.util.List.of(current.members().getFirst()))));
+        assertArrayEquals(before, codec.encode(hot));
     }
 
     @Test
@@ -97,7 +113,8 @@ class RoutePatrolSceneSupportTest {
 
         assertTrue(FrontierRoutePatrolSceneSupport.candidates(reconsidered).isEmpty());
         assertThrows(IllegalArgumentException.class,
-                () -> FrontierRoutePatrolSceneSupport.advanceFormationObserved(reconsidered, patrol, leaseId, next));
+                () -> FrontierRoutePatrolSceneSupport.advanceFormationObserved(reconsidered, patrol, leaseId, next,
+                        RoutePatrolExecutionAuthority.current(reconsidered, patrol)));
         assertThrows(IllegalArgumentException.class,
                 () -> FrontierRoutePatrolSceneSupport.releasedBody(reconsidered, reconsidered.sceneLeases().get(leaseId), patrol.memberIds().getFirst(),
                         candidate.memberBodies().get(patrol.memberIds().getFirst())));
@@ -127,9 +144,10 @@ class RoutePatrolSceneSupportTest {
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         SubjectId dead = state.strategicPlans().routePatrols().get(candidate.taskId()).memberIds().getFirst();
 
-        var blockedAlive = state.withStrategicPlans(state.strategicPlans()
+        var blockedAlive = state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans()
                 .blockPatrol(candidate.taskId(), RoutePatrolBlockReason.MISSING_OWNED_BODY)
-                .transitionTask(candidate.taskId(), StrategicTaskStatus.BLOCKED));
+                .transitionTask(candidate.taskId(), StrategicTaskStatus.BLOCKED))
+                .actorExecutions(RoutePatrolExecutionAuthority.retired(state, state.strategicPlans().routePatrols().get(candidate.taskId()))));
         var unknown = blockedAlive.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
         unknown = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknown));
         assertEquals(SceneLeaseStatus.DRAINING, FrontierSceneBehaviors.recoveredStatus(unknown, unknown.sceneLeases().get(leaseId)));
@@ -148,6 +166,7 @@ class RoutePatrolSceneSupportTest {
                 result.strategicPlans().routePatrols().get(candidate.taskId()).blockReason().orElseThrow());
         assertEquals(StrategicTaskStatus.BLOCKED, result.strategicPlans().tasks().get(candidate.taskId()).status());
         assertFalse(result.actorLocations().get(dead).condition().status() == ActorLifeStatus.ALIVE);
+        assertTrue(candidate.memberBodies().keySet().stream().allMatch(actor -> result.actorExecutions().actors().get(actor).current().isEmpty()));
     }
 
     @Test
@@ -179,7 +198,7 @@ class RoutePatrolSceneSupportTest {
     }
 
     @Test
-    void physicalSceneConflictIsAVisibleLocalRecoveryAmbiguityRatherThanAWorldwideFailure() {
+    void physicalSceneConflictRetainsTheSameCanonicalBodyAuthorityAndUnrelatedPositions() {
         FrontierWorldState state = patrolState(new WorldId("frontier:route-patrol-conflict-recovery"));
         FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:route-patrol-conflict-recovery");
@@ -190,7 +209,8 @@ class RoutePatrolSceneSupportTest {
         assertTrue(lease.members().stream().allMatch(member -> {
             FencedRecoveryBinding binding = conflicted.fencedRecovery().current()
                     .get(ActorBodyId.recoveryBindingId(member.actorId()));
-            return binding.phase() == FencedRecoveryPhase.AMBIGUOUS && binding.nextAction() == FencedRecoveryDisposition.INSPECT;
+            return binding.phase() == FencedRecoveryPhase.RUNNING && binding.authorityEpoch() == 1L
+                    && binding.ownerId().equals(member.actorId());
         }));
         assertEquals(state.actorLocations(), conflicted.actorLocations(), "one local physical ambiguity cannot rewrite unrelated canonical positions");
     }
@@ -306,6 +326,8 @@ class RoutePatrolSceneSupportTest {
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE);
         RoutePatrol patrol = RoutePatrol.planned(state, task, settlement,
                 RouteUnitManifest.patrol(taskId, guards.getFirst().id(), List.of(guards.get(1).id())));
-        return state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task).startPatrol(patrol));
+        state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
+        return io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess.reduceStarted(state, settlement.id(),
+                new RoutePatrolStarted(patrol, RoutePatrolExecutionAuthority.admission(state, patrol)));
     }
 }

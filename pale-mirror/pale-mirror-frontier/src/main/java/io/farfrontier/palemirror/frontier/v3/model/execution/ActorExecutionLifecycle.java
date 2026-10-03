@@ -177,6 +177,16 @@ public final class ActorExecutionLifecycle {
         return new Transition(state, released, ownedRetirements.finish(current));
     }
 
+    /** One family-owned terminal outcome retires its complete exact current participant group. */
+    public ActorExecutionState retireCurrentGroup(ActorExecutionState executions, ActorExecutionGroup group) {
+        group.requireCurrent(executions);
+        var result = executions;
+        for (var id : group.members()) {
+            capabilities.require(id.activityKind());
+            result = result.finish(id);
+        }
+        return result;
+    }
     /** The exact family retires either its current or paused claim, never a successor's authority. */
     public ActorExecutionState retire(FrontierWorldState state, SubjectId actor, ActorActivityKind kind, SubjectId owner) {
         return retire(state.actorExecutions(), actor, kind, owner);

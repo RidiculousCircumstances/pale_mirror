@@ -270,6 +270,9 @@ class RouteConstructionTaskProcessTest {
 
         state = AmbientLeaseStateProcess.transition(state, member, AmbientLeaseStatus.DRAINING);
         state = AmbientLeaseStateProcess.release(state, new AmbientLeaseReleased(member, ordinary.handoffBody(), FixedScalar.whole(8)));
+        // This pure fixture separately acknowledges actual physical departure. Closing an
+        // activity lease alone cannot declare its canonical body absent or enable COLD work.
+        state = ActorBodyAuthority.released(state, ActorBodyAuthority.current(state, member));
         RouteConstructionAssemblyStarted started = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(2, 400L)).stream()
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionAssemblyStarted.class::isInstance)
                 .map(RouteConstructionAssemblyStarted.class::cast).findFirst().orElseThrow();

@@ -36,7 +36,8 @@ public final class RoutePatrolProcess {
         }
         RoutePatrol patrol = selectIngressCapablePatrol(state, task, settlement, candidates);
         if (patrol == null) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
-        return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(settlement.id(), new RoutePatrolStarted(patrol)),
+        return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(settlement.id(), new RoutePatrolStarted(patrol,
+                RoutePatrolExecutionAuthority.admission(state, patrol))),
                 schedule(progress(patrol, Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().routePatrolStepInterval()))));
     }
 
@@ -44,9 +45,13 @@ public final class RoutePatrolProcess {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(action.subject());
         if (patrol == null || !patrol.active()) return List.of();
         requireCurrentPlan(state, patrol);
+        RoutePatrolExecutionAuthority.current(state, patrol);
         if (state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
                 && FrontierSceneBehaviors.isRoutePatrol(lease)
                 && FrontierSceneBehaviors.routePatrol(lease).taskId().equals(patrol.taskId()))) return List.of();
+        if (!ActorExecutionCoordinator.coldAvailable(state, patrol.memberIds()))
+            return List.of(schedule(progress(patrol, Math.addExact(action.dueAt().ticks(),
+                    state.bootstrap().ruleset().cadence().routePatrolStepInterval()))));
         StrategicTask task = task(state, patrol.taskId(), StrategicTaskStatus.ACTIVE);
         RoutePatrol current = patrol;
         List<ProposedEvent> events = new ArrayList<>();
@@ -58,7 +63,8 @@ public final class RoutePatrolProcess {
         // known loss.
         for (int advance = 0; advance < PatrolAssembly.MAX_COLD_ADVANCES; advance++) {
             if (current.memberIds().stream().anyMatch(member -> state.actorLocations().get(member).condition().status() != ActorLifeStatus.ALIVE)) {
-                events.add(new ProposedEvent(current.settlementId(), RoutePatrolFailureDiagnosticProducer.memberLost(current.taskId())));
+                events.add(new ProposedEvent(current.settlementId(), RoutePatrolFailureDiagnosticProducer.memberLost(current.taskId(),
+                        RoutePatrolExecutionAuthority.current(state, patrol))));
                 events.add(transition(task, StrategicTaskStatus.BLOCKED));
                 return List.copyOf(events);
             }
@@ -67,7 +73,8 @@ public final class RoutePatrolProcess {
                 BlockPosition confirmed = obstruction.orElseThrow();
                 ScheduledAction reconsideration = StrategicObjectiveProcess.routeReconsideration(current.settlementId(), confirmed, "confirmed",
                         Math.addExact(action.dueAt().ticks(), 1L));
-                events.add(new ProposedEvent(current.settlementId(), new RoutePatrolObstructionConfirmed(current.taskId(), confirmed)));
+                events.add(new ProposedEvent(current.settlementId(), new RoutePatrolObstructionConfirmed(current.taskId(), confirmed,
+                        RoutePatrolExecutionAuthority.current(state, patrol))));
                 events.add(transition(task, StrategicTaskStatus.COMPLETED));
                 events.add(new ProposedEvent(current.settlementId(), new ScheduleEffect.Created(reconsideration)));
                 return List.copyOf(events);
@@ -77,12 +84,14 @@ public final class RoutePatrolProcess {
                 try {
                     next = current.advanceFormation();
                 } catch (IllegalArgumentException unavailable) {
-                    events.add(new ProposedEvent(current.settlementId(), RoutePatrolDiagnosticProducer.NO_OPEN_RETAINED_EDGE.create(current.taskId())));
+                    events.add(new ProposedEvent(current.settlementId(), RoutePatrolDiagnosticProducer.NO_OPEN_RETAINED_EDGE.create(current.taskId(),
+                            RoutePatrolExecutionAuthority.current(state, patrol))));
                     events.add(transition(task, StrategicTaskStatus.BLOCKED));
                     return List.copyOf(events);
                 }
                 // COLD owns the same retained formation edge; no actor/body coordinate is selected here.
-                events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFormationAdvanced(current.taskId())));
+                events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFormationAdvanced(current.taskId(),
+                        RoutePatrolExecutionAuthority.current(state, patrol))));
                 current = next;
                 if (current.status() == RoutePatrolStatus.ROUTE_CLEAR) { events.add(transition(task, StrategicTaskStatus.COMPLETED)); return List.copyOf(events); }
             }
@@ -91,7 +100,7 @@ public final class RoutePatrolProcess {
         return List.copyOf(events);
     }
 
-    static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, RoutePatrolStarted started) {
+    public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, RoutePatrolStarted started) {
         RoutePatrol patrol = started.patrol(); StrategicTask task = task(state, patrol.taskId(), StrategicTaskStatus.ACTIVE);
         if (!subject.equals(patrol.settlementId()) || !task.ownerId().equals(subject) || state.strategicPlans().routePatrols().containsKey(patrol.taskId())) {
             throw new IllegalArgumentException("route patrol start has a foreign owner or duplicate task");
@@ -106,7 +115,10 @@ public final class RoutePatrolProcess {
         for (var entry : patrol.assembly().bodies().entrySet()) if (!state.actorLocations().get(entry.getKey()).body().equals(entry.getValue())) {
             throw new IllegalArgumentException("route patrol ingress must begin at each exact current resident body");
         }
-        return state.withStrategicPlans(state.strategicPlans().startPatrol(patrol));
+        started.executions().requireDeclaration(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.ROUTE_PATROL,
+                patrol.taskId(), patrol.memberIds());
+        return ActorExecutionComposition.LIFECYCLE.prepareVacantGroup(state, started.executions()).commit(state,
+                FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().startPatrol(patrol)));
     }
 
     /** COLD counterpart of one observed HOT formation edge: update every named body atomically. */
@@ -116,6 +128,9 @@ public final class RoutePatrolProcess {
             throw new IllegalArgumentException("route-patrol formation advance has foreign owner");
         }
         RoutePatrol next = patrol.advanceFormation();
+        RoutePatrolExecutionAuthority.requireCurrent(state, patrol, advanced.executions());
+        if (!ActorExecutionCoordinator.coldAvailable(state, patrol.memberIds()))
+            throw new IllegalArgumentException("COLD patrol cannot advance physically held participants");
         java.util.Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(state.actorLocations());
         for (var entry : FrontierRoutePatrolSceneSupport.bodies(patrol).entrySet()) {
             ActorLocation current = locations.get(entry.getKey());
@@ -124,35 +139,44 @@ public final class RoutePatrolProcess {
             }
             locations.put(entry.getKey(), current.withBody(FrontierRoutePatrolSceneSupport.bodies(next).get(entry.getKey())));
         }
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations)
-                .strategicPlans(state.strategicPlans().advancePatrolFormation(advanced.taskId())));
+        var update = FrontierWorldStateUpdate.begin().actorLocations(locations)
+                .strategicPlans(state.strategicPlans().advancePatrolFormation(advanced.taskId()));
+        if (!next.active()) update.actorExecutions(RoutePatrolExecutionAuthority.retired(state, patrol));
+        return state.withChanges(update);
     }
 
     static FrontierWorldState reduceObstruction(FrontierWorldState state, SubjectId subject, RoutePatrolObstructionConfirmed confirmed) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(confirmed.taskId());
-        if (patrol == null || !subject.equals(patrol.settlementId()) || !state.physicalDeltas().containsKey(confirmed.position())) {
+        if (patrol == null || !patrol.active() || !subject.equals(patrol.settlementId()) || !state.physicalDeltas().containsKey(confirmed.position())) {
             throw new IllegalArgumentException("route patrol obstruction lacks physical evidence");
         }
         requireCurrentPlan(state, patrol);
-        return state.withStrategicPlans(state.strategicPlans().confirmPatrolObstruction(confirmed.taskId(), confirmed.position()));
+        RoutePatrolExecutionAuthority.requireCurrent(state, patrol, confirmed.executions());
+        return state.withChanges(FrontierWorldStateUpdate.begin()
+                .strategicPlans(state.strategicPlans().confirmPatrolObstruction(confirmed.taskId(), confirmed.position()))
+                .actorExecutions(RoutePatrolExecutionAuthority.retired(state, patrol)));
     }
 
     /** One named patrol member loss is terminal evidence for this exact roster; no substitute may continue it. */
     public static FrontierWorldState reduceFailed(FrontierWorldState state, SubjectId subject, RoutePatrolFailed failed) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(failed.taskId());
-        if (patrol == null || !subject.equals(patrol.settlementId()) || patrol.memberIds().stream()
+        if (patrol == null || !patrol.active() || !subject.equals(patrol.settlementId()) || patrol.memberIds().stream()
                 .allMatch(member -> state.actorLocations().get(member).condition().status() == ActorLifeStatus.ALIVE)) {
             throw new IllegalArgumentException("route patrol failure lacks a dead guard");
         }
         requireCurrentPlan(state, patrol);
-        return state.withStrategicPlans(state.strategicPlans().failPatrol(failed.taskId()));
+        RoutePatrolExecutionAuthority.requireCurrent(state, patrol, failed.executions());
+        return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().failPatrol(failed.taskId()))
+                .actorExecutions(RoutePatrolExecutionAuthority.retired(state, patrol)));
     }
 
     static FrontierWorldState reduceBlocked(FrontierWorldState state, SubjectId subject, RoutePatrolBlocked blocked) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(blocked.taskId());
         if (patrol == null || !subject.equals(patrol.settlementId()) || !patrol.active()) throw new IllegalArgumentException("route patrol block has a foreign owner");
         requireCurrentPlan(state, patrol);
-        return state.withStrategicPlans(state.strategicPlans().blockPatrol(blocked.taskId(), blocked.reason()));
+        RoutePatrolExecutionAuthority.requireCurrent(state, patrol, blocked.executions());
+        return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().blockPatrol(blocked.taskId(), blocked.reason()))
+                .actorExecutions(RoutePatrolExecutionAuthority.retired(state, patrol)));
     }
 
     static ScheduledAction progress(RoutePatrol patrol, long due) { return new ScheduledAction(new ScheduleId("schedule:route-patrol-progress-" + patrol.taskId().value().replace(':', '-')),

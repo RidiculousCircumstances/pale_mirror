@@ -33,7 +33,7 @@ class RoutePatrolProcessTest {
         RoutePatrol expected = before.advanceFormation();
 
         FrontierWorldState advanced = RoutePatrolProcess.reduceFormationAdvanced(state, before.settlementId(),
-                new RoutePatrolFormationAdvanced(before.taskId()));
+                new RoutePatrolFormationAdvanced(before.taskId(), RoutePatrolExecutionAuthority.current(state, before)));
 
         assertEquals(expected, advanced.strategicPlans().routePatrols().get(before.taskId()));
         assertEquals(FrontierRoutePatrolSceneSupport.bodies(expected), before.memberIds().stream()
@@ -53,12 +53,14 @@ class RoutePatrolProcessTest {
         locations.put(lost, new ActorLocation(before.body(), ActorCondition.dead(), before.kind()));
         FrontierWorldState withLoss = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
 
-        FrontierWorldState failed = RoutePatrolProcess.reduceFailed(withLoss, patrol.settlementId(), RoutePatrolFailureDiagnosticProducer.memberLost(patrol.taskId()));
+        var failure = RoutePatrolFailureDiagnosticProducer.memberLost(patrol.taskId(), RoutePatrolExecutionAuthority.current(state, patrol));
+        FrontierWorldState failed = RoutePatrolProcess.reduceFailed(withLoss, patrol.settlementId(), failure);
 
         assertEquals(RoutePatrolStatus.FAILED, failed.strategicPlans().routePatrols().get(patrol.taskId()).status());
         assertEquals(patrol.memberIds(), failed.strategicPlans().routePatrols().get(patrol.taskId()).memberIds());
         assertThrows(IllegalArgumentException.class,
-                () -> RoutePatrolProcess.reduceFailed(state, patrol.settlementId(), RoutePatrolFailureDiagnosticProducer.memberLost(patrol.taskId())));
+                () -> RoutePatrolProcess.reduceFailed(state, patrol.settlementId(), failure));
+        assertTrue(patrol.memberIds().stream().allMatch(actor -> failed.actorExecutions().actors().get(actor).current().isEmpty()));
     }
 
     @Test
@@ -66,8 +68,9 @@ class RoutePatrolProcessTest {
         var fixture = FrontierDevelopmentScenarios.routePatrolFixture(new WorldId("frontier:patrol-block-reason"), 713L);
         FrontierWorldState state = fixture.state();
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(fixture.taskId());
-        FrontierWorldState blocked = state.withStrategicPlans(state.strategicPlans()
-                .blockPatrol(patrol.taskId(), RoutePatrolBlockReason.OCCUPIED_NEXT_BODY));
+        FrontierWorldState blocked = state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans()
+                .blockPatrol(patrol.taskId(), RoutePatrolBlockReason.OCCUPIED_NEXT_BODY))
+                .actorExecutions(RoutePatrolExecutionAuthority.retired(state, patrol)));
 
         FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(blocked));
 
@@ -104,8 +107,9 @@ class RoutePatrolProcessTest {
                 Optional.empty(), java.util.List.of(StrategicTaskRequirement.AVAILABLE_GUARD), java.util.List.of(), StrategicTaskStatus.ACTIVE);
         RouteUnitManifest unit = RouteUnitManifest.patrol(taskId, guard, java.util.List.of(scout));
         RoutePatrol patrol = RoutePatrol.planned(state, taskId, settlement, unit);
-        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)
-                .startPatrol(patrol));
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        state = RoutePatrolProcess.reduceStarted(state, settlement.id(),
+                new RoutePatrolStarted(patrol, RoutePatrolExecutionAuthority.admission(state, patrol)));
 
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)),
                 "a patrol on a persisted surveyed grade must hydrate from the same exact topology");

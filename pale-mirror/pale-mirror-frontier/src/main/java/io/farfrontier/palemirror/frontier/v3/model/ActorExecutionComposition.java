@@ -9,11 +9,12 @@ public final class ActorExecutionComposition {
     public static final ActorActivityCapabilities CAPABILITIES = new ActorActivityCapabilities(
             Set.of(ActorActivityKind.PRESENCE, ActorActivityKind.MEAL, ActorActivityKind.SERVICE_EXIT,
                     ActorActivityKind.FIELD_HARVEST, ActorActivityKind.PRODUCTION, ActorActivityKind.TRANSIT,
-                    ActorActivityKind.SCOUT_PATROL, ActorActivityKind.OPERATION_ASSEMBLY, ActorActivityKind.LOGISTICS),
+                    ActorActivityKind.SCOUT_PATROL, ActorActivityKind.OPERATION_ASSEMBLY, ActorActivityKind.LOGISTICS,
+                    ActorActivityKind.ROUTE_PATROL),
             List.of(new PresenceActivityCapability(), new MealActivityCapability(), new ServiceExitActivityCapability(),
                     new HarvestActivityCapability(), new ProductionActivityCapability(), new TransitActivityCapability(),
                     new ScoutPatrolActivityCapability(), OperationExecutionAuthority.assemblyCapability(),
-                    OperationExecutionAuthority.logisticsCapability()));
+                    OperationExecutionAuthority.logisticsCapability(), RoutePatrolExecutionAuthority.capability()));
     public static final ActorExecutionLifecycle LIFECYCLE = new ActorExecutionLifecycle(CAPABILITIES);
     private ActorExecutionComposition() { }
 }

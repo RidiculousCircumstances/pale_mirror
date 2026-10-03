@@ -13,9 +13,9 @@ import java.util.Set;
 /**
  * Exact candidate, admission and observed-arrival boundary for class-D patrol movement.
  *
- * <p>The patrol is the sole spatial truth.  The ordinary actor location remains COLD-owned
- * while the scene is HOT; each accepted physical arrival atomically advances both the same
- * patrol formation and the lease recovery anchor.  It never manufactures a generic guard goal.</p>
+ * <p>The patrol retains route targets and formation checkpoints. ActorLocation owns actual
+ * supported position in both providers; observed arrival updates it together with the patrol
+ * checkpoint and scene recovery evidence. It never manufactures a generic guard goal.</p>
  */
 public final class FrontierRoutePatrolSceneSupport {
     private FrontierRoutePatrolSceneSupport() { }
@@ -74,12 +74,24 @@ public final class FrontierRoutePatrolSceneSupport {
     }
 
     public static FrontierWorldState advanceFormationObserved(FrontierWorldState state, RoutePatrol current, SceneLeaseId leaseId,
-                                                              Map<SubjectId, BodyPosition> observedBodies) {
+                                                              Map<SubjectId, BodyPosition> observedBodies,
+                                                              io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions) {
+        RoutePatrolExecutionAuthority.requireCurrent(state, current, executions);
         requireCurrentPlan(state, current); SceneLease lease = requireHotLease(state, current, leaseId);
         RoutePatrol next = current.advanceFormation(); Map<SubjectId, BodyPosition> expected = bodies(next);
         if (!expected.equals(observedBodies)) throw new IllegalArgumentException("route-patrol formation observation did not reach its retained edge");
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, lease.withMemberPositions(expected));
-        return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().advancePatrolFormation(current.taskId())).sceneLeases(leases));
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        for (var entry : expected.entrySet()) {
+            var actor = actors.get(entry.getKey());
+            if (actor == null || !actor.body().equals(bodies(current).get(entry.getKey())))
+                throw new IllegalArgumentException("patrol HOT observation has a stale canonical predecessor");
+            actors.put(entry.getKey(), actor.withBody(entry.getValue()));
+        }
+        var update = FrontierWorldStateUpdate.begin().actorLocations(actors)
+                .strategicPlans(state.strategicPlans().advancePatrolFormation(current.taskId())).sceneLeases(leases);
+        if (!next.active()) update.actorExecutions(RoutePatrolExecutionAuthority.retired(state, current));
+        return state.withChanges(update);
     }
 
     public static BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {

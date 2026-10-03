@@ -118,7 +118,8 @@ class DiagnosticIncidentIndexTest {
         var lost = patrol.memberIds().getFirst();
         locations.put(lost, new ActorLocation(locations.get(lost).body(), ActorCondition.dead(), locations.get(lost).kind()));
         FrontierWorldState withLoss = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
-        RoutePatrolFailed payload = RoutePatrolFailureDiagnosticProducer.memberLost(patrol.taskId());
+        RoutePatrolFailed payload = RoutePatrolFailureDiagnosticProducer.memberLost(patrol.taskId(),
+                RoutePatrolExecutionAuthority.current(withLoss, patrol));
 
         FrontierWorldState reduced = FrontierWorldRuntimeDefinition.configuration(world, 713L).reducer().apply(withLoss,
                 event(world, patrol.settlementId(), payload, 1, 7));

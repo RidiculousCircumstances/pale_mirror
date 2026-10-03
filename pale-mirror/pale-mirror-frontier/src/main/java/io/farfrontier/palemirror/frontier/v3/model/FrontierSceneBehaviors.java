@@ -153,14 +153,16 @@ public final class FrontierSceneBehaviors {
 
     record SceneDeathOutcome(HumanPopulation humanPopulation, ResourceSiteState resourceSites, StrategicPlanState strategicPlans,
                              Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> physicalIntents,
-                             Map<SubjectId, SettlementServiceWork> serviceWorks) {
+                             Map<SubjectId, SettlementServiceWork> serviceWorks,
+                             io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState actorExecutions) {
         SceneDeathOutcome {
             Objects.requireNonNull(humanPopulation, "scene-death human population"); Objects.requireNonNull(resourceSites, "scene-death resource sites");
             Objects.requireNonNull(strategicPlans, "scene-death strategic plans"); Objects.requireNonNull(physicalIntents, "scene-death physical intents");
             Objects.requireNonNull(serviceWorks, "scene-death service works");
+            Objects.requireNonNull(actorExecutions, "scene-death execution outcomes");
         }
         static SceneDeathOutcome unchanged(FrontierWorldState state) {
-            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), state.strategicPlans(), state.physicalIntents(), state.serviceWorks());
+            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), state.strategicPlans(), state.physicalIntents(), state.serviceWorks(), state.actorExecutions());
         }
     }
 
@@ -468,7 +470,7 @@ public final class FrontierSceneBehaviors {
             }
             StrategicPlanState plans = state.strategicPlans().replaceSettlementAssault(next);
             return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), plans,
-                    state.physicalIntents(), state.serviceWorks());
+                    state.physicalIntents(), state.serviceWorks(), state.actorExecutions());
         }
     }
 
@@ -589,7 +591,7 @@ public final class FrontierSceneBehaviors {
             HumanPopulation population = operation.active() && (operation.patientId().equals(actorId) || operation.team().memberIds().contains(actorId))
                     ? state.humanPopulation().transitionMedicalOperation(operation.id(), MedicalEvacuationStatus.BLOCKED, atTick)
                     : state.humanPopulation();
-            return new SceneDeathOutcome(population, state.resourceSites(), state.strategicPlans(), state.physicalIntents(), state.serviceWorks());
+            return new SceneDeathOutcome(population, state.resourceSites(), state.strategicPlans(), state.physicalIntents(), state.serviceWorks(), state.actorExecutions());
         }
     }
 
@@ -710,7 +712,7 @@ public final class FrontierSceneBehaviors {
             if (intent == null) throw new IllegalArgumentException("dead harvest worker has no exact physical intent");
             Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
             intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.RESOURCE_SITE_HARVEST.stamp(intent)));
-            return new SceneDeathOutcome(state.humanPopulation(), sites, plans, Map.copyOf(intents), state.serviceWorks());
+            return new SceneDeathOutcome(state.humanPopulation(), sites, plans, Map.copyOf(intents), state.serviceWorks(), state.actorExecutions());
         }
     }
 
@@ -856,7 +858,7 @@ public final class FrontierSceneBehaviors {
                     intents.put(intent.id(), intent.withRecoveryUnknown(producer.stamp(intent)));
                 }
             }
-            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), state.strategicPlans(), Map.copyOf(intents), Map.copyOf(works));
+            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), state.strategicPlans(), Map.copyOf(intents), Map.copyOf(works), state.actorExecutions());
         }
     }
 
@@ -933,7 +935,7 @@ public final class FrontierSceneBehaviors {
             StrategicPlanState plans = state.strategicPlans().blockPatrol(patrol.taskId(), RoutePatrolBlockReason.MISSING_OWNED_BODY)
                     .transitionTask(patrol.taskId(), StrategicTaskStatus.BLOCKED);
             return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), plans,
-                    state.physicalIntents(), state.serviceWorks());
+                    state.physicalIntents(), state.serviceWorks(), RoutePatrolExecutionAuthority.retired(state, patrol));
         }
     }
 }

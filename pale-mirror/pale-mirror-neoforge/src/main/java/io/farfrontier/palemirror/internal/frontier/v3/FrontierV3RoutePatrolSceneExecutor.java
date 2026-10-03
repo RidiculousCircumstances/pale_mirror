@@ -140,7 +140,8 @@ final class FrontierV3RoutePatrolSceneExecutor {
         if (!demanded.active()) return;
         Optional<BlockPosition> obstruction = FrontierRouteNetwork.firstObstructionOnCarriagewaySegment(retained.route(), retained.routeIndex(), state.physicalDeltas());
         if (obstruction.isPresent()) {
-            submit(runtime, "route-patrol-obstruction", lease.id().value(), new RoutePatrolObstructionConfirmed(retained.taskId(), obstruction.orElseThrow()));
+            submit(runtime, "route-patrol-obstruction", lease.id().value(), new RoutePatrolObstructionConfirmed(retained.taskId(), obstruction.orElseThrow(),
+                    io.farfrontier.palemirror.frontier.v3.model.RoutePatrolExecutionAuthority.current(state, retained)));
             return;
         }
         // Body custody is checked before proposing the next canonical formation.  A missing
@@ -148,31 +149,31 @@ final class FrontierV3RoutePatrolSceneExecutor {
         // topology failure merely because the remaining retained column cannot advance alone.
         for (SceneMember candidate : lease.members()) {
             if (!(level.getEntity(candidate.entityId()) instanceof Mob)) {
-                block(level, runtime, lease, retained, RoutePatrolDiagnosticProducer.MISSING_OWNED_BODY); return;
+                block(level, runtime, state, lease, retained, RoutePatrolDiagnosticProducer.MISSING_OWNED_BODY); return;
             }
         }
         RoutePatrol formation;
         try {
             formation = retained.advanceFormation();
         } catch (IllegalArgumentException invalidFormation) {
-            block(level, runtime, lease, retained, RoutePatrolDiagnosticProducer.NO_OPEN_RETAINED_EDGE); return;
+            block(level, runtime, state, lease, retained, RoutePatrolDiagnosticProducer.NO_OPEN_RETAINED_EDGE); return;
         }
         Map<SubjectId, BodyPosition> formationBodies = FrontierRoutePatrolSceneSupport.bodies(formation);
         boolean arrived = true;
         for (SceneMember candidate : lease.members()) {
             Entity candidateEntity = level.getEntity(candidate.entityId()); BodyPosition targetBody = formationBodies.get(candidate.actorId());
             if (!(candidateEntity instanceof Mob candidateBody) || targetBody == null) {
-                block(level, runtime, lease, retained, RoutePatrolDiagnosticProducer.MISSING_OWNED_BODY); return;
+                block(level, runtime, state, lease, retained, RoutePatrolDiagnosticProducer.MISSING_OWNED_BODY); return;
             }
             if (!at(candidateBody, targetBody.supportingSurface())) { arrived = false; break; }
         }
-        if (arrived) { observeFormation(level, runtime, lease, retained, formationBodies); return; }
+        if (arrived) { observeFormation(level, runtime, state, lease, retained, formationBodies); return; }
         for (SceneMember candidate : lease.members()) {
             Entity candidateEntity = level.getEntity(candidate.entityId()); BodyPosition targetBody = formationBodies.get(candidate.actorId());
             if (!(candidateEntity instanceof Mob candidateBody) || targetBody == null) continue;
             if (!at(candidateBody, targetBody.supportingSurface())) {
                 if (!clearNextBody(level, candidateBody, targetBody.supportingSurface(), lease)) {
-                    block(level, runtime, lease, retained, RoutePatrolDiagnosticProducer.OCCUPIED_NEXT_BODY); return;
+                    block(level, runtime, state, lease, retained, RoutePatrolDiagnosticProducer.OCCUPIED_NEXT_BODY); return;
                 }
                 FrontierV3GoalNavigation.pursue(level, candidateBody, FrontierV3GoalNavigation.Goal.station(targetBody.supportingSurface(),
                         new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
@@ -180,15 +181,17 @@ final class FrontierV3RoutePatrolSceneExecutor {
         }
     }
 
-    private static void observeFormation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
+    private static void observeFormation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease,
                                          RoutePatrol patrol, Map<SubjectId, BodyPosition> bodies) {
         CommandResult result = submit(runtime, "route-patrol-formation", lease.id().value(),
-                new RoutePatrolFormationObserved(patrol.taskId(), lease.id(), bodies));
+                new RoutePatrolFormationObserved(patrol.taskId(), lease.id(), bodies,
+                        io.farfrontier.palemirror.frontier.v3.model.RoutePatrolExecutionAuthority.current(state, patrol)));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_formation", lease, result);
     }
-    private static void block(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, RoutePatrol patrol,
+    private static void block(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease, RoutePatrol patrol,
                               RoutePatrolDiagnosticProducer producer) {
-        CommandResult result = submit(runtime, "route-patrol-blocked", lease.id().value(), producer.create(patrol.taskId()));
+        CommandResult result = submit(runtime, "route-patrol-blocked", lease.id().value(), producer.create(patrol.taskId(),
+                io.farfrontier.palemirror.frontier.v3.model.RoutePatrolExecutionAuthority.current(state, patrol)));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_blocked", lease, result);
     }
     private static boolean at(Mob body, SurfaceAnchor surface) { return FrontierV3SurfaceObservation.at(body, surface); }

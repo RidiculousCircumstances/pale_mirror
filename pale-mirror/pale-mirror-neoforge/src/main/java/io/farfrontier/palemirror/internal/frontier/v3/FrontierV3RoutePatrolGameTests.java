@@ -212,12 +212,15 @@ public final class FrontierV3RoutePatrolGameTests {
         // never a local replacement route. Admission and the COLD assembly remain production
         // transitions; only the first physical HOT edge is asserted by this GameTest.
         RoutePatrol patrol = RoutePatrol.planned(initial, task, settlement, unit);
-        while (patrol.status() == RoutePatrolStatus.ASSEMBLING) patrol = patrol.advanceFormation();
+        FrontierWorldState state = initial.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        state = io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess.reduceStarted(state, settlement.id(),
+                new RoutePatrolStarted(patrol, RoutePatrolExecutionAuthority.admission(state, patrol)));
+        while (patrol.status() == RoutePatrolStatus.ASSEMBLING) {
+            state = io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess.reduceFormationAdvanced(state, settlement.id(),
+                    new RoutePatrolFormationAdvanced(taskId, RoutePatrolExecutionAuthority.current(state, patrol)));
+            patrol = state.strategicPlans().routePatrols().get(taskId);
+        }
         List<SurfaceAnchor> surfaces = patrol.inspectionRoute().linearCorridorSurfaces().stream().limit(4).toList();
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(initial.actorLocations());
-        FrontierRoutePatrolSceneSupport.bodies(patrol).forEach((actor, body) -> actors.put(actor, new ActorLocation(body, ActorCondition.HEALTHY, actors.get(actor).kind())));
-        FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
-                .strategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task).startPatrol(patrol)));
         return new Fixture(state, taskId, surfaces, patrol.travel().leader().currentBody().supportingSurface().support(),
                 patrol.advanceFormation().travel().leader().currentBody());
     }

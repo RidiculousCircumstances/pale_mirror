@@ -213,7 +213,8 @@ public final class FrontierSceneContinuationPlanner {
             if (!(continuation instanceof SceneContinuation.BlockRoutePatrol block)) throw invalid(continuation, kind());
             RoutePatrol patrol = state.strategicPlans().routePatrols().get(block.taskId());
             if (patrol == null || !patrol.active()) throw new IllegalArgumentException("scene recovery has no active route patrol");
-            return List.of(new ProposedEvent(patrol.settlementId(), RoutePatrolDiagnosticProducer.RECOVERY_UNRESOLVED.create(patrol.taskId())),
+            return List.of(new ProposedEvent(patrol.settlementId(), RoutePatrolDiagnosticProducer.RECOVERY_UNRESOLVED.create(patrol.taskId(),
+                    io.farfrontier.palemirror.frontier.v3.model.RoutePatrolExecutionAuthority.current(state, patrol))),
                     new ProposedEvent(patrol.settlementId(), new StrategicTaskTransition(patrol.taskId(), StrategicTaskStatus.BLOCKED)));
         }
     }
