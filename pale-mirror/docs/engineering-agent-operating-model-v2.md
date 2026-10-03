@@ -1,9 +1,9 @@
 # Pale Mirror engineering operating model v2
 
-Status: binding for new work orders after the F0.2C safe boundary. Its
-carrier-readiness, evidence-trust and review rules apply immediately to F0.2C.
-The detailed safety, liveness and economy rules remain in
-`engineering-agent-protocol.md`.
+Status: historical, superseded in full for workflow by
+[`engineering-agent-protocol.md`](engineering-agent-protocol.md), unified
+revision 2026-09-11. The preserved text below records prior decisions; it is not
+an additional source of active requirements or execution authority.
 
 ## Purpose
 

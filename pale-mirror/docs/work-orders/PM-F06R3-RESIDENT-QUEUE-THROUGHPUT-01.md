@@ -79,6 +79,100 @@ turn → sparse COLD travel → calibrated budget and queue guard → fresh-worl
 end-to-end check. A coherent smaller increment may be deployed for diagnosis,
 but must be labelled intermediate and cannot close this order.
 
+The live settlement-11 depot stall adds one required movement discriminator:
+the post-meal actor still occupied the service boundary while its route home
+was unavailable and therefore blocked every waiting meal. Static review found
+that meal, service-exit and bakery callers each constructed their own hard
+obstacles; meal/exit treated every other COLD actor body as a wall, while field
+used a different known-geometry provider. The accepted correction is the
+`frontier-v3-goal-navigation.md` route-knowledge boundary: tasks declare goals
+and authored passages; one provider determines known static/physical
+passability without making other COLD pedestrians permanent walls; the
+service coordinator alone serializes the throat. Verify a crowded exit and a
+changed physical service cell, then check actual live service release and
+multiple distinct meals. This source correction alone does not close the
+resident order, field-specific geometry migration or HOT/player acceptance.
+
+Source checkpoint `2b648ab4` implements the first settlement-provider slice:
+meal, post-meal exit and bakery routes consume one immutable known-geometric
+view and typed depot/workshop passage rather than adding actor body blocks in
+their callers. The provider keeps observed physical deltas hard even at an
+authored passage; the final short depot entrance is checked through it. A
+crowd regression proves the actual `ActorMovementProcess` can begin and reach
+the first boundary-clear segment, and a changed service cell remains blocked.
+Focused resident/bakery tests, Java style/debt and NeoForge compilation passed.
+Clean detached JAR SHA-512 `6d328e4d134de2c1dc5b43061aa4f4dac3dda5f80852601c6a9570706855babb9c94c898c6a4bf9c5d279538df569eb2a516d3fc3cea6cc002a2bc012518e44b`
+was installed on the preserved fresh diagnostic world after save/normal stop;
+preflight and startup verify passed. Live settlement-11 depot bread fell 59→54
+while retained meals fell 31→27 and world status stayed `ok`; this resolves
+the observed no-route blockade narrowly, not the full queue/TPS or player
+criterion. Next measurement must assess sustained lag/TPS and exact meal
+successors, then the relevant HOT/client visit. Field geometry remains a
+separate provider and bakery/field movement is still process-owned.
+
+Subsequent same-world observations reached canonical instant ~150,638 with
+`status=ok`, ~2-tick current runnable lag and ~19.8 canonical TPS over a
+194-second sample, not the sixty-minute 20-TPS cutover proof. Bread stock
+emptied and later replenished to 61; resident `11-32` reduced hunger deficit
+4→1 and cleared an intervening movement, while `11-1`, `11-5`, `11-20` and
+`11-32` had new exact meal phases. The selected isolated native meal scenario
+could not enter its client: the physical `DISPLAY=:0` is unavailable and the
+runner correctly rejected task-private Xvfb `:95`. Its disposable server
+stopped normally and the task-owned display was stopped. This is missing HOT
+evidence, not an observed product failure; do not inflate the COLD/server
+result into player acceptance. One targeted manual visit was requested.
+
+Source-only follow-up `a3e68e6e` moves the farmer's raw field occupancy,
+survey-support and authored depot-passage handling out of its work navigator
+and into `ResourceSiteHarvestKnownGeometry.route`. The farmer still chooses
+the exact typed work/depot goal; the field-specific overlay determines
+passability and invokes the shared bounded pathfinder. Focused harvest and
+process-SDK tests plus style/size/debt and NeoForge compilation pass. No
+behavioral field claim or live artifact update follows from this refactor.
+Follow-up source checkpoint `a49ce4c0` replaces the settlement-only provider
+with `KnownPedestrianRouteKnowledge` for meal, exit, bakery and farmer COLD
+routes. A caller declares an exact canonical facility plus `EXTERIOR` or
+`PUBLIC_ACCESS` reach. The provider validates the facility against the same
+typed port compiler used by `FrontierTraversalPlan`; existing hall, depot,
+workshop and infirmary ports need no route-specific branch. The field uses a
+typed canonical crop/soil overlay on that provider, and the active work path
+no longer assembles its own block set. Generic path search is called only by
+the shared provider. Crowd/forged-passage, four-port, changed depot cell,
+field-route, resident, bakery and movement tests pass, as do style/size/debt
+and NeoForge compilation. This is a reusable source boundary, not evidence
+that every future area type or all movement owners are migrated. In particular,
+a `PhysicalDelta` is changed-cell evidence without recorded final block state;
+unresolved cells conservatively make a route unavailable but are not proven
+solid obstacles. Do not infer exact post-state from the delta key. No build or
+server deployment follows this checkpoint. Read-only live performance of the
+older deployed artifact at instant ~164,932 stayed `ok` with
+~2-tick runnable lag, but recurring 40–96 tick keep-up warnings remain; no
+sustained TPS or HOT/player acceptance is claimed.
+
+Live check of the shared-provider artifact `a49ce4c0` found an additional
+real depot liveness defect, not a route-geometry failure. In preserved world
+`frontier-v3-queue-fresh-20260930`, baker `11-3` waited at the depot on
+`DEPOT_SERVICE_WAIT` and resident `11-12` held a meal inside the same physical
+boundary. The meal admission rejected the baker's body, while work admission
+rejected the meal body: symmetric denial with 30 other claimed meals waiting.
+Commit `9d246294` makes the already-present meal win this overlap, matching
+the work side's existing yield rule, and adds a direct two-body regression.
+The focused meal, bakery HOT/COLD, movement and common-route tests pass.
+Clean detached guardrails/assemble/package verification passed; the full
+unrelated module suite was intentionally not awaited for this intermediate
+diagnostic release. Exact JAR SHA-512
+`d7100b234fc3066906f5124a4be9850d884a0c182c90e2abccc7d0fcd0381dd7f53691b7da50fd213acb1e37f0e820df68671121b066498d9acd3907c774e540`
+was installed after save/normal stop on the same world; preflight and fresh
+startup verification passed. Subsequent status at instant ~249,574 was `ok`;
+bread fell 34→32, the baker moved from its previous boundary cell, and
+resident `11-12` had a new meal claim. At ~252,387, active meals had dropped
+31→16, stock 32→16 and `11-12` had completed that meal with hunger deficit
+4→3; status remained `ok`/NORMAL. The baker still reported
+`DEPOT_SERVICE_WAIT` from a position outside the depot. Treat the queue
+progress as narrow evidence, not closure: bakery liveness, sustained
+throughput/TPS, field delivery, HOT/player and restart acceptance remain open.
+Avoid repeated full matrices without a product discriminator.
+
 ## Implementation checkpoint, 2026-09-30
 
 Static review found a second independent serialization defect. The shared

@@ -5,7 +5,12 @@ description: Profile and optimize Pale Mirror world generation, chunk loading, r
 
 # PM Worldgen Performance
 
-Optimize from measured bottlenecks and preserve deterministic world ownership.
+Optimize from evidenced bottlenecks and preserve deterministic world ownership.
+Follow `docs/engineering-agent-protocol.md` for task autonomy, evidence/retry
+cost and review; this skill supplies performance-specific methods, not another
+mandatory benchmark campaign.
+The assigned executor owns this investigation and its outcome. This skill
+does not assign roles or require another agent to approve each measurement.
 
 ## Establish the pipeline
 
@@ -24,11 +29,17 @@ Optimize from measured bottlenecks and preserve deterministic world ownership.
 
 ## Measure
 
-Capture a baseline before changing algorithms or worker counts. Use
-`scripts/capture-runtime-jfr.sh` and, when relevant, the sibling pack's
-`scripts/benchmark-live-worldgen.sh` and `scripts/analyze-worldgen-jfr.sh`.
-Follow `references/evidence.md`. Record route, duration, chunks generated,
-chunks/second, TPS/MSPT, CPU, heap/GC, I/O, queue depth, and catalog hash.
+First name the claim: structural boundedness, runtime attribution or measured
+speed/latency. Reuse relevant existing traces/baselines. For a bounded-call-path
+correction inspect total work, callbacks, cache-key construction/validation and
+invalidation; use a connected focused regression/counter when adequate.
+Helper query count alone cannot prove caller boundedness.
+
+For runtime attribution use `scripts/capture-runtime-jfr.sh` when needed;
+for measured worldgen claims use the relevant pack benchmark/analyzer.
+Follow `references/evidence.md` for comparable measurements and relevant
+metrics. Do not launch a fresh baseline/JFR campaign merely because an
+algorithm changed; existing evidence may already identify the defect.
 
 ## Optimize safely
 
@@ -40,11 +51,15 @@ chunks/second, TPS/MSPT, CPU, heap/GC, I/O, queue depth, and catalog hash.
    across worker counts. Do not let completion order become world state.
 4. Never force-load distant chunks merely to validate physical state.
 5. Treat C2ME, native acceleration, lighting mods, and DH as independent
-   interventions. Change and benchmark one material variable at a time.
+   interventions. For a measured comparison change one material variable at a time.
 
 ## Verify and report
 
-Repeat the same route and profile. Compare throughput, tail latency, TPS,
-memory, GC, CPU saturation, and correctness hashes. State whether the change
-helps generation, loading, sending, rendering, or only headroom; do not report
-a combined stack estimate as a measured Pale Mirror result.
+Validate changed whole-path work and ownership with the faithful evidence that
+has the best expected discriminating value for its cost; a code-path audit,
+focused counter or runtime trace may each be the right first move. When claiming
+a measured gain, compare the same relevant route/profile and baseline metrics;
+do not repeat an accepted unchanged baseline for paperwork.
+Distinguish structurally bounded work, removed duplicate compilation and an
+observed runtime speedup. State whether the change affects generation, loading,
+sending, rendering or headroom; never present an estimate as a measurement.

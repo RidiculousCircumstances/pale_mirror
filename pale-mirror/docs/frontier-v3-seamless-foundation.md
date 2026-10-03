@@ -2,7 +2,7 @@
 
 Status: accepted normative implementation brief.
 
-This document is the complete hand-off for the foundation correction that must
+This document is the technical contract for the foundation correction that must
 precede further Frontier v3 materialization breadth. It refines, but does not
 replace, `frontier-v3-contract.md`. If an implementation choice conflicts with
 this document, the contract and `architecture.yml` must be amended deliberately
@@ -25,25 +25,36 @@ Before changing source, read in this order:
    `frontier-v3-materialization-completeness.md`;
 7. the process-specific contract for the active slice.
 
-Work only on the current `F0.*` slice recorded in `CONTINUITY.md`. Do not resume
-`MAT-004` or add another scene, effect or inventory family until its required
-foundation slice has passed its exit gate. Existing uncommitted MAT-001 tests
-and scenario work are retained as evidence input; they are not discarded.
+Work only on the active order in `CONTINUITY.md`. Finish the current F0.6R3
+fix, extract its runtime-verification vertical through mandatory `OBS-002`, then
+complete `ARC-001E` active-reference-transition adoption before resuming
+`MAT-006`, as the hardening pipeline specifies. `ARC-001`, `OBS-001` and
+`XACT-001` are accepted foundations at their recorded scope; this sequence does
+not reopen them. Preserve all WIP and dependency-valid evidence; historical
+slice names below do not authorize another feature family.
 
-The engineer decomposes that slice into bounded work orders and independently
-accepts each result. Terra high implements only the approved scope. Protocol
-Gate A/B/C grants supplement, never replace or weaken, the F0 exits below;
-the executor cannot advance the ledger or accept its own slice.
+The 2026-09-18 [execution-model amendment](frontier-v3-execution-semantics.md)
+is normative: one simulation, independent execution dimensions, three physical
+responsibilities and generation-safe retirement. ARC-001 checks and repairs
+conformance; this brief does not certify the current implementation.
 
-The mandatory execution order is `F0.0 -> F0.V -> F0.1 -> F0.2 ... F0.6`.
+The project manager / architect delegates whole product outcomes and checks
+their conformance to this plan and system contracts. Terra high is the sole
+coder and senior tech lead, owning technical design, diagnosis, verification
+and the working result without intermediate technical approval.
+The unified `engineering-agent-protocol.md` owns the lifecycle and verification
+rules, without recurring Gate A/B permission stops. It never weakens the F0
+exits below; the executor cannot accept or advance its own slice.
+
+The historical foundation order was `F0.0 -> F0.V -> F0.1 -> F0.2 ... F0.6`.
 The accepted execution-semantics correction adds mandatory exit coverage to
-these same slices, not another wave. At the next safe F0.VA measurement boundary,
-perform its requirements/evidence alignment before starting the next slice.
-Preserve current WIP, acceleration work and the ordered monorepo gate.
-`F0.V` is the integration-feedback prerequisite defined in
-`frontier-v3-integration-feedback-foundation.md`. It temporarily pauses the
-preserved F0.1 work so fast process-contract, deterministic crash-window and
-one-build/one-client evidence exist before the remaining foundation is proved.
+these same slices, not another wave. Reuse completed requirements/evidence
+alignment and accepted acceleration/migration work as recorded in the ledger;
+do not restart historical F0.VA prerequisites. Preserve current WIP.
+`F0.V` supplied the integration-feedback prerequisite defined in
+`frontier-v3-integration-feedback-foundation.md`. Its interruption and
+acceleration setup are consumed history, not a fresh pause instruction.
+The requirements below remain binding at their recorded acceptance scopes.
 
 ## Product invariant
 
@@ -115,6 +126,20 @@ is observed before any write and classified through FND-07.
 Canonical economy never branches on whether the replica was historically
 materialized. It branches only on a current authoritative custody lease. COLD
 work resumes after release and cannot wait for a merely serialized chest.
+
+Exact actors follow the same rule without becoming fungible. A naturally
+loaded, interaction-eligible Minecraft body is the exclusive physical
+custodian of its canonical actor under one authority epoch. Safe unload fences
+that binding and leaves one bounded inactive actor carrier retaining the
+canonical actor ID, stable Minecraft UUID, physical revision and only the
+evidence required to reconstruct or reconcile the body. This carrier is a
+replica, not a resident/process record: it owns no vitality, assignment,
+movement plan, cursor, schedule, equipment or work eligibility. COLD may resume
+the same canonical actor only after fencing the live epoch. Natural return
+re-adopts or reconstructs that same actor and UUID at current canonical state;
+it never selects a replacement or reports the retained worker missing merely
+because the former entity object was unloaded. A live body and inactive carrier
+cannot both be current, and neither may force-retain a chunk to avoid hand-off.
 
 ### FND-02 — semantic consequence and physical realization are different facts
 
@@ -262,6 +287,18 @@ Pedestrian, ground-bioform, flying-bioform and rail movement are distinct
 providers. Create later implements rail physics without owning route selection
 or cargo truth.
 
+The canonical due-action cadence is never a HOT locomotion cadence. While a
+current directive remains `TRAVELLING`, its capability provider keeps pursuing
+the retained checkpoint at ordinary Minecraft tick cadence until observed
+arrival, obstruction, interruption or demand loss; a slower process callback
+may not produce one-cell bursts separated by unowned idle plateaus. A process
+that intentionally dwells instead retains a distinct work/interaction/wait/
+blocked phase at the exact semantic station and presents that meaning through
+physical action, facing, pose or world effect. A diagnostic label, nonzero
+average speed, oscillation or filler wandering cannot substitute. Every current
+movement-bearing caller uses the common directive/result boundary rather than a
+private scheduler-driven movement path.
+
 ### FND-06 — restart uncertainty must be fenced, not wait forever
 
 `UNKNOWN_AFTER_RESTART` is a safe diagnostic state but not a permanent
@@ -355,7 +392,7 @@ if the same boundaries remain mechanically provable.
 | --- | --- | --- |
 | Process aggregate | Purpose, participants, resources, progress, outcome | None |
 | Execution-driver registry | COLD/HOT driver completeness and semantic step vocabulary | Resolve registered HOT provider only |
-| Replica registry | Expected physical identity, fingerprint and emitted revision | Observe loaded replica and apply safe current projection |
+| Replica registry | Expected physical identity, fingerprint and emitted revision, including one bounded inactive exact-actor carrier | Observe or reconstruct the same actor/UUID and apply safe current projection |
 | Custody lease registry | Current exclusive authority and epoch | Acquire, checkpoint, release and reject stale bindings |
 | Consequence/outbox | Semantic result and bounded deferred spatial aftermath | Run loaded physics or realize idempotent aftermath |
 | Inventory ledger | Lots, claims, exact quantities and custody transactions | Observe stack split/merge/move/consume/drop/pickup |
@@ -499,6 +536,8 @@ Required evidence:
 Deliver:
 
 - split persistent replica state from temporary container/object custody;
+- split an exact actor's inactive unloaded carrier from its current live-body
+  custody without creating another identity, vitality or process owner;
 - separate presentation demand from observer-independent physical eligibility;
 - declare per-family knowledge validity, unknown-precondition and approximation
   policies before allowing COLD geometry-dependent consequences;
@@ -512,6 +551,12 @@ Required evidence:
 
 - never-visited, visited-then-unloaded and loaded-without-player economies have
   equivalent liveness;
+- a live exact worker safely checkpoints to one inactive carrier, advances the
+  same process in COLD, and returns with the same canonical actor ID and
+  Minecraft UUID at its later current state; no duplicate, replacement,
+  vanished-worker status or visible teleport is admitted;
+- a missing, duplicate, foreign, stale or mismatched actor carrier isolates that
+  actor/process with a typed reason rather than choosing another eligible body;
 - one visit cannot change later production or hive-growth eligibility;
 - unchanged serialized chest safely catches up on return;
 - changed chest becomes a typed observation before any projection write;

@@ -8,6 +8,12 @@ description: Review Pale Mirror product vision, version scope, player promise, r
 Evaluate the experience the player can understand and change, not the number of
 domain types, adapters, JSON definitions, or passing technical tests.
 
+Review delivered behavior, plan alignment, system invariants and evidence scope.
+Roles come from the current user assignment and canonical ledger, not this skill.
+In paired mode, do not turn product review into micromanagement. In single-agent
+mode, the executor also owns code inspection, diagnosis and correction. A product
+finding names an existing requirement and observed discrepancy, not a preference.
+
 ## Establish the promise
 
 1. Read `CONTINUITY.md`, the relevant product or release document, and the
@@ -26,6 +32,26 @@ domain types, adapters, JSON definitions, or passing technical tests.
 
 Never promote evidence from one level to the next. Automated tests cannot prove
 visual quality, pacing, co-op clarity, or unaided comprehension.
+
+For player-visible corrections, also report the protocol promotion label.
+`PRODUCT_CANDIDATE` means the strongest contradiction is rejected through the
+real composition; `RELEASE_CANDIDATE` adds the frozen terminal gates; only an
+exact deployed candidate that has passed the protocol's mandatory real-client
+product preflight may be labelled `HUMAN_CANDIDATE` and offered for one
+consolidated user check. Review the actual graphical frames: the executor's ordinary
+full-pack test player must follow the relevant player story on the exact
+artifact, observe motion/state/presentation through its promised consequence
+and inspect the images. Logs, traces, diagnostics and endpoint state may
+correlate that story but cannot replace it.
+A failed check returns to the same product incident after runtime identity is
+correlated; it is not answered by more aggregate tests.
+
+Review the executor's delivered closure account against the order in whatever compact
+representation the tech lead selected. Every criterion must still identify its
+natural story, exact subject, terminal and any declared successor fact, credible
+evidence and strongest retained contradiction. `PROVEN_NARROWER` is not
+completion. Confirm that the known broken player/runtime history is actually
+resolved; a clean new world or aggregate green count is not that proof.
 
 ## Review the causal experience
 

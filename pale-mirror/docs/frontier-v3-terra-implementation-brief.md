@@ -1,19 +1,43 @@
 # Frontier v3 implementation brief for the continuation agent
 
-Status: normative execution brief for the GPT-5.6 Terra continuation agent.
+Status: normative execution brief for the GPT-5.6 Terra senior tech lead.
 
-Delivery roles follow [`engineering-agent-protocol.md`](engineering-agent-protocol.md).
-Terra runs with reasoning `high` as the sole code executor, not a second
-architect or self-accepting project owner. The supervising engineer owns all
-normative docs, work orders, the ledger and acceptance. Read the active order
-under `docs/work-orders/`; no implementation or expensive run begins without
-its explicit Gate A or Gate B grant. Propose requirement changes to the engineer.
+Delivery roles follow [`engineering-agent-protocol.md`](engineering-agent-protocol.md),
+revision `2026-09-15-PM-TL-JUDGMENT-LOOP`.
+Terra runs with reasoning `high` as the sole coder and autonomous senior tech
+lead. Own technical design, decomposition, code, integration, test methodology,
+diagnosis, technical self-review and a working delivered result. Main is project
+manager / architect: product direction, priorities, system contracts, normative
+docs and conformance acceptance, not technical instructions or code review.
+Use the active ledger/order, not historical handoffs. One complete stage grant
+covers ordinary fixes, related runtime/test/harness changes and useful retries.
+Do not stop for intermediate method, patch, build or run approval. Disprove
+technical hypotheses and choose better implementations yourself; raise actual
+product/architecture contradictions or missing external authority. No model
+replacement or second coder is part of this workflow.
 
 This document turns the accepted Frontier v3 direction into an executable
 working contract. It does not replace the product contract, the architecture
 map, the audit register or the Continuity Ledger. When those sources differ,
 resolve the discrepancy explicitly in the same change; do not silently choose
 the code currently easiest to extend.
+
+## Accepted execution-model amendment
+
+The 2026-09-18 contract and execution-semantics amendment is normative. It
+separates presentation, physical eligibility and mutation authority, and separates
+current-state projection from irreversible interactions and deferred aftermath.
+Actor identity outlives process generations/jobs; retirement resolves incoming
+obligations atomically under bounded retention. See those canonical documents,
+not a parallel specification here.
+
+Finish the current F0.6R3 fix first. ARC-001, OBS-001 and XACT-001 remain
+accepted foundations at their recorded scope. Then extract the reusable
+OBS-002 verifier and complete ARC-001E before resuming MAT-006. Reuse accepted
+REL, carrier and diagnostic mechanisms. The active ledger/order supplies status
+and authority; this planned sequence does not interrupt current work. Terra
+owns technical methods and decomposition; acceptance concerns observable
+conformance, not a prescribed class hierarchy or a new framework.
 
 ## 1. Mission and non-negotiable product promise
 
@@ -27,8 +51,8 @@ physical detail. The mandatory `frontier-v3-execution-semantics.md` defines
 exact versus calibrated comparisons, knowledge limits, independent physical
 activity, cross-scene effects and recoverable confirmation:
 
-- `COLD` is canonical, deterministic, event-driven progression without a
-  loaded physical scene;
+- `COLD` is canonical, deterministic, event-driven progression for a scope
+  without a current physical custodian; absence of a visible scene is not enough;
 - `HOT` is temporary bounded Minecraft execution of that exact process when
   natural physical availability makes execution possible; presentation demand
   and observer-independent physical custody are separate inputs;
@@ -44,36 +68,30 @@ is only a short-lived physical executor for a bounded part of that instance.
 
 ## 2. Authority and reading order
 
-At the beginning of every continuation turn, before selecting a change:
+At each turn bootstrap from project `AGENTS.md` and canonical `CONTINUITY.md`.
+At assignment or a material scope change, read the unified protocol, active
+order and relevant architecture/contract sections. Read matching skills and
+their required references completely as AGENTS directs. Use the order's short
+facts/rationale packet; do not reread all project documents on every correction.
+For HOT/COLD/materialization work, the execution-semantics and seamless-
+foundation contracts remain mandatory. Inspect relevant WIP before editing;
+preserve it rather than resetting for a fresh task.
 
-1. read `AGENTS.md`, `CONTINUITY.md`, `engineering-agent-protocol.md` and the
-   active work order (documentation paths are relative to this brief);
-2. read the relevant portions of `architecture.yml` and the complete
-   `docs/pale-mirror-foundry.md` for materialization work;
-3. read this brief and
-   [`frontier-v3-execution-semantics.md`](frontier-v3-execution-semantics.md);
-   when F0.V is active also read
-   [`frontier-v3-integration-feedback-foundation.md`](frontier-v3-integration-feedback-foundation.md),
-   followed by
-   [`frontier-v3-seamless-foundation.md`](frontier-v3-seamless-foundation.md),
-   [`frontier-v3-implementation-plan.md`](frontier-v3-implementation-plan.md)
-   and [`frontier-v3-architecture-audit.md`](frontier-v3-architecture-audit.md);
-4. inspect the current uncommitted state before editing. Preserve useful WIP;
-   do not discard it merely because a new slice starts.
-
-`CONTINUITY.md` names the first incomplete F0 slice and is the operational
-source of truth. This brief governs how that slice is approached. The
+`CONTINUITY.md` names the active slice and is the operational
+source of truth. This brief supplies product constraints; the unified protocol governs workflow. The
 following sources own their respective facts:
 
 | Source | Owns |
 | --- | --- |
 | `architecture.yml` | component boundaries, invariants and critical flows |
 | `frontier-v3-contract.md` | product-level world and causality promises |
+| `frontier-v3-execution-semantics.md` | shared execution dimensions, physical responsibilities, retirement and recovery protocol |
 | `frontier-v3-seamless-foundation.md` | FND-01…FND-09 and F0 exit gates |
 | `frontier-v3-integration-feedback-foundation.md` | current F0.V SDK/scenario scope and exit gate |
-| `frontier-v3-accelerated-verification-loop.md` | mandatory current F0.VA feedback-loop interruption and exit gate |
+| `frontier-v3-accelerated-verification-loop.md` | reusable F0.VA/VB/VC capabilities, technical causal-evidence rules and original exit criteria |
 | `frontier-v3-architecture-audit.md` | defect facts, remediation and closure evidence |
 | `frontier-v3-materialization-completeness.md` | M0–M3 classification; never overclaim a lower evidence level |
+| `engineering-agent-protocol.md` | sole agent lifecycle, review and verification-economy rules |
 | `CONTINUITY.md` | current slice, verified evidence, open questions and working set |
 | source/tests | implementation detail and executable behavior only |
 
@@ -258,49 +276,39 @@ permission to force-load, rewrite drift or batch-build in the player's view.
 
 ## 4. Execution protocol for every F0 slice
 
-Treat F0 as strictly ordered. Work on only the first incomplete slice listed in
-the ledger. Do not start MAT-004, another scene type, an endpoint executor, a
-hive combat feature or a Create integration while F0 remains open.
+Treat the remaining foundation work as ordered. Work on only the first
+incomplete outcome listed in the ledger. Previously accepted MAT slices remain
+valid within their evidenced scope, but do not start new MAT breadth, another
+scene type, an endpoint executor, a hive combat feature or a Create integration
+while the ledger records a blocking F0 correction.
 
-For the active slice:
+Use the [unified protocol](engineering-agent-protocol.md) and active order for
+framing, autonomy, review, verification tier, retries and delivery. For F0,
+identify the canonical and physical owners and the transition from command/due
+action through revision/epoch, WAL, observation and recovery. State what stays
+COLD, what may be HOT and who owns postconditions.
 
-1. **State the defect precisely.** Name the canonical owner, physical owner,
-   present illegal authority path and player-visible symptom. Submit the
-   V3-AUD finding for the engineer to record before a broad change.
-2. **Confirm the approved target transition.** Specify command/due action → expected
-   revision/epoch → event(s) → WAL boundary → canonical state → observable
-   effect/observation → recovery path. Identify what remains COLD, what may be
-   HOT and who owns postconditions.
-3. **Make one coherent fresh-world format cut.** Delete rejected assumptions;
-   do not add migration or compatibility code for development worlds. Recreate
-   disposable worlds whenever state format changes.
-4. **Install a recurrence guard before relying on a scenario.** A source,
-   composition, codec, state-machine or property test must reject the exact
-   family of error discovered. A timeout, retry or log suppression is not a
-   guard.
-5. **Add ordinary + adverse evidence.** Critical code needs focused pure tests,
-   a negative or recovery test, matching GameTest slice and one checked-in
-   declarative native scenario where the player-visible flow matters.
-6. **Run only relevant gates during iteration.** Use focused unit/Node and the
-   matching named GameTest slice. Run the complete critical-code gate before the
-   slice commit. Do not burn time launching unrelated full suites on every
-   source edit.
-7. **Capture proof for independent acceptance.** Record a bounded correlation
-   trace and clean semantic frame for visible claims. Submit audit,
-   architecture, materialization inventory and ledger facts to the engineer;
-   it owns these edits and Gate C acceptance before a scoped commit or next order.
+A format cut remains fresh-v3-only, without compatibility for rejected
+development formats. It does not itself authorize deleting/recreating any
+world: use the server-operation workflow and actual target authority.
+Cover the affected ordinary and negative/recovery behavior at its required
+tier, preserving authentic player and restart claims. Terra submits material
+audit/architecture/inventory/ledger facts to PM, who owns normative product/
+architecture decisions and parent-slice acceptance; technical implementation
+documentation remains Terra's. Private WIP checkpoints are not slice acceptance.
 
-### Required F0 order
+### Historical F0 order and retained exit requirements
 
-Every row also includes the additional mandatory slice exits in
-`frontier-v3-execution-semantics.md` and the foundation brief. Perform the
-requirements/evidence alignment at the next safe F0.VA measurement boundary;
-an old green endpoint test is not proof of the corrected contract.
+This table does not reactivate accepted stages. Current ARC/OBS/XACT/MAT
+ordering comes from the implementation plan and hardening pipeline.
+Every row includes the additional exits in `frontier-v3-execution-semantics.md`
+and the foundation brief. Reuse accepted alignment; an old endpoint test proves
+only its scope, not the corrected contract. The ledger records completed rows.
 
 | Slice | Deliverable | Do not accept as completion |
 | --- | --- | --- |
 | F0.0 | inventory plus ratchets for paired driver/legacy authority growth | a prose list without a failing guard |
-| F0.V | measured fast contract/crash/scenario runner foundation, including mandatory F0.VA accelerated loop | fake Minecraft evidence, retries, weaker assertions, cached final proof, reused mutable worlds, or discarded F0.1 WIP |
+| F0.V | measured fast contract/crash/scenario runner foundation, including mandatory F0.VA accelerated loop | fake Minecraft evidence, blind retries, weaker assertions, cached results mislabelled fresh, shared mutable worlds, or discarded F0.1 WIP |
 | F0.1 | one process whose COLD and HOT drivers share one cursor and exact worker | crop/output endpoint, scene-only progress, or a demand-created start |
 | F0.2 | replica/custody separation and deferred aftermath reference verticals | active-container branch, player-gated explosion, or desired-state repair |
 | F0.3 | fungible lots/claims/custody and ordinary vanilla inventory transformations | permanent UUID tags on interchangeable stacks |
@@ -308,21 +316,16 @@ an old green endpoint test is not proof of the corrected contract.
 | F0.5 | epoch fencing plus actionable failure owners | permanent `UNKNOWN_AFTER_RESTART`/`CONFLICT` limbo |
 | F0.6 | calibrated observer neutrality, first visibility and scale proof | one pretty loaded scene or TPS observation alone |
 
-## 5. Current handoff: F0.V integration feedback
+## 5. Current handoff and retained reference behavior
 
-F0.0 is mechanically guarded. Stop feature and F0.1 implementation now,
-preserve its complete dirty worktree, and execute
-[`frontier-v3-integration-feedback-foundation.md`](frontier-v3-integration-feedback-foundation.md).
-Do not reset or rewrite the harvest work to manufacture a clean baseline.
+`CONTINUITY.md` is the sole live handoff and deliberately owns the current
+slice, executor, WIP identity and next boundary. Do not copy a dated active
+stage into this long-lived brief. Terra resumes the whole remaining outcome
+from the preserved candidate recorded in the ledger and active order; it does
+not restart accepted infrastructure qualification or completed F0 slices.
 
-After the currently running command/process reaches a safe boundary, preserve
-its manifests and failure bundle and interrupt further full-matrix work to
-execute mandatory substage
-[`frontier-v3-accelerated-verification-loop.md`](frontier-v3-accelerated-verification-loop.md).
-Implement its exact lifecycle barriers first, then the persistent matrix
-client, evidence cache/dependency selector, enforced pyramid, four-worker CI
-matrix and development-only immutable fixture images. Resume the original F0.V
-matrix only after the F0.VA exit gate passes.
+The following F0.V/F0.1 examples preserve technical constraints and explain
+accepted behavior; they are not new tasks or instructions to rerun evidence.
 
 F0.V must leave a reusable fast HOT/COLD contract harness, deterministic
 crash-window controller, generated semantic scenario matrix, one-build/
@@ -349,14 +352,10 @@ required implementation properties, but no numeric provider-speed floor or
 standalone timing campaign blocks resumption of F0.V. Collect comparable timing
 from ordinary subsequent work.
 
-After F0.V is independently accepted, the engineer updates the ledger and issues
-the next order for preserved F0.1. Do not begin F0.2 or any MAT breadth first.
+### 5.1 Reference: F0.1 resource-site harvest
 
-### 5.1 Paused resume target: F0.1 resource-site harvest
-
-F0.1 remains the next reference slice after F0.V until the ledger records all
-of its exit evidence. Do not declare it complete merely
-because the previously existing harvest endpoint/restart tests are green.
+F0.1 acceptance is recorded in the ledger. These retained constraints explain
+why endpoint/restart evidence alone would not have closed that slice.
 
 The intended harvest model is:
 
@@ -381,9 +380,9 @@ Only the very first unstarted handoff may compile from a proven ambient body;
 after the process has retained a cursor, any handoff must prove that exact
 canonical body/cursor or fail locally.
 
-### Known physical regression to resolve correctly
+### Historical physical regression and required semantics
 
-The current native unload/return probe found a specific re-entry defect:
+The earlier native unload/return probe found a specific re-entry defect:
 
 - canonical harvest and its same farmer/cursor continue correctly after the
   field unloads;
@@ -400,7 +399,7 @@ other scene admission must keep the ordinary collision rule. A fence/full block
 in the same cell must remain blocked. This is a typed physical-provider rule,
 not a coordinate or settlement-specific exception.
 
-Required F0.1 evidence, in addition to the existing focused tests:
+F0.1 evidence requirements (reuse the accepted receipts for unchanged behavior):
 
 - a GameTest proves ordinary standing still rejects the mature crop, the
   registered harvest standing rule admits it, and the same rule rejects a
@@ -421,28 +420,25 @@ an epoch/fencing problem, not a reason to respawn a replacement farmer.
 
 ### 6.1 Fast feedback
 
-Run the smallest relevant pure test(s) and Node schema/guard test after a
-change. For HOT/COLD scene work use
-`./gradlew :pale-mirror-neoforge:runFrontierV3SceneGameTestServer`; use the
-economy slice for resource custody. A dedicated GameTest must validate both the
-new allowed state and a nearby forbidden state.
+During iteration, choose the smallest faithful discriminator with the best
+expected information value for the current uncertainty. Pure/Node checks are
+usually economical for local contracts; the scene GameTest slice is available
+for a changed HOT/COLD physical seam and the economy slice for changed resource
+custody. This is selector vocabulary, not an every-edit sequence. Any dedicated
+GameTest used as evidence must validate both the new allowed state and a nearby
+forbidden state.
 
-Before a coherent critical-code commit run the `AGENTS.md` critical gate:
-
-```text
-./gradlew guardrails check \
-  :pale-mirror-neoforge:runGameTestServer \
-  :pale-mirror-neoforge:build \
-  :pale-mirror-neoforge:verifyPackagedJar
-```
-
-Report unavailable infrastructure honestly. A passing scenario does not replace
-the critical gate; the full gate does not replace a precise causal scenario.
+Use the release-verification skill for full integration-milestone/release gates
+and the protocol for their timing/reuse. A private WIP commit is not acceptance.
+Report unavailable evidence honestly. A scenario and an aggregate gate prove
+different claims; neither automatically replaces the other.
 
 ### 6.2 Native scenario rules
 
 Use the checked-in test-pilot scenario runner, one normal visible native client
-at most, on `DISPLAY=:0`. It owns a disposable seeded server/world and must not
+at most, on the task-authorized display. `DISPLAY=:0` may be unavailable;
+task-private Xvfb can provide automation, not human visual acceptance. The
+runner owns a disposable seeded server/world and must not
 touch the user live server on port 25565. Scenarios may establish an explicit
 read-only fixture precondition and use normal player behavior afterwards. They
 must not force-load, edit world files, mutate canon through debug APIs or use a
@@ -473,10 +469,41 @@ An unloaded location is `unverified`, not proof that it is broken or a reason to
 force-load it. A changed/foreign loaded owned cell is evidence for the smallest
 owner. It remains visible until the normal process policy handles it.
 
+### 6.4 Close the natural lifecycle, not its first checkpoint
+
+Use whatever compact closure representation best supports the work. At delivery,
+each existing criterion still binds the natural player/system story and exact
+authoritative subject to a terminal fact and, when already declared, its
+successor state. Mark narrower evidence honestly; a first crop, nonzero cursor,
+active lease, present endpoint or aggregate green suite cannot stand in for a
+complete duration-bearing lifecycle.
+
+Resolve the strongest retained user/runtime contradiction with the most credible
+economical discriminator for the actual uncertainty. Retained facts, code-path
+reasoning, instrumentation, a red control or native observation may be used as
+appropriate, and expected facts must not be generated by the same helper or
+summary under test. This is technical self-review, not a PM method gate.
+
+A causal carrier must express every segment required by its claim. If the
+contract spans HOT departure and release, zero-player COLD progress, restart and
+re-entry, terminal effect/receipt, another release, successor COLD progress and
+same-actor return, observe that order rather than stopping where the current
+runner stops. Extend or replace an inadequate technical method autonomously;
+never narrow the product promise to fit it.
+
+Freeze candidate identity only when affected checks and Terra's closure account
+show no targeted missing, contradictory or narrower claim. Gather sufficient
+terminal evidence and proceed to product review without confidence-only runs.
+Choose diagnostic and verification order by expected information gain and cost,
+not a fixed recipe. If another equivalent attempt would not update the causal
+model, step back and reframe the connected owner / schedule / lease / physical
+effect / release / persistence / successor path, or choose another higher-value
+method. No fixed failure count mandates one technique.
+
 ## 7. Change-control checklist
 
-Before writing a line of critical code, answer in the implementation note or
-test name:
+During task framing/design, resolve the relevant questions below. Reuse known
+answers from the order/architecture; no new questionnaire per edit:
 
 - What exact canonical record is authoritative before and after the change?
 - Which layer owns the mutation, and what typed observation enters it?
@@ -488,8 +515,9 @@ test name:
   between durable state and physical effect?
 - Can an unaffected settlement/front continue?
 - What does a player visibly see, and which trace/frame proves it?
-- Does the change require a fresh-world schema cut? If yes, delete old bytes
-  and reset disposable/deployed worlds; do not add a migration.
+- Does the change require a fresh-world schema cut? Do not add compatibility
+  for rejected development formats or hydrate old bytes. World replacement is
+  a separately authorized server operation, not an automatic code-edit step.
 
 Stop, submit the audit finding, and seek an explicit design decision if the only way
 forward is force-loading, a silent overwrite, synthetic teleport/replacement,
@@ -498,21 +526,13 @@ or a global quarantine for ordinary play.
 
 ## 8. Commit, deployment and handoff
 
-Keep F0 slices coherent and independently reviewable. A slice commit includes
-only the source, tests, machine guard, documentation and ledger needed to prove
-that slice. Use a concise Conventional Commit message. Do not mix root pack or
-deployment files into a nested Pale Mirror commit.
-
-Before every commit:
-
-- inspect both repository statuses and stage each repository separately;
-- run `git diff --check` and the required gates;
-- confirm generated run data, screenshots and local worlds are not staged;
-- verify architecture, audit, materialization inventory and ledger agree;
-- state exact passed/failed evidence and remaining F0 gap.
-
-Commit and deployment require their own explicit engineer grants under existing
-user authority; this checklist is not a standing permission to stage all WIP.
+Follow the unified protocol for checkpoint versus milestone acceptance,
+minimal receipts and handoff. Commits need actual scoped authority; private
+checkpoints may preserve incomplete work without full gates. Before any commit
+inspect relevant status/diff and exclude generated/local artifacts. Keep
+source and pack/deployment ownership explicit; in the adopted monorepo do not
+pretend these are still separate Git commits. Original repositories remain
+separate preserved histories and must be inspected separately if touched.
 
 Deployment is a separate operation after a clean verified commit. It uses the
 root repository scripts, a fresh v3 world for state-format changes, pinned
@@ -521,8 +541,8 @@ or a stale log line a successful deployment. The user live server is a product
 observation surface, not an iterative test fixture.
 
 At handoff, submit compact factual ledger updates to the engineer: completed slice,
-evidence paths/IDs, first incomplete slice, discovered defect and exact next
-command. Do not copy raw logs or long chat history into it.
+evidence paths/IDs, first incomplete slice, discovered defect and next
+outcome/decision. Do not copy raw logs or long chat history into it.
 
 ## 9. Completion statement for the continuation agent
 
@@ -535,5 +555,7 @@ closed with evidence at the claimed M-level, and this sentence is true:
 > projection as authority, change its economic rules, freeze its history or
 > reveal a materialization switch.
 
-Only then may the engineer authorize resuming MAT-004 and the remaining materialization
-breadth. Until then, correctness of this foundation outranks feature count.
+Only then may PM accept the foundation and authorize the first incomplete
+post-F0 outcome named by the current ledger. Historical MAT ordering in this
+brief cannot override accepted slices or the ledger's current OBS/XACT/MAT
+sequence. Until then, correctness of this foundation outranks feature count.

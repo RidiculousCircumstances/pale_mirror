@@ -1,29 +1,43 @@
 # Performance evidence contract
 
-## Reproducible baseline
+## Select the claim and evidence
 
-Record the exact commit/artifact, seed/world identity, server Java and flags,
-pack/config hashes, worker counts, view/simulation distances, DH mode, player
-route and speed, warm-up, measurement duration, and whether chunks are new or
-existing. Change one material variable per comparison.
+For a structural bound, inspect the whole production path, callbacks, cache
+validation and invalidation, and use a connected focused work/behavior check
+where possible. Do not substitute output size or helper call count for total
+work. This establishes a bound, not a measured throughput/latency gain.
 
-## Required observations
+Use retained relevant traces to attribute an observed bottleneck. Add bounded
+runtime instrumentation/JFR only when attribution remains unknown or that tier
+is necessary. No unconditional baseline, JFR or mutation campaign per edit.
+The unified PM / senior-tech-lead protocol governs retry and cost decisions;
+Terra owns technical method selection and review, without a PM approval gate.
 
-- planning duration and catalog hash;
-- generated/loaded/sent chunks and chunks per second;
-- TPS, mean MSPT, and tail stalls;
-- process CPU and per-pool saturation;
-- heap, allocation rate, GC pauses, and native memory when relevant;
-- disk throughput/latency and network send pressure;
-- watchdog, disconnect, retry, and queue-growth evidence.
+## Reproducible measured comparison
 
-Use JFR stack evidence to name the hot algorithm. Separate Minecraft worldgen,
-PM planning/materialization, C2ME scheduling, lighting, saving, networking, and
-client rendering.
+When claiming a measured gain, retain the relevant commit/artifact, seed/world,
+Java/flags, pack/config, worker counts, view/simulation distances, DH mode,
+route/speed, warm-up, duration and new-versus-existing chunk conditions.
+Reuse an existing comparable baseline; otherwise capture the missing baseline.
+Change one material variable per comparison.
+
+Select observations relevant to the claimed bottleneck:
+
+- planning duration and canonical/catalog hash;
+- generated/loaded/sent chunks and throughput;
+- TPS/MSPT and tail stalls;
+- CPU/per-pool saturation, heap/allocation/GC and relevant native memory;
+- disk/network pressure, queue growth, watchdogs, disconnects and retries.
+
+Separate worldgen, PM planning/materialization, scheduling, lighting, saving,
+networking and rendering. Use JFR stack evidence when needed to locate hot work,
+not as an obligatory artifact for a statically evident duplicate call.
 
 ## Acceptance
 
-Require equal or better canonical/catalog hashes, no new errors, bounded
-queues, stable TPS after the route, and an improvement outside normal run
-variance. A higher aggregate CPU percentage is acceptable only when throughput
-or latency improves without starving the live server.
+Preserve exact canonical/catalog semantics, stable identities and owned
+lifecycle; hashes are equal where inputs/semantics are unchanged, not “better”.
+Bound queues/work and retain relevant negative/recovery coverage. For a claimed
+runtime gain require improvement outside ordinary variance without new errors
+or server starvation. Higher CPU use alone is not an improvement. State any
+unmeasured claim explicitly; structural correctness is not a measured speedup.

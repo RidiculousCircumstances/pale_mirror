@@ -8,6 +8,13 @@ description: Build, publish, install, reset, start, restart, diagnose, and valid
 Operate the test environment from discovered paths and real process evidence.
 Do not confuse a successful shell command with a running Minecraft server.
 
+Follow the current assignment and `docs/engineering-agent-protocol.md` for
+authority. The assigned executor owns authorized operations, diagnosis and
+ordinary corrections/retries; no model or delegation is required by this skill.
+The standing delivery policy below
+does not override an active source-only/disposable-scenario assignment or its
+explicit production/publication exclusions; resolve actual targets and grants.
+
 ## Discover the environment
 
 1. Read `CONTINUITY.md` and `references/operations-map.md` completely.
@@ -47,3 +54,10 @@ fresh log timestamps, NeoForge and Pale Mirror load, `Done` or ready state, and
 absence of a new crash loop. For a new world, verify the new seed, catalog, and
 genesis evidence. Report the running PID or service, artifact identity, world
 identity, and any client action required.
+
+For a player-facing retest, bind the verified `RELEASE_CANDIDATE` source/tree and
+JAR to the service/process start, fresh log and exact world/seed, then label it
+`HUMAN_CANDIDATE`. If the user reports a defect, preserve that wording and
+location/time when available and correlate these identities before classifying
+stale delivery versus a product incident. Do not deploy every intermediate patch
+or repeatedly ask the user to test.

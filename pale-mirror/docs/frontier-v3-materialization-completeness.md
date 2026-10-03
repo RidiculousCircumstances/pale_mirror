@@ -12,7 +12,10 @@ The player promise remains stronger: when a process intersects naturally loaded
 space, the player sees the same process continue through Minecraft bodies,
 objects, movement and effects, can interfere through ordinary play, and sees the
 result reconciled back into the same canonical state. COLD execution may omit
-rendering; it may not define a cheaper history or a different outcome model.
+rendering and use bounded calibrated physical approximations; it must retain
+the same process identities, conserved resources, causal order and declared
+exact/statistical outcomes. The execution-semantics contract defines this
+boundary; it does not promise bit-identical HOT/COLD physics.
 
 ## Evidence levels
 
@@ -44,8 +47,15 @@ idle storage chest.
 The desired-state materializer may project this state without acting out its
 history. It still requires stable object/part IDs, semantic provenance, exact
 baseline preconditions, visible conflict on drift and no overwrite of player or
-unknown changes. This exception covers bootstrap/current-state projection only;
-it never covers construction, repair, harvesting or another change process.
+unknown changes. This includes the current result of legitimately completed
+COLD work; it does not replay old harvests, build steps or explosions on entry.
+It never authorizes compressing ongoing HOT work into an endpoint or discarding
+an unresolved irreversible effect. Projection, physical interaction and deferred
+aftermath follow their separate execution-semantics contracts.
+
+Readiness of presentation, eligibility for physical interaction and exclusive
+mutation authority are separate facts. Projecting a completed COLD result is M1
+evidence for that result, not M2 evidence for how loaded work is performed.
 
 ### B. Atomic local interaction
 
@@ -148,6 +158,19 @@ its clock, recreates a participant or reenacts missed history. A process cannot
 reach M2 if viable off-screen work waits for a player, or if leaving and
 returning loses its actuator even though canonical work remains active.
 
+For an exact actor, safe physical release retains one bounded inactive carrier
+with the canonical actor ID, stable Minecraft UUID and physical revision. The
+carrier is reconstruction/reconciliation evidence only: it is neither a live
+physical custodian nor a second owner of identity, vitality, assignment,
+movement, process progress, schedule or inventory. COLD may advance only after
+the live binding is fenced. Natural return re-adopts or reconstructs the same
+actor and UUID at its later canonical state under one current epoch; it never
+chooses a replacement or reports that retained eligible actor as missing.
+Missing, duplicate, foreign, stale or revision-mismatched carrier evidence is a
+typed local ambiguity. Continuity requires the same person and UUID, not the
+same in-memory entity object, and forbids a visible position jump while the body
+is observed.
+
 This rule does not force every class into a scene. Class-B atomic effects use a
 durable intent and observed postcondition; class-E environmental work owns a
 spatial frontier; class-G decisions use downstream consequences; ambient bodies
@@ -215,13 +238,31 @@ The audit is anchored in the following current-source boundaries:
   diagnostics/receipts and result frames, not their missing in-progress actors
   or physical frontiers; `MAT-001` is the implemented exception below.
 
-V3-AUD-043 and F0.1 are now accepted. MAT-001 combines its earlier continuous
-HOT/death/restart evidence with fresh never-loaded COLD progress, two distinct
-due-neutral HOT arrivals, repeated unload-to-COLD-to-return hand-offs,
-intervention and graceful/abrupt recovery over the same farmer, process cursor
-and engine continuation. It is therefore reclosed at M2. This does not promote
-its traversal-only F0.1 matrix into proof of F0.2 crop/output realization or
-M3 player comprehension.
+V3-AUD-043 and the F0.1 traversal foundation remain accepted. MAT-001 had been
+classified M2 from its continuous HOT/death/restart evidence plus never-loaded
+COLD progress, repeated hand-offs and recovery over the same farmer. The exact
+deployed revision-15 human history now overturns that complete classification:
+after the final crop the worker idled, then disappeared on re-entry while the
+field reported `farmer is needed`. The earlier evidence remains valid only for
+its narrower observed stages. MAT-001 is reopened at M2 until one natural story
+proves terminal closure, inactive-carrier hand-off, later COLD progress and
+return of the same canonical farmer and Minecraft UUID without replacement,
+reset, replay or visible teleport. M3 remains unaccepted.
+
+The system-wide carrier correction changes an evidence dependency, not every
+previously proved local behavior. Before MAT-006 resumes, `XACT-001` inventories
+all production body creators/adopters and applies a closed composition guard.
+MAT-002 through MAT-005 retain their local M2 facts, but any path that depends
+on changed live-body/inactive-carrier behavior is `NEEDS_TARGETED_REVALIDATION`
+until the smallest representative lifecycle passes. Do not treat either a
+blanket retained-green status or a blanket native rerun as dependency analysis.
+
+All remaining rows additionally follow
+[`frontier-v3-materialization-hardening-pipeline.md`](frontier-v3-materialization-hardening-pipeline.md):
+their natural story must cross visible progress, terminal and declared
+successor, ordinary leave/COLD/restart/return, exact identity/custody and one
+player intervention. A proof ending at an intermediate receipt is
+`PROVEN_NARROWER`, even when every component assertion in that receipt is true.
 
 The broader F0 correction programme in
 `docs/frontier-v3-seamless-foundation.md` is now a mandatory predecessor to new
@@ -233,16 +274,16 @@ and later rows remain paused until the complete F0 gate passes.
 
 | ID | Priority | Current strongest evidence | Gap and closure requirement |
 |---|---:|---|---|
-| MAT-001 | P0 | M2 closed; M3 not accepted | Earlier schema-114/envelope-26 evidence supplies continuous visible HOT harvesting, exact-worker/death/restart behavior and native `disposable_redwillow_harvest` run `5110c424-f5b0-4321-894e-a6fdec3b7f36`. Accepted F0.V/F0.1 at schema126/envelope41 adds one process-owned cursor and engine continuation through never-loaded progress, distinct due-neutral arrivals `16 -> 17` and `19 -> 20`, two HOT/COLD hand-off cycles, ordinary intervention and graceful/abrupt recovery with the same farmer and no demand-created work. Four-worker run `34124239973` and proof-harness commit `8217f246079acc9220279ce66386b687c4a7441c` close the paired-driver/recovery proof without a native rerun. The F0.1 matrix deliberately retains zero crop/output consequence and `PREPARED` intent; F0.2 must still prove effect eligibility, confirmation and deferred crop/output aftermath. No unbriefed player-comprehension evidence exists, so M3 remains open. |
+| MAT-001 | P0 | M2 reopened; M3 not accepted | Earlier schema-114/envelope-26 HOT/death/restart evidence, accepted F0.V/F0.1 traversal evidence, four-worker run `34124239973` and proof-harness commit `8217f246079acc9220279ce66386b687c4a7441c` remain valid for their narrower stages. Exact deployed revision-15 human evidence rejects the complete duty cycle: the farmer idled after the last crop, then vanished on re-entry while the field reported `farmer is needed`. Closure now requires one natural terminal/successor story across live-body release, one inactive carrier, COLD progress and return of the same canonical actor and Minecraft UUID, including negative carrier/recovery cases and no replacement, reset, replay or visible teleport. No unbriefed player-comprehension evidence exists, so M3 also remains open. |
 | MAT-002 | P0 | M2 closed; M3 not accepted | Fresh-world schema 120/envelope 34 retain staged work and one bounded immutable worker-to-workshop topology/cursor through a semantic port with distinct input/work stations, headroom and public-circulation join. The two station supports are immutable, provenance-owned, traversable cyan/magenta floor cells; they are neither containers nor alternate inventory/movement authority. An observed arrival atomically advances both the job cursor and the persisted HOT lease's exact body position; a split recovered lease fails closed, and old schema/WAL bytes are rejected rather than inferred. Typed reducers accept only a matching HOT lease plus the observed exact worker at the retained station; no executor mutates a job directly. The registered class-C `PRODUCTION_WORK` executor materializes only that worker, advances observed approach/input/processing, and defers exact chest replacement until `OUTPUT_READY`. A loaded full block at the exact next retained worker body produces the persisted `ProductionWorkTraversalBlocked` fact, then `ROUTE_BLOCKED`/task `BLOCKED`/lease `DRAINING`; it cannot choose an alternate edge. A blocked job remains attached through durable release, then `ProductionWorkSceneFinalized` removes it and releases its exact reservation without a zombie lease. The player-driven input-theft scenario `disposable_materialized_production_input_theft` passed on a fresh world: the exact HOT worker drained, the job/order became `BLOCKED`/`CANCELLED`, and the exact wheat moved to player custody. A physical loss of an owned workshop station routes at the physical-observation boundary to the same job's immediate `FACILITY_UNAVAILABLE` block and HOT drain; it cannot wait for a strategic timer. Focused normal, forged-observation, cursor-recovery, theft, station-loss and route-block planner tests pass; the dedicated Scene GameTest proves approach/input/processing, durable current-station retention, exact body death/finalization and full-next-body collision without test force-loading (55/55 Scene slice); Economy 17/17 passes. Native `disposable_materialized_production_work_restart` run `652d7777-f5c8-4a40-adcb-b572c953275d` proved the exact `INDUSTRIAL WORKER`, a live `PROCESSING` stage on the exact magenta work station, terminal `FULFILLED`, then graceful recovery with the exact bread receipt intact. Fresh native `disposable_materialized_production_route_blocked` run `b3f63718-0566-48f4-9fbd-98e230396664` placed ordinary gray concrete at a read-only immutable future body anchor, then reached `CANCELLED`, no active job/reservation and task `BLOCKED`; it neither selected an entity nor altered the canonical plan. The filesystem runtime-restart test retains `PROCESSING(17)` and the exact work cursor before explicitly quarantining that one HOT lease to `UNKNOWN_AFTER_RESTART`, without creating output or releasing the job. Its camera reads only scene topology and cannot select or move a body. The graybox workshop now has a three-wide, two-high loading portal while retaining one canonical centre traversal edge; this is an M3-oriented geometry improvement, not M3 acceptance. Its newest player-height frame contains the worker and both distinct station colors but leaves the worker partly behind the right wall. M3 therefore still requires a reusable semantic presentation pose/grammar, not a hard-coded seed camera. |
 | MAT-003 | P0 | M2 closed; M3 not accepted | The canonical decontamination scan retains one exact `SettlementServiceWork`: qualified medic, intact infirmary, active exact depot slot, two immutable stations/topologies/cursors, input-issue intent and endpoint intent. The closed `SERVICE_WORK` scene admits only that retained worker, advances only the next observed body/cursor, issues the same held reagent at the retained source station, performs 80 observed work ticks and enables the terminal effect only at `EFFECT_READY`. A one-edge recovered physical arrival is reconciled only to the retained immediate next cursor; every other body/cursor mismatch is a bounded return to the retained surface or a visible conflict. Each accepted edge atomically updates the work cursor, scene recovery anchor and the sole canonical actor body, so input/effect validation cannot read a stale worker location. The terminal adapter changes only its observed overlay cell and consumes the same exact held reagent; completion atomically drains the lease. A graceful restart quarantines the same work/lease to `UNKNOWN_AFTER_RESTART`, then exact naturally loaded reclaim resumes the retained work rather than replaying its transfer/effect. Focused normal, forged-cursor, one-edge recovery, exact-actor-custody and restart tests pass; the dedicated Scene slice passes 56/56. Fresh native `disposable_service_decontamination_restart` used one ordinary test player and disposable seed 41: pre-restart run `109f8a50-5a47-4090-8ad9-75685310745b` observed the exact named `MEDICAL WORKER` in the active HOT scene; post-restart run `18840c72-2979-402e-8e83-58ccdee13b2f` reached the sole `CONFIRMED` decontamination receipt, consumed the exact reagent and closed the same work. The narrow clean frame is causal/identity evidence only: the medic remains visually indistinct among graybox residents, so it is explicitly rejected as M3 player-comprehension evidence. `STRUCTURAL_REPAIR` remains on its direct path until separately admitted. |
-| MAT-004 | P0 | M0/M1; replacement contract accepted | The current `RoutePatrol` retains exact members but starts and advances them by direct COLD body rewrites between waypoint cells; resident ambient goals still collapse security work to generic `GUARD` at the settlement anchor. Generic `WORK`, `GUARD` and `PATROL` motion is activity, not proof of the assigned operation. `docs/frontier-v3-route-patrol-contract.md` now requires a fresh-world replacement with exact ingress, distinct retained formation, terrain topology/cursor and a registered `ROUTE_PATROL` HOT scene. |
-| MAT-005 | P0 | M1/M2 partial | Hive mobilization proves exact cocoon release, assembly and durable departure, and assault combat has a HOT scene; the same roster does not yet have an evidenced continuous physical march from departure to contact. Carry one retained expedition topology/cursor/Overseer authority through COLD/HOT approach, contact and retreat. |
-| MAT-006 | P0 | M1 | Settlement provision consumes exact food then updates several named residents; birth consumes exact food then later adds a resident whose Villager is projected on load. There is no mess/feeding action or household/bed lifecycle transition. Add class-F staged exact-recipient provisioning and birth materialization; do not require one loose entity per food item. |
-| MAT-007 | P0 | M1 | Hive nutrient transfer has exact source/target receipts and a COLD corridor but no HOT vascular flow or carrier, while growth consumes biomass and atomically adds an organ, bioform and infection cell. Materialize transfer as interruptible hiveroot flow and growth as staged digestion/morphogenesis/cocoon work with exact biomass and organism identity. |
-| MAT-008 | P1 | M1 | Crop and infection projection apply batch block replacement at an aggregate stage. Extent is visible after the fact, but direction and active frontier are not necessarily observable. Introduce bounded spatial work units and retained partial progress for growth, spread, retreat and decontamination; a real instantaneous blast remains exempt. |
-| MAT-009 | P1 | M0/M1 | Markets, companies, shortages, quarantine and doctrine can be inspected and may affect canonical choices, but coverage does not yet prove that each decision class has an unambiguous operational consequence in play. Maintain a decision-to-visible-consequence matrix and reject board/diagnostic-only completion claims. |
-| MAT-010 | P1 | M0/M2 partial | Exact resident health and nutrition affect assignments, quarantine and medical work, but ordinary ambient presentation exposes profession/tactical function rather than hunger, exposure, infection or recovery. In HOT space, environmental contact must address the same exact resident and condition changes need readable body/behaviour cues; COLD may use bounded canonical exposure but cannot be contradicted by simultaneous HOT reality. Add symptom/recovery/starvation presentation and ordinary contact/intervention evidence without making labels a second health state. |
+| MAT-004 | P0 | M2 closed; M3 not accepted | Clean schema/envelope `152/62` candidate `aa12f919` replaces the old waypoint/body-rewrite patrol with one exact retained task, ordered roster, individual ingress, distinct formation and immutable pedestrian topology/cursor. COLD advances one retained edge atomically; the registered `ROUTE_PATROL` scene and shared provider commit that same formation only from observed exact-roster arrival. Focused pure/codec/non-flat, ordinary/blocked/body-loss and demand-loss evidence passes; candidate-bound native run `b6e334d4-022d-41c6-ac44-1f9060485a7e` proves ordinary demand, active-scene graceful restart, same exact HOT roster, ordinary-player obstruction and terminal typed block without generic guard substitution or replay. Its player-height graybox frame is only M2 continuity evidence; unbriefed direction/result comprehension and natural-terrain hardening remain M3/release scope. |
+| MAT-005 | P0 | M2 closed; M3 not accepted | Clean schema/envelope `154/64` candidate `741d4dda` retains one exact Overseer-led expedition operation, four-member roster, formation, immutable `GROUND_BIOFORM` topology/cursor and command authority from mobilisation departure through COLD/HOT approach, contact and owned retreat/return. Focused evidence covers non-flat progress, snapshot/WAL restart, typed obstruction, body/controller loss and demand return; Scene passes 77/77. Candidate-bound native run `8a2c700f-6997-43cd-beb1-19dceece457c` observes the exact HOT roster and terminal typed occupied-next-body result in one 18-line PMV3 trace; the final critical gate passes 324/324. The graybox frame proves physical presence only: unbriefed Overseer, direction, command-loss, contact and retreat comprehension plus natural-terrain hardening remain M3/release scope. |
+| MAT-006 | P0 | M1; target contract accepted; XACT-001 predecessor | Settlement provision consumes exact food then updates several named residents; birth consumes exact food then later adds a resident whose Villager is projected on load. There is no mess/feeding action, return of the same temporary recipient to its retained duty, or atomic household/bed/birth-to-body carrier lifecycle. `frontier-v3-recipient-provision-birth-contract.md` requires class-F exact-recipient allocations, bounded physical batches, duty return and exactly-once child emergence without one loose entity per food item. Implementation/evidence remain pending. |
+| MAT-007 | P0 | M1; target contract accepted | Hive nutrient transfer has exact source/target receipts and a COLD corridor but no HOT vascular flow or mixed-mode carrier, while growth consumes biomass and atomically adds an organ, bioform and infection cell. `frontier-v3-hive-metabolism-morphogenesis-contract.md` requires interruptible directional hiveroot flow, irreversible exact digestion and retained organ/bioform morphogenesis with exact conserved biomass, emergence identity, complete-footprint activation and cocoon/attachment dependencies. Implementation/evidence remain pending. |
+| MAT-008 | P1 | M1; target contract accepted | Crop and infection projection apply batch block replacement at an aggregate stage. Extent is visible after the fact, but direction, active frontier and complete multi-chunk visible envelope are not necessarily observable. `frontier-v3-spatial-frontier-contract.md` requires bounded retained work units, partial progress, intervention/recovery and truthful multi-direction first visibility for crop, infection and root environmental fronts; a genuinely instantaneous blast remains exempt. Implementation/evidence remain pending. |
+| MAT-009 | P1 | M0/M1; target contract accepted | Markets, companies, shortages, quarantine and doctrine can be inspected and may affect canonical choices, but coverage does not yet prove that each decision class has an unambiguous operational consequence in play. `frontier-v3-decision-consequence-contract.md` requires every checked-in causal-matrix row to reach its real exact task/operation, terminal or blocked fact, physical result and delayed aftermath; native sampling by presentation family cannot make an unexecuted row green. Implementation/evidence remain pending. |
+| MAT-010 | P1 | M0/M2 partial; target contract accepted after MAT-009 | Exact resident health and nutrition affect assignments, quarantine and medical work, but ordinary ambient presentation exposes profession/tactical function rather than hunger, exposure, infection or recovery. `frontier-v3-resident-condition-presentation-contract.md` binds composed readable cues, COLD deterioration, exact same-body return, physical treatment and duty resumption to one `ActorCondition`, with HOT/COLD neutrality and no second health state. Implementation/evidence remain pending. |
 
 ## Existing reference verticals
 

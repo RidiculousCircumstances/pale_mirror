@@ -83,6 +83,16 @@ Listing poses neither loads chunks nor changes source state; explicit spectator
 travel is ordinary player demand, so a resulting HOT scene is evidence only
 after the usual render settle.
 
+`VIS-002` will replace manual pose guessing for semantic process evidence with
+a bounded read-only scene map and camera selection manifest. It must show the
+relevant footprints/surfaces, boards, work points, current actors and route or
+effect envelopes; reject cameras with unknown geometry, blocked line of sight,
+missing target coverage or observer interference; and retain the selected pose,
+rejected reasons and map beside the actual PNG. The map is explanatory evidence,
+not a visual-quality verdict: reviewers still open the rendered player frame.
+Moving a settlement to the world origin or changing its geometry to simplify
+capture is explicitly out of scope.
+
 Each run writes PNG files, the client log and a machine-readable
 `manifest.json` under `build/visual-audits/<UTC timestamp>-<target>`. It also
 builds an overall contact sheet and one contact sheet per target kind. Use

@@ -82,6 +82,20 @@ due-action engine and physical-safety fence, and either stops exactly at the
 target or fails visibly if it is already crossed or outside the declared bound.
 It never writes a cursor, schedule or expected terminal value directly.
 
+Classify performance evidence by execution mode. Vanilla's `Can't keep up`
+line reports accumulated server scheduling debt; it is not evidence that one
+operation or tick blocked for the printed duration. During deliberate
+zero-player accelerated time control the runner retains that warning as exact
+backlog telemetry, but it may not relabel it a single server-thread stall or
+use its mere presence to reject an otherwise terminal causal result. That
+interval instead requires its typed completion/rejection receipt, declared
+wall-clock ceiling, connected per-slice/per-stage metrics and absence of
+watchdog, crash or quarantine. A warning during an ordinary client segment,
+or one correlated with a measured budget breach, disconnect or watchdog,
+remains a product-performance failure. Never merge the two classifications to
+make either path green: accelerated-control throughput is not ordinary TPS,
+and a responsive accelerated prelude cannot excuse a slow player ingress.
+
 Native container/inventory/death paths are the next pilot slice. They remain
 deliberately unclaimed until each has a real-server proof; the old Mineflayer
 implementation cannot supply that proof against the required NeoForge handshake.
@@ -102,6 +116,17 @@ ordinary player actions, read-only predicates and required frames. The runner
 writes one manifest containing the source scenario hash, pilot protocol
 version, server/world identity, diagnostic samples, correlation IDs and PNG
 paths. No screenshot pixel equality is used as a correctness oracle.
+
+The planned `VIS-002` extension adds a read-only semantic scene-map and camera
+planner. For an evidence-bearing frame it records buildings/roads/fields/water,
+boards, work points, route or effect envelopes and exact current actors in a
+bounded top-down artifact; evaluates a bounded set of ordinary player-eye poses
+for clearance, frustum coverage, line of sight and observer interference; and
+stores the selected pose plus rejected reasons beside the PNG. Planned,
+observed and unknown geometry remain distinct. A missing unobstructed pose is
+`INCONCLUSIVE`, never a reason to move the scene, force-load chunks or accept an
+unreadable screenshot. The same point/area/path/group target model serves farms,
+workshops, caravans, battles and hives without family-specific camera code.
 
 The initial regression is `visible_field_player_break`:
 

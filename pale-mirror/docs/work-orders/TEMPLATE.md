@@ -1,193 +1,98 @@
-# Work order <ID>: <one bounded result>
+# PM-<OUTCOME>-<ID>: <product result>
 
-Specification revision: <N>. Parent slice: <F0...>. Risk: <docs/small-code/critical-code>.
-Engineer: supervising root. Executor: gpt-5.6-terra, high.
-Active phase and acceptance owner: `CONTINUITY.md`.
+Revision: <n>. Parent slice: <id>. Risk: <docs/small-code/critical-code>.
+Status: <ledger state>. PM / architect: <name>.
+Senior tech lead and sole coder: Terra, gpt-5.6-terra, reasoning high.
+Workflow: [PM/TL protocol](../engineering-agent-protocol.md), revision
+`2026-09-20-LEAN-TL-AUTONOMY`.
+This assignment supplies outcome, context and authority, not a separate workflow.
 
-This template inherits `docs/engineering-agent-operating-model-v4.md`. New
-product slices use a fresh Terra context and isolated executor branch/worktree.
-Keep the order below 2,500 tokens where practical; after three substantive
-revisions, close/supersede it instead of appending a troubleshooting history.
+## Product outcome and acceptance
 
-## Baseline and prerequisites
+<What becomes true for the player/system; why this is the next planned result.>
+<Existing stage criteria and exact exclusions; do not invent extra gates.>
+<Negative/recovery guarantees and human acceptance that remain necessary.>
 
-- Exact repository/ref and dirty working-content identity; WIP to preserve.
-- Previous writer handoff and active command/resource ownership.
-- Required contracts, skills, previous accepted order and unresolved facts.
+## Context and continuation
 
-## Bounded builder context packet
+- Canonical governance/ledger: <path and protocol revision>.
+- Implementation worktree/branch, source identity or preserved WIP: <facts>.
+- Previous writer handoff and task-owned processes: <facts/UNCONFIRMED>.
+- Relevant contracts, owning architectural boundaries and interface meanings:
+  <small useful context, not an implementation recipe>.
+- Reusable evidence and remaining claims: <identity/scope/locations>.
+- Failed hypotheses and known pitfalls: <facts, not mandatory designs>.
 
-- Spawn with a fresh context and a routing note to this order; never fork the
-  full engineer conversation or predecessor transcript.
-- List the exact files/sections the builder must read, the accepted facts and
-  reusable receipt identities it must not rediscover, and only the remaining
-  claims it owns.
-- Spell out every critical external-artifact fact and accepted reference
-  contract on which the outcome depends, with an exact evidence handle and
-  symbol/assertion shape. A commit or document pointer alone is insufficient
-  when missing one field, bound or dimension can reproduce the rejected class.
-- For each method-risk claim, name the exact production entrypoint, the
-  observation seam/counter/receipt and the plausible bad behavior that must
-  traverse that same seam. A separately invoked instrumented helper is not an
-  observation of an uninstrumented production call.
-- State why the seam exists in production. Do not add a static or thread-local
-  callback referenced only by tests. For an absence-of-call claim, permit a
-  type/module or compiled-dependency boundary plus a real behavior test, and
-  keep any newly required negative mutation source-bound and reproducible.
-- Declare the semantic-change budget: owner/status/identity rules in scope and
-  accepted invariants that remain frozen. If a fixture requires weakening a
-  frozen production invariant to construct its state, return an architecture
-  exception rather than adapting production semantics to the fixture.
-- For a successor, name the clean inherited checkpoint, predecessor terminal
-  state and process cleanup. Historical orders/logs remain references rather
-  than startup context unless one unresolved fact explicitly requires them.
-- State the terminal context boundary. One consolidated semantic correction is
-  the maximum; a second rejected method/terminal semantic return requires a
-  clean WIP checkpoint and a fresh shortened successor order.
+Terra owns technical investigation, design, decomposition, source/test/harness
+changes, test adequacy, technical self-review and integration through a working
+result. Related in-stage runtime or harness repairs do not require a new order.
+Terra may replace a disproved technical approach without PM approval.
+There is no mandatory METHOD_READY, per-file allowlist or per-run permission.
+No work-order wording may impose a fixed attempt count or make an ordinary
+tooling/harness/test/infrastructure failure terminal. Terra repairs those
+obstacles autonomously. A terminal product result requires an admitted method,
+the exact frozen candidate and an authoritative current subject; stale
+hard-coded identities, wrong views and unexercised subjects are method defects.
 
-## Outcome and exclusions
+## Authority and resources
 
-- One observable deliverable; why it is needed by the parent slice.
-- Explicitly excluded gameplay, refactors, migration/deployment and future work.
+- Writable implementation boundary: <stage-related worktree scope>.
+- Hard exclusions: <actual product, safety or external-authority reasons>.
+- Disposable runtime/CI resources: <approved namespaces/ownership limits>.
+- Private WIP commits: <grant>; push/deploy/cleanup: <actual grant or exclusion>.
+- Existing services/data and private inputs to preserve: <facts>.
+- Apply existing evidence/retention limits and accelerated pipeline; do not
+  re-prove infrastructure or broaden acceptance to obtain a cleaner report.
 
-## Contract and transition
+Terra selects the technical route by expected discriminating value relative to
+cost, risk and reversibility. Code audit, instrumentation, focused checks and
+native evidence are options, not a mandatory sequence. It reuses valid evidence
+and repairs/retries when doing so reduces an actual product risk. A real resource
+or product-contract gap is NEEDS_DECISION; ordinary technical failure is not.
 
-- Canonical and physical state owners, identities and mutable state.
-- Inputs, expected version/epoch, events, persistence/confirmation boundary,
-  observations and success/failure/recovery postconditions.
-- Exact invariants and any predeclared non-exact comparator.
+PM, not Terra, maintains any promotion label and decides when a candidate is
+ready for a user retest. Terra only binds exact source/artifact/service/world
+when deployment is part of the result and reports the observed facts.
 
-## Write scope
+## Product closure
 
-- Approved component/path boundary; expected files are navigation hints.
-- Executor owns diagnosis, local design, helpers and focused/full test choices
-  within that boundary, without per-file or per-method approval.
-- Forbidden files/changes; conditions requiring a revised specification.
-- Engineer-owned normative docs; executor supplies proposed corrections.
+Terra closes the natural player/system result and the strongest retained broken
+behavior using the technical method it judges most credible and economical. No
+closure-map representation, terminal-carrier shape, evidence vocabulary or
+report ritual is prescribed. Several sound observations may compose a claim;
+a harness limitation still cannot silently narrow the product outcome.
 
-## Acceptance matrix
+Before claiming a terminal candidate, freeze candidate identity and perform a
+proportionate technical closure audit. Do not accumulate confidence-only proof
+while a targeted criterion is missing, contradictory, narrower than claimed or
+unsupported by its carrier. If another equivalent attempt would not update the
+causal model, Terra reframes the problem and chooses a higher-value discriminator;
+the protocol imposes no fixed failure count or first technique.
 
-| ID | Required outcome/invariant | Focused positive test | Negative/recovery test | Physical/final proof |
-| --- | --- | --- | --- | --- |
-| AC-1 | <contract> | <test> | <test> | <scenario or justified N/A> |
+If this is a diagnosis-only audit, say so explicitly; a valid product
+contradiction returns to PM because implementation is out of scope. Otherwise
+the same order owns correction through a working result, and a contradiction
+does not create an intermediate permission stop unless it exposes a true
+product/architecture/authority/safety decision.
 
-Declare required test outcomes and mandatory gates. Executor selects and records
-exact commands within the grant. Define the complete local verification
-envelope here, including mandatory full gates, sole heavy owner, permitted
-disposable paths and resource limits. Grant it once, not before each command.
-For every added or modified test, require an exact retained discovery/execution
-marker (test or unique batch identity and count); an aggregate green total alone
-is not evidence that the changed method executed.
-Native/destructive/external operations outside that envelope need their actual
-authority; identify any such unresolved boundary explicitly. Specify what evidence may be reused
-and what must be fresh, plus source/spec/build identity and artifact paths.
+## Chronology and supervision
 
-For every multi-owner or newly changed proof boundary, also declare the exact
-production composition, untouched initial control history, plausible defect,
-terminal oracle and negative/recovery mutation. If the preceding review rejected
-this same carrier/oracle as synthetic or non-faithful, mark a one-time read-only
-`METHOD_ADMISSION` challenger before any full/native/CI gate.
+Whole product blocker: <stable identity, first start or UNCONFIRMED>.
+Prior effort/evidence: <reference; distinguish measurements from estimates>.
+Track meaningful operations with purpose, duration, result and remaining
+uncertainty, including PM overhead. No heartbeat diary.
+While EXECUTING: PM checks liveness after ten minutes of silence, never more
+frequently; hourly review examines whole-blocker cost and product progress.
+These are not source inspection or technical approval checkpoints. Follow the
+protocol for an evidenced impasse; Terra owns its technical resolution.
 
-Declare one task-private temp/evidence root and require an actual bounded
-write/fsync/atomic-rename/delete probe on each filesystem used by the gate.
-Free-space reports alone are not admission. State which exact-identity receipts
-may be composed so an infrastructure failure does not cause unaffected green
-leaves to be repeated.
+## Delivery and next boundary
 
-## Review and execution permissions
-
-This order inherits the protocol's exhaustive intervention taxonomy. It MUST
-NOT add routine progress checkpoints, implementation-recipe approvals or
-separate permissions for tests/fixes already inside the declared envelope.
-Historical Gate A/B wording is non-operative when a later revision grants the
-complete outcome. While the order is `EXECUTING`, one bounded `LIVENESS` check
-is mandatory after each ten minutes without an executor event and never more
-frequently. It is limited to collaboration state, exact task-owned process/job
-liveness and a bounded progress marker; it never includes source/diff review.
-Record an execution-economy observation epoch below. After every complete hour
-from that epoch while the order remains `EXECUTING`, the engineer performs one
-bounded `ECONOMY_AUDIT` of accumulated operation-purpose/duration/outcome
-metadata. It is not an hourly code review or executor heartbeat.
-
-- Initial grant (Gate A): authorize diagnosis, implementation, local focused
-  and full verification, and corrections together. Acknowledgement does not
-  require a second permission message. READ_ONLY only for a named reason.
-- Optional consultation (Gate B): name any actual unresolved safety/authority
-  boundary or impasse; otherwise NO intermediate stop. Full testing alone is
-  not a boundary. Do not invent a consultation merely to populate the template.
-- Final review (Gate C): one completed result and criterion-to-evidence packet;
-  explicit ACCEPTED or consolidated evidence-backed findings. Terra selects
-  corrections and verifies them without separate permission for each step.
-- Exception and terminal packets contain full checkpoint/HEAD/parent/tree,
-  clean state, changed paths, commands/durations/exits, first causal failure,
-  full hashes, claim mapping, unexecuted claims, resource probe and exact
-  process/job/port/display/world cleanup. A prefix-only or narrative packet is
-  `DELIVERY_INCOMPLETE`, never implied acceptance.
-- Heavy-run owner, world/port/display scope and safe stop/recovery procedure.
-- Commit/push/deploy authority, if any; default none for this individual order.
-- Engineer reviews stable deliveries and risk-selected independent evidence;
-  no routine parallel duplication of diagnosis or complete test execution.
-- Supervisor intervention must identify architecture/authority, a concrete risk
-  or impasse, final review, explicit user audit or genuine liveness uncertainty.
-  Use one protocol reason label. File/helper/algorithm/command preferences are
-  not blocking findings and implementation suggestions remain non-binding.
-- Reports by completion or exception; no executor heartbeat. The engineer
-  performs the mandatory bounded ten-minute liveness check without messaging
-  Terra when collaboration/process evidence is healthy.
-- Apply the protocol's supervisor self-check before every intervention. The
-  limit covers status messages and process/diff queries together. No terminal
-  progress-only handoff requesting ordinary in-scope continuation permission.
-- Declare the default economical proof path: localization; changed/failed-lane
-  local regression; at most one runtime-relevant local physical preflight; one
-  four-worker terminal matrix; immediate review. Record which steps are
-  inapplicable. This is not a categorical one-attempt rule. Before an expensive
-  repeat, record the material product claim/decision it can change, why cheaper
-  evidence is insufficient and what outcome would alter acceptance or
-  implementation. The same heavy proof claim crossing two
-  consecutive hourly audits or four cumulative execution hours triggers a
-  mandatory safe-boundary stop and explicit work-order reset; provider queue
-  time is separate. No confidence, benchmark or accepted-infrastructure reproof
-  can extend the budget.
-- Before a milestone full gate that precedes native work, require a cheap
-  carrier-readiness proof on that candidate: the declarative scenario,
-  read-only diagnostic facts, semantic oracle and required negative/recovery
-  discriminator must exist and be admissible. If missing carrier work changes
-  identity after an otherwise useful gate, retain its receipt and decide the
-  final-candidate gate by material product value rather than a run counter.
-- State the evidence-entry boundary for a terminal matrix. A classified
-  deterministic provider transport/admission failure before every Minecraft
-  process and product-semantic lane produces no semantic evidence. Correction
-  needs no special user permission. Redispatch additionally requires a changed
-  candidate, a cheap faithful pre-Minecraft regression through the actual
-  failed provider shape and the supervising engineer's finding of material
-  expected product value. If it would only prove plumbing or repeat an accepted
-  claim, defer it. Reuse all unaffected evidence; unchanged blind retry remains
-  forbidden. Apply the same product-value test to semantic/runtime/flaky and
-  unclassified failures.
-
-## Execution-economy chronology
-
-Observation epoch: `<UTC timestamp>`. Next audit boundary: `<UTC timestamp>`.
-The ledger remains the sole status authority; this table is bounded cost/evidence
-metadata. Populate it from ordinary milestone/failure reports and retained
-receipts, never by requiring an executor heartbeat. Use `unknown` for unavailable
-historical timing.
-
-| UTC start/end or elapsed | Operation and product purpose | Outcome/evidence handle | Economy classification |
-| --- | --- | --- | --- |
-| <time> | <bounded operation; claim advanced> | <result; artifact/run> | <advanced / invalidated / necessary repeat / avoidable repeat> |
-
-| Economy-audit UTC | Reviewed interval | Finding and action | Next boundary |
-| --- | --- | --- | --- |
-| <time> | <from--to> | <healthy, or concrete cost/method finding and conceptual correction> | <time> |
-
-## Stop conditions
-
-Conflicting authority, unknown WIP, active external writer, changed fingerprint,
-new persistent/public meaning, missing permissions, contradictory requirement,
-unexplained repeated failure or missing human evidence: report before expanding.
-
-## Review record
-
-Engineer records decision, exact reviewed identity, evidence references and
-remaining exclusions here. The ledger remains the only active progress record.
+Return a concise coherent result: what changed, why it is believed correct,
+what was actually checked, exact source/runtime identity where relevant,
+remaining risks and owned process state. PM maps those facts to criteria and
+evidence labels. Do not return a stream of small patches for technical permission.
+PM accepts product/architecture conformance or states a concrete unmet
+requirement, without prescribing the fix. Next F0 slice requires acceptance.
+At an automation/operational boundary or handoff, compact the active ledger and
+archive cumbersome superseded chronology without resetting cost or open facts.

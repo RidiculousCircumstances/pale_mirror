@@ -1,5 +1,46 @@
 # Pale Mirror runtime performance
 
+Agent workflow, evidence reuse and retry decisions follow
+[`engineering-agent-protocol.md`](engineering-agent-protocol.md).
+Terra owns performance diagnosis, technical design and verification as senior
+tech lead; PM checks promised behavior and system constraints, not each trace,
+method or command. No intermediate technical approval is required.
+The explicit scale-limit gates below apply when increasing those limits, not
+to every bounded-work correction. Such corrections may use existing runtime
+diagnosis plus whole-path and focused regression evidence without a fresh
+benchmark/JFR campaign; a measured speedup still needs comparable measurements.
+
+## Frontier v3 bounded execution
+
+The [Frontier contract](frontier-v3-contract.md#maintainability-performance-and-observability)
+owns current v3 release budgets. Its full profile is a release/scale obligation,
+not a repeated campaign for every correction. ARC-001 aligns the structural
+work and retention model; it does not certify an unmeasured runtime speedup.
+
+Due work, dirty subjects, semantic slots and naturally available chunks use
+bounded indexed work sets. Reuse unchanged immutable topology/static plans;
+one changed organ, field generation or actor must not reconstruct unrelated
+world plans or scan accumulated history. Bound the complete caller path,
+including index validation, callback fan-out, projection and diagnostics.
+
+Separate simulation advancement, physical interaction/recovery and presentation
+queues. Budget each with fair scheduling, bounded count/bytes and visible
+backpressure. Optional presentation can be deferred/coalesced only when safe;
+never drop a critical cause, irreversible effect or recovery obligation to meet
+a budget. Expose simulation lag, oldest deferred work, queue count/bytes, active
+custody and dirty-set work so starvation is distinguishable from cheap ticks.
+
+Retired cycles compact under referential/recovery fences, not elapsed TTL alone.
+Long-running COLD cycles must not make the next first visit replay every cycle.
+Multiple arrivals share current indexed work; they cannot multiply canonical
+progress. Bounded admission must have an explicit outcome, never invisible
+starvation. No thread pool substitutes for eliminating redundant/unbounded work.
+
+## Legacy runtime and Visuals reference
+
+The following schema-v40/Visuals values describe their respective historical
+pipelines, not Frontier v3 simulation targets or current-stage acceptance.
+
 Schema v40 has one server-thread admission controller. Non-critical regional,
 railway, settlement and projection work shares a default soft budget of 3 ms
 and 256 weighted operations per tick. Safety-critical combat attribution,

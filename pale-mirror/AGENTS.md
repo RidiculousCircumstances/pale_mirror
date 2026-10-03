@@ -6,51 +6,39 @@ Maintain one compact Continuity Ledger in `CONTINUITY.md`. It is the canonical
 session brief that survives context compaction; do not rely on older chat
 messages unless their durable facts are reflected there.
 
-At the start of every assistant turn, read `CONTINUITY.md` before acting. Update
+At session entry or after context loss, read `CONTINUITY.md` before acting.
+Reuse already-read unchanged instructions during continuous work; automatic goal
+continuations do not require rereading them. Refresh changed files when another
+writer, user update or handoff can affect current authority/state. Update
 it only when goals, constraints/assumptions, key decisions, progress state,
 important verification evidence, open questions or the active working set
 change. Keep it factual and at most 1000 lines; never store dialogue summaries,
 long changelogs, raw test logs or stale file inventories in the active ledger.
+Aim for roughly 1000 words, well below that mechanical line cap; link durable
+receipts and historical decisions instead of accumulating successive handoffs.
 
 If history must be retained, archive the previous ledger under `docs/archive/`
 and reference that archive from the compact active ledger. If context is
 missing, reconstruct only supported facts, mark gaps `UNCONFIRMED`, ask targeted
 questions when necessary and continue without inventing state.
 
-Use these headings exactly:
+Keep the current objective, authority, implementation location, material results
+and next unresolved problem easy to find. No exact headings, separate execution
+checklist or duplicate plan synchronization is required. Mark missing facts as
+unconfirmed; do not invent them.
 
-- Goal (success criteria)
-- Constraints/Assumptions
-- Key decisions
-- State
-  - Done
-  - Now
-  - Next
-- Open questions
-- Working set
+Give concise updates for material progress, decisions or blockers; no mandatory
+Ledger Snapshot or full-ledger dump. Report unrelated findings separately.
 
-If a fact is missing, record `UNCONFIRMED`; do not invent it.
+## Project reference skills
 
-`update_plan` is a short-cycle execution checklist. `CONTINUITY.md` is the
-long-lived intent and state anchor. Keep them synchronized at the goal/state
-level without copying plan micro-steps into the ledger.
-
-Start user-facing work updates with a short **Ledger Snapshot** containing:
-
-- Goal
-- Now / Next
-- Open questions
-
-Show the full ledger only when it changed or the user requests it. If unrelated
-architectural flaws or code smells are discovered, report them separately.
-
-## Mandatory project skills
-
-Project skills live in `.agents/skills`. Before acting on a matching task,
-read the complete `SKILL.md` for every matching skill and announce the skill
-use in the commentary update. This routing is mandatory even when the host UI
-does not list repo-local skills; open the file directly instead. A summary in
-this file never substitutes for reading the selected skill.
+Project reference skills live in the canonical governance `.agents/skills`.
+The routes below are a reference index, not mandatory workflow triggers merely
+because a task mentions a topic. Consult a skill when its procedure or technical
+detail is needed; do not load a bundle as a prerequisite to reading or fixing
+code. When selecting a skill, read it fully and follow the host's skill-use
+rules. This does not override host-required skills or waive the project's
+technical contracts, operational safety or claim-specific acceptance criteria.
 
 - Materialization, Foundry reports/rules, physical ownership, unsupported or
   obstructed structures: `.agents/skills/pm-foundry-audit/SKILL.md`.
@@ -70,170 +58,86 @@ this file never substitutes for reading the selected skill.
   live-server validation: `.agents/skills/pm-test-server-ops/SKILL.md`.
 - Product review, version scope, player promise, playtest gates, or roadmap:
   `.agents/skills/pm-product-review/SKILL.md`.
+- Unfamiliar ownership, cross-module impact, lifecycle tracing, or a repeated
+  cross-layer defect: `.agents/skills/pm-repository-context/SKILL.md`.
 
-When scopes overlap, use the smallest matching set. Structural visual defects
-require both visual and Foundry skills. Verify an implementation before using
-the server-operations skill to deploy it. Product decisions precede technical
-implementation; release verification follows it.
+When references overlap, use only what answers the unresolved question.
+Structural visual defects still require physical-ownership and visual checks;
+consult the corresponding references as needed. Verify an implementation before
+deployment. A reference-reading sequence is not an implementation gate.
+
+## Development assistance tooling
+
+- Engineering capabilities are available through their named MCP surfaces or
+  checked-in CLI equivalents. Check availability when a capability is needed;
+  there is no mandatory all-tools smoke on session or worktree activation.
+  Missing optional tooling does not block direct source analysis or repair.
+  Report a limitation when it affects the task or an evidence claim.
+- `docs/agent-assist-toolchain.md` defines the advisory runtime-evidence,
+  change-selection, LSP, architecture and profiling tools. They reduce context
+  and diagnosis cost; none owns product truth, acceptance or repair authority.
+- For an unfamiliar cross-layer defect, choose direct source reading,
+  repository context or symbol/reference navigation by the unresolved question.
+  No prescribed tool sequence or onboarding campaign is required. An index is
+  not a substitute for reading the relevant canonical/source anchors.
+- Before a changed-candidate verification cycle, the change selector may build
+  the smallest declarative plan. It never executes tests and never overrides
+  the executor's technical judgment. Unknown ownership widens visibly; native
+  evidence always requires an explicit scenario.
+- Runtime evidence queries consume only already-produced bounded files. A
+  `stale`, `partial`, `not_found` or `trace_incomplete` answer is not proof of
+  absence. The navigator is not the OBS-001 producer and cannot complete a
+  diagnostic-plane criterion.
+- Use existing JFR/jcmd evidence first for a TPS or caller-path question.
+  Attach the pinned async-profiler only to an explicit same-user task-owned JVM,
+  for a bounded duration and a named unresolved hypothesis; its launcher is a
+  dry-run unless execution is explicitly selected. Never attach to an unrelated
+  live service.
+- Availability does not mean ritual invocation. The executor chooses the matching
+  capability by expected information gain: repository context for unclear
+  ownership/impact, runtime context for retained evidence, the selector when it
+  helps choose affected checks, Serena for a remaining symbol seam,
+  ArchUnit through its normal applicable Java gate and the profiler only for the
+  guarded unresolved performance case above. A CLI fallback is sufficient for a
+  long-lived TUI that cannot refresh its MCP catalog; a missing named surface
+  does not require a session restart when the CLI provides the capability.
 
 ## Sources of truth
 
-### Managed engineer / executor workflow
+### Current execution authority
 
-- `docs/engineering-agent-operating-model-v4.md` is the binding slice lifecycle.
-  It supersedes v3 and adds method-risk admission before expensive evidence,
-  exact partial-receipt composition, real same-filesystem resource probes and
-  complete exception packets while preserving fresh successor contexts,
-  private WIP checkpoints and independent terminal challenge.
+The [execution protocol](docs/engineering-agent-protocol.md) is the sole workflow
+source. The user's current assignment and compact ledger determine roles.
+Currently main alone implements the ledger-named resident-life/resource cut;
+the SA audit is paused, Terra is stopped and subagents are prohibited. Older PM-only/sole-Terra rules in skills, archived
+orders or source-checkout copies have no assignment authority.
 
-- Binding 2026-09-06 anti-micromanagement rules in the protocol take precedence
-  over older permission-only Gate A/B wording. Delegate diagnosis through full
-  authorized local verification as one outcome. Terra proceeds autonomously;
-  engineer intervention is limited to architectural/authority decisions,
-  evidenced risks or impasses, and final result review. No mandatory stop
-  between focused tests, full gates and ordinary fixes inside the granted
-  environment. No duplicate investigation or preference-only rewrites.
-- The protocol's intervention reasons are exhaustive: `ARCHITECTURE`,
-  `AUTHORITY`, `RISK`, `IMPASSE`, `FINAL_REVIEW`, `USER_AUDIT`, genuine
-  `LIVENESS` or due `ECONOMY_AUDIT`. Name one before contacting Terra or
-  inspecting intermediate work.
-  If none applies, do not act. An older work-order checkpoint cannot override
-  this boundary; only a real outcome/safety/authority limit remains binding.
-- Binding user amendment 2026-09-07: while a Terra assignment is `EXECUTING`
-  and no milestone, exception or terminal packet has arrived, the engineer MUST
-  perform one bounded liveness check after each ten minutes of silence across
-  turns. Never check more frequently. An executor event resets the interval.
-  Inspect only collaboration status and the exact task-owned process/job handle
-  plus a bounded progress marker when one exists; do not inspect source, diffs,
-  implementation choices or semantic intermediate results. A healthy check
-  produces no message or direction to Terra and no ledger churn. A passive wait
-  timeout alone is not a failure; the scheduled check determines liveness.
-- Apply the protocol's enforceable supervisor self-check before intervening.
-  Count all routine status mechanisms together; do not bypass the polling limit
-  with messages or intermediate process/diff inspection. Ordinary in-scope
-  repairs remain autonomous, not permission-only terminal handoffs.
-- Binding user amendment 2026-09-08: while an order remains `EXECUTING`, the
-  engineer MUST perform one bounded `ECONOMY_AUDIT` after every complete hour
-  from the order's recorded observation epoch, including across turns. Review
-  only the work-order execution chronology, executor milestone/failure reports,
-  exact command/job metadata and retained receipt timing summaries; do not use
-  it as an hourly source/diff review. Record operation purpose, start/end or
-  elapsed time when known, outcome and evidence handle in the active work order.
-  Healthy review needs no Terra message. Contact Terra only for a concrete
-  avoidable cost pattern or methodology problem and state the evidence and
-  required outcome, leaving diagnosis and remedy to Terra. Existing milestone
-  reporting supplies the facts; no hourly executor heartbeat is required.
-- `docs/engineering-agent-protocol.md` is the accepted delivery protocol.
-  The supervising engineer owns specifications, normative docs, the ledger
-  and independent acceptance; it must not edit source, tests, scripts, build/CI
-  or executable configuration. Only the assigned `gpt-5.6-terra` executor with
-  reasoning `high` writes implementation within an approved work order.
-- Read the ledger's active order under `docs/work-orders/` before working.
-  A READ_ONLY assignment grants no writes or test launches. The executor
-  reports proposed ledger updates rather than editing the engineer's ledger.
-- Explicit engineer acceptance is required before the next order or F0 slice.
-  Preserve existing WIP and obtain previous-writer handoff before granting a
-  new writer; finish identity-bound measurements before changing their inputs.
-- Delegate bounded engineering outcomes: Terra owns diagnosis, local design,
-  algorithms, helper/file choices, command/test design, sequencing and focused
-  through full-gate correction iterations inside the approved boundary.
-  Expected files are guidance unless a specific safety constraint says otherwise.
-  Engineer states violated invariants and observable acceptance outcomes, not
-  implementation recipes; its implementation suggestions are non-binding.
-  Review terminal coherent results and invariants, not every local choice;
-  do not routinely duplicate the executor's investigation or full test runs.
-  Public/persistent meaning, owner boundaries, requirements and external or
-  destructive authority still require explicit agreement.
-- Verification economy is an explicit supervising-engineer responsibility, not
-  a reason to inspect Terra's implementation more often. Once F0.VC or another
-  shared test capability is independently accepted, do not requalify it unless
-  its inputs/contract changed or concrete evidence contradicts that acceptance.
-  Before every expensive repeat, the engineer records the product claim or
-  decision it can materially change, why cheaper evidence is insufficient and
-  what result would alter acceptance or implementation. A repeat is allowed
-  without routine user permission when it proportionately confirms or falsifies
-  a material product invariant; it is deferred when it would only demonstrate
-  provider plumbing, infrastructure hygiene, confidence, timing, topology or
-  an already accepted claim. Before a new full native CI matrix, require a
-  faithful local preflight or regression to pass for every changed or previously
-  failing lane. One complete green terminal matrix is normally sufficient for
-  independent review. The engineer, not a mechanical run counter, decides and
-  records whether another heavy cycle has enough expected product value.
-- The proof campaign for one product candidate is a finite five-step budget:
-  smallest deterministic localization; faithful local regression for every
-  changed/failed lane; at most one fresh local physical preflight when runtime
-  or its observation boundary changed; one complete four-worker terminal
-  matrix; immediate independent review and stop. This is the default economical
-  path, not a categorical one-attempt prohibition. Skip an inapplicable step;
-  never add a confidence, benchmark or infrastructure-reproof step. A repeated
-  physical or matrix attempt requires a changed hypothesis/candidate, a cheap
-  passing discriminator and the recorded material product value described
-  above. If the same acceptance claim remains in heavy
-  proof work across two consecutive hourly economy audits, or accumulates four
-  execution hours after its first heavy attempt, the engineer MUST stop at the
-  nearest safe boundary, classify product/test/infrastructure value, and obtain
-  an explicit revised work-order decision before more heavy execution. Provider
-  queue time is recorded separately. Preventing this circuit-breaker is a
-  supervising-engineer duty; available compute is not an exception.
-- Do not turn that budget into a literal run counter. A CI invocation that
-  starts no Minecraft process and observes no product-semantic lane because of
-  a classified deterministic provider transport/admission defect has not
-  entered the semantic matrix evidence boundary. Terra corrects that seam
-  without special user permission after a cheap faithful pre-Minecraft
-  regression exercises the actual failed provider shape. That classification
-  does not automatically authorize or forbid another matrix: the engineer still
-  applies the expected-product-value decision above. Reuse every unaffected
-  accepted receipt. Unchanged blind retry remains forbidden; each recurrence
-  needs a concrete new cause, changed candidate and passing discriminator.
-  Semantic, Minecraft/runtime, flaky or unclassified failures follow their
-  ordinary product/test review under the same value test.
-- Raw native/CI proof storage is disposable working state, not a permanent
-  archive. After independent terminal review records exact identity, outcome
-  and a compact receipt/checksum, delete complete checkouts, Gradle caches,
-  runner distributions, prepared-runtime copies, disposable worlds and
-  unbounded logs. Retain source/history, normative summaries and only the
-  smallest artifact necessary for a specifically open disputed claim. At most
-  one current local-heavy root and one current provider root may survive per
-  order; project-wide raw proof storage must stay below 64GiB unless the user
-  approves a named temporary exception. A new heavy run is prohibited while
-  reviewed/stale roots remain or the cap would be exceeded. Storage accounting
-  and post-review reclamation are supervising-engineer duties.
-- Binding user decision 2026-09-08: follow the mandatory causal-evidence policy
-  in `docs/frontier-v3-accelerated-verification-loop.md`. Active F0.2B and later
-  changed scenarios use retained correlated facts and semantic milestones,
-  not timing luck or positional snapshot bindings. Wall-clock deadlines guard
-  failure; canonical time/due ordering remain exact domain assertions. Preserve
-  authentic restart coverage and the fast-test/native split. Repeated sequencing
-  failures require coherent scenario diagnosis, not symptom-only expensive
-  retries or a new infrastructure campaign.
-- Binding user decision 2026-09-08: methodological correctness of tests is an
-  explicit supervising-engineer responsibility. At work-order/specification and
-  FINAL_REVIEW boundaries, assess whether each test's subject, control history,
-  oracle, causal trace, negative/recovery case and execution tier can actually
-  establish the stated product claim. A green result, scenario name or fixture
-  setup never promotes evidence beyond that method's demonstrated scope. A
-  materially new proof carrier, oracle or claim mapping is a bounded `RISK`
-  review before expensive execution. This review evaluates proof validity and
-  cost, not Terra's implementation style, and does not create routine
-  intermediate code-review checkpoints.
-- The same responsibility includes a mandatory adequacy-of-test-framing check
-  before an expensive lane is authorized: the stated scenario must correspond
-  to the product claim, a plausible defect must make it fail, setup/fixtures
-  must not manufacture the claimed transition, and its evidence tier and cost
-  must be proportionate. If that framing is inadequate, correct the work order
-  or classify the intended claim more narrowly before execution; do not spend a
-  native/CI cycle first and discover the mismatch from a green or ambiguous
-  result. This is an order/method boundary, not routine review of Terra's local
-  test implementation.
-- Before a milestone full gate that is meant to precede native evidence, prove
-  cheaply that the final candidate already contains an admissible declarative
-  carrier, its read-only diagnostic facts and a discriminating semantic oracle
-  for every required native claim. A broad gate before carrier readiness is
-  premature. If the carrier must then change candidate identity, preserve the
-  useful prior receipt and apply the product-value rule to the required final-
-  candidate gate; do not treat the first gate as a categorical rerun ban.
+Read the active order for scope and acceptance, not historical chronology.
+The executor owns implementation, diagnosis, methods and ordinary scoped retries.
+Skills supply technical constraints, not a model choice or another approval chain.
+Preserve existing product, ownership, recovery, physical-evidence and safety
+requirements. No new publication/deployment/reset authority is created.
+
+Do not turn historical workflow prescriptions into additional blocking steps.
+Required outcomes and safety boundaries remain binding; the executor chooses
+the implementation and diagnostic sequence. Documentation records material
+decisions and results, not permission to take each ordinary development step.
+
+There is no scheduled self-review/report ceremony or fixed CI-worker count.
+Use parallelism when useful and reassess a stalled approach based on information
+gain. Neither paperwork nor optional tooling is a prerequisite for source repair.
+This changes workflow only, not product acceptance or safety constraints.
 
 ### Canonical sources
+
+- `docs/frontier-v3-contract.md` owns player promises and system responsibility
+  contracts; `docs/frontier-v3-execution-semantics.md` owns the shared execution,
+  authority, projection/action/aftermath and retirement protocol.
+- `docs/frontier-v3-domain-relations.md` and the diagnostic-plane contract own
+  their specialized relationship and explanation rules. The implementation
+  plan/hardening pipeline own stage ordering; neither claims code conformance.
+  ARC-001 is the mandatory adoption checkpoint after the current F0.6R3 fix;
+  only the ledger-named order supplies execution authority.
 
 - `architecture.yml` owns component boundaries, ownership, invariants, and
   critical flows.
@@ -243,27 +147,43 @@ implementation; release verification follows it.
 If code contradicts the architecture map, report the mismatch and change one
 side deliberately in the same task. Do not silently let either drift.
 
+The development-only repository context engine joins canonical governance to a
+local structural code graph. Consult `docs/repository-context-engine.md` when
+that capability helps answer an unresolved question. Direct source reading is
+equally valid for cross-layer work; no context query or index refresh is a
+prerequisite. Graph output is not authority. Report unavailability only when it
+affects the task or evidence, and continue from canonical docs and source.
+
 ## Before changing code
 
-1. Read `CONTINUITY.md` and the relevant part of `architecture.yml`.
-2. Name the risk: `docs`, `small-code`, or `critical-code`.
-3. Identify the source of truth for every mutable state change.
-4. Identify the owning layer and the observable failure/recovery path.
-5. Make the smallest coherent change; do not add speculative compatibility
-   paths or unrelated cleanup.
+Apply the protocol's evidence gate: a concrete contradiction in the active
+source path can justify a fix without first reproducing it in a client, but a
+plausible failure story cannot. Prioritize a wired end-to-end product result
+over inactive infrastructure while preserving required safety and acceptance.
 
-`critical-code` includes canonical world state, persistence, migrations,
-simulation, scenarios, materialization, observers, adapters, and server
-lifecycle. A test must cover a negative or recovery path for such changes.
+Understand the affected owner, authoritative state and failure/recovery path,
+reusing retained context. Make a coherent scoped change without speculative
+compatibility paths or unrelated cleanup. No risk label or completed checklist
+is required before editing; verification follows the actual affected risk.
+
+Changes affecting canonical state, persistence, migrations, simulation,
+materialization, observation, adapters or server lifecycle require verification
+of the affected negative or recovery behavior. Select this coverage from the
+semantic change, not the file's classification alone. Reuse applicable existing
+coverage; a comment, formatting or behavior-preserving edit does not by itself
+require a new negative test or another runtime campaign.
 
 ## Frontier v3 causal-test workflow
 
-For a change to Frontier v3 materialization, physical observation, player
-causality, test-pilot behaviour, scenario execution or restart/recovery,
-select the smallest relevant checked-in declarative scenario under
-`tools/frontier-v3-test-pilot/scenarios/`; do not substitute an ad-hoc client
-session or the full suite. A new causal flow must add or extend a scenario
-whose structure is:
+For iterative diagnosis and repair, choose direct code analysis, focused tests,
+instrumentation or an exploratory client session according to the actual
+uncertainty. No native scenario is required per edit, and exploratory evidence
+must be labelled with its limits. When claiming repeatable native acceptance
+for Frontier v3 materialization, physical observation, player causality,
+test-pilot behaviour, scenario execution or restart/recovery, use a relevant
+checked-in declarative scenario under `tools/frontier-v3-test-pilot/scenarios/`.
+For a new causal flow, add or extend that scenario before claiming acceptance.
+Its structure is:
 
 1. a read-only fixture declaring its required canonical/world preconditions;
 2. ordinary player setup and one or more evidence-bearing player actions;
@@ -272,13 +192,16 @@ whose structure is:
 
 Add a semantic camera check and linked frame when the change has a player
 visible claim. Add a graceful or abrupt restart split when it changes durable
-state, non-replayable physical effects, or recovery behaviour. Fixtures,
+state, non-replayable physical effects, or recovery behaviour. Native fixtures,
 diagnostics, semantic checks and scenario setup are evidence only: they must
-not force-load chunks, mutate canonical state or edit world files. Use at most
-one visible native client on `DISPLAY=:0`; the scenario runner owns its
-disposable seeded world and the normal player connection. Keep fast unit and
-Node schema tests for every edit, then apply the existing critical-code gate
-before committing. A live scenario is evidence for that specific flow, not a
+not force-load chunks, mutate canonical state or edit world files. Isolated
+unit tests may construct initial state, never fake an outcome and call it
+native evidence. Use at most one native client on the task-authorized display
+(physical `DISPLAY=:0` only if available; a task-private Xvfb is not human
+visual acceptance). The runner owns its disposable seeded world and ordinary
+player connection. Use relevant focused tests during iteration; apply full
+gates at integration milestones/releases, not private WIP checkpoints, as the
+protocol specifies. A live scenario is evidence for that specific flow, not a
 replacement for product/visual acceptance.
 
 Visual `frames` are test-only capture barriers, never ordinary pilot actions.
@@ -288,20 +211,40 @@ the next action until the X11 capture helper acknowledges its exact frame.
 Use `presentation: player` only when the player UI itself is the assertion;
 never add an ad-hoc HUD toggle to a scenario.
 
+For every duration-bearing player-visible flow, follow
+`docs/frontier-v3-runtime-verification.md`. The current exact subject owns a
+versioned progress obligation in canonical simulation ticks. The graphical
+runner must automatically reject unexplained non-progress, false active/pending
+presentation, canonical/physical divergence, an evidence gap or an incomplete
+terminal story and retain one bounded incident capsule with a linked frame.
+Wall-clock waiting, raw log tails, a changing intermediate stage or a final
+endpoint alone cannot satisfy that obligation. A complete machine-readable
+promotion receipt is required for a formal HUMAN_CANDIDATE claim, not for
+exploratory inspection or a targeted human diagnostic check. Such checks may
+precede automated acceptance when they answer a concrete unresolved question;
+label the build and missing evidence honestly. Neither a diagnostic visit nor
+automated acceptance by itself establishes M3.
+Runtime verification and optional OTel/JFR are read-only evidence layers and
+must never mutate, repair, advance or reclassify canonical state.
+
 ## Frontier v3 daily and scale workflow
 
-- For a v3 materialization edit, run focused pure/Node tests and the smallest
-  matching named GameTest slice first (`runFrontierV3SceneGameTestServer` for
-  HOT/COLD scenes; `runFrontierV3EconomyGameTestServer` for exact items,
-  production transforms or owned boards); reserve the complete critical gate for a commit
-  or milestone. A fast slice is evidence only for its changed boundary, not
-  permission to skip the final gate.
-- Every HOT/COLD change needs both its ordinary path and a negative or recovery
-  path. A test that merely observes `PREPARED` or `READY` is insufficient when a
-  terminal domain result is available.
+- For v3 materialization work, choose focused checks for the affected boundary;
+  there is no compulsory pure/Node/GameTest sequence or native run per edit.
+  Available named slices include `runFrontierV3SceneGameTestServer` for HOT/COLD
+  scenes and `runFrontierV3EconomyGameTestServer` for exact items, production
+  transforms or owned boards. Reserve the complete critical gate for an
+  integration milestone/release. A fast slice proves its changed boundary,
+  not the final milestone; private checkpoints follow the protocol.
+- Verify changed HOT/COLD behavior with relevant ordinary and negative/recovery
+  coverage, reusing evidence whose dependencies remain unchanged. This is not
+  a fresh pair of test runs for every edit. Observing `PREPARED` or `READY` alone
+  does not establish a claimed terminal domain result.
 - A change that raises a physical-scene or active-mob limit requires a
   reproducible same-seed JFR capture and a causal proof of operation → lease →
-  actor/cargo ownership. TPS alone is not acceptance evidence.
+  actor/cargo ownership, as the scale contract requires. This applies to a
+  raised limit, not every bounded-call-path correction. TPS alone is not
+  acceptance evidence.
 - A `bastion/mobs/empty` GameTest must address only its own template interior.
   Coordinates beyond that tiny template can overlap a neighbouring parallel
   test cell; use one local interior fixture position rather than an arbitrary
@@ -311,17 +254,17 @@ never add an ad-hoc HUD toggle to a scenario.
 
 - `docs/frontier-v3-execution-semantics.md` is mandatory for HOT/COLD, scenes,
   physical custody, movement knowledge, aftermath and recovery changes. It
-  defines exact versus calibrated guarantees and augments the existing F0 exit
-  gates. At the next safe F0.VA measurement boundary, align outstanding family
-  descriptors/tests before starting the next slice; preserve running evidence
-  and WIP. Documentation acceptance is not implementation completion.
+  defines exact versus calibrated guarantees and augments the F0 exit gates.
+  Keep changed family descriptors/tests aligned with it and preserve WIP.
+  Documentation acceptance is not implementation completion.
 - Presentation demand is not physical interaction eligibility. No COLD writer
   may compete with an observer-free live physical custodian. Unknown terrain
   is not exact knowledge; scene boundaries do not shield effects; a flushed WAL
   intent is not proof of an atomically saved player/container consequence.
 
-- Before extending a v3 process, scene, inventory surface, physical effect or
-  movement family, read `docs/frontier-v3-seamless-foundation.md`. Its active
+- `docs/frontier-v3-seamless-foundation.md` defines extension constraints for
+  processes, scenes, inventory surfaces, physical effects and movement. Consult
+  the relevant constraints when needed; reuse unchanged retained context. Its active
   F0 correction slices block new MAT breadth until their stated exit gates and
   recurrence guards pass; an older green endpoint/HOT test does not waive them.
 - Classify every canonical process with
@@ -344,19 +287,36 @@ never add an ad-hoc HUD toggle to a scenario.
 
 ## Frontier v3 terrain and movement discipline
 
+- Every target-directed HOT pedestrian move enters the shared goal navigator,
+  including ambient, assembly, medical, production and tactical callers.
+  Callers cannot drive a parallel direct actuator or stop a native path behind
+  its owner. Station-local work gestures and ordinary gravity have no route
+  authority. Acquiring one actuator must not recursively cancel its parent
+  route; repeated same-goal refresh preserves its leg and in-flight motion.
 - New canonical movement state must use typed surface/body/port/topology values;
   do not extend the historical convention where one `BlockPosition` may mean a
   support block, feet-air cell, facility anchor or transport node.
+- Goal-migrated callers supply a semantic order, known-route hint and explicit
+  hard scope, not local waypoint selection or route-width obstacle policy.
+  Shared HOT navigation owns segmentation and physical-path acceptance;
+  an accepted detour may leave an advisory stripe but never true hard bounds.
+  Derive the ephemeral corridor from the accepted path. Intermediate leg
+  arrival cannot award semantic completion. Explicit topology/formation
+  envelopes retain their hard meaning; COLD knowledge and authority handoff
+  are not replaced by physical pathfinding.
 - A new route, assembly, migration or scene approach may not assume constant Y,
   a fixed compass-facing entrance or an offset from a structure centre. It must
-  consume a bounded immutable three-dimensional traversal topology and a
-  semantic facility port compiled by the owning plan.
-- COLD advances only a retained topology edge/cursor. HOT delegates local
-  collision and navigation to the registered physical movement provider and
-  advances that same cursor only from observed arrival. The provider may find
-  a bounded local path inside the process-owned navigation envelope, but may
-  not leave it, skip a checkpoint, teleport, or select a different semantic
-  entrance or strategic route.
+  consume the owning plan's bounded three-dimensional known geometry and typed
+  semantic target/port; an immutable traversal topology remains valid for
+  families that explicitly retain one.
+- For a topology-owned family, COLD advances a retained edge/cursor and HOT
+  advances that same cursor only from observed arrival. For a family migrated
+  under `docs/frontier-v3-goal-navigation.md`, COLD advances the retained
+  semantic goal against known geometry and HOT delegates bounded local motion
+  to its registered provider, recording only observed goal arrival. The
+  provider may not leave true hard task/topology scope, skip semantic work,
+  teleport, or select a different task/strategic goal. Do not keep a hidden
+  per-block cursor as a second authority in a migrated family.
 - Every movement-bearing extension needs a focused non-flat fixture plus a
   blocked or damaged edge/entrance case. The flat graybox is one provider test,
   not evidence that the architecture supports real terrain.
@@ -381,7 +341,8 @@ never add an ad-hoc HUD toggle to a scenario.
   exactly one stable codec for every process payload; duplicate, missing,
   undeclared and cyclic ownership must fail a focused negative test.
 - Never persist an enum with `ordinal()` or decode it with `values()[tag]`.
-  Use explicit stable, non-reused wire tags and retain old-byte recovery tests.
+  Use explicit stable, non-reused wire tags, current-format recovery tests and
+  incompatible-old-format rejection tests under the fresh-world-only policy.
 - Process/support code must not directly reconstruct the complete
   `FrontierWorldState`. Use its named owned update boundary; full construction
   belongs only to fresh bootstrap and versioned hydration.
@@ -395,14 +356,77 @@ never add an ad-hoc HUD toggle to a scenario.
 
 ## Architecture rules
 
+- Shared coordinators own cross-owner protocol, not participants' internal
+  business rules. A generic execution, navigation, custody or recovery owner
+  must not inspect a concrete family's job/stage/cursor/recipe to decide its
+  safe checkpoint or domain outcome. The owning family supplies that decision
+  through an explicit typed capability/Strategy registered under its declared
+  key. The coordinator validates exact subject/owner and current immutable
+  state/epoch, arbitrates exclusive authority and performs the common transition.
+  A checkpoint assessment is not an acknowledgement of released ownership.
+  Closed registration rejects missing, duplicate and mismatched capabilities;
+  unknown families never inherit a permissive default. Moving family-specific
+  branches into a helper beside a coordinator does not establish this boundary.
+  Adding a supported family must not require editing the coordinator algorithm.
+  Composition may name implementations; generic protocol may not rediscover
+  them from ID prefixes, runtime types, coordinates or collection membership.
+  Review integration and remaining bypasses, and retain focused negative tests
+  for wrong/stale evidence and competing authority. Historical coordinates are
+  evidence of prior position, never a substitute for completion or ownership.
+- Any semantic owner, durable type, capability key, authority epoch or
+  behavior-dispatch identity that can affect canonical mutation, persistence,
+  recovery, custody or retirement must be an explicit typed value supplied by
+  its authoritative producer and, when durable, encoded under its own stable
+  non-reused wire tag. Production code may not infer it from another enum or
+  kind, an ID/string prefix, coordinates, runtime class, collection membership,
+  neighbouring state or a default/fallback. Missing, unknown, stale or
+  mismatched identity fails closed before dispatch, replay or mutation. Direct
+  decoding of the value's own wire tag and validation of declared compatible
+  values are not inference; read-only UI/index projections may derive labels
+  only when they cannot become authority. Fixture convenience may exist only
+  on test/moddev source sets and may not create an ownerless production API.
+  A typed role name is one nominal domain meaning: it may not mean a project
+  for one owner and an assault, service job or other subject type for another.
+  Validate the closed owner + operation kind + exact role schema together;
+  validating those dimensions independently is insufficient. Polymorphic
+  placeholders such as `ownerOrProject` merely rename inference and are
+  forbidden on authoritative production paths.
+  An identifier namespace may validate the spelling of an identity already
+  carried by a typed record; it may never supply that record's type, owner or
+  dispatch key. Likewise, collection membership may validate an explicitly
+  declared relationship but may not discover which relationship or owner was
+  intended. Authoritative branching on either convention is prohibited and
+  must be rejected by a mechanical architecture/recurrence check.
+  This is a strict no-inference boundary, not a preference for explicit code.
+  Every authoritative production value must enter its first admissible boundary
+  with one complete nominal declaration; a generic ID, nullable type, wildcard,
+  polymorphic placeholder or partially typed carrier is not an admissible
+  intermediate from which an owner or type may be completed later. A closed
+  registry may prove that the producer-declared owner, kind and schema form one
+  exact registered tuple, but it may not scan candidates, choose the only
+  compatible entry, inspect payload shape or otherwise discover a missing
+  dimension. Legacy or recovered data lacking that complete declaration is an
+  explicit unsupported schema/conflict and is rejected at the version boundary,
+  never repaired by a heuristic. Convenience resolvers, fallback classifiers
+  and single-candidate defaults are forbidden even when their answer would be
+  deterministic. The affected composition must have negative coverage that
+  removes or forges each declaration dimension independently and proves failure
+  before any behavior selection or state mutation.
 - `pale-mirror-domain` is pure Java: it must not import Minecraft, NeoForge,
   adapters, persistence, or wall-clock/random APIs.
+- Durable cross-owner identity follows
+  `docs/frontier-v3-domain-relations.md`: discovery is permitted only at
+  admission, continuation uses retained exact typed relationships, each relation
+  has one canonical owner, and the incoming/outgoing relation view is derived
+  read-only state rather than a second authority.
 - `pale-mirror-neoforge` owns Minecraft/NeoForge integration, persistence,
   observation, scheduling, and materialization execution.
 - `api` is a narrow experimental adapter SPI and must not expose `internal`
   implementation types.
-- Domain state is authoritative. Minecraft, adapters, and physical objects are
-  observed/materialized representations, never a second source of truth.
+- Domain state owns semantic history. Minecraft supplies authoritative observed
+  physical facts through typed observations and exclusive custody, not a second
+  economic or process model. Never treat canonical projection as permission to
+  overwrite an unclassified player change.
 - Every long-lived mutable record has one owner, explicit identity, and a
   retention/compaction or cleanup story.
 - Recognized player/world actions are ordinary typed domain disruptions with
@@ -415,31 +439,34 @@ never add an ad-hoc HUD toggle to a scenario.
 
 ## Verification and commits
 
-- `docs`: run `git diff --check` and `./gradlew guardrails`.
-- `small-code`: run focused tests and `./gradlew guardrails check`.
-- `critical-code`: run focused tests plus
-  `./gradlew guardrails check :pale-mirror-neoforge:runGameTestServer :pale-mirror-neoforge:build
-  :pale-mirror-neoforge:verifyPackagedJar`; report any unavailable dedicated
-  server/restart harness explicitly.
+Choose affected checks from the actual change and applicable acceptance criteria.
+The release-verification reference provides available gates and a module matrix;
+consult it when needed, not as a mandatory prerequisite to source work or a
+private checkpoint. The unified protocol governs focused iterations,
+milestone/release acceptance and evidence reuse. A checkpoint is not a completion
+claim; this does not waive an applicable release gate.
 
-Before every commit, confirm that generated/local files are not staged,
-architecture boundaries remain valid, failures are observable, and no
-unbounded state or silent fallback was introduced. Use concise Conventional
+Inspect the actual staged diff before an authorized commit; exclude unintended
+generated/local files. Architecture boundaries, observable failures and bounded
+state remain implementation requirements, not a separate repeated pre-commit
+audit or test campaign. Use concise Conventional
 Commit messages (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `build:`).
 
 ### Private supplied-reference gate during migration
 
 The user approved portable public CI plus a separately mandatory local
-authentic-reference check. In the monorepo candidate, full local pre-commit/
-release acceptance additionally requires, from its `pale-mirror/` directory:
+authentic-reference check. Full applicable local milestone/release acceptance
+in the adopted monorepo requires the following positive evidence from its
+`pale-mirror/` directory, not a repeat before every private WIP checkpoint:
 
 ```bash
 PALE_MIRROR_HARVESTER_REFERENCES=/absolute/private/reference-root ./gradlew verifyHunyuan2mvSuppliedReferenceIntegration --no-daemon
 ```
 
 Resolve the authorized actual path; do not use the example as a fixture.
-Revalidate changes to its tool, test, wiring or reference. Missing/wrong/changed
-input must fail, never skip. Public mechanics/negative tests cannot discharge
+Revalidate changes to its tool, test, wiring or reference; reuse unchanged
+identity-bound accepted evidence. Missing/wrong/changed input must fail when
+the check runs, never skip. Public mechanics/negative tests cannot discharge
 the authentic positive or human likeness acceptance. Do not publish private
 images or their derived fixtures. The original checkout retains its historical
 test wiring until migration adoption; this command describes the candidate
@@ -447,15 +474,17 @@ only and does not authorize source edits in the original checkout.
 
 ## Recurrence prevention
 
-- Treat every native-scenario, watchdog, persistence or deployment failure as a
-  candidate product defect until its exact cause is classified. Do not lengthen
-  a timeout, retry a world or suppress a log line as the fix.
-- Before rerunning a failed causal flow, add the smallest deterministic
-  regression or preflight that would have failed first: a pure/state test for
-  canonical rules, a codec/registry test for durable payloads, a bounded
-  performance guard for tick work, or a script-level dry-run/preflight for
-  deployment. Record the cause and remaining evidence in the architecture
-  audit/ledger.
+- Classify native-scenario, watchdog, persistence and deployment failures from
+  evidence; do not assume either product fault or harness fault. Correct an
+  evidenced invalid test deadline when necessary, preserving a finite hang
+  bound and semantic assertions. Increasing a timeout, retrying a world or
+  suppressing a log line alone does not fix a product defect.
+- Apply the protocol's failure classification and engineering-judgment rule
+  before repeating a failed flow. Choose the code audit, focused discriminator,
+  instrumentation or bounded runtime action with the best expected information
+  gain for its cost; no tier is mechanically first. An impossible local
+  reproducer must not block diagnosis. Record the material cause and remaining
+  product evidence, not every failed command, in the audit/ledger.
 - A deployment may use only a verified clean detached source ref and must
   prove Java/runtime/profile compatibility, exact target/reset paths, pinned
   artifact checksum, fresh startup evidence and no new quarantine. A running

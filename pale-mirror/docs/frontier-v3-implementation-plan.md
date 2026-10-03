@@ -1,150 +1,100 @@
 # Pale Mirror Frontier v3 implementation plan
 
-Status: approved execution plan for the target contract in
+Status: approved product execution plan for
 [`frontier-v3-contract.md`](frontier-v3-contract.md).
+This document owns product sequencing, not agent workflow.
 
-The active precondition for further materialization breadth is the normative
-[`frontier-v3-seamless-foundation.md`](frontier-v3-seamless-foundation.md)
-correction programme. Its F0 slices supersede the previous assumption that a
-valid endpoint executor or one monolithic scene is sufficient foundation.
+2026-09-28 explicit user reprioritization: main alone is implementing the
+[resident-life/resource cut](frontier-v3-resident-life-resource-contract.md)
+before resuming the remaining F0.6R3/MAT sequence. This is a replacement of
+the old settlement-wide provision authority, not parallel MAT breadth or a
+claim that birth is implemented. The ledger records code/evidence status.
+Older phase-order and Terra-role paragraphs below do not override this current
+assignment; unchanged safety, HOT/COLD, recovery and product gates still apply.
 
-The designated GPT-5.6 Terra continuation agent must follow the executable
-[`frontier-v3-terra-implementation-brief.md`](frontier-v3-terra-implementation-brief.md).
-It expands the F0 contract into ownership, recovery, scenario, testing and
-handoff rules; it does not authorize a deviation from this plan or
-`architecture.yml`.
+The normative [seamless foundation](frontier-v3-seamless-foundation.md) and
+[execution semantics](frontier-v3-execution-semantics.md) define F0 obligations
+before further materialization breadth. The
+[Terra brief](frontier-v3-terra-implementation-brief.md) supplies ownership and
+product examples; it cannot override the contract or `architecture.yml`.
 
-The current F0.V work must also follow mandatory substage
-[`frontier-v3-accelerated-verification-loop.md`](frontier-v3-accelerated-verification-loop.md).
-It installs one persistent matrix client, content-addressed evidence and
-dependency selection, an executable test pyramid, exact lifecycle barriers,
-four isolated GitHub Actions workers and development-only immutable fixture
-images before the remaining expensive F0.V matrix is resumed.
+All task lifecycle, review, permission, evidence/retry, monitoring and economy
+rules come solely from [the unified protocol](engineering-agent-protocol.md).
+Main is project manager / architect and owns product direction, priorities,
+system contracts and conformance acceptance. Terra high is the autonomous
+senior tech lead and sole coder, responsible for technical decisions, code,
+verification and the working result. PM does not direct methods, files, tests
+or ordinary retries. Current phase, assignment and accepted/missing evidence
+come from `CONTINUITY.md`, not historical handoff paragraphs. The next stage
+still requires product acceptance; a failed command is not a stage boundary.
 
-F0.VA qualifies the graybox development and verification loop; it is not a
-production natural-terrain acceptance gate. Its physical evidence may use the
-flat graybox provider plus bounded controlled non-flat, blocked-port and
-restart fixtures that prove the provider-neutral contracts. Whole authored
-regions, natural-site search, production terrain surveying, settlement
-earthworks and seed-specific `SETTLED` cleanup belong to a later terrain
-provider/hardening slice. A defect discovered there is retained and triaged,
-but blocks F0.VA only when it reproduces at the graybox/provider-neutral seam
-or invalidates an artifact, dependency or test result required by the F0.VA
-exit gate. Do not turn such a discovery into an unplanned real-terrain
-prerequisite.
+The [integration feedback foundation](frontier-v3-integration-feedback-foundation.md)
+and [accelerated loop](frontier-v3-accelerated-verification-loop.md) describe
+the reusable SDK, scenario and preparation/CI capabilities. Accepted F0.VA/
+F0.VB/F0.VC infrastructure is used, not requalified for confidence or speed
+ratios. Four isolated workers accelerate each new complete native matrix; this
+is not an extra semantic gate. Test selection/repeats follow the protocol.
 
-After every locally verifiable F0.VA gate is green, the two current repository
-histories must be combined by the post-F0.VA monorepo migration gate below and
-pushed to `git@github.com:RidiculousCircumstances/pale_mirror.git`. The
-four-worker workflow is the mandatory accelerated path for each newly started
-complete native matrix. It is infrastructure, not an extra semantic acceptance
-gate: a valid sequential matrix already in flight when this rule is adopted is
-not repeated merely to prove topology. A standalone provider-speed
-certification and any numeric speedup floor remain non-blocking; timing is
-collected from ordinary real work.
+F0.VA qualifies graybox/provider-neutral development, not production natural
+terrain. Controlled non-flat, blocked-port and restart fixtures exercise the
+relevant contracts. Natural-site search, surveying, earthworks and whole-region
+SETTLED cleanup remain later terrain-provider/hardening work unless a discovered
+defect invalidates the current graybox seam or its required artifact/evidence.
+Historical migration and interruption instructions below describe sequencing;
+they are not authority to repeat completed work or abandon the active slice.
 
-Verification economy is binding across all later slices. Accepted F0.VC
-infrastructure is consumed without requalification unless its relevant
-contract/input changes or concrete evidence contradicts it. Before each new
-complete CI matrix, every changed or previously failing lane must pass a
-faithful local preflight/regression; a provider-only admission/identity defect
-uses a bounded pre-Minecraft provider preflight. A failed matrix is not
-redispatched until that exact failure has a smallest reproducer and a passing
-candidate correction. One complete green terminal run advances directly to
-independent review; confidence, timing, topology and already-proved-
-infrastructure reruns are forbidden. The supervising engineer owns enforcement
-of this economy at order/dispatch/review boundaries without taking Terra's
-local design freedom or increasing intermediate inspection.
-
-The user-approved 2026-09-08
-[`mandatory causal-evidence policy`](frontier-v3-accelerated-verification-loop.md#mandatory-causal-evidence-instead-of-timing-luck)
-is required now within F0.2B, before its next expensive native attempt, and
-governs later changed scenarios. Use bounded correlated history and semantic
-milestones rather than racing transient states or positional snapshots. Keep
-canonical time/due ordering exact, recovery boundaries authentic and protocol
-negatives in fast tests. This does not reopen F0.VC or authorize a new framework.
-Complete the correction in the same order, then continue the approved product
-sequence after independent acceptance.
-
-The supervising engineer must also apply the
-[`methodological soundness review`](frontier-v3-accelerated-verification-loop.md#mandatory-methodological-soundness-review)
-at work-order definition and terminal acceptance. Passing commands alone do not
-prove a slice: each product claim needs a valid subject/control/oracle/causal-
-negative mapping at the correct evidence tier and exact identity. A method that
-supports only a narrower claim is recorded at that narrower level. A material
-change of proof carrier, oracle or claimed scope triggers one bounded `RISK`
-review before expensive execution, without transferring implementation design
-from Terra or adding routine approval gates.
-Before each newly authorized expensive native/CI boundary, the work order must
-also establish that the scenario actually represents the product claim, would
-fail for a named plausible defect, cannot pass through fixture-created success,
-uses the required evidence tier and is proportionate to the cheapest faithful
-alternative. Correct an inadequate framing before execution rather than using
-the expensive run to discover that it tests the wrong thing.
-
-This is the implementation source of truth for Frontier v3. Delivery follows
-[`engineering-agent-protocol.md`](engineering-agent-protocol.md): the engineer
-owns requirements, normative documentation, the ledger and independent review;
-one `gpt-5.6-terra` high executor owns implementation. Work only within the
-approved versioned order under `docs/work-orders/` named in `CONTINUITY.md`.
-The binding 2026-09-06 autonomy amendment grants diagnosis, implementation,
-necessary local full verification and repairs together (Gate A). Gate B is
-optional consultation for an actual architectural/authority boundary or impasse,
-not permission to run ordinary tests. Gate C reviews the completed result before
-the engineer issues the next order. No micro-orders, duplicate investigations or
-preference-only rewrites. Under the binding 2026-09-07 cadence amendment, one
-bounded liveness check is mandatory after each ten minutes of executor silence
-across turns and never more frequently; event-driven waiting fills the interval.
-Before every intervention, the engineer applies the protocol's enforceable
-supervisor self-check and names the permitted reason. Status messages and
-process inspection count together, while source/diff inspection is never part
-of routine liveness. Ordinary in-scope failures and repairs remain Terra-owned and
-must not become terminal permission-only handoffs. Neither a green test nor an
-executor report authorizes self-advancement, a commit or deployment. Later-wave
-code is not added speculatively.
-
-For avoidance of doubt, the protocol's eight intervention reasons are
-exhaustive. In the absence of `ARCHITECTURE`, `AUTHORITY`, `RISK`, `IMPASSE`,
-`FINAL_REVIEW`, an explicit `USER_AUDIT`, a due `LIVENESS` check, or a due
-`ECONOMY_AUDIT`, the engineer does not contact Terra or inspect intermediate
-work. The due liveness check reads only collaboration state and exact task-owned
-process/job liveness plus a bounded progress marker; a healthy result creates no
-executor message or design review. The hourly economy audit reads only the
-work-order chronology, milestone/failure metadata and bounded receipt timings;
-it records cost/progress history but never becomes an hourly source/diff review.
-Terra chooses the implementation and proceeds through ordinary failures and
-corrections to one coherent result. The engineer may require an
-observable invariant but may not turn a preferred algorithm, helper/file layout
-or command sequence into a blocking instruction.
-
-Every executing work order records one UTC observation epoch and a bounded
-execution-economy chronology: operation purpose, known start/end or elapsed
-duration, outcome/evidence handle and whether it advanced, invalidated or
-unnecessarily repeated a product claim. After each complete hour the engineer
-reviews the accumulated sequence for disproportionate cost, repeated equivalent
-attempts, test-tier inversion, avoidable serialization and redundant evidence.
-A healthy review produces no Terra contact. A concrete finding permits one
-consolidated conceptual `ECONOMY_AUDIT` correction; implementation remains
-Terra-owned and no extra heartbeat or intermediate approval is introduced.
+2026-09-30 live correction: before more resident/MAT breadth, execute
+[PM-F06R3 resident queue throughput and depot liveness](work-orders/PM-F06R3-RESIDENT-QUEUE-THROUGHPUT-01.md).
+The current test world demonstrated a >62,000-tick due-action lag that prevents
+already-started meals from progressing in COLD. Fix the workload and service
+semantics, not merely the visible bakery/depot symptom or the action ceiling;
+then resume the interrupted F0.6R3 product checks. This user assignment
+supersedes historical role text below: main alone implements it.
 
 ## Execution rules
+
+### Current F0.6R3 static-audit correction
+
+The user accepted [SA-01 through SA-10 and their remediation decision](frontier-v3-static-audit-2026-09-22.md).
+Resolve the concrete progress/terminal defects first, then the shared release,
+production and transaction barriers within this correction. Fix shared owners
+and affected consumers rather than adding farmer-only exceptions; retain one
+canonical simulation and the accepted HOT/COLD contracts. No speculative SDK,
+database migration or whole-project rewrite is a prerequisite. Coordinate
+overlapping reference work with ARC-001E; preserve the existing later OBS/VIS/MAT
+sequence and product gates rather than creating a parallel programme.
+
+For this bounded correction, the user's later assignment supersedes the general
+role paragraph above: Terra is stopped; main performs the audit and fixes without
+subagents. The ledger and active-order amendment record current authority.
+Static findings and documentation approval are not implementation acceptance.
+
+The accepted [goal-navigation split](frontier-v3-goal-navigation.md) is now an
+SA-09 farmer adoption obligation, not a second architecture programme. Keep
+CellId/work/custody and the COLD task canonical; use bounded Minecraft HOT
+pathfinding only as an ephemeral locomotion provider, with vanilla task AI
+suppressed. Retire the historical per-block route as a farmer work ledger only
+after a connected field/depot/HOT-COLD/restart vertical proves equivalent
+identity, physical evidence and progress. A green local-navigation test or a
+blocked-cell reducer alone is an intermediate checkpoint, not product exit.
+Non-field actors adopt the shared boundary after this vertical, by their own
+capability and acceptance evidence.
 
 ### Mandatory accepted-semantics alignment
 
 Read [`frontier-v3-execution-semantics.md`](frontier-v3-execution-semantics.md)
-at the next safe boundary of the current F0.VA measurement, before starting the
-next implementation slice. Record a concise existing-family gap map in the
+for affected implementation slices. Maintain a concise family gap map in the
 ledger/audit: proved, unproved or planned, with an owning F0 slice and exact or
-statistical comparator. Preserve running evidence, useful WIP and all six
-acceleration features. Do not resume product F0 without this alignment.
+statistical comparator. Preserve accepted alignment, useful WIP and all six
+acceleration features; do not restart completed F0.VA work.
 
 The document's slice matrix adds mandatory exits to F0.V and F0.1–F0.6:
 physical activity independent of visibility, bounded COLD knowledge, causal
 aftermath, cross-front interaction, actual crash confirmation and rapid-switch
 neutrality. It does not create another wave or waive existing M0–M3 gates.
 Changed comparator/assertion meaning invalidates affected cached acceptance;
-old evidence retains only its original scope. The monorepo/publication sequence
-below remains mandatory. Under the user decisions of 2026-09-06 and 2026-09-07,
+old evidence retains only its original scope. The consumed monorepo/publication
+sequence is historical context, not a current prerequisite. Under the user decisions of 2026-09-06 and 2026-09-07,
 provider timing is advisory, while every newly started complete native matrix
 uses the four-slot isolated CI pipeline and fail-closed aggregate. This is a
 pipeline requirement, not an additional F0 semantic criterion or reason to
@@ -180,97 +130,113 @@ repeat an already-running valid matrix.
   `CONTINUITY.md` consistent. No wave is complete from code existence alone.
 - Run only the focused tests for the current behavior plus the risk-level gate
   required by `AGENTS.md`; manual and product evidence is recorded separately.
-- Preserve both Git histories separately until the post-F0.VA monorepo
-  migration gate. The authorized migration must retain both histories without
-  squashing; it does not permit discarding either repository or force-pushing
-  over an unrelated remote history.
+- Before presenting any player-visible slice as a human candidate, perform the
+  protocol's mandatory real-client product preflight on the exact deployed
+  artifact and fresh world. The graphical full-pack test player follows the
+  complete relevant product story, observes real motion/state/presentation,
+  uses only acknowledged acceleration to remove waiting and supplies frames
+  that Terra actually reviews. Diagnostic truth or terminal state alone is not
+  player-visible product evidence; human acceptance remains separately open.
+- Preserve both original Git histories and the accepted checkout boundaries in
+  the ledger. Completed migration does not authorize another import, checkout
+  replacement, publication or force-push.
 
-## Mandatory post-F0.VA monorepo migration gate
+## Mandatory execution-model alignment (ARC-001)
 
-This is an ordered infrastructure boundary, not permission to interrupt an
-active measurement or fold uncommitted work into a synthetic import commit.
-It runs after all locally verifiable F0.VA implementation, timing, negative,
-critical-gate and original graceful-restart requirements are green, but before
-resuming the remaining original F0.V matrix. A dedicated GitHub-provider timing
-matrix is no longer an intervening prerequisite.
+The accepted 2026-09-18 amendment defines one autonomous simulation, independent
+presentation/physical-eligibility/mutation-authority dimensions, and distinct
+current projection, confirmed interaction and deferred aftermath contracts.
+The [execution semantics](frontier-v3-execution-semantics.md) own the protocol;
+[domain relationships](frontier-v3-domain-relations.md) own typed links and
+retirement; the contract owns player promises and performance targets.
 
-The resulting monorepo preserves the workspace layout: the Far Frontier
-pack/deployment tree is at its root and Pale Mirror remains at `pale-mirror/`.
-Assembly uses an isolated candidate; it does not replace the original live
-workspace or authorize deployment. Both original histories must be ancestors
-of final `main`. Checkout adoption is a separate gate below.
+Finish the current F0.6R3 revision-22 correction and its real-client harvest
+progress oracle first. ARC-001, OBS-001 and XACT-001 are already locally
+accepted at the exact identities in `CONTINUITY.md`; retain rather than repeat
+them. The next reusable foundation is
+[`OBS-002`](work-orders/PM-OBS002-ONLINE-SEMANTIC-VERIFICATION-01.md), followed
+by [`ARC-001E`](work-orders/PM-ARC001E-ACTIVE-REFERENCE-TRANSITION-CLOSURE-01.md).
+The bounded
+[`VIS-002`](work-orders/PM-VIS002-SEMANTIC-SCENE-MAP-CAMERA-01.md) semantic
+scene-map/camera planner follows OBS-002 and is mandatory before the next
+player-visible candidate; it does not block non-visual ARC-001E work. Preserved
+MAT-006 resumes only after both applicable gates. The
+[hardening pipeline](frontier-v3-materialization-hardening-pipeline.md) owns
+that order. Pending human M3 never accepts a fix or authorizes a player-facing
+claim from automation alone.
 
-Migration procedure and stop conditions:
+Terra owns technical decomposition and implementation. Start from an
+existing-family coverage map: conformant/proved, conformant/unproved,
+repair-needed or explicitly future scope, with owner and evidence dependencies.
+Reuse accepted mechanisms; repair actual gaps instead of rebuilding the runtime.
+Adopt lifecycle-generation/authority fences, bounded retirement dispositions,
+changed-set execution and truthful inspection in the existing ownership model.
+No parallel relation registry, history player, ORM or database is prescribed.
+All behavior-authoritative owners, durable types, capability keys and authority
+epochs are explicit typed inputs with their own stable wire identities. No
+production or recovery path may infer them from another kind, ID convention,
+position, class, container membership, surrounding state or default. ARC-001
+must add mechanical negative coverage across its affected composition so an
+ownerless constructor, implicit dispatcher or recovery synthesis cannot return.
+For physical-delta/aftermath/repair paths this means one producer-stamped typed
+semantic target is retained end to end alongside the exact subject ID. Remove
+every behavior-authoritative prefix or membership classifier in that connected
+path, reject missing/unknown/stale/mismatched persisted targets under the
+fresh-world boundary and add a recurrence guard that distinguishes forbidden
+classification from harmless formatting or namespace validation.
+ARC-001C also promotes the three active relationship families required by its
+retirement accounts—supply/cargo/route, service-work/station and current hive
+operation roster—to `RELATION_LAYER_CURRENT`. Migrate only existing exact
+behavior and its owner/persistence/recovery boundary; later feature breadth
+remains in its planned MAT stage.
 
-1. Reach a process-safe boundary for the affected checkout, artifact paths and
-   evidence inputs. Prove there is no competing writer and no active measurement
-   observes changed inputs. Unrelated live services and artifact readers remain
-   untouched; their existence is not permission or a requirement to stop them.
-2. Finish and commit the F0.VA work in `pale-mirror/`. Independently inventory,
-   verify and commit any intentional outer-pack changes. Do not discard,
-   silently ignore or absorb unknown dirty/untracked files. Record both exact
-   pre-migration HEADs and create verified Git bundles before changing either
-   repository layout.
-3. Build the merge in a disposable clone of the outer repository. Import the
-   exact nested `main` history under `pale-mirror/` with a non-squashed subtree
-   merge (or an equivalently proven history-preserving merge). Never force-add
-   a live embedded `.git` directory and never use a squashed subtree.
-4. Remove the outer `/pale-mirror/` ignore rule in the migration tree. Retain
-   the root and scoped `AGENTS.md` files, ownership documentation and all
-   source/deployment paths. The checkout has exactly one root Git metadata
-   directory; its tracked tree contains neither embedded `.git` nor gitlinks.
-5. Move or compose Pale Mirror GitHub workflows into the monorepo-root
-   `.github/workflows/` directory. Give jobs explicit `pale-mirror` working
-   directories and update artifact/action paths. Preserve existing workflow
-   families and pack/deployment scripts; if the original outer repository has
-   no workflows, record that fact rather than inventing a missing family.
-   Retain root CI bytes in relevant prepared/cache identities. Normalize Git
-   change discovery into the selector's source coordinates, separately handling
-   root CI and unrelated pack inputs; unknown relevant impact stays fail-closed.
-6. Prove both old HEADs are ancestors of final `main`. At the import checkpoint,
-   prove exact nested-tree equality and unchanged outer files. Then reconcile
-   every adaptation against that checkpoint, including deliberate normative
-   documentation updates; no unexplained source or payload drift is allowed.
-   Verify status, ignores, workflow syntax, pack checks and the complete Pale
-   Mirror critical gate from CI working paths. Pack validation checks incoming
-   bytes and both manifest hashes without silently refreshing them. Deliberate
-   migration-only regeneration requires an explained payload delta and a
-   repeatable idempotence check. Repository-only source/CI/evidence stays out
-   of the pack, while legitimate nested worldgen assets remain included.
-   A content, ancestry or verification mismatch stops the migration.
-7. Inspect the destination before mutation with `git ls-remote`. The only
-   authorized destination is
-   `git@github.com:RidiculousCircumstances/pale_mirror.git`. If `origin` is
-   absent, run exactly:
+Map the seven architectural acceptance stories to the smallest discriminating
+existing/new evidence. They are coverage obligations, not seven required native
+runs, a confidence matrix or repeated acceleration/performance qualification.
+Documentation acceptance is not implementation conformance or M3 acceptance.
 
-   ```bash
-   git remote add origin git@github.com:RidiculousCircumstances/pale_mirror.git
-   ```
+### Mandatory active-transition closure (ARC-001E)
 
-   If `origin` names anything else, or the destination contains unrelated or
-   non-fast-forward history, stop and report it. Never force-push and never
-   delete remote refs to make the migration pass.
-8. Push the verified `main` branch with `git push -u origin main` and push only
-   collision-free verified tags. Re-read the remote refs and clone the result
-   independently before treating the remote as canonical or retiring the two
-   recoverable pre-migration bundles/checkouts.
-9. Use the checked-in GitHub four-worker correctness pipeline for each newly
-   started complete native matrix. Require four simultaneously available
-   isolated slots, deterministic assignment, a complete duplicate-free
-   fail-closed merge and exact commit/evidence identity. Same-host slots are
-   valid only after capacity and isolation preflight. Do not repeat a valid
-   matrix that was already running when this requirement was adopted; worker
-   topology accelerates future pipeline work and is not a new F0 acceptance
-   assertion. Record comparable timing when it arises, but do not run or repair
-   a standalone campaign merely to meet a numeric speed ratio.
-10. After the clean remote clone and local F0.VA correctness gates pass, the
-    engineer may accept migration and F0.VA, adopt the monorepo checkout for
-    continued work and resume the preserved original F0.V matrix. Keep recovery
-    bundles until the user explicitly accepts their removal.
+The runtime contradiction discovered after the F0.6R3 movement correction
+invalidates the previous assumption that ARC-001's locally accepted composition
+covered every active reference/replica transition. A confirmed reference was
+consumed without establishing its next replica boundary. The audit detected the
+incomplete state, but only after the producer had emitted it; that is defense in
+depth, not conformance to the intended atomic lifecycle.
+
+The currently failing F0.6R3 chain adopts the shared typed transition boundary
+as part of its correction. After F0.6R3 acceptance and before MAT-006 resumes,
+`ARC-001E` inventories and migrates every other currently active producer that
+consumes, transfers, replaces, retires or releases a canonical reference or
+physical replica boundary. A producer supplies a complete typed request and one
+exhaustive legal outcome; one common canonical transaction closes the old
+binding and establishes exactly one successor, terminal disposition, bounded
+ambiguity or owner-local block. Process executors retain domain policy and
+physical adapter behavior, but never own another reference-lifecycle protocol.
+
+The production construction boundary must reject an omitted or partial outcome
+before canonical publication. The closure/recovery audits remain independent
+recurrence guards and corruption detectors, not the expected place to discover
+ordinary incomplete transitions. `OWNER_EXPLICIT_UNCHANGED` is not an exemption
+for an active mutating producer: before new MAT breadth it either proves that it
+already consumes the common contract or migrates. Read-only relationships and
+explicitly future, unreachable families remain outside this migration.
+
+Acceptance is an inventory-complete composition guard plus the smallest
+representative ordinary, owner-local negative and restart/recovery cases for
+materially different transition shapes. It is not a blanket all-family native
+matrix or a reason to reopen already unchanged product evidence.
+
+## Historical post-F0.VA migration gate
+
+The consumed [migration instructions](archive/frontier-v3-consumed-monorepo-migration-gate.md)
+are retained for provenance only. Do not restart them. Current governance,
+implementation and original-checkout boundaries come from `CONTINUITY.md`.
 
 ## Mandatory seamless-foundation correction gate
 
-After F0.V receives independent Gate C acceptance and before F0.1 starts,
+After F0.V receives independent terminal product/architecture acceptance and
+before F0.1 starts,
 execute the separate planned infrastructure checkpoint
 [`PM-F0VB-PARALLEL-NATIVE-PIPELINE-01`](work-orders/PM-F0VB-PARALLEL-NATIVE-PIPELINE-01.md).
 It activates and qualifies the reusable four-slot on-demand pipeline without
@@ -312,6 +278,132 @@ effect family, execute F0 from
    HOT/COLD semantic equivalence, pre-visible graybox catch-up and concurrent
    twelve-settlement/hive-front performance.
 
+Execute F0.6 through
+[`PM-F06-OBSERVER-NEUTRALITY-FIRST-VISIBILITY-SCALE-01`](work-orders/PM-F06-OBSERVER-NEUTRALITY-FIRST-VISIBILITY-SCALE-01.md).
+Its bounded representative pressure/JFR gate closes the F0 foundation only; it
+does not replace the separate sixty-minute Wave 7 release profile or human/M3
+acceptance.
+
+The user's live observations on the exact hash-confirmed F0.6R2 deployment
+reopen V3-AUD-056, V3-AUD-058 and V3-AUD-059: managed actors still expose
+one-cell/several-second movement cadence, first visits across the current
+settlement set still admit harvest at `crop-0` after zero-player runtime, and
+the naturally encountered hive still lacks its visible structures. Before
+resuming MAT-006, execute
+[`PM-F06R3-SHARED-HOT-LOCOMOTION-DUTY-CYCLE-01`](work-orders/PM-F06R3-SHARED-HOT-LOCOMOTION-DUTY-CYCLE-01.md).
+It closes the capability-level full-duty locomotion defect, observer-neutral
+all-current-process scheduling and coherent first-visible hive materialization
+as one candidate, deploys that exact candidate and requires a direct user
+retest. It reuses unaffected physics, calibration and scale evidence rather
+than repeating it.
+
+The F0.6R3 full-duty observation window continues past initial crop success.
+Every subsequent phase already declared by the current harvest/resource-site
+model must execute with the same exact worker and process through terminal
+crop/output receipt, task completion, growth-epoch transition, lease release
+and any declared successor assignment. Completion or hand-off may not teleport,
+despawn/recreate or directly rewrite the resident to another station; a changed
+station uses the shared retained movement/observed-arrival contract. Evidence
+must distinguish an intentionally semantic output receipt from a physical
+delivery and may not claim the latter when the current model declares none.
+This is continuity verification of the existing phase graph, not authorization
+to add unrelated logistics breadth.
+
+The farmer follow-through also requires the active-harvest cell-loss contract
+in [`frontier-v3-field-cell-lifecycle.md`](frontier-v3-field-cell-lifecycle.md):
+a confirmed player/world crop loss closes that CellId as zero-yield for the
+current job in the same canonical transition, while the farmer selects other
+work or delivers its actual carried batch. Do not infer the cause from crop age
+or treat a prepared farmer effect as already resolved. This requirement is open
+until the cell, job, physical witness and HOT/COLD/restart evidence agree.
+
+For the farmer-to-bakery work handoff, use the hybrid reevaluation contract in
+that same document. A confirmed depot transfer creates one durable, owner-scoped
+planner wake; the settlement planner rereads current prerequisites and chooses
+work, without a direct farmer-to-baker callback. Keep scheduled movement,
+growth, recipe duration and recovery; the periodic review is a backstop.
+Acceptance requires no wake from unconfirmed/zero stock, no duplicate objective
+from replay or an obsolete wake, and continued work after restart.
+
+The direct human retest of F0.6R3 candidate `38aa970c` further shows that a
+correct COLD crop receipt and non-`crop-0` cursor do not prove first-visible
+materialization: the field can be entirely absent and the farmer consequently
+idle. The same live path presents hive boards reading `ORGAN NOT CURRENT`, so
+private frames and prior currentness diagnostics also did not prove natural
+ingress. F0.6R3 revision5 therefore remains before MAT-006. Its correction must
+project the complete current field facility with every crop slot reflecting
+canonical COLD progress, present both nests with matching geometry/currentness/
+boards, and use physical ordinary-ingress oracles rather than receipt/cursor or
+curated-frame proxies.
+
+Historically, at the clean r151 boundary the user accepted adoption of the explicit
+domain relationship layer in
+[`frontier-v3-domain-relations.md`](frontier-v3-domain-relations.md) through
+[`PM-REL001-DOMAIN-RELATIONSHIP-LAYER-01`](work-orders/PM-REL001-DOMAIN-RELATIONSHIP-LAYER-01.md).
+It keeps exact relationships in their canonical aggregate owners, derives only
+a read-only incoming/outgoing view and migrates the complete current task/order/
+job/worker/resource/provision/recipient/successor chain. It is neither an ORM or
+database migration nor permission for a broad gameplay rewrite. That adoption
+is accepted at its recorded scope; do not repeat its interruption or migration.
+
+The bounded diagnostic foundation
+[`PM-OBS001-DIAGNOSTIC-CAUSALITY-FOUNDATION-01`](work-orders/PM-OBS001-DIAGNOSTIC-CAUSALITY-FOUNDATION-01.md)
+and shared carrier composition
+[`PM-XACT001-SHARED-ACTOR-CARRIER-COMPOSITION-01`](work-orders/PM-XACT001-SHARED-ACTOR-CARRIER-COMPOSITION-01.md)
+are already locally accepted at their ledger-recorded scopes. OBS-001 explains
+events, explicit non-progress, conflicts, unknowns and errors after they exist;
+it deliberately does not infer a temporal violation from silent active state.
+
+Before `ARC-001E` or MAT breadth, execute
+[`PM-OBS002-ONLINE-SEMANTIC-VERIFICATION-01`](work-orders/PM-OBS002-ONLINE-SEMANTIC-VERIFICATION-01.md).
+It reuses the OBS-001 envelope, incident index, traces and bundles to evaluate
+owner-declared progress obligations in canonical simulation time, capture silent
+stalls at their first violated boundary, reproduce eligible incidents and make
+the complete graphical terminal story an executable promotion prerequisite.
+[`frontier-v3-runtime-verification.md`](frontier-v3-runtime-verification.md)
+owns this architecture. It adds no second graph, simulation or mandatory remote
+telemetry service and does not reopen accepted OBS/XACT evidence.
+
+After OBS-002 and before the next player-visible candidate, execute
+[`PM-VIS002-SEMANTIC-SCENE-MAP-CAMERA-01`](work-orders/PM-VIS002-SEMANTIC-SCENE-MAP-CAMERA-01.md).
+It derives a bounded read-only top-down semantic map and reproducible legal
+player-eye camera candidates from typed current geometry, rejects occluded,
+unknown or route-interfering views and stores the chosen camera/map manifest
+beside the real screenshot. The common point/area/path/group target contract is
+reused by farms, workshops, caravans, battles and hive scenes. It neither moves
+a settlement to convenient coordinates nor substitutes a map for inspection of
+the actual rendered frame. ARC-001E may proceed independently, but MAT-006 or
+another player-visible promotion cannot bypass this visual-tooling gate.
+
+The ordered remaining materialization and release-hardening gates are refined
+by
+[`frontier-v3-materialization-hardening-pipeline.md`](frontier-v3-materialization-hardening-pipeline.md).
+Every duration-bearing or irreversible family must close one natural story
+through its terminal and declared successor, ordinary leave/COLD/restart/
+return, exact subject continuity and player intervention. Shared dependency
+changes explicitly mark affected evidence for targeted revalidation; they
+neither preserve a blanket green claim nor require a blanket rerun.
+
+After F0.5 receives independent acceptance and before F0.6 starts, execute the
+separate mandatory fresh-world deployment checkpoint
+[`PM-F05-FRESH-WORLD-TEST-DEPLOY-01`](work-orders/PM-F05-FRESH-WORLD-TEST-DEPLOY-01.md).
+It installs the exact accepted F0.5 artifact through the outer pack workflow,
+replaces only the resolved disposable test world with a new world and proves
+the real service, port, fresh logs, save/restart and absence of quarantine. Its
+green result makes the build available for human exploratory testing; it does
+not itself satisfy M3 comprehension, co-op or release acceptance. Human
+observations may continue alongside F0.6, but remain required evidence before
+production cutover.
+
+After F0.3 receives independent acceptance and before F0.4 starts, execute the
+separate mandatory
+[`PM-REPOSITORY-STRUCTURE-CONVERGENCE-01`](work-orders/PM-REPOSITORY-STRUCTURE-CONVERGENCE-01.md)
+checkpoint. It makes the adopted monorepo navigable before decision/tactical
+breadth is added, while preserving the pack/source ownership boundary, Git
+history and runtime semantics. It must not interrupt F0.3, absorb F0.4 features
+or become a broad cleanup/proof campaign; Terra owns its technical target layout
+and one proportional terminal verification.
+
 F0.2 is delivered through three independently reviewed cuts in this order:
 F0.2A owns the pure persisted replica/custody kernel; F0.2B consumes it for one
 settlement container and one hive store; F0.2C owns one shared bounded deferred-
@@ -346,9 +438,10 @@ two bounded product receipts: first COLD cause -> deferred aftermath -> natural
 availability/restart, then ordinary HOT admission -> exact physical receipt ->
 drain/release -> the next COLD epoch. Compose their shared cause/epoch rules at
 final F0.2C review; never require one strike to execute in both modes or let one
-fixture manufacture the other mode's result. Each receipt gets at most its one
-product-valued targeted native flow after cheap method admission; existing
-constructive-obstruction evidence is reused rather than rerun for confidence.
+fixture manufacture the other mode's result. Use the cheapest faithful evidence for each receipt and reuse accepted
+constructive-obstruction evidence. Review method validity before expensive
+execution when it is at risk. Repeats are product-value decisions under the
+unified protocol, not a one-run quota.
 
 The original sequence placed this checkpoint after independent F0.2B
 acceptance. By explicit user authority on 2026-09-08, the failed F0.2B native
@@ -365,12 +458,13 @@ closed by identity, invalidation, isolation, lifecycle and evidence correctness,
 not by a numeric speedup. This checkpoint adds no F0.2 aftermath or gameplay
 breadth and does not reopen F0.2B.
 After independent F0.VC acceptance, resume the same F0.2B revision and retained
-lineage/evidence; F0.VC neither satisfies nor weakens its product Gate C.
+lineage/evidence; F0.VC neither satisfies nor weakens F0.2B product acceptance.
 
 F0 is an ordered correction, not a parallel feature list. The executor works
 only on the approved bounded order within the first incomplete slice recorded
 in `CONTINUITY.md`. The engineer accepts each coherent fresh-world format cut
-and synchronizes audit/architecture/ledger before granting its scoped commit.
+and synchronizes audit/architecture/ledger at integration acceptance. Private
+WIP checkpoints follow the protocol and do not claim slice completion.
 Existing M0–M2 evidence remains
 valid only for the boundary it actually proves; tests encoding a rejected FND
 assumption must be rewritten rather than preserved as compatibility behavior.
@@ -400,8 +494,9 @@ scene/domain family until the following ordered corrections land:
 4. **H0.4 — state and persistence safety.** Replace process-side positional
    `FrontierWorldState` reconstruction with named owned updates. Migrate every
    persisted codec out of `model` ownership and every enum family from source
-   ordinals to explicit stable wire tags, retaining golden old-byte recovery
-   tests.
+   ordinals to explicit stable wire tags. Retain current-format golden-byte
+   recovery and incompatible-old-format rejection tests; fresh-world-only
+   schema/reset policy forbids compatibility migrations.
 5. **H0.5 — reproducible world rules (complete).** `FrontierRuleset` is an
    immutable persisted selector with a content hash. It owns cadence, radii,
    gains, economic rates, facility capacity and COLD combat output; recovered
@@ -796,6 +891,21 @@ remains present because breadth, balance and product comprehension are not done.
 - Trade route selection, exact cargo lifecycle, patrol, escort, reconnaissance,
   clearance, reclamation, evacuation, construction, field-post and resupply
   operations.
+- Before promoting trade/resupply breadth, replace the development-only
+  settlement-to-hive bread shipment with a recipient-neutral delivery contract.
+  A sender's authorized demand/order must retain an exact recipient, cargo,
+  custody, destination acceptance capability/port, route goal and terminal
+  hand-off; admission validates diplomacy, ownership, capacity and reachability.
+  The same delivery executor must support eligible settlement depots and other
+  explicitly declared receivers without branching on a hard-coded hive ID or
+  inferring the receiver from location. COLD/HOT transfer, full/blocked receiver,
+  interruption, loss and restart preserve that same contract and give a local
+  disposition rather than quarantining the world. Ordinary settlements must not
+  autonomously send food to the hostile hive: the old hive-facing route remains
+  available only as an explicit development fixture until retired or given a
+  separately justified product policy. Acceptance includes a real two-settlement
+  cargo transfer with recipient-side stock/receipt and no duplicate or invented
+  custody, plus a negative full-receiver case.
 - Field posts, modules, hospitals, fortifications, supply lines, engagements and
   aftermath/recovery.
 - Utility/HTN/local-goal AI for all human assignments and derived tactical
@@ -1010,15 +1120,29 @@ Close the confirmed gaps in dependency order:
    specified by [`frontier-v3-route-patrol-contract.md`](frontier-v3-route-patrol-contract.md),
    then bind hive expeditions to the same operation-continuity standard;
    generic ambient movement cannot execute an assignment;
-4. add staged exact-recipient provisioning and household/birth lifecycle work;
+4. replace settlement-wide ration execution with exact resident needs, settlement
+   schedule policy, one current activity and player-safe common resource accounting;
+   adopt bounded typed per-resident characteristics with metabolism as the first
+   consumer, fractional need progress and atomic threshold rescheduling on
+   characteristic changes (including mid-cycle and recovery checks)
+   under [`frontier-v3-resident-life-resource-contract.md`](frontier-v3-resident-life-resource-contract.md),
+   then implement the separate exact household/birth lifecycle under
+   [`frontier-v3-recipient-provision-birth-contract.md`](frontier-v3-recipient-provision-birth-contract.md);
 5. materialize hive nutrient flow, digestion, organism/organ growth and their
-   player-interruptible hiveroot/cocoon dependencies;
+   player-interruptible hiveroot/cocoon dependencies under
+   [`frontier-v3-hive-metabolism-morphogenesis-contract.md`](frontier-v3-hive-metabolism-morphogenesis-contract.md);
 6. convert crop/infection/growth/retreat projection to bounded retained spatial
-   progress, preserving atomic execution only for truly instantaneous effects;
-7. make exact hunger/exposure/infection/recovery readable on HOT residents and
-   reconcile real contact with the same canonical condition model;
-8. complete the decision-to-visible-consequence matrix for markets, shortages,
-   quarantine and doctrine, then run the unbriefed M3 comprehension gate.
+   progress under [`frontier-v3-spatial-frontier-contract.md`](frontier-v3-spatial-frontier-contract.md),
+   preserving atomic execution only for truly instantaneous effects;
+7. complete the decision-to-visible-consequence matrix for markets, shortages,
+   quarantine and doctrine under
+   [`frontier-v3-decision-consequence-contract.md`](frontier-v3-decision-consequence-contract.md),
+   with every declared row reaching its real owned work and terminal or delayed
+   consequence;
+8. make exact hunger/exposure/infection/recovery readable on HOT residents and
+   reconcile real contact with the same canonical condition model under
+   [`frontier-v3-resident-condition-presentation-contract.md`](frontier-v3-resident-condition-presentation-contract.md),
+   then run the unbriefed M3 comprehension gate.
 
 After F0 completes, `MAT-001` through `MAT-007` are P0 Wave-6 blockers. `MAT-008` through
 `MAT-010` block Wave-7 product acceptance. An earlier audit closure for conservation,
@@ -1026,6 +1150,20 @@ receipt or recovery remains valid at its evidence level but cannot be cited as
 closure of the corresponding `MAT-*` item.
 
 ## Wave 6 — production materialization
+
+The current bread-production migration is governed by
+[`frontier-v3-bakery-item-handling.md`](frontier-v3-bakery-item-handling.md):
+an exact baker must take wheat, carry and load it into a physically held bakery
+station, operate the station, unload station-held bread and deliver it to the
+depot through confirmed shared actor item-handling. The station owns custody
+during processing, while the settlement retains economic ownership. Neither
+in-hand conversion nor a decorative work coordinate is an accepted shortcut.
+The old direct depot-slot
+transform is retired at cutover; a renamed industrial worker or board is not
+the deliverable. This is an in-progress feature, not an acceptance claim. The
+cutover uses a fresh test world and a new snapshot/WAL format; there is no
+old-world compatibility path. The owner does not settle market work or payment
+until bread has reached the declared depot under a confirmed custody receipt.
 
 ### Deliverables
 

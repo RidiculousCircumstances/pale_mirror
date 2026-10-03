@@ -1,5 +1,11 @@
 # PM-F02C-COLD-ADMISSION-FINAL-27: verify the bounded COLD admission correction
 
+> Historical execution record. Current authority is
+> [order35 revision2](PM-F02C-PILOT-COMMAND-GRAMMAR-35.md) and the
+> [PM/TL protocol](../engineering-agent-protocol.md). Preserve evidence and
+> product guarantees; old microtask stops, design prescriptions and permission
+> checkpoints do not govern resumed work.
+
 Specification revision: 3. Status: `TERMINAL_PRODUCT_RED`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: one fresh `gpt-5.6-terra`, reasoning `high`, routed as

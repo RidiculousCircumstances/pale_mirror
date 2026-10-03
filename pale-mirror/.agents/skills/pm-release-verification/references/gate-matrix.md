@@ -1,6 +1,10 @@
 # Verification gate matrix
 
-Add the row-specific gates to the base risk gates in `AGENTS.md`.
+At integration milestones/releases, add scope-relevant rows to the risk gates
+in `../SKILL.md`. `docs/engineering-agent-protocol.md` owns applicability, reuse
+and retry decisions; this is not a checklist for every private WIP checkpoint.
+Terra selects and executes the applicable technical gates autonomously. PM
+checks their scope against stage claims, without approving commands or methods.
 
 | Scope | Additional evidence |
 | --- | --- |
@@ -10,7 +14,7 @@ Add the row-specific gates to the base risk gates in `AGENTS.md`.
 | Rail/Create | Managed-rail or Create integration harness and a real control-run acceptance when promised |
 | Threat adapter | Exact-version adapter harness, health/provenance, missing-adapter fail-closed case |
 | Client UI/JourneyMap | Client smoke, real-resolution screenshot, server revalidation of actions |
-| Performance | Reproducible before/after JFR and correctness/catalog-hash comparison |
+| Performance | Whole-path work/budget and correctness checks; reproducible before/after measurement for claimed speed/latency gains, JFR when runtime attribution is needed |
 | Product release | Manual visual pass, clean-room comprehension, co-op path, all promised outcomes |
 
 Do not run destructive deployment from a verification task. Record unavailable

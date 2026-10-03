@@ -1,6 +1,8 @@
 # Pale Mirror Frontier v3 contract
 
-Status: accepted target architecture; not yet implemented.
+Status: accepted target architecture, including the 2026-09-18 execution-model
+amendment. Implementation conformance is recorded separately in the ledger and
+ARC-001; this document does not certify the current build.
 
 This document is the stable contract for Frontier v3. Implementation details may
 change, but changing an invariant or player promise here requires an explicit
@@ -27,6 +29,66 @@ visible switch between two worlds.
 The graybox proves that promise with readable placeholder geometry. It is not a
 separate diagnostic simulation and cannot use labels or operator commands to
 hide a missing world process.
+
+## Execution model and document ownership
+
+Frontier v3 is one autonomous domain simulation with variable execution detail,
+independent physical custody and two-way Minecraft observations. HOT and COLD
+name execution strategies over that simulation, not separate world states or a
+settlement-wide switch. Each affected actor, asset or bounded front independently
+has presentation demand, physical interaction eligibility and execution authority.
+
+The domain owns goals, exact identities, relationships, resources and semantic
+progress. Minecraft navigation, collisions, damage and transfers supply real
+facts that the domain must reconcile. A scene coordinates bounded physical
+execution; it cannot own another job, economic result, schedule or progress
+history. An actor's lifetime is independent of any job or scene using it.
+
+Materialization has three distinct contracts: current-state projection,
+irreversible physical interaction and deferred causal aftermath. Projection may
+supersede obsolete presentation work after validating ownership and world
+preconditions. Interactions require their own confirmation/recovery boundary;
+aftermath retains the consequences and knowledge needed for lawful later
+realization. None may replay completed history or overwrite unexplained changes.
+
+Every owner, durable semantic type, capability key, authority epoch and
+behavior-dispatch identity that affects those contracts is explicit. Its
+authoritative producer supplies the typed value and persistence stores its own
+stable non-reused wire tag. Runtime code never reconstructs authority or type
+from another kind, an identifier prefix, coordinates, object class, collection
+membership, adjacent state or a convenient default. Missing, unknown, stale or
+mismatched identity is a visible fail-closed boundary before mutation or replay.
+Decoding the value's own tag and validating an explicitly declared compatible
+pair are not inference. Derived labels or indexes are allowed only when they are
+read-only and cannot select behavior or acquire authority.
+
+Durable physical evidence is self-describing. A known semantic cell change
+carries both the exact subject identity and an explicit typed semantic target
+supplied by the authoritative projection/observation producer; an unclassified
+change carries an explicit non-authoritative unknown variant and cannot be
+promoted to a structure, organ, route, worksite or actor by later lookup. The
+same typed target is copied through observation events, snapshot/WAL recovery,
+deferred aftermath, repair admission and terminal/late-input disposition.
+Those consumers may validate it against the current canonical subject and plan
+revision, but cannot choose its meaning from the subject text or the collection
+where that subject happens to be found. Under the fresh-world-only policy,
+persisted evidence missing this identity is incompatible input, not a migration
+or guessing opportunity.
+
+The normative sources have distinct responsibilities:
+
+| Source | Owns |
+| --- | --- |
+| This contract | Player promises, interface responsibilities and product limits. |
+| `architecture.yml` | Component ownership, dependency boundaries and invariant identifiers. |
+| `frontier-v3-execution-semantics.md` | Execution, handoff, projection/action/aftermath and confirmation semantics. |
+| Domain-relations, diagnostic-plane and runtime-verification contracts | Durable relationship lifecycle, causal explanations and read-only semantic progress verdicts. |
+| Implementation plan and hardening pipeline | Adoption order and stage exits, not alternative semantics. |
+| `CONTINUITY.md` and active order | Current assignment and evidence status; targets are never implementation receipts. |
+
+Resolve contradictory normative statements explicitly. Briefs and instructions
+link to these owners rather than restating a competing protocol. Historical
+slice restrictions and run-specific fixes are evidence, not current design rules.
 
 ## Target and exclusions
 
@@ -105,10 +167,14 @@ aggregate internals:
 | `FrontierCommand` | Versioned intent with command ID, world ID, expected revision, actor/cause and payload. |
 | `FrontierEvent` | Versioned accepted fact with event ID, transaction ID, simulation instant and cause chain. |
 | `ScheduledAction` | Persisted future work with stable ID, due instant, priority and deterministic tie-break key. |
-| `FrontierProjection` | Immutable query result for presentation, materialization, audit and operator diagnostics. |
-| `PhysicalIntent` | Durable request for one non-replayable Minecraft effect, lease or custody transition. |
+| `FrontierProjection` | Immutable revision-bound current-state view; not an executable history or authority to overwrite physical drift. |
+| `PhysicalIntent` | Durable request for one identified physical effect or authority/custody transition with preconditions and confirmation semantics; not a queue of past COLD animation steps. |
 | `PhysicalObservation` | Deduplicated evidence of the actual Minecraft result, including changed blocks, entities and items. |
-| `FrontierStore` | Append/recover transactions, snapshots, schedules, physical leases and bounded receipts. |
+| `FrontierStore` | Append/recover domain transactions, snapshots, schedules, physical leases and bounded receipts; it does not make Minecraft/player saves atomic with the domain WAL. |
+
+These are responsibility contracts, not a mandate for new Java types or a wire
+rename. Execution semantics defines the distinct deferred-aftermath responsibility;
+its existing owner and representation remain reusable when they satisfy it.
 
 `ScheduledAction` is the sole durable timing record. It remains in the
 engine-owned schedule portion of `CheckpointImage`; a process aggregate owns
@@ -295,6 +361,13 @@ production processes, needs, governance, security, companies, contracts,
 credit, investment, prices, trade, migration, diplomacy and operations. A
 company or institution owns real accounts and custody; resources do not exist
 as an unowned global pool.
+
+The accepted resident-life cut is specified by
+[`frontier-v3-resident-life-resource-contract.md`](frontier-v3-resident-life-resource-contract.md):
+settlement schedule policy, an exact resident need and one current activity
+are separate from a retained work assignment. The old settlement-wide
+provision cycle is superseded as nutrition authority. Personal self-care is a
+local activity under settlement policy, not a new strategic decision authority.
 
 The normative human capability and unit model is defined by
 `frontier-v3-human-capabilities.md`. A resident's profile/condition, learned
@@ -657,6 +730,19 @@ bind quantities to contracts, cargo, equipment and process reservations.
 Physical slots are temporary bindings while HOT, not permanent identity for an
 otherwise interchangeable Vanilla stack.
 
+Resource-processing recipes execute at an explicitly declared production
+station, not in a worker's hand, a remote container or an abstract work point.
+The station has bounded canonical input/output custody and a real HOT physical
+holding/processing surface; a worker moves inputs to it, loads them, operates
+it, unloads its output and delivers that output to its declared destination.
+The resource's economic owner does not change merely because the worker or
+station temporarily holds it. Recipe consumption/output is one station-local
+accounted transition with explicit provenance and observed physical effect
+when HOT. COLD uses the same station custody and process progress; a loaded
+station's current physical custodian excludes a concurrent abstract writer.
+Future furnace, mill, bakery and other recipes reuse this station/actor
+handoff contract, with explicit intermediate transfers between stations.
+
 An inventory reconciliation conflict is durable evidence anchored to one known
 physical container slot. It may also name the exact item that was observed, but
 that item reference is historical evidence rather than a second live-custody
@@ -741,25 +827,65 @@ server-thread commands, flushes durable state and reports failure visibly.
 
 V2 files, SavedData and schemas are neither read nor overwritten.
 
-## Performance and observability
+## Maintainability, performance and observability
+
+New process families compose the existing appropriate execution archetype and
+registered providers. Shared code must not gain crop-, site-, actor- or scene-
+specific lifecycle branches. An abstraction needs one named responsibility and
+a concrete duplication or invariant it removes; no second mutable registry,
+generic workflow engine, database or distributed runtime is required by this
+amendment. Technical design remains the senior tech lead's responsibility.
+
+For every waiting or failed object, bounded inspection must expose its canonical
+owner, exact process and stage, custody/epoch, reason, next eligible transition,
+relevant relationships and confirmation state. Canonical reasons survive restart;
+derived trace loss is explicit and never changes execution.
+
+Every eligible duration-bearing process additionally publishes one bounded
+owner-declared semantic progress obligation: exact subject/generation and
+participants, baseline revision and simulation instant, permitted next
+checkpoints or terminal/successor facts, canonical cadence and complete typed
+non-progress dispositions. The read-only runtime verifier in
+`frontier-v3-runtime-verification.md` consumes the existing diagnostic envelope
+and automatically distinguishes satisfied, violated, still-pending and
+inconclusive finite observations. It may reject a test or promotion and capture
+evidence, but never advances, repairs or reclassifies canonical state. Domain
+liveness uses `SimInstant`; wall-clock time diagnoses only server/client/harness
+health. Missing or truncated evidence cannot produce a green result.
 
 The event engine does no world-wide per-tick scan. Spatial queries use bounded
 indexes; due actions use an ordered queue; projections are incremental by
 revision and chunk. No simulation, audit or materialization path force-loads a
 chunk.
 
+Ordinary update cost follows due work and the affected dependency set, not all
+historical cycles, actors or plan cells. Initial indexing and recovery may scan
+their declared bounded input once; they are not hidden recurring tick work.
+Queue admission, per-turn work, retries and retained bytes have explicit limits,
+fair service and observable overload dispositions. Critical consequences are
+never dropped to meet a budget. Superseded projections can be coalesced only
+under the execution contract; unresolved effects and causal evidence cannot.
+Safe compaction prevents completed cycles from accumulating future replay work.
+Adding threads is not a substitute for bounded ownership and incremental work.
+
 Before feature expansion, Wave 1 pins a reproducible benchmark on the project
 test machine. The default cutover budget is sustained 20 TPS for sixty minutes,
 mean server tick below 35 ms, p99 below 50 ms, Frontier v3 p95 work below 5 ms
 per server tick, no watchdog event and no monotonic heap, WAL, receipt or delta
 growth after compaction. A later profile may tighten these values but may not
-silently relax them.
+silently relax them. This is the release/cutover profile, not a fresh campaign
+for every correction or documentation amendment. Structural boundedness and
+measured latency are distinct claims; `performance-operations.md` owns the
+applicable measurement procedure.
 
 Metrics expose due/backlogged actions, simulation lag, command rejection,
 events by subsystem, projection work, active HOT leases, reconciliation
 conflicts, WAL/snapshot size, recovery result and per-stage timing. Metrics and
 operator commands are read-only unless they submit an ordinary validated v3
-command.
+command. Exact high-cardinality subject identity belongs in bounded diagnostic
+events and incident capsules rather than metric labels. Structured logs, OTel
+and JFR are optional off-thread projections; exporter failure cannot block the
+mutation lane or change canonical hashes, recovery or acceptance truth.
 
 ## Graybox and product acceptance
 

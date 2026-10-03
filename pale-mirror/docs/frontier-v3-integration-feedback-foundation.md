@@ -1,8 +1,19 @@
 # Frontier v3 integration-feedback foundation
 
-Status: accepted normative implementation brief for mandatory slice `F0.V`.
+Status: accepted F0.V capability contract and historical qualification record;
+not a current task-workflow source.
 
-This slice pauses, but does not discard, the current `F0.1` harvest work. It
+Current acceptance/assignment comes from `CONTINUITY.md`; F0.V and its
+acceleration stages are already accepted. The interruption/baseline instructions
+below record the original implementation sequence, not a command to repeat it.
+[The unified protocol](engineering-agent-protocol.md) alone owns task lifecycle,
+review, retries and verification economy. Retain these technical contracts and
+reuse accepted evidence for unchanged behavior.
+Terra, the senior tech lead and only coder, owns technical execution and test
+adequacy; main, the project manager / architect, checks product/architecture
+conformance rather than approving technical methods or individual runs.
+
+Originally this slice paused, but did not discard, the `F0.1` harvest work. It
 must complete before implementation resumes `F0.1` and the remaining F0
 foundation. Its purpose is to move ownership, hand-off and crash-window defects
 into a fast deterministic feedback loop while retaining real Minecraft evidence
@@ -37,7 +48,7 @@ F0.VA does not replace or weaken any F0.V requirement.
 - Native evidence still uses a fresh isolated world, natural chunk demand and
   ordinary player actions. It never force-loads, edits world files or mutates
   canonical state through diagnostics.
-- Do not make a test green with retries, a longer timeout, a reused mutable
+- Do not make a test green with blind retries, a longer timeout, a reused mutable
   evidence world, a server-selected player target or weakened terminal
   assertions.
 - At most one visible native client may exist. A persistent pilot client may
@@ -323,13 +334,16 @@ Do not collect unrelated player identity, full unbounded logs or whole-world
 dumps. Preserve the failed disposable world for forensic recovery; successful
 worlds retain the existing exact cleanup rule.
 
-The iteration ladder is mandatory:
+The historical qualification ladder below records what the accepted F0.V
+tooling had to support. It is not a mandatory per-edit execution sequence for
+later product work; current selection and retry decisions belong to Terra under
+the unified protocol.
 
 ```text
-per edit:       pure contract + focused unit/Node/codec guards
-physical seam: smallest matching GameTest slice
-causal claim:   one generated/declared native variant
-slice commit:   complete critical-code gate + required native matrix
+local contract uncertainty: pure contract or focused unit/Node/codec guard
+changed physical seam:      smallest matching GameTest slice when useful
+changed causal claim:       faithful generated/declared native variant
+integration milestone:      applicable critical/package and native evidence
 ```
 
 Parallelize pure/Node/build work only when outputs and ports are isolated.
