@@ -11,6 +11,7 @@ import java.util.Objects;
 public record MovementOrder(SubjectId ownerId, SubjectId actorId, long goalOrdinal, long goalRevision,
                             List<SurfaceAnchor> legalStations, TraversalCapability capability,
                             ArrivalPolicy arrivalPolicy) {
+    public static final int MAX_LEGAL_STATIONS = 8;
     public enum ArrivalPolicy { EXACT_STATION, ANY_DECLARED_STATION }
 
     public MovementOrder {
@@ -19,7 +20,7 @@ public record MovementOrder(SubjectId ownerId, SubjectId actorId, long goalOrdin
         legalStations = List.copyOf(Objects.requireNonNull(legalStations, "movement legal stations"));
         Objects.requireNonNull(capability, "movement capability");
         Objects.requireNonNull(arrivalPolicy, "movement arrival policy");
-        if (goalOrdinal < 0 || goalRevision < 1 || legalStations.isEmpty() || legalStations.size() > 8
+        if (goalOrdinal < 0 || goalRevision < 1 || legalStations.isEmpty() || legalStations.size() > MAX_LEGAL_STATIONS
                 || legalStations.stream().anyMatch(Objects::isNull)
                 || legalStations.stream().distinct().count() != legalStations.size()
                 || arrivalPolicy == ArrivalPolicy.EXACT_STATION && legalStations.size() != 1)

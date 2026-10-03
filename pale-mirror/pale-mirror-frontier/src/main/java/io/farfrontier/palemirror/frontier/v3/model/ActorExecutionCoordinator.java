@@ -116,7 +116,10 @@ public final class ActorExecutionCoordinator {
     }
 
     private static boolean ordinaryAmbientPurpose(AmbientGoalKind goal) {
-        return goal == AmbientGoalKind.PATROL || goal == AmbientGoalKind.WORK || goal == AmbientGoalKind.MEAL;
+        // GUARD is ordinary resident presentation. Actual defence keeps its own
+        // assignment capability and cannot become interruptible through this admission.
+        return goal == AmbientGoalKind.PATROL || goal == AmbientGoalKind.WORK
+                || goal == AmbientGoalKind.GUARD || goal == AmbientGoalKind.MEAL;
     }
 
     private static boolean carriesResource(FrontierWorldState state, SubjectId actorId) {

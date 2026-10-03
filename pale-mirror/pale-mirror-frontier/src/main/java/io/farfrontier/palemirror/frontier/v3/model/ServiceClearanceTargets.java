@@ -11,6 +11,24 @@ import java.util.Set;
 public final class ServiceClearanceTargets {
     private ServiceClearanceTargets() { }
 
+    /** Bounded exit region, independent of any preferred parking destination or activity. */
+    public static List<SurfaceAnchor> exits(ServiceAccessBoundary boundary,
+            SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded) {
+        if (boundary.cleared(start.standingBody())) return List.of(start);
+        java.util.Set<SurfaceAnchor> candidates = new java.util.HashSet<>();
+        for (SurfaceAnchor occupied : boundary.occupiedSurfaces()) {
+            for (int[] step : List.of(new int[]{1, 0}, new int[]{-1, 0}, new int[]{0, 1}, new int[]{0, -1})) {
+                SurfaceAnchor candidate = knowledge.supportAt(occupied.x() + step[0], occupied.z() + step[1]);
+                if (boundary.cleared(candidate.standingBody()) && !excluded.contains(candidate)) candidates.add(candidate);
+            }
+        }
+        return candidates.stream().sorted(java.util.Comparator
+                .comparingInt((SurfaceAnchor surface) -> Math.abs(surface.x() - start.x())
+                        + Math.abs(surface.z() - start.z()) + Math.abs(surface.y() - start.y()))
+                .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)
+                .thenComparingInt(SurfaceAnchor::y)).toList();
+    }
+
     /** Exclusions reserve final destinations; they do not make walking actors terrain obstacles. */
     public static Optional<SurfaceAnchor> select(ServiceAccessPoint point, SubjectId actorId,
             KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded) {

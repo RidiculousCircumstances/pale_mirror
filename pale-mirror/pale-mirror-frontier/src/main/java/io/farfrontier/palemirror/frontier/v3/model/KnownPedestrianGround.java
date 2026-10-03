@@ -7,21 +7,20 @@ import java.util.Map;
 
 /** Composes authored solid surfaces before natural terrain; no task owns a private road datum. */
 public final class KnownPedestrianGround {
-    private record Roads(RouteTopology topology, Map<TerrainColumn, SurfaceAnchor> surfaces) { }
+    private record Roads(RouteTopology topology, ChunkSurfaceIndex surfaces) { }
     // Rebuildable knowledge cache: one current bootstrap identity/road revision, never world state.
     private static FrontierBootstrap cachedBootstrap;
     private static Roads cachedRoads;
-    private static final Map<SubjectId, Map<TerrainColumn, SurfaceAnchor>> LOCAL = new LinkedHashMap<>();
+    private static final Map<SubjectId, ChunkSurfaceIndex> LOCAL = new LinkedHashMap<>();
     private KnownPedestrianGround() { }
 
     public static BoundedPedestrianApproach.SurveyedSurface forSettlement(FrontierWorldState state,
                                                                        SubjectId settlementId) {
-        Map<TerrainColumn, SurfaceAnchor> roads = roads(state.bootstrap(), state.routeTopology());
-        Map<TerrainColumn, SurfaceAnchor> local = local(state.bootstrap(), settlementId);
+        ChunkSurfaceIndex roads = roads(state.bootstrap(), state.routeTopology());
+        ChunkSurfaceIndex local = local(state.bootstrap(), settlementId);
         var terrain = state.bootstrap().terrain();
         return (x, z) -> {
-            TerrainColumn column = new TerrainColumn(x, z);
-            SurfaceAnchor road = roads.get(column), settlement = local.get(column);
+            SurfaceAnchor road = roads.at(x, z), settlement = local.at(x, z);
             // Both solid authored floors are physically projected. Only their upper exposed
             // collision surface is standable; selecting the lower puts feet inside the upper.
             if (road != null && settlement != null) return road.y() >= settlement.y() ? road : settlement;
@@ -31,25 +30,21 @@ public final class KnownPedestrianGround {
         };
     }
 
-    private static synchronized Map<TerrainColumn, SurfaceAnchor> roads(FrontierBootstrap bootstrap,
+    private static synchronized ChunkSurfaceIndex roads(FrontierBootstrap bootstrap,
                                                                        RouteTopology topology) {
         useBootstrap(bootstrap);
         Roads cached = cachedRoads;
         if (cached != null && cached.topology() == topology) return cached.surfaces();
-        Map<TerrainColumn, SurfaceAnchor> surfaces = new LinkedHashMap<>();
-        for (BlockPosition position : FrontierRouteNetwork.footprint(bootstrap, topology).surfaceCells()) {
-            TerrainColumn column = new TerrainColumn(position.x(), position.z());
-            SurfaceAnchor candidate = new SurfaceAnchor(position);
-            surfaces.merge(column, candidate, (left, right) -> left.y() >= right.y() ? left : right);
-        }
-        Map<TerrainColumn, SurfaceAnchor> immutable = Map.copyOf(surfaces);
+        ChunkSurfaceIndex immutable = ChunkSurfaceIndex.of(FrontierRouteNetwork.footprint(bootstrap, topology)
+                .surfaceCells().stream().map(SurfaceAnchor::new).toList());
         cachedRoads = new Roads(topology, immutable);
         return immutable;
     }
 
-    private static synchronized Map<TerrainColumn, SurfaceAnchor> local(FrontierBootstrap bootstrap, SubjectId settlementId) {
+    private static synchronized ChunkSurfaceIndex local(FrontierBootstrap bootstrap, SubjectId settlementId) {
         useBootstrap(bootstrap);
-        return LOCAL.computeIfAbsent(settlementId, id -> SettlementPedestrianGround.localSupports(bootstrap, id));
+        return LOCAL.computeIfAbsent(settlementId, id -> ChunkSurfaceIndex.of(
+                SettlementPedestrianGround.localSupports(bootstrap, id).values()));
     }
 
     private static void useBootstrap(FrontierBootstrap bootstrap) {

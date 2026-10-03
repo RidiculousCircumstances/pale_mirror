@@ -10,6 +10,20 @@ import java.util.Objects;
 public final class KnownServiceExitNavigation {
     private KnownServiceExitNavigation() { }
 
+    public static List<SurfaceAnchor> exitStations(FrontierWorldState state, SubjectId settlementId,
+            SubjectId depotId, SubjectId actorId, SurfaceAnchor start) {
+        if (!depotId.equals(FrontierWorldState.depotId(settlementId)))
+            throw new IllegalArgumentException("exit has a foreign service identity");
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
+        SettlementStructure depot = settlement.structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlementId,
+                List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
+                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+        return ServiceClearanceTargets.exits(SettlementDepotServicePort.forDepot(depot).accessBoundary(),
+                start, knowledge, ServiceDestinationClaims.excludedFor(state, actorId));
+    }
+
     public static List<SurfaceAnchor> path(FrontierWorldState state, SubjectId settlementId,
                                            SubjectId depotId, MovementOrder order) {
         ActorLocation actor = state.actorLocations().get(order.actorId());
@@ -25,14 +39,12 @@ public final class KnownServiceExitNavigation {
         Objects.requireNonNull(order, "service exit movement order");
         Objects.requireNonNull(start, "service exit start");
         if (order.capability() != TraversalCapability.PEDESTRIAN
-                || order.arrivalPolicy() != MovementOrder.ArrivalPolicy.EXACT_STATION
                 || !depotId.equals(FrontierWorldState.depotId(settlementId)))
-            throw new IllegalArgumentException("service exit needs an exact local pedestrian goal");
-        SurfaceAnchor destination = order.legalStations().getFirst();
+            throw new IllegalArgumentException("service exit needs a local pedestrian goal");
         ActorLocation actor = state.actorLocations().get(order.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("service exit has no living actor body");
-        if (start.equals(destination)) return List.of(start);
+        if (order.legalStations().contains(start)) return List.of(start);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
         SettlementStructure depot = settlement.structures().stream()
                 .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();

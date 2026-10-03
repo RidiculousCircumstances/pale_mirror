@@ -12,6 +12,31 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void occupiedExitIsNotTheOnlyGoalAndParkingDoesNotOwnClearance() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:exit-region"), 20260918065L));
+        var settlement = initial.bootstrap().settlements().get(6);
+        var actor = settlement.residents().getFirst().id();
+        var other = settlement.residents().get(1).id();
+        var depot = FrontierWorldState.depotId(settlement.id());
+        var port = SettlementServiceAccessPoints.depotPort(initial, settlement.id());
+        var state = initial.withActorBody(actor, port.serviceSurface().standingBody());
+        var exits = KnownServiceExitNavigation.exitStations(state, settlement.id(), depot, actor, port.serviceSurface());
+        assertTrue(exits.size() > 1, "the service is an exit region, not one exact parking cell");
+        var blocked = state.withActorBody(other, exits.getFirst().standingBody());
+        var alternatives = KnownServiceExitNavigation.exitStations(blocked, settlement.id(), depot, actor, port.serviceSurface());
+        assertTrue(!alternatives.contains(exits.getFirst()));
+        assertTrue(!alternatives.isEmpty());
+        assertTrue(alternatives.stream().allMatch(surface -> port.accessBoundary().cleared(surface.standingBody())));
+        var arbitraryParking = SurfaceAnchor.at(130, 63, 30);
+        var moving = testMeal(blocked, settlement, actor, depot, arbitraryParking);
+        var clearing = new ResidentMeal(actor, settlement.id(), depot, arbitraryParking,
+                moving.sourceAccountId(), moving.actorAccountId(), moving.portion(), moving.claimId(),
+                moving.retainedWorkOwner(), ResidentMeal.Phase.CLEAR_ACCESS, moving.startedAtTick(), Optional.empty());
+        var path = ResidentMealKnownNavigation.clearancePathFrom(blocked, clearing, port.serviceSurface());
+        assertTrue(port.accessBoundary().cleared(path.getLast().standingBody()));
+        assertTrue(!path.getLast().equals(arbitraryParking));
+    }
     @Test void waitingApproachCannotOccupyAnotherMealsReservedClearanceAndHotCanRejectOccupiedPockets() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:meal-waiting-clearance"), 20260918065L));

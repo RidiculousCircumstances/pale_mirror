@@ -4,7 +4,6 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -18,17 +17,25 @@ final class FrontierV3ServicePointClearance {
         ResidentProfile resident = state.humanPopulation().resident(lease.actorId());
         if (resident == null) return false;
         BodyPosition observed = FrontierV3BodyObservation.position(body);
-        ServiceAccessPoint point = SettlementServiceAccessPoints.occupiedPoint(state, resident.settlementId(), observed).orElse(null);
+        List<ServiceAccessPoint> points = SettlementServiceAccessPoints.forSettlement(state, resident.settlementId());
+        ServiceAccessPoint point = points.stream().filter(candidate -> ServiceAreaDestinations.temporary(
+                candidate, observed.supportingSurface())).findFirst().orElse(null);
         Target target = TARGETS.get(body);
         if (target != null && target.revision() != lease.revision()) { TARGETS.remove(body); target = null; }
         if (point == null && target == null) return false;
         if (target == null || target.revision() != lease.revision()
                 || target.surfaces().stream().noneMatch(surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface))) {
             if (point == null) { TARGETS.remove(body); return false; }
-            List<SurfaceAnchor> surfaces = point.waitingSurfaces().stream()
-                    .filter(surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface))
-                    .sorted(Comparator.comparingDouble(surface -> FrontierV3SemanticMovement.point(level, surface).distanceToSqr(body.position())))
-                    .limit(8).toList();
+            Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), point.settlementId());
+            SettlementStructure facility = settlement.structures().stream()
+                    .filter(value -> value.id().equals(point.facilityId())).findFirst().orElseThrow();
+            var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
+                    new KnownPedestrianRouteKnowledge.Passage(facility,
+                            KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+            List<SurfaceAnchor> surfaces = ServiceAreaDestinations.select(points, lease.actorId(),
+                    observed.supportingSurface(), knowledge, ServiceDestinationClaims.excludedFor(state, lease.actorId()),
+                    surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface))
+                    .map(List::of).orElse(List.of());
             if (surfaces.isEmpty()) {
                 FrontierV3GoalNavigation.stop(body);
                 FrontierV3PhysicalWaitTrace.actor(body, state, lease.actorId(), "service-clearance:no-safe-waiting-position");

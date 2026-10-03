@@ -266,8 +266,6 @@ final class FrontierV3AmbientActorExecutor {
                             if (observeDirectedArrival(level, runtime, state, actorId, mob, lease)) admitted++;
                         }
                         if (drainAfterDemandHysteresis(level, runtime, actorId, mob)) admitted++;
-                    } else if (drainObservedAfterDemandHysteresis(level, runtime, actorId)) {
-                        admitted++;
                     }
                 } else if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED
                         && abandonUndemandedPrepared(level, runtime, state, actorId, lease)) {
@@ -901,8 +899,11 @@ final class FrontierV3AmbientActorExecutor {
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var receipt = ledger.ambientDeparture(actorId).filter(value -> value.current(state)).orElse(null);
         if (receipt == null || ledger.hasDepartureConflict(actorId)
-                || level.hasChunkAt(minecraftBody(receipt.observed().body()))
-                || (lease.goal() != AmbientGoalKind.PATROL && !receipt.observed().body().equals(lease.handoffBody()))) return false;
+                || level.hasChunkAt(minecraftBody(receipt.observed().body()))) return false;
+        var release = new AmbientLeaseReleased(actorId, receipt.observed().body(), receipt.observed().health());
+        // The owning domain protocol checks cursor-bound purposes and pending effects.
+        // An admission anchor is not a release predicate for semantic-goal movement.
+        if (!unloadedReleaseEligible(state, release)) return false;
         var carrier = receipt.carrier();
         if (!ledger.fence(carrier.identity(), carrier.physicalRevision(), carrier.ambientRevision())) return false;
         ledger.persist(level, state.bootstrap().worldId());
@@ -914,8 +915,24 @@ final class FrontierV3AmbientActorExecutor {
                 || draining.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return false;
         if (!receipt.current(draining)) return false;
         return submit(runtime, "ambient-unloaded-reserved-release", actorId.value(),
-                new AmbientLeaseReleased(actorId, receipt.observed().body(), receipt.observed().health()))
+                release)
                 instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
+    }
+    static boolean unloadedReleaseEligible(FrontierWorldState state, AmbientLeaseReleased release) {
+        ResidentMeal meal = state.humanPopulation().meals().get(release.actorId());
+        // A departure pose alone does not prove a physical food-hand reconciliation.
+        if (meal != null && (meal.pendingPhysicalStep().isPresent()
+                || state.inventory().fungibleResources().bindings().values().stream()
+                    .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId())))) return false;
+        try {
+            var draining = state.ambientLeases().get(release.actorId()).status() == AmbientLeaseStatus.DRAINING
+                    ? state : io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.transition(
+                        state, release.actorId(), AmbientLeaseStatus.DRAINING);
+            io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.release(draining, release);
+            return true;
+        } catch (IllegalArgumentException rejected) {
+            return false;
+        }
     }
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         FrontierV3AmbientPendingAdmissions.forget(runtime);
@@ -942,16 +959,6 @@ final class FrontierV3AmbientActorExecutor {
         if (drained) absentSince.remove(actorId);
         if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
         return drained;
-    }
-    private static boolean drainObservedAfterDemandHysteresis(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                               SubjectId actorId) {
-        Map<SubjectId, Long> absentSince = COLD_DEMAND_SINCE.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
-        if (absentSince.size() >= FrontierV3AmbientPendingAdmissions.MAX_ENTRIES && !absentSince.containsKey(actorId)) return false;
-        long started = absentSince.computeIfAbsent(actorId, ignored -> level.getGameTime());
-        var observed = FrontierV3AmbientActorCaches.lastObserved(runtime, actorId);
-        if (observed == null || level.getGameTime() - started < DRAIN_HYSTERESIS_TICKS
-                || playerWithin(level, minecraftBody(observed.body()), DRAIN_SAFE_RADIUS_BLOCKS)) return false;
-        return false;
     }
     private static boolean observeDirectedArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                   FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {

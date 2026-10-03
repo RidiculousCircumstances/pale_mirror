@@ -59,10 +59,25 @@ class ActorExecutionCoordinatorTest {
             assertFalse(ActorExecutionCoordinator.coldAvailable(state, farmer.id()));
         }
         var lease = new AmbientActorLease(farmer.id(), body, new SimInstant(1), 1,
-                AmbientLeaseStatus.HOT, AmbientGoalKind.GUARD, body);
+                AmbientLeaseStatus.HOT, AmbientGoalKind.SCOUT_PATROL, body);
         var state = initial.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(farmer.id(), lease)));
         assertEquals(new ActorExecutionCoordinator.Waiting(ActorExecutionCoordinator.Wait.FOREIGN_AMBIENT_PURPOSE),
                 ActorExecutionCoordinator.ordinaryWorkAdmission(state, farmer.id()));
+    }
+
+    @Test void ordinaryGuardPresentationCanYieldButNeverGrantsConcurrentColdMotion() {
+        var initial = ResourceSiteHarvestProcessTest.initial();
+        var resident = initial.bootstrap().settlements().getFirst().residents().stream()
+                .filter(value -> value.role() == ResidentRole.GUARD).findFirst().orElseThrow();
+        var body = initial.actorLocations().get(resident.id()).body();
+        var lease = new AmbientActorLease(resident.id(), body, new SimInstant(1), 1,
+                AmbientLeaseStatus.HOT, AmbientGoalKind.GUARD, body);
+        var state = initial.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(resident.id(), lease)));
+        assertTrue(ResidentWorkYield.assess(state, HumanAssignmentProjection.compile(state)
+                .assignment(resident.id())).ready());
+        assertInstanceOf(ActorExecutionCoordinator.AmbientTransfer.class,
+                ActorExecutionCoordinator.ordinaryWorkAdmission(state, resident.id()));
+        assertFalse(ActorExecutionCoordinator.coldAvailable(state, resident.id()));
     }
 
     @Test void existingAssignmentCannotBeReplacedByAnotherJob() {

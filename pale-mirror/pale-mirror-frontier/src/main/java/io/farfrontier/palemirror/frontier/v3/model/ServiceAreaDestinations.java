@@ -18,13 +18,20 @@ public final class ServiceAreaDestinations {
 
     public static Optional<SurfaceAnchor> select(List<ServiceAccessPoint> points, SubjectId actorId,
             SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded) {
+        return select(points, actorId, start, knowledge, excluded, surface -> true);
+    }
+
+    public static Optional<SurfaceAnchor> select(List<ServiceAccessPoint> points, SubjectId actorId,
+            SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded,
+            java.util.function.Predicate<SurfaceAnchor> available) {
         for (int distance = 1; distance <= MAX_SEARCH_RADIUS; distance++) {
             // Manhattan rings choose a nearest reachable free column, including non-flat support.
             for (int dx = -distance; dx <= distance; dx++) {
                 int dz = distance - Math.abs(dx);
                 for (int sign : dz == 0 ? new int[] {1} : new int[] {1, -1}) {
                     SurfaceAnchor candidate = knowledge.supportAt(start.x() + dx, start.z() + sign * dz);
-                    if (excluded.contains(candidate) || points.stream().anyMatch(point -> temporary(point, candidate))) continue;
+                    if (excluded.contains(candidate) || points.stream().anyMatch(point -> temporary(point, candidate))
+                            || !available.test(candidate)) continue;
                     MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
                             TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
                     try {

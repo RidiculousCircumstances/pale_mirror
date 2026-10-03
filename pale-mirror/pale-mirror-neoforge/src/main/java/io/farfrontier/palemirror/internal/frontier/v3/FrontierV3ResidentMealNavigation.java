@@ -31,6 +31,33 @@ final class FrontierV3ResidentMealNavigation {
             FrontierV3GoalNavigation.stop(body);
             return;
         }
+        if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS) {
+            ROUTES.remove(body);
+            var stations = KnownServiceExitNavigation.exitStations(state, meal.settlementId(), meal.depotId(),
+                    meal.residentId(), FrontierV3SurfaceObservation.observedBody(body).supportingSurface()).stream()
+                    .filter(station -> available(level, body, station)).toList();
+            if (stations.isEmpty()) {
+                blocked(body, meal, "service_exit:no-available-supported-exit");
+                FrontierV3GoalNavigation.stop(body);
+                return;
+            }
+            String lastReason = "no-reachable-exit";
+            for (int offset = 0; offset < stations.size(); offset += MovementOrder.MAX_LEGAL_STATIONS) {
+                var batch = stations.subList(offset, Math.min(stations.size(), offset + MovementOrder.MAX_LEGAL_STATIONS));
+                MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
+                        FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, batch,
+                        TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
+                var result = FrontierV3GoalNavigation.pursue(level, body,
+                        FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()));
+                if (result.status() != FrontierV3GoalNavigation.Status.BLOCKED) {
+                    BLOCKED.remove(body);
+                    return;
+                }
+                lastReason = result.reason();
+            }
+            blocked(body, meal, "service_exit:" + lastReason);
+            return;
+        }
         Route route = ROUTES.get(body);
         boolean admitted = ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId());
         if (route == null || route.leaseRevision() != lease.revision()

@@ -10,6 +10,41 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3AmbientDepartureTest {
     private static final SubjectId ACTOR = new SubjectId("resident:1-1");
 
+    @Test void semanticGoalDepartureReleasesFromActualBodyNotOldAdmissionAnchor() {
+        var state = hot();
+        var lease = state.ambientLeases().get(ACTOR);
+        var start = state.actorLocations().get(ACTOR).body();
+        var moved = new BodyPosition(start.x() + 1, start.y(), start.z());
+        state = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.retarget(
+                state, ACTOR, AmbientGoalKind.WORK, moved);
+        var original = receipt(state);
+        var departure = new FrontierV3AmbientDeparture(original.carrier(),
+                new SceneMemberPosition(ACTOR, moved, original.observed().health()),
+                original.canonicalBodyAtCapture(), original.canonicalHealthAtCapture());
+        assertTrue(departure.current(state));
+        assertNotEquals(lease.handoffBody(), moved);
+        assertTrue(FrontierV3AmbientActorExecutor.unloadedReleaseEligible(state,
+                new AmbientLeaseReleased(ACTOR, moved, departure.observed().health())));
+        var released = AmbientLeaseStateProcess.release(AmbientLeaseStateProcess.transition(
+                state, ACTOR, AmbientLeaseStatus.DRAINING),
+                new AmbientLeaseReleased(ACTOR, moved, departure.observed().health()));
+        assertEquals(moved, released.actorLocations().get(ACTOR).body());
+        assertFalse(departure.current(released));
+        // The persisted unload witness survives release until exact successor
+        // adoption, then retires without leaving a stale admission blocker.
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        assertTrue(ledger.recordAmbientDeparture(departure));
+        var carrier = departure.carrier();
+        assertTrue(ledger.fence(carrier.identity(), carrier.physicalRevision(), carrier.ambientRevision()));
+        ledger = FrontierV3AmbientCarrierLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        var successor = carrier.identity().liveBody(carrier.identity().owner(),
+                carrier.ambientRevision() + 1L, ledger.reconstructionEpoch(ACTOR));
+        assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(successor)));
+        assertTrue(ledger.ambientDeparture(ACTOR).isEmpty());
+        assertFalse(ledger.hasCarrier(ACTOR));
+        assertTrue(ledger.pendingAdoption(ACTOR).isPresent());
+    }
+
     private static FrontierWorldState hot() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ambient-departure"), 91L));
         state = AmbientLeaseStateProcess.prepare(state, AmbientActorProcess.nextLease(state, ACTOR, SimInstant.ZERO));
