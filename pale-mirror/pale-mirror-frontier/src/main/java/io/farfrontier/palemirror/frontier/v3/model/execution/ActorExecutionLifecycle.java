@@ -31,8 +31,15 @@ public final class ActorExecutionLifecycle {
         var actor = state.actorLocations().get(successor.actorId());
         var retained = state.actorExecutions().actors().get(successor.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
-                || retained != null && (retained.current().isPresent() || retained.suspended().isPresent()))
+                || retained != null && retained.suspended().isPresent())
             throw new IllegalArgumentException("new work admission cannot replace a current or suspended owner");
+        if (retained != null && retained.current().isPresent()) {
+            var current = retained.current().orElseThrow();
+            var capability = capabilities.require(current.activityKind());
+            if (capability.interruption() != ActorActivityCapability.Interruption.RELEASE)
+                throw new IllegalArgumentException("new work admission cannot replace an unreleased owner");
+            return releaseAndBegin(state, current, successor, capability);
+        }
         return new Transition(state, state, state.actorExecutions().begin(successor, successor.generation() - 1L));
     }
     public Transition prepareBegin(FrontierWorldState state, ActorExecutionId successor, long atTick) {
@@ -47,6 +54,8 @@ public final class ActorExecutionLifecycle {
             return new Transition(state, state, state.actorExecutions().begin(successor, successor.generation() - 1L));
         var current = retained.current().orElseThrow();
         var capability = capabilities.require(current.activityKind());
+        if (capability.interruption() == ActorActivityCapability.Interruption.RELEASE)
+            return releaseAndBegin(state, current, successor, capability);
         capability.validateReference(state, current);
         var checkpoint = Objects.requireNonNull(capability.checkpoint(state, current));
         checkpoint.validate(state, current);
@@ -57,6 +66,18 @@ public final class ActorExecutionLifecycle {
         if (!paused.actorExecutions().equals(state.actorExecutions()))
             throw new IllegalArgumentException("family pause changed common execution authority");
         return new Transition(state, paused, paused.actorExecutions().suspendAndBegin(current, successor));
+    }
+    private Transition releaseAndBegin(FrontierWorldState state, ActorExecutionId current,
+                                        ActorExecutionId successor, ActorActivityCapability capability) {
+        capability.validateReference(state, current);
+        var checkpoint = Objects.requireNonNull(capability.checkpoint(state, current));
+        checkpoint.validate(state, current);
+        if (!checkpoint.ready()) throw new IllegalArgumentException("release owner has unfinished obligations");
+        var released = Objects.requireNonNull(capability.release(state, current));
+        if (!released.actorExecutions().equals(state.actorExecutions()))
+            throw new IllegalArgumentException("family release changed common execution authority");
+        var executions = released.actorExecutions().finish(current).begin(successor, current.generation());
+        return new Transition(state, released, executions);
     }
     public Transition prepareResume(FrontierWorldState state, ActorExecutionId suspended,
                                     ActorExecutionId successor, long atTick) {

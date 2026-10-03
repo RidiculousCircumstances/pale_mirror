@@ -116,7 +116,7 @@ class DiagnosticIncidentIndexTest {
         RoutePatrol patrol = initial.strategicPlans().routePatrols().get(fixture.taskId());
         var locations = new java.util.LinkedHashMap<>(initial.actorLocations());
         var lost = patrol.memberIds().getFirst();
-        locations.put(lost, new ActorLocation(locations.get(lost).body(), ActorCondition.dead()));
+        locations.put(lost, new ActorLocation(locations.get(lost).body(), ActorCondition.dead(), locations.get(lost).kind()));
         FrontierWorldState withLoss = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
         RoutePatrolFailed payload = RoutePatrolFailureDiagnosticProducer.memberLost(patrol.taskId());
 

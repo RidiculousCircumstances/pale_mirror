@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -43,7 +45,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 222 retains exact settlement work authorization; old test worlds are rejected.
     // Version 225 retains UAE execution identities separately from movement and physical custody.
     // Disposable old worlds are rejected, never given inferred activity authority.
-    static final int VERSION = 225; private static final int MAX_ENTRIES = 65_535;
+    static final int VERSION = 226; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -170,7 +172,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static void writeActors(DataOutputStream output, Map<SubjectId, ActorLocation> values) throws IOException {
         writeCount(output, values.size());
         for (Map.Entry<SubjectId, ActorLocation> entry : values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-            writeString(output, entry.getKey().value()); writeBody(output, entry.getValue().body());
+            writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().kind().wireTag()); writeBody(output, entry.getValue().body());
             output.writeByte(entry.getValue().condition().status().wireTag()); output.writeLong(entry.getValue().condition().health().raw());
         }
     }
@@ -178,9 +180,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         Map<SubjectId, ActorLocation> values = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input));
+            ActorKind kind = FrontierWireTags.require(ActorKind.class, input.readUnsignedByte());
             BodyPosition body = readBody(input); int status = input.readUnsignedByte();
             if (status >= ActorLifeStatus.values().length
-                    || values.put(id, new ActorLocation(body, new ActorCondition(FrontierWireTags.require(ActorLifeStatus.class, status), new FixedScalar(input.readLong())))) != null) {
+                    || values.put(id, new ActorLocation(body, new ActorCondition(FrontierWireTags.require(ActorLifeStatus.class, status), new FixedScalar(input.readLong())), kind)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate actor state id: " + id.value());
             }
         }

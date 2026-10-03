@@ -6,7 +6,10 @@ import java.util.Optional;
 /** A portion remains owned until consumption or explicit resource reconciliation. */
 final class MealActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.MEAL; }
-    @Override public boolean supportsContinuation() { return false; }
+    @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
+    @Override public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {
+        throw new IllegalArgumentException("meal must settle its physical portion before exact terminal retirement");
+    }
     @Override public void validateReference(FrontierWorldState state, ActorExecutionId execution) {
         var meal = state.humanPopulation().meals().get(execution.actorId());
         if (execution.activityKind() != kind() || meal == null || !meal.executionId().equals(execution))

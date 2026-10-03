@@ -149,7 +149,7 @@ public final class ActorExecutionCoordinator {
                     || actor.condition().status() != ActorLifeStatus.ALIVE)
                 throw new IllegalArgumentException("capture lacks one living HOT ambient actor");
             FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), capture.body().supportingSurface().support());
-            actors.put(capture.actorId(), new ActorLocation(capture.body(), actor.condition().withHealth(capture.health())));
+            actors.put(capture.actorId(), new ActorLocation(capture.body(), actor.condition().withHealth(capture.health()), actor.kind()));
             ambient.put(capture.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
         }
         FrontierWorldState capturedState = state.withChanges(FrontierWorldStateUpdate.begin()

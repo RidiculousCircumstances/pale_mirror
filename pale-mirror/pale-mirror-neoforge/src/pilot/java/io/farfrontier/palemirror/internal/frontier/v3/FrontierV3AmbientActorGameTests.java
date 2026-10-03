@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
@@ -614,7 +616,7 @@ public final class FrontierV3AmbientActorGameTests {
         body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
         body.setNoAi(true); body.setHealth(7.0F);
         var source = new FrontierV3ActorCarrierComposition.Declaration(actor,
-                    FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE,
+                    ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE,
                     body.getUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 17L, 4L);
         FrontierV3ActorCarrierComposition.stamp(body, source);
         body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, "lease:handoff-source");

@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
@@ -37,8 +39,8 @@ final class FrontierV3ActorBirthCommitter implements TransactionCommitter {
             var permissions = new java.util.ArrayList<FrontierV3ActorFirstAdmission>(births.size());
             for (var birth : births) {
                 var kind = switch (birth.kind()) {
-                    case RESIDENT -> FrontierV3ActorCarrierComposition.ActorKind.RESIDENT;
-                    case BIOFORM -> FrontierV3ActorCarrierComposition.ActorKind.BIOFORM;
+                    case RESIDENT -> ActorKind.RESIDENT;
+                    case BIOFORM -> ActorKind.BIOFORM;
                 };
                 var identity = new FrontierV3ActorFirstAdmission.Identity(birth.actorId(), kind,
                         SceneLease.deterministicEntityId(world, birth.actorId()));

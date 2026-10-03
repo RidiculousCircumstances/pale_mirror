@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -55,7 +57,7 @@ final class FrontierV3AmbientDepartureObserver {
                     || (lease.status() != AmbientLeaseStatus.HOT && lease.status() != AmbientLeaseStatus.DRAINING
                         && lease.status() != AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)) return null;
             return FrontierV3ActorCarrierComposition.fromCanonical(state, actor,
-                    FrontierV3ActorCarrierComposition.ActorKind.valueOf(tag.getString(FrontierV3ActorCarrierComposition.KIND_KEY)),
+                    ActorKind.valueOf(tag.getString(FrontierV3ActorCarrierComposition.KIND_KEY)),
                     FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, entity.getUUID(),
                     FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(),
                     tag.getLong(FrontierV3ActorCarrierComposition.EPOCH_KEY));

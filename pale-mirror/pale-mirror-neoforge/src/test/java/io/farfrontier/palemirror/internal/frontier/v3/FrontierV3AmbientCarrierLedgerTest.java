@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -12,7 +14,7 @@ class FrontierV3AmbientCarrierLedgerTest {
     private static final UUID UUID_A = UUID.fromString("ef562345-8f47-37ec-af28-d12c259ab948");
     private static FrontierV3ActorCarrierComposition.Declaration declaration(FrontierV3ActorCarrierComposition.Owner owner,
                                                                                FrontierV3ActorCarrierComposition.Representation representation, long revision, long epoch) {
-        return new FrontierV3ActorCarrierComposition.Declaration(ACTOR, FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, owner, UUID_A, representation, revision, epoch);
+        return new FrontierV3ActorCarrierComposition.Declaration(ACTOR, ActorKind.RESIDENT, owner, UUID_A, representation, revision, epoch);
     }
     @Test void fencedCarrierPermitsOnlyOneNewerSameUuidAdoption() {
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
@@ -77,9 +79,9 @@ class FrontierV3AmbientCarrierLedgerTest {
         var inactive = declaration(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 1L);
         assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER, ledger.reconciliation(declaration(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 8L, 2L)));
         assertTrue(ledger.fence(inactive, 7L, 0L));
-        var foreign = new FrontierV3ActorCarrierComposition.Declaration(ACTOR, FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+        var foreign = new FrontierV3ActorCarrierComposition.Declaration(ACTOR, ActorKind.RESIDENT,
                 FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, UUID.randomUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 8L, 2L);
-        var wrongKind = new FrontierV3ActorCarrierComposition.Declaration(ACTOR, FrontierV3ActorCarrierComposition.ActorKind.BIOFORM,
+        var wrongKind = new FrontierV3ActorCarrierComposition.Declaration(ACTOR, ActorKind.BIOFORM,
                 FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, UUID_A, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 8L, 2L);
         assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.UUID_MISMATCH, ledger.reconciliation(foreign));
         assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.KIND_MISMATCH, ledger.reconciliation(wrongKind));

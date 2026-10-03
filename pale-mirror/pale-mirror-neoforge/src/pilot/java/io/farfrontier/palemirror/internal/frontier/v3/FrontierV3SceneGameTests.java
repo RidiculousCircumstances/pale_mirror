@@ -1,4 +1,8 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
+
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
@@ -350,7 +354,7 @@ public final class FrontierV3SceneGameTests {
                         "a stale body from a closed scene must be denied rather than retained as a permanent exception");
                 var staleMember = lease.members().getFirst();
                 var tombstone = state(runtime).fencedRecovery().tombstones().get(
-                        io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(staleMember.actorId()));
+                        ActorBodyId.recoveryBindingId(staleMember.actorId()));
                 helper.assertTrue(tombstone != null && state(runtime).fencedRecovery().lateLoad(tombstone.bindingId(),
                                 io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset.BODY,
                                 io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.recoveryOwner(lease),
@@ -415,7 +419,7 @@ public final class FrontierV3SceneGameTests {
     public static void newBodiesHydrateHealthForBothKindsAndOwners(GameTestHelper helper) {
         var condition = new io.farfrontier.palemirror.frontier.v3.model.ActorCondition(
                 ActorLifeStatus.ALIVE, new FixedScalar(7_250_000L));
-        for (var kind : FrontierV3ActorCarrierComposition.ActorKind.values()) {
+        for (var kind : ActorKind.values()) {
             for (var owner : FrontierV3ActorCarrierComposition.Owner.values()) {
                 var declaration = new FrontierV3ActorCarrierComposition.Declaration(
                         new SubjectId(("actor:health-" + kind.name() + "-" + owner.name()).toLowerCase(java.util.Locale.ROOT)), kind, owner,

@@ -7,17 +7,10 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
-import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 
 /** Read-only exact-tombstone guard for naturally returned closed scene projections. */
 final class FrontierV3ClosedProjectionFence {
     private FrontierV3ClosedProjectionFence() { }
-
-    static boolean bodyIsStale(FrontierWorldState state, SceneLease lease, SceneMember member) {
-        // A body also carries exact immutable actor/lease tags at its caller. A compacted body
-        // tombstone therefore remains fail-closed and may be discarded, never re-admitted.
-        return rejects(state, FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId()), FencedRecoveryAsset.BODY, lease, true);
-    }
 
     static boolean cargoIsStale(FrontierWorldState state, SceneLease lease) {
         return rejects(state, FrontierSceneLeaseStateSupport.cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId()),

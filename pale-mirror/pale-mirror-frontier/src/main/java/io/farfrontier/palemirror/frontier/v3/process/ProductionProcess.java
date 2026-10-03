@@ -79,7 +79,7 @@ public final class ProductionProcess {
             return state;
         }
         TraversalTopology rebased = ProductionWorkTraversal.compile(state, workshop, job.workerId(),
-                new ActorLocation(capture.body(), current.condition()), job.id());
+                new ActorLocation(capture.body(), current.condition(), current.kind()), job.id());
         return FrontierProductionWorkSceneSupport.replaceJob(state, job.rebaseUnstartedTraversal(rebased));
     }
 

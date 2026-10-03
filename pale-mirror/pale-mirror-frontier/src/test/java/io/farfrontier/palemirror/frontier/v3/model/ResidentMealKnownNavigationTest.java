@@ -123,7 +123,7 @@ class ResidentMealKnownNavigationTest {
         SurfaceAnchor side = port.stations().get(3);
         assertEquals(SurfaceAnchor.at(134, 64, 13), side);
         var actors = new java.util.LinkedHashMap<>(initial.actorLocations());
-        actors.put(resident, ActorLocation.standingOn(side));
+        actors.put(resident, ActorLocation.standingOn(side, ActorKind.RESIDENT));
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot, side,
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-side"),
@@ -156,7 +156,7 @@ class ResidentMealKnownNavigationTest {
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
         assertTrue(port.accessBoundary().cleared(route.getLast().standingBody()));
         var waitingActors = new java.util.LinkedHashMap<>(state.actorLocations());
-        waitingActors.put(resident, ActorLocation.standingOn(route.getLast()));
+        waitingActors.put(resident, ActorLocation.standingOn(route.getLast(), ActorKind.RESIDENT));
         List<SurfaceAnchor> shortEntry = ResidentMealKnownNavigation.path(
                 state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(waitingActors)), meal);
         assertEquals(port.serviceSurface(), shortEntry.getLast());
@@ -189,7 +189,7 @@ class ResidentMealKnownNavigationTest {
                 meal.retainedWorkOwner(), ResidentMeal.Phase.RETURN, meal.startedAtTick(), Optional.empty(),
                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, meal.claimId(), 1L));
         var serviceActors = new java.util.LinkedHashMap<>(state.actorLocations());
-        serviceActors.put(resident, ActorLocation.standingOn(service));
+        serviceActors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT));
         List<SurfaceAnchor> exit = ResidentMealKnownNavigation.returnPath(
                 state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(serviceActors)), returning);
         assertEquals(service, exit.getFirst());

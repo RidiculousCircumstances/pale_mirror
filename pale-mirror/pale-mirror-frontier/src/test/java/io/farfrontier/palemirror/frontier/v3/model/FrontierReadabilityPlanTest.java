@@ -59,7 +59,7 @@ class FrontierReadabilityPlanTest {
         SubjectId actor = state.actorLocations().keySet().iterator().next();
         java.util.Map<SubjectId, ActorLocation> changedActors = new LinkedHashMap<>(state.actorLocations());
         ActorLocation prior = changedActors.get(actor);
-        changedActors.put(actor, new ActorLocation(prior.body(), prior.condition().withHealth(FixedScalar.whole(7))));
+        changedActors.put(actor, new ActorLocation(prior.body(), prior.condition().withHealth(FixedScalar.whole(7)), prior.kind()));
         FrontierWorldState injured = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(changedActors));
 
         org.junit.jupiter.api.Assertions.assertNotEquals(FrontierReadabilityPlan.input(state), FrontierReadabilityPlan.input(injured),

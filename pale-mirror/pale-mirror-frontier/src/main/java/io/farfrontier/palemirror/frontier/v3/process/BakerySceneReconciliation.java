@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import java.util.LinkedHashMap;
@@ -39,12 +41,13 @@ public final class BakerySceneReconciliation {
                 || !bindings.getFirst().lotQuantities().equals(account.lotQuantities())
                 || !bindings.getFirst().claimQuantities().equals(account.claimQuantities()))
             throw new IllegalArgumentException("bakery recovery cannot replace or replay its cargo/effect");
-        var recoveryId = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(job.workerId());
+        var recoveryId = ActorBodyId.recoveryBindingId(job.workerId());
         var fence = state.fencedRecovery().current().get(recoveryId);
-        if (fence == null || fence.asset() != FencedRecoveryAsset.BODY || fence.phase() != FencedRecoveryPhase.AMBIGUOUS
-                || !fence.ownerId().equals(FrontierSceneLeaseStateSupport.recoveryOwner(lease))
-                || fence.ownerRevision() != lease.revision() || fence.authorityEpoch() != receipt.recoveryEpoch())
+        if (fence == null || fence.asset() != FencedRecoveryAsset.BODY
+                || !fence.ownerId().equals(job.workerId()) || fence.ownerRevision() != 0L
+                || fence.authorityEpoch() != receipt.recoveryEpoch())
             throw new IllegalArgumentException("bakery recovery has a stale body fence");
+        var recovery = ActorBodyAuthority.inspectedPresent(state, new ActorBodyId(job.workerId(), receipt.recoveryEpoch()));
         if (!state.bootstrap().bounds().contains(receipt.observedBody().supportingSurface().support()))
             throw new IllegalArgumentException("bakery recovery body is outside world");
         var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.workerId(), actor.withBody(receipt.observedBody()));
@@ -52,6 +55,6 @@ public final class BakerySceneReconciliation {
         var leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(lease.id(), lease.withMemberPositions(positions).withStatus(SceneLeaseStatus.HOT));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).sceneLeases(leases)
-                .fencedRecovery(state.fencedRecovery().inspectedRunning(recoveryId, receipt.recoveryEpoch())));
+                .fencedRecovery(recovery));
     }
 }

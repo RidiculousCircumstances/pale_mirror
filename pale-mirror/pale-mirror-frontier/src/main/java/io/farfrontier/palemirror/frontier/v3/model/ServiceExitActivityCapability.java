@@ -6,7 +6,10 @@ import java.util.Optional;
 /** Optional exit movement is retired by its exact interruption/arrival protocol, not suspended work. */
 final class ServiceExitActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.SERVICE_EXIT; }
-    @Override public boolean supportsContinuation() { return false; }
+    @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
+    @Override public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {
+        throw new IllegalArgumentException("service exit uses its exact movement retirement boundary");
+    }
     @Override public void validateReference(FrontierWorldState state, ActorExecutionId execution) {
         var movement = state.actorMovements().get(execution.actorId());
         if (execution.activityKind() != kind() || movement == null || !movement.executionId().equals(execution))

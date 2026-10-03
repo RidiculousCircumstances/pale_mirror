@@ -70,7 +70,7 @@ class KnownPedestrianRouteKnowledgeTest {
         int index = 1;
         for (Resident resident : settlement.residents()) {
             if (resident.id().equals(actorId)) continue;
-            actors.put(resident.id(), ActorLocation.standingOn(baseline.get(index)));
+            actors.put(resident.id(), ActorLocation.standingOn(baseline.get(index), ActorKind.RESIDENT));
             index = index + 1 < baseline.size() - 1 ? index + 1 : 1;
         }
         FrontierWorldState crowded = atService.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));

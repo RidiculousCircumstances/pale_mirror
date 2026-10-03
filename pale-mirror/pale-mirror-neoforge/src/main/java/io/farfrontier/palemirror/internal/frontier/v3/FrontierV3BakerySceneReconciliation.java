@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
+
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation;
 import net.minecraft.server.level.ServerLevel;
@@ -16,7 +18,7 @@ final class FrontierV3BakerySceneReconciliation {
         if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3SceneExecutor.owned(body, state, lease, member)
                 || !FrontierV3BakeryHandProjection.matchesCurrent(state, lease, member, body)) return;
         var observed = FrontierV3SupportedBodyCapture.observe(level, body);
-        var fence = state.fencedRecovery().current().get(FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId()));
+        var fence = state.fencedRecovery().current().get(ActorBodyId.recoveryBindingId(member.actorId()));
         if (observed.isEmpty() || fence == null || body.getMainHandItem().isEmpty()) return;
         var jobId = FrontierSceneBehaviors.productionWork(lease).jobId();
         var job = state.productionJobs().get(jobId);

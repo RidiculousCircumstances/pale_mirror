@@ -297,7 +297,7 @@ final class FrontierV3AmbientMovementExecutor {
                 || !lease.goalBody().equals(BodyPosition.above(new SurfaceAnchor(journey.nextColdPosition())))) return false;
         if (!observedBody(body).equals(lease.goalBody())) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-transit", actorId.value(),
-                new ResidentTransitAdvanced(actorId, journey.nextRouteIndex()));
+                new ResidentTransitAdvanced(actorId, journey.nextRouteIndex(), journey.executionId()));
         FrontierV3DiagnosticTrace.record(level.getServer(), "resident-transit:" + actorId.value(), "resident_transit_advanced", actorId, result);
         return true;
     }

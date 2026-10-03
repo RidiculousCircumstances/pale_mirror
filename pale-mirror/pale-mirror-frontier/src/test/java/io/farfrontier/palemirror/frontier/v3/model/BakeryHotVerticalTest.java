@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
+
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
@@ -109,7 +111,7 @@ class BakeryHotVerticalTest {
 
         ActorLocation actor = state.actorLocations().get(job.workerId());
         Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(state.actorLocations());
-        locations.put(job.workerId(), new ActorLocation(actor.body(), ActorCondition.dead()));
+        locations.put(job.workerId(), new ActorLocation(actor.body(), ActorCondition.dead(), actor.kind()));
         FrontierWorldState deadWorker = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
         List<ProposedEvent> deathEvents = ProductionProcess.failPreEffectWorkForDeath(deadWorker, job.workerId());
         assertEquals(2, deathEvents.size());
@@ -286,7 +288,7 @@ class BakeryHotVerticalTest {
         // may resume this exact body/hand, never clear an unknown pending recipe effect.
         var conflicted = state.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
         var fence = conflicted.fencedRecovery().current().get(
-                FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(job.workerId()));
+                ActorBodyId.recoveryBindingId(job.workerId()));
         var reconciled = new BakerySceneReconciled(job.id(), leaseId, lease.revision(),
                 fence.authorityEpoch(), actor.body(), hand);
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();

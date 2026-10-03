@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -177,7 +179,7 @@ final class FrontierV3SceneDepartureObserver {
                     || tag.getLong(FrontierV3SceneExecutor.REVISION_KEY) != lease.revision()) return null;
             SceneMember member = lease.members().stream().filter(value -> value.actorId().equals(actorId)).findFirst().orElse(null);
             if (member == null || !member.entityId().equals(entity.getUUID())) return null;
-            var kind = FrontierV3ActorCarrierComposition.ActorKind.valueOf(tag.getString(FrontierV3ActorCarrierComposition.KIND_KEY));
+            var kind = ActorKind.valueOf(tag.getString(FrontierV3ActorCarrierComposition.KIND_KEY));
             var live = FrontierV3ActorCarrierComposition.fromCanonical(state, actorId, kind,
                     FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
                     FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(),

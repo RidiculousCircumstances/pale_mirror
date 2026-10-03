@@ -262,7 +262,9 @@ class FrontierWorldProcessCatalogTest {
                         new SubjectId("object:representative"), "crate", 1L, "fingerprint:representative", "provenance:representative"))),
                 Map.entry("ambient-actors", new AmbientActorObserved(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE)),
                 Map.entry("logistics-scenes", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT)),
-                Map.entry("population", ResidentMigrationDiagnosticProducer.QUARANTINE.create(new SubjectId("resident:representative"))),
+                Map.entry("population", ResidentMigrationDiagnosticProducer.QUARANTINE.create(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                        new SubjectId("resident:representative"), io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.TRANSIT,
+                        new SubjectId("resident:representative"), 1L))),
                 Map.entry("actor-execution", new ActorExecutionResumed(
                         new ActorExecutionId(new SubjectId("resident:representative"), ActorActivityKind.FIELD_HARVEST,
                                 new SubjectId("job:representative"), 1L),

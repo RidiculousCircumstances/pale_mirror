@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import net.minecraft.nbt.CompoundTag;
@@ -24,7 +26,7 @@ class FrontierV3SceneDepartureConsumptionTest {
             new SimInstant(0), 7, SceneLeaseStatus.DRAINING, List.of(MEMBER), Map.of(ACTOR, BODY), Set.of(), Optional.empty());
 
     private static FrontierV3SceneDeparture receipt(SceneLeaseId lease, long revision, FixedScalar baseline,
-                                                    FrontierV3ActorCarrierComposition.ActorKind kind) {
+                                                    ActorKind kind) {
         var declaration = new FrontierV3ActorCarrierComposition.Declaration(ACTOR, kind,
                 FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, MEMBER.entityId(),
                 FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, revision, 4);
@@ -33,7 +35,7 @@ class FrontierV3SceneDepartureConsumptionTest {
     }
 
     private static FrontierV3SceneDeparture valid() {
-        return receipt(LEASE.id(), 7, BASELINE, FrontierV3ActorCarrierComposition.ActorKind.RESIDENT);
+        return receipt(LEASE.id(), 7, BASELINE, ActorKind.RESIDENT);
     }
 
     @Test
@@ -67,10 +69,10 @@ class FrontierV3SceneDepartureConsumptionTest {
     @Test
     void wrongSceneRevisionBaselineAndActorKindCannotFence() {
         var invalid = List.of(
-                receipt(new SceneLeaseId("lease:other"), 7, BASELINE, FrontierV3ActorCarrierComposition.ActorKind.RESIDENT),
-                receipt(LEASE.id(), 8, BASELINE, FrontierV3ActorCarrierComposition.ActorKind.RESIDENT),
-                receipt(LEASE.id(), 7, BASELINE.plus(FixedScalar.ONE), FrontierV3ActorCarrierComposition.ActorKind.RESIDENT),
-                receipt(LEASE.id(), 7, BASELINE, FrontierV3ActorCarrierComposition.ActorKind.BIOFORM));
+                receipt(new SceneLeaseId("lease:other"), 7, BASELINE, ActorKind.RESIDENT),
+                receipt(LEASE.id(), 8, BASELINE, ActorKind.RESIDENT),
+                receipt(LEASE.id(), 7, BASELINE.plus(FixedScalar.ONE), ActorKind.RESIDENT),
+                receipt(LEASE.id(), 7, BASELINE, ActorKind.BIOFORM));
         for (var receipt : invalid) {
             var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
             assertTrue(ledger.recordDeparture(receipt));
@@ -89,7 +91,7 @@ class FrontierV3SceneDepartureConsumptionTest {
         ledger.recordDeparture(valid());
         assertTrue(ledger.confirmSavedDeparture(valid()));
         assertTrue(FrontierV3SceneDepartureObserver.fenceDeparture(STATE, LEASE, MEMBER, ledger));
-        assertFalse(ledger.resumeDeparture(receipt(LEASE.id(), 8, BASELINE, FrontierV3ActorCarrierComposition.ActorKind.RESIDENT)));
+        assertFalse(ledger.resumeDeparture(receipt(LEASE.id(), 8, BASELINE, ActorKind.RESIDENT)));
         assertTrue(ledger.hasCarrier(ACTOR));
         assertTrue(ledger.resumeDeparture(valid()));
         assertFalse(ledger.hasCarrier(ACTOR));
@@ -146,7 +148,7 @@ class FrontierV3SceneDepartureConsumptionTest {
     }
 
     private static FrontierV3ActorCarrierComposition.Declaration live(long epoch) {
-        return new FrontierV3ActorCarrierComposition.Declaration(ACTOR, FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+        return new FrontierV3ActorCarrierComposition.Declaration(ACTOR, ActorKind.RESIDENT,
                 FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, MEMBER.entityId(),
                 FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, LEASE.revision(), epoch);
     }
@@ -185,7 +187,7 @@ class FrontierV3SceneDepartureConsumptionTest {
     @Test
     void matchingBodyCannotEraseDepartureAgainstADifferentCanonicalBaseline() {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
-        var stale = receipt(LEASE.id(), 7, BASELINE.plus(FixedScalar.ONE), FrontierV3ActorCarrierComposition.ActorKind.RESIDENT);
+        var stale = receipt(LEASE.id(), 7, BASELINE.plus(FixedScalar.ONE), ActorKind.RESIDENT);
         ledger.recordDeparture(stale);
         assertFalse(FrontierV3SceneDepartureObserver.resumeReturned(STATE, LEASE, MEMBER, live(4), stale.observed(), ledger));
         assertEquals(stale, ledger.departure(ACTOR).orElseThrow());

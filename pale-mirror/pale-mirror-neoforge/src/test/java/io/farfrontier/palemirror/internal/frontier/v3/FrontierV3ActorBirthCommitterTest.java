@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -37,7 +39,7 @@ class FrontierV3ActorBirthCommitterTest {
         assertEquals(List.of("permit", "wal", "permit", "wal"), sequence);
         assertEquals(1, ledger.firstAdmissions().size());
         var identity = ledger.firstAdmission(ACTOR).orElseThrow().identity();
-        assertEquals(FrontierV3ActorCarrierComposition.ActorKind.BIOFORM, identity.kind());
+        assertEquals(ActorKind.BIOFORM, identity.kind());
         assertEquals(SceneLease.deterministicEntityId(WORLD, ACTOR), identity.entityId());
     }
     @Test void failedPermissionWriteCannotPublishCanonicalBirth() {
@@ -77,7 +79,7 @@ class FrontierV3ActorBirthCommitterTest {
                 new ActorBirthIdentity(otherActor, ActorBirthIdentity.Kind.BIOFORM));
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         var identity = new FrontierV3ActorFirstAdmission.Identity(otherActor,
-                FrontierV3ActorCarrierComposition.ActorKind.BIOFORM,
+                ActorKind.BIOFORM,
                 SceneLease.deterministicEntityId(WORLD, otherActor));
         assertTrue(ledger.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(identity)));
         assertTrue(ledger.beginFirstAdmission(FrontierV3ActorOwnerBinding.ambient(

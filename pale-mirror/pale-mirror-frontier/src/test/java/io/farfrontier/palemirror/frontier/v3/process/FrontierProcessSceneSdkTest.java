@@ -386,7 +386,7 @@ class FrontierProcessSceneSdkTest {
         }
         @Override public TransitContext hotCheckpoint(TransitContext context) {
             EngineContext engine = fork(context.engine()); ResidentMigrationJourney journey = migration(engine, context.resident());
-            return context.with(submit(engine, new ResidentTransitAdvanced(context.resident(), journey.nextRouteIndex())));
+            return context.with(submit(engine, new ResidentTransitAdvanced(context.resident(), journey.nextRouteIndex(), journey.executionId())));
         }
         @Override public TransitContext releaseToCold(TransitContext context) {
             EngineContext engine = submit(fork(context.engine()), new AmbientLeaseTransition(context.resident(), AmbientLeaseStatus.DRAINING));
@@ -410,12 +410,12 @@ class FrontierProcessSceneSdkTest {
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<TransitContext> rejectStaleObservation(TransitContext context) {
             ResidentMigrationJourney journey = migration(context.engine(), context.resident());
-            assertRejected(context.engine(), new ResidentTransitAdvanced(context.resident(), journey.routeIndex()));
+            assertRejected(context.engine(), new ResidentTransitAdvanced(context.resident(), journey.routeIndex(), journey.executionId()));
             return rejected(context, "stale transit observation");
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<TransitContext> rejectSecondCursor(TransitContext context) {
             ResidentMigrationJourney journey = migration(context.engine(), context.resident());
-            assertRejected(context.engine(), new ResidentTransitAdvanced(context.resident(), journey.nextRouteIndex() + 1));
+            assertRejected(context.engine(), new ResidentTransitAdvanced(context.resident(), journey.nextRouteIndex() + 1, journey.executionId()));
             return rejected(context, "skipped transit cursor");
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<TransitContext> rejectDuplicateSchedule(TransitContext context) {

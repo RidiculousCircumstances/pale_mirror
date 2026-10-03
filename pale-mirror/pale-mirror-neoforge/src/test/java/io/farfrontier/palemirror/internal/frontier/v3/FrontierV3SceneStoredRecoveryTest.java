@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -173,7 +175,7 @@ class FrontierV3SceneStoredRecoveryTest {
         var actor = new SubjectId(actorValue);
         var id = UUID.fromString(uuid);
         var declaration = new FrontierV3ActorCarrierComposition.Declaration(actor,
-                FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+                ActorKind.RESIDENT,
                 FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, id,
                 FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7, 2);
         return new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, 7, 3),

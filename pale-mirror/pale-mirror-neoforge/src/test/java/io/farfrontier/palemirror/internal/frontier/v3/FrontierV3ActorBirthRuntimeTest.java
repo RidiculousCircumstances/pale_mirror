@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -52,7 +54,7 @@ class FrontierV3ActorBirthRuntimeTest {
         var disk = readLedger(ledgerFile);
         var permit = disk.firstAdmission(job.resident().id()).orElseThrow();
         assertEquals(FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED, permit.phase());
-        assertEquals(FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, permit.identity().kind());
+        assertEquals(ActorKind.RESIDENT, permit.identity().kind());
         assertEquals(SceneLease.deterministicEntityId(WORLD, job.resident().id()), permit.identity().entityId());
 
         // Open the real durable WAL without checkpointing the first runtime. No physical body exists.
@@ -121,7 +123,7 @@ class FrontierV3ActorBirthRuntimeTest {
         assertFalse(born.hiveColony().growthJobs().containsKey(job.id()));
         assertEquals(StrategicTaskStatus.COMPLETED, born.strategicPlans().tasks().get(task.id()).status());
         var disk = readLedger(ledgerFile); var permission = disk.firstAdmission(job.bioform().id()).orElseThrow();
-        assertEquals(FrontierV3ActorCarrierComposition.ActorKind.BIOFORM, permission.identity().kind());
+        assertEquals(ActorKind.BIOFORM, permission.identity().kind());
         assertEquals(SceneLease.deterministicEntityId(WORLD, job.bioform().id()), permission.identity().entityId());
         assertEquals(FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED, permission.phase());
         var reopened = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());

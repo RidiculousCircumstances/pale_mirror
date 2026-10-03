@@ -50,7 +50,7 @@ class RoutePatrolProcessTest {
         SubjectId lost = patrol.memberIds().getFirst();
         java.util.Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(state.actorLocations());
         ActorLocation before = locations.get(lost);
-        locations.put(lost, new ActorLocation(before.body(), ActorCondition.dead()));
+        locations.put(lost, new ActorLocation(before.body(), ActorCondition.dead(), before.kind()));
         FrontierWorldState withLoss = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
 
         FrontierWorldState failed = RoutePatrolProcess.reduceFailed(withLoss, patrol.settlementId(), RoutePatrolFailureDiagnosticProducer.memberLost(patrol.taskId()));

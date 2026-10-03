@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import net.minecraft.nbt.*;
 import net.minecraft.world.level.ChunkPos;

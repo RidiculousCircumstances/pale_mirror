@@ -86,7 +86,7 @@ class ResourceSiteStateTest {
         ResourceSite site = FrontierResourceSitePlan.compile(baseline.bootstrap()).get(siteId);
         SubjectId workerId = new SubjectId("resident:1-1");
         SurfaceAnchor terminal = ResourceSiteHarvestTraversal.workReturnSurface(baseline.bootstrap(), site);
-        ActorLocation retained = new ActorLocation(terminal.standingBody(), baseline.actorLocations().get(workerId).condition());
+        ActorLocation retained = new ActorLocation(terminal.standingBody(), baseline.actorLocations().get(workerId).condition(), baseline.actorLocations().get(workerId).kind());
 
         ResourceSiteHarvestTraversal.Plan nextEpoch = ResourceSiteHarvestTraversal.compilePlan(baseline.bootstrap(), site, retained,
                 new SubjectId("job:site-harvest-1-wheat-field-2"));

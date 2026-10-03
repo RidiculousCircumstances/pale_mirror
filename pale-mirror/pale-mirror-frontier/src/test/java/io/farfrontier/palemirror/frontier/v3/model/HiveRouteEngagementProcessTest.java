@@ -1,4 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
 import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -159,7 +161,7 @@ class HiveRouteEngagementProcessTest {
         state = state.transitionSceneLease(leaseId, SceneLeaseStatus.PREPARED).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertEquals(SceneLeaseStatus.HOT, state.sceneLeases().get(leaseId).status());
         assertEquals(RouteEngagementStatus.HOT, state.strategicPlans().routeEngagements().get(engagement.id()).status());
-        SubjectId bodyBinding = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(actorIds.getFirst());
+        SubjectId bodyBinding = ActorBodyId.recoveryBindingId(actorIds.getFirst());
         assertEquals(2L, state.fencedRecovery().current().get(bodyBinding).authorityEpoch(),
                 "attributed conflict resolution must install a new exact body epoch");
         assertEquals(FencedRecoveryDisposition.REJECT_STALE, state.fencedRecovery().lateLoad(bodyBinding, FencedRecoveryAsset.BODY,
@@ -587,7 +589,7 @@ class HiveRouteEngagementProcessTest {
         HiveOperationCommandAuthority expected = engagement.commandAuthority();
         java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
         ActorLocation controller = actors.get(expected.currentAuthorityId());
-        actors.put(expected.currentAuthorityId(), new ActorLocation(controller.body(), ActorCondition.dead()));
+        actors.put(expected.currentAuthorityId(), new ActorLocation(controller.body(), ActorCondition.dead(), controller.kind()));
         state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         HiveOperationCommandAuthority forged = new HiveOperationCommandAuthority(expected.kind(), expected.originalAuthorityId(), expected.currentAuthorityId(),
                 expected.rosterIds(), expected.subordinateWeight() + 1, expected.relayCoverage(), HiveCommandSignalPhase.SIGNAL_MEMORY, 3_010L);
@@ -626,7 +628,7 @@ class HiveRouteEngagementProcessTest {
         assertEquals(List.of(engagement.id()), state.coldEngagementSceneCandidates().stream().map(SceneEngagementCandidate::engagementId).toList());
         SubjectId fallen = engagement.commandAuthority().currentAuthorityId();
         java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        ActorLocation controller = actors.get(fallen); actors.put(fallen, new ActorLocation(controller.body(), ActorCondition.dead()));
+        ActorLocation controller = actors.get(fallen); actors.put(fallen, new ActorLocation(controller.body(), ActorCondition.dead(), controller.kind()));
         state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
 
         state = reduceControl(state, engagement.id(), 3_010L);

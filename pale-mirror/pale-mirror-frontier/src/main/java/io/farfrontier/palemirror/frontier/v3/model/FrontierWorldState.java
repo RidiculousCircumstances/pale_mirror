@@ -1,4 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
 import java.util.Optional;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState;
@@ -112,12 +114,15 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(diagnosticIncidents, "diagnostic incidents"); actorMovements = FrontierWorldStateSupport.immutableMap(actorMovements, "actor movements");
         Objects.requireNonNull(actorExecutions, "actor executions");
         ActorExecutionComposition.CAPABILITIES.validateKinds(actorExecutions);
+        PresenceActivityCapability.validateReferences(actorLocations, actorExecutions);
         ActorMovementStateSupport.validate(actorMovements, actorLocations, humanPopulation, inventory, actorExecutions);
         ResidentMealExecutionAuthority.validate(humanPopulation, actorExecutions);
+        TransitActivityCapability.validateReferences(humanPopulation, actorExecutions);
         HarvestActivityCapability.validateReferences(resourceSites, actorExecutions);
         ProductionActivityCapability.validateReferences(productionJobs, actorExecutions);
         if (!actorLocations.keySet().containsAll(actorExecutions.actors().keySet())) throw new IllegalArgumentException("execution names unknown actor");
         if (!fullValidationDeferred()) {
+            ActorBodyAuthority.validate(actorLocations, fencedRecovery);
             fencedRecovery.cargoRetirements().validateContext(bootstrap.worldId(), sceneLeases);
             validateFullState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs,
                 serviceWorks, contracts, operations, logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony,
@@ -156,8 +161,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             requireJobTask(strategicPlans, job.taskId(), job.hiveId(), StrategicTaskKind.GROW_HIVE_ORGANISM, "hive growth");
         }
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
-        Set<SubjectId> expectedActors = FrontierWorldStateSupport.bioformIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet()); expectedActors.addAll(humanPopulation.residentIds());
-        if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only canonical actor");
+        Set<SubjectId> expectedActors = ActorIdentityDeclarations.validate(bootstrap, hiveColony, humanPopulation, actorLocations);
                 FrontierWorldStateSupport.validateActorItemCustody(bootstrap.worldId(), expectedActors, inventory, sceneLeases, ambientLeases);
         HiveLifecycleStateSupport.validateCocoonCustody(bootstrap, hiveColony, actorLocations, ambientLeases, physicalDeltas);
         FrontierWorldStateSupport.validateSettlementPolicies(bootstrap, humanPopulation);
@@ -885,11 +889,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         nextActors.put(death.actorId(), current.deadAt(death.body()));
         FrontierSceneBehaviors.SceneDeathOutcome outcome = FrontierSceneBehaviors.afterActorDeath(this, lease, death.actorId(), atTick);
         FencedRecoveryState recovery = fencedRecovery;
-        SubjectId recoveryBinding = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(death.actorId());
+        SubjectId recoveryBinding = ActorBodyId.recoveryBindingId(death.actorId());
         FencedRecoveryBinding binding = recovery.current().get(recoveryBinding);
         if (binding != null) {
-            recovery = recovery.retireObservedBodyDeath(recoveryBinding, binding.authorityEpoch(),
-                    FrontierSceneLeaseStateSupport.recoveryOwner(lease), lease.revision());
+            recovery = ActorBodyAuthority.death(recovery, new ActorBodyId(death.actorId(), binding.authorityEpoch()));
         }
         return withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors).humanPopulation(outcome.humanPopulation())
                 .resourceSites(outcome.resourceSites()).strategicPlans(outcome.strategicPlans()).physicalIntents(outcome.physicalIntents())
@@ -926,7 +929,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 physicalIntents, physicalObservations, sceneLeases, hiveColony.addOrgan(organ), structureDamage, physicalDeltas, ambientLeases);
     } public FrontierWorldState spawnBioform(Bioform bioform) {
         Objects.requireNonNull(bioform, "bioform"); if (actorLocations.containsKey(bioform.id())) throw new IllegalArgumentException("spawned bioform collides with actor identity");
-        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations); nextActors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(bioform.position())));
+        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations); nextActors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(bioform.position()), ActorKind.BIOFORM));
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony.spawn(bioform), structureDamage, physicalDeltas, ambientLeases);
     }

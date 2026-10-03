@@ -257,7 +257,7 @@ class RouteMaintenanceProcessTest {
         for (int index = 0; index < ready.team().memberIds().size(); index++) {
             SubjectId member = ready.team().memberIds().get(index); BlockPosition station = port.stations().get(index).support();
             members.put(member, new EngineeringWorkAssembly.Member(List.of(station), 0));
-            positions.put(member, new ActorLocation(BodyPosition.above(new SurfaceAnchor(station)), positions.get(member).condition()));
+            positions.put(member, new ActorLocation(BodyPosition.above(new SurfaceAnchor(station)), positions.get(member).condition(), positions.get(member).kind()));
         }
         RouteMaintenance returned = ready.withAssembly(new EngineeringWorkAssembly(EngineeringJourneyPurpose.RETURN_DEPOT, members));
         FrontierWorldState atServicePort = terminalWithTool.withChanges(FrontierWorldStateUpdate.begin()

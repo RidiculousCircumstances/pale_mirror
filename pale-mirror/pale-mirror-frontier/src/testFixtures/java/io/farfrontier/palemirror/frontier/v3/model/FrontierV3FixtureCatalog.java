@@ -457,7 +457,7 @@ public final class FrontierV3FixtureCatalog {
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
         SurfaceAnchor service = SettlementDepotServicePort.forDepot(depot).serviceSurface();
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(initial.actorLocations());
-        actors.put(residentId, ActorLocation.standingOn(service));
+        actors.put(residentId, ActorLocation.standingOn(service, ActorKind.RESIDENT));
         long hungryAt = initial.humanPopulation().nutrition(residentId).nextThresholdTick(
                 initial.bootstrap().ruleset().residentLife(),
                 initial.humanPopulation().resident(residentId).characteristics().effectiveMetabolismPermille(0L));

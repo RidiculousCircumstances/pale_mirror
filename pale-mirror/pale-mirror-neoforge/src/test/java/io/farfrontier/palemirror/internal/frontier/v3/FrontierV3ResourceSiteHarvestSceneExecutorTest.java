@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
+
 import io.farfrontier.palemirror.frontier.v3.model.HarvestFixtureOwners;
 
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
@@ -48,7 +50,7 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
         state = state.transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CONFLICT);
         var conflict = state.sceneLeases().get(lease.id());
         long canonicalEpoch = state.fencedRecovery().current().get(
-                io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(job.workerId()))
+                ActorBodyId.recoveryBindingId(job.workerId()))
                 .authorityEpoch();
         var carrier = FrontierV3AmbientActorExecutor.carrierDeclaration(state, job.workerId(),
                 FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, lease.members().getFirst().entityId(),

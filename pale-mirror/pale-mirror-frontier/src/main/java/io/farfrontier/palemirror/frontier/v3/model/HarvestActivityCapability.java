@@ -6,7 +6,10 @@ import java.util.Optional;
 /** Field owner supplies its exact checkpoint and preserves work/cargo through interruption. */
 final class HarvestActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.FIELD_HARVEST; }
-    @Override public boolean supportsContinuation() { return true; }
+    @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
+    @Override public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {
+        throw new IllegalArgumentException("field work must retain its continuation or complete through its owner");
+    }
     private ResourceSiteHarvestJob job(FrontierWorldState state, ActorExecutionId execution) {
         return job(state.resourceSites(), execution);
     }

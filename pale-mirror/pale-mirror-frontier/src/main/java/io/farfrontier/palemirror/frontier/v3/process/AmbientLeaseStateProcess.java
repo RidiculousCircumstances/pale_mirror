@@ -45,6 +45,7 @@ public final class AmbientLeaseStateProcess {
         if (previous != null && previous.status() != AmbientLeaseStatus.CLOSED) throw new IllegalArgumentException("actor already has an active ambient lease");
         long expectedRevision = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
         if (lease.revision() != expectedRevision) throw new IllegalArgumentException("ambient lease revision is not the actor's next revision");
+        state = ActorBodyAuthority.demand(state, lease.actorId());
         Map<SubjectId, AmbientActorLease> next = new LinkedHashMap<>(state.ambientLeases()); next.put(lease.actorId(), lease);
         var movement = state.actorMovements().get(lease.actorId());
         if (movement != null && movement.coldTravel().isPresent()) {
@@ -80,6 +81,7 @@ public final class AmbientLeaseStateProcess {
         Map<SubjectId, AmbientActorLease> next = new LinkedHashMap<>(state.ambientLeases()); next.put(actorId, current.withStatus(nextStatus));
         FrontierWorldState changed = copy(state, state.actorLocations(), next);
         if (nextStatus != AmbientLeaseStatus.HOT) return changed;
+        changed = ActorBodyAuthority.observedPresent(changed, actorId);
         BioformLifecycle lifecycle = changed.hiveColony().bioformLifecycles().get(actorId);
         if (lifecycle == null || lifecycle.phase() != BioformLifecyclePhase.WAKING) return changed;
         Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(changed.hiveColony().bioformLifecycles());
@@ -153,7 +155,7 @@ public final class AmbientLeaseStateProcess {
                 && state.humanPopulation().meals().get(release.actorId()).pendingPhysicalStep().isPresent())
             throw new IllegalArgumentException("ambient meal has an unresolved physical effect");
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(release.actorId(), new ActorLocation(release.body(), actor.condition().withHealth(release.health())));
+        actors.put(release.actorId(), new ActorLocation(release.body(), actor.condition().withHealth(release.health()), actor.kind()));
         Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(release.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
         return copy(state, actors, leases);
     }
@@ -187,7 +189,13 @@ public final class AmbientLeaseStateProcess {
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), death.body().supportingSurface().support());
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations()); actors.put(death.actorId(), actor.deadAt(death.body()));
         Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(death.actorId(), lease.withStatus(AmbientLeaseStatus.CLOSED));
-        return copy(state, actors, leases, state.humanPopulation().cancelMigration(death.actorId()));
+        var recovery = state.fencedRecovery();
+        if (recovery.current().containsKey(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(death.actorId())))
+            recovery = ActorBodyAuthority.observedDeath(state, ActorBodyAuthority.current(state, death.actorId()));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).ambientLeases(leases)
+                .humanPopulation(state.humanPopulation().cancelMigration(death.actorId()))
+                .fencedRecovery(recovery)
+                .actorExecutions(HumanPopulationStateSupport.migrationRetirement(state, death.actorId())));
     }
 
     public static FrontierWorldState retarget(FrontierWorldState state, SubjectId actorId, AmbientGoalKind goal, BodyPosition goalBody) {

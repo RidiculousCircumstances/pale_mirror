@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
@@ -51,13 +53,13 @@ class FrontierV3ActorCarrierCompositionTest {
         UUID entity = FrontierV3AmbientActorExecutor.entityId(state, resident);
 
         FrontierV3ActorCarrierComposition.Declaration declaration = FrontierV3ActorCarrierComposition.fromCanonical(state, resident,
-                FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
                 entity, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L, 1L);
 
         assertEquals(resident, declaration.actorId());
-        assertEquals(FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, declaration.kind());
+        assertEquals(ActorKind.RESIDENT, declaration.kind());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorCarrierComposition.fromCanonical(state, resident,
-                FrontierV3ActorCarrierComposition.ActorKind.BIOFORM, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                ActorKind.BIOFORM, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
                 entity, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L, 1L),
                 "a body producer cannot substitute a compatible Minecraft type for the declared canonical kind");
     }
@@ -67,10 +69,10 @@ class FrontierV3ActorCarrierCompositionTest {
         SubjectId actor = new SubjectId("resident:xact-7");
         UUID entity = UUID.fromString("7f65aa31-f6d9-42f7-9e05-8d1fe830644a");
         assertThrows(IllegalArgumentException.class, () -> new FrontierV3ActorCarrierComposition.Declaration(actor,
-                FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
                 entity, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, -2L, 1L));
         FrontierV3ActorCarrierComposition.Declaration live = new FrontierV3ActorCarrierComposition.Declaration(actor,
-                FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
                 entity, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 4L, 2L);
         assertEquals(FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, live.inactiveCarrier().representation());
         assertEquals(5L, live.liveBody(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, 5L, 3L).authorityRevision());

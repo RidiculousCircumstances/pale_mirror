@@ -27,6 +27,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PopulationMigrationProcessTest {
+    @Test void aForeignGenerationCannotAdvanceTheSameResidentAndCursor() {
+        var state = displaced();
+        var started = payload(PopulationMigrationProcess.planReview(state,
+                PopulationMigrationProcess.review(1, 100L)), ResidentMigrationStarted.class);
+        state = HumanPopulationStateSupport.startMigration(state, started.journey());
+        var id = started.journey().executionId();
+        var foreign = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1L);
+        var before = state;
+        assertThrows(IllegalArgumentException.class, () -> HumanPopulationStateSupport.advanceMigration(before,
+                new ResidentMigrationAdvanced(id.actorId(), started.journey().nextRouteIndex(), foreign)));
+        assertEquals(started.journey(), before.humanPopulation().migration(id.actorId()));
+        before.actorExecutions().requireCurrent(id);
+    }
     @Test
     void displacedResidentMovesOneColdWaypointAtATimeThenChangesHouseholdOnlyAtArrival() {
         FrontierWorldState state = displaced(); Settlement source = state.bootstrap().settlements().getFirst();
@@ -66,6 +80,7 @@ class PopulationMigrationProcessTest {
                 "migration must retain fractional need progress rather than restarting hunger");
         assertEquals(migration.destination(), state.actorLocations().get(before.id()).supportingSurface().support());
         assertEquals(null, state.humanPopulation().migration(before.id()));
+        assertTrue(state.actorExecutions().actors().get(before.id()).current().isEmpty());
         assertTrue(!state.humanPopulation().residents().values().stream().anyMatch(person -> person.id().equals(before.id()) && person.settlementId().equals(source.id())));
     }
 
@@ -100,7 +115,7 @@ class PopulationMigrationProcessTest {
         uninterrupted.advanceTo(new SimInstant(100L), new WorkBudget(8, 64));
         FrontierWorldState beforeRestart = decode(uninterrupted.checkpoint());
         ResidentMigrationJourney journey = beforeRestart.humanPopulation().migrations().values().stream().findFirst().orElseThrow();
-        assertTrue(uninterrupted.checkpoint().schedules().stream().anyMatch(action -> action.id().equals(progressId(journey.residentId()))));
+        assertTrue(uninterrupted.checkpoint().schedules().stream().anyMatch(action -> action.id().equals(progressId(journey))));
 
         var recovered = FrontierEngines.recover(configuration, new RecoveryImage(world,
                 Optional.of(new SnapshotRecord(uninterrupted.checkpoint(), uninterrupted.checkpoint().revision().value())), List.of()));
@@ -134,7 +149,7 @@ class PopulationMigrationProcessTest {
         for (ResidentMigrationJourney journey : state.humanPopulation().migrations().values()) {
             assertTrue(journey.route().size() > 255, "the exact COLD route is no longer a coarse waypoint teleport");
             assertEquals(new ResidentMigrationStarted(journey), roundTrip(new ResidentMigrationStarted(journey)));
-            assertEquals(new ResidentMigrationAdvanced(journey.residentId(), 512), roundTrip(new ResidentMigrationAdvanced(journey.residentId(), 512)));
+            assertEquals(new ResidentMigrationAdvanced(journey.residentId(), 512, journey.executionId()), roundTrip(new ResidentMigrationAdvanced(journey.residentId(), 512, journey.executionId())));
             for (int index = 1; index < journey.route().size(); index++) {
                 BlockPosition previous = journey.route().get(index - 1), current = journey.route().get(index);
                 assertEquals(1, Math.abs(previous.x() - current.x()) + Math.abs(previous.z() - current.z()));
@@ -197,10 +212,10 @@ class PopulationMigrationProcessTest {
         state = AmbientLeaseStateProcess.transition(state, resident, AmbientLeaseStatus.HOT);
         FrontierWorldState hot = state;
         assertThrows(IllegalArgumentException.class, () -> HumanPopulationStateSupport.advanceMigration(hot,
-                new ResidentMigrationAdvanced(resident, started.journey().nextRouteIndex())), "COLD may not race a HOT lease");
+                new ResidentMigrationAdvanced(resident, started.journey().nextRouteIndex(), started.journey().executionId())), "COLD may not race a HOT lease");
 
         ResidentMigrationJourney before = state.humanPopulation().migration(resident);
-        ResidentTransitAdvanced first = new ResidentTransitAdvanced(resident, before.nextRouteIndex());
+        ResidentTransitAdvanced first = new ResidentTransitAdvanced(resident, before.nextRouteIndex(), before.executionId());
         assertEquals(first, roundTrip(first));
         state = PopulationMigrationProcess.reduceHotAdvance(state, first, 101L);
         ResidentMigrationJourney after = state.humanPopulation().migration(resident);
@@ -213,7 +228,7 @@ class PopulationMigrationProcessTest {
         while (state.humanPopulation().migration(resident) != null) {
             ResidentMigrationJourney journey = state.humanPopulation().migration(resident);
             state = PopulationMigrationProcess.reduceHotAdvance(state,
-                    new ResidentTransitAdvanced(resident, journey.nextRouteIndex()), 101L);
+                    new ResidentTransitAdvanced(resident, journey.nextRouteIndex(), journey.executionId()), 101L);
         }
         assertEquals(started.journey().destinationSettlementId(), state.humanPopulation().resident(resident).settlementId());
         assertEquals(started.journey().route().getLast(), state.actorLocations().get(resident).supportingSurface().support());
@@ -252,8 +267,9 @@ class PopulationMigrationProcessTest {
                 .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).filter(action -> action.kind().equals(kind)).findFirst().orElseThrow();
     }
 
-    private static io.farfrontier.palemirror.frontier.v3.api.ScheduleId progressId(SubjectId resident) {
-        return new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resident-migration-progress-" + resident.value().substring("resident:".length()));
+    private static io.farfrontier.palemirror.frontier.v3.api.ScheduleId progressId(ResidentMigrationJourney journey) {
+        return new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resident-migration-progress-"
+                + journey.residentId().value().substring("resident:".length()) + "-execution-" + journey.executionId().generation());
     }
 
     private static FrontierWorldState decode(io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint) {

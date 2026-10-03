@@ -19,6 +19,9 @@ public final class HumanPopulationStateSupport {
                 && operation.participantIds().contains(migration.residentId()))) throw new IllegalArgumentException("resident assigned to an active operation cannot migrate");
         ResidentProfile current = state.humanPopulation().resident(migration.residentId());
         ResidentMigrationJourney journey = state.humanPopulation().migration(migration.residentId());
+        if (journey == null || !journey.executionId().equals(migration.executionId()))
+            throw new IllegalArgumentException("migration completion has stale or foreign execution identity");
+        state.actorExecutions().requireCurrent(migration.executionId());
         if (journey == null || !journey.arriving() || !actor.supportingSurface().support().equals(journey.currentPosition())
                 || !journey.destinationHouseholdId().equals(migration.destinationHouseholdId())
                 || !journey.destinationSettlementId().equals(migration.destinationSettlementId()) || !journey.currentPosition().equals(migration.destination())) {
@@ -35,6 +38,7 @@ public final class HumanPopulationStateSupport {
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                 .humanPopulation(state.humanPopulation().completeMigration(migration.residentId(),
                         migration.destinationHouseholdId(), migration.destinationSettlementId()))
+                .actorExecutions(state.actorExecutions().finish(journey.executionId()))
                 .strategicPlans(state.strategicPlans().withWorkPermissions(current.settlementId(), permissions)));
     }
 
@@ -49,11 +53,12 @@ public final class HumanPopulationStateSupport {
             throw new IllegalArgumentException("migration journey requires one reservable destination housing place");
         }
         requireJourneyBounds(state, journey);
-        return copy(state, state.actorLocations(), state.humanPopulation().startMigration(journey));
+        return ActorExecutionComposition.LIFECYCLE.prepareVacant(state, journey.executionId()).commit(state,
+                FrontierWorldStateUpdate.begin().humanPopulation(state.humanPopulation().startMigration(journey)));
     }
 
     public static FrontierWorldState advanceMigration(FrontierWorldState state, ResidentMigrationAdvanced advanced) {
-        ResidentMigrationJourney journey = requireJourney(state, advanced.residentId()); ActorLocation actor = state.actorLocations().get(advanced.residentId());
+        ResidentMigrationJourney journey = requireJourney(state, advanced.residentId(), advanced.executionId()); ActorLocation actor = state.actorLocations().get(advanced.residentId());
         if (journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving() || advanced.nextRouteIndex() <= journey.routeIndex()
                 || advanced.nextRouteIndex() > journey.routeIndex() + ResidentMigrationJourney.MAX_COLD_ADVANCE_BLOCKS
                 || advanced.nextRouteIndex() >= journey.route().size()
@@ -66,7 +71,7 @@ public final class HumanPopulationStateSupport {
     }
 
     public static FrontierWorldState advanceMigrationHot(FrontierWorldState state, ResidentTransitAdvanced advanced) {
-        ResidentMigrationJourney journey = requireJourney(state, advanced.residentId());
+        ResidentMigrationJourney journey = requireJourney(state, advanced.residentId(), advanced.executionId());
         ActorLocation actor = state.actorLocations().get(advanced.residentId()); AmbientActorLease lease = state.ambientLeases().get(advanced.residentId());
         if (journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving() || advanced.nextRouteIndex() != journey.nextRouteIndex()
                 || actor == null || !actor.supportingSurface().support().equals(journey.currentPosition()) || lease == null || lease.status() != AmbientLeaseStatus.HOT
@@ -79,7 +84,7 @@ public final class HumanPopulationStateSupport {
     }
 
     public static FrontierWorldState blockMigration(FrontierWorldState state, ResidentMigrationBlocked blocked) {
-        ResidentMigrationJourney journey = requireJourney(state, blocked.residentId());
+        ResidentMigrationJourney journey = requireJourney(state, blocked.residentId(), blocked.executionId());
         if (journey.status() != ResidentMigrationStatus.EN_ROUTE || migrationBlockReason(state, journey) != blocked.reason()) {
             throw new IllegalArgumentException("migration block reason is not the current exact precondition failure");
         }
@@ -87,7 +92,7 @@ public final class HumanPopulationStateSupport {
     }
 
     public static FrontierWorldState resumeMigration(FrontierWorldState state, ResidentMigrationResumed resumed) {
-        ResidentMigrationJourney journey = requireJourney(state, resumed.residentId());
+        ResidentMigrationJourney journey = requireJourney(state, resumed.residentId(), resumed.executionId());
         if (journey.status() != ResidentMigrationStatus.BLOCKED || migrationBlockReason(state, journey) != null) {
             throw new IllegalArgumentException("migration may resume only after its current exact blockers clear");
         }
@@ -95,7 +100,14 @@ public final class HumanPopulationStateSupport {
     }
 
     static FrontierWorldState cancelMigrationForDeath(FrontierWorldState state, SubjectId residentId) {
-        return copy(state, state.actorLocations(), state.humanPopulation().cancelMigration(residentId));
+        return state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(state.humanPopulation().cancelMigration(residentId))
+                .actorExecutions(migrationRetirement(state, residentId)));
+    }
+    /** Death owners compose the transit cancellation with their other owned consequences. */
+    public static io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState migrationRetirement(
+            FrontierWorldState state, SubjectId residentId) {
+        var journey = state.humanPopulation().migration(residentId);
+        return journey == null ? state.actorExecutions() : state.actorExecutions().finish(journey.executionId());
     }
 
     static FrontierWorldState startBirth(FrontierWorldState state, ResidentBirthJob job) {
@@ -117,7 +129,7 @@ public final class HumanPopulationStateSupport {
         if (SettlementFacilityCapability.livingResidents(state, job.settlementId()) >= SettlementFacilityCapability.housingCapacity(state, job.settlementId())) {
             throw new IllegalArgumentException("resident birth lost required housing before completion");
         }
-        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.resident().id(), ActorLocation.standingOn(new SurfaceAnchor(job.position())));
+        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.resident().id(), ActorLocation.standingOn(new SurfaceAnchor(job.position()), ActorKind.RESIDENT));
         return copy(state, actors, state.humanPopulation().completeBirth(job.id(), state.bootstrap().ruleset().residentLife()));
     }
 
@@ -129,9 +141,12 @@ public final class HumanPopulationStateSupport {
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).humanPopulation(population));
     }
 
-    private static ResidentMigrationJourney requireJourney(FrontierWorldState state, SubjectId residentId) {
+    private static ResidentMigrationJourney requireJourney(FrontierWorldState state, SubjectId residentId,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution) {
         ResidentMigrationJourney journey = state.humanPopulation().migration(residentId);
         if (journey == null || state.humanPopulation().resident(residentId) == null) throw new IllegalArgumentException("migration has no exact resident journey");
+        if (!journey.executionId().equals(execution)) throw new IllegalArgumentException("migration input has stale execution identity");
+        state.actorExecutions().requireCurrent(execution);
         requireJourneyBounds(state, journey); return journey;
     }
 

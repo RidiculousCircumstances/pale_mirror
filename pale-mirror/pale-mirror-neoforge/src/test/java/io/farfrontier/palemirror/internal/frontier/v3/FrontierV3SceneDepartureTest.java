@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import net.minecraft.nbt.CompoundTag;
@@ -13,7 +15,7 @@ class FrontierV3SceneDepartureTest {
 
     private static FrontierV3SceneDeparture receipt(long epoch, long health) {
         var declaration = new FrontierV3ActorCarrierComposition.Declaration(ACTOR,
-                FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE,
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE,
                 UUID.fromString("ef562345-8f47-37ec-af28-d12c259ab948"),
                 FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7, epoch);
         return new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, 7, 3),

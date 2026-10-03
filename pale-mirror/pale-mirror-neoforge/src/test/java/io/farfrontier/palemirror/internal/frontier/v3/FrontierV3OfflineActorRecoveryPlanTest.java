@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.*;
@@ -74,7 +76,7 @@ class FrontierV3OfflineActorRecoveryPlanTest {
         for (var phase : FrontierV3ActorFirstAdmission.Phase.values()) {
             var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
             var identity = new FrontierV3ActorFirstAdmission.Identity(ACTOR,
-                    FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+                    ActorKind.RESIDENT,
                     FrontierV3AmbientActorExecutor.entityId(state, ACTOR));
             assertTrue(ledger.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(identity)));
             var target = FrontierV3ActorOwnerBinding.ambient(FrontierV3AmbientActorExecutor.carrierDeclaration(

@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -71,7 +70,7 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
 
     /** One canonical actor retains the same physical identity across ambient and scene leases. */
     public static UUID deterministicEntityId(WorldId worldId, SubjectId actorId) {
-        return UUID.nameUUIDFromBytes(("frontier-v3:actor:" + worldId.value() + ":" + actorId.value()).getBytes(StandardCharsets.UTF_8));
+        return io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(worldId, actorId);
     }
 
     /** The lease is intentionally not part of physical identity. */

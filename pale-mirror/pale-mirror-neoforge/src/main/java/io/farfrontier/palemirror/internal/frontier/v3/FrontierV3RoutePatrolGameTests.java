@@ -215,7 +215,7 @@ public final class FrontierV3RoutePatrolGameTests {
         while (patrol.status() == RoutePatrolStatus.ASSEMBLING) patrol = patrol.advanceFormation();
         List<SurfaceAnchor> surfaces = patrol.inspectionRoute().linearCorridorSurfaces().stream().limit(4).toList();
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(initial.actorLocations());
-        FrontierRoutePatrolSceneSupport.bodies(patrol).forEach((actor, body) -> actors.put(actor, new ActorLocation(body, ActorCondition.HEALTHY)));
+        FrontierRoutePatrolSceneSupport.bodies(patrol).forEach((actor, body) -> actors.put(actor, new ActorLocation(body, ActorCondition.HEALTHY, actors.get(actor).kind())));
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                 .strategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task).startPatrol(patrol)));
         return new Fixture(state, taskId, surfaces, patrol.travel().leader().currentBody().supportingSurface().support(),

@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import net.minecraft.nbt.*;
 import org.junit.jupiter.api.Test;
@@ -52,7 +54,7 @@ class FrontierV3AmbientCarrierPersistenceTest {
     @Test void savingAnotherActorsReleaseKeepsUnacknowledgedAdoptionOnDisk() throws Exception {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         var old = new FrontierV3ActorCarrierComposition.Declaration(new SubjectId("resident:1-1"),
-                FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
                 new java.util.UUID(0, 1), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 2L, 1L);
         var live = old.liveBody(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, 3L, 2L);
         assertTrue(ledger.fence(old, 2L, 2L)); assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(live)));

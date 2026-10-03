@@ -284,7 +284,7 @@ public final class RouteConstructionStateSupport {
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         ActorLocation prior = actors.get(moved);
         if (prior == null || prior.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("engineering assembly advances a nonliving member");
-        actors.put(moved, new ActorLocation(BodyPosition.above(new SurfaceAnchor(advanced.assembly().members().get(moved).currentPosition())), prior.condition()));
+        actors.put(moved, new ActorLocation(BodyPosition.above(new SurfaceAnchor(advanced.assembly().members().get(moved).currentPosition())), prior.condition(), prior.kind()));
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withAdvancedAssembly(advanced.assembly()));
         Map<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>(state.ambientLeases());

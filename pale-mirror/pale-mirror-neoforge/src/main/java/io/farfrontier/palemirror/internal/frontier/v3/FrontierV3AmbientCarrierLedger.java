@@ -1,5 +1,9 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
+
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierDomainRelationships;
@@ -412,7 +416,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         var location = state.actorLocations().get(actor);
         if (location == null || location.condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD
                 || state.fencedRecovery().current().containsKey(
-                        io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(actor))) return false;
+                        ActorBodyId.recoveryBindingId(actor))) return false;
         if (carriers.remove(actor) != null) setDirty();
         if (pendingAdoptions.remove(actor) != null) setDirty();
         if (pendingHandoffs.remove(actor) != null) setDirty();
@@ -738,7 +742,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
                     || !tag.contains("revision", Tag.TAG_LONG) || !tag.contains("ambientRevision", Tag.TAG_LONG)
                     || !tag.contains("epoch", Tag.TAG_LONG)) throw new IllegalStateException("incomplete v3 ambient carrier evidence");
             try { return new Carrier(new FrontierV3ActorCarrierComposition.Declaration(new SubjectId(tag.getString("actor")),
-                    FrontierV3ActorCarrierComposition.ActorKind.valueOf(tag.getString("kind")), FrontierV3ActorCarrierComposition.Owner.valueOf(tag.getString("owner")),
+                    ActorKind.valueOf(tag.getString("kind")), FrontierV3ActorCarrierComposition.Owner.valueOf(tag.getString("owner")),
                     tag.getUUID("uuid"), FrontierV3ActorCarrierComposition.Representation.valueOf(tag.getString("representation")),
                     tag.getLong("revision"), tag.getLong("epoch")), tag.getLong("revision"), tag.getLong("ambientRevision")); }
             catch (IllegalArgumentException invalid) { throw new IllegalStateException("invalid v3 ambient carrier declaration", invalid); }

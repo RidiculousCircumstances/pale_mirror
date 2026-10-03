@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -303,7 +305,7 @@ class ResidentMealProcessTest {
         SurfaceAnchor service = SettlementDepotServicePort.forDepot(settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).serviceSurface();
         var actors = new LinkedHashMap<>(initial.actorLocations());
-        actors.put(resident, ActorLocation.standingOn(service));
+        actors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT));
         var stock = initial.inventory().fungibleResources().transformCold(ReferenceContainerCustody.scopeId(depot),
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(new SubjectId("lot:resident-two-portions-bread"), settlement.id(),
@@ -395,7 +397,7 @@ class ResidentMealProcessTest {
         SurfaceAnchor service = SettlementDepotServicePort.forDepot(settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).serviceSurface();
         var actors = new LinkedHashMap<>(initial.actorLocations());
-        actors.put(resident, ActorLocation.standingOn(service));
+        actors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT));
         var stock = initial.inventory().fungibleResources().transformCold(ReferenceContainerCustody.scopeId(depot),
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(new SubjectId("lot:resident-engine-bread"), settlement.id(),
@@ -444,7 +446,7 @@ class ResidentMealProcessTest {
         SurfaceAnchor service = SettlementDepotServicePort.forDepot(settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).serviceSurface();
         var actors = new LinkedHashMap<>(initial.actorLocations());
-        actors.put(resident, ActorLocation.standingOn(service));
+        actors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT));
         SubjectId account = ReferenceContainerCustody.scopeId(depot);
         SubjectId bread = new SubjectId("lot:resident-meal-hot-bread");
         var cold = initial.inventory().fungibleResources().transformCold(account,
@@ -581,7 +583,7 @@ class ResidentMealProcessTest {
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
         SurfaceAnchor service = SettlementDepotServicePort.forDepot(depotStructure).serviceSurface();
         var actors = new LinkedHashMap<>(initial.actorLocations());
-        actors.put(resident, ActorLocation.standingOn(service));
+        actors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT));
         SubjectId bread = new SubjectId("lot:resident-meal-cold-bread");
         SubjectId depotAccount = ReferenceContainerCustody.scopeId(depot);
         var ledger = initial.inventory().fungibleResources().transformCold(depotAccount,

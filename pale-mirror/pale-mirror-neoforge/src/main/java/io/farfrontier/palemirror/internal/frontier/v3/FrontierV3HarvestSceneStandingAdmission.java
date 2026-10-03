@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
+
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
@@ -26,7 +28,7 @@ final class FrontierV3HarvestSceneStandingAdmission {
                 || lease.recoveryEvidence().isPresent()) return false;
         SceneMember member = lease.members().getFirst();
         var binding = state.fencedRecovery().current().get(
-                FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId()));
+                ActorBodyId.recoveryBindingId(member.actorId()));
         if (binding == null || binding.phase() != FencedRecoveryPhase.PREPARED) return false;
         if (!obstructedBodyFreeColumn(level, member.entityId(), lease.memberPosition(member.actorId()))) return false;
         ResourceSiteHarvestSceneCause cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);

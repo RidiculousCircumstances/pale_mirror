@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -43,7 +45,7 @@ class FrontierV3AmbientCarrierRecognitionTest {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         assertTrue(FrontierV3AmbientCarrierRecognition.recoverableOwnership(state, observed, ledger));
         var old = new FrontierV3ActorCarrierComposition.Declaration(actor,
-                FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
                 id, FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, revision - 1, 1L);
         assertTrue(ledger.fence(old, revision - 1, revision - 1));
         assertFalse(FrontierV3AmbientCarrierRecognition.recoverableOwnership(state, observed, ledger));

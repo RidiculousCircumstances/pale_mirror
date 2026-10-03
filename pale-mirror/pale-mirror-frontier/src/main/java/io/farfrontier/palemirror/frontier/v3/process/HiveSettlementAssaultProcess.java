@@ -184,7 +184,7 @@ public final class HiveSettlementAssaultProcess {
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         for (Map.Entry<SubjectId, BodyPosition> body : next.formationBodies().entrySet()) {
             ActorLocation current = actors.get(body.getKey());
-            actors.put(body.getKey(), new ActorLocation(body.getValue(), current.condition()));
+            actors.put(body.getKey(), new ActorLocation(body.getValue(), current.condition(), current.kind()));
         }
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                 .strategicPlans(state.strategicPlans().replaceSettlementAssault(next)));
@@ -225,7 +225,7 @@ public final class HiveSettlementAssaultProcess {
         FixedScalar remaining = target.condition().health().minus(strike.damage());
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(strike.targetId(), remaining.compareTo(FixedScalar.ZERO) <= 0 ? target.deadAt(target.body())
-                : new ActorLocation(target.body(), target.condition().withHealth(remaining)));
+                : new ActorLocation(target.body(), target.condition().withHealth(remaining), target.kind()));
         return copy(state, actors, state.strategicPlans().replaceSettlementAssault(assault.afterStrike(strike.epoch())));
     }
 

@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.model.AmbientPlacementPolicy;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
@@ -457,8 +459,9 @@ final class FrontierV3AmbientActorExecutor {
     static FrontierV3ActorCarrierComposition.Declaration carrierDeclaration(FrontierWorldState state, SubjectId actorId,
                                                                              FrontierV3ActorCarrierComposition.Owner owner, UUID entityId,
                                                                              FrontierV3ActorCarrierComposition.Representation representation, long revision, long epoch) {
-        return FrontierV3ActorCarrierComposition.fromCanonical(state, actorId, bioform(state, actorId)
-                        ? FrontierV3ActorCarrierComposition.ActorKind.BIOFORM : FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+        var actor = state.actorLocations().get(actorId);
+        if (actor == null) throw new IllegalArgumentException("carrier declaration requires its exact canonical actor");
+        return FrontierV3ActorCarrierComposition.fromCanonical(state, actorId, actor.kind(),
                 owner, entityId, representation, revision, epoch);
     }
     static boolean mayCreateFreshBody(boolean chunkLoaded, boolean entitiesLoaded, boolean exactHeadroom) {
@@ -630,8 +633,9 @@ final class FrontierV3AmbientActorExecutor {
         return FrontierV3SceneExecutor.demandExists(level, position);
     }
     static boolean bioform(FrontierWorldState state, SubjectId actorId) {
-        return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-                .map(Bioform::id).anyMatch(actorId::equals);
+        var actor = state.actorLocations().get(actorId);
+        if (actor == null) throw new IllegalArgumentException("actor kind is absent from canonical identity");
+        return actor.kind() == ActorKind.BIOFORM;
     }
     static Bioform bioformProfile(FrontierWorldState state, SubjectId actorId) {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
@@ -643,8 +647,8 @@ final class FrontierV3AmbientActorExecutor {
                 && (bioform ? entity instanceof Zombie : entity instanceof Villager)
                 && (bioform ? "BIOFORM" : "RESIDENT").equals(entity.getPersistentData().getString(KIND_KEY))
                 && actorId.value().equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.ACTOR_KEY))
-                && (bioform ? FrontierV3ActorCarrierComposition.ActorKind.BIOFORM.name()
-                : FrontierV3ActorCarrierComposition.ActorKind.RESIDENT.name()).equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.KIND_KEY))
+                && (bioform ? ActorKind.BIOFORM.name()
+                : ActorKind.RESIDENT.name()).equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.KIND_KEY))
                 && FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE.name().equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.OWNER_KEY))
                 && FrontierV3ActorCarrierComposition.Representation.LIVE_BODY.name().equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.REPRESENTATION_KEY))
                 && entity.getPersistentData().getLong(FrontierV3ActorCarrierComposition.REVISION_KEY) >= 1L

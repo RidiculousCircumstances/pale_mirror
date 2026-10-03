@@ -18,6 +18,33 @@ class FencedRecoveryStateTest {
     private static final SubjectId EFFECT = new SubjectId("effect:recovery-a");
     private static final SubjectId OWNER = new SubjectId("operation:recovery-a");
 
+    @Test void genericRecoveryCommandsCannotAdvanceOrRetireAnActorIncarnation() {
+        var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:body-generic-recovery"), 91L);
+        var actor = base.initialState().humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        var state = ActorBodyAuthority.demand(base.initialState(), actor);
+        var body = ActorBodyAuthority.current(state, actor);
+        var binding = io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(actor);
+        var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
+                base.worldId(), state, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(),
+                base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(),
+                base.transactionCommitter(), base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter());
+        var engine = FrontierEngines.create(configuration);
+        var before = engine.checkpoint();
+        java.util.List<FrontierPayload> attempts = java.util.List.of(new Running(binding, body.physicalEpoch()),
+                new Observed(binding, body.physicalEpoch()), new Confirmed(binding, body.physicalEpoch()),
+                new RevokedToCold(binding, body.physicalEpoch()), new Abandoned(binding, body.physicalEpoch()),
+                FencedRecoveryDiagnosticProducer.ambiguous(binding, body.physicalEpoch(), "wrong-protocol", FencedRecoveryDisposition.INSPECT));
+        for (int index = 0; index < attempts.size(); index++) {
+            var command = new CommandId("command:body-generic-recovery-" + index);
+            var rejected = assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(
+                    FrontierCommand.SCHEMA_VERSION, command, base.worldId(), before.revision(), before.instant(),
+                    FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), attempts.get(index))));
+            assertTrue(rejected.rejection().detail().contains("generic recovery cannot mutate actor-body authority"));
+            assertEquals(before.revision(), engine.checkpoint().revision());
+            assertArrayEquals(before.canonicalState(), engine.checkpoint().canonicalState());
+        }
+    }
+
     @Test
     void observedDeathCannotRetireCargoForeignOwnerRevisionOrEpoch() {
         var state = FencedRecoveryState.empty().prepare(binding(BODY, FencedRecoveryAsset.BODY, 1L, true))
@@ -91,12 +118,13 @@ class FencedRecoveryStateTest {
 
     @Test
     void allFourFamiliesRoundTripSnapshotAndWalReducerRejectsStaleEpochsBeforeMutation() {
-        FencedRecoveryState recovery = FencedRecoveryState.empty()
-                .prepare(binding(BODY, FencedRecoveryAsset.BODY, 1L, true))
+        FrontierWorldState baseline = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:fenced-recovery"), 91L));
+        var actor = baseline.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        baseline = ActorBodyAuthority.demand(baseline, actor);
+        FencedRecoveryState recovery = baseline.fencedRecovery()
                 .prepare(binding(CARGO, FencedRecoveryAsset.CARGO, 1L, false))
                 .prepare(binding(CONTAINER, FencedRecoveryAsset.CONTAINER, 1L, false))
                 .prepare(binding(EFFECT, FencedRecoveryAsset.EFFECT, 1L, false));
-        FrontierWorldState baseline = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:fenced-recovery"), 91L));
         FrontierWorldState changed = baseline.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(recovery));
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
         byte[] encoded = codec.encode(changed);

@@ -143,7 +143,7 @@ public final class RouteMaintenanceStateSupport {
         if (!current.advance(moved).equals(advanced.assembly())) throw new IllegalArgumentException("route maintenance advances outside its exact corridor");
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations()); ActorLocation prior = actors.get(moved);
         if (prior == null || prior.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("route maintenance advances a nonliving member");
-        actors.put(moved, new ActorLocation(BodyPosition.above(new SurfaceAnchor(advanced.assembly().members().get(moved).currentPosition())), prior.condition()));
+        actors.put(moved, new ActorLocation(BodyPosition.above(new SurfaceAnchor(advanced.assembly().members().get(moved).currentPosition())), prior.condition(), prior.kind()));
         Map<SubjectId, RouteMaintenance> next = new LinkedHashMap<>(state.routeMaintenances()); next.put(maintenance.id(), maintenance.withAdvancedAssembly(advanced.assembly()));
         Map<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>(state.ambientLeases());
         AmbientActorLease lease = ambient.get(moved);

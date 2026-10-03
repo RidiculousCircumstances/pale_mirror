@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
@@ -55,7 +57,7 @@ class FrontierV3AmbientDepartureTest {
         var location = state.actorLocations().get(ACTOR);
         long revision = state.ambientLeases().get(ACTOR).revision();
         var declaration = FrontierV3ActorCarrierComposition.fromCanonical(state, ACTOR,
-                FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
                 SceneLease.deterministicEntityId(state.bootstrap().worldId(), ACTOR),
                 FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, revision, 1L);
         return new FrontierV3AmbientDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, revision, revision),

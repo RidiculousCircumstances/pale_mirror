@@ -6,7 +6,10 @@ import java.util.Optional;
 /** Production owner, not hunger or the lifecycle, decides its physical effect checkpoint. */
 final class ProductionActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.PRODUCTION; }
-    @Override public boolean supportsContinuation() { return true; }
+    @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
+    @Override public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {
+        throw new IllegalArgumentException("production must retain its continuation or complete through its owner");
+    }
     private ProductionJob job(FrontierWorldState state, ActorExecutionId execution) {
         return job(state.productionJobs(), execution);
     }

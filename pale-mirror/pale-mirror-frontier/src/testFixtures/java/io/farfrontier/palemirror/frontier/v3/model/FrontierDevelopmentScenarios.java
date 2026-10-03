@@ -296,7 +296,7 @@ final class FrontierDevelopmentScenarios {
         compiled.members().forEach((member, approach) -> {
             EngineeringWorkAssembly.Member arrived = new EngineeringWorkAssembly.Member(approach.corridor(), approach.corridor().size() - 1);
             completed.put(member, arrived);
-            locations.put(member, new ActorLocation(BodyPosition.above(new SurfaceAnchor(arrived.currentPosition())), locations.get(member).condition()));
+            locations.put(member, new ActorLocation(BodyPosition.above(new SurfaceAnchor(arrived.currentPosition())), locations.get(member).condition(), locations.get(member).kind()));
         });
         RouteConstruction ready = new RouteConstruction(project.id(), project.settlementId(), project.waypoints(), project.workCells(), project.confirmedCells(),
                 project.status(), java.util.Optional.of(cargo.id()), project.team(), java.util.Optional.of(new EngineeringWorkAssembly(EngineeringJourneyPurpose.WORKSITE, completed)));

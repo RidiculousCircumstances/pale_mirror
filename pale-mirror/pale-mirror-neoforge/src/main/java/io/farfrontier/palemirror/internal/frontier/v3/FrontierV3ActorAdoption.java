@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -85,7 +87,7 @@ record FrontierV3ActorAdoption(FrontierV3AmbientCarrierLedger.Carrier predecesso
             throw new IllegalStateException("incomplete actor adoption declaration");
         }
         return new FrontierV3ActorCarrierComposition.Declaration(new SubjectId(tag.getString("actor")),
-                FrontierV3ActorCarrierComposition.ActorKind.valueOf(tag.getString("kind")),
+                ActorKind.valueOf(tag.getString("kind")),
                 FrontierV3ActorCarrierComposition.Owner.valueOf(tag.getString("owner")), tag.getUUID("uuid"),
                 FrontierV3ActorCarrierComposition.Representation.valueOf(tag.getString("representation")),
                 tag.getLong("revision"), tag.getLong("epoch"));

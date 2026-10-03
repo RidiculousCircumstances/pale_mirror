@@ -410,8 +410,8 @@ public final class FrontierV3AmbientPhysicsGameTests {
         SubjectId resident = initial.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
         SubjectId bioform = initial.bootstrap().hive().bioforms().stream().map(form -> form.id()).sorted().findFirst().orElseThrow();
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(initial.actorLocations());
-        actors.put(resident, new ActorLocation(BodyPosition.above(new SurfaceAnchor(block(residentSupport))), actors.get(resident).condition()));
-        actors.put(bioform, new ActorLocation(BodyPosition.above(new SurfaceAnchor(block(bioformSupport))), actors.get(bioform).condition()));
+        actors.put(resident, new ActorLocation(BodyPosition.above(new SurfaceAnchor(block(residentSupport))), actors.get(resident).condition(), actors.get(resident).kind()));
+        actors.put(bioform, new ActorLocation(BodyPosition.above(new SurfaceAnchor(block(bioformSupport))), actors.get(bioform).condition(), actors.get(bioform).kind()));
         Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(initial.hiveColony().bioformLifecycles());
         BioformLifecycle original = lifecycles.get(bioform);
         lifecycles.put(bioform, original == null ? BioformLifecycle.activeWithoutHome() : BioformLifecycle.active(original.homeSlot().orElseThrow()));

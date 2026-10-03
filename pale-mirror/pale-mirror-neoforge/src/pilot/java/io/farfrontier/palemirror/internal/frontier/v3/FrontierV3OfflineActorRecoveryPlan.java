@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess;
@@ -78,7 +80,7 @@ record FrontierV3OfflineActorRecoveryPlan(SubjectId actor, long cancelledRevisio
         // This is a NEW inactive recovery carrier for the cancelled generation. It does not
         // assert that an old physical body/epoch was observed, nor restore historical health.
         var declaration = FrontierV3ActorCarrierComposition.fromCanonical(closed, actor,
-                FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
                 uuid, FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, lease.revision(), 1L);
         var carrier = new FrontierV3AmbientCarrierLedger.Carrier(declaration, lease.revision(), lease.revision());
         return new FrontierV3OfflineActorRecoveryPlan(actor, lease.revision(), state, draining, closed, carrier, List.of(transition, release));

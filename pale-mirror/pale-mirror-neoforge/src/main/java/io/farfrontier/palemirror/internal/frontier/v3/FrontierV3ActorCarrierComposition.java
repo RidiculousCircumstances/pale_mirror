@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.world.entity.Entity;
@@ -29,7 +31,6 @@ final class FrontierV3ActorCarrierComposition {
 
     private FrontierV3ActorCarrierComposition() { }
 
-    enum ActorKind { RESIDENT, BIOFORM }
     enum Owner { AMBIENT_LEASE, SCENE_LEASE }
     enum Representation { LIVE_BODY, INACTIVE_CARRIER }
     enum Role { PRODUCER, ADOPTER }
@@ -136,7 +137,8 @@ final class FrontierV3ActorCarrierComposition {
         boolean resident = state.humanPopulation().residents().containsKey(actorId);
         boolean bioform = state.bootstrap().hive().bioforms().stream().anyMatch(value -> value.id().equals(actorId))
                 || state.hiveColony().spawnedBioforms().containsKey(actorId);
-        if (resident == bioform || (kind == ActorKind.RESIDENT) != resident || !state.actorLocations().containsKey(actorId)) {
+        var actor = state.actorLocations().get(actorId);
+        if (resident == bioform || (kind == ActorKind.RESIDENT) != resident || actor == null || actor.kind() != kind) {
             throw new IllegalArgumentException("canonical actor declaration does not match its closed producer roster");
         }
         return new Declaration(actorId, kind, owner, entityId, representation, revision, epoch);

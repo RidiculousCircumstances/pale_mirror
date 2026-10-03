@@ -332,10 +332,11 @@ final class HumanPopulationPayloadCodecs {
                 ResidentMigrated migration = (ResidentMigrated) payload;
                 FrontierWorldPayloadCodecs.writeSubject(output, migration.residentId()); FrontierWorldPayloadCodecs.writeSubject(output, migration.destinationHouseholdId());
                 FrontierWorldPayloadCodecs.writeSubject(output, migration.destinationSettlementId()); FrontierWorldPayloadCodecs.writePosition(output, migration.destination());
+                ActorExecutionStateCodec.writeId(output, migration.executionId());
             }); }
             @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMigrated(
                     FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(),
-                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readPosition(input))); }
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readPosition(input), ActorExecutionStateCodec.readId(input))); }
         };
     }
 
@@ -371,9 +372,10 @@ final class HumanPopulationPayloadCodecs {
             @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 ResidentMigrationAdvanced advanced = (ResidentMigrationAdvanced) payload;
                 FrontierWorldPayloadCodecs.writeSubject(output, advanced.residentId()); FrontierWorldStateCodec.writeCount(output, advanced.nextRouteIndex());
+                ActorExecutionStateCodec.writeId(output, advanced.executionId());
             }); }
             @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes,
-                    input -> new ResidentMigrationAdvanced(FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldStateCodec.readCount(input))); }
+                    input -> new ResidentMigrationAdvanced(FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldStateCodec.readCount(input), ActorExecutionStateCodec.readId(input))); }
         };
     }
 
@@ -383,9 +385,10 @@ final class HumanPopulationPayloadCodecs {
             @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 ResidentTransitAdvanced advanced = (ResidentTransitAdvanced) payload;
                 FrontierWorldPayloadCodecs.writeSubject(output, advanced.residentId()); FrontierWorldStateCodec.writeCount(output, advanced.nextRouteIndex());
+                ActorExecutionStateCodec.writeId(output, advanced.executionId());
             }); }
             @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes,
-                    input -> new ResidentTransitAdvanced(FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldStateCodec.readCount(input))); }
+                    input -> new ResidentTransitAdvanced(FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldStateCodec.readCount(input), ActorExecutionStateCodec.readId(input))); }
         };
     }
 
@@ -395,11 +398,12 @@ final class HumanPopulationPayloadCodecs {
             @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 ResidentMigrationBlocked blocked = (ResidentMigrationBlocked) payload;
                 FrontierWorldPayloadCodecs.writeSubject(output, blocked.residentId()); output.writeByte(blocked.reason().wireTag()); FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, blocked.diagnostic());
+                ActorExecutionStateCodec.writeId(output, blocked.executionId());
             }); }
             @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 var resident = FrontierWorldPayloadCodecs.readSubject(input); int reason = input.readUnsignedByte();
                 if (reason >= ResidentMigrationBlockReason.values().length) throw new IllegalArgumentException("unknown resident migration block reason");
-                return new ResidentMigrationBlocked(resident.value(), FrontierWireTags.require(ResidentMigrationBlockReason.class, reason), FrontierWorldPayloadCodecs.readDiagnosticTuple(input));
+                return new ResidentMigrationBlocked(resident.value(), FrontierWireTags.require(ResidentMigrationBlockReason.class, reason), FrontierWorldPayloadCodecs.readDiagnosticTuple(input), ActorExecutionStateCodec.readId(input));
             }); }
         };
     }
@@ -407,10 +411,11 @@ final class HumanPopulationPayloadCodecs {
     static PayloadCodec migrationResumed() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resident_migration_resumed"; }
-            @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output ->
-                    FrontierWorldPayloadCodecs.writeSubject(output, ((ResidentMigrationResumed) payload).residentId())); }
+            @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    FrontierWorldPayloadCodecs.writeSubject(output, ((ResidentMigrationResumed) payload).residentId());
+                    ActorExecutionStateCodec.writeId(output, ((ResidentMigrationResumed) payload).executionId()); }); }
             @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes,
-                    input -> new ResidentMigrationResumed(FrontierWorldPayloadCodecs.readSubject(input).value())); }
+                    input -> new ResidentMigrationResumed(FrontierWorldPayloadCodecs.readSubject(input).value(), ActorExecutionStateCodec.readId(input))); }
         };
     }
 
@@ -456,6 +461,7 @@ final class HumanPopulationPayloadCodecs {
         FrontierWorldStateCodec.writeCount(output, journey.route().size()); for (BlockPosition position : journey.route()) FrontierWorldPayloadCodecs.writePosition(output, position);
         FrontierWorldStateCodec.writeCount(output, journey.routeIndex()); output.writeByte(journey.status().wireTag()); output.writeBoolean(journey.blockReason().isPresent());
         if (journey.blockReason().isPresent()) output.writeByte(journey.blockReason().orElseThrow().wireTag());
+        ActorExecutionStateCodec.writeId(output, journey.executionId());
     }
 
     private static ResidentMigrationJourney readJourney(DataInputStream input) throws IOException {
@@ -472,6 +478,6 @@ final class HumanPopulationPayloadCodecs {
             reason = java.util.Optional.of(FrontierWireTags.require(ResidentMigrationBlockReason.class, value));
         }
         return new ResidentMigrationJourney(resident.value(), origin.value(), household.value(), destination.value(), route, routeIndex,
-                FrontierWireTags.require(ResidentMigrationStatus.class, status), reason);
+                FrontierWireTags.require(ResidentMigrationStatus.class, status), reason, ActorExecutionStateCodec.readId(input));
     }
 }

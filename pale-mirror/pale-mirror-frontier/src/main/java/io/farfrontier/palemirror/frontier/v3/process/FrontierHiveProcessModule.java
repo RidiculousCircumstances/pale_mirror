@@ -405,7 +405,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                             new java.util.LinkedHashMap<>(currentState.actorLocations());
                     if (strike.targetHealthAfter().compareTo(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO) > 0) {
                         ActorLocation target = actors.get(strike.targetId());
-                        actors.put(strike.targetId(), new ActorLocation(target.body(), target.condition().withHealth(strike.targetHealthAfter())));
+                        actors.put(strike.targetId(), new ActorLocation(target.body(), target.condition().withHealth(strike.targetHealthAfter()), target.kind()));
                     }
                     return currentState.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).physicalIntents(intents)
                             .physicalObservations(observations)).withStrategicPlans(currentState.strategicPlans().afterConfirmedHotStrike(current));

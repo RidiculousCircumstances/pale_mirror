@@ -122,7 +122,12 @@ public final class AmbientActorProcess {
         if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED) return AmbientLeaseStateProcess.recordDeath(state, death);
         var nextActors = new LinkedHashMap<>(state.actorLocations());
         nextActors.put(death.actorId(), state.actorLocations().get(death.actorId()).deadAt(death.body()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors));
+        var recovery = state.fencedRecovery();
+        if (recovery.current().containsKey(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(death.actorId())))
+            recovery = ActorBodyAuthority.observedDeath(state, ActorBodyAuthority.current(state, death.actorId()));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors).fencedRecovery(recovery)
+                .humanPopulation(state.humanPopulation().cancelMigration(death.actorId()))
+                .actorExecutions(HumanPopulationStateSupport.migrationRetirement(state, death.actorId())));
     }
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, AmbientActorObserved observation) {
@@ -130,7 +135,7 @@ public final class AmbientActorProcess {
         requireUnleased(state, observation.actorId());
         if (!subject.equals(owner(state, observation.actorId()))) throw new IllegalArgumentException("ambient actor observation lacks its canonical owner");
         var nextActors = new LinkedHashMap<>(state.actorLocations());
-        nextActors.put(observation.actorId(), new ActorLocation(observation.body(), state.actorLocations().get(observation.actorId()).condition().withHealth(observation.health())));
+        nextActors.put(observation.actorId(), new ActorLocation(observation.body(), state.actorLocations().get(observation.actorId()).condition().withHealth(observation.health()), state.actorLocations().get(observation.actorId()).kind()));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors));
     }
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, SimInstant instant, AmbientLeasePrepared prepared) {

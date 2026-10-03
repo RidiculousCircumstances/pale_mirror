@@ -18,6 +18,7 @@ import java.util.List;
 final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessModule {
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         try {
+            requireGenericAsset(state, command.payload());
             return switch (command.payload()) {
                 case ReferenceSurfaceVerified verified -> {
                     ReferenceSurfaceRecovery.verify(state, verified);
@@ -84,6 +85,7 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         try {
+            requireGenericAsset(state, event.payload());
             return switch (event.payload()) {
                 case ReferenceSurfaceVerified verified -> {
                     if (!event.subject().equals(verified.containerId())) throw new IllegalArgumentException("surface verification has a foreign subject");
@@ -137,6 +139,15 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
     }
     private static FrontierWorldState replace(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyState next) {
         return state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(next));
+    }
+    private static void requireGenericAsset(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
+        if (!(payload instanceof ExistingBindingTransition transition)) return;
+        var binding = state.fencedRecovery().current().get(transition.bindingId());
+        if (binding == null || binding.authorityEpoch() != transition.expectedEpoch())
+            throw new IllegalArgumentException("generic recovery requires an exact current asset");
+        if (binding.asset() == io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset.BODY)
+            throw new IllegalArgumentException("generic recovery cannot mutate actor-body authority");
     }
     private static FrontierWorldState replaceRecovery(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryState next) {
         return state.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(next));

@@ -50,7 +50,7 @@ class RouteTopologyTest {
         SubjectId engineer = new SubjectId("resident:1-1");
         BlockPosition start = new BlockPosition(-381, 64, -305);
         java.util.Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(initial.actorLocations());
-        locations.put(engineer, new ActorLocation(BodyPosition.above(new SurfaceAnchor(start)), locations.get(engineer).condition()));
+        locations.put(engineer, new ActorLocation(BodyPosition.above(new SurfaceAnchor(start)), locations.get(engineer).condition(), locations.get(engineer).kind()));
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
         BlockPosition deck = FrontierRouteNetwork.surfaceAt(bootstrap, state.routeTopology(), -380, -305).orElseThrow();
         assertEquals(new BlockPosition(-380, 64, -305), deck);

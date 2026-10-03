@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
+
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
@@ -55,9 +57,7 @@ public final class FrontierSceneLeaseStateSupport {
         FencedRecoveryState recovery = switch (nextStatus) {
             case HOT -> runningRecovery(state.fencedRecovery(), current);
             case CONFLICT -> isolateRecovery(state.fencedRecovery(), current, "scene-conflict");
-            // CONFLICT -> PREPARED is the attributed local-resolution boundary.  The old
-            // materialization is retained as a stale tombstone and this exact lease receives a
-            // new epoch before any body can run again.
+            // A scene resolution may supersede its cargo projection, never its actors.
             case PREPARED -> current.status() == SceneLeaseStatus.CONFLICT
                     ? reprepareConflictRecovery(state.fencedRecovery(), current) : state.fencedRecovery();
             default -> state.fencedRecovery();
@@ -96,7 +96,7 @@ public final class FrontierSceneLeaseStateSupport {
                 || !FrontierSceneBehaviors.isRoutePatrol(current)) {
             throw new IllegalArgumentException("recovery revoke requires one uninspected route-patrol lease");
         }
-        FencedRecoveryState recovery = revokeReversibleBodies(state.fencedRecovery(), current);
+        FencedRecoveryState recovery = state.fencedRecovery();
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(current.id(), current.withStatus(SceneLeaseStatus.CLOSED));
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans(), recovery);
@@ -125,7 +125,7 @@ public final class FrontierSceneLeaseStateSupport {
             // halfway through ordinary Minecraft movement when its chunk vanished, but that
             // transient sub-cell location must not become a second strategic travel state.
             BodyPosition canonical = FrontierSceneBehaviors.releasedBody(state, current, position.actorId(), position.body());
-            actors.put(position.actorId(), new ActorLocation(canonical, currentActor.condition().withHealth(position.health())));
+            actors.put(position.actorId(), new ActorLocation(canonical, currentActor.condition().withHealth(position.health()), currentActor.kind()));
         }
         StrategicPlanState plans = FrontierSceneBehaviors.releasePlans(state, current);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
@@ -156,15 +156,8 @@ public final class FrontierSceneLeaseStateSupport {
                 && (current.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || current.recoveryEvidence().isPresent())) {
             throw new IllegalArgumentException("only an unstarted scene lease can be aborted before materialization");
         }
-        for (SceneMember member : current.members()) {
-            FencedRecoveryBinding binding = state.fencedRecovery().current().get(bodyRecoveryBindingId(member.actorId()));
-            if (binding == null || binding.phase() != FencedRecoveryPhase.PREPARED
-                    || binding.asset() != FencedRecoveryAsset.BODY
-                    || !binding.ownerId().equals(recoveryOwner(current))
-                    || binding.ownerRevision() != current.revision()) {
-                throw new IllegalArgumentException("scene preparation abort lacks exact unstarted body authority");
-            }
-        }
+        // Cancelling process admission does not revoke an actor incarnation. It may already
+        // be observed under another activity; only common body unload/death may retire it.
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans(), revokePreparedRecovery(state.fencedRecovery(), current));
@@ -181,9 +174,7 @@ public final class FrontierSceneLeaseStateSupport {
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).sceneLeases(leases)
                 .ambientLeases(ambient).strategicPlans(plans).fencedRecovery(recovery));
     }
-    /** Stable physical-body key used by runtime stale-load guards as well as canonical recovery. */
-    public static SubjectId bodyRecoveryBindingId(SubjectId actorId) { return new SubjectId("recovery:body_" + actorId.value().replace(':', '_')); }
-    /** Stable owner identity for an exact scene epoch; it is deliberately not an ambient roster. */
+    /** Stable owner identity for scene cargo/effects only; actor bodies own their own epoch. */
     public static SubjectId recoveryOwner(SceneLease lease) { return recoveryOwner(lease.id()); }
     /** Stable persisted recovery binding for one exact lease; this is identity translation, never owner discovery. */
     public static SubjectId recoveryOwner(io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId leaseId) {
@@ -195,10 +186,9 @@ public final class FrontierSceneLeaseStateSupport {
         return prepareCargo(prepareBodies(recovery, lease), lease);
     }
     private static FencedRecoveryState prepareBodies(FencedRecoveryState recovery, SceneLease lease) {
-        FencedRecoveryState next = recovery; SubjectId owner = recoveryOwner(lease);
+        FencedRecoveryState next = recovery;
         for (SceneMember member : lease.members()) {
-            SubjectId id = bodyRecoveryBindingId(member.actorId());
-            next = next.prepare(FencedRecoveryBinding.prepared(id, FencedRecoveryAsset.BODY, owner, lease.revision(), next.nextEpoch(id), true));
+            next = ActorBodyAuthority.demand(next, member.actorId());
         }
         return next;
     }
@@ -210,11 +200,7 @@ public final class FrontierSceneLeaseStateSupport {
     }
     private static FencedRecoveryState reprepareConflictRecovery(FencedRecoveryState recovery, SceneLease lease) {
         FencedRecoveryState next = recovery; SubjectId owner = recoveryOwner(lease);
-        for (SceneMember member : lease.members()) {
-            SubjectId id = bodyRecoveryBindingId(member.actorId());
-            next = next.supersedeAmbiguous(FencedRecoveryBinding.prepared(id, FencedRecoveryAsset.BODY, owner, lease.revision(),
-                    next.nextEpoch(id), true), "scene-conflict-resolved");
-        }
+        // Resolving a process conflict neither supersedes nor reconstructs its actors.
         if (!FrontierSceneBehaviors.isLogistics(lease)) return next;
         SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId());
         return next.supersedeAmbiguous(FencedRecoveryBinding.prepared(id, FencedRecoveryAsset.CARGO, owner, lease.revision(),
@@ -226,10 +212,7 @@ public final class FrontierSceneLeaseStateSupport {
     private static FencedRecoveryState runningBodies(FencedRecoveryState recovery, SceneLease lease) {
         FencedRecoveryState next = recovery;
         for (SceneMember member : lease.members()) {
-            SubjectId id = bodyRecoveryBindingId(member.actorId()); FencedRecoveryBinding binding = next.current().get(id);
-            if (binding == null) throw new IllegalArgumentException("scene body recovery authority is absent");
-            if (binding.phase() == FencedRecoveryPhase.PREPARED) next = next.running(id, binding.authorityEpoch());
-            else if (binding.phase() != FencedRecoveryPhase.RUNNING) throw new IllegalArgumentException("scene body recovery authority cannot be reclaimed");
+            next = ActorBodyAuthority.observedPresent(next, member.actorId());
         }
         return next;
     }
@@ -242,18 +225,7 @@ public final class FrontierSceneLeaseStateSupport {
         return binding.phase() == FencedRecoveryPhase.PREPARED ? recovery.running(id, binding.authorityEpoch()) : recovery;
     }
     private static FencedRecoveryState confirmRecovery(FrontierWorldState state, FencedRecoveryState recovery, SceneLease lease) {
-        return confirmCargo(state, confirmBodies(state, recovery, lease), lease);
-    }
-    private static FencedRecoveryState confirmBodies(FrontierWorldState state, FencedRecoveryState recovery, SceneLease lease) {
-        FencedRecoveryState next = recovery;
-        for (SceneMember member : lease.members()) {
-            SubjectId id = bodyRecoveryBindingId(member.actorId());
-            FencedRecoveryBinding binding = next.current().get(id);
-            if (state.actorLocations().get(member.actorId()).condition().status() != ActorLifeStatus.ALIVE) continue;
-            if (binding == null) throw new IllegalArgumentException("scene body recovery authority is absent at release");
-            long epoch = binding.authorityEpoch(); next = next.observed(id, epoch).confirm(id, epoch);
-        }
-        return next;
+        return confirmCargo(state, recovery, lease);
     }
     private static FencedRecoveryState confirmCargo(FrontierWorldState state, FencedRecoveryState recovery, SceneLease lease) {
         if (!FrontierSceneBehaviors.isLogistics(lease)) return recovery;
@@ -274,24 +246,13 @@ public final class FrontierSceneLeaseStateSupport {
         return recovery.observed(id, binding.authorityEpoch());
     }
     private static FencedRecoveryState revokePreparedRecovery(FencedRecoveryState recovery, SceneLease lease) {
-        return revokePreparedCargo(revokePreparedBodies(recovery, lease), lease);
+        return revokePreparedCargo(recovery, lease);
     }
     private static FencedRecoveryState isolateRecovery(FencedRecoveryState recovery, SceneLease lease, String reason) {
         FencedRecoveryState next = recovery;
-        for (SceneMember member : lease.members()) {
-            SubjectId id = bodyRecoveryBindingId(member.actorId()); FencedRecoveryBinding binding = next.current().get(id);
-            if (binding != null) next = next.ambiguous(id, binding.authorityEpoch(), reason, FencedRecoveryDisposition.INSPECT);
-        }
         if (FrontierSceneBehaviors.isLogistics(lease)) {
             SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId()); FencedRecoveryBinding binding = next.current().get(id);
             if (binding != null) next = next.ambiguous(id, binding.authorityEpoch(), reason, FencedRecoveryDisposition.INSPECT);
-        }
-        return next;
-    }
-    private static FencedRecoveryState revokePreparedBodies(FencedRecoveryState recovery, SceneLease lease) {
-        FencedRecoveryState next = recovery;
-        for (SceneMember member : lease.members()) {
-            SubjectId id = bodyRecoveryBindingId(member.actorId()); next = next.revokeToCold(id, next.current().get(id).authorityEpoch());
         }
         return next;
     }
@@ -300,19 +261,5 @@ public final class FrontierSceneLeaseStateSupport {
         SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId()); FencedRecoveryBinding binding = recovery.current().get(id);
         if (binding == null) throw new IllegalArgumentException("prepared scene cargo recovery authority is absent");
         return recovery.revokeToCold(id, binding.authorityEpoch());
-    }
-    private static FencedRecoveryState revokeReversibleBodies(FencedRecoveryState recovery, SceneLease lease) {
-        FencedRecoveryState next = recovery;
-        SubjectId owner = recoveryOwner(lease);
-        for (SceneMember member : lease.members()) {
-            SubjectId id = bodyRecoveryBindingId(member.actorId());
-            FencedRecoveryBinding binding = next.current().get(id);
-            if (binding == null || binding.asset() != FencedRecoveryAsset.BODY || !binding.ownerId().equals(owner)
-                    || binding.ownerRevision() != lease.revision()) {
-                throw new IllegalArgumentException("scene recovery revoke lacks exact body authority");
-            }
-            next = next.revokeToCold(id, binding.authorityEpoch());
-        }
-        return next;
     }
 }

@@ -1,9 +1,10 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import java.util.LinkedHashMap;
-import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ActorCarrierComposition.ActorKind;
 
 /** Issuance at the same explicit fresh-instance boundary used by the canonical runtime. */
 final class FrontierV3ActorFirstAdmissionBootstrap {

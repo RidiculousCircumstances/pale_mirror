@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 
@@ -885,7 +887,7 @@ public final class FrontierV3CargoCarrierGameTests {
         body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
         body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
         FrontierV3ActorCarrierComposition.stamp(body, FrontierV3ActorCarrierComposition.fromCanonical(state, member.actorId(),
-                bioform ? FrontierV3ActorCarrierComposition.ActorKind.BIOFORM : FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+                bioform ? ActorKind.BIOFORM : ActorKind.RESIDENT,
                 FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
                 FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
         helper.assertTrue(level.addFreshEntity(body), "the exact recovery body fixture must enter the loaded world");

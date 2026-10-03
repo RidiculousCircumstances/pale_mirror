@@ -1,4 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
@@ -870,8 +872,9 @@ final class FrontierV3SceneExecutor {
         return lease.status() == SceneLeaseStatus.CLOSED && ownsDeclaration(entity, state, lease, member);
     }
     static boolean bioform(FrontierWorldState state, SubjectId actorId) {
-        return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-                .anyMatch(bioform -> bioform.id().equals(actorId));
+        var actor = state.actorLocations().get(actorId);
+        if (actor == null) throw new IllegalArgumentException("actor kind is absent from canonical identity");
+        return actor.kind() == ActorKind.BIOFORM;
     }
     private static boolean mark(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
         var from = FrontierV3ActorCarrierComposition.declaredBy(entity).orElse(null);

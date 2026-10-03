@@ -42,9 +42,9 @@ public final class PopulationMigrationProcess {
         FrontierWorldState working = state;
         for (ResidentMigrationJourney journey : orderedJourneys(state, ordinal)) {
             if (journey.status() == ResidentMigrationStatus.BLOCKED && HumanPopulationStateSupport.migrationBlockReason(working, journey) == null) {
-                events.add(new ProposedEvent(journey.originSettlementId(), new ResidentMigrationResumed(journey.residentId())));
-                events.add(schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
-                working = HumanPopulationStateSupport.resumeMigration(working, new ResidentMigrationResumed(journey.residentId()));
+                events.add(new ProposedEvent(journey.originSettlementId(), new ResidentMigrationResumed(journey.residentId(), journey.executionId())));
+                events.add(schedule(progress(journey, Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
+                working = HumanPopulationStateSupport.resumeMigration(working, new ResidentMigrationResumed(journey.residentId(), journey.executionId()));
             }
         }
         int capacity = Math.min(MAX_NEW_JOURNEYS_PER_REVIEW, MAX_ACTIVE_JOURNEYS - working.humanPopulation().migrations().size());
@@ -56,7 +56,7 @@ public final class PopulationMigrationProcess {
                 if (candidate.isEmpty()) continue;
                 Candidate value = candidate.orElseThrow();
                 events.add(new ProposedEvent(value.origin().id(), new ResidentMigrationStarted(value.journey())));
-                events.add(schedule(progress(value.journey().residentId(), Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
+                events.add(schedule(progress(value.journey(), Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
                 working = HumanPopulationStateSupport.startMigration(working, value.journey());
                 started++; admitted = true;
             }
@@ -67,17 +67,18 @@ public final class PopulationMigrationProcess {
 
     public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
         ResidentMigrationJourney journey = state.humanPopulation().migration(action.subject());
-        if (journey == null || !progress(action.subject()).id().equals(action.id())) return List.of();
+        if (journey == null || !progress(journey, action.dueAt().ticks()).id().equals(action.id())) return List.of();
+        state.actorExecutions().requireCurrent(journey.executionId());
         if (journey.status() == ResidentMigrationStatus.BLOCKED) return List.of();
         ResidentMigrationBlockReason reason = HumanPopulationStateSupport.migrationBlockReason(state, journey);
-        if (reason != null) return List.of(new ProposedEvent(journey.originSettlementId(), producer(reason).create(journey.residentId())));
+        if (reason != null) return List.of(new ProposedEvent(journey.originSettlementId(), producer(reason).create(journey.executionId())));
         if (!coldAvailable(state, journey.residentId())) {
-            return List.of(schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
+            return List.of(schedule(progress(journey, Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
         }
         if (journey.arriving()) return List.of(new ProposedEvent(journey.destinationSettlementId(), new ResidentMigrated(journey.residentId(),
-                journey.destinationHouseholdId(), journey.destinationSettlementId(), journey.currentPosition())));
-        return List.of(new ProposedEvent(journey.originSettlementId(), new ResidentMigrationAdvanced(journey.residentId(), journey.nextRouteIndex())),
-                schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
+                journey.destinationHouseholdId(), journey.destinationSettlementId(), journey.currentPosition(), journey.executionId())));
+        return List.of(new ProposedEvent(journey.originSettlementId(), new ResidentMigrationAdvanced(journey.residentId(), journey.nextRouteIndex(), journey.executionId())),
+                schedule(progress(journey, Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
     }
 
     public static FrontierWorldState reduceHotAdvance(FrontierWorldState state, ResidentTransitAdvanced advanced,
@@ -86,7 +87,7 @@ public final class PopulationMigrationProcess {
         ResidentMigrationJourney journey = advancedState.humanPopulation().migration(advanced.residentId());
         if (journey.arriving()) {
             advancedState = advancedState.recordResidentMigration(new ResidentMigrated(journey.residentId(), journey.destinationHouseholdId(),
-                    journey.destinationSettlementId(), journey.currentPosition()));
+                    journey.destinationSettlementId(), journey.currentPosition(), journey.executionId()));
         }
         AmbientActorProcess.AmbientGoal goal = AmbientActorProcess.goalFor(advancedState, advanced.residentId(), atTick);
         return AmbientLeaseStateProcess.retarget(advancedState, advanced.residentId(), goal.kind(), BodyPosition.above(new SurfaceAnchor(goal.position())));
@@ -131,7 +132,8 @@ public final class PopulationMigrationProcess {
             throw new IllegalArgumentException("migration corridor has a known physical obstruction");
         }
         return new ResidentMigrationJourney(resident.id(), source.id(), household.id(), destination.id(), route, 0,
-                ResidentMigrationStatus.EN_ROUTE, Optional.empty());
+                ResidentMigrationStatus.EN_ROUTE, Optional.empty(), state.actorExecutions().next(resident.id(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.TRANSIT, resident.id()));
     }
 
     private static boolean displaced(FrontierWorldState state, Settlement settlement) { return overflow(state, settlement) > 0; }
@@ -176,12 +178,10 @@ public final class PopulationMigrationProcess {
         if (index == settlements.size()) throw new IllegalArgumentException("migration references unknown settlement");
         return Math.floorMod(index - Math.floorMod(ordinal, settlements.size()), settlements.size());
     }
-    private static ScheduledAction progress(SubjectId residentId, long dueAt) {
-        return new ScheduledAction(progress(residentId).id(), new SimInstant(dueAt), 0, residentId, "frontier.population.migration.progress", 1);
-    }
-    private static ScheduledAction progress(SubjectId residentId) {
-        return new ScheduledAction(new ScheduleId("schedule:resident-migration-progress-" + residentId.value().substring("resident:".length())),
-                SimInstant.ZERO, 0, residentId, "frontier.population.migration.progress", 1);
+    private static ScheduledAction progress(ResidentMigrationJourney journey, long dueAt) {
+        return new ScheduledAction(new ScheduleId("schedule:resident-migration-progress-"
+                + journey.residentId().value().substring("resident:".length()) + "-execution-" + journey.executionId().generation()),
+                new SimInstant(dueAt), 0, journey.residentId(), "frontier.population.migration.progress", 1);
     }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
     private record Candidate(Settlement origin, ResidentMigrationJourney journey) { }

@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
@@ -221,7 +223,7 @@ final class FrontierV3SceneDeparturePersistence {
                     && representation.equals("LIVE_BODY") && revision == receipt.sceneRevision()
                     && epoch == declaration.epoch() && lease.equals(receipt.leaseId().value())
                     && sceneRevision == receipt.sceneRevision()
-                    && type.equals(declaration.kind() == FrontierV3ActorCarrierComposition.ActorKind.RESIDENT
+                    && type.equals(declaration.kind() == ActorKind.RESIDENT
                         ? "minecraft:villager" : "minecraft:zombie")
                     && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health())
                     && (receipt.offhand().isEmpty() || receipt.offhand().equals(offhand))

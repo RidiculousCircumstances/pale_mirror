@@ -21,7 +21,8 @@ public record ResidentMigrationJourney(
         List<BlockPosition> route,
         int routeIndex,
         ResidentMigrationStatus status,
-        Optional<ResidentMigrationBlockReason> blockReason
+        Optional<ResidentMigrationBlockReason> blockReason,
+        io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId executionId
 ) {
     public static final int MAX_WAYPOINTS = 4_096;
     public static final int MAX_COLD_ADVANCE_BLOCKS = 4;
@@ -31,6 +32,10 @@ public record ResidentMigrationJourney(
         Objects.requireNonNull(destinationHouseholdId, "migration destination household"); Objects.requireNonNull(destinationSettlementId, "migration destination");
         route = List.copyOf(Objects.requireNonNull(route, "migration route")); Objects.requireNonNull(status, "migration status");
         blockReason = Objects.requireNonNull(blockReason, "migration block reason");
+        Objects.requireNonNull(executionId, "migration execution");
+        if (!executionId.actorId().equals(residentId) || !executionId.activityOwnerId().equals(residentId)
+                || executionId.activityKind() != io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.TRANSIT)
+            throw new IllegalArgumentException("migration requires its exact declared transit execution");
         if (route.size() < 2 || route.size() > MAX_WAYPOINTS || routeIndex < 0 || routeIndex >= route.size()
                 || route.stream().anyMatch(Objects::isNull) || originSettlementId.equals(destinationSettlementId)) {
             throw new IllegalArgumentException("migration journey must have a bounded cross-settlement route");
@@ -60,15 +65,15 @@ public record ResidentMigrationJourney(
             throw new IllegalStateException("migration journey cannot make that COLD advance");
         }
         return new ResidentMigrationJourney(residentId, originSettlementId, destinationHouseholdId, destinationSettlementId, route,
-                nextRouteIndex, ResidentMigrationStatus.EN_ROUTE, Optional.empty());
+                nextRouteIndex, ResidentMigrationStatus.EN_ROUTE, Optional.empty(), executionId);
     }
     public ResidentMigrationJourney block(ResidentMigrationBlockReason reason) {
         return new ResidentMigrationJourney(residentId, originSettlementId, destinationHouseholdId, destinationSettlementId, route,
-                routeIndex, ResidentMigrationStatus.BLOCKED, Optional.of(Objects.requireNonNull(reason, "migration block reason")));
+                routeIndex, ResidentMigrationStatus.BLOCKED, Optional.of(Objects.requireNonNull(reason, "migration block reason")), executionId);
     }
     public ResidentMigrationJourney resume() {
         if (status != ResidentMigrationStatus.BLOCKED) throw new IllegalStateException("only a blocked migration journey may resume");
         return new ResidentMigrationJourney(residentId, originSettlementId, destinationHouseholdId, destinationSettlementId, route,
-                routeIndex, ResidentMigrationStatus.EN_ROUTE, Optional.empty());
+                routeIndex, ResidentMigrationStatus.EN_ROUTE, Optional.empty(), executionId);
     }
 }

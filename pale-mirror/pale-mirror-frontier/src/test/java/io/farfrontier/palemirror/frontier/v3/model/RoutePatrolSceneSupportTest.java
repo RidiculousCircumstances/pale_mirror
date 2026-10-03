@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
+
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -162,15 +164,15 @@ class RoutePatrolSceneSupportTest {
 
         FrontierWorldState prepared = state.prepareSceneLease(lease);
         assertTrue(lease.members().stream().allMatch(member -> prepared.fencedRecovery().current()
-                .get(FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId())).phase() == FencedRecoveryPhase.PREPARED));
+                .get(ActorBodyId.recoveryBindingId(member.actorId())).phase() == FencedRecoveryPhase.PREPARED));
         FrontierWorldState hot = prepared.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertTrue(lease.members().stream().allMatch(member -> hot.fencedRecovery().current()
-                .get(FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId())).phase() == FencedRecoveryPhase.RUNNING));
+                .get(ActorBodyId.recoveryBindingId(member.actorId())).phase() == FencedRecoveryPhase.RUNNING));
 
         SubjectId dead = lease.members().getFirst().actorId();
         FrontierWorldState afterDeath = hot.recordActorDeath(new ActorDied(leaseId, dead,
                 hot.sceneLeases().get(leaseId).memberPosition(dead), "recovery-fence-death"), 11L);
-        SubjectId bindingId = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(dead);
+        SubjectId bindingId = ActorBodyId.recoveryBindingId(dead);
         assertFalse(afterDeath.fencedRecovery().current().containsKey(bindingId));
         assertEquals(FencedRecoveryDisposition.REJECT_STALE, afterDeath.fencedRecovery().lateLoad(bindingId,
                 FencedRecoveryAsset.BODY, FrontierSceneLeaseStateSupport.recoveryOwner(lease), 1L));
@@ -187,7 +189,7 @@ class RoutePatrolSceneSupportTest {
         assertEquals(SceneLeaseStatus.CONFLICT, conflicted.sceneLeases().get(leaseId).status());
         assertTrue(lease.members().stream().allMatch(member -> {
             FencedRecoveryBinding binding = conflicted.fencedRecovery().current()
-                    .get(FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId()));
+                    .get(ActorBodyId.recoveryBindingId(member.actorId()));
             return binding.phase() == FencedRecoveryPhase.AMBIGUOUS && binding.nextAction() == FencedRecoveryDisposition.INSPECT;
         }));
         assertEquals(state.actorLocations(), conflicted.actorLocations(), "one local physical ambiguity cannot rewrite unrelated canonical positions");
@@ -214,7 +216,7 @@ class RoutePatrolSceneSupportTest {
             submit(engine, world, "death", death);
             var after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
             assertEquals(ActorLifeStatus.DEAD, after.actorLocations().get(member.actorId()).condition().status(), status.name());
-            var binding = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId());
+            var binding = ActorBodyId.recoveryBindingId(member.actorId());
             assertFalse(after.fencedRecovery().current().containsKey(binding), status.name());
             assertEquals(FencedRecoveryDisposition.REJECT_STALE, after.fencedRecovery().tombstones().get(binding).disposition());
             assertEquals(status == SceneLeaseStatus.HOT ? SceneLeaseStatus.DRAINING

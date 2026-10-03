@@ -15,6 +15,32 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorExecutionLifecycleTest {
+    @Test void passivePresenceReleasesWithoutInventingWorkOrChangingBodyAndResources() {
+        var state = ResourceSiteHarvestProcessTest.initial();
+        var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        var presence = state.actorExecutions().next(actor, ActorActivityKind.PRESENCE, actor);
+        state = ActorExecutionComposition.LIFECYCLE.prepareVacant(state, presence)
+                .commit(state, FrontierWorldStateUpdate.begin());
+        var next = state.actorExecutions().next(actor, ActorActivityKind.PRESENCE, actor);
+        var changed = ActorExecutionComposition.LIFECYCLE.prepareBegin(state, next, 1L)
+                .commit(state, FrontierWorldStateUpdate.begin());
+        assertEquals(next, changed.actorExecutions().actors().get(actor).current().orElseThrow());
+        assertTrue(changed.actorExecutions().actors().get(actor).suspended().isEmpty());
+        assertSame(state.actorLocations(), changed.actorLocations());
+        assertSame(state.inventory(), changed.inventory());
+        assertSame(state.ambientLeases(), changed.ambientLeases());
+        assertSame(state.sceneLeases(), changed.sceneLeases());
+        var workAdmission = ActorExecutionComposition.LIFECYCLE.prepareVacant(changed,
+                changed.actorExecutions().next(actor, ActorActivityKind.PRESENCE, actor));
+        var admitted = workAdmission.commit(changed, FrontierWorldStateUpdate.begin());
+        assertEquals(3L, admitted.actorExecutions().generation(actor));
+        assertTrue(admitted.actorExecutions().actors().get(actor).suspended().isEmpty());
+        var stale = state;
+        assertThrows(IllegalArgumentException.class, () -> ActorExecutionComposition.LIFECYCLE.prepareVacant(stale, presence));
+        assertThrows(IllegalArgumentException.class, () -> admitted.withChanges(FrontierWorldStateUpdate.begin()
+                .actorExecutions(admitted.actorExecutions().finish(admitted.actorExecutions().actors().get(actor).current().orElseThrow())
+                        .begin(new ActorExecutionId(actor, ActorActivityKind.PRESENCE, new SubjectId("actor:foreign-owner"), 4L), 3L))));
+    }
     @Test void declaredRegistryRejectsMissingDuplicateAndUnadoptedFamilies() {
         var capability = new HarvestActivityCapability();
         assertThrows(IllegalArgumentException.class, () -> new ActorActivityCapabilities(

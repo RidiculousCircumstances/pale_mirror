@@ -102,7 +102,7 @@ class ProductionStationSpecTest {
         FungibleResourceLedger resources = initial.inventory().fungibleResources().issue(wheat,
                 new CustodyAccount(actorAccount, new ResourceCustody.Actor(actorId), Map.of(wheatId, 64), Map.of()));
         java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(initial.actorLocations());
-        actors.put(actorId, ActorLocation.standingOn(machine.workerStation()));
+        actors.put(actorId, ActorLocation.standingOn(machine.workerStation(), ActorKind.RESIDENT));
         FrontierWorldState atStation = initial.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(initial.inventory().withFungibleResources(resources)).actorLocations(actors));
         ActorContainerItemOrder order = new ActorContainerItemOrder(new SubjectId("job:bakery-loading"), actorId,

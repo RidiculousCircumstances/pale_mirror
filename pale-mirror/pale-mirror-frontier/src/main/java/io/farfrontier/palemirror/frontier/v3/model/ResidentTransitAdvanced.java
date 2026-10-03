@@ -6,9 +6,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Observed completion of one exact HOT transit segment by its already leased resident body. */
-public record ResidentTransitAdvanced(SubjectId residentId, int nextRouteIndex) implements FrontierPayload {
+public record ResidentTransitAdvanced(SubjectId residentId, int nextRouteIndex,
+        io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId executionId) implements FrontierPayload {
     public ResidentTransitAdvanced {
         Objects.requireNonNull(residentId, "migration resident");
+        TransitActivityCapability.requireDeclared(residentId, executionId);
         if (nextRouteIndex < 1 || nextRouteIndex >= ResidentMigrationJourney.MAX_WAYPOINTS) {
             throw new IllegalArgumentException("HOT transit next route index is out of bounds");
         }

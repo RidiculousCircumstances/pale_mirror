@@ -7,10 +7,10 @@ import java.util.Set;
 /** Explicit live adoption inventory. No inferred kind or permissive legacy/default provider. */
 public final class ActorExecutionComposition {
     public static final ActorActivityCapabilities CAPABILITIES = new ActorActivityCapabilities(
-            Set.of(ActorActivityKind.MEAL, ActorActivityKind.SERVICE_EXIT,
-                    ActorActivityKind.FIELD_HARVEST, ActorActivityKind.PRODUCTION),
-            List.of(new MealActivityCapability(), new ServiceExitActivityCapability(),
-                    new HarvestActivityCapability(), new ProductionActivityCapability()));
+            Set.of(ActorActivityKind.PRESENCE, ActorActivityKind.MEAL, ActorActivityKind.SERVICE_EXIT,
+                    ActorActivityKind.FIELD_HARVEST, ActorActivityKind.PRODUCTION, ActorActivityKind.TRANSIT),
+            List.of(new PresenceActivityCapability(), new MealActivityCapability(), new ServiceExitActivityCapability(),
+                    new HarvestActivityCapability(), new ProductionActivityCapability(), new TransitActivityCapability()));
     public static final ActorExecutionLifecycle LIFECYCLE = new ActorExecutionLifecycle(CAPABILITIES);
     private ActorExecutionComposition() { }
 }

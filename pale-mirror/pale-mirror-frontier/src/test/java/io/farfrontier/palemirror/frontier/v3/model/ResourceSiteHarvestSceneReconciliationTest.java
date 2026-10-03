@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
+
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestSceneReconciliation;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -19,7 +21,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
                 .transitionSceneLease(hot.lease().id(), SceneLeaseStatus.CONFLICT);
         var lease = state.sceneLeases().get(hot.lease().id());
         long epoch = state.fencedRecovery().current().get(
-                FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(job.workerId())).authorityEpoch();
+                ActorBodyId.recoveryBindingId(job.workerId())).authorityEpoch();
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
                 lease.members().getFirst().entityId()), "minecraft:wheat", 1);
         var receipt = new ResourceSiteHarvestSceneReconciled(hot.site(), job.id(), lease.id(), lease.revision(), epoch,
@@ -53,7 +55,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
         state = state.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.CONFLICT);
         var lease = state.sceneLeases().get(hot.lease().id());
         long epoch = state.fencedRecovery().current().get(
-                FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(job.workerId())).authorityEpoch();
+                ActorBodyId.recoveryBindingId(job.workerId())).authorityEpoch();
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
                 lease.members().getFirst().entityId()), "minecraft:wheat", 1);
         var receipt = new ResourceSiteHarvestSceneReconciled(hot.site(), job.id(), lease.id(), lease.revision(), epoch,
@@ -83,7 +85,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
         var state = complete.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.CONFLICT);
         var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         var lease = state.sceneLeases().get(hot.lease().id());
-        var bindingId = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(job.workerId());
+        var bindingId = ActorBodyId.recoveryBindingId(job.workerId());
         long epoch = state.fencedRecovery().current().get(bindingId).authorityEpoch();
         var original = state.actorLocations().get(job.workerId()).body();
         var displaced = new BodyPosition(original.x() + 1, original.y(), original.z());

@@ -125,7 +125,7 @@ class HumanTacticalFunctionProjectionTest {
         state = state.withInventory(state.inventory().destroyObservedItem(leaderSword, new InventoryCustody.Actor(leader)));
         ActorLocation leaderLocation = state.actorLocations().get(leader);
         java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(leader, new ActorLocation(leaderLocation.body(), ActorCondition.dead()));
+        actors.put(leader, new ActorLocation(leaderLocation.body(), ActorCondition.dead(), leaderLocation.kind()));
         state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         assertEquals(SettlementDefenderReadinessStatus.DEGRADED, SettlementDefenderReadinessProjection.derive(state, assault).status());
         assertEquals(FixedScalar.ONE, RouteEngagementCombatRules.damage(state, fighter), "leader loss degrades survivors without replacing them");

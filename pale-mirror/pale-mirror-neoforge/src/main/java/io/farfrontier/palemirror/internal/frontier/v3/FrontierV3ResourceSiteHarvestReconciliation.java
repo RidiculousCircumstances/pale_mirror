@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
+
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestSceneReconciliation;
 import net.minecraft.server.level.ServerLevel;
@@ -64,10 +66,11 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
         if (lease.status() != SceneLeaseStatus.CONFLICT || lease.members().size() != 1)
             return java.util.OptionalLong.empty();
         var recovery = state.fencedRecovery().current().get(
-                FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(lease.members().getFirst().actorId()));
+                ActorBodyId.recoveryBindingId(lease.members().getFirst().actorId()));
         return recovery != null && recovery.asset() == FencedRecoveryAsset.BODY
-                && recovery.ownerId().equals(FrontierSceneLeaseStateSupport.recoveryOwner(lease))
-                && recovery.ownerRevision() == lease.revision() && recovery.phase() == FencedRecoveryPhase.AMBIGUOUS
+                && recovery.ownerId().equals(lease.members().getFirst().actorId())
+                && recovery.ownerRevision() == 0L
+                && (recovery.phase() == FencedRecoveryPhase.AMBIGUOUS || recovery.phase() == FencedRecoveryPhase.RUNNING)
                 ? java.util.OptionalLong.of(recovery.authorityEpoch()) : java.util.OptionalLong.empty();
     }
 

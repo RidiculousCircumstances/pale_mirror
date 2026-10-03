@@ -14,15 +14,15 @@ final class FrontierWorldInitialState {
 
     static FrontierWorldState create(FrontierBootstrap bootstrap) {
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(); HumanPopulation population = HumanPopulation.bootstrap(bootstrap);
-        bootstrap.settlements().forEach(settlement -> settlement.residents().forEach(resident -> actors.put(resident.id(), ActorLocation.standingOn(new SurfaceAnchor(resident.home())))));
+        bootstrap.settlements().forEach(settlement -> settlement.residents().forEach(resident -> actors.put(resident.id(), ActorLocation.standingOn(new SurfaceAnchor(resident.home()), ActorKind.RESIDENT))));
         HiveColony colony = HiveColony.empty().withBioformLifecycles(initialBioformLifecycles(bootstrap));
         bootstrap.hive().bioforms().forEach(bioform -> {
             BioformLifecycle lifecycle = colony.bioformLifecycles().get(bioform.id());
             if (lifecycle.phase().occupiesCocoon()) {
                 HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
-                actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(HiveCocoonPlan.cocoonCell(organ(bootstrap, slot.hibernaculumId()), slot))));
+                actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(HiveCocoonPlan.cocoonCell(organ(bootstrap, slot.hibernaculumId()), slot)), ActorKind.BIOFORM));
             } else {
-                actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(bioform.position())));
+                actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(bioform.position()), ActorKind.BIOFORM));
             }
         });
         Map<SubjectId, StructureCondition> structures = new LinkedHashMap<>();

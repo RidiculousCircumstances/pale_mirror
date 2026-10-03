@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -102,7 +104,7 @@ final class FrontierV3ActorHandoffRecovery {
         if (!expected.equals(target)) return false;
         var metadata = body.getPersistentData();
         if (from.equals(handoff.currentBinding()) && FrontierV3AmbientActorExecutor.owned(body, target.actorId(),
-                target.kind() == FrontierV3ActorCarrierComposition.ActorKind.BIOFORM)
+                target.kind() == ActorKind.BIOFORM)
                 && !metadata.contains(FrontierV3SceneExecutor.LEASE_KEY)
                 && !metadata.contains(FrontierV3SceneExecutor.REVISION_KEY)
                 && metadata.getLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY) == target.epoch()) return false;

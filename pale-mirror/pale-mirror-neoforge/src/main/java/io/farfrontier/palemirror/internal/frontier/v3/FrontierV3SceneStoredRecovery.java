@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
@@ -193,7 +195,7 @@ final class FrontierV3SceneStoredRecovery {
             if (saved == null || !saved.id().equals(member.entityId()) || !saved.actor().equals(member.actorId().value())) return;
             FrontierV3SceneDeparture receipt;
             try {
-                var kind = FrontierV3ActorCarrierComposition.ActorKind.valueOf(saved.kind());
+                var kind = ActorKind.valueOf(saved.kind());
                 var inactive = FrontierV3ActorCarrierComposition.fromCanonical(current, member.actorId(), kind,
                         FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
                         FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, retained.revision(), saved.epoch());
