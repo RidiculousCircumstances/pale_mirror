@@ -124,6 +124,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         SettlementAssaultExecutionAuthority.validateReferences(strategicPlans.settlementAssaults(), actorExecutions);
         EngineeringExecutionAuthority.validateReferences(routeConstructions, routeMaintenances, actorExecutions);
         SettlementServiceExecutionAuthority.validateReferences(serviceWorks, actorExecutions);
+        MedicalExecutionAuthority.validateReferences(humanPopulation, actorExecutions);
         ActorMovementStateSupport.validate(actorMovements, actorLocations, humanPopulation, inventory, actorExecutions);
         ResidentMealExecutionAuthority.validate(humanPopulation, actorExecutions);
         TransitActivityCapability.validateReferences(humanPopulation, actorExecutions);

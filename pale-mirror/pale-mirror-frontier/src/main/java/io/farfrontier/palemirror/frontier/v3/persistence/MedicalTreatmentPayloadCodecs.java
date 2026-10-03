@@ -25,6 +25,7 @@ final class MedicalTreatmentPayloadCodecs {
                 for (SubjectId member : operation.team().memberIds()) FrontierWorldPayloadCodecs.writeSubject(output, member);
                 FrontierWorldPayloadCodecs.writeSubject(output, operation.supplyItemId()); FrontierWorldPayloadCodecs.writeString(output, operation.consumptionIntentId().value());
                 output.writeByte(operation.status().wireTag());
+                ActorExecutionStateCodec.writeGroup(output, ((MedicalTreatmentStarted) payload).executions());
             }); }
             @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId id = FrontierWorldPayloadCodecs.readSubject(input).value(); SubjectId settlement = FrontierWorldPayloadCodecs.readSubject(input).value();
@@ -37,7 +38,7 @@ final class MedicalTreatmentPayloadCodecs {
                 if (status >= MedicalEvacuationStatus.values().length) throw new IllegalArgumentException("unknown medical treatment status");
                 MedicalEvacuationTeam team = new MedicalEvacuationTeam(teamId, id, settlement, leader, members);
                 return new MedicalTreatmentStarted(new MedicalEvacuationOperation(id, settlement, patient, infirmary, team, supply, intent,
-                        FrontierWireTags.require(MedicalEvacuationStatus.class, status), -1L));
+                        FrontierWireTags.require(MedicalEvacuationStatus.class, status), -1L), ActorExecutionStateCodec.readGroup(input));
             }); }
         };
     }
@@ -48,11 +49,12 @@ final class MedicalTreatmentPayloadCodecs {
             @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 MedicalTreatmentTransition transition = (MedicalTreatmentTransition) payload;
                 FrontierWorldPayloadCodecs.writeSubject(output, transition.operationId()); output.writeByte(transition.status().wireTag());
+                ActorExecutionStateCodec.writeGroup(output, transition.executions());
             }); }
             @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId operation = FrontierWorldPayloadCodecs.readSubject(input).value(); int status = input.readUnsignedByte();
                 if (status >= MedicalEvacuationStatus.values().length) throw new IllegalArgumentException("unknown medical treatment status");
-                return new MedicalTreatmentTransition(operation, FrontierWireTags.require(MedicalEvacuationStatus.class, status));
+                return new MedicalTreatmentTransition(operation, FrontierWireTags.require(MedicalEvacuationStatus.class, status), ActorExecutionStateCodec.readGroup(input));
             }); }
         };
     }

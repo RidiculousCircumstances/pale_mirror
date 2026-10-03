@@ -588,7 +588,8 @@ public final class FrontierSceneBehaviors {
             HumanPopulation population = operation.active() && (operation.patientId().equals(actorId) || operation.team().memberIds().contains(actorId))
                     ? state.humanPopulation().transitionMedicalOperation(operation.id(), MedicalEvacuationStatus.BLOCKED, atTick)
                     : state.humanPopulation();
-            return new SceneDeathOutcome(population, state.resourceSites(), state.strategicPlans(), state.physicalIntents(), state.serviceWorks(), state.actorExecutions());
+            return new SceneDeathOutcome(population, state.resourceSites(), state.strategicPlans(), state.physicalIntents(), state.serviceWorks(),
+                    population == state.humanPopulation() ? state.actorExecutions() : MedicalExecutionAuthority.retired(state, operation));
         }
     }
 

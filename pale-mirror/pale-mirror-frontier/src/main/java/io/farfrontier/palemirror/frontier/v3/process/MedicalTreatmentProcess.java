@@ -36,6 +36,7 @@ public final class MedicalTreatmentProcess {
                 .min(Comparator.comparing(ResidentProfile::id));
         Optional<ResidentProfile> medic = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == ResidentProfession.MEDICAL_WORKER)
+                .filter(resident -> patient.isEmpty() || !resident.id().equals(patient.orElseThrow().id()))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .filter(resident -> assignments.idle(resident.id()))
                 .filter(resident -> !state.humanPopulation().meals().containsKey(resident.id())
@@ -58,7 +59,7 @@ public final class MedicalTreatmentProcess {
                 id, PhysicalIntentRoleBinding.medicalTreatmentConsumption(id, operation.supplyItemId()), new FixedPosition(FixedScalar.whole(infirmary.orElseThrow().anchor().x()),
                 FixedScalar.whole(infirmary.orElseThrow().anchor().y()), FixedScalar.whole(infirmary.orElseThrow().anchor().z())), 0,
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT);
-        return List.of(new ProposedEvent(settlementId, new MedicalTreatmentStarted(operation)), new ProposedEvent(settlementId, new PhysicalIntentPrepared(intent)));
+        return List.of(new ProposedEvent(settlementId, new MedicalTreatmentStarted(operation, MedicalExecutionAuthority.admission(state, operation))), new ProposedEvent(settlementId, new PhysicalIntentPrepared(intent)));
     }
 
     public static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
@@ -67,7 +68,7 @@ public final class MedicalTreatmentProcess {
         return switch (transition.status()) {
             case RUNNING -> {
                 if (operation.status() != MedicalEvacuationStatus.PREPARED) throw new IllegalArgumentException("medical treatment may start only from prepared care");
-                yield List.of(physical, new ProposedEvent(operation.settlementId(), new MedicalTreatmentTransition(operation.id(), MedicalEvacuationStatus.TREATING)));
+                yield List.of(physical, new ProposedEvent(operation.settlementId(), new MedicalTreatmentTransition(operation.id(), MedicalEvacuationStatus.TREATING, MedicalExecutionAuthority.current(state, operation))));
             }
             case CONFIRMED -> {
                 if (operation.status() == MedicalEvacuationStatus.BLOCKED) yield List.of(physical);
@@ -75,10 +76,10 @@ public final class MedicalTreatmentProcess {
                     throw new IllegalArgumentException("medical treatment receipt has no active care operation");
                 }
                 if (state.actorLocations().get(operation.patientId()).condition().status() != ActorLifeStatus.ALIVE) yield List.of(physical,
-                        new ProposedEvent(operation.settlementId(), new MedicalTreatmentTransition(operation.id(), MedicalEvacuationStatus.BLOCKED)));
+                        new ProposedEvent(operation.settlementId(), new MedicalTreatmentTransition(operation.id(), MedicalEvacuationStatus.BLOCKED, MedicalExecutionAuthority.current(state, operation))));
                 yield List.of(physical, new ProposedEvent(operation.settlementId(),
                         new ResidentHealthTransition(operation.patientId(), ResidentHealthStatus.RECOVERING, now)),
-                        new ProposedEvent(operation.settlementId(), new MedicalTreatmentTransition(operation.id(), MedicalEvacuationStatus.COMPLETED)));
+                        new ProposedEvent(operation.settlementId(), new MedicalTreatmentTransition(operation.id(), MedicalEvacuationStatus.COMPLETED, MedicalExecutionAuthority.current(state, operation))));
             }
             case UNKNOWN_AFTER_RESTART -> {
                 if (operation.status() == MedicalEvacuationStatus.BLOCKED) yield List.of(physical);
@@ -86,7 +87,7 @@ public final class MedicalTreatmentProcess {
                     throw new IllegalArgumentException("medical treatment uncertainty has no active care operation");
                 }
                 yield List.of(physical, new ProposedEvent(operation.settlementId(),
-                        new MedicalTreatmentTransition(operation.id(), MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART)));
+                        new MedicalTreatmentTransition(operation.id(), MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART, MedicalExecutionAuthority.current(state, operation))));
             }
             default -> List.of(physical);
         };
@@ -97,12 +98,14 @@ public final class MedicalTreatmentProcess {
         if (!subject.equals(operation.settlementId())) throw new IllegalArgumentException("medical treatment start lacks settlement owner");
         MedicalEvacuationStateSupport.validate(state.bootstrap(), state.humanPopulation().startMedicalOperation(operation), state.actorLocations(),
                 state.structureConditions(), state.inventory(), state.physicalIntents());
-        return state.withHumanPopulation(state.humanPopulation().startMedicalOperation(operation));
+        return ActorExecutionComposition.LIFECYCLE.prepareVacantGroup(state, started.executions()).commit(state,
+                FrontierWorldStateUpdate.begin().humanPopulation(state.humanPopulation().startMedicalOperation(operation)));
     }
 
     public static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, long atTick, MedicalTreatmentTransition transition) {
         MedicalEvacuationOperation operation = state.humanPopulation().medicalOperations().get(transition.operationId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("medical treatment transition lacks operation owner");
+        MedicalExecutionAuthority.requireCurrent(state, operation, transition.executions());
         if (transition.status() == MedicalEvacuationStatus.TREATING && operation.status() != MedicalEvacuationStatus.PREPARED
                 || transition.status() == MedicalEvacuationStatus.COMPLETED && operation.status() != MedicalEvacuationStatus.TREATING
                         && operation.status() != MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART
@@ -111,7 +114,9 @@ public final class MedicalTreatmentProcess {
                 || transition.status() == MedicalEvacuationStatus.BLOCKED && !operation.active()) {
             throw new IllegalArgumentException("medical treatment lifecycle transition is invalid");
         }
-        return state.withHumanPopulation(state.humanPopulation().transitionMedicalOperation(operation.id(), transition.status(), atTick));
+        var population = state.humanPopulation().transitionMedicalOperation(operation.id(), transition.status(), atTick);
+        return state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(population).actorExecutions(
+                population.medicalOperations().get(operation.id()).active() ? state.actorExecutions() : MedicalExecutionAuthority.retired(state, operation)));
     }
 
     public static MedicalEvacuationOperation operationForIntent(FrontierWorldState state, PhysicalIntent intent) {

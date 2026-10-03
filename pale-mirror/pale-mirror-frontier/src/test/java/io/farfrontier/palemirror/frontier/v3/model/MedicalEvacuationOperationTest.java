@@ -57,12 +57,21 @@ class MedicalEvacuationOperationTest {
         MedicalEvacuationOperation operation = new MedicalEvacuationOperation(operationId, settlement.id(), patient, infirmary,
                 MedicalEvacuationTeam.forOperation(operationId, settlement.id(), List.of(medic)), supply,
                 new PhysicalIntentId("intent:medical-owner-test-consume"), MedicalEvacuationStatus.PREPARED, -1L);
-        FrontierWorldState admitted = state.withHumanPopulation(state.humanPopulation().startMedicalOperation(operation));
+        FrontierWorldState admitted = MedicalTreatmentProcess.reduceStarted(state, settlement.id(),
+                new MedicalTreatmentStarted(operation, MedicalExecutionAuthority.admission(state, operation)));
 
         assertEquals(HumanAssignmentKind.MEDICAL_EVACUATION, HumanAssignmentProjection.compile(admitted).assignment(medic).kind());
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(admitted));
         assertEquals(operation, restored.humanPopulation().medicalOperations().get(operationId));
         assertEquals(HumanAssignmentKind.MEDICAL_EVACUATION, HumanAssignmentProjection.compile(restored).assignment(medic).kind());
+        assertEquals(MedicalExecutionAuthority.current(admitted, operation), MedicalExecutionAuthority.current(restored, operation));
+        assertThrows(IllegalArgumentException.class, () -> admitted.withChanges(FrontierWorldStateUpdate.begin()
+                .actorExecutions(MedicalExecutionAuthority.retired(admitted, operation))),
+                "an active care owner cannot lose either patient or medic execution");
+        var group = MedicalExecutionAuthority.current(admitted, operation);
+        assertThrows(IllegalArgumentException.class, () -> new MedicalTreatmentStarted(operation,
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(List.of(group.members().getFirst()))),
+                "patient and medical team must enter the protocol together");
     }
 
     @Test void patientCannotAlsoBeTheirOwnMedicalTeam() {
@@ -117,6 +126,9 @@ class MedicalEvacuationOperationTest {
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         assertEquals(started, io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs()
                 .decode(started.type(), io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
+        byte[] encoded = FrontierWorldRuntimeDefinition.payloadCodecs().encode(started);
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(),
+                java.util.Arrays.copyOf(encoded, encoded.length - 1)), "partial care execution declaration cannot be hydrated");
         state = MedicalTreatmentProcess.reduceStarted(state, settlement.id(), started);
         state = PhysicalIntentLifecycleFixture.prepare(state, settlement.id(), prepared.intent());
         state = admitTreatmentScene(state, started.operation()).state();
@@ -126,6 +138,15 @@ class MedicalEvacuationOperationTest {
                 PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         MedicalTreatmentTransition treating = runningEvents.stream().map(event -> event.payload()).filter(MedicalTreatmentTransition.class::isInstance)
                 .map(MedicalTreatmentTransition.class::cast).findFirst().orElseThrow();
+        var future = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(treating.executions().members().stream()
+                .map(id -> new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                        id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1L)).toList());
+        FrontierWorldState beforeTreating = state;
+        assertThrows(IllegalArgumentException.class, () -> MedicalTreatmentProcess.reduceTransition(beforeTreating, settlement.id(), 300L,
+                new MedicalTreatmentTransition(treating.operationId(), treating.status(), future)),
+                "matching patient and physical intent cannot authorize a different execution generation");
+        assertEquals(treating, FrontierWorldRuntimeDefinition.payloadCodecs().decode(treating.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(treating)));
         state = MedicalTreatmentProcess.reduceTransition(state, settlement.id(), 300L, treating);
 
         ExactItemConsumedObservation receipt = new ExactItemConsumedObservation(new PhysicalObservationId("observation:medical-treatment"), prepared.intent().id(),
@@ -142,6 +163,10 @@ class MedicalEvacuationOperationTest {
         state = MedicalTreatmentProcess.reduceTransition(state, settlement.id(), 400L, completed);
         assertEquals(ResidentHealthStatus.RECOVERING, state.humanPopulation().health(started.operation().patientId()).status());
         assertEquals(MedicalEvacuationStatus.COMPLETED, state.humanPopulation().medicalOperations().get(started.operation().id()).status());
+        FrontierWorldState completedState = state;
+        assertTrue(MedicalExecutionAuthority.participants(started.operation()).stream().allMatch(actor ->
+                completedState.actorExecutions().actors().get(actor).current().isEmpty()),
+                "terminal care releases the entire declared group without waiting for body removal");
         assertTrue(!state.inventory().items().containsKey(started.operation().supplyItemId()));
 
         FrontierWorldState unknownState = treatmentReadyState();
@@ -311,8 +336,9 @@ class MedicalEvacuationOperationTest {
     @Test void completedTreatmentCanRecoverItsBodiesForReleaseWithoutRepeatingTreatment() {
         TreatmentSceneFixture fixture = hotTreatmentFixture(new WorldId("frontier:medical-completed-recovery"));
         // Terminal owner-state input; actual treatment receipts are verified in the preceding test.
-        var completed = fixture.state().withHumanPopulation(fixture.state().humanPopulation()
-                .transitionMedicalOperation(fixture.operation().id(), MedicalEvacuationStatus.COMPLETED, 500L));
+        var completed = fixture.state().withChanges(FrontierWorldStateUpdate.begin().humanPopulation(fixture.state().humanPopulation()
+                .transitionMedicalOperation(fixture.operation().id(), MedicalEvacuationStatus.COMPLETED, 500L))
+                .actorExecutions(MedicalExecutionAuthority.retired(fixture.state(), fixture.operation())));
         var leaseId = fixture.lease().id();
         var unknownScene = completed.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
         unknownScene = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknownScene));
