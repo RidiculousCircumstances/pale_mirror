@@ -98,6 +98,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
 
     private static void work(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         SettlementServiceWork work = FrontierSettlementServiceWorkSceneSupport.require(state, FrontierSceneBehaviors.serviceWork(lease));
+        var execution = io.farfrontier.palemirror.frontier.v3.model.SettlementServiceExecutionAuthority.current(state, work);
         if (work.phase() == SettlementServiceWorkPhase.EFFECT_READY) { drain(runtime, lease); return; }
         if (state.structureConditions().get(work.facilityId()) != StructureCondition.INTACT) { drain(runtime, lease); return; }
         FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, FrontierSettlementServiceWorkSceneSupport.currentSurface(work).support());
@@ -121,7 +122,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
                 if (cursor < corridor.size() - 1 && FrontierV3SemanticMovement.arrived(level, worker, corridor.get(cursor + 1))) {
                     submit(runtime, "settlement-service-work-traversal", lease.id().value(),
                             new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(),
-                                    FrontierV3SurfaceObservation.observedAt(worker, corridor.get(cursor + 1)), cursor + 1));
+                                    FrontierV3SurfaceObservation.observedAt(worker, corridor.get(cursor + 1)), cursor + 1, execution));
                 } else conflict(level, runtime, lease, "cursor-" + FrontierV3SemanticMovement.detail(FrontierV3SemanticMovement.at(level, worker, current)));
             } else conflict(level, runtime, lease, "cursor-" + FrontierV3SemanticMovement.detail(FrontierV3SemanticMovement.at(level, worker, current)));
             return;
@@ -134,10 +135,10 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
             SurfaceAnchor next = corridor.get(cursor + 1);
             if (FrontierV3SemanticMovement.arrived(level, worker, next)) {
                 submit(runtime, "settlement-service-work-traversal", lease.id().value(),
-                        new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, next), cursor + 1));
+                        new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, next), cursor + 1, execution));
             } else if (!FrontierV3ProductionWorkSceneExecutor.clearNextBody(level, worker, next)) {
                 submit(runtime, "settlement-service-work-route-blocked", lease.id().value(),
-                        new SettlementServiceWorkTraversalBlocked(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), cursor + 1));
+                        new SettlementServiceWorkTraversalBlocked(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), cursor + 1, execution));
             } else FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(level, worker, current, next);
             return;
         }
@@ -147,7 +148,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
         int ticks = next == SettlementServiceWorkPhase.EFFECT_READY ? 0 : work.completedWorkTicks() + 1;
         worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         submit(runtime, "settlement-service-work-progress", lease.id().value(),
-                new SettlementServiceWorkProgressed(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next, ticks));
+                new SettlementServiceWorkProgressed(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next, ticks, execution));
     }
 
     private static boolean isTraversalPhase(SettlementServiceWorkPhase phase) {

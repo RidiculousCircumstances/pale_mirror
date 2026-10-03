@@ -30,6 +30,7 @@ public final class FrontierSettlementServiceWorkSceneSupport {
             return Optional.empty();
         }
         if (state.structureConditions().get(work.facilityId()) != StructureCondition.INTACT) return Optional.empty();
+        SettlementServiceExecutionAuthority.current(state, work);
         return Optional.of(new Candidate(work.id(), work.settlementId(), work.workerId(), work.facilityId(),
                 currentSurface(work).support()));
     }
@@ -47,6 +48,7 @@ public final class FrontierSettlementServiceWorkSceneSupport {
     /** Requires the one HOT lease allowed to turn an observed Minecraft body into this work's cursor fact. */
     public static SceneLease requireHotLease(FrontierWorldState state, SettlementServiceWork work,
                                              io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId leaseId) {
+        SettlementServiceExecutionAuthority.current(state, work);
         SceneLease lease = state.sceneLeases().get(leaseId);
         if (lease == null || lease.status() != SceneLeaseStatus.HOT || !FrontierSceneBehaviors.isServiceWork(lease)
                 || !FrontierSceneBehaviors.serviceWork(lease).workId().equals(work.id()) || lease.members().size() != 1

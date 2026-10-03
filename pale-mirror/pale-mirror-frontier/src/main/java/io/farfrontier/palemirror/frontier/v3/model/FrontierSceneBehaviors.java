@@ -839,7 +839,7 @@ public final class FrontierSceneBehaviors {
         }
         @Override public SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
             SettlementServiceWork work = FrontierSettlementServiceWorkSceneSupport.require(state, cause(lease));
-            if (!work.workerId().equals(actorId)) return SceneDeathOutcome.unchanged(state);
+            if (!work.workerId().equals(actorId) || !work.phase().active()) return SceneDeathOutcome.unchanged(state);
             Map<SubjectId, SettlementServiceWork> works = new LinkedHashMap<>(state.serviceWorks());
             works.put(work.id(), work.withPhase(SettlementServiceWorkPhase.BLOCKED, 0));
             Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
@@ -855,7 +855,8 @@ public final class FrontierSceneBehaviors {
                     intents.put(intent.id(), intent.withRecoveryUnknown(producer.stamp(intent)));
                 }
             }
-            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), state.strategicPlans(), Map.copyOf(intents), Map.copyOf(works), state.actorExecutions());
+            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), state.strategicPlans(), Map.copyOf(intents), Map.copyOf(works),
+                    SettlementServiceExecutionAuthority.retired(state, work));
         }
     }
 

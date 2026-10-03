@@ -53,7 +53,8 @@ public final class SettlementServiceWorkProcess {
         }
         Candidate value = candidate.orElseThrow();
         return List.of(new ProposedEvent(value.settlement().id(), new StrategicTaskTransition(value.task().id(), StrategicTaskStatus.ACTIVE)),
-                new ProposedEvent(value.settlement().id(), new SettlementServiceWorkStarted(value.task().id(), value.work(), value.inputIssue(), value.endpoint())), next);
+                new ProposedEvent(value.settlement().id(), new SettlementServiceWorkStarted(value.task().id(), value.work(), value.inputIssue(), value.endpoint(),
+                        io.farfrontier.palemirror.frontier.v3.model.SettlementServiceExecutionAuthority.admission(state, value.work()))), next);
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, SettlementServiceWorkStarted started) {
@@ -82,13 +83,15 @@ public final class SettlementServiceWorkProcess {
         LinkedHashMap<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
         intents.put(work.inputIssueIntentId(), started.inputIssueIntent());
         intents.put(work.endpointIntentId(), started.endpointIntent());
-        return state.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(works).physicalIntents(intents));
+        return io.farfrontier.palemirror.frontier.v3.model.ActorExecutionComposition.LIFECYCLE.prepareVacant(state, started.execution())
+                .commit(state, FrontierWorldStateUpdate.begin().serviceWorks(works).physicalIntents(intents));
     }
 
     /** Commits only a loaded observation of the next edge on the current retained service leg. */
     public static FrontierWorldState reduceHotTraversalAdvanced(FrontierWorldState state, SubjectId subject,
                                                                  SettlementServiceWorkTraversalAdvanced advanced) {
         SettlementServiceWork work = requireOwned(state, subject, advanced.workId());
+        io.farfrontier.palemirror.frontier.v3.model.SettlementServiceExecutionAuthority.requireCurrent(state, work, advanced.execution());
         SettlementServiceWork replacement = switch (work.phase()) {
             case PREPARED, APPROACH_INPUT -> work.withInputTraversalCursor(advanced.nextCursor());
             case APPROACH_WORK -> work.withWorkTraversalCursor(advanced.nextCursor());
@@ -101,6 +104,7 @@ public final class SettlementServiceWorkProcess {
     public static FrontierWorldState reduceHotProgressed(FrontierWorldState state, SubjectId subject,
                                                           SettlementServiceWorkProgressed progressed) {
         SettlementServiceWork work = requireOwned(state, subject, progressed.workId());
+        io.farfrontier.palemirror.frontier.v3.model.SettlementServiceExecutionAuthority.requireCurrent(state, work, progressed.execution());
         if (work.phase() != SettlementServiceWorkPhase.WORKING || !progressed.observedWorker().equals(work.workStation().standingBody())) {
             throw new IllegalArgumentException("service-work progress must be observed at its retained work station");
         }
@@ -129,6 +133,7 @@ public final class SettlementServiceWorkProcess {
     public static FrontierWorldState reduceHotTraversalBlocked(FrontierWorldState state, SubjectId subject,
                                                                 SettlementServiceWorkTraversalBlocked blocked) {
         SettlementServiceWork work = requireOwned(state, subject, blocked.workId());
+        io.farfrontier.palemirror.frontier.v3.model.SettlementServiceExecutionAuthority.requireCurrent(state, work, blocked.execution());
         int current = switch (work.phase()) {
             case PREPARED, APPROACH_INPUT -> work.inputTraversalCursor();
             case APPROACH_WORK -> work.workTraversalCursor();
@@ -163,7 +168,8 @@ public final class SettlementServiceWorkProcess {
         }
         LinkedHashMap<SubjectId, SettlementServiceWork> works = new LinkedHashMap<>(state.serviceWorks());
         works.put(replacement.id(), replacement);
-        return state.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(works));
+        return state.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(works).actorExecutions(replacement.phase().active()
+                ? state.actorExecutions() : io.farfrontier.palemirror.frontier.v3.model.SettlementServiceExecutionAuthority.retired(state, current)));
     }
 
     private static Optional<StrategicTask> pendingTask(FrontierWorldState state) {

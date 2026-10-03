@@ -14,12 +14,16 @@ import java.util.Objects;
  * creating an endpoint before an exact worker, source station and retained traversal exist.</p>
  */
 public record SettlementServiceWorkStarted(SubjectId taskId, SettlementServiceWork work,
-                                           PhysicalIntent inputIssueIntent, PhysicalIntent endpointIntent) implements FrontierPayload {
+                                           PhysicalIntent inputIssueIntent, PhysicalIntent endpointIntent,
+                                           io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution) implements FrontierPayload {
     public SettlementServiceWorkStarted {
         taskId = Objects.requireNonNull(taskId, "service work task");
         work = Objects.requireNonNull(work, "service work");
         inputIssueIntent = Objects.requireNonNull(inputIssueIntent, "service input issue intent");
         endpointIntent = Objects.requireNonNull(endpointIntent, "service endpoint intent");
+        Objects.requireNonNull(execution, "service admission execution");
+        SettlementServiceExecutionAuthority.requireDeclaration(execution, work.id());
+        if (!execution.actorId().equals(work.workerId())) throw new IllegalArgumentException("service admission has a foreign worker");
         if (!taskId.equals(work.taskId()) || !inputIssueIntent.id().equals(work.inputIssueIntentId())
                 || !endpointIntent.id().equals(work.endpointIntentId())) {
             throw new IllegalArgumentException("service-work admission must retain one task and both exact intents");

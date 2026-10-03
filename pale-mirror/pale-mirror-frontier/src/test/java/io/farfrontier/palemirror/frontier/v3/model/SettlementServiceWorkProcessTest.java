@@ -60,6 +60,13 @@ class SettlementServiceWorkProcessTest {
         SettlementServiceWorkStarted decoded = assertInstanceOf(SettlementServiceWorkStarted.class,
                 FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         assertEquals(started, decoded);
+        assertEquals(started.execution(), SettlementServiceExecutionAuthority.current(admitted, work));
+        assertThrows(IllegalArgumentException.class, () -> admitted.withChanges(FrontierWorldStateUpdate.begin()
+                .actorExecutions(SettlementServiceExecutionAuthority.retired(admitted, work))),
+                "retained active service cannot lose its exact worker authority");
+        byte[] encoded = FrontierWorldRuntimeDefinition.payloadCodecs().encode(started);
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(),
+                java.util.Arrays.copyOf(encoded, encoded.length - 1)), "partial execution identity is not a legacy admission");
         assertEquals(admitted, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(admitted)));
     }
 
@@ -96,7 +103,7 @@ class SettlementServiceWorkProcessTest {
                 planned.endpointIntent().postcondition(), planned.endpointIntent().lifecycleOwner());
 
         assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceStarted(active, settlement.id(),
-                new SettlementServiceWorkStarted(planned.taskId(), planned.work(), planned.inputIssueIntent(), forgedEndpoint)));
+                new SettlementServiceWorkStarted(planned.taskId(), planned.work(), planned.inputIssueIntent(), forgedEndpoint, planned.execution())));
     }
 
     @Test
@@ -130,7 +137,20 @@ class SettlementServiceWorkProcessTest {
                 "restart uncertainty must not discard the durable traversal cursor");
         FrontierWorldState reclaimed = afterRestart.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         SurfaceAnchor next = work.inputTraversal().linearCorridorSurfaces().get(1);
-        SettlementServiceWorkTraversalAdvanced advance = new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), next.standingBody(), 1);
+        SettlementServiceWorkTraversalAdvanced advance = new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), next.standingBody(), 1,
+                SettlementServiceExecutionAuthority.current(reclaimed, work));
+        var id = advance.execution();
+        var future = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1L);
+        assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceHotTraversalAdvanced(reclaimed, settlement.id(),
+                new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), next.standingBody(), 1, future)),
+                "matching work and cursor cannot bless a foreign execution generation");
+        var foreign = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                id.actorId(), id.activityKind(), new SubjectId("service:foreign-owner"), id.generation());
+        assertThrows(IllegalArgumentException.class, () -> new SettlementServiceWorkTraversalAdvanced(
+                work.id(), lease.id(), next.standingBody(), 1, foreign));
+        assertEquals(advance, FrontierWorldRuntimeDefinition.payloadCodecs().decode(advance.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(advance)));
 
         FrontierWorldState advanced = SettlementServiceWorkProcess.reduceHotTraversalAdvanced(reclaimed, settlement.id(), advance);
 
@@ -139,8 +159,17 @@ class SettlementServiceWorkProcessTest {
         assertEquals(next.standingBody(), advanced.actorLocations().get(work.workerId()).body(),
                 "the observed HOT cursor is also the sole canonical worker position for the later exact hand-off");
         assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceHotTraversalAdvanced(reclaimed, settlement.id(),
-                new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), next.standingBody(), 2)),
+                new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), next.standingBody(), 2, advance.execution())),
                 "an observed arrival may not skip a retained edge");
+        var blocked = new SettlementServiceWorkTraversalBlocked(work.id(), lease.id(), start.standingBody(), 1, advance.execution());
+        assertEquals(blocked, FrontierWorldRuntimeDefinition.payloadCodecs().decode(blocked.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(blocked)));
+        var held = SettlementServiceWorkProcess.reduceHotTraversalBlocked(reclaimed, settlement.id(), blocked);
+        assertTrue(held.actorExecutions().actors().get(work.workerId()).current().isEmpty());
+        assertEquals(reclaimed.physicalIntents(), held.physicalIntents(),
+                "blocking movement cannot erase or rewrite the service's physical-effect obligations");
+        assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceHotTraversalAdvanced(held, settlement.id(), advance),
+                "late movement cannot reactivate a terminal service");
     }
 
     @Test
@@ -160,6 +189,8 @@ class SettlementServiceWorkProcessTest {
                 complete.physicalIntents().get(ready.intent().id()).status());
         assertFalse(complete.inventory().items().containsKey(ready.item()));
         assertEquals(SettlementServiceWorkPhase.COMPLETED, complete.serviceWorks().get(ready.work().id()).phase());
+        assertTrue(complete.actorExecutions().actors().get(ready.work().workerId()).current().isEmpty(),
+                "confirmed endpoint retires service authority independently of body draining");
         assertEquals(observation.remainingRaw(), complete.infection().get(ready.cell()).value().raw());
         var lease = complete.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isServiceWork)
                 .findFirst().orElseThrow();
@@ -222,7 +253,8 @@ class SettlementServiceWorkProcessTest {
         while (work.inputTraversalCursor() < work.inputTraversal().linearCorridorSurfaces().size() - 1) {
             int next = work.inputTraversalCursor() + 1;
             ready = SettlementServiceWorkProcess.reduceHotTraversalAdvanced(ready, settlement.id(),
-                    new SettlementServiceWorkTraversalAdvanced(work.id(), leaseId, work.inputTraversal().linearCorridorSurfaces().get(next).standingBody(), next));
+                    new SettlementServiceWorkTraversalAdvanced(work.id(), leaseId, work.inputTraversal().linearCorridorSurfaces().get(next).standingBody(), next,
+                            SettlementServiceExecutionAuthority.current(ready, work)));
             work = ready.serviceWorks().get(work.id());
         }
         SettlementServiceInputIssueObservation inputReceipt = new SettlementServiceInputIssueObservation(
@@ -241,7 +273,8 @@ class SettlementServiceWorkProcessTest {
         while (work.workTraversalCursor() < work.workTraversal().linearCorridorSurfaces().size() - 1) {
             int next = work.workTraversalCursor() + 1;
             ready = SettlementServiceWorkProcess.reduceHotTraversalAdvanced(ready, settlement.id(),
-                    new SettlementServiceWorkTraversalAdvanced(work.id(), leaseId, work.workTraversal().linearCorridorSurfaces().get(next).standingBody(), next));
+                    new SettlementServiceWorkTraversalAdvanced(work.id(), leaseId, work.workTraversal().linearCorridorSurfaces().get(next).standingBody(), next,
+                            SettlementServiceExecutionAuthority.current(ready, work)));
             work = ready.serviceWorks().get(work.id());
         }
         SettlementServiceWork effectReady = work.withPhase(SettlementServiceWorkPhase.EFFECT_READY, 0);

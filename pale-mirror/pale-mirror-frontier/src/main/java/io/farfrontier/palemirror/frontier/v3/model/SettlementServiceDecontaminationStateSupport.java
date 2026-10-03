@@ -19,7 +19,7 @@ public final class SettlementServiceDecontaminationStateSupport {
     private SettlementServiceDecontaminationStateSupport() { }
 
     public static boolean owns(FrontierWorldState state, PhysicalIntent intent) {
-        return intent.kind() == PhysicalIntentKind.DECONTAMINATION && state.serviceWorks().containsKey(intent.causeSubjectId());
+        return intent.lifecycleOwner() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION;
     }
 
     /** Snapshot/WAL receipt validation after the effect has already completed its retained work. */
@@ -103,7 +103,8 @@ public final class SettlementServiceDecontaminationStateSupport {
         io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId leaseId = findHotLease(state, work);
         leases.put(leaseId, leases.get(leaseId).withStatus(SceneLeaseStatus.DRAINING));
         return state.withChanges(FrontierWorldStateUpdate.begin().infection(infection).inventory(state.inventory().consume(work.inputItemId(), 1))
-                .serviceWorks(works).physicalIntents(intents).physicalObservations(observations).sceneLeases(leases));
+                .serviceWorks(works).physicalIntents(intents).physicalObservations(observations).sceneLeases(leases)
+                .actorExecutions(SettlementServiceExecutionAuthority.retired(state, work)));
     }
 
     public static FrontierWorldState unknown(FrontierWorldState state, PhysicalIntent intent, Map<PhysicalIntentId, PhysicalIntent> intents) {
