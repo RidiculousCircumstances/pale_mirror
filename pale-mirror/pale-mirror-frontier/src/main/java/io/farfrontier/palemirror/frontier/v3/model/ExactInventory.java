@@ -158,11 +158,16 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
 
     /** Capacity and physical addresses are both fenced by outstanding work reservations. */
     public List<Integer> availableSlots(SubjectId containerId, Set<Integer> reservedSlots) {
+        return availableSlots(containerId, reservedSlots, Map.of());
+    }
+
+    /** Future inbound stock consumes capacity, not physical slot addresses. */
+    public List<Integer> availableSlots(SubjectId containerId, Set<Integer> reservedSlots, Map<String, Long> inbound) {
         ContainerRecord container = containers.get(Objects.requireNonNull(containerId, "container id"));
         if (container == null) throw new IllegalArgumentException("unknown container: " + containerId.value());
         ContainerSlotBudget budget = slotBudget(containerId);
         if (!validReservations(container, budget, reservedSlots)
-                || budget.requiredSlots() + reservedSlots.size() >= container.slotCount()) return List.of();
+                || slotBudget(containerId, inbound).requiredSlots() + reservedSlots.size() >= container.slotCount()) return List.of();
         var available = new java.util.ArrayList<Integer>();
         for (int slot = 0; slot < container.slotCount(); slot++) {
             if (!budget.occupied().contains(slot) && !budget.bound().contains(slot)
@@ -172,11 +177,15 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     }
 
     public boolean canReserveSlots(SubjectId containerId, Set<Integer> reservedSlots) {
+        return canReserveSlots(containerId, reservedSlots, Map.of());
+    }
+
+    public boolean canReserveSlots(SubjectId containerId, Set<Integer> reservedSlots, Map<String, Long> inbound) {
         ContainerRecord container = containers.get(Objects.requireNonNull(containerId, "container id"));
         if (container == null) throw new IllegalArgumentException("unknown container: " + containerId.value());
         ContainerSlotBudget budget = slotBudget(containerId);
         return validReservations(container, budget, reservedSlots)
-                && budget.requiredSlots() + reservedSlots.size() <= container.slotCount();
+                && slotBudget(containerId, inbound).requiredSlots() + reservedSlots.size() <= container.slotCount();
     }
 
     private static boolean validReservations(ContainerRecord container, ContainerSlotBudget budget, Set<Integer> reservedSlots) {
@@ -229,12 +238,37 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ContainerSlotBudget(occupied, bound, packedStacks);
     }
 
+    /** A recipe replaces stored input; a full container alone does not forbid equal-size conversion. */
+    public boolean canTransformFungible(SubjectId containerId, String inputKind, int inputCount,
+                                        String outputKind, int outputCount, Set<Integer> reserved,
+                                        Map<String, Long> inbound) {
+        Objects.requireNonNull(inputKind); Objects.requireNonNull(outputKind); Objects.requireNonNull(inbound);
+        if (inputCount <= 0 || outputCount <= 0) throw new IllegalArgumentException("invalid storage conversion");
+        ContainerRecord container = Objects.requireNonNull(containers.get(containerId), "unknown container");
+        long available = fungibleResources.accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container custody
+                        && custody.containerId().equals(containerId))
+                .flatMap(account -> account.lotQuantities().entrySet().stream())
+                .filter(entry -> fungibleResources.lots().get(entry.getKey()).itemKind().equals(inputKind))
+                .mapToLong(entry -> entry.getValue().longValue()).sum();
+        if (available < inputCount) return false;
+        var changes = new HashMap<>(inbound);
+        changes.merge(inputKind, -(long) inputCount, Math::addExact);
+        changes.merge(outputKind, (long) outputCount, Math::addExact);
+        return validReservations(container, slotBudget(containerId), reserved)
+                && slotBudget(containerId, changes).requiredSlots() + reserved.size() <= container.slotCount();
+    }
+
     /** Capacity admission for an arrived fungible shipment, including partially filled stacks. */
     public boolean canReceiveFungibleCargo(SubjectId cargoId, SubjectId targetContainerId) {
         return canReceiveFungibleCargo(cargoId, targetContainerId, Set.of());
     }
 
     public boolean canReceiveFungibleCargo(SubjectId cargoId, SubjectId targetContainerId, Set<Integer> reservedSlots) {
+        return canReceiveFungibleCargo(cargoId, targetContainerId, reservedSlots, Map.of());
+    }
+    public boolean canReceiveFungibleCargo(SubjectId cargoId, SubjectId targetContainerId, Set<Integer> reservedSlots,
+                                           Map<String, Long> inbound) {
         CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "fungible cargo id"));
         ContainerRecord target = containers.get(Objects.requireNonNull(targetContainerId, "target container id"));
         if (batch == null || !batch.fungibleContents() || target == null) {
@@ -243,7 +277,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         CustodyAccount source = fungibleResources.accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Cargo custody && custody.cargoId().equals(cargoId))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("fungible cargo account is absent"));
-        Map<String, Long> incomingByKind = new HashMap<>();
+        Map<String, Long> incomingByKind = new HashMap<>(inbound);
         source.lotQuantities().forEach((lotId, quantity) -> incomingByKind.merge(
                 fungibleResources.lots().get(lotId).itemKind(), quantity.longValue(), Math::addExact));
         long before = slotBudget(targetContainerId).requiredSlots();
@@ -258,11 +292,16 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     }
 
     public boolean canReceiveFungible(SubjectId targetContainerId, String itemKind, int quantity, Set<Integer> reservedSlots) {
+        return canReceiveFungible(targetContainerId, itemKind, quantity, reservedSlots, Map.of());
+    }
+    public boolean canReceiveFungible(SubjectId targetContainerId, String itemKind, int quantity,
+                                      Set<Integer> reservedSlots, Map<String, Long> inbound) {
         ContainerRecord target = containers.get(Objects.requireNonNull(targetContainerId, "target container id"));
         Objects.requireNonNull(itemKind, "item kind");
         if (target == null || quantity <= 0) throw new IllegalArgumentException("invalid fungible container admission");
         long before = slotBudget(targetContainerId).requiredSlots();
-        long after = slotBudget(targetContainerId, Map.of(itemKind, (long) quantity)).requiredSlots();
+        var incoming = new HashMap<>(inbound); incoming.merge(itemKind, (long) quantity, Math::addExact);
+        long after = slotBudget(targetContainerId, incoming).requiredSlots();
         return validReservations(target, slotBudget(targetContainerId), reservedSlots)
                 && after + reservedSlots.size() <= Math.max(target.slotCount(), before + reservedSlots.size());
     }

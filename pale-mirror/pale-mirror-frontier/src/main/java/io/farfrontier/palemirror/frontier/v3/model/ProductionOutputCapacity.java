@@ -8,11 +8,38 @@ import java.util.Objects;
 public final class ProductionOutputCapacity {
     private ProductionOutputCapacity() { }
 
-    /** Do not admit another bread batch when its destination cannot hold it now. */
+    /** The recipe owner declares its retained inbound demand after input has left storage. */
+    public static java.util.List<ContainerInboundCapacity.Demand> pendingInbound(java.util.Map<SubjectId, ProductionJob> jobs) {
+        var incoming = new java.util.ArrayList<ContainerInboundCapacity.Demand>();
+        for (ProductionJob job : jobs.values()) {
+            if (job.bakeryWork().isEmpty()) continue;
+            var phase = job.bakeryWork().orElseThrow().phase();
+            if (phase != BakeryWorkState.Phase.DEPOT_PICKUP && phase != BakeryWorkState.Phase.DELIVERED)
+                incoming.add(new ContainerInboundCapacity.Demand(job.id(),
+                        FrontierWorldState.depotId(job.settlementId()), job.outputItemKind(), job.outputCount()));
+        }
+        return java.util.List.copyOf(incoming);
+    }
+
+    /** Admission accounts for input replacement and the outputs already committed by other owners. */
     public static boolean canAdmitBreadBatch(FrontierWorldState state, SubjectId settlementId) {
         Objects.requireNonNull(state, "production output state");
-        return state.canReceiveFungible(FrontierWorldState.depotId(
-                Objects.requireNonNull(settlementId, "settlement id")), "minecraft:bread", 64);
+        SubjectId depot = FrontierWorldState.depotId(Objects.requireNonNull(settlementId, "settlement id"));
+        var pending = ContainerInboundCapacity.incoming(pendingInbound(state.productionJobs()), depot, java.util.Optional.empty());
+        return state.canReceiveFungible(depot, "minecraft:bread", 64)
+                || state.inventory().canTransformFungible(depot, "minecraft:wheat", 64,
+                    "minecraft:bread", 64, state.reservedContainerSlots(depot), pending)
+                || state.inventory().items().values().stream().anyMatch(item ->
+                    item.economicOwnerId().equals(settlementId) && item.itemKind().equals("minecraft:wheat")
+                    && item.count() == 64 && item.custody() instanceof InventoryCustody.ContainerSlot slot
+                    && slot.containerId().equals(depot))
+                    && state.inventory().canReserveSlots(depot, state.reservedContainerSlots(depot), pending);
+    }
+
+    public static java.util.OptionalInt deliverySlot(FrontierWorldState state, ProductionJob job) {
+        if (!job.equals(state.productionJobs().get(job.id())))
+            throw new IllegalArgumentException("output capacity names a stale production owner");
+        return state.firstFreeContainerSlotForOutput(FrontierWorldState.depotId(job.settlementId()), job.id());
     }
 
     public static boolean depotDeliveryUnavailable(FrontierWorldState state, ProductionJob job) {
@@ -21,7 +48,7 @@ public final class ProductionOutputCapacity {
         if (job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_DELIVERY) return false;
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
         return job.inputHold() instanceof ProductionInputHold.Materialized
-                ? state.firstFreeContainerSlot(depot).isEmpty()
-                : !state.canReceiveFungible(depot, job.outputItemKind(), job.outputCount());
+                ? deliverySlot(state, job).isEmpty()
+                : !state.canReceiveFungibleOutput(depot, job.outputItemKind(), job.outputCount(), job.id());
     }
 }

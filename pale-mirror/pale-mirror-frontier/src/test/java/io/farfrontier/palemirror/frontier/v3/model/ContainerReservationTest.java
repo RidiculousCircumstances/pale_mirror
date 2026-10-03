@@ -12,6 +12,50 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ContainerReservationTest {
     @Test
+    void inputPickupProtectsItsFreedCapacityUntilExactOutputDeliveryAcrossRecovery() {
+        var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:inbound-capacity"), 41L)), StrategicTaskStatus.PENDING);
+        var task = state.strategicPlans().tasks().values().iterator().next();
+        var depot = FrontierWorldState.depotId(task.ownerId());
+        var inventory = state.inventory();
+        while (inventory.firstFreeSlot(depot).isPresent()) {
+            int slot = inventory.firstFreeSlot(depot).orElseThrow();
+            inventory = inventory.store(new ExactItemStack(new SubjectId("item:inbound-block-" + slot),
+                    task.ownerId(), "minecraft:stone", 1, new InventoryCustody.ContainerSlot(depot, slot)));
+        }
+        state = state.withInventory(inventory);
+        assertTrue(ProductionOutputCapacity.canAdmitBreadBatch(state, task.ownerId()));
+        var started = io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.planStart(state,
+                io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.start(task, 200L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ProductionStarted.class::isInstance).map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess.reduceTaskTransition(state,
+                task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        long due = 300L;
+        while (state.productionJobs().get(started.job().id()).bakeryWork().orElseThrow().phase()
+                == BakeryWorkState.Phase.DEPOT_PICKUP && due < 10_000L) {
+            var job = state.productionJobs().get(started.job().id());
+            var step = io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.planCompletion(state,
+                    io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.complete(job, due)).stream()
+                    .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                    .filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            state = io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
+            due += 20L;
+        }
+        assertEquals(BakeryWorkState.Phase.STATION_LOAD, state.productionJobs().get(started.job().id()).bakeryWork().orElseThrow().phase());
+        assertTrue(state.inventory().firstFreeSlot(depot).isPresent(), "input really left storage");
+        assertTrue(state.firstFreeContainerSlot(depot).isEmpty(), "new output reservations cannot steal that space");
+        assertTrue(state.firstFreeContainerSlotForOutput(depot, started.job().id()).isPresent(), "the owner may deliver into its own space");
+        assertThrows(IllegalArgumentException.class, () -> ContainerInboundCapacity.incoming(
+                List.of(new ContainerInboundCapacity.Demand(started.job().id(), depot, "minecraft:bread", 64)),
+                depot, java.util.Optional.of(new SubjectId("job:foreign-output"))));
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(Map.of("minecraft:bread", 64L), recovered.pendingContainerInbound(depot));
+        assertTrue(recovered.firstFreeContainerSlot(depot).isEmpty());
+        assertTrue(recovered.firstFreeContainerSlotForOutput(depot, started.job().id()).isPresent());
+    }
+    @Test
     void activeHarvestReservationConsumesRealCapacityForOtherProducers() {
         FrontierWorldState state = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0).state();
         ResourceSiteHarvestJob harvest = (ResourceSiteHarvestJob) state.resourceSites()

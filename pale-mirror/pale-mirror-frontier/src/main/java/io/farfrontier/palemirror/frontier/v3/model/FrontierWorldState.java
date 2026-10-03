@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
+import java.util.Optional;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -638,38 +639,34 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return HarvestContainerReservations.slots(resourceSites, containerId);
     }
     public boolean canReceiveFungible(SubjectId containerId, String itemKind, int quantity) {
-        return inventory.canReceiveFungible(containerId, itemKind, quantity, reservedContainerSlots(containerId));
+        return ContainerStorageAdmission.receive(this, containerId, itemKind, quantity, Optional.empty());
+    }
+    public boolean canReceiveFungibleOutput(SubjectId containerId, String itemKind, int quantity, SubjectId owner) {
+        return ContainerStorageAdmission.receive(this, containerId, itemKind, quantity, Optional.of(owner));
     }
     public boolean canReceiveFungibleCargo(SubjectId cargoId, SubjectId containerId) {
-        return inventory.canReceiveFungibleCargo(cargoId, containerId, reservedContainerSlots(containerId));
+        return ContainerStorageAdmission.receiveCargo(this, cargoId, containerId);
     }
     private static void validateHarvestOutputReservations(ExactInventory inventory, ResourceSiteState sites) {
         HarvestContainerReservations.validate(inventory, sites);
     }
     private static void validateHarvestResourceAccounts(ExactInventory inventory, ResourceSiteState sites) {
-        java.util.Set<SubjectId> declared = new java.util.HashSet<>();
-        for (ResourceSiteHarvestJob job : sites.sites().values().stream()
-                .flatMap(site -> site.harvestJobs().values().stream()).toList()) {
-            if (!declared.add(job.actorAccountId()))
-                throw new IllegalArgumentException("active harvest jobs share one declared actor resource account");
-            CustodyAccount account = inventory.fungibleResources().accounts().get(job.actorAccountId());
-            if (account != null && !account.custody().equals(new ResourceCustody.Actor(job.workerId())))
-                throw new IllegalArgumentException("active harvest actor account has foreign custody");
-            CustodyAccount depotAccount = inventory.fungibleResources().accounts().get(job.depotAccountId());
-            if (depotAccount != null && !depotAccount.custody().equals(new ResourceCustody.Container(job.outputSlot().containerId())))
-                throw new IllegalArgumentException("active harvest depot account has foreign custody");
-        }
+        HarvestContainerReservations.validateAccounts(inventory, sites);
     }
     public boolean containerSlotAvailable(InventoryCustody.ContainerSlot slot) {
-        return inventory.availableSlots(slot.containerId(), reservedContainerSlots(slot.containerId())).contains(slot.slot())
-                && ReferenceContainerCustody.expectedFungibleSlot(this, slot.containerId(), slot.slot()).isEmpty()
-                && !productionHoldReserves(slot);
+        return ContainerStorageAdmission.available(this, slot, Optional.empty(), this::productionHoldReserves);
+    }
+    public boolean containerSlotAvailableForOutput(InventoryCustody.ContainerSlot slot, SubjectId owner) {
+        return ContainerStorageAdmission.available(this, slot, Optional.of(owner), this::productionHoldReserves);
     }
     public java.util.OptionalInt firstFreeContainerSlot(SubjectId containerId) {
-        for (int slot : inventory.availableSlots(containerId, reservedContainerSlots(containerId))) {
-            if (containerSlotAvailable(new InventoryCustody.ContainerSlot(containerId, slot))) return java.util.OptionalInt.of(slot);
-        }
-        return java.util.OptionalInt.empty();
+        return ContainerStorageAdmission.first(this, containerId, Optional.empty(), this::productionHoldReserves);
+    }
+    public java.util.OptionalInt firstFreeContainerSlotForOutput(SubjectId containerId, SubjectId completingOwner) {
+        return ContainerStorageAdmission.first(this, containerId, Optional.of(completingOwner), this::productionHoldReserves);
+    }
+    public Map<String, Long> pendingContainerInbound(SubjectId containerId) {
+        return ContainerStorageAdmission.inbound(this, containerId, Optional.empty());
     }
     private static void requireJobTask(StrategicPlanState plans, SubjectId taskId, SubjectId ownerId,
                                        StrategicTaskKind kind, String jobKind) {

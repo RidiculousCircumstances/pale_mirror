@@ -107,6 +107,8 @@ final class BakeryJobAdmission {
         // successful depot-slot wheat-to-bread path through a forged event.
         if (job.bakeryWork().isEmpty())
             throw new IllegalArgumentException("bread production start requires declared bakery station work");
+        if (!ProductionOutputCapacity.canAdmitBreadBatch(state, job.settlementId()))
+            throw new IllegalArgumentException("production start has no capacity for its retained output");
         SettlementStructure workshop = ProductionProcess.workshop(settlement);
         if (!workshop.id().equals(job.facilityId()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production start facility is unavailable");
         ResidentProfile worker = state.humanPopulation().resident(job.workerId());

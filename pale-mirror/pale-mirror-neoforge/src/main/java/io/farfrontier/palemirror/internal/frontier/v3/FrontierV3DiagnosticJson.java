@@ -685,13 +685,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"eligibleObserverCount\":" + value.eligibleObserverCount()
                 + ",\"presentationObserverCount\":" + value.presentationObserverCount() + "}").orElse("");
         String replica = referenceCustody(state, subject);
-        var capacity = state.inventory().containerCapacity(subject, state.reservedContainerSlots(subject));
-        String canonicalCapacity = ",\"canonicalCapacity\":{\"exactSlots\":" + capacity.exactSlots()
-                + ",\"boundFungibleSlots\":" + capacity.boundFungibleSlots()
-                + ",\"packedFungibleSlots\":" + capacity.packedFungibleSlots()
-                + ",\"reservedSlots\":" + capacity.reservedSlots()
-                + ",\"freeCapacitySlots\":" + capacity.freeCapacitySlots()
-                + ",\"reservationsValid\":" + capacity.reservationsValid() + "}";
+        String canonicalCapacity = FrontierV3ContainerCapacityJson.render(state, subject);
         return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
                 + "\",\"surface\":\"" + surface.status() + "\",\"position\":" + position(surface.position()) + ",\"slotCount\":" + container.slotCount()
                 + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied

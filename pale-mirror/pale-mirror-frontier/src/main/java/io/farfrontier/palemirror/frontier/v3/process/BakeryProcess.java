@@ -336,8 +336,8 @@ public final class BakeryProcess {
         };
         if (prepared.destinationSlot() != requiredSlot
                 || prepared.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
-                && !state.containerSlotAvailable(new InventoryCustody.ContainerSlot(
-                FrontierWorldState.depotId(job.settlementId()), prepared.destinationSlot())))
+                && !state.containerSlotAvailableForOutput(new InventoryCustody.ContainerSlot(
+                FrontierWorldState.depotId(job.settlementId()), prepared.destinationSlot()), job.id()))
             throw new IllegalArgumentException("bakery HOT effect has no reserved current target port");
         BakeryPhysicalStep step = new BakeryPhysicalStep(prepared.phase(), prepared.leaseId(), prepared.destinationSlot());
         return FrontierProductionWorkSceneSupport.replaceJob(state, job.withBakeryWork(work.preparePhysical(step)));
@@ -535,7 +535,7 @@ public final class BakeryProcess {
                         new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()));
                 case DELIVER -> new ActorContainerItemOrder.ContainerEndpoint.ExactSlot(new InventoryCustody.ContainerSlot(depotId,
                         work.pendingPhysicalStep().map(BakeryPhysicalStep::destinationSlot)
-                                .orElseGet(() -> state.firstFreeContainerSlot(depotId).orElseThrow())));
+                                .orElseGet(() -> ProductionOutputCapacity.deliverySlot(state, job).orElseThrow())));
                 default -> throw new IllegalArgumentException("not an exact transfer step");
             };
             portion = new ActorContainerItemOrder.Portion.Exact(item);

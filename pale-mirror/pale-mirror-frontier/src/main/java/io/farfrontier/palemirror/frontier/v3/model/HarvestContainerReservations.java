@@ -9,6 +9,21 @@ import java.util.Set;
 final class HarvestContainerReservations {
     private HarvestContainerReservations() { }
 
+    static void validateAccounts(ExactInventory inventory, ResourceSiteState sites) {
+        Set<SubjectId> declared = new HashSet<>();
+        for (ResourceSiteHarvestJob job : sites.sites().values().stream()
+                .flatMap(site -> site.harvestJobs().values().stream()).toList()) {
+            if (!declared.add(job.actorAccountId()))
+                throw new IllegalArgumentException("active harvest jobs share one declared actor resource account");
+            CustodyAccount account = inventory.fungibleResources().accounts().get(job.actorAccountId());
+            if (account != null && !account.custody().equals(new ResourceCustody.Actor(job.workerId())))
+                throw new IllegalArgumentException("active harvest actor account has foreign custody");
+            CustodyAccount depotAccount = inventory.fungibleResources().accounts().get(job.depotAccountId());
+            if (depotAccount != null && !depotAccount.custody().equals(new ResourceCustody.Container(job.outputSlot().containerId())))
+                throw new IllegalArgumentException("active harvest depot account has foreign custody");
+        }
+    }
+
     static Set<Integer> slots(ResourceSiteState sites, SubjectId containerId) {
         Set<Integer> reserved = new HashSet<>();
         for (ResourceSiteHarvestJob job : sites.sites().values().stream()

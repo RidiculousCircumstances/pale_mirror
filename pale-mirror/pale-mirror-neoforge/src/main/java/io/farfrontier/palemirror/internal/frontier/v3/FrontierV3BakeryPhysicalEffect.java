@@ -47,7 +47,7 @@ final class FrontierV3BakeryPhysicalEffect {
             case STATION_LOAD -> station(state, work).inputSlot();
             case PROCESSING -> station(state, work).outputSlot();
             case DEPOT_DELIVERY -> work.pendingPhysicalStep().map(BakeryPhysicalStep::destinationSlot)
-                    .orElseGet(() -> state.firstFreeContainerSlot(containerId).orElse(-1));
+                    .orElseGet(() -> ProductionOutputCapacity.deliverySlot(state, job).orElse(-1));
             case DELIVERED -> throw new IllegalStateException("delivered bakery work cannot prepare another effect");
         };
         if (destinationSlot < 0 && (work.phase() == BakeryWorkState.Phase.STATION_LOAD

@@ -225,8 +225,10 @@ class BakeryColdVerticalTest {
         assertEquals(BakeryColdStep.Action.MOVE, historicalMove.action());
         SubjectId depot = FrontierWorldState.depotId(task.ownerId());
         ExactInventory inventory = state.inventory();
-        while (state.withInventory(inventory).firstFreeContainerSlot(depot).isPresent()) {
-            int slot = state.withInventory(inventory).firstFreeContainerSlot(depot).orElseThrow();
+        // External placement can consume a promised space; simulate that actual intervention,
+        // not a new process obeying the now-protected inbound budget.
+        while (inventory.firstFreeSlot(depot).isPresent()) {
+            int slot = inventory.firstFreeSlot(depot).orElseThrow();
             inventory = inventory.store(new ExactItemStack(new SubjectId("item:bakery-capacity-" + slot), task.ownerId(),
                     "minecraft:stone", 1, new InventoryCustody.ContainerSlot(depot, slot)));
         }

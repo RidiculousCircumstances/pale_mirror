@@ -35,7 +35,7 @@ class StrategicObjectiveProcessTest {
     }
 
     @Test
-    void fullDepotSuppressesNewBreadWorkAndRetainsASelectedMarketDemand() {
+    void fullDepotAllowsCapacityNeutralRecipeAndRetainsASelectedMarketDemand() {
         FrontierWorldState initial = initial("frontier:full-depot-bread-admission", 407L);
         SubjectId owner = initial.bootstrap().settlements().getFirst().id();
         List<ProposedEvent> selected = StrategicObjectiveProcess.plan(initial,
@@ -65,7 +65,8 @@ class StrategicObjectiveProcessTest {
                     "minecraft:stone", 1, new InventoryCustody.ContainerSlot(depot, slot)));
         }
         FrontierWorldState full = pending.withInventory(inventory);
-        assertTrue(!ProductionOutputCapacity.canAdmitBreadBatch(full, owner));
+        assertTrue(ProductionOutputCapacity.canAdmitBreadBatch(full, owner),
+                "converting a stored full wheat stack into one bread stack does not need another slot");
         assertTrue(StrategicObjectiveProcess.plan(full, StrategicObjectiveProcess.review(owner, 2, 61L)).stream()
                 .noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected value
                         && value.objective().kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD));

@@ -117,6 +117,9 @@ public final class ProductionProcess {
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
         }
         if (fungible.isEmpty() && input.isEmpty()) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
+        if (!ProductionOutputCapacity.canAdmitBreadBatch(state, settlement.id()))
+            return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
+                    state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
         if (physicalCustody && !ReferenceContainerCustody.hasOperationalCustody(state, depot)
                 || fungible.isPresent() && input.isEmpty() && !ProductionResourceCustody.canStart(state, fungible.orElseThrow(), 64)) {
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
