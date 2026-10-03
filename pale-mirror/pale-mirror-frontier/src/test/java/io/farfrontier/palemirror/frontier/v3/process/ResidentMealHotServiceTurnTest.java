@@ -41,11 +41,11 @@ class ResidentMealHotServiceTurnTest {
         var service = SettlementDepotServicePort.forDepot(settlement.structures().stream()
                 .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).serviceSurface();
         ResidentMealHotArrived firstArrival = new ResidentMealHotArrived(first,
-                state.ambientLeases().get(first).revision(), service.standingBody());
+                state.ambientLeases().get(first).revision(), service.standingBody(), state.humanPopulation().meals().get(first).executionId());
         assertTrue(ResidentMealProcess.hotArrivalHasServiceTurn(state, first, firstArrival));
         state = ResidentMealProcess.reduceHotArrived(state, first, firstArrival);
         ResidentMealHotArrived secondArrival = new ResidentMealHotArrived(second,
-                state.ambientLeases().get(second).revision(), service.standingBody());
+                state.ambientLeases().get(second).revision(), service.standingBody(), state.humanPopulation().meals().get(second).executionId());
         assertFalse(ResidentMealProcess.hotArrivalHasServiceTurn(state, second, secondArrival));
         assertEquals(ResidentMeal.Phase.MOVE, state.humanPopulation().meals().get(second).phase());
         FrontierWorldState occupied = state;

@@ -174,6 +174,21 @@ class BakeryColdVerticalTest {
         assertTrue(ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), resident));
         assertEquals(job, state.productionJobs().get(job.id()));
         assertEquals(3, state.inventory().fungibleResources().totalQuantity(job.settlementId(), "minecraft:bread"));
+        assertTrue(state.actorExecutions().actors().get(resident).current().isEmpty(),
+                "confirmed food does not itself select a work successor");
+        var review = io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.plan(state,
+                io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(resident, 27_300L));
+        var resumed = review.stream().map(ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed.class::cast).findFirst().orElseThrow();
+        state = io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.reduce("actor-execution", state,
+                new io.farfrontier.palemirror.frontier.v3.api.FrontierEvent(1,
+                        new io.farfrontier.palemirror.frontier.v3.api.EventId("event:baker-selected-resume"),
+                        new io.farfrontier.palemirror.frontier.v3.api.TransactionId("transaction:baker-selected-resume"),
+                        state.bootstrap().worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(1L),
+                        new SimInstant(resumed.atTick()), resident,
+                        io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(
+                                new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:baker-selected-resume")), resumed));
         assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 27_300L))
                 .stream().anyMatch(event -> event.payload() instanceof BakeryColdStep));
     }

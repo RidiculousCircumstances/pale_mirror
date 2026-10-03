@@ -90,7 +90,7 @@ public final class FrontierWorldPhysicalObservationProcess {
                 .sorted(java.util.Comparator.comparing(ResidentMeal::residentId))
                 .forEach(meal -> {
                     events.add(new ProposedEvent(meal.residentId(),
-                            new ResidentMealColdStep(meal.residentId(), meal.phase(), submittedAt)));
+                            new ResidentMealColdStep(meal.residentId(), meal.phase(), submittedAt, meal.executionId())));
                     events.add(new ProposedEvent(meal.residentId(),
                             new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled(
                                     ResidentMealProcess.progress(meal, Math.addExact(meal.startedAtTick(), 1L)).id(),
@@ -110,7 +110,7 @@ public final class FrontierWorldPhysicalObservationProcess {
                     var actor = movement.order().actorId();
                     events.add(new ProposedEvent(actor,
                             new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced(
-                                    actor, movement.order().goalRevision(), submittedAt)));
+                                    actor, movement.order().goalRevision(), submittedAt, movement.executionId())));
                     events.add(new ProposedEvent(actor,
                             new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled(
                                     ActorMovementProcess.progress(movement, Math.addExact(movement.issuedAtTick(), 1L)).id(),
@@ -263,6 +263,7 @@ public final class FrontierWorldPhysicalObservationProcess {
                 observed.playerId(), observed.interactionId(), observed.remaining())))
             throw new IllegalArgumentException("stock departure differs from its exact witnessed edit classification");
         HumanPopulation population = state.humanPopulation();
+        var executions = state.actorExecutions();
         for (SubjectId claimId : observed.forfeitedClaimIds().stream().sorted().toList()) {
             ClaimAllocation claim = ledger.claims().get(claimId);
             ResidentMeal meal = claim == null ? null : population.meals().get(claim.claimantId());
@@ -272,13 +273,15 @@ public final class FrontierWorldPhysicalObservationProcess {
                     || ledger.accounts().containsKey(meal.actorAccountId()))
                 throw new IllegalArgumentException("stock exit cannot retire a foreign or physically held meal claim");
             population = population.abandonMealSource(meal);
+            executions = executions.finish(meal.executionId());
         }
         FungibleResourceLedger cleared = observed.forfeitedClaimIds().isEmpty()
                 ? ledger : ledger.releaseClaims(observed.forfeitedClaimIds());
         FungibleResourceLedger departed = cleared.departObserved(observed.sourceAccountId(),
                 observed.authorityEpoch(), observed.departedLots(), observed.remaining());
         FrontierWorldState next = state.withChanges(FrontierWorldStateUpdate.begin()
-                .inventory(state.inventory().withFungibleResources(departed)).humanPopulation(population));
+                .inventory(state.inventory().withFungibleResources(departed)).humanPopulation(population)
+                .actorExecutions(executions));
         for (SubjectId claimId : observed.forfeitedClaimIds().stream().sorted().toList()) {
             ClaimAllocation claim = ledger.claims().get(claimId);
             next = ResidentActivityProcess.retargetHotResident(next, claim.claimantId(),

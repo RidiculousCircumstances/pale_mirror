@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import java.util.Optional;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId; import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
@@ -14,7 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<SubjectId, AmbientActorLease> ambientLeases, Map<SubjectId, RouteConstruction> routeConstructions, Map<SubjectId, RouteMaintenance> routeMaintenances, RouteTopology routeTopology, StrategicPlanState strategicPlans,
         HumanPopulation humanPopulation, CompanyRegistry companies, ResourceSiteState resourceSites, PhysicalReplicaCustodyState replicaCustody,
         DeferredAftermathState deferredAftermath, FencedRecoveryState fencedRecovery, DiagnosticIncidentIndex diagnosticIncidents,
-        Map<SubjectId, ActorMovement> actorMovements) {
+        Map<SubjectId, ActorMovement> actorMovements, ActorExecutionState actorExecutions) {
     private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO); private static final int MAX_OPERATIONS = 1_024, MAX_PHYSICAL_OBSERVATIONS = 4_096;
     public static final int MAX_PHYSICAL_INTENTS = 4_096;
     private static final int MAX_SCENE_LEASES = 1_024, MAX_AMBIENT_LEASES = 4_096, MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
@@ -39,7 +40,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 contracts, operations, logisticsHistory, physicalIntents, physicalObservations, sceneLeases,
                 hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeMaintenances,
                 routeTopology, strategicPlans, humanPopulation, companies, resourceSites, replicaCustody,
-                deferredAftermath, fencedRecovery, diagnosticIncidents, Map.of());
+                deferredAftermath, fencedRecovery, diagnosticIncidents, Map.of(), ActorExecutionState.empty());
     }
     public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
                               Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection, ExactInventory inventory,
@@ -109,7 +110,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(replicaCustody, "replica custody"); Objects.requireNonNull(deferredAftermath, "deferred aftermath");
         Objects.requireNonNull(fencedRecovery, "fenced recovery");
         Objects.requireNonNull(diagnosticIncidents, "diagnostic incidents"); actorMovements = FrontierWorldStateSupport.immutableMap(actorMovements, "actor movements");
-        ActorMovementStateSupport.validate(actorMovements, actorLocations, humanPopulation, inventory);
+        Objects.requireNonNull(actorExecutions, "actor executions");
+        ActorExecutionComposition.CAPABILITIES.validateKinds(actorExecutions);
+        ActorMovementStateSupport.validate(actorMovements, actorLocations, humanPopulation, inventory, actorExecutions);
+        ResidentMealExecutionAuthority.validate(humanPopulation, actorExecutions);
+        HarvestActivityCapability.validateReferences(resourceSites, actorExecutions);
+        ProductionActivityCapability.validateReferences(productionJobs, actorExecutions);
+        if (!actorLocations.keySet().containsAll(actorExecutions.actors().keySet())) throw new IllegalArgumentException("execution names unknown actor");
         if (!fullValidationDeferred()) {
             fencedRecovery.cargoRetirements().validateContext(bootstrap.worldId(), sceneLeases);
             validateFullState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs,
@@ -133,8 +140,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                                           Map<SubjectId, RouteMaintenance> routeMaintenances, RouteTopology routeTopology,
                                           StrategicPlanState strategicPlans, HumanPopulation humanPopulation,
                                           CompanyRegistry companies, ResourceSiteState resourceSites) {
-            resourceSites.validate(bootstrap); validateHarvestOutputReservations(inventory, resourceSites);
-            validateHarvestResourceAccounts(inventory, resourceSites);
+            resourceSites.validate(bootstrap); HarvestContainerReservations.validate(inventory, resourceSites);
+            HarvestContainerReservations.validateAccounts(inventory, resourceSites);
             strategicPlans.validate(bootstrap, routeTopology, humanPopulation); strategicPlans.hiveOperationKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveSettlementKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveTerritoryKnowledge().validate(bootstrap, hiveColony, actorLocations, structureConditions);
@@ -460,7 +467,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         try {
             new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, serviceWorks, contracts,
                     operations, logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas,
-                    ambientLeases, routeConstructions, routeMaintenances, routeTopology, strategicPlans, humanPopulation, companies, resourceSites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents);
+                    ambientLeases, routeConstructions, routeMaintenances, routeTopology, strategicPlans, humanPopulation, companies, resourceSites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents, actorMovements, actorExecutions);
         } finally {
             if (depth != 0) DEFERRED_FULL_VALIDATION_DEPTH.set(depth);
         }
@@ -495,7 +502,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 || structureDamage != previous.structureDamage || physicalDeltas != previous.physicalDeltas || ambientLeases != previous.ambientLeases
                 || routeConstructions != previous.routeConstructions || routeTopology != previous.routeTopology || companies != previous.companies
                 || resourceSites != previous.resourceSites || replicaCustody != previous.replicaCustody || deferredAftermath != previous.deferredAftermath || fencedRecovery != previous.fencedRecovery ||
-                        diagnosticIncidents != previous.diagnosticIncidents
+                        diagnosticIncidents != previous.diagnosticIncidents || actorMovements != previous.actorMovements || actorExecutions != previous.actorExecutions
                 || (strategicPlans == previous.strategicPlans && humanPopulation == previous.humanPopulation)) return false;
         if (!sceneLeases.isEmpty() || !physicalIntents.isEmpty() || !physicalObservations.isEmpty()) return false;
         return humanPopulation.households() == previous.humanPopulation.households()
@@ -526,7 +533,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 && physicalDeltas == previous.physicalDeltas && ambientLeases == previous.ambientLeases && routeConstructions == previous.routeConstructions
                 && routeTopology == previous.routeTopology && strategicPlans == previous.strategicPlans && humanPopulation == previous.humanPopulation && companies == previous.companies
                 && resourceSites == previous.resourceSites && replicaCustody == previous.replicaCustody && deferredAftermath == previous.deferredAftermath && fencedRecovery == previous.fencedRecovery &&
-                        diagnosticIncidents == previous.diagnosticIncidents && infection != previous.infection;
+                        diagnosticIncidents == previous.diagnosticIncidents && actorMovements == previous.actorMovements && actorExecutions == previous.actorExecutions && infection != previous.infection;
     }
     private static long raw(FixedRatio ratio) { return ratio == null ? 0L : ratio.value().raw(); } private static boolean fullValidationDeferred() { return DEFERRED_FULL_VALIDATION_DEPTH.get() > 0; }
     FrontierWorldState next(Map<SubjectId, ActorLocation> actors, Map<SubjectId, StructureCondition> structures,
@@ -537,7 +544,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                             Map<BlockPosition, PhysicalDelta> deltas, Map<SubjectId, AmbientActorLease> ambient) {
         return new FrontierWorldState(bootstrap, actors, structures, nextInfection, nextInventory, jobs, serviceWorks, nextContracts, nextOperations,
                 logisticsHistory, intents, observations, leases, colony, damage, deltas, ambient, routeConstructions, routeMaintenances,
-                routeTopology, strategicPlans, humanPopulation, companies, resourceSites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents, actorMovements);
+                routeTopology, strategicPlans, humanPopulation, companies, resourceSites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents, actorMovements, actorExecutions);
     }
     public FrontierWorldState withChanges(FrontierWorldStateUpdate change) {
         change = Objects.requireNonNull(change, "state change");
@@ -546,7 +553,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 change.physicalIntents(this), change.physicalObservations(this), change.sceneLeases(this), change.hiveColony(this),
                 change.structureDamage(this), change.physicalDeltas(this), change.ambientLeases(this), change.routeConstructions(this), change.routeMaintenances(this),
                 change.routeTopology(this), change.strategicPlans(this), change.humanPopulation(this), change.companies(this), change.resourceSites(this), change.replicaCustody(this), change.deferredAftermath(this),
-                        change.fencedRecovery(this), change.diagnosticIncidents(this), change.actorMovements(this));
+                        change.fencedRecovery(this), change.diagnosticIncidents(this), change.actorMovements(this), change.actorExecutions(this));
     }
     public FrontierWorldState withRouteTopology(RouteTopology nextTopology) { return withChanges(FrontierWorldStateUpdate.begin().routeTopology(nextTopology)); }
     public FrontierWorldState withStrategicPlans(StrategicPlanState nextPlans) { return withChanges(FrontierWorldStateUpdate.begin().strategicPlans(nextPlans)); }
@@ -647,12 +654,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public boolean canReceiveFungibleCargo(SubjectId cargoId, SubjectId containerId) {
         return ContainerStorageAdmission.receiveCargo(this, cargoId, containerId);
     }
-    private static void validateHarvestOutputReservations(ExactInventory inventory, ResourceSiteState sites) {
-        HarvestContainerReservations.validate(inventory, sites);
-    }
-    private static void validateHarvestResourceAccounts(ExactInventory inventory, ResourceSiteState sites) {
-        HarvestContainerReservations.validateAccounts(inventory, sites);
-    }
     public boolean containerSlotAvailable(InventoryCustody.ContainerSlot slot) {
         return ContainerStorageAdmission.available(this, slot, Optional.empty(), this::productionHoldReserves);
     }
@@ -677,19 +678,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
     }
 
-    public FrontierWorldState withProductionJob(ProductionJob job) {
-        Objects.requireNonNull(job, "production job");
-        if (!(job.inputHold() instanceof ProductionInputHold.Materialized)) {
-            throw new IllegalArgumentException("only a materialized production input may remain in exact inventory");
-        }
-        if (productionJobs.containsKey(job.id())) throw new IllegalArgumentException("production job identity already exists: " + job.id().value());
-        if (!ProductionFacilityReservations.available(productionJobs, job.facilityId())) {
-            throw new IllegalArgumentException("facility already has an active production job: " + job.facilityId().value());
-        }
-        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.put(job.id(), job);
-        return next(actorLocations, structureConditions, infection, inventory, next, contracts, operations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
-    }
+    public FrontierWorldState withProductionJob(ProductionJob job) { return ProductionJobStateSupport.startMaterialized(this, job); }
     public FrontierWorldState startProductionJob(ProductionJob job, SubjectId inputItemId) { return ProductionJobStateSupport.start(this, job, inputItemId); }
     public FrontierWorldState completeProductionJob(SubjectId jobId, ExactItemStack output) { return ProductionJobStateSupport.complete(this, jobId, output); }
     /** Commits a COLD recipe by replacing its reserved fungible lot inside the same account. */

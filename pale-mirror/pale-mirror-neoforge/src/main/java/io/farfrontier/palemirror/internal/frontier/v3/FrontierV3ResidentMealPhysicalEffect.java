@@ -36,7 +36,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
                         FrontierV3ResidentMealHandProjection.SLOT), meal.portion())) return false;
         return accepted(level, runtime, actorId, "ambient-meal-hand-release", new ResidentMealHotHandReleased(
                 actorId, lease.revision(), new FungiblePhysicalObservation.Stack(address,
-                        meal.portion().itemKind(), meal.portion().quantity())));
+                        meal.portion().itemKind(), meal.portion().quantity()), meal.executionId()));
     }
 
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -55,7 +55,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
                     new ResidentMealHotHandMaterialized(meal.residentId(), lease.revision(),
                             new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(
                                     meal.residentId(), worker, FrontierV3ResidentMealHandProjection.SLOT),
-                                    meal.portion().itemKind(), meal.portion().quantity())));
+                                    meal.portion().itemKind(), meal.portion().quantity()), meal.executionId()));
         var observedBody = FrontierV3SupportedBodyCapture.observe(level, body);
         if (observedBody.isEmpty()) return false;
         if (meal.phase() == ResidentMeal.Phase.CONSUME) {
@@ -95,7 +95,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
             if (!transfer.before()) return false;
             ResidentMealPhysicalStep step = new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE,
                     sourceCounts, 0, slices.getFirst().epoch(),
-                    lease.revision(), lease.revision());
+                    lease.revision(), lease.revision(), meal.executionId());
             return accepted(level, runtime, meal.residentId(), "resident-meal-take-prepare",
                     new ResidentMealHotEffectPrepared(meal.residentId(), step));
         }
@@ -111,7 +111,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
                 meal.residentId(), worker, FrontierV3ResidentMealHandProjection.SLOT), meal.portion().itemKind(), meal.portion().quantity());
         boolean applied = accepted(level, runtime, meal.residentId(), "resident-meal-take-observed",
                 new ResidentMealHotEffectObserved(meal.residentId(), ResidentMeal.Phase.TAKE,
-                        lease.revision(), lease.goalBody(), remaining, List.of(held)));
+                        lease.revision(), lease.goalBody(), remaining, List.of(held), meal.executionId()));
         if (applied && !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(
                 runtime, meal.depotId(), chest))
             throw new IllegalStateException("resident bread take lacks its next depot replica boundary");
@@ -135,7 +135,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
             return accepted(level, runtime, meal.residentId(), "resident-meal-consume-prepare",
                     new ResidentMealHotEffectPrepared(meal.residentId(), new ResidentMealPhysicalStep(
                             ResidentMeal.Phase.CONSUME, -1, meal.portion().quantity(), bindings.getFirst().authorityEpoch(),
-                            0L, lease.revision())));
+                            0L, lease.revision(), meal.executionId())));
         }
         if (pending.phase() != ResidentMeal.Phase.CONSUME || pending.ambientRevision() != lease.revision()
                 || pending.consumptionQuantity() != meal.portion().quantity()
@@ -146,7 +146,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
         } else if (!actual.isEmpty()) return false;
         return accepted(level, runtime, meal.residentId(), "resident-meal-consume-observed",
                 new ResidentMealHotEffectObserved(meal.residentId(), ResidentMeal.Phase.CONSUME,
-                        lease.revision(), FrontierV3SupportedBodyCapture.observe(level, worker).orElseThrow(), List.of(), List.of()));
+                        lease.revision(), FrontierV3SupportedBodyCapture.observe(level, worker).orElseThrow(), List.of(), List.of(), meal.executionId()));
     }
 
     private static boolean accepted(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

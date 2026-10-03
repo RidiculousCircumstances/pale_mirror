@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,6 +19,13 @@ import java.util.Objects;
  */
 public final class FrontierWireTags {
     private static final Map<Class<?>, Map<Integer, ? extends Enum<?>>> BY_TYPE = Map.ofEntries(
+            entry(ActorActivityKind.class,
+                    tag(10, ActorActivityKind.PRESENCE), tag(11, ActorActivityKind.MEAL), tag(12, ActorActivityKind.SERVICE_EXIT),
+                    tag(13, ActorActivityKind.FIELD_HARVEST), tag(14, ActorActivityKind.PRODUCTION), tag(15, ActorActivityKind.LOGISTICS),
+                    tag(16, ActorActivityKind.ROUTE_PATROL), tag(17, ActorActivityKind.SETTLEMENT_ASSAULT), tag(18, ActorActivityKind.ENGINEERING_WORK),
+                    tag(19, ActorActivityKind.SETTLEMENT_SERVICE), tag(20, ActorActivityKind.MEDICAL_TREATMENT), tag(21, ActorActivityKind.TRANSIT),
+                    tag(22, ActorActivityKind.SCOUT_PATROL), tag(23, ActorActivityKind.HIVE_TASK_ASSEMBLY), tag(24, ActorActivityKind.HIVE_TASK_RETURN),
+                    tag(25, ActorActivityKind.OPERATION_ASSEMBLY), tag(26, ActorActivityKind.ENGINEERING_ASSEMBLY)),
             entry(ActorLifeStatus.class,
                     tag(0, ActorLifeStatus.ALIVE), tag(1, ActorLifeStatus.DEAD)),
             entry(AmbientGoalKind.class,

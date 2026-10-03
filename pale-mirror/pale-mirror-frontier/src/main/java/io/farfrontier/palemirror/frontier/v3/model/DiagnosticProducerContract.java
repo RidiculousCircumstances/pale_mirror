@@ -124,6 +124,7 @@ public final class DiagnosticProducerContract {
         "frontier.settlement_service_work_started", "frontier.settlement_service_work_traversal_advanced", "frontier.settlement_service_work_traversal_blocked",
         "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.structure_damaged",
         "frontier.supply_contract_abandoned", "frontier.supply_contract_created", "frontier.terminal_logistics_compacted",
+        "frontier.actor_execution_resumed",
         "kernel.schedule_consumed", "kernel.schedule_rescheduled", "kernel.schedule_created", "kernel.schedule_cancelled");
     /** SavedData quarantine is a separately persisted producer, explicitly bridged rather than inferred from an adapter status. */
     private static final Set<DiagnosticReason> OUT_OF_BAND = Set.of(DiagnosticReason.FRONTIER_QUARANTINE);

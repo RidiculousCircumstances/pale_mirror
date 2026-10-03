@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -13,6 +14,17 @@ import java.util.Objects;
 /** Canonical production mutations, including fungible lot claims and their physical boundary. */
 final class ProductionJobStateSupport {
     private ProductionJobStateSupport() { }
+
+    static FrontierWorldState startMaterialized(FrontierWorldState state, ProductionJob job) {
+        Objects.requireNonNull(job, "production job");
+        if (!(job.inputHold() instanceof ProductionInputHold.Materialized))
+            throw new IllegalArgumentException("only a materialized production input may remain in exact inventory");
+        if (state.productionJobs().containsKey(job.id())) throw new IllegalArgumentException("production job identity already exists: " + job.id().value());
+        if (!ProductionFacilityReservations.available(state.productionJobs(), job.facilityId()))
+            throw new IllegalArgumentException("facility already has an active production job: " + job.facilityId().value());
+        var jobs = new LinkedHashMap<>(state.productionJobs()); jobs.put(job.id(), job);
+        return admit(state, job, state.inventory(), jobs);
+    }
 
     static FrontierWorldState start(FrontierWorldState state, ProductionJob job, SubjectId inputItemId) {
         Objects.requireNonNull(job, "production job");
@@ -28,9 +40,7 @@ final class ProductionJobStateSupport {
             throw new IllegalArgumentException("facility already has an active production job: " + job.facilityId().value());
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(state.productionJobs()); next.put(job.id(), job);
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withoutItem(inputItemId), next,
-                state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+        return admit(state, job, state.inventory().withoutItem(inputItemId), next);
     }
 
     static FrontierWorldState complete(FrontierWorldState state, SubjectId jobId, ExactItemStack output) {
@@ -64,9 +74,9 @@ final class ProductionJobStateSupport {
             }
             intents.remove(intent.id());
         }
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory.store(output), next, state.contracts(),
-                state.operations(), intents, state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(),
-                state.physicalDeltas(), state.ambientLeases());
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory.store(output)).productionJobs(next)
+                .physicalIntents(intents).actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(
+                        state, job.workerId(), ActorActivityKind.PRODUCTION, job.id())));
     }
 
     static FrontierWorldState completeFungible(FrontierWorldState state, SubjectId jobId, ResourceLot output) {
@@ -80,9 +90,9 @@ final class ProductionJobStateSupport {
         FungibleResourceLedger resources = state.inventory().fungibleResources().transformCold(cold.accountId(),
                 cold.inputLots(), Map.of(cold.claimId(), job.outputCount()), output);
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(state.productionJobs()); next.remove(jobId);
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withFungibleResources(resources), next,
-                state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(resources))
+                .productionJobs(next).actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(
+                        state, job.workerId(), ActorActivityKind.PRODUCTION, job.id())));
     }
 
     static FrontierWorldState startFungible(FrontierWorldState state, ProductionJob job) {
@@ -107,9 +117,7 @@ final class ProductionJobStateSupport {
             throw new IllegalArgumentException("fungible production job is unavailable or duplicates its facility");
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(state.productionJobs()); next.put(job.id(), job);
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withFungibleResources(reserved), next,
-                state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+        return admit(state, job, state.inventory().withFungibleResources(reserved), next);
     }
 
     static FrontierWorldState cancel(FrontierWorldState state, SubjectId jobId) {
@@ -138,8 +146,16 @@ final class ProductionJobStateSupport {
             nextIntents.remove(intent.id());
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(state.productionJobs()); next.remove(job.id());
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), nextInventory, next, state.contracts(), state.operations(),
-                nextIntents, state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(nextInventory).productionJobs(next)
+                .physicalIntents(nextIntents).actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(
+                        state, job.workerId(), ActorActivityKind.PRODUCTION, job.id())));
+    }
+
+    private static FrontierWorldState admit(FrontierWorldState state, ProductionJob job, ExactInventory inventory,
+                                             Map<SubjectId, ProductionJob> jobs) {
+        var execution = state.actorExecutions().next(job.workerId(), ActorActivityKind.PRODUCTION, job.id());
+        return ActorExecutionComposition.LIFECYCLE.prepareVacant(state, execution).commit(state,
+                FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs));
     }
 
     private static ExactInventory restoreExactColdInput(ExactInventory inventory, ProductionInputHold.Cold cold) {

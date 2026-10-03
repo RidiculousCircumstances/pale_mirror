@@ -37,6 +37,7 @@ final class ActorMovementStateCodec {
             for (SurfaceAnchor station : order.legalStations())
                 FrontierWorldStateCodec.writePosition(output, station.support());
             output.writeLong(movement.issuedAtTick());
+            ActorExecutionStateCodec.writeId(output, movement.executionId());
             switch (movement.context()) {
                 case ActorMovementContext.ServiceExit exit -> {
                     output.writeByte(0); // stable ServiceExit provider tag, never inferred from an ID
@@ -74,13 +75,14 @@ final class ActorMovementStateCodec {
                 stations.add(new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input)));
             MovementOrder order = new MovementOrder(owner, actor, ordinal, revision, stations, capability, policy);
             long issuedAt = input.readLong();
+            var executionId = ActorExecutionStateCodec.readId(input);
             ActorMovementContext context = switch (input.readUnsignedByte()) {
                 case 0 -> new ActorMovementContext.ServiceExit(
                         new SubjectId(FrontierWorldStateCodec.readString(input)),
                         new SubjectId(FrontierWorldStateCodec.readString(input)));
                 default -> throw new IllegalArgumentException("unknown actor movement provider tag");
             };
-            ActorMovement movement = new ActorMovement(order, issuedAt, context);
+            ActorMovement movement = new ActorMovement(order, issuedAt, context, executionId);
             if (input.readBoolean()) {
                 long departedAt = input.readLong(), ticksPerEdge = input.readLong(), epoch = input.readLong();
                 int length = FrontierWorldStateCodec.readCount(input);

@@ -21,6 +21,8 @@ public final class ResourceSiteHarvestLabour {
             throw new IllegalArgumentException("retained labour belongs to a different operation");
         if (!run) return prior.pause(tick);
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job) || job.navigationBlock().isPresent()
+                || !state.actorExecutions().owns(job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id())
                 || !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), tick))
             throw new IllegalArgumentException("labour start needs a working farmer at the selected cell");
         var resident = state.humanPopulation().resident(job.workerId());

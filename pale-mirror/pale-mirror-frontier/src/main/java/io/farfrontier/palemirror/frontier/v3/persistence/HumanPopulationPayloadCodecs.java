@@ -142,12 +142,13 @@ final class HumanPopulationPayloadCodecs {
                     output.writeLong(arrived.ambientRevision());
                     output.writeInt(arrived.observedBody().x()); output.writeInt(arrived.observedBody().y());
                     output.writeInt(arrived.observedBody().z());
+                    ActorExecutionStateCodec.writeId(output, arrived.executionId());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealHotArrived(
                         FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong(),
-                        new BodyPosition(input.readInt(), input.readInt(), input.readInt())));
+                        new BodyPosition(input.readInt(), input.readInt(), input.readInt()), ActorExecutionStateCodec.readId(input)));
             }
         };
     }
@@ -182,6 +183,7 @@ final class HumanPopulationPayloadCodecs {
                     output.writeInt(observed.observedBody().z());
                     PhysicalObservationStackCodec.writeStacks(output, observed.remainingSource());
                     PhysicalObservationStackCodec.writeStacks(output, observed.destination());
+                    ActorExecutionStateCodec.writeId(output, observed.executionId());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
@@ -189,7 +191,7 @@ final class HumanPopulationPayloadCodecs {
                         FrontierWorldPayloadCodecs.readSubject(input).value(),
                         FrontierWireTags.require(ResidentMeal.Phase.class, input.readUnsignedByte()),
                         input.readLong(), new BodyPosition(input.readInt(), input.readInt(), input.readInt()),
-                        PhysicalObservationStackCodec.readStacks(input), PhysicalObservationStackCodec.readStacks(input)));
+                        PhysicalObservationStackCodec.readStacks(input), PhysicalObservationStackCodec.readStacks(input), ActorExecutionStateCodec.readId(input)));
             }
         };
     }
@@ -211,12 +213,13 @@ final class HumanPopulationPayloadCodecs {
                     FrontierWorldPayloadCodecs.writeSubject(output, returned.residentId());
                     output.writeLong(returned.ambientRevision());
                     FrontierWorldPayloadCodecs.writePosition(output, returned.observedBody().supportingSurface().support());
+                    ActorExecutionStateCodec.writeId(output, returned.executionId());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealHotReturned(
                         FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong(),
-                        BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(input)))));
+                        BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(input))), ActorExecutionStateCodec.readId(input)));
             }
         };
     }
@@ -230,12 +233,13 @@ final class HumanPopulationPayloadCodecs {
                     FrontierWorldPayloadCodecs.writeSubject(output, cleared.residentId());
                     output.writeLong(cleared.ambientRevision());
                     FrontierWorldPayloadCodecs.writePosition(output, cleared.observedBody().supportingSurface().support());
+                    ActorExecutionStateCodec.writeId(output, cleared.executionId());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealHotAccessCleared(
                         FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong(),
-                        BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(input)))));
+                        BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(input))), ActorExecutionStateCodec.readId(input)));
             }
         };
     }
@@ -247,16 +251,18 @@ final class HumanPopulationPayloadCodecs {
                 return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                     io.farfrontier.palemirror.frontier.v3.api.SubjectId id;
                     long revision;
+                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId executionId;
                     FungiblePhysicalObservation.Stack hand;
                     if (materialized) {
                         ResidentMealHotHandMaterialized value = (ResidentMealHotHandMaterialized) payload;
-                        id = value.residentId(); revision = value.ambientRevision(); hand = value.observedHand();
+                        id = value.residentId(); revision = value.ambientRevision(); hand = value.observedHand(); executionId = value.executionId();
                     } else {
                         ResidentMealHotHandReleased value = (ResidentMealHotHandReleased) payload;
-                        id = value.residentId(); revision = value.ambientRevision(); hand = value.observedHand();
+                        id = value.residentId(); revision = value.ambientRevision(); hand = value.observedHand(); executionId = value.executionId();
                     }
                     FrontierWorldPayloadCodecs.writeSubject(output, id); output.writeLong(revision);
                     PhysicalObservationStackCodec.writeStacks(output, java.util.List.of(hand));
+                    ActorExecutionStateCodec.writeId(output, executionId);
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
@@ -264,8 +270,9 @@ final class HumanPopulationPayloadCodecs {
                     var id = FrontierWorldPayloadCodecs.readSubject(input).value(); long revision = input.readLong();
                     var hands = PhysicalObservationStackCodec.readStacks(input);
                     if (hands.size() != 1) throw new IllegalArgumentException("meal hand witness needs one exact stack");
-                    return materialized ? new ResidentMealHotHandMaterialized(id, revision, hands.getFirst())
-                            : new ResidentMealHotHandReleased(id, revision, hands.getFirst());
+                    var executionId = ActorExecutionStateCodec.readId(input);
+                    return materialized ? new ResidentMealHotHandMaterialized(id, revision, hands.getFirst(), executionId)
+                            : new ResidentMealHotHandReleased(id, revision, hands.getFirst(), executionId);
                 });
             }
         };
@@ -283,6 +290,7 @@ final class HumanPopulationPayloadCodecs {
                     output.writeBoolean(value.nextSurface().isPresent());
                     if (value.nextSurface().isPresent()) FrontierWorldPayloadCodecs.writePosition(output,
                             value.nextSurface().orElseThrow().support());
+                    ActorExecutionStateCodec.writeId(output, value.executionId());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
@@ -293,7 +301,7 @@ final class HumanPopulationPayloadCodecs {
                     var next = input.readBoolean() ? java.util.Optional.of(
                             new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(input)))
                             : java.util.Optional.<SurfaceAnchor>empty();
-                    return new ResidentMealColdStep(resident, phase, atTick, next);
+                    return new ResidentMealColdStep(resident, phase, atTick, next, ActorExecutionStateCodec.readId(input));
                 });
             }
         };

@@ -253,6 +253,7 @@ final class HumanPopulationStateCodec {
         FrontierWorldStateCodec.writeString(output, meal.actorAccountId().value());
         writeFoodPortion(output, meal.portion());
         FrontierWorldStateCodec.writeString(output, meal.claimId().value());
+        ActorExecutionStateCodec.writeId(output, meal.executionId());
         output.writeBoolean(meal.retainedWorkOwner().isPresent());
         if (meal.retainedWorkOwner().isPresent()) FrontierWorldStateCodec.writeString(output, meal.retainedWorkOwner().orElseThrow().value());
         output.writeByte(FrontierWireTags.tag(meal.phase())); output.writeLong(meal.startedAtTick());
@@ -299,6 +300,7 @@ final class HumanPopulationStateCodec {
         }
         output.writeByte(step.consumptionQuantity()); output.writeLong(step.sourceEpoch());
         output.writeLong(step.destinationEpoch()); output.writeLong(step.ambientRevision());
+        ActorExecutionStateCodec.writeId(output, step.executionId());
     }
 
     static ResidentMealPhysicalStep readMealPhysicalStep(DataInputStream input) throws IOException {
@@ -310,7 +312,7 @@ final class HumanPopulationStateCodec {
             if (sources.put(input.readUnsignedByte(), input.readUnsignedByte()) != null)
                 throw new IllegalArgumentException("duplicate meal source slot");
         return new ResidentMealPhysicalStep(phase, sources, input.readUnsignedByte(),
-                input.readLong(), input.readLong(), input.readLong());
+                input.readLong(), input.readLong(), input.readLong(), ActorExecutionStateCodec.readId(input));
     }
 
     static ResidentMeal readMeal(DataInputStream input) throws IOException {
@@ -322,6 +324,7 @@ final class HumanPopulationStateCodec {
         SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input));
         FoodPortion portion = readFoodPortion(input);
         SubjectId claim = new SubjectId(FrontierWorldStateCodec.readString(input));
+        var executionId = ActorExecutionStateCodec.readId(input);
         java.util.Optional<SubjectId> retained = input.readBoolean()
                 ? java.util.Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input)))
                 : java.util.Optional.empty();
@@ -334,7 +337,7 @@ final class HumanPopulationStateCodec {
         java.util.Optional<ResidentMealPhysicalStep> pending = java.util.Optional.empty();
         if (input.readBoolean()) pending = java.util.Optional.of(readMealPhysicalStep(input));
         ResidentMeal meal = new ResidentMeal(resident, settlement, depot, clearing, source, actor, portion,
-                claim, retained, FrontierWireTags.require(ResidentMeal.Phase.class, phase), started, wait, pending);
+                claim, retained, FrontierWireTags.require(ResidentMeal.Phase.class, phase), started, wait, pending, executionId);
         if (!input.readBoolean()) return meal;
         long departedAt = input.readLong(), ticksPerEdge = input.readLong(), epoch = input.readLong();
         int length = FrontierWorldStateCodec.readCount(input);

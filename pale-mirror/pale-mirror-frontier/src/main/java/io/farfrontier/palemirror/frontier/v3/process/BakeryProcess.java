@@ -511,7 +511,9 @@ public final class BakeryProcess {
         Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs()); jobs.remove(job.id());
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(delivered.withEconomics(paid.inventory().economics())).productionJobs(jobs)
-                .companies(companies).strategicPlans(state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.COMPLETED)));
+                .companies(companies).strategicPlans(state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.COMPLETED))
+                .actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(state, job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id())));
     }
 
     static ActorContainerItemOrder itemOrder(FrontierWorldState state, ProductionJob job, BakeryColdStep.Action action) {

@@ -43,12 +43,13 @@ final class ActorMovementPayloadCodecs {
                 FrontierWorldPayloadCodecs.writeSubject(out, value.actorId());
                 out.writeLong(value.goalRevision()); out.writeLong(value.atTick());
                 FrontierWorldPayloadCodecs.writePosition(out, value.retainedBody().supportingSurface().support());
+                ActorExecutionStateCodec.writeId(out, value.executionId());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new ActorMovementInterrupted(
                     FrontierWorldPayloadCodecs.readSubject(in).value(), in.readLong(), in.readLong(),
-                    BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(in)))));
+                    BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(in))), ActorExecutionStateCodec.readId(in)));
         }
     }; }
 
@@ -62,6 +63,7 @@ final class ActorMovementPayloadCodecs {
                 out.writeBoolean(value.arrivedSurface().isPresent());
                 if (value.arrivedSurface().isPresent()) FrontierWorldPayloadCodecs.writePosition(out,
                         value.arrivedSurface().orElseThrow().support());
+                ActorExecutionStateCodec.writeId(out, value.executionId());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
@@ -71,7 +73,7 @@ final class ActorMovementPayloadCodecs {
                 Optional<SurfaceAnchor> arrived = in.readBoolean()
                         ? Optional.of(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(in)))
                         : Optional.empty();
-                return new ActorMovementColdAdvanced(actor, revision, atTick, arrived);
+                return new ActorMovementColdAdvanced(actor, revision, atTick, arrived, ActorExecutionStateCodec.readId(in));
             });
         }
     }; }
@@ -84,12 +86,13 @@ final class ActorMovementPayloadCodecs {
                 FrontierWorldPayloadCodecs.writeSubject(out, value.actorId());
                 out.writeLong(value.goalRevision()); out.writeLong(value.ambientRevision());
                 FrontierWorldPayloadCodecs.writePosition(out, value.observedBody().supportingSurface().support());
+                ActorExecutionStateCodec.writeId(out, value.executionId());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new ActorMovementHotObserved(
                     FrontierWorldPayloadCodecs.readSubject(in).value(), in.readLong(), in.readLong(),
-                    BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(in)))));
+                    BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(in))), ActorExecutionStateCodec.readId(in)));
         }
     }; }
 }

@@ -52,7 +52,9 @@ public final class FungibleProductionStateSupport {
         if (receipts.putIfAbsent(observation.id(), observation) != null) throw new IllegalArgumentException("production receipt already exists");
         StrategicPlanState plans = state.strategicPlans().transitionTask(ProductionTransformationStateSupport.activeTask(state, job).id(), StrategicTaskStatus.COMPLETED);
         return paid.withChanges(FrontierWorldStateUpdate.begin().inventory(paid.inventory().withFungibleResources(resources))
-                .productionJobs(jobs).companies(companies).physicalIntents(nextIntents).physicalObservations(receipts).strategicPlans(plans));
+                .productionJobs(jobs).companies(companies).physicalIntents(nextIntents).physicalObservations(receipts).strategicPlans(plans)
+                .actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(state, job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id())));
     }
 
     public static void verifyRetirement(FrontierWorldState before, FrontierWorldState after, ProductionJob job, PhysicalIntentStatus status) {

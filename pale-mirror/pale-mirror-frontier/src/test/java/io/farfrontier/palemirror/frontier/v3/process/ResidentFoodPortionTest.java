@@ -98,12 +98,12 @@ class ResidentFoodPortionTest {
         assertEquals(9, started.meal().portion().quantity());
         assertEquals(Map.of(LOT_A, 3, LOT_B, 6), started.meal().portion().lotQuantities());
         state = ResidentActivityProcess.reduceMealStarted(state, resident, roundtrip(started));
-        state = ResidentMealProcess.reduceHotArrived(state, resident, new ResidentMealHotArrived(resident, 1, fixture.service().standingBody()));
+        state = ResidentMealProcess.reduceHotArrived(state, resident, new ResidentMealHotArrived(resident, 1, fixture.service().standingBody(), started.meal().executionId()));
         var prepared = roundtrip(new ResidentMealHotEffectPrepared(resident,
-                new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, Map.of(7, 3, 19, 8), 0, 1, 1, 1)));
+                new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, Map.of(7, 3, 19, 8), 0, 1, 1, 1, started.meal().executionId())));
         var before = state;
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotPrepared(before, resident,
-                new ResidentMealHotEffectPrepared(resident, new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, 7, 3, 1, 1, 1))));
+                new ResidentMealHotEffectPrepared(resident, new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, 7, 3, 1, 1, 1, started.meal().executionId()))));
         state = ResidentMealProcess.reduceHotPrepared(state, resident, prepared);
         assertTrue(ContainerPhysicalAuthorityComposition.pending(state, fixture.depot()));
         assertFalse(ContainerPhysicalAuthorityComposition.pending(state, new SubjectId("container:other")));
@@ -122,26 +122,26 @@ class ResidentFoodPortionTest {
                         replica.fingerprint(), replica.provenance())));
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorPocket(resident,
                 SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident), 0), FOOD, 9);
-        roundtrip(new ResidentMealHotHandMaterialized(resident, 1, hand));
+        roundtrip(new ResidentMealHotHandMaterialized(resident, 1, hand, started.meal().executionId()));
         for (var equipmentHand : ActorContainerItemOrder.Hand.values())
             roundtrip(new ResidentMealHotHandReleased(resident, 1, new FungiblePhysicalObservation.Stack(
                     new PhysicalStackAddress.ActorHand(resident,
-                            SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident), equipmentHand), FOOD, 9)));
+                            SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident), equipmentHand), FOOD, 9), started.meal().executionId()));
         state = ResidentActivityProcess.reduceMealEffectObserved(state, resident, roundtrip(new ResidentMealHotEffectObserved(resident,
                 ResidentMeal.Phase.TAKE, 1, fixture.service().standingBody(),
-                List.of(new FungiblePhysicalObservation.Stack(slots.getLast().address(), FOOD, 2)), List.of(hand))), 96_001);
+                List.of(new FungiblePhysicalObservation.Stack(slots.getLast().address(), FOOD, 2)), List.of(hand), started.meal().executionId())), 96_001);
         assertFalse(ContainerPhysicalAuthorityComposition.pending(state, fixture.depot()));
         var eating = state.humanPopulation().meals().get(resident).clearingSurface().standingBody();
         var atService = state;
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotPrepared(atService, resident,
                 new ResidentMealHotEffectPrepared(resident,
-                        new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1))));
+                        new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1, started.meal().executionId()))));
         state = ResidentMealProcess.reduceHotAccessCleared(state, resident,
-                roundtrip(new ResidentMealHotAccessCleared(resident, 1, eating)));
+                roundtrip(new ResidentMealHotAccessCleared(resident, 1, eating, started.meal().executionId())));
         state = ResidentMealProcess.reduceHotPrepared(state, resident, roundtrip(new ResidentMealHotEffectPrepared(resident,
-                new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1))));
+                new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1, started.meal().executionId()))));
         var consumed = new ResidentMealHotEffectObserved(resident, ResidentMeal.Phase.CONSUME, 1,
-                eating, List.of(), List.of());
+                eating, List.of(), List.of(), started.meal().executionId());
         var events = ResidentMealProcess.planHotObserved(state, consumed, 96_002);
         assertTrue(events.stream().anyMatch(event -> event.payload().equals(consumed)));
         for (var event : events) {

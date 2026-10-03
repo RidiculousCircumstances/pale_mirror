@@ -1,0 +1,53 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.model.execution.*;
+import java.util.Optional;
+
+/** Production owner, not hunger or the lifecycle, decides its physical effect checkpoint. */
+final class ProductionActivityCapability implements ActorActivityCapability {
+    @Override public ActorActivityKind kind() { return ActorActivityKind.PRODUCTION; }
+    @Override public boolean supportsContinuation() { return true; }
+    private ProductionJob job(FrontierWorldState state, ActorExecutionId execution) {
+        return job(state.productionJobs(), execution);
+    }
+    private static ProductionJob job(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ProductionJob> jobs,
+                                      ActorExecutionId execution) {
+        if (execution.activityKind() != ActorActivityKind.PRODUCTION) throw new IllegalArgumentException("foreign production execution kind");
+        var job = jobs.get(execution.activityOwnerId());
+        if (job == null || !job.workerId().equals(execution.actorId()))
+            throw new IllegalArgumentException("production execution lost its exact job/worker");
+        return job;
+    }
+    static void validateReferences(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ProductionJob> jobs,
+                                    ActorExecutionState executions) {
+        executions.current(ActorActivityKind.PRODUCTION).values().forEach(id -> job(jobs, id));
+        executions.suspended().stream().filter(id -> id.activityKind() == ActorActivityKind.PRODUCTION)
+                .forEach(id -> job(jobs, id));
+    }
+    @Override public void validateReference(FrontierWorldState state, ActorExecutionId execution) { job(state, execution); }
+    @Override public ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId execution) {
+        var job = job(state, execution);
+        Optional<ActorActivityCheckpoint.Wait> waiting;
+        var status = checkpointStatus(job);
+        if (status == ResidentWorkYield.Status.OWNER_SAFETY_HOLD) waiting = Optional.of(new ActorActivityCheckpoint.Wait(
+                ActorActivityCheckpoint.Reason.OWNER_TERMINAL_BOUNDARY, job.id()));
+        else if (status == ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT) waiting = Optional.of(
+                new ActorActivityCheckpoint.Wait(ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION, job.id()));
+        else if (status == ResidentWorkYield.Status.READY) waiting = Optional.empty();
+        else throw new IllegalArgumentException("production checkpoint has no declared UAE translation");
+        return new ActorActivityCheckpoint(state, execution, waiting);
+    }
+    static ResidentWorkYield.Status checkpointStatus(ProductionJob job) {
+        return job.bakeryWork().isEmpty() ? ResidentWorkYield.Status.OWNER_SAFETY_HOLD
+                : job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()
+                    ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.READY;
+    }
+    @Override public FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long atTick) {
+        job(state, execution);
+        // Bakery progress accrues only by confirmed owned work steps, never elapsed travel time.
+        return state;
+    }
+    @Override public FrontierWorldState resume(FrontierWorldState state, ActorExecutionId execution, long atTick) {
+        job(state, execution); return state;
+    }
+}

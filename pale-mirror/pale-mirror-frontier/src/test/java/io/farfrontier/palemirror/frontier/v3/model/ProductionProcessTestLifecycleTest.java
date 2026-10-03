@@ -269,7 +269,9 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
 
     @Test
     void terminalFungibleBreadAndIndependentFieldAdmissionKeepTheirExactOwners() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production-harvest-relation"), 91L));
+        // This is a terminal relationship test, not a 16x16 field throughput/calendar test.
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(
+                FrontierResourceSiteHarvestFixture.smallFieldBootstrap(new WorldId("frontier:production-harvest-relation"), 91L)));
         for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         finishRetainedColdWork(engine);
         FrontierWorldState terminal = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -364,7 +366,11 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
     @Test
     void missingDuplicateAndStaleOrderEndpointsFailClosedWithoutSelectingAnotherCandidate() {
         ColdMarketJob prepared = coldMarketJob();
-        FrontierWorldState missingJob = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> prepared.state().withChanges(
+                FrontierWorldStateUpdate.begin().productionJobs(Map.of())), "a live execution cannot lose its exact job endpoint");
+        FrontierWorldState missingJob = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(Map.of())
+                .actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(prepared.state(), prepared.job().workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, prepared.job().id())));
         FrontierDomainRelationships.Incident missing = FrontierDomainRelationships.view(missingJob, 74L).incidents().stream()
                 .filter(value -> value.kind() == FrontierDomainRelationships.Kind.ORDER_JOB).findFirst().orElseThrow();
         assertEquals(FrontierDomainRelationships.IncidentReason.MISSING_ENDPOINT, missing.reason());

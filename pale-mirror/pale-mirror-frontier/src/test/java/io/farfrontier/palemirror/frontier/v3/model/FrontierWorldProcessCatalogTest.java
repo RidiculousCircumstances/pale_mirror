@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriv
 import io.farfrontier.palemirror.frontier.v3.process.FrontierProcessSceneSdk;
 import io.farfrontier.palemirror.frontier.v3.process.SettlementServiceWorkProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
@@ -262,8 +263,17 @@ class FrontierWorldProcessCatalogTest {
                 Map.entry("ambient-actors", new AmbientActorObserved(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE)),
                 Map.entry("logistics-scenes", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT)),
                 Map.entry("population", ResidentMigrationDiagnosticProducer.QUARANTINE.create(new SubjectId("resident:representative"))),
+                Map.entry("actor-execution", new ActorExecutionResumed(
+                        new ActorExecutionId(new SubjectId("resident:representative"), ActorActivityKind.FIELD_HARVEST,
+                                new SubjectId("job:representative"), 1L),
+                        new ActorExecutionId(new SubjectId("resident:representative"), ActorActivityKind.FIELD_HARVEST,
+                                new SubjectId("job:representative"), 3L), 2L)),
                 Map.entry("actor-movement", new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced(
-                        new SubjectId("resident:representative"), 1L, 2L)),
+                        new SubjectId("resident:representative"), 1L, 2L,
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                                new SubjectId("resident:representative"),
+                                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.SERVICE_EXIT,
+                                new SubjectId("resident:representative"), 1L))),
                 Map.entry("economy", new MarketDemandExpired(new SubjectId("demand:representative"))),
                 Map.entry("resource-sites", new ResourceSiteGrowthAdvanced(new SubjectId("site:representative"), 1L, 0)),
                 Map.entry("hive", new InfectionChanged(new InfectionCell(1, 1), new FixedRatio(FixedScalar.ONE))),

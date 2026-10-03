@@ -43,7 +43,7 @@ class AmbientBodyConfirmationProcessTest {
         assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, FrontierWorldState.depotId(f.port().settlementId()), f.security()));
         assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, FrontierWorldState.depotId(f.port().settlementId()), f.medic()));
         ResidentMealHotArrived arrival = new ResidentMealHotArrived(f.security(), state.ambientLeases().get(f.security()).revision(),
-                f.port().serviceSurface().standingBody());
+                f.port().serviceSurface().standingBody(), state.humanPopulation().meals().get(f.security()).executionId());
         assertTrue(ResidentMealProcess.hotArrivalHasServiceTurn(state, f.security(), arrival));
         assertEquals(ResidentMeal.Phase.TAKE, ResidentMealProcess.reduceHotArrived(state, f.security(), arrival)
                 .humanPopulation().meals().get(f.security()).phase());

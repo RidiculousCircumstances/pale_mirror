@@ -202,11 +202,13 @@ class ResourceSiteColdHarvestReceiptTest {
         ResidentMeal otherMeal = new ResidentMeal(occupant, settlement.id(), depot, port.exteriorApproach(),
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-harvest-wait"),
                 new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:harvest-wait-bread"), 1)), new SubjectId("claim:harvest-wait-bread"),
-                java.util.Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, java.util.Optional.empty());
+                java.util.Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, java.util.Optional.empty(),
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(occupant, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:harvest-wait-bread"), 1L));
         var occupiedBodies = new java.util.LinkedHashMap<>(pending.state().actorLocations());
         occupiedBodies.put(occupant, occupiedBodies.get(occupant).withBody(port.serviceSurface().standingBody()));
         FrontierWorldState occupiedDepot = pending.state().withChanges(FrontierWorldStateUpdate.begin()
-                .actorLocations(occupiedBodies).humanPopulation(pending.state().humanPopulation().withMeal(otherMeal)));
+                .actorLocations(occupiedBodies).humanPopulation(pending.state().humanPopulation().withMeal(otherMeal))
+                .actorExecutions(pending.state().actorExecutions().begin(otherMeal.executionId(), 0L)));
         assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(occupiedDepot, pending.action()));
         assertEquals(List.of(new ScheduleEffect.Rescheduled(pending.action().id(), pending.action())),
                 ResourceSiteHarvestProcess.planColdProgress(occupiedDepot, pending.action()).stream()

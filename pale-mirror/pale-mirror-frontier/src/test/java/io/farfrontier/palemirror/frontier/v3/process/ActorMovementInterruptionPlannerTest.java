@@ -71,7 +71,7 @@ class ActorMovementInterruptionPlannerTest {
         assertEquals(before, next.actorLocations().get(actor).body());
         assertThrows(IllegalArgumentException.class, () -> ActorMovementInterruptionPlanner.reduce(next, actor, interrupted));
         assertThrows(IllegalArgumentException.class, () -> ActorMovementInterruptionPlanner.reduce(state, actor,
-                new ActorMovementInterrupted(actor, movement.order().goalRevision() + 1L, 24_000L, before)));
+                new ActorMovementInterrupted(actor, movement.order().goalRevision() + 1L, 24_000L, before, movement.executionId())));
     }
 
     @Test void serviceClearanceCannotBeSkippedToStartAnotherActivity() {
@@ -96,13 +96,15 @@ class ActorMovementInterruptionPlannerTest {
         var order = new MovementOrder(actor, actor, 0L, 10L, List.of(home), TraversalCapability.PEDESTRIAN,
                 MovementOrder.ArrivalPolicy.EXACT_STATION);
         var movement = new ActorMovement(order, 23_900L,
-                new ActorMovementContext.ServiceExit(settlement.id(), FrontierWorldState.depotId(settlement.id())));
+                new ActorMovementContext.ServiceExit(settlement.id(), FrontierWorldState.depotId(settlement.id())),
+                initial.actorExecutions().next(actor, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.SERVICE_EXIT, actor));
         SubjectId account = ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(settlement.id()));
         var resources = initial.inventory().fungibleResources().transformCold(account,
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(new SubjectId("lot:interruption-bread"), settlement.id(), ResidentMeal.BREAD_KIND,
                         64, "test", List.of()));
         return initial.withInventory(initial.inventory().withFungibleResources(resources)).withActorBody(actor, body.standingBody())
-                .withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(actor, movement)));
+                .withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(actor, movement))
+                        .actorExecutions(initial.actorExecutions().begin(movement.executionId(), 0L)));
     }
 }

@@ -149,7 +149,9 @@ public final class ResourceSitePhysicalIntentStateSupport {
                         ResourceSiteHarvestHistoryRetention.reclaimable(state, lifecycle, job.workerId()))
                         .withPlantReadiness(successor), successor))
                 .inventory(state.inventory().withFungibleResources(resources))
-                .physicalIntents(nextIntents).physicalObservations(observations).sceneLeases(scenes));
+                .physicalIntents(nextIntents).physicalObservations(observations).sceneLeases(scenes)
+                .actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(state, job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id())));
         if (carried == 0) return published;
         SubjectId containerId = job.outputSlot().containerId();
         if (!ReferenceContainerCustody.canonicalFingerprint(published, containerId).equals(receipt.depotFingerprint())) {

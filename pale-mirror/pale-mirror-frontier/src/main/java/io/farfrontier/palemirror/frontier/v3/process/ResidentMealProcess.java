@@ -42,7 +42,7 @@ public final class ResidentMealProcess {
     public static ScheduledAction progress(ResidentMeal meal, long dueAt) {
         if (dueAt <= meal.startedAtTick()) throw new IllegalArgumentException("meal progress precedes start");
         return new ScheduledAction(new ScheduleId("schedule:resident-meal-"
-                + meal.residentId().value().substring("resident:".length()) + "-" + meal.startedAtTick()),
+                + meal.residentId().value().substring("resident:".length()) + "-" + meal.executionId().generation() + "-" + meal.startedAtTick()),
                 new SimInstant(dueAt), 12, meal.residentId(), PROGRESS, 1);
     }
 
@@ -138,7 +138,8 @@ public final class ResidentMealProcess {
         SubjectId actorAccount = new SubjectId("custody:resident-meal-" + suffix);
         ResidentMeal meal = new ResidentMeal(residentId, resident.settlementId(), source.depotId(), source.clearingSurface(),
                 selected.accountId(), actorAccount, source.portion(), claimId,
-                assignment.ownerId(), ResidentMeal.Phase.MOVE, now, Optional.empty());
+                assignment.ownerId(), ResidentMeal.Phase.MOVE, now, Optional.empty(),
+                state.actorExecutions().next(residentId, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, claimId));
         ResidentMealStarted started = new ResidentMealStarted(meal);
         // A broken ownership/binding invariant must remain visible. Ordinary absence was
         // handled above; silently mapping every reducer failure to "no food" hid bugs.
@@ -196,9 +197,8 @@ public final class ResidentMealProcess {
                 throw new IllegalArgumentException("meal source has no current physical custody");
             ledger = ledger.reserveBound(claim, meal.sourceAccountId(), epoch);
         }
-        state = ActivityExecutionCapabilities.pauseLabour(state,
-                HumanAssignmentProjection.compile(state).assignment(subject), meal.startedAtTick());
-        return state.withChanges(FrontierWorldStateUpdate.begin()
+        var transition = ActorExecutionComposition.LIFECYCLE.prepareBegin(state, meal.executionId(), meal.startedAtTick());
+        return transition.commit(state, FrontierWorldStateUpdate.begin()
                 .inventory(state.inventory().withFungibleResources(ledger))
                 .humanPopulation(state.humanPopulation().withMeal(meal)));
     }
@@ -234,7 +234,8 @@ public final class ResidentMealProcess {
                                                    ResidentMealHotArrived arrived) {
         ResidentMeal meal = state.humanPopulation().meals().get(arrived.residentId());
         AmbientActorLease lease = state.ambientLeases().get(arrived.residentId());
-        if (!subject.equals(arrived.residentId()) || meal == null || meal.phase() != ResidentMeal.Phase.MOVE
+        if (!subject.equals(arrived.residentId()) || meal == null || !meal.executionId().equals(arrived.executionId())
+                || meal.phase() != ResidentMeal.Phase.MOVE
                 || meal.pendingPhysicalStep().isPresent() || lease == null
                 || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.MEAL
                 || lease.revision() != arrived.ambientRevision()
@@ -248,7 +249,7 @@ public final class ResidentMealProcess {
                                                        ResidentMealHotEffectPrepared prepared) {
         ResidentMeal meal = hotMeal(state, subject, prepared.residentId(), prepared.step().ambientRevision());
         ResidentMealPhysicalStep step = prepared.step();
-        if (meal.phase() != step.phase() || meal.pendingPhysicalStep().isPresent())
+        if (!meal.executionId().equals(step.executionId()) || meal.phase() != step.phase() || meal.pendingPhysicalStep().isPresent())
             throw new IllegalArgumentException("HOT meal effect cannot prepare a foreign or second stage");
         FungibleResourceLedger ledger = state.inventory().fungibleResources();
         if (step.phase() == ResidentMeal.Phase.TAKE) {
@@ -278,6 +279,7 @@ public final class ResidentMealProcess {
     public static FrontierWorldState reduceHotObserved(FrontierWorldState state, SubjectId subject,
                                                        ResidentMealHotEffectObserved observed, long atTick) {
         ResidentMeal meal = hotMeal(state, subject, observed.residentId(), observed.ambientRevision());
+        if (!meal.executionId().equals(observed.executionId())) throw new IllegalArgumentException("physical receipt belongs to a different meal execution");
         ResidentMealPhysicalStep step = meal.pendingPhysicalStep().orElseThrow(
                 () -> new IllegalArgumentException("HOT meal effect lacks its durable pre-effect fence"));
         if (step.phase() != observed.phase() || (step.phase() == ResidentMeal.Phase.CONSUME
@@ -309,7 +311,8 @@ public final class ResidentMealProcess {
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(subject, actors.get(subject).withBody(observed.observedBody()));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
-                .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people));
+                .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people)
+                .actorExecutions(state.actorExecutions().finish(meal.executionId())));
     }
 
     /** A witnessed consumption and both affected resident clocks form one command transaction. */
@@ -339,6 +342,7 @@ public final class ResidentMealProcess {
                 || !lease.goalBody().equals(goalSurface(state, meal).standingBody())
                 || actor == null || !validHotMealBody(state, meal, lease, actor.body()))
             throw new IllegalArgumentException("HOT meal step lacks its exact resident, body or lease");
+        state.actorExecutions().requireCurrent(meal.executionId());
         return meal;
     }
 
@@ -369,6 +373,7 @@ public final class ResidentMealProcess {
     public static FrontierWorldState reduceHotAccessCleared(FrontierWorldState state, SubjectId subject,
                                                              ResidentMealHotAccessCleared cleared) {
         ResidentMeal meal = hotMeal(state, subject, cleared.residentId(), cleared.ambientRevision());
+        if (!meal.executionId().equals(cleared.executionId())) throw new IllegalArgumentException("service exit belongs to a stale meal execution");
         boolean reached = ServiceAccessCoordinator.cleared(state, meal, cleared.observedBody());
         boolean readyToEat = meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
                 && port(state, meal).accessBoundary().cleared(cleared.observedBody());
@@ -386,6 +391,7 @@ public final class ResidentMealProcess {
     public static FrontierWorldState reduceHotHandMaterialized(FrontierWorldState state, SubjectId subject,
                                                                ResidentMealHotHandMaterialized observed) {
         ResidentMeal meal = hotMeal(state, subject, observed.residentId(), observed.ambientRevision());
+        if (!meal.executionId().equals(observed.executionId())) throw new IllegalArgumentException("hand projection belongs to a stale meal execution");
         if (!meal.carriesFood() || meal.pendingPhysicalStep().isPresent())
             throw new IllegalArgumentException("meal hand projection requires retained consume stage");
         FungibleResourceLedger ledger = state.inventory().fungibleResources();
@@ -400,6 +406,7 @@ public final class ResidentMealProcess {
     public static FrontierWorldState reduceHotHandReleased(FrontierWorldState state, SubjectId subject,
                                                            ResidentMealHotHandReleased released) {
         ResidentMeal meal = hotMeal(state, subject, released.residentId(), released.ambientRevision());
+        if (!meal.executionId().equals(released.executionId())) throw new IllegalArgumentException("hand release belongs to a stale meal execution");
         if (!meal.carriesFood() || meal.pendingPhysicalStep().isPresent())
             throw new IllegalArgumentException("meal hand release requires retained consume stage");
         requireMealHand(state, meal, released.observedHand());
@@ -417,13 +424,15 @@ public final class ResidentMealProcess {
     public static FrontierWorldState reduceHotReturned(FrontierWorldState state, SubjectId subject,
                                                        ResidentMealHotReturned returned) {
         ResidentMeal meal = hotMeal(state, subject, returned.residentId(), returned.ambientRevision());
+        if (!meal.executionId().equals(returned.executionId())) throw new IllegalArgumentException("return belongs to a stale meal execution");
         if (meal.phase() != ResidentMeal.Phase.RETURN || meal.pendingPhysicalStep().isPresent()
                 || !ServiceAccessCoordinator.cleared(state, meal, returned.observedBody()))
             throw new IllegalArgumentException("HOT meal cannot return before one confirmed consumption");
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(subject, actors.get(subject).withBody(returned.observedBody()));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
-                .humanPopulation(state.humanPopulation().completeMeal(meal)));
+                .humanPopulation(state.humanPopulation().completeMeal(meal))
+                .actorExecutions(state.actorExecutions().finish(meal.executionId())));
     }
 
     /** The physical clearance receipt, activity wake and old progress retirement are atomic. */
@@ -472,23 +481,23 @@ public final class ResidentMealProcess {
         if (meal.movesToClearance()) {
             if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
                     && port(state, meal).accessBoundary().cleared(actor.body()))
-                return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now));
+                return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now, meal.executionId()));
             if (meal.coldTravel().isPresent()) return arrivedTravelStep(state, meal, now);
             try {
                 ResidentMealKnownNavigation.returnPath(state, meal);
-                return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now));
+                return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now, meal.executionId()));
             } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 return Optional.empty();
             }
         }
         if (meal.phase() != ResidentMeal.Phase.MOVE)
-            return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now));
+            return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now, meal.executionId()));
         if (meal.coldTravel().isPresent()) return arrivedTravelStep(state, meal, now);
         try {
             List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
             if (route.size() == 1 && !actor.supportingSurface().equals(serviceSurface(state, meal)))
                 return Optional.empty();
-            return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now));
+            return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now, meal.executionId()));
         } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
             return Optional.empty();
         }
@@ -500,14 +509,14 @@ public final class ResidentMealProcess {
                 || meal.phase() == ResidentMeal.Phase.MOVE
                     && !travel.route().getLast().equals(serviceSurface(state, meal))
                     && !ResidentMealKnownNavigation.waitingStationAvailable(state, meal, travel.route().getLast()))
-            return Optional.of(new ResidentMealColdStep(meal.residentId(), meal.phase(), now));
+            return Optional.of(new ResidentMealColdStep(meal.residentId(), meal.phase(), now, meal.executionId()));
         if (!travel.arrivedBy(now)) return Optional.empty();
         if (meal.phase() == ResidentMeal.Phase.MOVE
                 && travel.route().getLast().equals(serviceSurface(state, meal))
                 && !ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId()))
-            return Optional.of(new ResidentMealColdStep(meal.residentId(), meal.phase(), now));
+            return Optional.of(new ResidentMealColdStep(meal.residentId(), meal.phase(), now, meal.executionId()));
         return Optional.of(new ResidentMealColdStep(meal.residentId(), meal.phase(), now,
-                Optional.of(travel.route().getLast())));
+                Optional.of(travel.route().getLast()), meal.executionId()));
     }
 
     private static int firstKnownBarrier(FrontierWorldState state, TimedKnownRoute travel) {
@@ -599,7 +608,8 @@ public final class ResidentMealProcess {
     public static FrontierWorldState reduceColdStep(FrontierWorldState state, SubjectId subject,
                                                      ResidentMealColdStep step) {
         ResidentMeal meal = state.humanPopulation().meals().get(step.residentId());
-        if (!subject.equals(step.residentId()) || meal == null || meal.phase() != step.expectedPhase()
+        if (!subject.equals(step.residentId()) || meal == null || !meal.executionId().equals(step.executionId())
+                || meal.phase() != step.expectedPhase()
                 || step.atTick() < meal.startedAtTick())
             throw new IllegalArgumentException("cold meal step has no exact retained predecessor");
         ActorLocation actor = state.actorLocations().get(subject);
@@ -655,7 +665,8 @@ public final class ResidentMealProcess {
                         state.bootstrap().ruleset().residentLife())
                         .completeMeal(meal);
                 yield state.withChanges(FrontierWorldStateUpdate.begin()
-                        .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people));
+                        .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people)
+                        .actorExecutions(state.actorExecutions().finish(meal.executionId())));
             }
             case RETURN, CLEAR_ACCESS -> {
                 ResidentMealColdStep expected = planColdStep(state, subject, step.atTick())
@@ -690,9 +701,11 @@ public final class ResidentMealProcess {
                 }
                 if (!ServiceAccessCoordinator.cleared(state, meal, actor.body()))
                     throw new IllegalArgumentException("meal cannot release an occupied service throat");
-                yield state.withHumanPopulation(meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
-                        ? state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.CONSUME))
-                        : state.humanPopulation().completeMeal(meal));
+                yield meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
+                        ? state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.CONSUME)))
+                        : state.withChanges(FrontierWorldStateUpdate.begin()
+                                .humanPopulation(state.humanPopulation().completeMeal(meal))
+                                .actorExecutions(state.actorExecutions().finish(meal.executionId())));
             }
         };
     }

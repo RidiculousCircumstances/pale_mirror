@@ -913,7 +913,10 @@ class ProductionProcessTest {
             }
         }
         assertEquals(ResourceSitePhase.GROWING, harvesting.resourceSites().site(siteId).phase(),
-                "the farmer must deliver the harvested part before successor lineage exists");
+                "the farmer must deliver the harvested part before successor lineage exists; due=" + progress.dueAt()
+                        + " jobs=" + harvesting.resourceSites().site(siteId).harvestJobs().values().stream()
+                            .map(job -> job.id().value() + ":" + job.progress().completedCropSlots() + "/" + job.progress().totalCropSlots()).toList()
+                        + " execution=" + harvesting.actorExecutions().actors().get(firstStarted.job().workerId()));
         ResourceSiteHarvestLineage completed = harvesting.resourceSites().site(siteId).harvestLineages().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         assertFalse(harvesting.physicalIntents().containsKey(firstPrepared.intent().id()),
                 "terminal COLD composition cannot leave its prior physical subject unowned before the next growth epoch");

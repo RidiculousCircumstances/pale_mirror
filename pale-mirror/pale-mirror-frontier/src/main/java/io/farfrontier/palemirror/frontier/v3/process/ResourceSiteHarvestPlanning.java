@@ -222,7 +222,9 @@ final class ResourceSiteHarvestPlanning {
             throw new IllegalArgumentException("resource-site harvest continuation has an active job outside HARVESTING or terminal CONFLICT");
         long now = Math.max(action.dueAt().ticks(), currentTick);
         if (!state.humanPopulation().meals().containsKey(job.workerId())
-                && !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), now)) {
+                && (!state.actorExecutions().owns(job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id())
+                    || !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), now))) {
             var paused = new java.util.ArrayList<ProposedEvent>();
             if (job.progress().work().filter(WorkProgress::running).isPresent()
                     && !FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
@@ -458,6 +460,9 @@ final class ResourceSiteHarvestPlanning {
         ResourceSite descriptor = state.resourceSite(job.siteId());
         SettlementCommitmentComposition.ADMISSION.requireParticipants(state, new SettlementCommitmentAdmission.Request(
                 job.taskId(), descriptor.settlementId(), descriptor.facilityId(), List.of(job.workerId())));
-        return state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
+        var execution = state.actorExecutions().next(job.workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id());
+        return ActorExecutionComposition.LIFECYCLE.prepareVacant(state, execution).commit(state,
+                FrontierWorldStateUpdate.begin().resourceSites(state.resourceSites().replace(lifecycle.harvesting(job))));
     }
 }

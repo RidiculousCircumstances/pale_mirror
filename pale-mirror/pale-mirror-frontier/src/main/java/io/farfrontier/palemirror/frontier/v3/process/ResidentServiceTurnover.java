@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +46,7 @@ final class ResidentServiceTurnover {
                         Math.addExact(atTick, 1L), List.of(destination), TraversalCapability.PEDESTRIAN,
                         MovementOrder.ArrivalPolicy.EXACT_STATION), atTick,
                         new ActorMovementContext.ServiceExit(point.settlementId(),
-                                FrontierWorldState.depotId(point.settlementId()))));
+                                FrontierWorldState.depotId(point.settlementId())),
+                        state.actorExecutions().next(actorId, ActorActivityKind.SERVICE_EXIT, actorId)));
     }
 }

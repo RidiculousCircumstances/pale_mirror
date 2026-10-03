@@ -163,7 +163,9 @@ public final class ProductionProcess {
         if (job == null) return List.of();
         if (state.humanPopulation().meals().containsKey(job.workerId()))
             return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
-        if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), action.dueAt().ticks()))
+        if (!state.actorExecutions().owns(job.workerId(),
+                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id())
+                || !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), action.dueAt().ticks()))
             return List.of(reschedule(action, complete(job, ResidentActivityCoordinator.nextOrdinaryWorkCheck(
                     state, job.workerId(), action.dueAt().ticks()))));
         if (job.bakeryWork().isPresent()) return BakeryCompletionPlanning.plan(state, job, action);

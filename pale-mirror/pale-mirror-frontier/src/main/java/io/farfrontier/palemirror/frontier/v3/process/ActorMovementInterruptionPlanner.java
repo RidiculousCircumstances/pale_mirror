@@ -19,7 +19,7 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
         if (checkpoint.isEmpty()) return new Waiting(ActorExecutionCoordinator.sceneOwns(state, residentId)
                 ? Reason.AUTHORITY_HANDOFF : Reason.SERVICE_CLEARANCE);
         ActorMovementInterrupted event = new ActorMovementInterrupted(residentId,
-                movement.order().goalRevision(), atTick, checkpoint.orElseThrow());
+                movement.order().goalRevision(), atTick, checkpoint.orElseThrow(), movement.executionId());
         return new Ready(state, reduce(state, residentId, event), List.of(new ProposedEvent(residentId, event),
                 new ProposedEvent(residentId, new ScheduleEffect.Cancelled(ActorMovementProcess.progress(
                         movement, Math.addExact(movement.issuedAtTick(), 1L)).id()))));
@@ -49,13 +49,16 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
     static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, ActorMovementInterrupted event) {
         ActorMovement movement = state.actorMovements().get(subject);
         if (!subject.equals(event.actorId()) || movement == null
+                || !movement.executionId().equals(event.executionId())
                 || movement.order().goalRevision() != event.goalRevision()
                 || !checkpoint(state, movement, event.atTick()).equals(Optional.of(event.retainedBody())))
             throw new IllegalArgumentException("interruption has no exact safe movement checkpoint");
+        state.actorExecutions().requireCurrent(movement.executionId());
         var movements = new LinkedHashMap<>(state.actorMovements());
         movements.remove(subject);
         var actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(subject, actors.get(subject).withBody(event.retainedBody()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(movements).actorLocations(actors));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(movements).actorLocations(actors)
+                .actorExecutions(state.actorExecutions().finish(movement.executionId())));
     }
 }

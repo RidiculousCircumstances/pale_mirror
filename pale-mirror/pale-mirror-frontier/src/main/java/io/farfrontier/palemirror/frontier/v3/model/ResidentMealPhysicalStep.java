@@ -1,17 +1,23 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
+
 /** Durable before-effect fence for one non-replayable HOT meal step. */
 public record ResidentMealPhysicalStep(ResidentMeal.Phase phase, java.util.Map<Integer, Integer> sourceCounts,
                                        int consumptionQuantity,
-                                       long sourceEpoch, long destinationEpoch, long ambientRevision) {
+                                       long sourceEpoch, long destinationEpoch, long ambientRevision, ActorExecutionId executionId) {
     public ResidentMealPhysicalStep(ResidentMeal.Phase phase, int sourceSlot, int sourceCount,
-                                    long sourceEpoch, long destinationEpoch, long ambientRevision) {
+                                    long sourceEpoch, long destinationEpoch, long ambientRevision, ActorExecutionId executionId) {
         this(phase, phase == ResidentMeal.Phase.TAKE ? java.util.Map.of(sourceSlot, sourceCount) : java.util.Map.of(),
-                phase == ResidentMeal.Phase.CONSUME ? sourceCount : 0, sourceEpoch, destinationEpoch, ambientRevision);
+                phase == ResidentMeal.Phase.CONSUME ? sourceCount : 0, sourceEpoch, destinationEpoch, ambientRevision, executionId);
         if (phase == ResidentMeal.Phase.CONSUME && sourceSlot != -1)
             throw new IllegalArgumentException("consumption fence is not a container source");
     }
     public ResidentMealPhysicalStep {
+        java.util.Objects.requireNonNull(executionId, "meal operation execution identity");
+        if (executionId.activityKind() != ActorActivityKind.MEAL)
+            throw new IllegalArgumentException("meal operation has foreign activity kind");
         sourceCounts = java.util.Map.copyOf(sourceCounts);
         if (phase != ResidentMeal.Phase.TAKE && phase != ResidentMeal.Phase.CONSUME
                 || sourceCounts.size() > 27 || sourceCounts.entrySet().stream().anyMatch(entry ->

@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -32,9 +33,12 @@ public final class ActorMovementProcess {
             throw new IllegalArgumentException("movement start lacks exclusive living actor authority");
         // Validate the explicitly declared provider and known route before retaining any authority.
         segmentRoute(state, movement, movement.issuedAtTick());
+        if (movement.executionId().activityKind() != ActorActivityKind.SERVICE_EXIT)
+            throw new IllegalArgumentException("service-exit producer declared a foreign activity kind");
+        var transition = ActorExecutionComposition.LIFECYCLE.prepareBegin(state, movement.executionId(), movement.issuedAtTick());
         var movements = new LinkedHashMap<>(state.actorMovements());
         movements.put(subject, movement);
-        return ResidentActivityProcess.retargetHotResident(state.withChanges(
+        return ResidentActivityProcess.retargetHotResident(transition.commit(state,
                 FrontierWorldStateUpdate.begin().actorMovements(movements)), subject, movement.issuedAtTick());
     }
 
@@ -42,7 +46,7 @@ public final class ActorMovementProcess {
         if (dueAt <= movement.issuedAtTick()) throw new IllegalArgumentException("movement progress precedes order");
         MovementOrder order = movement.order();
         return new ScheduledAction(new ScheduleId("schedule:actor-movement-"
-                + order.actorId().value().replace(':', '-') + "-" + order.goalRevision()),
+                + order.actorId().value().replace(':', '-') + "-" + movement.executionId().generation() + "-" + order.goalRevision()),
                 new SimInstant(dueAt), 12, order.actorId(), PROGRESS, 1);
     }
 
@@ -121,22 +125,22 @@ public final class ActorMovementProcess {
         ActorLocation actor = state.actorLocations().get(actorId);
         if (actor == null) return Optional.empty();
         if (actor.condition().status() != ActorLifeStatus.ALIVE)
-            return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now));
+            return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now, movement.executionId()));
         if (!ActorExecutionCoordinator.coldAvailable(state, actorId))
             return Optional.empty();
         if (movement.coldTravel().isPresent()) {
             TimedKnownRoute travel = movement.coldTravel().orElseThrow();
             if (firstKnownBarrier(state, travel) >= 0)
-                return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now));
+                return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now, movement.executionId()));
             if (!travel.arrivedBy(now)) return Optional.empty();
             return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now,
-                    Optional.of(travel.route().getLast())));
+                    Optional.of(travel.route().getLast()), movement.executionId()));
         }
         if (movement.order().arrivedAt(actor.supportingSurface()))
-            return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now));
+            return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now, movement.executionId()));
         try {
             if (segmentRoute(state, movement, now).route().size() <= 1) return Optional.empty();
-            return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now));
+            return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now, movement.executionId()));
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
             return Optional.empty();
         }
@@ -146,19 +150,23 @@ public final class ActorMovementProcess {
                                                          ActorMovementColdAdvanced step) {
         ActorMovement movement = state.actorMovements().get(step.actorId());
         if (!subject.equals(step.actorId()) || movement == null
+                || !movement.executionId().equals(step.executionId())
                 || movement.order().goalRevision() != step.goalRevision()
                 || !step.equals(coldStep(state, movement, step.atTick()).orElse(null)))
             throw new IllegalArgumentException("COLD movement lacks exact current order or causal boundary");
+        state.actorExecutions().requireCurrent(movement.executionId());
         ActorLocation actor = state.actorLocations().get(subject);
         Map<SubjectId, ActorMovement> next = new LinkedHashMap<>(state.actorMovements());
         if (actor.condition().status() != ActorLifeStatus.ALIVE) {
             next.remove(subject);
-            return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(next));
+            return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(next)
+                    .actorExecutions(state.actorExecutions().finish(movement.executionId())));
         }
         if (movement.coldTravel().isEmpty()) {
             if (movement.order().arrivedAt(actor.supportingSurface())) {
                 next.remove(subject);
-                return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(next));
+                return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(next)
+                        .actorExecutions(state.actorExecutions().finish(movement.executionId())));
             }
             next.put(subject, movement.withColdTravel(segmentRoute(state, movement, step.atTick())));
             return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(next));
@@ -175,7 +183,9 @@ public final class ActorMovementProcess {
         actors.put(subject, actor.withBody(body));
         if (arrived != null && movement.order().arrivedAt(arrived)) next.remove(subject);
         else next.put(subject, movement.withoutColdTravel());
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).actorMovements(next));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).actorMovements(next)
+                .actorExecutions(next.containsKey(subject) ? state.actorExecutions()
+                        : state.actorExecutions().finish(movement.executionId())));
     }
 
     public static FrontierWorldState reduceHotObserved(FrontierWorldState state, SubjectId subject,
@@ -184,12 +194,14 @@ public final class ActorMovementProcess {
         AmbientActorLease lease = state.ambientLeases().get(observed.actorId());
         ActorLocation actor = state.actorLocations().get(observed.actorId());
         if (!subject.equals(observed.actorId()) || movement == null || actor == null
+                || !movement.executionId().equals(observed.executionId())
                 || movement.order().goalRevision() != observed.goalRevision()
                 || lease == null || lease.status() != AmbientLeaseStatus.HOT
                 || lease.goal() != AmbientGoalKind.ACTOR_MOVEMENT
                 || lease.revision() != observed.ambientRevision()
                 || !lease.goalBody().supportingSurface().equals(movement.order().legalStations().getFirst()))
             throw new IllegalArgumentException("HOT movement lacks exact order, lease or actor");
+        state.actorExecutions().requireCurrent(movement.executionId());
         boolean arrived = movement.order().arrivedAt(observed.observedBody().supportingSurface());
         boolean exited = ServiceAccessCoordinator.witnessedActorMovementExit(state, movement, observed.observedBody());
         if (!arrived && !exited)
@@ -199,7 +211,8 @@ public final class ActorMovementProcess {
         Map<SubjectId, ActorMovement> movements = new LinkedHashMap<>(state.actorMovements());
         if (arrived) movements.remove(subject);
         FrontierWorldState next = state.withChanges(FrontierWorldStateUpdate.begin()
-                .actorLocations(actors).actorMovements(movements));
+                .actorLocations(actors).actorMovements(movements)
+                .actorExecutions(arrived ? state.actorExecutions().finish(movement.executionId()) : state.actorExecutions()));
         return arrived ? ResidentActivityProcess.retargetHotResident(next, subject, atTick) : next;
     }
 

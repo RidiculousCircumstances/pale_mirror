@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -73,8 +74,9 @@ class ActorMovementProcessTest {
         MovementOrder order = new MovementOrder(actorId, actorId, 0L, 1L, List.of(destination),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         ActorMovement movement = new ActorMovement(order, 27_000L,
-                new ActorMovementContext.ServiceExit(settlement.id(), FrontierWorldState.depotId(settlement.id())));
-        state = state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(actorId, movement)));
+                new ActorMovementContext.ServiceExit(settlement.id(), FrontierWorldState.depotId(settlement.id())),
+                state.actorExecutions().next(actorId, ActorActivityKind.SERVICE_EXIT, actorId));
+        state = retainMovement(state, movement);
         state = state.recordPhysicalDelta(new PhysicalDelta(destination.support(), PhysicalDeltaKind.UNKNOWN_SCAR,
                 Optional.empty(), Optional.empty(), "test:blocked-movement-destination"));
         var action = ActorMovementProcess.progress(movement, 27_001L);
@@ -98,15 +100,17 @@ class ActorMovementProcessTest {
         MovementOrder order = new MovementOrder(actorId, actorId, 0L, 1L, List.of(destination),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         ActorMovement movement = new ActorMovement(order, 27_000L,
-                new ActorMovementContext.ServiceExit(settlement.id(), FrontierWorldState.depotId(settlement.id())));
+                new ActorMovementContext.ServiceExit(settlement.id(), FrontierWorldState.depotId(settlement.id())),
+                state.actorExecutions().next(actorId, ActorActivityKind.SERVICE_EXIT, actorId));
         assertTrue(FrontierWorldStateSupport.availableForNewAssignment(state, resident));
-        state = state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(actorId, movement)));
+        state = retainMovement(state, movement);
         assertFalse(FrontierWorldStateSupport.availableForNewAssignment(state, resident));
         assertFalse(ResidentActivityCoordinator.mayStartOrdinaryWork(state, actorId, 27_001L));
         assertFalse(ResidentActivityCoordinator.ordinaryWorkPermitted(state, actorId, 27_001L));
         assertTrue(ResidentActivityCoordinator.requestsYield(state, actorId, 27_001L));
         assertTrue(ResidentMealOpportunity.find(state, actorId).isEmpty());
-        state = state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of()));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of())
+                .actorExecutions(state.actorExecutions().finish(movement.executionId())));
         assertTrue(FrontierWorldStateSupport.availableForNewAssignment(state, resident));
     }
 
@@ -124,21 +128,19 @@ class ActorMovementProcessTest {
         MovementOrder order = new MovementOrder(actorId, actorId, 0L, 1L, List.of(destination),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         ActorMovement movement = new ActorMovement(order, 27_000L,
-                new ActorMovementContext.ServiceExit(settlement.id(), depotId));
+                new ActorMovementContext.ServiceExit(settlement.id(), depotId),
+                state.actorExecutions().next(actorId, ActorActivityKind.SERVICE_EXIT, actorId));
         SubjectId foreignSettlement = initial.bootstrap().settlements().get(1).id();
         FrontierWorldState beforeOrder = state;
-        assertThrows(IllegalArgumentException.class, () -> beforeOrder.withChanges(
-                FrontierWorldStateUpdate.begin().actorMovements(Map.of(actorId,
-                        new ActorMovement(order, 27_000L,
-                                new ActorMovementContext.ServiceExit(foreignSettlement, depotId))))));
-        assertThrows(IllegalArgumentException.class, () -> beforeOrder.withChanges(
-                FrontierWorldStateUpdate.begin().actorMovements(Map.of(actorId,
-                        new ActorMovement(order, 27_000L,
-                                new ActorMovementContext.ServiceExit(settlement.id(),
-                                        FrontierWorldState.depotId(foreignSettlement)))))));
+        assertThrows(IllegalArgumentException.class, () -> retainMovement(beforeOrder,
+                new ActorMovement(order, 27_000L,
+                        new ActorMovementContext.ServiceExit(foreignSettlement, depotId), movement.executionId())));
+        assertThrows(IllegalArgumentException.class, () -> retainMovement(beforeOrder,
+                new ActorMovement(order, 27_000L, new ActorMovementContext.ServiceExit(settlement.id(),
+                        FrontierWorldState.depotId(foreignSettlement)), movement.executionId())));
         assertThrows(IllegalArgumentException.class, () -> beforeOrder.withChanges(
                 FrontierWorldStateUpdate.begin().actorMovements(Map.of(foreignSettlement, movement))));
-        state = state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(actorId, movement)));
+        state = retainMovement(state, movement);
         var initialAction = ActorMovementProcess.progress(movement, 27_001L);
         var started = ActorMovementProcess.plan(state, initialAction, 27_001L);
         state = ActorMovementProcess.reduceColdAdvanced(state, actorId,
@@ -190,5 +192,36 @@ class ActorMovementProcessTest {
         assertEquals(asOf, state.actorLocations().get(actorId).body());
         assertTrue(state.actorMovements().get(actorId).coldTravel().isEmpty());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+    @Test void lateMovementCompletionCannotFinishSuccessorEvenWithReusedRouteRevision() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:execution-late-movement"), 421L));
+        Settlement settlement = initial.bootstrap().settlements().getFirst();
+        SubjectId actor = settlement.residents().getFirst().id();
+        SurfaceAnchor body = initial.actorLocations().get(actor).supportingSurface();
+        var order = new MovementOrder(actor, actor, 0L, 1L, List.of(body), TraversalCapability.PEDESTRIAN,
+                MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var old = new ActorMovement(order, 1L,
+                new ActorMovementContext.ServiceExit(settlement.id(), FrontierWorldState.depotId(settlement.id())),
+                initial.actorExecutions().next(actor, ActorActivityKind.SERVICE_EXIT, actor));
+        var first = retainMovement(initial, old);
+        var oldEvent = new ActorMovementColdAdvanced(actor, 1L, 2L, old.executionId());
+        var afterFirst = ActorMovementProcess.reduceColdAdvanced(first, actor, oldEvent);
+        assertFalse(afterFirst.actorMovements().containsKey(actor));
+        var successor = new ActorMovement(order, 1L, old.context(),
+                afterFirst.actorExecutions().next(actor, ActorActivityKind.SERVICE_EXIT, actor));
+        var next = retainMovement(afterFirst, successor);
+        assertNotEquals(ActorMovementProcess.progress(old, 2L).id(), ActorMovementProcess.progress(successor, 2L).id());
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.reduceColdAdvanced(next, actor, oldEvent));
+        assertEquals(successor, next.actorMovements().get(actor));
+        next.actorExecutions().requireCurrent(successor.executionId());
+        assertEquals(next, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(next)));
+    }
+
+    private static FrontierWorldState retainMovement(FrontierWorldState state, ActorMovement movement) {
+        return state.withChanges(FrontierWorldStateUpdate.begin()
+                .actorMovements(Map.of(movement.order().actorId(), movement))
+                .actorExecutions(state.actorExecutions().begin(movement.executionId(),
+                        movement.executionId().generation() - 1L)));
     }
 }

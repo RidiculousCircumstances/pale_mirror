@@ -79,9 +79,11 @@ class KnownPedestrianRouteKnowledgeTest {
                 port.serviceSurface(), order, List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
                         KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS))));
         ActorMovement movement = new ActorMovement(order, 27_000L,
-                new ActorMovementContext.ServiceExit(settlement.id(), depotId));
+                new ActorMovementContext.ServiceExit(settlement.id(), depotId),
+                crowded.actorExecutions().next(actorId, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.SERVICE_EXIT, actorId));
         FrontierWorldState moving = crowded.withChanges(FrontierWorldStateUpdate.begin()
-                .actorMovements(Map.of(actorId, movement)));
+                .actorMovements(Map.of(actorId, movement))
+                .actorExecutions(crowded.actorExecutions().begin(movement.executionId(), 0L)));
         var action = ActorMovementProcess.progress(movement, 27_001L);
         var started = ActorMovementProcess.plan(moving, action, 27_001L);
         ActorMovementColdAdvanced event = assertInstanceOf(ActorMovementColdAdvanced.class,

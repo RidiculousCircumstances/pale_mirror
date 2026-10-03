@@ -41,7 +41,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 220 separates pre-consumption service clearance from confirmed eating.
     // Version 221 retains shared operation labour and resident work modifiers; fresh test worlds only.
     // Version 222 retains exact settlement work authorization; old test worlds are rejected.
-    static final int VERSION = 224; private static final int MAX_ENTRIES = 65_535;
+    // Version 225 retains UAE execution identities separately from movement and physical custody.
+    // Disposable old worlds are rejected, never given inferred activity authority.
+    static final int VERSION = 225; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -89,6 +91,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 HumanPopulationStateCodec.write(output, state.humanPopulation());
                 ResourceSiteStateCodec.write(output, state.resourceSites());
                 ActorMovementStateCodec.write(output, state.actorMovements());
+                ActorExecutionStateCodec.write(output, state.actorExecutions());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -135,7 +138,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, serviceWorks, contracts, operations, history,
                     intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances,
                     topology, plans, population, companies, sites, replicaCustody, deferredAftermath, fencedRecovery,
-                    diagnosticIncidents, actorMovements);
+                    diagnosticIncidents, actorMovements, ActorExecutionStateCodec.read(input));
             FrontierWorldStateCodecValidation.validate(input, state);
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }

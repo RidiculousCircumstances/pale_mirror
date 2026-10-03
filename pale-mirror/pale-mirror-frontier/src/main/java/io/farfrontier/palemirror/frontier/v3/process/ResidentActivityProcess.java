@@ -157,8 +157,18 @@ public final class ResidentActivityProcess {
                 state = ready.following();
             }
         }
+        ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, action.subject(), now);
+        var execution = state.actorExecutions().actors().get(action.subject());
+        if (choice.kind() == ResidentActivityChoice.Kind.WORK && execution != null
+                && execution.current().isEmpty() && execution.suspended().isPresent()) {
+            var suspended = execution.suspended().orElseThrow();
+            var successor = state.actorExecutions().next(action.subject(), suspended.activityKind(), suspended.activityOwnerId());
+            var resumed = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed(suspended, successor, now);
+            state = ActorExecutionComposition.LIFECYCLE.prepareResume(state, suspended, successor, now)
+                    .commit(state, FrontierWorldStateUpdate.begin());
+            events.add(new ProposedEvent(action.subject(), resumed));
+        }
         FrontierWorldState selectedState = state;
-        ResidentActivityChoice choice = ResidentActivityCoordinator.assess(selectedState, action.subject(), now);
         if (choice.kind() == ResidentActivityChoice.Kind.EAT
                 && !state.humanPopulation().meals().containsKey(action.subject())
                 && !state.actorMovements().containsKey(action.subject())) {

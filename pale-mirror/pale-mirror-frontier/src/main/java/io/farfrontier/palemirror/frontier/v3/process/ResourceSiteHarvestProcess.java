@@ -294,6 +294,8 @@ public final class ResourceSiteHarvestProcess {
                 .resourceSites(state.resourceSites().replace(next, successor))
                 .inventory(inventory)
                 .physicalIntents(intents)
+                .actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(state, job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id()))
                 .fencedRecovery(recovery);
         if (intent.status() == PhysicalIntentStatus.RUNNING) return state.withChanges(update);
         intents.remove(intent.id());
@@ -301,6 +303,8 @@ public final class ResourceSiteHarvestProcess {
                 .resourceSites(state.resourceSites().replace(next, successor))
                 .inventory(inventory)
                 .physicalIntents(intents)
+                .actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(state, job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id()))
                 .fencedRecovery(FencedRecoveryPhysicalIntentSupport.composed(recovery, intent, FencedRecoveryAsset.EFFECT)));
     }
 

@@ -110,7 +110,9 @@ public final class ProductionTransformationStateSupport {
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(observation.id(), observation);
         StrategicPlanState plans = state.strategicPlans().transitionTask(activeTask(state, job).id(), StrategicTaskStatus.COMPLETED);
         return paidState.withChanges(FrontierWorldStateUpdate.begin().inventory(paidState.inventory().withoutItem(input.id()).store(output))
-                .productionJobs(jobs).physicalIntents(nextIntents).physicalObservations(observations).strategicPlans(plans));
+                .productionJobs(jobs).physicalIntents(nextIntents).physicalObservations(observations).strategicPlans(plans)
+                .actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(state, job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id())));
     }
 
     static void validateReceipt(PhysicalIntent intent, ProductionTransformationObservation observation) {

@@ -48,6 +48,7 @@ public final class FungibleClaimForfeitureStateSupport {
         Map<PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
         CompanyRegistry companies = state.companies();
         HiveColony hive = state.hiveColony();
+        var executions = state.actorExecutions();
         for (Plan plan : plans) {
             ProductionJob production = plan.productionJobId() == null ? null : jobs.get(plan.productionJobId());
             if (production != null && production.bakeryWork().isPresent()) {
@@ -64,6 +65,8 @@ public final class FungibleClaimForfeitureStateSupport {
             strategic = strategic.transitionTask(plan.taskId(), StrategicTaskStatus.BLOCKED);
             if (plan.productionJobId() != null) {
                 jobs.remove(plan.productionJobId());
+                executions = ActorExecutionComposition.LIFECYCLE.retire(executions, production.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, production.id());
                 if (plan.orderId() != null) companies = companies.withMarket(companies.market().cancel(plan.orderId(), MarketWorkOrderStatus.CANCELLED));
             } else {
                 intents.remove(plan.hiveIntentId());
@@ -71,7 +74,7 @@ public final class FungibleClaimForfeitureStateSupport {
             }
         }
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs).companies(companies)
-                .physicalIntents(intents).hiveColony(hive).strategicPlans(strategic));
+                .physicalIntents(intents).hiveColony(hive).strategicPlans(strategic).actorExecutions(executions));
     }
 
     private static List<Plan> plan(FrontierWorldState state, FungibleResourceHandoffObserved observed) {

@@ -1,0 +1,9 @@
+package io.farfrontier.palemirror.frontier.v3.model.execution;
+
+/** Nominal execution families. These tags never derive from a job, goal or identifier. */
+public enum ActorActivityKind {
+    PRESENCE, MEAL, SERVICE_EXIT, FIELD_HARVEST, PRODUCTION,
+    LOGISTICS, ROUTE_PATROL, SETTLEMENT_ASSAULT, ENGINEERING_WORK,
+    SETTLEMENT_SERVICE, MEDICAL_TREATMENT, TRANSIT, SCOUT_PATROL,
+    HIVE_TASK_ASSEMBLY, HIVE_TASK_RETURN, OPERATION_ASSEMBLY, ENGINEERING_ASSEMBLY
+}

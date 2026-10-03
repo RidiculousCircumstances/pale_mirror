@@ -4,12 +4,15 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId;
 
 /** Binds one COLD-held bread portion to a newly admitted exact HOT offhand. */
 public record ResidentMealHotHandMaterialized(SubjectId residentId, long ambientRevision,
-                                              FungiblePhysicalObservation.Stack observedHand) implements FrontierPayload {
+                                              FungiblePhysicalObservation.Stack observedHand, ActorExecutionId executionId) implements FrontierPayload {
     public ResidentMealHotHandMaterialized {
         Objects.requireNonNull(residentId, "meal resident");
+        Objects.requireNonNull(executionId, "meal execution authority");
+        if (!residentId.equals(executionId.actorId())) throw new IllegalArgumentException("meal hand has foreign execution actor");
         Objects.requireNonNull(observedHand, "resident meal hand");
         if (ambientRevision < 1) throw new IllegalArgumentException("meal hand needs a current ambient revision");
     }

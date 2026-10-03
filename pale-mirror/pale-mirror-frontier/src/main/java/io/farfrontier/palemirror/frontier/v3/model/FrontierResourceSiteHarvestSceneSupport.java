@@ -32,10 +32,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
                         () -> new IllegalArgumentException("field checkpoint lost its exact job"));
         if (!job.workerId().equals(assignment.residentId()))
             throw new IllegalArgumentException("field checkpoint names a foreign worker");
-        return new ActivityExecutionCheckpoint(state, assignment,
-                job.progress().hasPendingCrop() || state.resourceSites().hasPendingWorldChange(job.siteId())
-                        ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT
-                        : ResidentWorkYield.Status.READY);
+        return new ActivityExecutionCheckpoint(state, assignment, HarvestActivityCapability.checkpointStatus(state, job));
     }
 
     static Optional<ActorCarriedResources.Presentation> carriedResources(FrontierWorldState state, HumanAssignment assignment) {
