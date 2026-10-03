@@ -90,7 +90,8 @@ public final class HiveSettlementAssaultProcess {
         List<ProposedEvent> events = new ArrayList<>();
         // One payload owns both ends of the custody transfer. A separate start event would
         // expose a departed roster without a strategic owner between WAL reductions.
-        events.add(new ProposedEvent(mobilization.hiveId(), new HiveMobilizationDeparted(mobilization.id(), assault)));
+        events.add(new ProposedEvent(mobilization.hiveId(), new HiveMobilizationDeparted(mobilization.id(), assault,
+                HiveAssemblyExecutionAuthority.currentGroup(state, mobilization))));
         events.addAll(postAdmission(state, assault, now));
         return List.copyOf(events);
     }

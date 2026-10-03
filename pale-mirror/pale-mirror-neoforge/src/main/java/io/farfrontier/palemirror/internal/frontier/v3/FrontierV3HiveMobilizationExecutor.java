@@ -131,7 +131,8 @@ final class FrontierV3HiveMobilizationExecutor {
         }
         if (!level.setBlock(position, Blocks.AIR.defaultBlockState(), 3) || !level.getBlockState(position).isAir()) return;
         boolean accepted = submit(level, runtime, state, "hive-mobilization-cocoon-released", mobilization.id(),
-                new HiveMobilizationCocoonReleased(mobilization.id(), bioformId));
+                new HiveMobilizationCocoonReleased(mobilization.id(), bioformId,
+                        io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyExecutionAuthority.admission(state, mobilization.id(), bioformId)));
         if (accepted) ledger.retire(position, claim.owner(), claim.targetTag(), claim.material(), claim.semanticPart());
     }
 

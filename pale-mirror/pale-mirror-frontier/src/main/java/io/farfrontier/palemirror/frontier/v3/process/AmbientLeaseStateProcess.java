@@ -113,10 +113,8 @@ public final class AmbientLeaseStateProcess {
                 throw new IllegalArgumentException("HOT engineering assembly may return to COLD only at its exact cursor");
             }
         }
-        HiveMobilization mobilization = state.hiveColony().mobilizations().values().stream()
+        HiveMobilization mobilization = io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyExecutionAuthority.owner(state, release.actorId())
                 .filter(value -> value.status() == HiveMobilizationStatus.ASSEMBLING)
-                .filter(value -> value.assembly().map(assembly -> assembly.members().containsKey(release.actorId())).orElse(false))
-                .reduce((left, right) -> { throw new IllegalArgumentException("ambient bioform belongs to more than one hive assembly"); })
                 .orElse(null);
         if (mobilization != null) {
             HiveTaskAssembly.Member member = mobilization.assembly().orElseThrow().members().get(release.actorId());

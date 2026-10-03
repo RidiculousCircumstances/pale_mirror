@@ -858,7 +858,7 @@ final class FrontierDevelopmentScenarios {
         for (SubjectId member : base.memberIds()) {
             HiveMobilization current = state.hiveColony().mobilizations().get(base.mobilizationId());
             state = HiveMobilizationProcess.reduceReleaseStarted(state, hive, new HiveMobilizationReleaseStarted(current.id()));
-            state = HiveMobilizationProcess.reduceCocoonReleased(state, hive, new HiveMobilizationCocoonReleased(current.id(), member));
+            state = HiveMobilizationProcess.reduceCocoonReleased(state, hive, new HiveMobilizationCocoonReleased(current.id(), member, HiveAssemblyExecutionAuthority.admission(state, current.id(), member)));
         }
         SettlementAssault assault = null;
         for (int step = 0; step < 256; step++) {

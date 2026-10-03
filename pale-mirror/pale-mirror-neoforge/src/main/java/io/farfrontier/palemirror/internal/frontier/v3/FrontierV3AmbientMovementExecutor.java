@@ -348,7 +348,8 @@ final class FrontierV3AmbientMovementExecutor {
             return false;
         }
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-hive-assembly", actorId.value(),
-                new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId, member.cursor()));
+                new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId, member.cursor(),
+                        io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyExecutionAuthority.current(state, mobilization.id(), actorId)));
         FrontierV3DiagnosticTrace.record(level.getServer(), "hive-assembly:" + mobilization.id().value(),
                 "hive_assembly_advanced", actorId, result);
         return true;
@@ -397,10 +398,8 @@ final class FrontierV3AmbientMovementExecutor {
         return lease.goalBody().equals(BodyPosition.above(new SurfaceAnchor(expected))) ? member : null;
     }
     private static HiveMobilization assemblingMobilization(FrontierWorldState state, SubjectId actorId) {
-        return state.hiveColony().mobilizations().values().stream()
+        return io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyExecutionAuthority.owner(state, actorId)
                 .filter(mobilization -> mobilization.status() == HiveMobilizationStatus.ASSEMBLING)
-                .filter(mobilization -> mobilization.assembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
-                .reduce((left, right) -> { throw new IllegalStateException("ambient bioform belongs to more than one hive assembly"); })
                 .orElse(null);
     }
     static HiveTaskAssembly.Member hiveAssemblyMember(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {

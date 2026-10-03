@@ -328,7 +328,7 @@ class FrontierV3FixtureCatalogTest {
         for (SubjectId member : initial.memberIds()) {
             HiveMobilization current = state.hiveColony().mobilizations().get(initial.id());
             state = HiveMobilizationProcess.reduceReleaseStarted(state, initial.hiveId(), new HiveMobilizationReleaseStarted(current.id()));
-            state = HiveMobilizationProcess.reduceCocoonReleased(state, initial.hiveId(), new HiveMobilizationCocoonReleased(current.id(), member));
+            state = HiveMobilizationProcess.reduceCocoonReleased(state, initial.hiveId(), new HiveMobilizationCocoonReleased(current.id(), member, HiveAssemblyExecutionAuthority.admission(state, current.id(), member)));
         }
         FrontierWorldState assembledState = state;
         HiveTaskAssembly assembly = assembledState.hiveColony().mobilizations().get(initial.id()).assembly().orElseThrow();

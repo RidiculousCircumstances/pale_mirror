@@ -48,21 +48,21 @@ final class HiveMobilizationPayloadCodecs {
     private static final class CocoonReleasedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_cocoon_released"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationCocoonReleased released = (HiveMobilizationCocoonReleased) payload;
-            writeSubject(output, released.mobilizationId()); writeSubject(output, released.bioformId()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationCocoonReleased(readSubject(input), readSubject(input))); }
+            writeSubject(output, released.mobilizationId()); writeSubject(output, released.bioformId()); ActorExecutionStateCodec.writeId(output, released.execution()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationCocoonReleased(readSubject(input), readSubject(input), ActorExecutionStateCodec.readId(input))); }
     }
     private static final class AssemblyAdvancedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_assembly_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationAssemblyAdvanced advanced = (HiveMobilizationAssemblyAdvanced) payload;
-            writeSubject(output, advanced.mobilizationId()); writeSubject(output, advanced.bioformId()); output.writeShort(advanced.expectedCursor()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationAssemblyAdvanced(readSubject(input), readSubject(input), input.readUnsignedShort())); }
+            writeSubject(output, advanced.mobilizationId()); writeSubject(output, advanced.bioformId()); output.writeShort(advanced.expectedCursor()); ActorExecutionStateCodec.writeId(output, advanced.execution()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationAssemblyAdvanced(readSubject(input), readSubject(input), input.readUnsignedShort(), ActorExecutionStateCodec.readId(input))); }
     }
     private static final class DepartedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_departed"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationDeparted departed = (HiveMobilizationDeparted) payload;
-            writeSubject(output, departed.mobilizationId()); SettlementAssaultPayloadCodecs.write(output, departed.assault()); }); }
+            writeSubject(output, departed.mobilizationId()); SettlementAssaultPayloadCodecs.write(output, departed.assault()); ActorExecutionStateCodec.writeGroup(output, departed.executions()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes,
-                input -> new HiveMobilizationDeparted(readSubject(input), SettlementAssaultPayloadCodecs.read(input))); }
+                input -> new HiveMobilizationDeparted(readSubject(input), SettlementAssaultPayloadCodecs.read(input), ActorExecutionStateCodec.readGroup(input))); }
     }
     private static final class ReturnAdvancedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_return_advanced"; }

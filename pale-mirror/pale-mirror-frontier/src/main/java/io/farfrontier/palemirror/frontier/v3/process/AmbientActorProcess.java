@@ -200,12 +200,10 @@ public final class AmbientActorProcess {
     }
 
     public static AmbientGoal goalFor(FrontierWorldState state, SubjectId actorId, long atTick) {
-        HiveMobilization assemblingMobilization = state.hiveColony().mobilizations().values().stream()
-                .filter(mobilization -> mobilization.status() == HiveMobilizationStatus.ASSEMBLING)
-                .filter(mobilization -> mobilization.assembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
-                .reduce((left, right) -> { throw new IllegalStateException("ambient bioform belongs to more than one hive assembly"); })
-                .orElse(null);
+        HiveMobilization assemblingMobilization = io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyExecutionAuthority.owner(state, actorId).orElse(null);
         if (assemblingMobilization != null) {
+            if (assemblingMobilization.status() != HiveMobilizationStatus.ASSEMBLING)
+                return new AmbientGoal(AmbientGoalKind.HIVE_TASK_ASSEMBLY, state.actorLocations().get(actorId).supportingSurface().support());
             HiveTaskAssembly.Member member = assemblingMobilization.assembly().orElseThrow().members().get(actorId);
             SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
             return new AmbientGoal(AmbientGoalKind.HIVE_TASK_ASSEMBLY, target.support());
