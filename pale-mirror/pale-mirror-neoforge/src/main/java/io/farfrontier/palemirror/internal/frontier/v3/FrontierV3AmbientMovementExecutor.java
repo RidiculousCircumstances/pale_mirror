@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.OperationExecutionAuthority;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
@@ -187,7 +188,7 @@ final class FrontierV3AmbientMovementExecutor {
                         OperationAssemblyDeferral.Reason.LOADED_WORLD_OBSTRUCTION);
                 if (!assembly.deferral().filter(deferral::equals).isPresent()) {
                     io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly-deferred", actorId.value(),
-                            new OperationAssemblyDeferred(operation.id(), deferral));
+                            new OperationAssemblyDeferred(operation.id(), deferral, OperationExecutionAuthority.assemblyCurrent(state, operation)));
                     FrontierV3DiagnosticTrace.record(level.getServer(), "operation-assembly:" + operation.id().value(), "operation_assembly_deferred", actorId, result);
                     FrontierV3GoalNavigation.stop(body);
                     return true;
@@ -318,7 +319,7 @@ final class FrontierV3AmbientMovementExecutor {
             return false;
         }
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly", actorId.value(),
-                new OperationAssemblyAdvanced(operation.id(), assembly.advance(actorId)));
+                new OperationAssemblyAdvanced(operation.id(), assembly.advance(actorId), OperationExecutionAuthority.assemblyCurrent(state, operation)));
         FrontierV3DiagnosticTrace.record(level.getServer(), "operation-assembly:" + operation.id().value(), "operation_assembly_advanced", actorId, result);
         return true;
     }

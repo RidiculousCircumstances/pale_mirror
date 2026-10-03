@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+import io.farfrontier.palemirror.frontier.v3.model.OperationExecutionAuthority;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
@@ -552,7 +553,7 @@ final class FrontierV3SceneExecutor {
         }
         if (!FrontierV3CargoCarrierExecutor.atDestination(level, state, lease, next.cargoAnchor().surface().support())) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "scene-operation-travel", lease.id().value(),
-                new OperationTravelAdvanced(operation.id(), next));
+                new OperationTravelAdvanced(operation.id(), next, OperationExecutionAuthority.logisticsCurrent(state, operation)));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "operation_travel_advanced", lease, result);
         return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
     }

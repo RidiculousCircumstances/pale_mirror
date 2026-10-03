@@ -149,8 +149,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         }); }
     }
     private static final class OperationCreatedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.operation_created"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeOperation(output, ((OperationCreated) payload).operation())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationCreated(readOperation(input))); }
+        @Override public String type() { return "frontier.operation_created"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            var created = (OperationCreated) payload; writeOperation(output, created.operation());
+            ActorExecutionStateCodec.writeGroup(output, created.executions()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationCreated(
+                readOperation(input), ActorExecutionStateCodec.readGroup(input))); }
     }
     private static final class OperationAdvancedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_advanced"; } @Override public byte[] encode(FrontierPayload payload) {
@@ -165,9 +168,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     private static final class OperationAssemblyAdvancedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_assembly_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationAssemblyAdvanced advanced = (OperationAssemblyAdvanced) payload;
-            writeSubject(output, advanced.operationId()); writeOperationAssembly(output, advanced.assembly()); }); }
+            writeSubject(output, advanced.operationId()); writeOperationAssembly(output, advanced.assembly()); ActorExecutionStateCodec.writeGroup(output, advanced.executions()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes,
-                input -> new OperationAssemblyAdvanced(readSubject(input).value(), readOperationAssembly(input))); }
+                input -> new OperationAssemblyAdvanced(readSubject(input).value(), readOperationAssembly(input), ActorExecutionStateCodec.readGroup(input))); }
     }
     private static final class OperationAssemblyDeferredCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_assembly_deferred"; }
@@ -175,34 +178,35 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             writeSubject(output, deferred.operationId()); writeSubject(output, deferred.deferral().actorId());
             output.writeInt(deferred.deferral().target().x()); output.writeInt(deferred.deferral().target().y()); output.writeInt(deferred.deferral().target().z());
             output.writeInt(deferred.deferral().obstructionSurface().x()); output.writeInt(deferred.deferral().obstructionSurface().y()); output.writeInt(deferred.deferral().obstructionSurface().z());
-            output.writeByte(deferred.deferral().reason().wireTag()); }); }
+            output.writeByte(deferred.deferral().reason().wireTag()); ActorExecutionStateCodec.writeGroup(output, deferred.executions()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             SubjectIdHolder operation = readSubject(input); SubjectIdHolder actor = readSubject(input);
             BlockPosition target = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
             BlockPosition obstruction = new BlockPosition(input.readInt(), input.readInt(), input.readInt()); int reason = input.readUnsignedByte();
             if (reason >= OperationAssemblyDeferral.Reason.values().length) throw new IllegalArgumentException("unknown operation assembly deferral reason");
             return new OperationAssemblyDeferred(operation.value(), new OperationAssemblyDeferral(actor.value(), new SurfaceAnchor(target), new SurfaceAnchor(obstruction),
-                    FrontierWireTags.require(OperationAssemblyDeferral.Reason.class, reason)));
+                    FrontierWireTags.require(OperationAssemblyDeferral.Reason.class, reason)), ActorExecutionStateCodec.readGroup(input));
         }); }
     }
     private static final class OperationTravelStartedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_travel_started"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationTravelStarted started = (OperationTravelStarted) payload;
-            writeSubject(output, started.operationId()); writeOperationTravel(output, started.travel()); }); }
+            writeSubject(output, started.operationId()); writeOperationTravel(output, started.travel()); ActorExecutionStateCodec.writeGroup(output, started.executions()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input ->
-                new OperationTravelStarted(readSubject(input).value(), readOperationTravel(input))); }
+                new OperationTravelStarted(readSubject(input).value(), readOperationTravel(input), ActorExecutionStateCodec.readGroup(input))); }
     }
     private static final class OperationTravelAdvancedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_travel_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationTravelAdvanced advanced = (OperationTravelAdvanced) payload;
-            writeSubject(output, advanced.operationId()); writeOperationTravel(output, advanced.travel()); }); }
+            writeSubject(output, advanced.operationId()); writeOperationTravel(output, advanced.travel()); ActorExecutionStateCodec.writeGroup(output, advanced.executions()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input ->
-                new OperationTravelAdvanced(readSubject(input).value(), readOperationTravel(input))); }
+                new OperationTravelAdvanced(readSubject(input).value(), readOperationTravel(input), ActorExecutionStateCodec.readGroup(input))); }
     }
     private static final class OperationTravelSegmentCompletedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_travel_segment_completed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSubject(output, ((OperationTravelSegmentCompleted) payload).operationId())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationTravelSegmentCompleted(readSubject(input).value())); }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { var completed = (OperationTravelSegmentCompleted) payload;
+            writeSubject(output, completed.operationId()); ActorExecutionStateCodec.writeGroup(output, completed.executions()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationTravelSegmentCompleted(readSubject(input).value(), ActorExecutionStateCodec.readGroup(input))); }
     }
     private static final class OperationColdSuspendedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_cold_suspended"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationColdSuspended suspended = (OperationColdSuspended) payload;

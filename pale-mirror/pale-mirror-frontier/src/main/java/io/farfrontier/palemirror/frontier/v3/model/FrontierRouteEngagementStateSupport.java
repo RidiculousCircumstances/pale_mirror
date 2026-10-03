@@ -62,7 +62,13 @@ public final class FrontierRouteEngagementStateSupport {
                     operation.unit(), operation.route(), operation.routeIndex(), OperationStage.FAILED, java.util.Optional.empty(), java.util.Optional.empty(),
                     operation.tacticalPlan().withPhase(TacticalPlanPhase.ABORTED)));
         }
-        return copy(state, state.actorLocations(), operations, plans);
+        var update = FrontierWorldStateUpdate.begin().operations(operations).strategicPlans(plans);
+        if (resolved.outcome() == RouteEngagementOutcome.HIVE_VICTORY) {
+            var operation = state.operations().get(engagement.operationId());
+            update.actorExecutions(OperationExecutionAuthority.retired(state,
+                    OperationExecutionAuthority.logisticsCurrent(state, operation)));
+        }
+        return state.withChanges(update);
     }
 
     private static RouteEngagement requireColdEngagement(FrontierWorldState state, SubjectId id) {

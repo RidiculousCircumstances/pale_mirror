@@ -244,7 +244,7 @@ class FrontierWorldStateTest {
         assertThrows(IllegalArgumentException.class, () -> before.startOperationTravel(operation.id(), new OperationTravel(
                 topology(adjacentSegment(operation.route().getFirst(), operation.route().get(1))), 0,
                 assembly.positions().entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> BodyPosition.above(entry.getValue()))),
-                new TransportAnchor(assembly.positions().get(assembly.cargoCarrierId())))));
+                new TransportAnchor(assembly.positions().get(assembly.cargoCarrierId()))), OperationExecutionAuthority.logisticsAdmission(before, operation)));
         assertThrows(IllegalArgumentException.class, () -> before.advanceOperation(operation.id(), operation.routeIndex() + 1, OperationStage.EN_ROUTE));
     }
 
@@ -261,7 +261,8 @@ class FrontierWorldStateTest {
         Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(initial.members());
         OperationAssembly.Member current = members.get(hauler); members.put(hauler, new OperationAssembly.Member(current.topology(), current.cursor() + 1));
 
-        FrontierWorldState advanced = state.advanceOperationAssembly(operation.id(), new OperationAssembly(members, initial.cargoCarrierId()));
+        FrontierWorldState advanced = state.advanceOperationAssembly(operation.id(), new OperationAssembly(members, initial.cargoCarrierId()),
+                OperationExecutionAuthority.assemblyCurrent(state, operation));
 
         assertEquals(current.nextSurface().support(), FrontierTestPositions.supportOf(advanced.actorLocations().get(hauler)));
         for (SubjectId member : operation.participantIds()) {

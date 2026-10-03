@@ -55,7 +55,10 @@ class OperationTravelTest {
                 java.util.Set.of(TraversalCapability.PEDESTRIAN, TraversalCapability.GROUND_BIOFORM),
                 List.of(SurfaceAnchor.at(0, 63, 0), SurfaceAnchor.at(1, 64, 0)));
         OperationTravel travel = new OperationTravel(topology, 0, Map.of(HAULER, new BodyPosition(0, 65, 1)), TransportAnchor.atSupportCell(new BlockPosition(0, 64, 0)));
-        OperationTravelStarted payload = new OperationTravelStarted(new SubjectId("operation:test"), travel);
+        OperationTravelStarted payload = new OperationTravelStarted(new SubjectId("operation:test"), travel,
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(List.of(
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(HAULER,
+                                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.LOGISTICS, new SubjectId("operation:test"), 1L))));
 
         var codecs = FrontierWorldPayloadCodecs.create();
         assertEquals(payload, codecs.decode(payload.type(), codecs.encode(payload)));

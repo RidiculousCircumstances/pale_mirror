@@ -38,7 +38,7 @@ class OperationFrontTest {
                 state.strategicPlans().requireDecisionAuthority(operation.settlementId()).commitmentIds(), List.of()));
         assertFalse(FrontierSceneAdmission.coldInterceptionAvailable(reconsidered, operation.id()),
                 "a stale tactical owner must not admit a new front/scene");
-        IllegalArgumentException stale = assertThrows(IllegalArgumentException.class, () -> reconsidered.createOperation(operation));
+        IllegalArgumentException stale = assertThrows(IllegalArgumentException.class, () -> reconsidered.createOperation(operation, OperationExecutionAuthority.assemblyAdmission(reconsidered, operation)));
         assertTrue(stale.getMessage().contains("stale decision authority"));
     }
 }

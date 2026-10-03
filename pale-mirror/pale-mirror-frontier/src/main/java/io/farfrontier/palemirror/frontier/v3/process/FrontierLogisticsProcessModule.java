@@ -247,11 +247,11 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             if (operation == null) return FrontierWorldCommandPlanner.rejected("operation assembly observation has no active operation");
             try {
                 validateHotAssemblyObservation(state, operation, advanced.assembly());
-                state.advanceOperationAssembly(advanced.operationId(), advanced.assembly());
+                state.advanceOperationAssembly(advanced.operationId(), advanced.assembly(), advanced.executions());
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(operation.settlementId(), advanced)));
             if (advanced.assembly().complete()) {
-                events.add(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(),
+                events.add(new ProposedEvent(operation.settlementId(), OperationExecutionAuthority.travelStarted(state, operation,
                         SupplyOperationProcess.travelForCompletedAssembly(state, operation, advanced.assembly()))));
                 events.add(new ProposedEvent(operation.id(), new ScheduleEffect.Created(
                         SupplyOperationProcess.operationProgress(operation, command.submittedAt().ticks() + 20L))));
@@ -263,28 +263,28 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             if (operation == null) return FrontierWorldCommandPlanner.rejected("operation assembly deferral has no active operation");
             try {
                 validateHotAssemblyDeferral(state, operation, deferred.deferral());
-                state.deferOperationAssembly(deferred.operationId(), deferred.deferral());
+                state.deferOperationAssembly(deferred.operationId(), deferred.deferral(), deferred.executions());
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), deferred)));
         }
         if (command.payload() instanceof OperationTravelSegmentCompleted completed) {
             RouteOperation operation = state.operations().get(completed.operationId());
             if (operation == null) return FrontierWorldCommandPlanner.rejected("operation travel completion has no active operation");
-            try { state.completeOperationTravelSegment(completed.operationId()); }
+            try { state.completeOperationTravelSegment(completed.operationId(), completed.executions()); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), completed)));
         }
         if (command.payload() instanceof OperationTravelAdvanced advanced) {
             RouteOperation operation = state.operations().get(advanced.operationId());
             if (operation == null) return FrontierWorldCommandPlanner.rejected("operation travel observation has no active operation");
-            try { state.advanceOperationTravel(advanced.operationId(), advanced.travel()); }
+            try { state.advanceOperationTravel(advanced.operationId(), advanced.travel(), advanced.executions()); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), advanced)));
         }
         if (command.payload() instanceof OperationTravelStarted started) {
             RouteOperation operation = state.operations().get(started.operationId());
             if (operation == null) return FrontierWorldCommandPlanner.rejected("operation travel start has no active operation");
-            try { state.startOperationTravel(started.operationId(), started.travel()); }
+            try { state.startOperationTravel(started.operationId(), started.travel(), started.executions()); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), started)));
         }
@@ -446,7 +446,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         if (!operation.route().equals(state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()))) {
             throw new IllegalArgumentException("route operation must use the deterministic settlement-to-nest route");
         }
-        return state.createOperation(operation);
+        return state.createOperation(operation, created.executions());
     }
 
     private static FrontierWorldState requireOperation(FrontierWorldState state, SubjectId subject, SubjectId operationId, String action) {
@@ -461,23 +461,23 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
     }
     private static FrontierWorldState reduceAssemblyAdvanced(FrontierWorldState state, SubjectId subject, OperationAssemblyAdvanced advanced) {
         requireOperation(state, subject, advanced.operationId(), "operation assembly");
-        return state.advanceOperationAssembly(advanced.operationId(), advanced.assembly());
+        return state.advanceOperationAssembly(advanced.operationId(), advanced.assembly(), advanced.executions());
     }
     private static FrontierWorldState reduceAssemblyDeferred(FrontierWorldState state, SubjectId subject, OperationAssemblyDeferred deferred) {
         requireOperation(state, subject, deferred.operationId(), "operation assembly deferral");
-        return state.deferOperationAssembly(deferred.operationId(), deferred.deferral());
+        return state.deferOperationAssembly(deferred.operationId(), deferred.deferral(), deferred.executions());
     }
     private static FrontierWorldState reduceTravelStarted(FrontierWorldState state, SubjectId subject, OperationTravelStarted started) {
         requireOperation(state, subject, started.operationId(), "operation travel");
-        return state.startOperationTravel(started.operationId(), started.travel());
+        return state.startOperationTravel(started.operationId(), started.travel(), started.executions());
     }
     private static FrontierWorldState reduceTravelAdvanced(FrontierWorldState state, SubjectId subject, OperationTravelAdvanced advanced) {
         requireOperation(state, subject, advanced.operationId(), "operation travel");
-        return state.advanceOperationTravel(advanced.operationId(), advanced.travel());
+        return state.advanceOperationTravel(advanced.operationId(), advanced.travel(), advanced.executions());
     }
     private static FrontierWorldState reduceTravelSegmentCompleted(FrontierWorldState state, SubjectId subject, OperationTravelSegmentCompleted completed) {
         requireOperation(state, subject, completed.operationId(), "operation travel completion");
-        return state.completeOperationTravelSegment(completed.operationId());
+        return state.completeOperationTravelSegment(completed.operationId(), completed.executions());
     }
 
     private static FrontierWorldState reduceColdSuspended(FrontierWorldState state, SubjectId subject, OperationColdSuspended suspended) {

@@ -4,10 +4,13 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
+import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 
 /** Durable ownership of the next exact logistics segment before either COLD or HOT advances it. */
-public record OperationTravelStarted(SubjectId operationId, OperationTravel travel) implements FrontierPayload {
+public record OperationTravelStarted(SubjectId operationId, OperationTravel travel, ActorExecutionGroup executions) implements FrontierPayload {
     public OperationTravelStarted {
+        Objects.requireNonNull(executions, "operation participant executions")
+                .requireDeclaration(ActorActivityKind.LOGISTICS, operationId, travel.formation().keySet());
         Objects.requireNonNull(operationId, "operation travel operation");
         Objects.requireNonNull(travel, "operation travel state");
     }

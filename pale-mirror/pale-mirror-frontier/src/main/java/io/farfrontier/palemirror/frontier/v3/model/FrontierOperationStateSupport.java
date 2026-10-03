@@ -26,8 +26,8 @@ final class FrontierOperationStateSupport {
         operations.put(operationId, new RouteOperation(current.id(), current.contractId(), current.settlementId(), current.cargoId(), current.destinationId(),
                 current.unit(), current.route(), current.routeIndex(), OperationStage.FAILED, java.util.Optional.empty(), java.util.Optional.empty(),
                 current.tacticalPlan().withPhase(TacticalPlanPhase.ABORTED)));
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), operations,
-                state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+        return state.withChanges(FrontierWorldStateUpdate.begin().operations(operations).actorExecutions(
+                OperationExecutionAuthority.retired(state, OperationExecutionAuthority.logisticsCurrent(state, current))));
     }
 
     /** Read-only terminal-pair validation shared by compaction admission and execution. */

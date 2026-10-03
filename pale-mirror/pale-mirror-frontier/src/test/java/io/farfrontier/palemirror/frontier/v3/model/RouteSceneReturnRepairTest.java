@@ -51,6 +51,7 @@ class RouteSceneReturnRepairTest {
         assertFalse(state(engine).routeTopology().supplyPassable(state(engine).bootstrap(), operation.settlementId()));
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
         submit(engine, world, new SceneLeaseReleased(lease.id(), memberPositions(state(engine), operation)));
+        releaseRemovedBodies(engine, world, operation);
 
         long start = engine.checkpoint().instant().ticks();
         for (long tick = start + 1L; tick <= start + 6_000L; tick++) {
@@ -109,6 +110,7 @@ class RouteSceneReturnRepairTest {
 
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
         submit(engine, world, new SceneLeaseReleased(lease.id(), memberPositions(obstructed)));
+        releaseRemovedBodies(engine, world, operation);
         long start = engine.checkpoint().instant().ticks();
         for (long tick = start + 1L; tick <= start + 6_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
@@ -153,7 +155,14 @@ class RouteSceneReturnRepairTest {
         Map<SubjectId, BodyPosition> formation = new LinkedHashMap<>();
         current.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, deltaY, deltaZ)));
         submit(engine, world, new OperationTravelAdvanced(operationId, new OperationTravel(current.topology(), current.nextHotCursor(), formation,
-                current.cargoAnchor().offset(deltaX, deltaY, deltaZ))));
+                current.cargoAnchor().offset(deltaX, deltaY, deltaZ)),
+                OperationExecutionAuthority.logisticsCurrent(state(engine), state(engine).operations().get(operationId))));
+    }
+    /** Pure fixture acknowledges physical removal separately; scene closure never proves it. */
+    private static void releaseRemovedBodies(FrontierEngine<FrontierWorldProjection> engine, WorldId world, RouteOperation operation) {
+        for (SubjectId actor : operation.participantIds())
+            submit(engine, world, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyReleased(
+                    ActorBodyAuthority.current(state(engine), actor)));
     }
 
     private static void submit(FrontierEngine<FrontierWorldProjection> engine,

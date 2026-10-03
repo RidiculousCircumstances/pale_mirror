@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
 import java.util.Optional;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId; import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
@@ -116,6 +117,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         ActorExecutionComposition.CAPABILITIES.validateKinds(actorExecutions);
         PresenceActivityCapability.validateReferences(actorLocations, actorExecutions);
         ScoutPatrolActivityCapability.validateReferences(bootstrap, hiveColony, actorExecutions);
+        OperationExecutionAuthority.validateReferences(operations, actorExecutions);
         ActorMovementStateSupport.validate(actorMovements, actorLocations, humanPopulation, inventory, actorExecutions);
         ResidentMealExecutionAuthority.validate(humanPopulation, actorExecutions);
         TransitActivityCapability.validateReferences(humanPopulation, actorExecutions);
@@ -768,89 +770,28 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(actorLocations, structureConditions, infection, inventory.completeFungibleCargoHandoff(cargoId, receiver), productionJobs, nextContracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
-    public FrontierWorldState createOperation(RouteOperation operation) {
-        Objects.requireNonNull(operation, "route operation");
-        requireCurrentTacticalPlan(operation);
-        if (operations.containsKey(operation.id())) throw new IllegalArgumentException("route operation identity already exists: " + operation.id().value());
-        Map<SubjectId, RouteOperation> next = new LinkedHashMap<>(operations); next.put(operation.id(), operation);
-        // Creation is a claim, never a movement.  Each assembly/travel cursor owns later positions.
-        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, next,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    public FrontierWorldState createOperation(RouteOperation operation, ActorExecutionGroup executions) {
+        return OperationActorStateSupport.createOperation(this, operation, executions);
     }
     public FrontierWorldState advanceOperation(SubjectId operationId, int nextRouteIndex, OperationStage nextStage) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "route operation id"));
         if (operation == null) throw new IllegalArgumentException("unknown route operation: " + operationId.value());
         throw new IllegalArgumentException("route operation advancement must use one exact operation travel segment");
     }
-    public FrontierWorldState startOperationTravel(SubjectId operationId, OperationTravel travel) {
-        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id"));
-        if (operation == null || (operation.activeTravel().isPresent() && !operation.activeTravel().orElseThrow().arrived())) {
-            throw new IllegalArgumentException("operation already owns an in-progress exact travel or does not exist");
-        }
-        requireCurrentTacticalPlan(operation);
-        RouteOperation started = operation.startTravel(Objects.requireNonNull(travel, "operation travel"));
-        Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), started);
-        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withBody(position)));
-        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    public FrontierWorldState startOperationTravel(SubjectId operationId, OperationTravel travel, ActorExecutionGroup executions) {
+        return OperationActorStateSupport.startOperationTravel(this, operationId, travel, executions);
     }
-    public FrontierWorldState advanceOperationTravel(SubjectId operationId, OperationTravel travel) {
-        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id"));
-        if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalArgumentException("operation has no active exact travel");
-        requireCurrentTacticalPlan(operation);
-        OperationTravel current = operation.activeTravel().orElseThrow();
-        if (!current.corridor().equals(travel.corridor()) || travel.cursor() <= current.cursor() || travel.cursor() > current.nextColdCursor()) {
-            throw new IllegalArgumentException("operation travel must advance its current bounded corridor");
-        }
-        RouteOperation advanced = operation.withTravel(travel); Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), advanced);
-        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withBody(position)));
-        Map<SceneLeaseId, SceneLease> nextLeases = sceneLeases;
-        SceneLease activeScene = sceneLeases.values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(lease -> FrontierSceneBehaviors.logistics(lease).operationId().equals(operation.id()))
-                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED).findFirst().orElse(null);
-        if (activeScene != null) {
-            if (!travel.isExactHotAdvanceFrom(current)) {
-                throw new IllegalArgumentException("HOT operation travel may advance only one exact cursor");
-            }
-            SceneLease rebased = activeScene.rebaseHotOperationTravel(current, travel);
-            nextLeases = new LinkedHashMap<>(sceneLeases); nextLeases.put(rebased.id(), rebased);
-        }
-        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
-                physicalIntents, physicalObservations, nextLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    public FrontierWorldState advanceOperationTravel(SubjectId operationId, OperationTravel travel, ActorExecutionGroup executions) {
+        return OperationActorStateSupport.advanceOperationTravel(this, operationId, travel, executions);
     }
-    public FrontierWorldState advanceOperationAssembly(SubjectId operationId, OperationAssembly assembly) {
-        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation assembly operation id"));
-        if (operation == null || operation.activeAssembly().isEmpty()) throw new IllegalArgumentException("operation has no active assembly");
-        requireCurrentTacticalPlan(operation);
-        OperationAssembly advanced = operation.activeAssembly().orElseThrow().advance(Objects.requireNonNull(assembly, "operation assembly").members());
-        Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), operation.withAssembly(advanced));
-        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        advanced.positions().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withBody(position.standingBody())));
-        Map<SubjectId, AmbientActorLease> nextAmbient = new LinkedHashMap<>(ambientLeases);
-        advanced.members().forEach((actor, member) -> {
-            AmbientActorLease lease = nextAmbient.get(actor);
-            if (lease != null && lease.status() == AmbientLeaseStatus.HOT && lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
-                SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
-                nextAmbient.put(actor, lease.withGoal(AmbientGoalKind.OPERATION_ASSEMBLY, target.standingBody()));
-            }
-        });
-        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, nextAmbient);
+    public FrontierWorldState advanceOperationAssembly(SubjectId operationId, OperationAssembly assembly, ActorExecutionGroup executions) {
+        return OperationActorStateSupport.advanceOperationAssembly(this, operationId, assembly, executions);
     }
-    public FrontierWorldState deferOperationAssembly(SubjectId operationId, OperationAssemblyDeferral deferral) {
-        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation assembly operation id"));
-        if (operation == null || operation.activeAssembly().isEmpty()) throw new IllegalArgumentException("operation has no active assembly");
-        requireCurrentTacticalPlan(operation);
-        RouteOperation deferred = operation.withAssembly(operation.activeAssembly().orElseThrow().defer(Objects.requireNonNull(deferral, "assembly deferral")));
-        Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), deferred);
-        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, nextOperations, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    public FrontierWorldState deferOperationAssembly(SubjectId operationId, OperationAssemblyDeferral deferral, ActorExecutionGroup executions) {
+        return OperationActorStateSupport.deferOperationAssembly(this, operationId, deferral, executions);
     }
-    public FrontierWorldState completeOperationTravelSegment(SubjectId operationId) {
-        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id")); if (operation == null) throw new IllegalArgumentException("unknown operation travel");
-        requireCurrentTacticalPlan(operation);
-        RouteOperation completed = operation.completeTravelSegment();
-        Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), completed);
-        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, nextOperations, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    public FrontierWorldState completeOperationTravelSegment(SubjectId operationId, ActorExecutionGroup executions) {
+        return OperationActorStateSupport.completeOperationTravelSegment(this, operationId, executions);
     }
     public FrontierWorldState preparePhysicalIntent(PhysicalIntent intent) {
         Objects.requireNonNull(intent, "physical intent");
@@ -901,11 +842,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 .serviceWorks(outcome.serviceWorks()).fencedRecovery(recovery));
     }
     public FrontierWorldState failOperation(SubjectId operationId) { return FrontierOperationStateSupport.fail(this, operationId); }
-    private void requireCurrentTacticalPlan(RouteOperation operation) {
-        if (!operation.tacticalPlan().currentFor(strategicPlans)) {
-            throw new IllegalArgumentException("route operation tactical plan has stale decision authority");
-        }
-    }
     public FrontierWorldState compactTerminalLogistics(SubjectId operationId, long terminalAtTick) {
         TerminalLogisticsReceipt receipt = FrontierOperationStateSupport.terminalLogisticsReceipt(this, operationId, terminalAtTick);
         RouteOperation operation = operations.get(operationId);

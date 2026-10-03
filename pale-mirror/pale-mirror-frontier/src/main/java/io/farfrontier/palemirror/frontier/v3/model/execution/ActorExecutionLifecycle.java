@@ -67,6 +67,64 @@ public final class ActorExecutionLifecycle {
             throw new IllegalArgumentException("family pause changed common execution authority");
         return new Transition(state, paused, paused.actorExecutions().suspendAndBegin(current, successor));
     }
+    /** A group's job and all participant authorities enter one immutable, reference-closed update. */
+    public Transition prepareVacantGroup(FrontierWorldState state, ActorExecutionGroup successor) {
+        Objects.requireNonNull(successor, "successor executions");
+        FrontierWorldState prepared = state;
+        ActorExecutionState executions = state.actorExecutions();
+        for (var id : successor.members()) {
+            capabilities.require(id.activityKind());
+            var actor = prepared.actorLocations().get(id.actorId());
+            var retained = executions.actors().get(id.actorId());
+            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
+                    || retained != null && retained.suspended().isPresent())
+                throw new IllegalArgumentException("group cannot replace an unavailable participant");
+            if (retained != null && retained.current().isPresent()) {
+                var current = retained.current().orElseThrow();
+                var capability = capabilities.require(current.activityKind());
+                if (capability.interruption() != ActorActivityCapability.Interruption.RELEASE)
+                    throw new IllegalArgumentException("group participant has an unreleased owner");
+                capability.validateReference(prepared, current);
+                var checkpoint = Objects.requireNonNull(capability.checkpoint(prepared, current));
+                checkpoint.validate(prepared, current);
+                if (!checkpoint.ready()) throw new IllegalArgumentException("group participant has unfinished effects");
+                prepared = Objects.requireNonNull(capability.release(prepared, current));
+                if (!prepared.actorExecutions().equals(state.actorExecutions()))
+                    throw new IllegalArgumentException("group release changed common execution authority");
+                executions = executions.finish(current);
+            }
+            executions = executions.begin(id, executions.generation(id.actorId()));
+        }
+        return new Transition(state, prepared, executions);
+    }
+    /** A terminal-only family acknowledges its completed group before a new purpose can begin. */
+    public Transition prepareTerminalGroupReplacement(FrontierWorldState state, ActorExecutionGroup completed,
+                                                       ActorExecutionGroup successor) {
+        Objects.requireNonNull(completed); Objects.requireNonNull(successor);
+        var actors = completed.members().stream().map(ActorExecutionId::actorId).collect(java.util.stream.Collectors.toSet());
+        if (!actors.equals(successor.members().stream().map(ActorExecutionId::actorId).collect(java.util.stream.Collectors.toSet())))
+            throw new IllegalArgumentException("group replacement must retain its exact actor roster");
+        var executions = state.actorExecutions();
+        for (var current : completed.members()) {
+            executions.requireCurrent(current);
+            var capability = capabilities.require(current.activityKind());
+            capability.validateReference(state, current);
+            var checkpoint = Objects.requireNonNull(capability.checkpoint(state, current));
+            checkpoint.validate(state, current);
+            if (capability.interruption() != ActorActivityCapability.Interruption.TERMINAL_ONLY || !checkpoint.ready())
+                throw new IllegalArgumentException("group owner has not acknowledged its terminal boundary");
+            executions = executions.finish(current);
+        }
+        for (var next : successor.members()) {
+            capabilities.require(next.activityKind());
+            var actor = state.actorLocations().get(next.actorId());
+            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
+                throw new IllegalArgumentException("group replacement requires living exact actors");
+            executions = executions.begin(next, executions.generation(next.actorId()));
+        }
+        return new Transition(state, state, executions);
+    }
+
     private Transition releaseAndBegin(FrontierWorldState state, ActorExecutionId current,
                                         ActorExecutionId successor, ActorActivityCapability capability) {
         capability.validateReference(state, current);

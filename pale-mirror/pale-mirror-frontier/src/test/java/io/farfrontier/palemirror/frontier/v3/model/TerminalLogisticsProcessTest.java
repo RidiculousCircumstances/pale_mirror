@@ -157,10 +157,8 @@ class TerminalLogisticsProcessTest {
         RouteOperation completed = new RouteOperation(operation.id(), operation.contractId(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
                 operation.unit(), operation.route(), 0, OperationStage.COMPLETED, java.util.Optional.empty(), java.util.Optional.empty());
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>(state.operations()); operations.put(completed.id(), completed);
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), inventory,
-                state.productionJobs(), contracts, operations, state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(),
-                state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(),
-                state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).contracts(contracts).operations(operations)
+                .actorExecutions(OperationExecutionAuthority.retired(state, OperationExecutionAuthority.logisticsCurrent(state, operation))));
     }
 
     private static TerminalLogisticsReceipt receipt(int index, long atTick) {

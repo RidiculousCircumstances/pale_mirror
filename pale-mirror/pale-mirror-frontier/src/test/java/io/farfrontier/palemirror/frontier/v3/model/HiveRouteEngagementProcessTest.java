@@ -162,10 +162,12 @@ class HiveRouteEngagementProcessTest {
         assertEquals(SceneLeaseStatus.HOT, state.sceneLeases().get(leaseId).status());
         assertEquals(RouteEngagementStatus.HOT, state.strategicPlans().routeEngagements().get(engagement.id()).status());
         SubjectId bodyBinding = ActorBodyId.recoveryBindingId(actorIds.getFirst());
-        assertEquals(2L, state.fencedRecovery().current().get(bodyBinding).authorityEpoch(),
-                "attributed conflict resolution must install a new exact body epoch");
+        assertEquals(1L, state.fencedRecovery().current().get(bodyBinding).authorityEpoch(),
+                "a scene conflict does not replace an actor's physical incarnation");
+        assertEquals(FencedRecoveryDisposition.RECLAIM, state.fencedRecovery().lateLoad(bodyBinding, FencedRecoveryAsset.BODY,
+                actorIds.getFirst(), 1L), "the same independently owned body remains current");
         assertEquals(FencedRecoveryDisposition.REJECT_STALE, state.fencedRecovery().lateLoad(bodyBinding, FencedRecoveryAsset.BODY,
-                FrontierSceneLeaseStateSupport.recoveryOwner(lease), 1L), "the obstructed body cannot reclaim the replacement scene");
+                FrontierSceneLeaseStateSupport.recoveryOwner(lease), 1L), "a scene owner cannot claim an actor-owned body");
     }
 
     @Test void interceptTaskRejectsAnOperationThatDoesNotExistInCanonicalWorld() {
@@ -317,6 +319,14 @@ class HiveRouteEngagementProcessTest {
         }).toList();
         state = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING).releaseSceneLease(leaseId, captured);
         assertEquals(RouteEngagementStatus.COLD_COMBAT, state.strategicPlans().routeEngagements().get(engagementId).status());
+        org.junit.jupiter.api.Assertions.assertInstanceOf(ScheduleEffect.Created.class, HiveRouteEngagementProcess.planCombat(state,
+                new ScheduledAction(new ScheduleId("schedule:test-still-physical"), new SimInstant(3_020L), 0,
+                        engagementId, "frontier.hive_route_engagement.combat", 1)).getFirst().payload(),
+                "scene closure does not prove physical body departure");
+        // Isolated domain fixture explicitly acknowledges removal; native departure requires
+        // the separate saved-carrier evidence protocol and cannot be inferred from closure.
+        for (SubjectId actor : candidate.actorIds())
+            state = ActorBodyAuthority.released(state, ActorBodyAuthority.current(state, actor));
 
         RouteEngagementStrike first = (RouteEngagementStrike) HiveRouteEngagementProcess.planCombat(state,
                 new ScheduledAction(new ScheduleId("schedule:test-first"), new SimInstant(3_020L), 0, engagementId, "frontier.hive_route_engagement.combat", 1)).getFirst().payload();

@@ -64,6 +64,7 @@ final class CargoCarrierReleaseStateSupport {
         // back to the former shipment just because the scene's old chunk is absent.
         FencedRecoveryState recovery = FrontierSceneLeaseStateSupport.observeCargoCarrier(state.fencedRecovery(), lease);
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).contracts(contracts).operations(operations)
-                .sceneLeases(leases).strategicPlans(plans).fencedRecovery(recovery));
+                .sceneLeases(leases).strategicPlans(plans).fencedRecovery(recovery).actorExecutions(
+                        OperationExecutionAuthority.retired(state, OperationExecutionAuthority.logisticsCurrent(state, operation))));
     }
 }

@@ -108,7 +108,8 @@ public final class SupplyOperationProcess {
         if (physicalTransition != null) events.add(new ProposedEvent(contract.settlementId(), physicalTransition));
         events.addAll(List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), cargo)),
                 transition(preparation, StrategicTaskStatus.COMPLETED), transition(delivery, StrategicTaskStatus.ACTIVE),
-                new ProposedEvent(contract.settlementId(), new OperationCreated(operation))));
+                new ProposedEvent(contract.settlementId(), new OperationCreated(operation,
+                        OperationExecutionAuthority.assemblyAdmission(state, operation)))));
         // Cargo loading is a settlement fact. It is not an observation by the hive; an
         // explicit scout/perception slice must create any future intercept opportunity.
         events.add(schedule(operationAssembly(operation, now + 20L)));
@@ -127,7 +128,7 @@ public final class SupplyOperationProcess {
         if (assembly.complete()) {
             if (!ActorExecutionCoordinator.coldAvailable(state, operation.participantIds()))
                 return List.of(reschedule(action, operationAssembly(operation, action.dueAt().ticks() + 20L)));
-            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
+            return List.of(new ProposedEvent(operation.settlementId(), OperationExecutionAuthority.travelStarted(state, operation, travelForNextSegment(state, operation))),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
         // A formation may have more than the historical hauler/guard pair.  Advance exactly
@@ -139,11 +140,11 @@ public final class SupplyOperationProcess {
                 .map(assembly::advance).findFirst().orElse(null);
         if (next == null) return List.of(reschedule(action, operationAssembly(operation, action.dueAt().ticks() + 20L)));
         if (next.complete()) {
-            return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
-                    new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForCompletedAssembly(state, operation, next))),
+            return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next, OperationExecutionAuthority.assemblyCurrent(state, operation))),
+                    new ProposedEvent(operation.settlementId(), OperationExecutionAuthority.travelStarted(state, operation, travelForCompletedAssembly(state, operation, next))),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
-        return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
+        return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next, OperationExecutionAuthority.assemblyCurrent(state, operation))),
                 reschedule(action, operationAssembly(operation, action.dueAt().ticks() + 20L)));
     }
 
@@ -154,7 +155,7 @@ public final class SupplyOperationProcess {
             return List.of(reschedule(action, operationProgress(operation, Math.addExact(action.dueAt().ticks(), 20L))));
         if (operation != null && operation.stage() == OperationStage.ARRIVED
                 && contractForOperation(state, operation).status() == ContractStatus.DELIVERED) {
-            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
+            return List.of(new ProposedEvent(operation.settlementId(), OperationExecutionAuthority.travelStarted(state, operation, travelForNextSegment(state, operation))),
                     reschedule(action, operationProgress(operation, Math.addExact(action.dueAt().ticks(), 20L))));
         }
         if (operation != null && operation.stage() == OperationStage.ARRIVED) {
@@ -187,18 +188,18 @@ public final class SupplyOperationProcess {
         }
         if (operation.activeTravel().isEmpty() || operation.activeTravel().orElseThrow().arrived()
                 && operation.activeTravel().orElseThrow().corridor().getLast().equals(operation.route().get(operation.routeIndex()))) {
-            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
+            return List.of(new ProposedEvent(operation.settlementId(), OperationExecutionAuthority.travelStarted(state, operation, travelForNextSegment(state, operation))),
                     reschedule(action, operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
         OperationTravel travel = operation.activeTravel().orElseThrow();
         if (!travel.arrived()) {
             if (!travel.canAdvanceNextEdge()) return failed(state, operation, "route-obstructed", action.dueAt().ticks());
             OperationTravel advanced = translateTravel(travel, travel.nextColdCursor());
-            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelAdvanced(operation.id(), advanced)),
+            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelAdvanced(operation.id(), advanced, OperationExecutionAuthority.logisticsCurrent(state, operation))),
                     reschedule(action, operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
         int completedIndex = operation.stage() == OperationStage.RETURNING ? operation.routeIndex() - 1 : operation.routeIndex() + 1;
-        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(operation.settlementId(), new OperationTravelSegmentCompleted(operation.id()))));
+        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(operation.settlementId(), new OperationTravelSegmentCompleted(operation.id(), OperationExecutionAuthority.logisticsCurrent(state, operation)))));
         if (operation.stage() == OperationStage.RETURNING) {
             if (completedIndex > 0) events.add(reschedule(action, operationProgress(operation, action.dueAt().ticks() + 20L)));
         } else if (completedIndex == operation.route().size() - 1) {
