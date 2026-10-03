@@ -125,12 +125,13 @@ final class SettlementAssaultPayloadCodecs {
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 SettlementAssaultResolved value = (SettlementAssaultResolved) payload;
                 subject(output, value.assaultId()); output.writeByte(value.outcome().wireTag());
+                HiveReturnAdmissionCodec.write(output, value.returnAdmission());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId assault = subject(input); int outcome = input.readUnsignedByte();
-                return new SettlementAssaultResolved(assault, FrontierWireTags.require(SettlementAssaultOutcome.class, outcome));
+                return new SettlementAssaultResolved(assault, FrontierWireTags.require(SettlementAssaultOutcome.class, outcome), HiveReturnAdmissionCodec.read(input));
             });
         }
     }; }

@@ -85,28 +85,57 @@ class HiveMobilizationProcessTest {
         state = draining.releaseSceneLease(leaseId, members.stream()
                 .map(member -> new SceneMemberPosition(member.actorId(), draining.actorLocations().get(member.actorId()).body(),
                         draining.actorLocations().get(member.actorId()).condition().health())).toList());
+        // Pure fixture models the adapter's separate exact physical-departure receipts.
+        // Closing a scene by itself must not prove that its bodies left Minecraft.
+        for (var member : members)
+            state = ActorBodyAuthority.released(state, ActorBodyAuthority.current(state, member.actorId()));
         state = new FrontierWorldStateCodec(state.bootstrap()).decode(new FrontierWorldStateCodec(state.bootstrap()).encode(state));
         assault = state.strategicPlans().settlementAssaults().get(assault.id());
         assertEquals(parent.expeditionId(), assault.expeditionId());
         assertEquals(parent.memberIds(), state.hiveColony().mobilizations().get(parent.id()).memberIds());
         assertEquals(SettlementAssaultStatus.COLD_COMBAT, assault.status(), "the HOT receipt returns to the same COLD child rather than replacing it");
 
-        state = HiveSettlementAssaultProcess.reduceResolved(state, hive, new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED));
+        var resolution = HiveSettlementAssaultProcess.resolution(state, assault, SettlementAssaultOutcome.ABORTED);
+        var returnAdmission = assertInstanceOf(HiveReturnAdmission.Returning.class, resolution.returnAdmission());
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        byte[] resolvedBytes = codecs.encode(resolution);
+        assertEquals(resolution, codecs.decode(resolution.type(), resolvedBytes));
+        assertThrows(IllegalArgumentException.class, () -> codecs.decode(resolution.type(),
+                java.util.Arrays.copyOf(resolvedBytes, resolvedBytes.length - 1)));
+        FrontierWorldState beforeReturn = state;
+        assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceResolved(beforeReturn, hive,
+                new SettlementAssaultResolved(resolution.assaultId(), resolution.outcome(), new HiveReturnAdmission.Independent())),
+                "resolution cannot forget its exact hive parent");
+        state = HiveSettlementAssaultProcess.reduceResolved(state, hive, resolution);
         state = new FrontierWorldStateCodec(state.bootstrap()).decode(new FrontierWorldStateCodec(state.bootstrap()).encode(state));
         HiveMobilization returning = state.hiveColony().mobilizations().get(parent.id());
         assertEquals(HiveMobilizationStatus.RETURNING, returning.status());
         assertEquals(parent.expeditionId(), returning.expeditionId());
+        returnAdmission.executions().requireCurrent(state.actorExecutions());
+        FrontierWorldState retainedReturn = state;
+        var firstExecution = returnAdmission.executions().members().getFirst();
+        assertThrows(IllegalArgumentException.class, () -> retainedReturn.withChanges(FrontierWorldStateUpdate.begin()
+                .actorExecutions(retainedReturn.actorExecutions().finish(firstExecution))),
+                "a survivor cannot lose its declared return authority independently of its parent");
+        var staleExecution = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                firstExecution.actorId(), firstExecution.activityKind(), firstExecution.activityOwnerId(), firstExecution.generation() + 1);
+        int retainedCursor = returning.returnAssembly().orElseThrow().members().get(firstExecution.actorId()).cursor();
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceReturnAdvanced(retainedReturn, hive,
+                new HiveMobilizationReturnAdvanced(parent.id(), firstExecution.actorId(), retainedCursor, staleExecution)));
         while (state.hiveColony().mobilizations().get(parent.id()).status() == HiveMobilizationStatus.RETURNING) {
             HiveMobilization current = state.hiveColony().mobilizations().get(parent.id());
             HiveTaskAssembly.Member member = current.returnAssembly().orElseThrow().members().values().stream()
                     .filter(value -> !value.arrived()).findFirst().orElseThrow();
             SubjectId actor = current.returnAssembly().orElseThrow().members().entrySet().stream()
                     .filter(entry -> entry.getValue().equals(member)).map(java.util.Map.Entry::getKey).findFirst().orElseThrow();
-            state = HiveMobilizationProcess.reduceReturnAdvanced(state, hive, new HiveMobilizationReturnAdvanced(parent.id(), actor, member.cursor()));
+            state = HiveMobilizationProcess.reduceReturnAdvanced(state, hive, new HiveMobilizationReturnAdvanced(parent.id(), actor, member.cursor(), HiveReturnExecutionAuthority.current(state, parent.id(), actor)));
         }
         assertEquals(HiveMobilizationStatus.COMPLETED, state.hiveColony().mobilizations().get(parent.id()).status());
         FrontierWorldState completed = state;
         assertTrue(parent.memberIds().stream().allMatch(actor -> completed.hiveColony().bioformLifecycles().get(actor).phase() == BioformLifecyclePhase.ACTIVE));
+        assertTrue(returnAdmission.executions().members().stream().noneMatch(id ->
+                completed.actorExecutions().current(id.activityKind()).containsKey(id.actorId())),
+                "the terminal home arrival retires the whole exact group without retiring the actors");
     }
 
     @Test void registeredPhysicalReleaseCommandAdmitsTheExactWakingGroup() {
@@ -398,7 +427,7 @@ class HiveMobilizationProcessTest {
                 .transitionTask(departedTaskId, StrategicTaskStatus.BLOCKED)),
                 "a terminal task may not detach itself from its still-unresolved exact assault");
         FrontierWorldState released = HiveSettlementAssaultProcess.reduceResolved(departedState, hive,
-                new SettlementAssaultResolved(exactAssault.id(), SettlementAssaultOutcome.ABORTED));
+                HiveSettlementAssaultProcess.resolution(departedState, exactAssault, SettlementAssaultOutcome.ABORTED));
         HiveMobilization returning = released.hiveColony().mobilizations().get(initial.id());
         assertEquals(HiveMobilizationStatus.RETURNING, returning.status(),
                 "a surviving expedition cannot complete merely because its child resolved");
@@ -427,7 +456,7 @@ class HiveMobilizationProcessTest {
             SubjectId advancing = current.returnAssembly().orElseThrow().safeAdvances().getFirst();
             int cursor = current.returnAssembly().orElseThrow().members().get(advancing).cursor();
             released = HiveMobilizationProcess.reduceReturnAdvanced(released, hive,
-                    new HiveMobilizationReturnAdvanced(current.id(), advancing, cursor));
+                    new HiveMobilizationReturnAdvanced(current.id(), advancing, cursor, HiveReturnExecutionAuthority.current(released, current.id(), advancing)));
         }
         assertEquals(HiveMobilizationStatus.COMPLETED, released.hiveColony().mobilizations().get(initial.id()).status());
         FrontierWorldState returned = released;

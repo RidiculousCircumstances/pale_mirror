@@ -23,11 +23,7 @@ public final class AmbientLeaseStateProcess {
         if (!HivePhysiologySupport.permitsAmbientLease(state, lease.actorId())) {
             throw new IllegalArgumentException("cocoon-retained bioform may not prepare an ambient lease");
         }
-        HiveMobilization returning = state.hiveColony().mobilizations().values().stream()
-                .filter(value -> value.status() == HiveMobilizationStatus.RETURNING)
-                .filter(value -> value.returnAssembly().map(assembly -> assembly.members().containsKey(lease.actorId())).orElse(false))
-                .reduce((left, right) -> { throw new IllegalArgumentException("ambient bioform belongs to more than one hive return"); })
-                .orElse(null);
+        HiveMobilization returning = io.farfrontier.palemirror.frontier.v3.model.HiveReturnExecutionAuthority.owner(state, lease.actorId()).orElse(null);
         if (returning != null) {
             HiveTaskAssembly.Member member = returning.returnAssembly().orElseThrow().members().get(lease.actorId());
             SurfaceAnchor expected = member.arrived() ? member.currentSurface() : member.nextSurface();
@@ -123,11 +119,7 @@ public final class AmbientLeaseStateProcess {
                 throw new IllegalArgumentException("HOT hive task assembly may return to COLD only at its exact retained cursor");
             }
         }
-        HiveMobilization returning = state.hiveColony().mobilizations().values().stream()
-                .filter(value -> value.status() == HiveMobilizationStatus.RETURNING)
-                .filter(value -> value.returnAssembly().map(assembly -> assembly.members().containsKey(release.actorId())).orElse(false))
-                .reduce((left, right) -> { throw new IllegalArgumentException("ambient bioform belongs to more than one hive return"); })
-                .orElse(null);
+        HiveMobilization returning = io.farfrontier.palemirror.frontier.v3.model.HiveReturnExecutionAuthority.owner(state, release.actorId()).orElse(null);
         if (returning != null) {
             HiveTaskAssembly.Member member = returning.returnAssembly().orElseThrow().members().get(release.actorId());
             if (current.goal() != AmbientGoalKind.HIVE_TASK_RETURN

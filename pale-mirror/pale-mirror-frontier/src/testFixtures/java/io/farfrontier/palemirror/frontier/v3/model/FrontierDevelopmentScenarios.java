@@ -228,7 +228,7 @@ final class FrontierDevelopmentScenarios {
         FrontierWorldState state = started.state().withInventory(started.state().inventory().store(sword)
                 .moveObservedItem(sword.id(), sword.custody(), new InventoryCustody.Actor(defender)));
         state = HiveSettlementAssaultProcess.reduceResolved(state, state.bootstrap().hive().id(),
-                new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED));
+                HiveSettlementAssaultProcess.resolution(state, assault, SettlementAssaultOutcome.ABORTED));
         return new SettlementAssaultFixture(state, started.instant(), started.schedules(), started.assaultId());
     }
 
@@ -873,7 +873,7 @@ final class FrontierDevelopmentScenarios {
             if (assault != null) break;
         }
         if (assault == null) throw new IllegalStateException("development return fixture did not reach exact departure");
-        state = HiveSettlementAssaultProcess.reduceResolved(state, hive, new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED));
+        state = HiveSettlementAssaultProcess.reduceResolved(state, hive, HiveSettlementAssaultProcess.resolution(state, assault, SettlementAssaultOutcome.ABORTED));
         HiveMobilization returning = state.hiveColony().mobilizations().get(base.mobilizationId());
         if (returning.status() != HiveMobilizationStatus.RETURNING) throw new IllegalStateException("development return fixture lacks retained survivors");
         return new HiveMobilizationFixture(state, new SimInstant(900L), List.of(), base.mobilizationId(), base.memberIds());

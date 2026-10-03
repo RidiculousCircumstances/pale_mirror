@@ -318,7 +318,7 @@ class SettlementAssaultTest {
         assertEquals(TacticalPlanPhase.RETREAT, coldRetreat.tacticalPlan().phase());
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> terminal = HiveSettlementAssaultProcess.planCombat(state,
                 HiveSettlementAssaultProcess.combat(coldRetreat, 20L));
-        assertEquals(new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED), terminal.getFirst().payload());
+        assertEquals(HiveSettlementAssaultProcess.resolution(state, assault, SettlementAssaultOutcome.ABORTED), terminal.getFirst().payload());
     }
 
     @Test void oneSharedNonFlatFormationCursorSurvivesSnapshotAndRejectsForgedHotArrival() {

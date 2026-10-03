@@ -147,7 +147,7 @@ class HumanTacticalFunctionProjectionTest {
         state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
                 .store(new ExactItemStack(sword, assault.settlementId(), "minecraft:iron_sword", 1, new InventoryCustody.ContainerSlot(depot, sourceSlot)))
                 .moveObservedItem(sword, new InventoryCustody.ContainerSlot(depot, sourceSlot), new InventoryCustody.Actor(resident)));
-        state = HiveSettlementAssaultProcess.reduceResolved(state, fixture.hive(), new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED));
+        state = HiveSettlementAssaultProcess.reduceResolved(state, fixture.hive(), HiveSettlementAssaultProcess.resolution(state, assault, SettlementAssaultOutcome.ABORTED));
         SettlementAssault resolved = state.strategicPlans().settlementAssaults().get(assault.id());
 
         PhysicalIntent returned = DefenderEquipmentReturnProcess.plan(state, DefenderEquipmentReturnProcess.review(resolved, 250L)).stream()

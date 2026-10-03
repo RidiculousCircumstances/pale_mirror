@@ -67,8 +67,8 @@ final class HiveMobilizationPayloadCodecs {
     private static final class ReturnAdvancedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_return_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationReturnAdvanced advanced = (HiveMobilizationReturnAdvanced) payload;
-            writeSubject(output, advanced.mobilizationId()); writeSubject(output, advanced.bioformId()); output.writeShort(advanced.expectedCursor()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationReturnAdvanced(readSubject(input), readSubject(input), input.readUnsignedShort())); }
+            writeSubject(output, advanced.mobilizationId()); writeSubject(output, advanced.bioformId()); output.writeShort(advanced.expectedCursor()); ActorExecutionStateCodec.writeId(output, advanced.execution()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationReturnAdvanced(readSubject(input), readSubject(input), input.readUnsignedShort(), ActorExecutionStateCodec.readId(input))); }
     }
     private static final class ConflictedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_conflicted"; }

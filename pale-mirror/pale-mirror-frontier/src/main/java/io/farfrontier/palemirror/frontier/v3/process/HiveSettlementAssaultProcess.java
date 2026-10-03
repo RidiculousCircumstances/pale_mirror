@@ -149,7 +149,8 @@ public final class HiveSettlementAssaultProcess {
         deferredBomberAftermath(state, assault, attacker, action.dueAt().ticks()).ifPresent(aftermath ->
                 events.add(new ProposedEvent(assault.hiveId(), new DeferredAftermathPrepared(aftermath))));
         if (after.compareTo(FixedScalar.ZERO) <= 0 && ((hiveTurn && defenders.size() == 1) || (!hiveTurn && attackers.size() == 1))) {
-            events.addAll(resolvedWithReturn(state, assault,
+            FrontierWorldState afterStrike = reduceStrike(state, assault.hiveId(), strike);
+            events.addAll(resolvedWithReturn(afterStrike, afterStrike.strategicPlans().settlementAssaults().get(assault.id()),
                     hiveTurn ? SettlementAssaultOutcome.HIVE_VICTORY : SettlementAssaultOutcome.SETTLEMENT_VICTORY, action.dueAt().ticks()));
         } else events.add(schedule(combat(assault, action.dueAt().ticks()
                 + state.bootstrap().ruleset().cadence().hiveSettlementAssaultCombatInterval())));
@@ -241,15 +242,7 @@ public final class HiveSettlementAssaultProcess {
         StrategicTask task = plans.tasks().get(assault.taskId());
         plans = plans.transitionTask(task.id(), resolved.outcome() == SettlementAssaultOutcome.HIVE_VICTORY
                 ? StrategicTaskStatus.COMPLETED : StrategicTaskStatus.BLOCKED);
-        HiveMobilization parent = state.hiveColony().mobilizations().values().stream()
-                .filter(value -> value.taskId().equals(assault.taskId()) && value.status() == HiveMobilizationStatus.DEPARTED)
-                .findFirst().orElse(null);
-        if (parent == null) return state.withStrategicPlans(plans);
-        boolean survivor = parent.memberIds().stream().anyMatch(member -> alive(state, member));
-        return survivor ? state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(plans)
-                        .hiveColony(state.hiveColony().beginMobilizationReturn(parent.id(), HiveAssemblyCorridor.compileReturn(state, parent))))
-                : state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(plans)
-                        .hiveColony(state.hiveColony().completeMobilization(parent.id())));
+        return HiveReturnExecutionAuthority.resolve(state, assault, plans, resolved.returnAdmission());
     }
 
     private static SettlementAssault assault(FrontierWorldState state, SubjectId id) {
@@ -425,12 +418,16 @@ public final class HiveSettlementAssaultProcess {
     }
     private static List<ProposedEvent> resolvedWithReturn(FrontierWorldState state, SettlementAssault assault,
                                                            SettlementAssaultOutcome outcome, long now) {
-        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultResolved(assault.id(), outcome))));
-        state.hiveColony().mobilizations().values().stream()
-                .filter(parent -> parent.taskId().equals(assault.taskId()) && parent.status() == HiveMobilizationStatus.DEPARTED)
-                .findFirst().ifPresent(parent -> events.add(new ProposedEvent(parent.hiveId(), new ScheduleEffect.Created(
-                        HiveMobilizationProcess.returnProgress(parent.id(), Math.addExact(now, state.bootstrap().ruleset().cadence().migrationStepInterval()))))));
+        var resolved = resolution(state, assault, outcome);
+        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(assault.hiveId(), resolved)));
+        if (resolved.returnAdmission() instanceof HiveReturnAdmission.Returning returning)
+            events.add(new ProposedEvent(assault.hiveId(), new ScheduleEffect.Created(HiveMobilizationProcess.returnProgress(
+                    returning.mobilizationId(), Math.addExact(now, state.bootstrap().ruleset().cadence().migrationStepInterval())))));
         return List.copyOf(events);
+    }
+    public static SettlementAssaultResolved resolution(FrontierWorldState state, SettlementAssault assault,
+                                                      SettlementAssaultOutcome outcome) {
+        return new SettlementAssaultResolved(assault.id(), outcome, HiveReturnExecutionAuthority.planResolution(state, assault));
     }
     private static FixedScalar damage(FrontierWorldState state, SubjectId actor) { return RouteEngagementCombatRules.damage(state, actor); }
     private static List<BlockPosition> approach(FrontierWorldState state, BlockPosition start, BlockPosition end) {

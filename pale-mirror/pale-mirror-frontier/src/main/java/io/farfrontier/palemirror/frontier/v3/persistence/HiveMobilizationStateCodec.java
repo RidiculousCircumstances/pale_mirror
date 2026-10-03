@@ -122,7 +122,7 @@ final class HiveMobilizationStateCodec {
         return new HiveTaskAssembly(ganglion, members);
     }
 
-    private static void writeReturnAssembly(DataOutputStream output, HiveReturnAssembly assembly) throws IOException {
+    static void writeReturnAssembly(DataOutputStream output, HiveReturnAssembly assembly) throws IOException {
         FrontierWorldStateCodec.writeString(output, assembly.nestId().value());
         FrontierWorldStateCodec.writeCount(output, assembly.members().size());
         for (var entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
@@ -132,7 +132,7 @@ final class HiveMobilizationStateCodec {
         }
     }
 
-    private static HiveReturnAssembly readReturnAssembly(DataInputStream input) throws IOException {
+    static HiveReturnAssembly readReturnAssembly(DataInputStream input) throws IOException {
         SubjectId nest = new SubjectId(FrontierWorldStateCodec.readString(input));
         Map<SubjectId, HiveTaskAssembly.Member> members = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {

@@ -208,11 +208,7 @@ public final class AmbientActorProcess {
             SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
             return new AmbientGoal(AmbientGoalKind.HIVE_TASK_ASSEMBLY, target.support());
         }
-        HiveMobilization returningMobilization = state.hiveColony().mobilizations().values().stream()
-                .filter(mobilization -> mobilization.status() == HiveMobilizationStatus.RETURNING)
-                .filter(mobilization -> mobilization.returnAssembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
-                .reduce((left, right) -> { throw new IllegalStateException("ambient bioform belongs to more than one hive return"); })
-                .orElse(null);
+        HiveMobilization returningMobilization = io.farfrontier.palemirror.frontier.v3.model.HiveReturnExecutionAuthority.owner(state, actorId).orElse(null);
         if (returningMobilization != null) {
             HiveTaskAssembly.Member member = returningMobilization.returnAssembly().orElseThrow().members().get(actorId);
             SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
