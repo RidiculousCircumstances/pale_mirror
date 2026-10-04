@@ -319,7 +319,7 @@ class RoutePatrolSceneSupportTest {
     @Test
     void suspendedOrUnstartedSceneStillRecordsDeathAndRetiresExactRecoveryAuthority() {
         for (SceneLeaseStatus status : List.of(SceneLeaseStatus.PREPARED, SceneLeaseStatus.HOT,
-                SceneLeaseStatus.DRAINING, SceneLeaseStatus.CONFLICT, SceneLeaseStatus.UNKNOWN_AFTER_RESTART)) {
+                SceneLeaseStatus.DRAINING, SceneLeaseStatus.CONFLICT, SceneLeaseStatus.UNKNOWN_AFTER_RESTART, SceneLeaseStatus.CLOSED)) {
             WorldId world = new WorldId("frontier:patrol-death-" + status.name().toLowerCase(java.util.Locale.ROOT));
             FrontierWorldState initial = patrolState(world);
             var candidate = FrontierRoutePatrolSceneSupport.candidates(initial).stream().findFirst().orElseThrow();
@@ -331,7 +331,13 @@ class RoutePatrolSceneSupportTest {
             submit(engine, world, "prepare", new RoutePatrolSceneLeasePrepared(lease));
             FrontierTestActorBodies.present(engine, world, lease);
             if (status != SceneLeaseStatus.PREPARED) submit(engine, world, "hot", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
-            if (status != SceneLeaseStatus.PREPARED && status != SceneLeaseStatus.HOT)
+            if (status == SceneLeaseStatus.CLOSED) {
+                submit(engine, world, "drain", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+                var beforeRelease = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+                submit(engine, world, "release", new SceneLeaseReleased(lease.id(), lease.members().stream().map(member ->
+                        new SceneMemberPosition(member.actorId(), beforeRelease.actorLocations().get(member.actorId()).body(),
+                                beforeRelease.actorLocations().get(member.actorId()).condition().health())).toList()));
+            } else if (status != SceneLeaseStatus.PREPARED && status != SceneLeaseStatus.HOT)
                 submit(engine, world, "suspend", new SceneLeaseTransition(lease.id(), status));
             var member = lease.members().getFirst();
             var death = ModeledActorBodyFacts.death(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()),
@@ -339,6 +345,12 @@ class RoutePatrolSceneSupportTest {
             submit(engine, world, "death", death);
             var after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
             assertEquals(ActorLifeStatus.DEAD, after.actorLocations().get(member.actorId()).condition().status(), status.name());
+            assertEquals(RoutePatrolStatus.BLOCKED, after.strategicPlans().routePatrols().get(candidate.taskId()).status(), status.name());
+            assertEquals(StrategicTaskStatus.BLOCKED, after.strategicPlans().tasks().get(candidate.taskId()).status(), status.name());
+            assertTrue(lease.members().stream().noneMatch(participant -> after.actorExecutions()
+                    .current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.ROUTE_PATROL)
+                    .containsKey(participant.actorId())), "death retires the exact entire patrol, not its bodies");
+            assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
             var binding = ActorBodyId.recoveryBindingId(member.actorId());
             assertFalse(after.fencedRecovery().current().containsKey(binding), status.name());
             assertEquals(FencedRecoveryDisposition.REJECT_STALE, after.fencedRecovery().tombstones().get(binding).disposition());

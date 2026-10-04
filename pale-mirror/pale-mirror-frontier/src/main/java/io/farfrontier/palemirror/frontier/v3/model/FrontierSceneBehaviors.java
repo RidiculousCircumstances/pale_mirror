@@ -137,11 +137,6 @@ public final class FrontierSceneBehaviors {
                                                            SceneLeaseRecoveryUnresolved unresolved) {
         return behavior(lease).recoveryUnresolvedPlan(state, lease, unresolved);
     }
-    /** Cause-owned state that must transition atomically with a recorded scene death. */
-    static SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
-        return behavior(lease).afterActorDeath(state, lease, actorId, atTick);
-    }
-
     /** Recovery resumes owned work only when the registered owner still has work to run. */
     public static SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
         if (lease.members().stream().anyMatch(member ->
@@ -149,21 +144,6 @@ public final class FrontierSceneBehaviors {
             return SceneLeaseStatus.DRAINING;
         }
         return behavior(lease).recoveredStatus(state, lease);
-    }
-
-    record SceneDeathOutcome(HumanPopulation humanPopulation, ResourceSiteState resourceSites, StrategicPlanState strategicPlans,
-                             Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> physicalIntents,
-                             Map<SubjectId, SettlementServiceWork> serviceWorks,
-                             io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState actorExecutions) {
-        SceneDeathOutcome {
-            Objects.requireNonNull(humanPopulation, "scene-death human population"); Objects.requireNonNull(resourceSites, "scene-death resource sites");
-            Objects.requireNonNull(strategicPlans, "scene-death strategic plans"); Objects.requireNonNull(physicalIntents, "scene-death physical intents");
-            Objects.requireNonNull(serviceWorks, "scene-death service works");
-            Objects.requireNonNull(actorExecutions, "scene-death execution outcomes");
-        }
-        static SceneDeathOutcome unchanged(FrontierWorldState state) {
-            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), state.strategicPlans(), state.physicalIntents(), state.serviceWorks(), state.actorExecutions());
-        }
     }
 
     interface SceneBehavior<C extends SceneCause> {
@@ -216,9 +196,6 @@ public final class FrontierSceneBehaviors {
         SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released);
         SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved);
         SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease);
-        default SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
-            return SceneDeathOutcome.unchanged(state);
-        }
     }
 
     private static final class LogisticsBehavior implements SceneBehavior<LogisticsSceneCause> {
@@ -459,24 +436,6 @@ public final class FrontierSceneBehaviors {
         @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
             return new SceneRecoveryPlan(owner(state, lease), unresolved, new SceneContinuation.None());
         }
-        @Override public SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
-            SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, cause(lease));
-            if (assault.status() != SettlementAssaultStatus.HOT || !assault.overseerId().equals(actorId)) {
-                return SceneDeathOutcome.unchanged(state);
-            }
-            // Keep the same durable assault, roster and authority.  The physical scene may
-            // drain naturally, but it can no longer commit a contact receipt or regain a
-            // replacement controller from ambient Minecraft state.
-            SettlementAssault next = assault.retreatAfterOverseerLoss(actorId);
-            if (assault.tacticalPlan().phase() == TacticalPlanPhase.TRAVEL && !assault.march().complete()) {
-                ExpeditionMarchIssue issue = new ExpeditionMarchIssue(ExpeditionMarchIssueKind.CONTROLLER_LOST, actorId,
-                        assault.march().memberTopologies().get(actorId).edgeAfterCursor(assault.march().cursor()).id(), assault.march().cursor());
-                next = assault.recordMarchIssue(issue).retreatAfterOverseerLoss(actorId);
-            }
-            StrategicPlanState plans = state.strategicPlans().replaceSettlementAssault(next);
-            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), plans,
-                    state.physicalIntents(), state.serviceWorks(), state.actorExecutions());
-        }
     }
 
     private static final class EngineeringWorksiteBehavior implements SceneBehavior<EngineeringWorkSceneCause> {
@@ -591,14 +550,6 @@ public final class FrontierSceneBehaviors {
         }
         @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
             return new SceneRecoveryPlan(owner(state, lease), unresolved, new SceneContinuation.None());
-        }
-        @Override public SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
-            MedicalEvacuationOperation operation = FrontierMedicalTreatmentSceneSupport.require(state, cause(lease));
-            HumanPopulation population = operation.active() && (operation.patientId().equals(actorId) || operation.team().memberIds().contains(actorId))
-                    ? state.humanPopulation().transitionMedicalOperation(operation.id(), MedicalEvacuationStatus.BLOCKED, atTick)
-                    : state.humanPopulation();
-            return new SceneDeathOutcome(population, state.resourceSites(), state.strategicPlans(), state.physicalIntents(), state.serviceWorks(),
-                    population == state.humanPopulation() ? state.actorExecutions() : MedicalExecutionAuthority.retired(state, operation));
         }
     }
 
@@ -810,13 +761,6 @@ public final class FrontierSceneBehaviors {
         @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
             return new SceneRecoveryPlan(owner(state, lease), unresolved, new SceneContinuation.None());
         }
-        @Override public SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
-            SettlementServiceWork work = FrontierSettlementServiceWorkSceneSupport.require(state, cause(lease));
-            if (!work.workerId().equals(actorId)) throw new IllegalArgumentException("service death scope has a foreign worker");
-            // Common scope quiescence does not own work/resource retirement. The registered
-            // activity acknowledges death even without a retained presentation scope.
-            return SceneDeathOutcome.unchanged(state);
-        }
     }
 
     /** Class-D route patrol: generic guard motion never substitutes for this retained formation. */
@@ -882,17 +826,6 @@ public final class FrontierSceneBehaviors {
         @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
             return new SceneRecoveryPlan(owner(state, lease), unresolved,
                     new SceneContinuation.BlockRoutePatrol(cause(lease).taskId()));
-        }
-        @Override public SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
-            RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, cause(lease));
-            if (!patrol.memberIds().contains(actorId) || !patrol.active()) return SceneDeathOutcome.unchanged(state);
-            // Death is the patrol's terminal evidence.  Keep task and patrol terminal states in
-            // the same authoritative transaction; a later generic continuation would leave a
-            // briefly active task with a dead member and permit a second planner to race it.
-            StrategicPlanState plans = state.strategicPlans().blockPatrol(patrol.taskId(), RoutePatrolBlockReason.MISSING_OWNED_BODY)
-                    .transitionTask(patrol.taskId(), StrategicTaskStatus.BLOCKED);
-            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), plans,
-                    state.physicalIntents(), state.serviceWorks(), RoutePatrolExecutionAuthority.retired(state, patrol));
         }
     }
 }

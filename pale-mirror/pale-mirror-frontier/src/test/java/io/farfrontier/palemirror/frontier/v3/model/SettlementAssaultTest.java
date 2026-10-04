@@ -298,6 +298,15 @@ class SettlementAssaultTest {
         state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         long contactPlanEpoch = state.strategicPlans().settlementAssaults().get(assault.id()).tacticalPlan().planEpoch();
 
+        // Presentation absence is not absence of the retained command owner or its body.
+        var noScope = state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(java.util.Map.of()));
+        var noScopeDeath = ModeledActorBodyFacts.died(noScope, assault.overseerId(),
+                noScope.actorLocations().get(assault.overseerId()).body(), "test-overseer-without-scope", 11L);
+        assertEquals(TacticalPlanPhase.RETREAT, noScopeDeath.strategicPlans().settlementAssaults().get(assault.id()).tacticalPlan().phase());
+        assertEquals(noScope.actorExecutions(), noScopeDeath.actorExecutions(), "the expedition retains its causal cohort until terminal settlement");
+        assertEquals(noScopeDeath, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(noScopeDeath)));
+
         state = ModeledActorBodyFacts.died(state, assault.overseerId(), lease.memberBody(state.actorLocations(), assault.overseerId()), "test-overseer-loss", 11L);
 
         SettlementAssault retreating = state.strategicPlans().settlementAssaults().get(assault.id());

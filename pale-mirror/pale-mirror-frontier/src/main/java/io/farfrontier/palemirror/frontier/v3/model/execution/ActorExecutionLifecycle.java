@@ -230,7 +230,7 @@ public final class ActorExecutionLifecycle {
         for (var id : claims) {
             var capability = capabilities.require(id.activityKind());
             var death = capability.deathAcknowledgement();
-            if (death.isEmpty()) continue; // Existing coordinated owners still use their declared scene consequence port.
+            if (death.isEmpty()) continue; // No immediate family outcome; its causal owner retains terminal settlement.
             capability.validateReference(state, id);
             var result = Objects.requireNonNull(death.orElseThrow().acknowledge(state, id, atTick), "owner death acknowledgement");
             if (result.expectedState() != state || !result.execution().equals(id))

@@ -55,6 +55,15 @@ public final class MedicalExecutionAuthority {
         return operation;
     }
     static ActorActivityCapability capability() { return new ActorActivityCapability() {
+        @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
+            return Optional.of((state, execution, tick) -> {
+                var operation = require(state.humanPopulation().medicalOperations(), execution);
+                var population = state.humanPopulation().transitionMedicalOperation(operation.id(), MedicalEvacuationStatus.BLOCKED, tick);
+                return new ActorActivityDeath.Acknowledgement(state, execution,
+                        FrontierWorldStateUpdate.begin().humanPopulation(population),
+                        ActorActivityDeath.Disposition.RETIRE_DECLARED_GROUP, Optional.of(current(state, operation)));
+            });
+        }
         @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId id, AmbientActorLease lease) {
             return false; // Patient/team motion enters the coordinated clinical consumer.
         }

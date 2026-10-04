@@ -44,6 +44,18 @@ public final class RoutePatrolExecutionAuthority {
         return patrol;
     }
     static ActorActivityCapability capability() { return new ActorActivityCapability() {
+        @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
+            return Optional.of((state, execution, tick) -> {
+                var patrol = require(state.strategicPlans().routePatrols(), execution);
+                // One terminal owner transaction: no active task with a dead crew member,
+                // and no dependency on a current or historical presentation scope.
+                var plans = state.strategicPlans().blockPatrol(patrol.taskId(), RoutePatrolBlockReason.MISSING_OWNED_BODY)
+                        .transitionTask(patrol.taskId(), StrategicTaskStatus.BLOCKED);
+                return new ActorActivityDeath.Acknowledgement(state, execution,
+                        FrontierWorldStateUpdate.begin().strategicPlans(plans),
+                        ActorActivityDeath.Disposition.RETIRE_DECLARED_GROUP, Optional.of(current(state, patrol)));
+            });
+        }
         @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId id, AmbientActorLease lease) {
             return false; // The patrol owns its retained formation, not ambient presentation.
         }

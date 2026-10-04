@@ -372,9 +372,22 @@ class MedicalEvacuationOperationTest {
     }
 
     @Test void participantDeathBlocksCareBeforeTheDeathFactAndLeavesPreEffectSupplyUntouched() {
+        assertParticipantDeathSettlement(true);
+        assertParticipantDeathSettlement(false);
+    }
+
+    private void assertParticipantDeathSettlement(boolean retainScope) {
         TreatmentSceneFixture fixture = hotTreatmentFixture(new WorldId("frontier:medical-death"));
+        var initial = fixture.state();
+        if (!retainScope) {
+            initial = initial.transitionSceneLease(fixture.lease().id(), SceneLeaseStatus.DRAINING);
+            var beforeRelease = initial;
+            initial = initial.releaseSceneLease(fixture.lease().id(), fixture.lease().members().stream().map(member ->
+                    new SceneMemberPosition(member.actorId(), beforeRelease.actorLocations().get(member.actorId()).body(),
+                            beforeRelease.actorLocations().get(member.actorId()).condition().health())).toList());
+        }
         var base = FrontierWorldRuntimeDefinition.configuration(fixture.world(), 42L);
-        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(fixture.world(), fixture.state(), new SimInstant(300L),
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(fixture.world(), initial, new SimInstant(300L),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
                 List.of(), base.transactionCommitter()));
         SceneMember dead = fixture.lease().members().getFirst();
@@ -387,7 +400,9 @@ class MedicalEvacuationOperationTest {
         MedicalEvacuationOperation operation = afterDeath.humanPopulation().medicalOperations().get(fixture.operation().id());
         assertEquals(MedicalEvacuationStatus.BLOCKED, operation.status());
         assertEquals(ActorLifeStatus.DEAD, afterDeath.actorLocations().get(dead.actorId()).condition().status());
-        assertEquals(SceneLeaseStatus.DRAINING, afterDeath.sceneLeases().get(fixture.lease().id()).status());
+        assertEquals(retainScope ? SceneLeaseStatus.DRAINING : SceneLeaseStatus.CLOSED, afterDeath.sceneLeases().get(fixture.lease().id()).status());
+        assertTrue(MedicalExecutionAuthority.participants(operation).stream().noneMatch(actor -> afterDeath.actorExecutions()
+                .current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEDICAL_TREATMENT).containsKey(actor)));
         assertEquals(PhysicalIntentStatus.PREPARED, afterDeath.physicalIntents().get(operation.consumptionIntentId()).status());
         assertTrue(operation.compactable());
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(fixture.world(), engine, "command:medical-blocked-running",
@@ -395,7 +410,7 @@ class MedicalEvacuationOperationTest {
 
         List<SceneMemberPosition> survivors = fixture.lease().members().stream().filter(member -> !member.equals(dead))
                 .map(member -> new SceneMemberPosition(member.actorId(), FrontierTestPositions.bodyCellOf(afterDeath.actorLocations().get(member.actorId())))).toList();
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(fixture.world(), engine, "command:medical-death-release",
+        if (retainScope) assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(fixture.world(), engine, "command:medical-death-release",
                 new SceneLeaseReleased(fixture.lease().id(), survivors))));
         FrontierWorldState released = state(engine);
         assertEquals(SceneLeaseStatus.CLOSED, released.sceneLeases().get(fixture.lease().id()).status());

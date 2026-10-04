@@ -31,18 +31,9 @@ public final class FrontierActorDeathConsequences implements ActorDeathConsequen
                 stoppedPlans = FrontierSceneBehaviors.transitionPlans(state, scene, next);
             }
         }
-        var outcome = participantScope == null ? FrontierSceneBehaviors.SceneDeathOutcome.unchanged(state)
-                : FrontierSceneBehaviors.afterActorDeath(state, leases.get(participantScope.id()), actor, atTick);
-        var population = outcome.humanPopulation();
-        var executions = outcome.actorExecutions();
         var changes = FrontierWorldStateUpdate.begin();
-        if (population != state.humanPopulation()) changes.humanPopulation(population);
-        if (outcome.resourceSites() != state.resourceSites()) changes.resourceSites(outcome.resourceSites());
-        var plans = outcome.strategicPlans() == state.strategicPlans() ? stoppedPlans : outcome.strategicPlans();
-        if (plans != state.strategicPlans()) changes.strategicPlans(plans);
-        if (outcome.physicalIntents() != state.physicalIntents()) changes.physicalIntents(outcome.physicalIntents());
-        if (outcome.serviceWorks() != state.serviceWorks()) changes.serviceWorks(outcome.serviceWorks());
-        var activities = ActorExecutionComposition.LIFECYCLE.acknowledgeActivityDeath(state, actor, executions, atTick);
+        if (stoppedPlans != state.strategicPlans()) changes.strategicPlans(stoppedPlans);
+        var activities = ActorExecutionComposition.LIFECYCLE.acknowledgeActivityDeath(state, actor, state.actorExecutions(), atTick);
         changes.merge(activities.changes());
         var ambient = new LinkedHashMap<>(state.ambientLeases());
         var presentation = ambient.get(actor);

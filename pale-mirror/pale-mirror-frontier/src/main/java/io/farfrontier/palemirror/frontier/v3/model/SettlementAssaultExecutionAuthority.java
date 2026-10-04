@@ -58,6 +58,25 @@ public final class SettlementAssaultExecutionAuthority {
         return assault;
     }
     static ActorActivityCapability capability() { return new ActorActivityCapability() {
+        @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
+            return Optional.of((state, execution, tick) -> {
+                var assault = require(state.strategicPlans().settlementAssaults(), execution);
+                var changes = FrontierWorldStateUpdate.begin();
+                if (assault.status() == SettlementAssaultStatus.HOT && assault.overseerId().equals(execution.actorId())) {
+                    // The command owner's loss invalidates contact, not the identity of the
+                    // expedition or its surviving members. Its terminal owner settles them.
+                    var next = assault;
+                    if (assault.tacticalPlan().phase() == TacticalPlanPhase.TRAVEL && !assault.march().complete()) {
+                        var issue = new ExpeditionMarchIssue(ExpeditionMarchIssueKind.CONTROLLER_LOST, execution.actorId(),
+                                assault.march().memberTopologies().get(execution.actorId()).edgeAfterCursor(assault.march().cursor()).id(),
+                                assault.march().cursor());
+                        next = assault.recordMarchIssue(issue);
+                    }
+                    changes.strategicPlans(state.strategicPlans().replaceSettlementAssault(next.retreatAfterOverseerLoss(execution.actorId())));
+                }
+                return new ActorActivityDeath.Acknowledgement(state, execution, changes, ActorActivityDeath.Disposition.RETAIN_CAUSAL_OWNER);
+            });
+        }
         @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId id, AmbientActorLease lease) {
             return false; // The assault owns formation/tactical goals, never ambient fallback motion.
         }
