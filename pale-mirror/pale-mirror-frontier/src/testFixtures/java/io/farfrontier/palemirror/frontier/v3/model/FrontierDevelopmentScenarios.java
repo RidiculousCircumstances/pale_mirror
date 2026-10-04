@@ -109,7 +109,7 @@ final class FrontierDevelopmentScenarios {
                 throw new IllegalStateException("route-patrol fixture ingress cannot reach its retained formation");
             }
             state = RoutePatrolProcess.reduceFormationAdvanced(state, settlement.id(),
-                    new RoutePatrolFormationAdvanced(taskId, RoutePatrolExecutionAuthority.current(state, current)));
+                    new RoutePatrolFormationAdvanced(taskId, PatrolFormationStep.capture(current), RoutePatrolExecutionAuthority.current(state, current)));
         }
         throw new IllegalStateException("route-patrol fixture ingress did not reach its declared bounded formation");
     }

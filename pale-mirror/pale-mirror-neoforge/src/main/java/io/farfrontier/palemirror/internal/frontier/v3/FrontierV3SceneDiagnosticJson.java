@@ -78,7 +78,7 @@ final class FrontierV3SceneDiagnosticJson {
                 + "\",\"harvestJob\":\"" + FrontierV3DiagnosticJson.quote(harvest == null ? "" : harvest.jobId().value())
                 + "\",\"productionJob\":\"" + FrontierV3DiagnosticJson.quote(production == null ? "" : production.jobId().value())
                 + "\",\"patrolTask\":\"" + FrontierV3DiagnosticJson.quote(routePatrol == null ? "" : routePatrol.taskId().value())
-                + "\"" + productionTraversal(state, productionJob) + serviceTraversal(serviceWork) + patrolTraversal(patrol)
+                + "\"" + productionTraversal(state, productionJob) + serviceTraversal(serviceWork) + patrolTraversal(state, patrol)
                 + ",\"members\":" + lease.members().size() + ",\"primaryActor\":\"" + FrontierV3DiagnosticJson.quote(primaryMember.actorId().value())
                 + "\",\"primaryEntityUuid\":\"" + primaryMember.entityId() + "\",\"explosionStatus\":\"" + (explosion == null ? "NONE" : explosion.status()) + "\""
                 + ",\"strikeStatus\":\"" + (strike == null ? "NONE" : strike.status()) + "\""
@@ -139,7 +139,7 @@ final class FrontierV3SceneDiagnosticJson {
                 + ",\"serviceTarget\":\"" + FrontierV3DiagnosticJson.quote(work.target().toString()) + "\"";
     }
 
-    private static String patrolTraversal(io.farfrontier.palemirror.frontier.v3.model.RoutePatrol patrol) {
+    private static String patrolTraversal(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.RoutePatrol patrol) {
         if (patrol == null) return ",\"patrolStatus\":\"\",\"patrolBlockReason\":\"\",\"patrolRouteIndex\":-1,\"patrolCurrent\":null,\"patrolNextSurface\":null,\"patrolNextBody\":null";
         var bodies = FrontierRoutePatrolSceneSupport.bodies(patrol);
         var leader = bodies.get(patrol.guardId());
@@ -152,7 +152,24 @@ final class FrontierV3SceneDiagnosticJson {
                 + patrol.blockReason().map(Enum::name).orElse("") + "\",\"patrolRouteIndex\":" + patrol.routeIndex()
                 + ",\"patrolCurrent\":" + FrontierV3DiagnosticJson.position(leader.supportingSurface().support())
                 + ",\"patrolNextSurface\":" + (nextBody == null ? "null" : FrontierV3DiagnosticJson.position(nextBody.supportingSurface().support()))
-                + ",\"patrolNextBody\":" + (nextBody == null ? "null" : FrontierV3DiagnosticJson.position(nextBody));
+                + ",\"patrolNextBody\":" + (nextBody == null ? "null" : FrontierV3DiagnosticJson.position(nextBody))
+                + patrolMembers(state, patrol);
+    }
+
+    private static String patrolMembers(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.RoutePatrol patrol) {
+        if (!patrol.active()) return ",\"patrolSpatialMembers\":[]";
+        var predecessor = io.farfrontier.palemirror.frontier.v3.model.PatrolFormationStep.capture(patrol);
+        var records = new java.util.ArrayList<String>();
+        for (var actor : patrol.memberIds().stream().sorted().toList()) {
+            var member = predecessor.members().get(actor);
+            var checkpoint = patrol.status() == io.farfrontier.palemirror.frontier.v3.model.RoutePatrolStatus.ASSEMBLING
+                    ? patrol.assembly().members().get(actor).checkpointSurface() : patrol.travel().members().get(actor).checkpointSurface();
+            records.add("{\"actor\":\"" + FrontierV3DiagnosticJson.quote(actor.value()) + "\",\"routeRevision\":" + member.routeRevision()
+                    + ",\"semanticCursor\":" + member.cursor() + ",\"approachCursor\":" + member.approachCursor()
+                    + ",\"checkpoint\":" + FrontierV3DiagnosticJson.position(checkpoint.support())
+                    + ",\"actualBody\":" + FrontierV3DiagnosticJson.position(state.actorLocations().get(actor).body()) + "}");
+        }
+        return ",\"patrolSpatialMembers\":[" + String.join(",", records) + "]";
     }
 
     private static String marchTraversal(SettlementAssault assault) {

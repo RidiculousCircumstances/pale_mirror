@@ -368,7 +368,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
     private static CommandPlan planPatrolFormation(FrontierWorldState state, RoutePatrolFormationObserved observed) {
         try {
             RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, new RoutePatrolSceneCause(observed.taskId()));
-            FrontierRoutePatrolSceneSupport.advanceFormationObserved(state, patrol, observed.leaseId(), observed.bodies(), observed.executions());
+            FrontierRoutePatrolSceneSupport.advanceFormationObserved(state, patrol, observed);
             return new CommandPlan.Accepted(List.of(new ProposedEvent(patrol.settlementId(), observed)));
         } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
@@ -418,7 +418,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
     private static FrontierWorldState reducePatrolFormation(FrontierWorldState state, SubjectId subject, RoutePatrolFormationObserved observed) {
         RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, new RoutePatrolSceneCause(observed.taskId()));
         if (!subject.equals(patrol.settlementId())) throw new IllegalArgumentException("route-patrol formation has a foreign owner");
-        return FrontierRoutePatrolSceneSupport.advanceFormationObserved(state, patrol, observed.leaseId(), observed.bodies(), observed.executions());
+        return FrontierRoutePatrolSceneSupport.advanceFormationObserved(state, patrol, observed);
     }
     private static FrontierWorldState reducePatrolFormationAdvanced(FrontierWorldState state, SubjectId subject, RoutePatrolFormationAdvanced advanced) {
         return RoutePatrolProcess.reduceFormationAdvanced(state, subject, advanced);

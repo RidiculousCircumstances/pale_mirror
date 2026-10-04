@@ -66,6 +66,24 @@ final class ActorExecutionStateCodec {
         for (int index = 0; index < count; index++) members.add(readId(in));
         return new ActorExecutionGroup(members);
     }
+    static void writeActuations(DataOutputStream out, ActorActuationGroup group) throws IOException {
+        out.writeShort(group.members().size());
+        for (var member : group.members()) {
+            FrontierWorldStateCodec.writeString(out, member.body().actorId().value());
+            out.writeLong(member.body().physicalEpoch());
+            writeId(out, member.execution());
+        }
+    }
+    static ActorActuationGroup readActuations(DataInputStream in) throws IOException {
+        int count = in.readUnsignedShort();
+        if (count < 1 || count > ActorExecutionState.MAX_ACTORS) throw new IOException("invalid actuation group bound");
+        var members = new java.util.ArrayList<ActorActuationId>(count);
+        for (int index = 0; index < count; index++) {
+            var body = new ActorBodyId(new SubjectId(FrontierWorldStateCodec.readString(in)), in.readLong());
+            members.add(new ActorActuationId(body, readId(in)));
+        }
+        return new ActorActuationGroup(members);
+    }
     private static Optional<ActorExecutionId> readOptional(DataInputStream in) throws IOException {
         return in.readBoolean() ? Optional.of(readId(in)) : Optional.empty();
     }

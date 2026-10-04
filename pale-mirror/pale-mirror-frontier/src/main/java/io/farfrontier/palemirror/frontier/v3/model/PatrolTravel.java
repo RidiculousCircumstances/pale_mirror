@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Optional;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin;
 
 /**
  * Exact retained movement state for one patrol column.
@@ -43,9 +45,12 @@ public record PatrolTravel(SubjectId leaderId, TraversalTopology leaderRoute,
         if (!leader.topology().equals(leaderRoute)) {
             throw new IllegalArgumentException("patrol leader must own the inspection route");
         }
-        if (copy.values().stream().map(Member::currentBody).distinct().count() != copy.size()) {
+        if (copy.values().stream().map(member -> member.corridor().get(member.cursor()).standingBody()).distinct().count() != copy.size()) {
             throw new IllegalArgumentException("patrol formation bodies must be distinct");
         }
+        if (copy.values().stream().anyMatch(member -> member.rejoin().isPresent())
+                && copy.values().stream().anyMatch(member -> !member.arrived() && member.rejoin().isEmpty()))
+            throw new IllegalArgumentException("a rejoining column must retain every unfinished member's approach");
         members = Map.copyOf(copy);
     }
 
@@ -61,6 +66,8 @@ public record PatrolTravel(SubjectId leaderId, TraversalTopology leaderRoute,
 
     /** Members whose exact next retained body is not currently occupied. */
     public List<SubjectId> safeAdvances() {
+        // Rejoin has a single whole-column acknowledgement, never individual route credit.
+        if (members.values().stream().anyMatch(member -> member.rejoin().isPresent())) return List.of();
         Set<BodyPosition> occupied = new LinkedHashSet<>(bodies().values());
         List<SubjectId> safe = new ArrayList<>();
         members.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
@@ -87,6 +94,8 @@ public record PatrolTravel(SubjectId leaderId, TraversalTopology leaderRoute,
      * progression; it deliberately does not accept arbitrary body coordinates.
      */
     public PatrolTravel advanceOne(SubjectId memberId) {
+        if (members.values().stream().anyMatch(member -> member.rejoin().isPresent()))
+            throw new IllegalArgumentException("patrol rejoin must settle through its coordinated formation boundary");
         SubjectId exactMember = Objects.requireNonNull(memberId, "patrol advance member");
         if (!safeAdvances().contains(exactMember)) {
             throw new IllegalArgumentException("patrol member next retained body is occupied or unavailable");
@@ -101,6 +110,7 @@ public record PatrolTravel(SubjectId leaderId, TraversalTopology leaderRoute,
      * distinct next pedestrian body before the column advances together. */
     public PatrolTravel advanceFormation() {
         if (complete()) throw new IllegalStateException("complete patrol formation has no next edge");
+        if (members.values().stream().anyMatch(member -> member.rejoin().isPresent())) return advanceRejoin();
         Set<BodyPosition> nextBodies = new LinkedHashSet<>();
         Map<SubjectId, Member> next = new LinkedHashMap<>();
         for (Map.Entry<SubjectId, Member> entry : members.entrySet()) {
@@ -112,6 +122,23 @@ public record PatrolTravel(SubjectId leaderId, TraversalTopology leaderRoute,
         return new PatrolTravel(leaderId, leaderRoute, next);
     }
 
+    /** Legal approach steps are serialized; no inspection cursor advances before the whole column rejoins. */
+    private PatrolTravel advanceRejoin() {
+        var next = new LinkedHashMap<>(members);
+        if (!members.values().stream().allMatch(Member::checkpointReached)) {
+            var order = members.keySet().stream().sorted(java.util.Comparator
+                    .comparingInt((SubjectId actor) -> actor.equals(leaderId) ? 0 : 1).thenComparing(actor -> actor)).toList();
+            var selected = order.stream().filter(actor -> {
+                var member = members.get(actor);
+                return !member.checkpointReached() && member.openRetainedEdge() && members.entrySet().stream()
+                        .noneMatch(other -> !other.getKey().equals(actor) && other.getValue().currentBody().equals(member.nextBody()));
+            }).findFirst().orElseThrow(() -> new IllegalArgumentException("patrol rejoin has no safe retained approach edge"));
+            next.put(selected, members.get(selected).advanceApproach());
+        }
+        if (next.values().stream().allMatch(Member::checkpointReached)) next.replaceAll((actor, member) -> member.commitCheckpoint());
+        return new PatrolTravel(leaderId, leaderRoute, next);
+    }
+
     /**
      * Bounded deterministic COLD progression. Each inner transition is the
      * same retained one-edge transition as HOT; it stops rather than crossing
@@ -120,6 +147,9 @@ public record PatrolTravel(SubjectId leaderId, TraversalTopology leaderRoute,
     public PatrolTravel advanceCold() {
         PatrolTravel current = this;
         for (int advance = 0; advance < MAX_COLD_ADVANCES && !current.complete(); advance++) {
+            if (current.members().values().stream().anyMatch(member -> member.rejoin().isPresent())) {
+                current = current.advanceFormation(); continue;
+            }
             List<SubjectId> safe = current.safeAdvances();
             if (safe.isEmpty()) break;
             current = current.advanceOne(safe.getFirst());
@@ -139,28 +169,53 @@ public record PatrolTravel(SubjectId leaderId, TraversalTopology leaderRoute,
     }
 
     /** One member's immutable body corridor and sole cursor. */
-    public record Member(TraversalTopology topology, int cursor) {
+    public record Member(TraversalTopology topology, int cursor, long routeRevision, Optional<TraversalRejoin> rejoin) {
+        public Member(TraversalTopology topology, int cursor) { this(topology, cursor, 1L, Optional.empty()); }
         public Member {
             topology = requirePedestrian(Objects.requireNonNull(topology, "patrol member topology"));
             if (cursor < 0 || cursor >= topology.linearCorridorSurfaces().size()) {
                 throw new IllegalArgumentException("patrol member cursor is outside retained corridor");
             }
+            if (routeRevision < 1L) throw new IllegalArgumentException("patrol spatial revision is not positive");
+            rejoin = Objects.requireNonNull(rejoin, "patrol member rejoin");
+            var surfaces = topology.linearCorridorSurfaces();
+            var target = surfaces.get(Math.min(cursor + 1, surfaces.size() - 1));
+            if (rejoin.isPresent() && !rejoin.orElseThrow().target().equals(target))
+                throw new IllegalArgumentException("patrol rejoin changes its retained inspection checkpoint");
         }
 
         public List<SurfaceAnchor> corridor() { return topology.linearCorridorSurfaces(); }
-        public SurfaceAnchor currentSurface() { return corridor().get(cursor); }
+        public SurfaceAnchor currentSurface() { return rejoin.map(TraversalRejoin::current).orElse(corridor().get(cursor)); }
+        public SurfaceAnchor checkpointSurface() { return corridor().get(Math.min(cursor + 1, corridor().size() - 1)); }
         public BodyPosition currentBody() { return BodyPosition.above(currentSurface()); }
-        public boolean arrived() { return cursor == corridor().size() - 1; }
+        public boolean arrived() { return rejoin.isEmpty() && cursor == corridor().size() - 1; }
         public SurfaceAnchor nextSurface() {
             if (arrived()) throw new IllegalStateException("arrived patrol member has no next surface");
+            if (rejoin.isPresent()) {
+                var approach = rejoin.orElseThrow(); return approach.path().get(approach.nextCursor(1));
+            }
             return corridor().get(cursor + 1);
         }
         public BodyPosition nextBody() { return BodyPosition.above(nextSurface()); }
+        public boolean openRetainedEdge() { return cursor == corridor().size() - 1
+                || topology.edgeAfterCursor(cursor).traversableBy(TraversalCapability.PEDESTRIAN); }
+        public Member withRejoin(TraversalRejoin approach) { return new Member(topology, cursor, Math.incrementExact(routeRevision), Optional.of(approach)); }
+        boolean checkpointReached() { return arrived() || rejoin.filter(TraversalRejoin::arrived).isPresent(); }
+        Member advanceApproach() {
+            if (checkpointReached() || !openRetainedEdge()) throw new IllegalArgumentException("patrol approach cannot advance");
+            var approach = rejoin.orElseThrow();
+            return new Member(topology, cursor, routeRevision, Optional.of(approach.advance(approach.nextCursor(1), 1)));
+        }
+        Member commitCheckpoint() {
+            if (!checkpointReached()) throw new IllegalArgumentException("patrol column has not rejoined its checkpoint");
+            return rejoin.isEmpty() ? this : new Member(topology, Math.min(cursor + 1, corridor().size() - 1), routeRevision, Optional.empty());
+        }
         public Member advanceOne() {
-            if (arrived() || !topology.edgeAfterCursor(cursor).traversableBy(TraversalCapability.PEDESTRIAN)) {
+            if (rejoin.isPresent()) throw new IllegalArgumentException("a rejoining patrol member needs coordinated checkpoint settlement");
+            if (arrived() || !openRetainedEdge()) {
                 throw new IllegalArgumentException("patrol member cannot advance unavailable retained edge");
             }
-            return new Member(topology, cursor + 1);
+            return new Member(topology, cursor + 1, routeRevision, Optional.empty());
         }
     }
 }

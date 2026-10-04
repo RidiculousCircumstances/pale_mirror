@@ -20,6 +20,7 @@ final class PatrolStateCodec {
         for (var entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             subject(output, entry.getKey()); TraversalTopologyStateCodec.write(output, entry.getValue().topology());
             FrontierWorldStateCodec.writeCount(output, entry.getValue().cursor());
+            output.writeLong(entry.getValue().routeRevision()); TraversalRejoinCodec.write(output, entry.getValue().rejoin());
         }
     }
 
@@ -27,7 +28,8 @@ final class PatrolStateCodec {
         Map<SubjectId, PatrolAssembly.Member> members = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId actor = subject(input);
-            if (members.put(actor, new PatrolAssembly.Member(TraversalTopologyStateCodec.read(input), FrontierWorldStateCodec.readCount(input))) != null) {
+            if (members.put(actor, new PatrolAssembly.Member(TraversalTopologyStateCodec.read(input), FrontierWorldStateCodec.readCount(input),
+                    input.readLong(), TraversalRejoinCodec.read(input))) != null) {
                 throw new IllegalArgumentException("duplicate patrol assembly member");
             }
         }
@@ -40,6 +42,7 @@ final class PatrolStateCodec {
         for (var entry : travel.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             subject(output, entry.getKey()); TraversalTopologyStateCodec.write(output, entry.getValue().topology());
             FrontierWorldStateCodec.writeCount(output, entry.getValue().cursor());
+            output.writeLong(entry.getValue().routeRevision()); TraversalRejoinCodec.write(output, entry.getValue().rejoin());
         }
     }
 
@@ -48,7 +51,8 @@ final class PatrolStateCodec {
         Map<SubjectId, PatrolTravel.Member> members = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId actor = subject(input);
-            if (members.put(actor, new PatrolTravel.Member(TraversalTopologyStateCodec.read(input), FrontierWorldStateCodec.readCount(input))) != null) {
+            if (members.put(actor, new PatrolTravel.Member(TraversalTopologyStateCodec.read(input), FrontierWorldStateCodec.readCount(input),
+                    input.readLong(), TraversalRejoinCodec.read(input))) != null) {
                 throw new IllegalArgumentException("duplicate patrol travel member");
             }
         }

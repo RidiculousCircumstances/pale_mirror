@@ -841,7 +841,9 @@ class FrontierV3DiagnosticJsonTest {
                 new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
                 candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
                 members, java.util.Set.of(), Optional.empty());
-        FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
+        FrontierWorldState hot = before.prepareSceneLease(lease);
+        for (var member : lease.members()) hot = io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts.present(hot, member.actorId());
+        hot = hot.transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
 
         String scene = FrontierV3DiagnosticJson.render("scene", candidate.assaultId().value(), checkpoint, hot, Optional.empty());
 
@@ -872,7 +874,9 @@ class FrontierV3DiagnosticJsonTest {
         SceneLease firstLease = SceneLease.forCause(firstLeaseId, checkpoint.worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
                 candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, firstMembers, java.util.Set.of(), Optional.empty());
-        state = state.prepareSceneLease(firstLease).transitionSceneLease(firstLeaseId, SceneLeaseStatus.HOT);
+        state = state.prepareSceneLease(firstLease);
+        for (var member : firstLease.members()) state = io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts.present(state, member.actorId());
+        state = state.transitionSceneLease(firstLeaseId, SceneLeaseStatus.HOT);
         SubjectId firstAttacker = assault.combatantAttackerIds().stream().sorted().findFirst().orElseThrow();
         SubjectId firstTarget = assault.defenderIds().stream().sorted().findFirst().orElseThrow();
         SubjectId firstCause = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity.strike(assault.id(), firstAttacker, 0L);

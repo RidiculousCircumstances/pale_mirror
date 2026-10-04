@@ -33,7 +33,7 @@ class RoutePatrolProcessTest {
         RoutePatrol expected = before.advanceFormation();
 
         FrontierWorldState advanced = RoutePatrolProcess.reduceFormationAdvanced(state, before.settlementId(),
-                new RoutePatrolFormationAdvanced(before.taskId(), RoutePatrolExecutionAuthority.current(state, before)));
+                new RoutePatrolFormationAdvanced(before.taskId(), PatrolFormationStep.capture(before), RoutePatrolExecutionAuthority.current(state, before)));
 
         assertEquals(expected, advanced.strategicPlans().routePatrols().get(before.taskId()));
         assertEquals(FrontierRoutePatrolSceneSupport.bodies(expected), before.memberIds().stream()

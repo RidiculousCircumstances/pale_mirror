@@ -52,9 +52,7 @@ public final class RoutePatrolExecutionAuthority {
         @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
             return request -> {
                 var patrol = require(request.expectedState().strategicPlans().routePatrols(), request.execution());
-                if (!FrontierRoutePatrolSceneSupport.bodies(patrol).get(request.execution().actorId()).equals(request.observedPosition()))
-                    throw new IllegalArgumentException("patrol requires its observed formation rejoin before COLD");
-                return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+                return PatrolSpatialContinuation.acknowledge(request, patrol);
             };
         }
         @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }

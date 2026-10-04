@@ -217,7 +217,8 @@ public final class FrontierV3RoutePatrolGameTests {
                 new RoutePatrolStarted(patrol, RoutePatrolExecutionAuthority.admission(state, patrol)));
         while (patrol.status() == RoutePatrolStatus.ASSEMBLING) {
             state = io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess.reduceFormationAdvanced(state, settlement.id(),
-                    new RoutePatrolFormationAdvanced(taskId, RoutePatrolExecutionAuthority.current(state, patrol)));
+                    new RoutePatrolFormationAdvanced(taskId, io.farfrontier.palemirror.frontier.v3.model.PatrolFormationStep.capture(patrol),
+                            RoutePatrolExecutionAuthority.current(state, patrol)));
             patrol = state.strategicPlans().routePatrols().get(taskId);
         }
         List<SurfaceAnchor> surfaces = patrol.inspectionRoute().linearCorridorSurfaces().stream().limit(4).toList();

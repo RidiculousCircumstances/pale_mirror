@@ -74,21 +74,32 @@ final class RoutePatrolPayloadCodecs {
         @Override public String type() { return "frontier.route_patrol_formation_observed"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             RoutePatrolFormationObserved observed = (RoutePatrolFormationObserved) payload;
-            subject(output, observed.taskId()); FrontierWorldPayloadCodecs.writeString(output, observed.leaseId().value()); output.writeByte(observed.bodies().size());
+            subject(output, observed.taskId()); FrontierWorldPayloadCodecs.writeString(output, observed.leaseId().value());
+            output.writeLong(observed.leaseRevision()); output.writeByte(observed.bodies().size());
             for (SubjectId actor : observed.bodies().keySet().stream().sorted().toList()) { subject(output, actor); BodyPosition body = observed.bodies().get(actor); output.writeInt(body.x()); output.writeInt(body.y()); output.writeInt(body.z()); }
-            ActorExecutionStateCodec.writeGroup(output, observed.executions());
+            PatrolFormationStepCodec.write(output, observed.predecessor());
+            ActorExecutionStateCodec.writeActuations(output, observed.actuations());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
-            SubjectId task = subject(input); SceneLeaseId lease = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)); Map<SubjectId, BodyPosition> bodies = new LinkedHashMap<>();
-            for (int index = 0, count = input.readUnsignedByte(); index < count; index++) bodies.put(subject(input), new BodyPosition(input.readInt(), input.readInt(), input.readInt()));
-            return new RoutePatrolFormationObserved(task, lease, bodies, ActorExecutionStateCodec.readGroup(input));
+            SubjectId task = subject(input); SceneLeaseId lease = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input));
+            long revision = input.readLong(); Map<SubjectId, BodyPosition> bodies = new LinkedHashMap<>();
+            int count = input.readUnsignedByte();
+            if (count < 2 || count > PatrolTravel.MAX_MEMBERS) throw new IOException("invalid patrol observed cohort");
+            for (int index = 0; index < count; index++) {
+                var actor = subject(input); var body = new BodyPosition(input.readInt(), input.readInt(), input.readInt());
+                if (bodies.putIfAbsent(actor, body) != null) throw new IOException("duplicate patrol observed member");
+            }
+            return new RoutePatrolFormationObserved(task, lease, revision, bodies,
+                    PatrolFormationStepCodec.read(input), ActorExecutionStateCodec.readActuations(input));
         }); }
     }; }
     static PayloadCodec formationAdvanced() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_patrol_formation_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            var advanced = (RoutePatrolFormationAdvanced) payload; subject(output, advanced.taskId()); ActorExecutionStateCodec.writeGroup(output, advanced.executions()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RoutePatrolFormationAdvanced(subject(input), ActorExecutionStateCodec.readGroup(input))); }
+            var advanced = (RoutePatrolFormationAdvanced) payload; subject(output, advanced.taskId());
+            PatrolFormationStepCodec.write(output, advanced.predecessor()); ActorExecutionStateCodec.writeGroup(output, advanced.executions()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                new RoutePatrolFormationAdvanced(subject(input), PatrolFormationStepCodec.read(input), ActorExecutionStateCodec.readGroup(input))); }
     }; }
     private static void writePatrol(DataOutputStream output, RoutePatrol patrol) throws IOException {
         subject(output, patrol.taskId()); subject(output, patrol.settlementId()); RouteUnitManifestCodec.write(output, patrol.unit());

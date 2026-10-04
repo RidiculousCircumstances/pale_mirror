@@ -434,6 +434,12 @@ public final class StrategicPlanState {
         return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
                 hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults, decisionAuthorities, frontEffects);
     }
+    public StrategicPlanState replacePatrol(RoutePatrol patrol) {
+        if (!routePatrols.containsKey(patrol.taskId())) throw new IllegalArgumentException("unknown retained patrol");
+        Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(patrol.taskId(), patrol);
+        return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults, decisionAuthorities, frontEffects);
+    }
 
     public StrategicPlanState confirmPatrolObstruction(SubjectId taskId, BlockPosition position) {
         RoutePatrol current = routePatrols.get(taskId);

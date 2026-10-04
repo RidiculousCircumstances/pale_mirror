@@ -21,10 +21,13 @@ class RoutePatrolPayloadCodecTest {
                 new RoutePatrolStarted(patrol, group),
                 RoutePatrolDiagnosticProducer.OCCUPIED_NEXT_BODY.create(patrol.taskId(), group),
                 RoutePatrolFailureDiagnosticProducer.memberLost(patrol.taskId(), group),
-                new RoutePatrolFormationAdvanced(patrol.taskId(), group),
+                new RoutePatrolFormationAdvanced(patrol.taskId(), PatrolFormationStep.capture(patrol), group),
                 new RoutePatrolObstructionConfirmed(patrol.taskId(), patrol.route().getFirst(), group),
-                new RoutePatrolFormationObserved(patrol.taskId(), new SceneLeaseId("lease:patrol-codecs"),
-                        FrontierRoutePatrolSceneSupport.bodies(patrol.advanceFormation()), group));
+                new RoutePatrolFormationObserved(patrol.taskId(), new SceneLeaseId("lease:patrol-codecs"), 1L,
+                        FrontierRoutePatrolSceneSupport.bodies(patrol.advanceFormation()), PatrolFormationStep.capture(patrol),
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationGroup(group.members().stream()
+                                .map(id -> new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(id.actorId(), 1L), id)).toList())));
         for (var payload : payloads) {
             byte[] bytes = codecs.encode(payload);
             assertEquals(payload, codecs.decode(payload.type(), bytes));

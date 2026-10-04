@@ -171,6 +171,11 @@ public record RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitMan
         }
         throw new IllegalArgumentException("only an active patrol may advance");
     }
+    public RoutePatrol withSpatialContinuation(PatrolAssembly nextAssembly, PatrolTravel nextTravel) {
+        if (!active()) throw new IllegalArgumentException("terminal patrol has no advancing spatial continuation");
+        return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, nextAssembly, nextTravel,
+                tacticalPlan, status, obstruction, blockReason);
+    }
     /** Advances the exact retained column by one shared edge; callers cannot choose a guard. */
     public RoutePatrol advanceFormation() {
         if (status == RoutePatrolStatus.ASSEMBLING) {

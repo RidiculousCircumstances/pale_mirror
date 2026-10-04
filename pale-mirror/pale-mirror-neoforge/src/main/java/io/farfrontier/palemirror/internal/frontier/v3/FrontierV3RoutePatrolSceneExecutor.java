@@ -157,6 +157,16 @@ final class FrontierV3RoutePatrolSceneExecutor {
             block(level, runtime, state, lease, retained, RoutePatrolDiagnosticProducer.NO_OPEN_RETAINED_EDGE); return;
         }
         Map<SubjectId, BodyPosition> formationBodies = FrontierRoutePatrolSceneSupport.bodies(formation);
+        var executions = RoutePatrolExecutionAuthority.current(state, retained);
+        var captured = new java.util.LinkedHashMap<SubjectId, FrontierV3ActorActuation>();
+        for (SceneMember candidate : lease.members()) {
+            var body = (Mob) level.getEntity(candidate.entityId());
+            captured.put(candidate.actorId(), FrontierV3ActorActuation.capture(state, body,
+                    executions.requireMember(candidate.actorId()), runtime::decodedState));
+        }
+        var receipt = new RoutePatrolFormationObserved(retained.taskId(), lease.id(), lease.revision(), formationBodies,
+                PatrolFormationStep.capture(retained), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationGroup(
+                        captured.values().stream().map(FrontierV3ActorActuation::id).toList()));
         boolean arrived = true;
         for (SceneMember candidate : lease.members()) {
             Entity candidateEntity = level.getEntity(candidate.entityId()); BodyPosition targetBody = formationBodies.get(candidate.actorId());
@@ -165,8 +175,13 @@ final class FrontierV3RoutePatrolSceneExecutor {
             }
             if (!at(candidateBody, targetBody.supportingSurface())) { arrived = false; break; }
         }
-        if (arrived) { observeFormation(level, runtime, state, lease, retained, formationBodies); return; }
-        var executions = io.farfrontier.palemirror.frontier.v3.model.RoutePatrolExecutionAuthority.current(state, retained);
+        if (arrived) {
+            for (SceneMember candidate : lease.members()) {
+                var body = (Mob) level.getEntity(candidate.entityId());
+                if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
+            }
+            observeFormation(level, runtime, lease, receipt); return;
+        }
         for (SceneMember candidate : lease.members()) {
             Entity candidateEntity = level.getEntity(candidate.entityId()); BodyPosition targetBody = formationBodies.get(candidate.actorId());
             if (!(candidateEntity instanceof Mob candidateBody) || targetBody == null) continue;
@@ -176,16 +191,14 @@ final class FrontierV3RoutePatrolSceneExecutor {
                 }
                 FrontierV3GoalNavigation.pursue(level, candidateBody, FrontierV3GoalNavigation.Goal.station(targetBody.supportingSurface(),
                         new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())),
-                        FrontierV3ActorActuation.capture(state, candidateBody, executions.requireMember(candidate.actorId()), runtime::decodedState));
+                        captured.get(candidate.actorId()));
             }
         }
     }
 
-    private static void observeFormation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease,
-                                         RoutePatrol patrol, Map<SubjectId, BodyPosition> bodies) {
-        CommandResult result = submit(runtime, "route-patrol-formation", lease.id().value(),
-                new RoutePatrolFormationObserved(patrol.taskId(), lease.id(), bodies,
-                        io.farfrontier.palemirror.frontier.v3.model.RoutePatrolExecutionAuthority.current(state, patrol)));
+    private static void observeFormation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
+                                         RoutePatrolFormationObserved receipt) {
+        CommandResult result = submit(runtime, "route-patrol-formation", lease.id().value(), receipt);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_formation", lease, result);
     }
     private static void block(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease, RoutePatrol patrol,

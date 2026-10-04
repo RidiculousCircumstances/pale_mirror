@@ -18,6 +18,30 @@ class PatrolTravelTest {
     private static final SubjectId SCOUT = new SubjectId("resident:scout");
 
     @Test
+    void unevenNonFlatRejoinRetainsOneInspectionEdgeUntilBothMembersReachTheirCheckpoints() {
+        var leaderRoute = topology("rejoin-leader", List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 65, 0), new BlockPosition(2, 65, 0)));
+        var scoutRoute = topology("rejoin-scout", List.of(new BlockPosition(-1, 64, 0), new BlockPosition(0, 64, 0), new BlockPosition(1, 65, 0)));
+        var leader = new PatrolTravel.Member(leaderRoute, 0).withRejoin(new io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin(
+                List.of(new SurfaceAnchor(new BlockPosition(1, 65, 0))), 0));
+        var scout = new PatrolTravel.Member(scoutRoute, 0).withRejoin(new io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin(
+                List.of(new SurfaceAnchor(new BlockPosition(-2, 64, 0)), new SurfaceAnchor(new BlockPosition(-1, 64, 0)),
+                        new SurfaceAnchor(new BlockPosition(0, 64, 0))), 0));
+        var travel = new PatrolTravel(LEADER, leaderRoute, Map.of(LEADER, leader, SCOUT, scout));
+        assertTrue(travel.safeAdvances().isEmpty(), "there is no individual semantic advance while a column is rejoining");
+        assertThrows(IllegalArgumentException.class, () -> travel.advanceOne(LEADER));
+        var approaching = travel.advanceFormation();
+        assertEquals(0, approaching.routeCursor(), "an arrived leader cannot skip the unfinished follower");
+        assertEquals(leader.currentBody(), approaching.bodies().get(LEADER));
+        var rejoined = approaching.advanceFormation();
+        assertEquals(1, rejoined.routeCursor());
+        assertEquals(1, rejoined.members().get(SCOUT).cursor());
+        assertTrue(rejoined.members().values().stream().allMatch(member -> member.rejoin().isEmpty()));
+        assertEquals(leaderRoute, rejoined.leaderRoute());
+        assertEquals(scoutRoute, rejoined.members().get(SCOUT).topology());
+        assertEquals(2L, rejoined.leader().routeRevision());
+    }
+
+    @Test
     void columnAdvancesOnlyIntoAnExactVacatedRetainedBody() {
         TraversalTopology leaderRoute = corridor("leader", List.of(0, 1, 2, 3));
         TraversalTopology scoutRoute = corridor("scout", List.of(-1, 0, 1, 2));

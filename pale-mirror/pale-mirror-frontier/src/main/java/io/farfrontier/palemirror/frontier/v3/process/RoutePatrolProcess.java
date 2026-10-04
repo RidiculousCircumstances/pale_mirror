@@ -90,7 +90,13 @@ public final class RoutePatrolProcess {
                     return List.copyOf(events);
                 }
                 // COLD owns the same retained formation edge; no actor/body coordinate is selected here.
-                events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFormationAdvanced(current.taskId(),
+                if (!PatrolSpatialContinuation.openFormation(state, current, next)) {
+                    events.add(new ProposedEvent(current.settlementId(), RoutePatrolDiagnosticProducer.NO_OPEN_RETAINED_EDGE.create(current.taskId(),
+                            RoutePatrolExecutionAuthority.current(state, patrol))));
+                    events.add(transition(task, StrategicTaskStatus.BLOCKED));
+                    return List.copyOf(events);
+                }
+                events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFormationAdvanced(current.taskId(), PatrolFormationStep.capture(current),
                         RoutePatrolExecutionAuthority.current(state, patrol))));
                 current = next;
                 if (current.status() == RoutePatrolStatus.ROUTE_CLEAR) { events.add(transition(task, StrategicTaskStatus.COMPLETED)); return List.copyOf(events); }
@@ -128,9 +134,12 @@ public final class RoutePatrolProcess {
             throw new IllegalArgumentException("route-patrol formation advance has foreign owner");
         }
         RoutePatrol next = patrol.advanceFormation();
+        advanced.predecessor().requireCurrent(patrol);
         RoutePatrolExecutionAuthority.requireCurrent(state, patrol, advanced.executions());
         if (!ActorExecutionCoordinator.coldAvailable(state, patrol.memberIds()))
             throw new IllegalArgumentException("COLD patrol cannot advance physically held participants");
+        if (!PatrolSpatialContinuation.openFormation(state, patrol, next))
+            throw new IllegalArgumentException("COLD patrol lacks known open geometry for its formation edge");
         java.util.Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(state.actorLocations());
         for (var entry : FrontierRoutePatrolSceneSupport.bodies(patrol).entrySet()) {
             ActorLocation current = locations.get(entry.getKey());
