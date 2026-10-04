@@ -133,8 +133,30 @@ consumption completes feeding; activity selection owns subsequent travel.
 Focused run45037 PASS36s (67 frontier checks plus one native-adapter navigation
 check), guardrails/native/pilot/test compilation run51799 PASS10s. These are
 modeled/adapter-boundary facts, not native graphical acceptance.
-Remaining known HOT position writers: ordinary production/service traversal;
-the full consumer inventory, integrated UAE acceptance and deployment remain OPEN.
+2026-10-04 ordinary production/service checkpoint2e86479e (schema244):
+semantic arrival/progress/block payloads capture full body/execution/scope plus
+family cursor/stage predecessors and require independent common inspection.
+Their reducers no longer write HOT position. Production departure checkpoints
+retain a versioned bounded approach to the same unfinished station, including
+an explicit non-advancing origin when known geometry is unavailable. COLD
+requires exact current execution/body/spatial predecessor and shared known
+geometry; rejoin never awards processing. HOT delegates the retained approach
+to the common goal navigator without changing the original work topology.
+Snapshot and job/event codecs retain the current format; old worlds fail closed.
+Focused production/service model coverage:66 checks passed in run45352;
+the combined command failed only its separate filesystem fixture because the
+new common observation incorrectly excluded legal scene revision0. That source
+contradiction is repaired; run30964 passed the same filesystem restart check,
+eight movement/field authority checks plus five automatic architecture checks
+and guardrails in20s. Codec/schema run11757 PASS25s; final native compilation
+77722 PASS18s. Both architecture maps validate. Native/pilot/test sources
+compile. Service HOT navigation accepts lawful intermediate retained-edge motion
+without awarding semantic arrival. Retired the old pilot
+method that fabricated production arrivals and later teleported an unowned body;
+retained native collision/modeled scope component checks are not a substitute
+for integrated lifecycle/death acceptance.
+Service off-cursor departure/re-admission and the full real consumer inventory
+remain OPEN, as do integrated UAE graphical acceptance and deployment.
 
 1. **Assignment is not current execution.** A paused job retains its exact
    worker relation without permission to act. Execution holds a typed reference

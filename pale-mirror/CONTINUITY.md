@@ -13,7 +13,7 @@ do not finish it. The user's current assignment and
 
 Implementation Git root: /home/rd/proj/pm-f06r3-facility-lane-recovery,
 branch feat/baker-carry-orders-20260926; Gradle root is its pale-mirror/.
-Source HEAD 9eca26cb, fresh-world schema243. Canonical governance is this
+Source HEAD 2e86479e, fresh-world schema244. Canonical governance is this
 checkout, /home/rd/proj/pm-governance/pale-mirror. One active ledger only.
 Origin: git@github.com:RidiculousCircumstances/pale_mirror.git.
 
@@ -81,20 +81,43 @@ validate. These are modeled/adapter-boundary facts, not graphical acceptance.
 
 ## Current next action and remaining goal
 
-Meal/movement source checkpoint is clean; governance records its semantics.
-No task-owned Gradle/client/server process remains from the completed runs.
-No packaging, push, live operation or new deployment has occurred.
+Checkpoint2e86479e removes production/service HOT pose writers
+and old-cursor HOT scope gate. Traversal/progress/block receipts retain captured
+body/execution/scope plus family cursor/stage predecessor; native adapters capture
+before common inspection and fence callbacks against immutable owner/scope changes.
+ProductionSpatialState/JourneyKnowledge/ColdJourney retain a versioned bounded
+approach or unavailable-knowledge origin at common body departure. Original work
+topology/progress stays unchanged; COLD validates exact execution/body/predecessor
+and shared known geometry, never credits processing for return travel. Candidate,
+ambient handoff, HOT shared navigation and both job/snapshot codecs are wired.
+Explicit STATIONS geometry passage opens only the facility's declared port/stations;
+physical deltas remain hard, no moving body becomes terrain.
 
-Next connected source cut: ordinary non-bakery production and settlement
-service work still use advanceWorker to write ActorLocation and require the
-old route cursor pose in requireHotLease. Independent common observation of
-the next station would violate that old pose gate. Replace the connected
-receipt, native actuation, semantic predecessor and pose validation together;
-do not merely remove the gate or keep a second active writer.
-ProductionWorkTraversalAdvanced currently lacks body/execution/scope capture;
-SettlementServiceWorkTraversalAdvanced has nominal execution only.
-Inspect unload/COLD continuation, scene admission and hydration in this cut,
-not helper-by-helper test cycles that rediscover predictable mismatches.
+Focused run45352 passed66 frontier checks (production lifecycle55, work clock3,
+service6, connected departure/recovery2); combined command failed the separate
+filesystem fixture. It exposed a real shared API contradiction: legal scene
+revision0 rejected by ActorHotObservation. Fixed to accept explicit non-negative
+scope versions with unchanged exact comparison/body fences. Run30964 PASS20s:
+one filesystem recovery, eight movement/field authority and five architecture
+checks plus guardrails. Schema/hydration run11757 PASS25s covers four codec
+checks plus five automatic architecture checks. Service HOT motion now continues
+lawful intermediate retained-edge poses rather than raising cursor conflict;
+final native compile77722 PASS18s. Both architecture maps validate. All
+main/native/pilot/test source sets compiled. Compile
+syntax/fixture errors in earlier65238/85034/90692 were corrected; no test was
+waived. Old76241 handle is missing, so its lost result is not claimed.
+Removed one obsolete production pilot method that fabricated arrivals and then
+teleported a legacy-owned body outside the canonical map. Native collision and
+modeled scope component checks remain; full lifecycle/death native acceptance
+is still owed. Schema244 bytes reject old disposable worlds.
+
+No task-owned Gradle/client/server process remains from these completed runs.
+No packaging, push, live operation or new deployment occurred.
+Next connected source cut: service still requires its old cursor at candidate
+admission after off-cursor unload/re-entry. Its HOT intermediate-edge motion
+and receipt adoption are done; departure/re-admission continuation is not.
+Complete that lifecycle
+and expose retained approach/wait diagnostics, then finish the full caller inventory.
 
 Then close the real production caller inventory: creation/adoption/removal,
 navigation/stop, position, death/unload/recovery across all UAE rows, including

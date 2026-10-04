@@ -840,6 +840,25 @@ depot access; other ambient purposes remain explicitly exact-only where no
 bounded alternative capability is registered. This is not adoption of every
 scene family's admission protocol.
 
+Ordinary topology-owned production/service progress receipts retain the exact
+body epoch, execution generation, scope revision and family semantic predecessor.
+A scope revision can legitimately be0; its explicit captured declaration and
+exact comparison confer authority, not positivity or an inferred default.
+Independent common inspection owns HOT pose; semantic cursor/stage receipts
+cannot install it. Resource effect settlement remains a separate obligation.
+
+For ordinary production, observed departure atomically retains an owner-local
+bounded approach to the unfinished station without changing the original
+semantic topology or awarding work. The shared geometry provider interprets
+explicit declared facility-station access and physical deltas; moving residents
+are not permanent terrain. If known geometry cannot supply an approach, retain
+the exact departure origin as a visible non-advancing owner obligation, never
+reset work or teleport to the old cursor. COLD checks current execution/body and
+spatial predecessor, excludes physical custody and grants no processing credit
+for returning to a work station. HOT uses the common navigator under the retained
+approach's hard latitude. The equivalent service departure/re-admission adoption
+remains implementation debt; receipt-only adoption does not close it.
+
 Process families consume one closed provider-neutral movement/result contract.
 They may own different routes, formations and station semantics, but may not
 embed their own coordinate comparison, Minecraft path clock or fallback route.
