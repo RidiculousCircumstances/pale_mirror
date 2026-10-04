@@ -14,7 +14,12 @@ public final class ServiceClearanceTargets {
     /** Bounded exit region, independent of any preferred parking destination or activity. */
     public static List<SurfaceAnchor> exits(ServiceAccessBoundary boundary,
             SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded) {
-        if (boundary.cleared(start.standingBody())) return List.of(start);
+        // A centre/feet-derived HOT position can already be outside the boundary while
+        // the body still straddles its raised sill. It is not a standable destination.
+        // Keep pursuing the shared region until real supported exit observation wins.
+        if (boundary.cleared(start.standingBody())
+                && start.equals(knowledge.supportAt(start.x(), start.z()))
+                && knowledge.traversable(List.of(start))) return List.of(start);
         return egressRegion(boundary, knowledge).stream().filter(candidate -> !excluded.contains(candidate))
                 .sorted(java.util.Comparator
                 .comparingInt((SurfaceAnchor surface) -> Math.abs(surface.x() - start.x())

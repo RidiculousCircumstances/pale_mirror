@@ -21,6 +21,29 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void anUnsupportedRaisedSillEdgeIsNotItsOwnServiceExit() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:unsupported-service-exit-edge"), 20260918065L));
+        var settlementId = new SubjectId("settlement:7");
+        var port = SettlementServiceAccessPoints.depotPort(state, settlementId);
+        var actorId = new SubjectId("resident:7-9");
+        var unsupported = SurfaceAnchor.at(133, 64, 14);
+        assertTrue(port.accessBoundary().cleared(unsupported.standingBody()));
+        var candidates = KnownServiceExitNavigation.exitStations(state, settlementId,
+                FrontierWorldState.depotId(settlementId), actorId, unsupported);
+        assertTrue(!candidates.isEmpty(), "a straddling body still needs a supported exit target");
+        assertTrue(!candidates.contains(unsupported), "being outside the boundary is not support evidence");
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
+        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
+                .findFirst().orElseThrow();
+        var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlementId,
+                List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
+                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+        assertTrue(candidates.stream().allMatch(surface -> surface.equals(knowledge.supportAt(surface.x(), surface.z()))));
+        var supported = candidates.getFirst();
+        assertEquals(List.of(supported), KnownServiceExitNavigation.exitStations(state, settlementId,
+                FrontierWorldState.depotId(settlementId), actorId, supported));
+    }
     @Test void serviceGeometryIsReusedButPhysicalChangesInvalidateIt() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:service-geometry-reuse"), 20260918065L));
