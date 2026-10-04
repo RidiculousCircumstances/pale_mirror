@@ -26,7 +26,6 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierMedicalTreatmentSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
@@ -61,10 +60,7 @@ final class FrontierV3ExactItemConsumptionExecutor {
                 .filter(intent -> intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION)
                 .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING
                         || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
-                .filter(intent -> intent.lifecycleOwner() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT
-                        || (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
-                        ? FrontierMedicalTreatmentSceneSupport.permitsConsumptionReceipt(state, intent)
-                        : FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent)))
+                .filter(intent -> FrontierV3ExactConsumptionAuthority.eligible(state, intent))
                 .toList();
         return turns.next(candidates, PhysicalIntent::id);
     }
@@ -85,7 +81,10 @@ final class FrontierV3ExactItemConsumptionExecutor {
         if (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
             inspectRunning(runtime, intent, target, chest); return;
         }
+        var permission = FrontierV3ExactConsumptionAuthority.capture(level, runtime, intent);
+        if (permission.isEmpty() || !permission.orElseThrow().current()) return;
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
+        if (!permission.orElseThrow().current()) return;
         if (!consume(chest, target)) { unknown(runtime, intent.id(), "precondition-conflict"); return; }
         confirm(runtime, intent, target, chest);
     }

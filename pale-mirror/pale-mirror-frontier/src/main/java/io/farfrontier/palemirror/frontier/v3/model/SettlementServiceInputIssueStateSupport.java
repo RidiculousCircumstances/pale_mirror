@@ -23,10 +23,28 @@ public final class SettlementServiceInputIssueStateSupport {
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         validateRetainedInput(state, intent);
         SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+        if (work.phase() != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING)
+            throw new IllegalArgumentException("retired or recovering service input cannot authorize a new take");
+        SettlementServiceExecutionAuthority.current(state, work);
         ActorLocation worker = state.actorLocations().get(work.workerId());
         if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE
                 || !worker.supportingSurface().equals(work.inputStation()))
             throw new IllegalArgumentException("service input issue worker has not reached its source station");
+    }
+
+    /** An inspected source-present/empty-hand retry still needs the same active worker/station. */
+    public static void validateUnappliedRetry(FrontierWorldState state, PhysicalIntent intent) {
+        validateRetainedInput(state, intent);
+        var work = state.serviceWorks().get(intent.causeSubjectId());
+        if (!work.phase().active() || (intent.status() != PhysicalIntentStatus.RUNNING
+                && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+                || work.inputTraversalCursor() != work.inputTraversal().linearCorridorSurfaces().size() - 1)
+            throw new IllegalArgumentException("input retry needs its exact active reached source boundary");
+        SettlementServiceExecutionAuthority.current(state, work);
+        var worker = state.actorLocations().get(work.workerId());
+        if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE
+                || !worker.supportingSurface().equals(work.inputStation()))
+            throw new IllegalArgumentException("input retry needs its living worker at the exact source station");
     }
 
     /** Exact effect settlement survives body departure; it cannot issue a new physical take. */
@@ -36,8 +54,10 @@ public final class SettlementServiceInputIssueStateSupport {
         SettlementServiceWork work = state.serviceWorks().get(workId);
         if (work == null || !intent.id().equals(work.inputIssueIntentId()) || !intent.causeSubjectId().equals(workId)
                 || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceInputIssue(workId, work.workerId(), work.inputItemId()))
-                || work.phase() != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) {
-            throw new IllegalArgumentException("service input issue must bind the exact retained work at its source station");
+                || work.phase() != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING
+                && !((work.phase() == SettlementServiceWorkPhase.BLOCKED || work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART)
+                    && (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART))) {
+            throw new IllegalArgumentException("service input issue must bind its exact pending or possibly applied retained work");
         }
         ExactItemStack item = state.inventory().items().get(work.inputItemId());
         ContainerSurface surface = state.inventory().surfaces().get(work.inputSource().containerId());
@@ -61,13 +81,13 @@ public final class SettlementServiceInputIssueStateSupport {
                 || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceInputIssue(workId, work.workerId(), work.inputItemId()))) {
             return ExecutionEligibility.INVALID;
         }
-        if (work.phase() != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) return ExecutionEligibility.DEFERRED;
         if (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
             try {
                 validateRetainedInput(state, intent);
                 return ExecutionEligibility.READY; // Inspect retained effects even after leaving the station.
             } catch (IllegalArgumentException invalid) { return ExecutionEligibility.INVALID; }
         }
+        if (work.phase() != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) return ExecutionEligibility.DEFERRED;
         // Departure retains the input reservation but may require an approach back to the source.
         // That is spatial deferral, not loss of resource identity or permission to issue remotely.
         ActorLocation worker = state.actorLocations().get(work.workerId());
@@ -96,14 +116,25 @@ public final class SettlementServiceInputIssueStateSupport {
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
         observations.put(receipt.id(), receipt);
         Map<SubjectId, SettlementServiceWork> works = new LinkedHashMap<>(state.serviceWorks());
-        SettlementServiceWork issued = work.withInputIssued();
+        // Confirmed custody is independent of a retired actor execution. Never revive BLOCKED.
+        SettlementServiceWork issued = work.phase() == SettlementServiceWorkPhase.BLOCKED ? work : work.withInputIssued();
         ActorLocation worker = state.actorLocations().get(work.workerId());
-        if (worker != null && !worker.supportingSurface().equals(FrontierSettlementServiceWorkSceneSupport.semanticSurface(issued)))
+        if (issued.phase().active() && worker != null && worker.condition().status() == ActorLifeStatus.ALIVE
+                && !worker.supportingSurface().equals(FrontierSettlementServiceWorkSceneSupport.semanticSurface(issued)))
             issued = issued.withSpatial(SettlementServiceJourneyKnowledge.checkpoint(state, issued, worker.supportingSurface()));
         works.put(work.id(), issued);
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(state.inventory().moveObservedItem(work.inputItemId(), work.inputSource(), new InventoryCustody.Actor(work.workerId())))
                 .serviceWorks(works).physicalIntents(nextIntents).physicalObservations(observations));
+    }
+
+    /** Input uncertainty changes its own owner phase atomically, not just the intent bytes. */
+    public static FrontierWorldState unknown(FrontierWorldState state, PhysicalIntent intent, Map<PhysicalIntentId, PhysicalIntent> intents) {
+        validateRetainedInput(state, intent);
+        var work = state.serviceWorks().get(intent.causeSubjectId());
+        var works = new LinkedHashMap<>(state.serviceWorks());
+        if (work.phase().active()) works.put(work.id(), work.withPhase(SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART, work.completedWorkTicks()));
+        return state.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(works).physicalIntents(intents));
     }
 
     public static SettlementServiceInputIssueObservation requireReceipt(PhysicalEffectObservation evidence) {

@@ -61,19 +61,45 @@ public final class FrontierMedicalTreatmentSceneSupport {
         }
     }
 
+    /** Clinical roles, not scene sorting, determine the immutable semantic station assignment. */
+    public static Map<SubjectId, SurfaceAnchor> treatmentStations(FrontierWorldState state, MedicalEvacuationOperation operation) {
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), operation.settlementId());
+        var port = SettlementInfirmaryTreatmentPort.forInfirmary(FrontierWorldStateSupport.structure(settlement, operation.infirmaryId()));
+        var stations = new LinkedHashMap<SubjectId, SurfaceAnchor>();
+        stations.put(operation.patientId(), port.patientSurface());
+        var medics = operation.team().memberIds().stream().sorted().toList();
+        port.requireMedicCapacity(medics.size());
+        for (int index = 0; index < medics.size(); index++) stations.put(medics.get(index), port.medicSurfaces().get(index));
+        return Map.copyOf(stations);
+    }
+
+    public static boolean atTreatmentStations(FrontierWorldState state, MedicalEvacuationOperation operation) {
+        return treatmentStations(state, operation).entrySet().stream().allMatch(entry -> {
+            var actor = state.actorLocations().get(entry.getKey());
+            return actor != null && actor.condition().status() == ActorLifeStatus.ALIVE
+                    && actor.supportingSurface().equals(entry.getValue());
+        });
+    }
+
     /** Exact supply consumption is allowed only during the operation's own HOT lease. */
     public static boolean permitsCurrentConsumptionIntent(FrontierWorldState state, PhysicalIntent intent) {
         MedicalEvacuationOperation operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
-        return operation != null && operation.requiresSupply() && hasExactHotConsumption(state, operation, intent);
+        if (operation == null || operation.status() != MedicalEvacuationStatus.PREPARED
+                || intent.status() != PhysicalIntentStatus.PREPARED || !hasExactHotConsumption(state, operation, intent)
+                || !atTreatmentStations(state, operation)) return false;
+        MedicalExecutionAuthority.current(state, operation);
+        return true;
     }
 
-    /** A retained UNKNOWN may accept its observed result, never start another consumption. */
+    /** Retained RUNNING/UNKNOWN effect settlement survives body/scope retirement, never starts a new take. */
     public static boolean permitsConsumptionReceipt(FrontierWorldState state, PhysicalIntent intent) {
         MedicalEvacuationOperation operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
-        return operation != null && (operation.requiresSupply()
-                || operation.status() == MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART
-                && intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
-                && hasExactHotConsumption(state, operation, intent);
+        return operation != null && operation.consumptionIntentId().equals(intent.id())
+                && intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.medicalTreatmentConsumption(
+                        operation.id(), operation.supplyItemId()))
+                && (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+                && (operation.status() == MedicalEvacuationStatus.TREATING || operation.status() == MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART
+                    || operation.status() == MedicalEvacuationStatus.BLOCKED);
     }
 
     private static boolean hasExactHotConsumption(FrontierWorldState state, MedicalEvacuationOperation operation, PhysicalIntent intent) {

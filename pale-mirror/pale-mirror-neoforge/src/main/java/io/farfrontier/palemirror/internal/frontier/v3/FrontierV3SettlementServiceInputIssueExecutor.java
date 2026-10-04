@@ -123,7 +123,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         if (!sourceMatches(chest, target) || !worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
             unknown(runtime, intent.id(), "precondition-conflict"); return;
         }
-        var actuation = takeAuthority(level, runtime, target, worker);
+        var actuation = takeAuthority(level, runtime, intent, target, worker);
         if (actuation == null || !transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
         if (!actuation.current(worker)) return;
         if (!handOff(chest, worker, target)) { unknown(runtime, intent.id(), "effect-conflict"); return; }
@@ -156,18 +156,25 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
 
     private static Villager resident(ServerLevel level, FrontierWorldState state, Target target, boolean requireStation) {
         var entity = level.getEntity(SceneLease.deterministicEntityId(state.bootstrap().worldId(), target.work().workerId()));
-        if (!(entity instanceof Villager worker) || !worker.isAlive()
-                || !FrontierV3ActorBodyController.recognizesRecordedBody(level, state, worker)) return null;
-        return !requireStation || FrontierV3SemanticMovement.arrived(level, worker, target.work().inputStation()) ? worker : null;
+        if (!(entity instanceof Villager worker)) return null;
+        if (requireStation) return worker.isAlive()
+                && FrontierV3ActorBodyController.recognizesRecordedBody(level, state, worker)
+                && FrontierV3SemanticMovement.arrived(level, worker, target.work().inputStation()) ? worker : null;
+        return FrontierV3ActorBodyController.recognizesRecordedBody(level, state, worker)
+                || FrontierV3ActorBodyController.recognizesRetiredDeadBody(level, state, worker) ? worker : null;
     }
 
     /** New mutation uses current UAE authority; observing a possibly applied effect does not. */
     private static FrontierV3ActorActuation takeAuthority(ServerLevel level,
-            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Target target, Villager worker) {
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target, Villager worker) {
         var state = runtime.decodedState().orElse(null);
         if (state == null || !target.work().equals(state.serviceWorks().get(target.work().id()))
                 || !hasHotScope(state, target.work())
                 || !FrontierV3SemanticMovement.arrived(level, worker, target.work().inputStation())) return null;
+        try {
+            if (intent.status() == PhysicalIntentStatus.PREPARED) SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+            else SettlementServiceInputIssueStateSupport.validateUnappliedRetry(state, intent);
+        } catch (IllegalArgumentException noActiveTakeAuthority) { return null; }
         var actuation = FrontierV3ActorActuation.capture(state, worker,
                 io.farfrontier.palemirror.frontier.v3.model.SettlementServiceExecutionAuthority.current(state, target.work()),
                 () -> runtime.decodedState().filter(now -> target.work().equals(now.serviceWorks().get(target.work().id()))));
@@ -193,7 +200,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         boolean source = sourceMatches(chest, target), hand = FrontierV3CargoHandoffExecutor.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
         if (!source && hand) { confirm(runtime, intent, target); return; }
         if (source && worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
-            var permission = takeAuthority(level, runtime, target, worker);
+            var permission = takeAuthority(level, runtime, intent, target, worker);
             if (permission == null) return; // A lawful off-station body is not a resource conflict.
             if (permission.current(worker) && handOff(chest, worker, target)) { confirm(runtime, intent, target); return; }
         }
@@ -205,7 +212,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         boolean source = sourceMatches(chest, target), hand = FrontierV3CargoHandoffExecutor.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
         if (!source && hand) confirm(runtime, intent, target);
         else if (source && worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
-            var permission = takeAuthority(level, runtime, target, worker);
+            var permission = takeAuthority(level, runtime, intent, target, worker);
             if (permission != null && permission.current(worker) && handOff(chest, worker, target)) confirm(runtime, intent, target);
         }
     }

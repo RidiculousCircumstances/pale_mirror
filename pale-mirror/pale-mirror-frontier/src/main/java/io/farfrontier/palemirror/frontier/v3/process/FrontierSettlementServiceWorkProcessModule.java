@@ -189,7 +189,7 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
         return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
                 (currentState, current, evidence, intents) -> SettlementServiceInputIssueStateSupport.complete(currentState, current,
                         SettlementServiceInputIssueStateSupport.requireReceipt(evidence), new java.util.LinkedHashMap<>(intents)),
-                PhysicalIntentTransitionStorage::recordUnknown);
+                SettlementServiceInputIssueStateSupport::unknown);
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof SettlementServiceWorkSceneLeasePrepared prepared) {

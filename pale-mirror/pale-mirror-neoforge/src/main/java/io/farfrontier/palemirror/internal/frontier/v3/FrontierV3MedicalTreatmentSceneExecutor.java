@@ -4,11 +4,9 @@ import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,8 +23,6 @@ import java.util.Set;
  * writes an inventory slot.</p>
  */
 final class FrontierV3MedicalTreatmentSceneExecutor {
-    private static final double READY_DISTANCE_SQUARED = 2.25D;
-
     private FrontierV3MedicalTreatmentSceneExecutor() { }
 
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -138,33 +134,54 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
         SettlementStructure infirmary = settlement.structures().stream().filter(structure -> structure.id().equals(operation.infirmaryId()))
                 .findFirst().orElseThrow(() -> new IllegalStateException("medical operation infirmary is absent from its settlement"));
         SettlementInfirmaryTreatmentPort port = SettlementInfirmaryTreatmentPort.forInfirmary(infirmary);
+        var stations = FrontierMedicalTreatmentSceneSupport.treatmentStations(state, operation);
         boolean allPresent = true;
-        for (int index = 0; index < lease.members().size(); index++) {
-            SceneMember member = lease.members().get(index); Entity entity = level.getEntity(member.entityId());
+        for (var member : lease.members()) {
+            Entity entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob body) || !FrontierV3SceneExecutor.recognizes(runtime, body) || !body.isAlive()) return false;
-            List<SurfaceAnchor> route = new ArrayList<>(port.arrivalSurfaces()); route.add(port.treatmentSurface(index));
-            List<Vec3> targets = new ArrayList<>();
-            List<BodyPosition> targetBodies = new ArrayList<>();
-            for (SurfaceAnchor surface : route) {
-                // Both public approach and facility cells are declared semantic support surfaces.
-                // A missing/altered support stays a visible deferral; neither the executor nor a
-                // heightmap lookup may choose a substitute column or a hidden level path.
-                BlockPos standing = FrontierV3StandingPosition.aboveExactFloor(level, surface.support());
-                if (standing == null) return false;
-                targets.add(new Vec3(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D));
-                targetBodies.add(new BodyPosition(standing.getX(), standing.getY(), standing.getZ()));
-            }
-            BodyPosition observed = FrontierV3BodyObservation.position(body);
-            Vec3 target = targets.get(ObservedTraversalCursor.nextTargetIndex(observed, targetBodies, 0));
-            if (body.distanceToSqr(target) > READY_DISTANCE_SQUARED) {
-                FrontierV3GoalNavigation.pursue(level, body, FrontierV3GoalNavigation.Goal.station(
-                        route.get(ObservedTraversalCursor.nextTargetIndex(observed, targetBodies, 0)),
-                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())),
-                        FrontierV3ActorActuation.capture(state, body, executions.get(member.actorId()), runtime::decodedState));
+            var station = stations.get(member.actorId());
+            var actuation = FrontierV3ActorActuation.capture(state, body, executions.get(member.actorId()),
+                    () -> runtime.decodedState().filter(current -> operation.equals(
+                            current.humanPopulation().medicalOperations().get(operation.id()))
+                            && lease.equals(current.sceneLeases().get(lease.id()))));
+            if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body) || !actuation.current(body)) return false;
+            if (!FrontierV3SemanticMovement.arrived(level, body, station)) {
+                var hint = new ArrayList<>(port.arrivalSurfaces()); hint.add(station);
+                FrontierV3GoalNavigation.pursue(level, body, new FrontierV3GoalNavigation.Goal(List.of(station),
+                        TraversalCapability.PEDESTRIAN, new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds()),
+                        Optional.empty(), hint), actuation);
                 allPresent = false;
             }
         }
         return allPresent;
+    }
+
+    /** Capture exact live participants before a new effect; later receipts do not need these bodies. */
+    static Optional<FrontierV3ExactConsumptionAuthority.Permission> consumptionAuthority(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        var state = runtime.decodedState().orElse(null);
+        if (state == null || !FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent)) return Optional.empty();
+        var operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
+        var group = MedicalExecutionAuthority.current(state, operation);
+        var lease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isMedicalTreatment)
+                .filter(scope -> scope.status() == SceneLeaseStatus.HOT
+                        && FrontierSceneBehaviors.medicalTreatment(scope).operationId().equals(operation.id())).findFirst().orElseThrow();
+        var stations = FrontierMedicalTreatmentSceneSupport.treatmentStations(state, operation);
+        var permissions = new ArrayList<java.util.function.BooleanSupplier>();
+        for (var execution : group.members()) {
+            var entity = level.getEntity(SceneLease.deterministicEntityId(state.bootstrap().worldId(), execution.actorId()));
+            if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, body)
+                    || !FrontierV3SemanticMovement.arrived(level, body, stations.get(execution.actorId()))) return Optional.empty();
+            var actuation = FrontierV3ActorActuation.capture(state, body, execution,
+                    () -> runtime.decodedState().filter(current -> lease.equals(current.sceneLeases().get(lease.id()))
+                            && current.humanPopulation().medicalOperations().get(operation.id()).active()
+                            && group.equals(MedicalExecutionAuthority.current(current,
+                                    current.humanPopulation().medicalOperations().get(operation.id())))));
+            if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body) || !actuation.current(body)) return Optional.empty();
+            permissions.add(() -> actuation.current(body) && body.isAlive()
+                    && FrontierV3SemanticMovement.arrived(level, body, stations.get(execution.actorId())));
+        }
+        return Optional.of(() -> permissions.stream().allMatch(java.util.function.BooleanSupplier::getAsBoolean));
     }
 
     /** Transfers only observed ambient Villagers, preserving their UUID and current position. */
@@ -177,6 +194,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
             if (ambient.status() != AmbientLeaseStatus.HOT) return;
             Entity entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)) return;
+            if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
             BodyPosition observed = FrontierV3BodyObservation.position(body);
             captures.add(new SceneMemberPosition(member.actorId(), observed,
                     new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth() * io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE))));

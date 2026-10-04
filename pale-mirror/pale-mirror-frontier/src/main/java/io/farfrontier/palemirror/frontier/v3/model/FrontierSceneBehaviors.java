@@ -575,7 +575,15 @@ public final class FrontierSceneBehaviors {
             if (!valid) throw new IllegalArgumentException("medical scene and operation lifecycle disagree");
             Set<SubjectId> members = new HashSet<>(operation.team().memberIds()); members.add(operation.patientId()); return Set.copyOf(members);
         }
-        @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
+        @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) {
+            var operation = FrontierMedicalTreatmentSceneSupport.require(state, cause(lease));
+            if (nextStatus == SceneLeaseStatus.HOT && operation.status() == MedicalEvacuationStatus.PREPARED) {
+                MedicalExecutionAuthority.current(state, operation);
+                if (!FrontierMedicalTreatmentSceneSupport.atTreatmentStations(state, operation))
+                    throw new IllegalArgumentException("unbegun medical care needs independently inspected exact clinical stations");
+            }
+            return state.strategicPlans();
+        }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
         @Override public void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) { }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {

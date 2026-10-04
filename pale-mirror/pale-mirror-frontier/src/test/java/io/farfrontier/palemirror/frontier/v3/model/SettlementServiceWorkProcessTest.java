@@ -346,6 +346,36 @@ class SettlementServiceWorkProcessTest {
         var receipt = new SettlementServiceInputIssueObservation(
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-departed-input"),
                 intent.id(), work.id(), work.workerId(), work.inputItemId(), work.inputSource());
+        var uncertain = transition(running, work.settlementId(), intent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        assertEquals(SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART, uncertain.serviceWorks().get(work.id()).phase(),
+                "uncertainty must update the input owner's phase atomically with the effect");
+        assertEquals(uncertain, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(uncertain)));
+        var resolved = transition(uncertain, work.settlementId(), intent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        assertEquals(SettlementServiceWorkPhase.APPROACH_WORK, resolved.serviceWorks().get(work.id()).phase());
+        assertEquals(uncertain.actorLocations(), resolved.actorLocations());
+
+        var location = observed.actorLocations().get(work.workerId());
+        var death = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied(
+                ActorBodyAuthority.current(observed, work.workerId()), location.body(), location.condition().health(),
+                Optional.of(location.body()), observed.actorExecutions().actors().get(work.workerId()).current(),
+                "test:applied-service-input-death");
+        var dead = ActorBodyAuthority.died(observed, death, FrontierActorDeathConsequences.INSTANCE, 1_004L);
+        var retainedIntent = dead.physicalIntents().get(intent.id());
+        assertEquals(SettlementServiceWorkPhase.BLOCKED, dead.serviceWorks().get(work.id()).phase());
+        assertEquals(SettlementServiceInputIssueStateSupport.ExecutionEligibility.READY,
+                SettlementServiceInputIssueStateSupport.executionEligibility(dead, retainedIntent));
+        assertThrows(IllegalArgumentException.class, () -> SettlementServiceInputIssueStateSupport.validateIntent(dead, retainedIntent));
+        assertThrows(IllegalArgumentException.class, () -> SettlementServiceInputIssueStateSupport.validateUnappliedRetry(dead, retainedIntent));
+        var settled = transition(dead, work.settlementId(), retainedIntent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        assertEquals(dead.serviceWorks(), settled.serviceWorks(), "late resource settlement cannot revive a retired job");
+        assertEquals(dead.actorExecutions(), settled.actorExecutions());
+        assertEquals(dead.actorLocations(), settled.actorLocations());
+        assertEquals(new InventoryCustody.Actor(work.workerId()), settled.inventory().items().get(work.inputItemId()).custody());
+        assertEquals(settled, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(settled)));
+
         var confirmed = transition(restored, work.settlementId(), intent,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         assertEquals(restored.actorLocations(), confirmed.actorLocations(), "resource settlement cannot restore station pose");

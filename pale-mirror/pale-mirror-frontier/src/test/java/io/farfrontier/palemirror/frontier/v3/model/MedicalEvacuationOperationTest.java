@@ -72,6 +72,15 @@ class MedicalEvacuationOperationTest {
         assertThrows(IllegalArgumentException.class, () -> new MedicalTreatmentStarted(operation,
                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(List.of(group.members().getFirst()))),
                 "patient and medical team must enter the protocol together");
+        var entryState = state;
+        var oversizedTeam = settlement.residents().stream().map(Resident::id).filter(id -> !id.equals(patient)).limit(3).toList();
+        var oversized = new MedicalEvacuationOperation(operationId, settlement.id(), patient, infirmary,
+                MedicalEvacuationTeam.forOperation(operationId, settlement.id(), oversizedTeam), supply,
+                operation.consumptionIntentId(), MedicalEvacuationStatus.PREPARED, -1L);
+        var capacityFailure = assertThrows(IllegalArgumentException.class, () -> MedicalTreatmentProcess.reduceStarted(
+                entryState, settlement.id(), new MedicalTreatmentStarted(oversized, MedicalExecutionAuthority.admission(entryState, oversized))),
+                "a three-member evacuation team cannot claim two physical treatment stations");
+        assertTrue(capacityFailure.getMessage().contains("treatment capacity"), capacityFailure.getMessage());
     }
 
     @Test void patientCannotAlsoBeTheirOwnMedicalTeam() {
@@ -280,7 +289,15 @@ class MedicalEvacuationOperationTest {
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList();
         SceneLease lease = SceneLease.forCause(leaseId, world, new MedicalTreatmentSceneCause(started.operation().id()), candidate.infirmaryAnchor(),
                 new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED, members, java.util.Set.of(), java.util.Optional.empty());
-        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease);
+        var approaching = state;
+        assertThrows(IllegalArgumentException.class, () -> approaching.transitionSceneLease(leaseId, SceneLeaseStatus.HOT),
+                "presence near an ingress node is not independent arrival at the declared clinical station");
+        var stations = FrontierMedicalTreatmentSceneSupport.treatmentStations(state, started.operation());
+        var infirmary = FrontierWorldStateSupport.structure(settlement, started.operation().infirmaryId());
+        assertEquals(SettlementInfirmaryTreatmentPort.forInfirmary(infirmary).patientSurface(), stations.get(started.operation().patientId()));
+        for (var station : stations.entrySet()) state = ModeledActorBodyFacts.inspected(state, station.getKey(), station.getValue().standingBody());
+        state = state.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertTrue(FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, prepared.intent()));
 
         state = PhysicalIntentLifecycleFixture.transition(state, settlement.id(), prepared.intent(),
@@ -302,7 +319,8 @@ class MedicalEvacuationOperationTest {
                 settlement.id(), unknownIntent, PhysicalIntentStatus.RUNNING, java.util.Optional.empty()),
                 "recovery must not replay physical consumption");
         var withoutHotAuthority = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
-        assertFalse(FrontierMedicalTreatmentSceneSupport.permitsConsumptionReceipt(withoutHotAuthority, unknownIntent));
+        assertTrue(FrontierMedicalTreatmentSceneSupport.permitsConsumptionReceipt(withoutHotAuthority, unknownIntent),
+                "settlement of a possibly applied effect is independent of live presentation/actuation authority");
         var codec = new FrontierWorldStateCodec();
         state = codec.decode(codec.encode(state));
         assertEquals(ambiguous, state, "recovery must retain the exact ambiguity, team, supply and fence");
@@ -310,10 +328,12 @@ class MedicalEvacuationOperationTest {
                 started.operation().supplyItemId(), 1, 0);
         var admittedReceipt = plannedMedicalTransition(state,
                 new PhysicalIntentTransition(unknownIntent.id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt)));
-        var rejectedReplay = assertThrows(IllegalArgumentException.class, () -> replayMedicalTransition(withoutHotAuthority, settlement.id(),
-                admittedReceipt),
-                "decoded receipts cannot bypass the owning HOT scene");
-        assertTrue(rejectedReplay.getMessage().contains("HOT"), rejectedReplay.getMessage());
+        var settledAfterDrain = replayMedicalTransition(withoutHotAuthority, settlement.id(), admittedReceipt);
+        assertEquals(PhysicalIntentStatus.CONFIRMED, settledAfterDrain.physicalIntents().get(unknownIntent.id()).status(),
+                "a decoded exact receipt settles the retained effect after presentation has drained");
+        assertEquals(withoutHotAuthority.actorLocations(), settledAfterDrain.actorLocations(), "receipt settlement has no pose authority");
+        assertEquals(withoutHotAuthority.actorExecutions(), settledAfterDrain.actorExecutions(), "receipt settlement cannot recreate an execution");
+        assertEquals(withoutHotAuthority.sceneLeases(), settledAfterDrain.sceneLeases(), "receipt settlement cannot reopen presentation");
         assertThrows(IllegalArgumentException.class, () -> replayMedicalTransition(ambiguous, settlement.id(),
                 new PhysicalIntentTransition(unknownIntent.id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty())),
                 "decoded transitions cannot replay ambiguous consumption");
@@ -456,7 +476,10 @@ class MedicalEvacuationOperationTest {
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList();
         SceneLease lease = SceneLease.forCause(leaseId, world, new MedicalTreatmentSceneCause(operation.id()), candidate.infirmaryAnchor(),
                 new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED, members, java.util.Set.of(), java.util.Optional.empty());
-        return new TreatmentSceneFixture(world, FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT), operation, lease);
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease);
+        for (var station : FrontierMedicalTreatmentSceneSupport.treatmentStations(state, operation).entrySet())
+            state = ModeledActorBodyFacts.inspected(state, station.getKey(), station.getValue().standingBody());
+        return new TreatmentSceneFixture(world, state.transitionSceneLease(leaseId, SceneLeaseStatus.HOT), operation, lease);
     }
 
     private record TreatmentSceneFixture(WorldId world, FrontierWorldState state, MedicalEvacuationOperation operation, SceneLease lease) { }

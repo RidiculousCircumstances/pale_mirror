@@ -383,6 +383,21 @@ final class FrontierV3ActorBodyController {
         if (entity instanceof Mob body) discardRetired(level, state, body);
     }
 
+    /** Read-only evidence for already-applied resource settlement; never actuation or revival. */
+    static boolean recognizesRetiredDeadBody(ServerLevel level, FrontierWorldState state, net.minecraft.world.entity.Entity body) {
+        if (body == null || body.level() != level || body.isRemoved()) return false;
+        var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElse(null);
+        if (declaration == null || declaration.representation() != FrontierV3ActorCarrierComposition.Representation.LIVE_BODY
+                || !body.getUUID().equals(declaration.entityId())
+                || !SceneLease.deterministicEntityId(state.bootstrap().worldId(), declaration.actorId()).equals(declaration.entityId())) return false;
+        var actor = state.actorLocations().get(declaration.actorId());
+        var retired = state.fencedRecovery().tombstones().get(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(declaration.actorId()));
+        return actor != null && actor.kind() == declaration.kind()
+                && actor.condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD
+                && retired != null && retired.retiredEpoch() == declaration.epoch();
+    }
+
     static boolean discardRetired(ServerLevel level, FrontierWorldState state, Mob body) {
         if (body.level() != level || body.isRemoved()) return false;
         var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElse(null);
@@ -392,10 +407,7 @@ final class FrontierV3ActorBodyController {
                 || !SceneLease.deterministicEntityId(state.bootstrap().worldId(), declaration.actorId()).equals(declaration.entityId()))
             return false;
         var id = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(declaration.actorId(), declaration.epoch());
-        var retired = state.fencedRecovery().tombstones().get(
-                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(declaration.actorId()));
-        boolean dead = actor.condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD
-                && retired != null && retired.retiredEpoch() == declaration.epoch();
+        boolean dead = recognizesRetiredDeadBody(level, state, body);
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         if (!dead && !ledger.fencesBody(declaration)) return false;
         if (!FrontierV3GoalNavigation.retireIncarnation(body, id)) return false;

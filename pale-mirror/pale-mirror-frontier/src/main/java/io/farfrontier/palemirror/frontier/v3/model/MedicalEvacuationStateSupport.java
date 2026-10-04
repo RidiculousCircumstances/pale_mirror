@@ -21,6 +21,7 @@ public final class MedicalEvacuationStateSupport {
             ResidentProfile patient = population.resident(operation.patientId());
             if (patient == null || !patient.settlementId().equals(settlement.id())) throw new IllegalArgumentException("medical operation has a foreign patient");
             if (operation.active()) {
+                SettlementInfirmaryTreatmentPort.forInfirmary(infirmary).requireMedicCapacity(operation.team().memberIds().size());
                 ResidentHealthStatus health = population.health(operation.patientId()).status();
                 boolean consumed = intents.get(operation.consumptionIntentId()) != null
                         && intents.get(operation.consumptionIntentId()).status() == PhysicalIntentStatus.CONFIRMED;

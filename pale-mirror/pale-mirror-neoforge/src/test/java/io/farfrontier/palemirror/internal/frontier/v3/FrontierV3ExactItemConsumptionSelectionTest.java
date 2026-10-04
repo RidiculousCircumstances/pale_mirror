@@ -11,9 +11,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Selection only: no claim of physical writes, chest persistence or native recovery. */
 class FrontierV3ExactItemConsumptionSelectionTest {
     @Test void unresolvedHeadCannotStarveIndependentPreparedConsumption() {
-        PhysicalIntent first = provision("a");
-        first = first.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_PROVISION.stamp(first));
-        PhysicalIntent second = provision("b");
+        PhysicalIntent first = growth("a");
+        first = first.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.HIVE_GROWTH.stamp(first));
+        PhysicalIntent second = growth("b");
         var state = state();
         var inventory = List.of(second, first);
         var turns = new FrontierV3FairTurn<PhysicalIntentId>();
@@ -25,8 +25,8 @@ class FrontierV3ExactItemConsumptionSelectionTest {
     }
 
     @Test void waitingPreparedHeadAndIneligibleMedicalEntryDoNotMonopolizeTurns() {
-        PhysicalIntent first = provision("a");
-        PhysicalIntent second = provision("b");
+        PhysicalIntent first = growth("a");
+        PhysicalIntent second = growth("b");
         PhysicalIntent medical = new PhysicalIntent(new PhysicalIntentId("intent:0-medical"),
                 PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
                 new SubjectId("medical:test"), PhysicalIntentRoleBinding.medicalTreatmentConsumption(
@@ -47,12 +47,12 @@ class FrontierV3ExactItemConsumptionSelectionTest {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:consumption-selection"), 42L));
     }
 
-    private static PhysicalIntent provision(String suffix) {
-        var cause = new SubjectId("provision:" + suffix);
+    private static PhysicalIntent growth(String suffix) {
+        var cause = new SubjectId("job:hive-growth-" + suffix);
         return new PhysicalIntent(new PhysicalIntentId("intent:" + suffix), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
                 PhysicalIntentStatus.PREPARED, cause,
-                PhysicalIntentRoleBinding.settlementProvisionConsumption(cause, new SubjectId("item:" + suffix)),
+                PhysicalIntentRoleBinding.hiveGrowthConsumption(cause, new SubjectId("item:" + suffix)),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
-                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION);
+                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, PhysicalIntentLifecycleOwner.HIVE_GROWTH);
     }
 }

@@ -116,7 +116,9 @@ public record SettlementServiceWork(
     }
 
     public SettlementServiceWork withInputIssued() {
-        if (phase != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) throw new IllegalArgumentException("service input may issue only at its retained source station");
+        if ((phase != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING && phase != SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART)
+                || inputTraversalCursor != inputTraversal.linearCorridorSurfaces().size() - 1)
+            throw new IllegalArgumentException("service input outcome must retain its reached source boundary");
         SettlementServiceWorkPhase next = workTraversal.linearCorridorSurfaces().size() == 1
                 ? SettlementServiceWorkPhase.WORKING : SettlementServiceWorkPhase.APPROACH_WORK;
         return copy(next, inputTraversalCursor, 0, 0, spatial.cleared());

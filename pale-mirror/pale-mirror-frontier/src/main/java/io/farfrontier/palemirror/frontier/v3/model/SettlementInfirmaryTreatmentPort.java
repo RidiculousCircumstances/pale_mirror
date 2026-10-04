@@ -81,6 +81,12 @@ public record SettlementInfirmaryTreatmentPort(SubjectId settlementId, SubjectId
     }
     public List<SurfaceAnchor> ingressSurfaces() { return List.of(approachSurface, throatSurface, interiorSurface); }
 
+    /** A clinical team must fit actual planned stations before admission, not after body dispatch. */
+    public void requireMedicCapacity(int count) {
+        if (count < 1 || count > medicSurfaces.size())
+            throw new IllegalArgumentException("medical team exceeds the infirmary's declared treatment capacity");
+    }
+
     /** Patient first, then the bounded ordered medical-team positions. */
     public SurfaceAnchor treatmentSurface(int ordinal) {
         return switch (ordinal) {
