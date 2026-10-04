@@ -134,7 +134,10 @@ public final class OperationExecutionAuthority {
                         return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
                     }
                     var travel = operation.activeTravel().orElseThrow();
-                    var checkpoint = travel.checkpointMember(id.actorId(), request.observedPosition());
+                    if (travel.memberCheckpoint(id.actorId()).equals(request.observedPosition()))
+                        return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+                    var checkpoint = travel.checkpointMember(id.actorId(), OperationTravelContinuation.checkpoint(state,
+                            operation, id.actorId(), request.observedPosition().supportingSurface()));
                     var update = FrontierWorldStateUpdate.begin();
                     if (checkpoint != travel) {
                         var operations = new java.util.LinkedHashMap<>(state.operations());

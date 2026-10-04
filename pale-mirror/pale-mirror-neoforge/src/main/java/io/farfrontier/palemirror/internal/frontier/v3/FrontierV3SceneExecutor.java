@@ -36,6 +36,8 @@ import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
 import io.farfrontier.palemirror.frontier.v3.model.OperationFront;
 import io.farfrontier.palemirror.frontier.v3.model.ActorDirective;
 import io.farfrontier.palemirror.frontier.v3.model.OperationTravelAdvanced;
+import io.farfrontier.palemirror.frontier.v3.model.OperationTravelObservation;
+import io.farfrontier.palemirror.frontier.v3.model.TraversalCapability;
 import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneExecutionAuthority;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
@@ -200,6 +202,7 @@ final class FrontierV3SceneExecutor {
             if (ambient.status() != AmbientLeaseStatus.HOT) return;
             Entity body = level.getEntity(member.entityId());
             if (!(body instanceof Mob mob) || !mob.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), bioform(state, member.actorId()))) return;
+            if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, mob)) return;
             captures.add(new SceneMemberPosition(member.actorId(), FrontierV3BodyObservation.position(body), fixed(mob.getHealth())));
         }
         if (!captures.isEmpty()) {
@@ -471,10 +474,26 @@ final class FrontierV3SceneExecutor {
         var executions = LogisticsSceneExecutionAuthority.current(state, lease);
         List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream)
                 .sorted(Comparator.comparing(value -> value.member().actorId())).toList();
+        var operation = state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId());
         for (Body actor : bodies) {
             var execution = executions.requireMember(actor.member().actorId());
             var actuation = FrontierV3ActorActuation.capture(state, actor.entity(), execution,
-                    () -> runtime.decodedState().filter(current -> LogisticsSceneExecutionAuthority.permits(current, lease, executions)));
+                    () -> runtime.decodedState().filter(current -> operation.equals(current.operations().get(operation.id()))
+                            && LogisticsSceneExecutionAuthority.permits(current, lease, executions)));
+            if (FrontierSceneBehaviors.logistics(lease).engagementId().isEmpty() && operation.activeTravel().isPresent()) {
+                var travel = operation.activeTravel().orElseThrow();
+                var approach = travel.approaches().get(actor.member().actorId());
+                if (approach == null && (travel.arrived() || !travel.canAdvanceNextEdge())) continue;
+                if (approach != null) {
+                    var target = travel.nextFormationBody(actor.member().actorId()).supportingSurface();
+                    if (approach.approach().isPresent()) {
+                        var path = approach.approach().orElseThrow(); var hint = path.path().subList(path.cursor(), path.path().size());
+                        FrontierV3GoalNavigation.pursue(level, actor.entity(), new FrontierV3GoalNavigation.Goal(List.of(target),
+                                TraversalCapability.PEDESTRIAN, new FrontierV3NavigationScope.RetainedApproach(hint), Optional.empty(), hint), actuation);
+                    }
+                    continue; // Missing known geometry retains the same visible goal, without route progress.
+                }
+            }
             Optional<ActorDirective> directive = logisticsDirective(state, lease, actor.member().actorId());
             if (directive.isPresent() && !directive.orElseThrow().movement().permitsObservedSupport(supportPosition(actor.entity().blockPosition()))) continue;
             if (directive.isPresent()) {
@@ -491,20 +510,28 @@ final class FrontierV3SceneExecutor {
         RouteOperation operation = state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId());
         if (operation == null || operation.activeTravel().isEmpty()) return false;
         OperationTravel current = operation.activeTravel().orElseThrow();
-        if (current.arrived()) return false;
+        if (current.arrived() || !current.canAdvanceNextEdge()) return false;
         OperationFront front = OperationFront.logistics(operation);
         OperationTravel next = translateTravel(current, current.nextHotCursor());
+        var executions = OperationExecutionAuthority.logisticsCurrent(state, operation);
+        Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation> captured = new LinkedHashMap<>();
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId());
             BodyPosition expected = next.formation().get(member.actorId());
             ActorDirective directive = front.directive(operation, lease.id(), member.actorId());
             if (!(entity instanceof Mob body) || !owned(entity, state, lease, member)
                     || !directive.movement().permitsObservedSupport(supportPosition(body.blockPosition()))
-                    || body.getBlockX() != expected.x() || body.getBlockY() != expected.y() || body.getBlockZ() != expected.z()) return false;
+                    || !FrontierV3SemanticMovement.arrived(level, body, expected.supportingSurface())) return false;
+            var actuation = FrontierV3ActorActuation.capture(state, body, executions.requireMember(member.actorId()),
+                    () -> runtime.decodedState().filter(now -> operation.equals(now.operations().get(operation.id()))
+                            && LogisticsSceneExecutionAuthority.permits(now, lease, executions)));
+            captured.put(member.actorId(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(actuation.id(), lease.revision()));
+            if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body) || !actuation.current(body)) return false;
         }
         if (!FrontierV3CargoCarrierExecutor.atDestination(level, state, lease, next.cargoAnchor().surface().support())) return false;
+        var observation = new OperationTravelObservation.HotSegment(executions, current, lease.id(), captured);
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "scene-operation-travel", lease.id().value(),
-                new OperationTravelAdvanced(operation.id(), next, OperationExecutionAuthority.logisticsCurrent(state, operation)));
+                new OperationTravelAdvanced(operation.id(), next, observation));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "operation_travel_advanced", lease, result);
         return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
     }

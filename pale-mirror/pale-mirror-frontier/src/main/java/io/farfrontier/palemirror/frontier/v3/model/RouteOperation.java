@@ -108,7 +108,8 @@ public record RouteOperation(SubjectId id, SubjectId contractId, SubjectId settl
             return new RouteOperation(id, contractId, settlementId, cargoId, destinationId, unit, route, routeIndex, OperationStage.EN_ROUTE, Optional.empty(), Optional.of(travel), tacticalPlan.withPhase(TacticalPlanPhase.TRAVEL));
         }
         OperationTravel previous = activeTravel.orElseThrow(() -> new IllegalArgumentException("operation has no completed travel formation"));
-        if (!previous.arrived() || !previous.formation().equals(travel.formation()) || !previous.cargoAnchor().equals(travel.cargoAnchor())) {
+        if (!previous.arrived() || !OperationTravelContinuation.approachesReady(previous)
+                || !previous.formation().equals(travel.formation()) || !previous.cargoAnchor().equals(travel.cargoAnchor())) {
             throw new IllegalArgumentException("next operation travel must retain the arrived formation and cargo anchor");
         }
         OperationStage nextStage = stage == OperationStage.ARRIVED || stage == OperationStage.RETURNING ? OperationStage.RETURNING : OperationStage.EN_ROUTE;
@@ -133,7 +134,8 @@ public record RouteOperation(SubjectId id, SubjectId contractId, SubjectId settl
 
     public RouteOperation completeTravelSegment() {
         OperationTravel travel = activeTravel.orElseThrow(() -> new IllegalArgumentException("operation has no exact travel to complete"));
-        if (!travel.arrived()) throw new IllegalArgumentException("operation travel segment has not arrived");
+        if (!travel.arrived() || !OperationTravelContinuation.approachesReady(travel))
+            throw new IllegalArgumentException("operation travel segment and every saved member approach must have arrived");
         int nextIndex = stage == OperationStage.RETURNING ? routeIndex - 1 : routeIndex + 1;
         OperationStage nextStage = stage == OperationStage.RETURNING ? (nextIndex == 0 ? OperationStage.COMPLETED : OperationStage.RETURNING)
                 : (nextIndex == route.size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE);

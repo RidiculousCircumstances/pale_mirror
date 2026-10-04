@@ -277,7 +277,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         if (command.payload() instanceof OperationTravelAdvanced advanced) {
             RouteOperation operation = state.operations().get(advanced.operationId());
             if (operation == null) return FrontierWorldCommandPlanner.rejected("operation travel observation has no active operation");
-            try { state.advanceOperationTravel(advanced.operationId(), advanced.travel(), advanced.executions()); }
+            try { state.advanceOperationTravel(advanced.operationId(), advanced.travel(), advanced.observation()); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), advanced)));
         }
@@ -291,6 +291,8 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         if (command.payload() instanceof SceneLeasePrepared prepared) {
             RouteOperation operation = state.operations().get(FrontierSceneBehaviors.logistics(prepared.lease()).operationId());
             if (operation == null) return FrontierWorldCommandPlanner.rejected("scene lease has no owning operation");
+            try { OperationTravelContinuation.atScopeAdmission(state, prepared.lease()).prepareSceneLease(prepared.lease()); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), prepared)));
         }
         if (command.payload() instanceof SettlementAssaultSceneLeasePrepared prepared) {
@@ -305,6 +307,8 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         if (command.payload() instanceof SceneLeaseHandoff handoff) {
             RouteOperation operation = state.operations().get(FrontierSceneBehaviors.logistics(handoff.lease()).operationId());
             if (operation == null) return FrontierWorldCommandPlanner.rejected("scene hand-off has no owning operation");
+            try { OperationTravelContinuation.atScopeAdmission(state, handoff.lease()).handoffAmbientScene(handoff); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), handoff)));
         }
         if (command.payload() instanceof SettlementAssaultSceneLeaseHandoff handoff) {
@@ -463,7 +467,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
     }
     private static FrontierWorldState reduceTravelAdvanced(FrontierWorldState state, SubjectId subject, OperationTravelAdvanced advanced) {
         requireOperation(state, subject, advanced.operationId(), "operation travel");
-        return state.advanceOperationTravel(advanced.operationId(), advanced.travel(), advanced.executions());
+        return state.advanceOperationTravel(advanced.operationId(), advanced.travel(), advanced.observation());
     }
     private static FrontierWorldState reduceTravelSegmentCompleted(FrontierWorldState state, SubjectId subject, OperationTravelSegmentCompleted completed) {
         requireOperation(state, subject, completed.operationId(), "operation travel completion");
@@ -487,7 +491,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         if (operation == null || !subject.equals(operation.settlementId()) || !lease.handoffInstant().equals(event.instant())) {
             throw new IllegalArgumentException("scene lease does not match its current operation hand-off");
         }
-        return state.prepareSceneLease(lease);
+        return OperationTravelContinuation.atScopeAdmission(state, lease).prepareSceneLease(lease);
     }
 
     private static FrontierWorldState reduceSceneHandoff(FrontierWorldState state, SubjectId subject, FrontierEvent event, SceneLeaseHandoff handoff) {
@@ -496,7 +500,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         if (operation == null || !subject.equals(operation.settlementId()) || !lease.handoffInstant().equals(event.instant())) {
             throw new IllegalArgumentException("scene hand-off does not match its current operation hand-off");
         }
-        return state.handoffAmbientScene(handoff);
+        return OperationTravelContinuation.atScopeAdmission(state, lease).handoffAmbientScene(handoff);
     }
 
     private static FrontierWorldState reduceAssaultPrepared(FrontierWorldState state, SubjectId subject, FrontierEvent event, SettlementAssaultSceneLeasePrepared prepared) {

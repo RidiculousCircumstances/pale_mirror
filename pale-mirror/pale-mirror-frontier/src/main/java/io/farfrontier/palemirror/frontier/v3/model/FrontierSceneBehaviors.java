@@ -252,6 +252,9 @@ public final class FrontierSceneBehaviors {
         }
         @Override public void validatePrepared(FrontierWorldState state, SceneLease lease) {
             RouteOperation operation = state.operations().get(cause(lease).operationId());
+            if (operation != null && operation.activeTravel().isPresent() && operation.participantIds().stream().anyMatch(actor ->
+                    !operation.activeTravel().orElseThrow().memberCheckpoint(actor).equals(state.actorLocations().get(actor).body())))
+                throw new IllegalArgumentException("logistics scope needs the owner-retained actual member origins");
             if (operation != null && operation.activeTravel().isPresent()
                     && !operation.activeTravel().orElseThrow().cargoAnchor().surface().support().equals(cause(lease).cargoPosition())) {
                 throw new IllegalArgumentException("scene lease must retain the exact canonical cargo position");

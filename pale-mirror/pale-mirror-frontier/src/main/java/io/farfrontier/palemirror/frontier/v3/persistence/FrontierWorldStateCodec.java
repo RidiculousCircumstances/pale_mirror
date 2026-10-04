@@ -47,8 +47,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Disposable old worlds are rejected, never given inferred activity authority.
     // Version 228 requires activity-independent physical body metadata/history.
     // Version 239 retains patrol rejoin/predecessor versions and captured physical arrival authority.
-    // Version 245 retains service departures and their exact spatial receipt predecessor.
-    static final int VERSION = 245; private static final int MAX_ENTRIES = 65_535;
+    // Version 246 retains logistics formation goals, member approaches and captured HOT cohort receipts.
+    static final int VERSION = 246; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -651,7 +651,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             for (int point = 0, pointCount = readCount(input); point < pointCount; point++) route.add(readPosition(input));
             int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
             java.util.Optional<OperationAssembly> assembly = input.readBoolean() ? java.util.Optional.of(readAssembly(input, true, true)) : java.util.Optional.empty();
-            java.util.Optional<OperationTravel> travel = input.readBoolean() ? java.util.Optional.of(readTravel(input, true, true)) : java.util.Optional.empty();
+            java.util.Optional<OperationTravel> travel = input.readBoolean() ? java.util.Optional.of(OperationTravelStateCodec.read(input)) : java.util.Optional.empty();
             TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
             if (operations.put(id, new RouteOperation(id, contract, settlement, cargo, destination, unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel, tacticalPlan)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route operation");
@@ -686,23 +686,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         return new LogisticsHistory(receipts, delivered, failed, interrupted);
     } private static void writeTravel(DataOutputStream output, OperationTravel travel) throws IOException {
-        TraversalTopologyStateCodec.write(output, travel.topology());
-        writeCount(output, travel.cursor()); writeCount(output, travel.formation().size());
-        for (var entry : travel.formation().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-            writeString(output, entry.getKey().value());
-            BodyPosition body = entry.getValue(); writePosition(output, new BlockPosition(body.x(), body.y(), body.z()));
-        }
-        writePosition(output, travel.cargoAnchor().surface().support());
-    }
-    private static OperationTravel readTravel(DataInputStream input, boolean hasTraversalTopology, boolean hasTypedTravelAnchors) throws IOException {
-        return readTravelWithTopology(input, TraversalTopologyStateCodec.read(input), true);
-    } static OperationTravel readTravelWithTopology(DataInputStream input, TraversalTopology topology, boolean hasTypedTravelAnchors) throws IOException {
-        int cursor = readCount(input); Map<SubjectId, BodyPosition> formation = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId actor = new SubjectId(readString(input)); BlockPosition body = readPosition(input); formation.put(actor,
-                    new BodyPosition(body.x(), body.y(), body.z()));
-        }
-        return new OperationTravel(topology, cursor, formation, TransportAnchor.atSupportCell(readPosition(input)));
+        OperationTravelStateCodec.write(output, travel);
     } private static void writeAssembly(DataOutputStream output, OperationAssembly assembly) throws IOException {
         writeString(output, assembly.cargoCarrierId().value()); writeCount(output, assembly.members().size());
         for (var entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {

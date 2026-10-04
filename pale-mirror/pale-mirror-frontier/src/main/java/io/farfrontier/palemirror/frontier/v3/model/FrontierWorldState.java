@@ -398,7 +398,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         // process closure/history compaction. A historical scene is neither
                         // that authority nor permission for divergent COLD progression.
                         && !ActorBodyAuthority.retainsPhysicalCustody(fencedRecovery, participant)
-                        && !actorLocations.get(participant).supportingSurface().support().equals(operation.activeTravel().map(travel -> travel.formation().get(participant).supportingSurface().support())
+                        && !actorLocations.get(participant).supportingSurface().support().equals(operation.activeTravel().map(travel -> travel.memberCheckpoint(participant).supportingSurface().support())
                         .orElseGet(() -> operation.activeAssembly().map(assembly -> assembly.positions().get(participant).support()).orElseGet(operation::currentPosition)))) {
                     throw new IllegalArgumentException("active route operation participant must be at its canonical travel position");
                 }
@@ -407,6 +407,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             operation.activeAssembly().ifPresent(assembly -> assembly.members().values().forEach(member ->
                     member.rejoin().ifPresent(approach -> approach.path().forEach(surface ->
                             FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), surface.support())))));
+            operation.activeTravel().ifPresent(travel -> travel.approaches().values().forEach(spatial -> {
+                spatial.approach().ifPresent(approach -> approach.path().forEach(surface ->
+                        FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), surface.support())));
+                spatial.waitingOrigin().ifPresent(surface -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), surface.support()));
+            }));
         }
         FrontierRouteEngagementSupport.validate(bootstrap, hiveColony, actorLocations, operations, strategicPlans);
         FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
@@ -799,8 +804,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState startOperationTravel(SubjectId operationId, OperationTravel travel, ActorExecutionGroup executions) {
         return OperationActorStateSupport.startOperationTravel(this, operationId, travel, executions);
     }
-    public FrontierWorldState advanceOperationTravel(SubjectId operationId, OperationTravel travel, ActorExecutionGroup executions) {
-        return OperationActorStateSupport.advanceOperationTravel(this, operationId, travel, executions);
+    public FrontierWorldState advanceOperationTravel(SubjectId operationId, OperationTravel travel, OperationTravelObservation observation) {
+        return OperationActorStateSupport.advanceOperationTravel(this, operationId, travel, observation);
     }
     public FrontierWorldState advanceOperationAssembly(SubjectId operationId, OperationAssembly assembly, ActorExecutionGroup executions) {
         return OperationActorStateSupport.advanceOperationAssembly(this, operationId, assembly, executions);

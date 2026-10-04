@@ -156,15 +156,12 @@ public final class SupplyOperationProcess {
                 && !ActorExecutionCoordinator.coldAvailable(state, operation.participantIds()))
             return List.of(reschedule(action, operationProgress(operation, Math.addExact(action.dueAt().ticks(), 20L))));
         if (operation != null && operation.stage() == OperationStage.ARRIVED
-                && contractForOperation(state, operation).status() == ContractStatus.DELIVERED) {
-            return List.of(new ProposedEvent(operation.settlementId(), OperationExecutionAuthority.travelStarted(state, operation, travelForNextSegment(state, operation))),
-                    reschedule(action, operationProgress(operation, Math.addExact(action.dueAt().ticks(), 20L))));
-        }
-        if (operation != null && operation.stage() == OperationStage.ARRIVED) {
+                && contractForOperation(state, operation).status() != ContractStatus.DELIVERED) {
             List<ProposedEvent> arrival = arrivalEvents(state, operation, action.dueAt().ticks());
             return arrival.isEmpty() ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id()))) : arrival;
         }
-        if (operation == null || (operation.stage() != OperationStage.EN_ROUTE && operation.stage() != OperationStage.RETURNING)) {
+        if (operation == null || (operation.stage() != OperationStage.EN_ROUTE && operation.stage() != OperationStage.RETURNING
+                && operation.stage() != OperationStage.ARRIVED)) {
             // A terminal operation can retain an older persisted progress action after recovery.
             // It is not harmless to return no events: record the exact cancellation rather than
             // pretending the action never existed or allowing the kernel to quarantine.
@@ -188,7 +185,21 @@ public final class SupplyOperationProcess {
         if (!state.routeTopology().supplyPassable(state.bootstrap(), operation.settlementId())) {
             return failed(state, operation, "route-obstructed", action.dueAt().ticks());
         }
-        if (operation.activeTravel().isEmpty() || operation.activeTravel().orElseThrow().arrived()
+        if (operation.activeTravel().isPresent()) {
+            var retained = operation.activeTravel().orElseThrow();
+            if (!retained.approaches().isEmpty() && !OperationTravelContinuation.approachesReady(retained)) {
+                var approached = OperationTravelContinuation.coldApproached(state, operation);
+                if (approached.equals(retained))
+                    return List.of(reschedule(action, operationProgress(operation, action.dueAt().ticks() + 100L)));
+                return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelAdvanced(operation.id(), approached,
+                                OperationTravelObservation.ColdApproach.capture(state, operation))),
+                        reschedule(action, operationProgress(operation, action.dueAt().ticks() + 20L)));
+            }
+        }
+        // Delivered cargo is not permission to move a physically held crew. Return travel
+        // starts only after scope/physical holds and any saved departure approach above.
+        if (operation.stage() == OperationStage.ARRIVED || operation.activeTravel().isEmpty()
+                || operation.activeTravel().orElseThrow().arrived()
                 && operation.activeTravel().orElseThrow().corridor().getLast().equals(operation.route().get(operation.routeIndex()))) {
             return List.of(new ProposedEvent(operation.settlementId(), OperationExecutionAuthority.travelStarted(state, operation, travelForNextSegment(state, operation))),
                     reschedule(action, operationProgress(operation, action.dueAt().ticks() + 20L)));
@@ -196,8 +207,11 @@ public final class SupplyOperationProcess {
         OperationTravel travel = operation.activeTravel().orElseThrow();
         if (!travel.arrived()) {
             if (!travel.canAdvanceNextEdge()) return failed(state, operation, "route-obstructed", action.dueAt().ticks());
-            OperationTravel advanced = translateTravel(travel, travel.nextColdCursor());
-            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelAdvanced(operation.id(), advanced, OperationExecutionAuthority.logisticsCurrent(state, operation))),
+            OperationTravel advanced = translateTravel(travel, travel.approaches().isEmpty() ? travel.nextColdCursor() : travel.nextHotCursor());
+            if (!OperationTravelContinuation.coldSegmentAvailable(state, travel, advanced))
+                return failed(state, operation, "formation-route-obstructed", action.dueAt().ticks());
+            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelAdvanced(operation.id(), advanced,
+                            OperationTravelObservation.ColdSegment.capture(state, operation))),
                     reschedule(action, operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
         int completedIndex = operation.stage() == OperationStage.RETURNING ? operation.routeIndex() - 1 : operation.routeIndex() + 1;

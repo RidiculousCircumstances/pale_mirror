@@ -209,9 +209,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     private static final class OperationTravelAdvancedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_travel_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationTravelAdvanced advanced = (OperationTravelAdvanced) payload;
-            writeSubject(output, advanced.operationId()); writeOperationTravel(output, advanced.travel()); ActorExecutionStateCodec.writeGroup(output, advanced.executions()); }); }
+            writeSubject(output, advanced.operationId()); writeOperationTravel(output, advanced.travel()); OperationTravelObservationCodec.write(output, advanced.observation()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input ->
-                new OperationTravelAdvanced(readSubject(input).value(), readOperationTravel(input), ActorExecutionStateCodec.readGroup(input))); }
+                new OperationTravelAdvanced(readSubject(input).value(), readOperationTravel(input), OperationTravelObservationCodec.read(input))); }
     }
     private static final class OperationTravelSegmentCompletedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_travel_segment_completed"; }
@@ -581,28 +581,12 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         return new RouteOperation(id.value(), contract.value(), settlement.value(), cargo.value(), destination.value(), unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel, tacticalPlan);
     }
     private static void writeOperationTravel(DataOutputStream output, OperationTravel travel) throws IOException {
-        // This envelope is mandatory for every current-schema operation cursor.
-        output.writeShort(0xfffe); TraversalTopologyStateCodec.write(output, travel.topology());
-        output.writeShort(travel.cursor()); output.writeByte(travel.formation().size());
-        for (var entry : travel.formation().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
-            writeSubject(output, entry.getKey()); output.writeInt(entry.getValue().x());
-            output.writeInt(entry.getValue().y()); output.writeInt(entry.getValue().z());
-        }
-        output.writeInt(travel.cargoAnchor().x()); output.writeInt(travel.cargoAnchor().y()); output.writeInt(travel.cargoAnchor().z());
+        output.writeShort(0xfffd); OperationTravelStateCodec.write(output, travel);
     }
     private static OperationTravel readOperationTravel(DataInputStream input) throws IOException {
-        int envelope = input.readUnsignedShort();
-        if (envelope != 0xfffe) throw new IllegalArgumentException("operation travel payload requires the current typed-anchor envelope");
-        return readOperationTravelWithTopology(input, TraversalTopologyStateCodec.read(input));
-    }
-    private static OperationTravel readOperationTravelWithTopology(DataInputStream input, TraversalTopology topology) throws IOException {
-        int cursor = input.readUnsignedShort(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BodyPosition> formation = new java.util.LinkedHashMap<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
-            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor = readSubject(input).value();
-            BlockPosition position = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
-            formation.put(actor, new BodyPosition(position.x(), position.y(), position.z()));
-        }
-        return new OperationTravel(topology, cursor, formation, TransportAnchor.atSupportCell(new BlockPosition(input.readInt(), input.readInt(), input.readInt())));
+        if (input.readUnsignedShort() != 0xfffd)
+            throw new IllegalArgumentException("operation travel requires current continuation/evidence schema");
+        return OperationTravelStateCodec.read(input);
     }
     private static void writeOperationAssembly(DataOutputStream output, OperationAssembly assembly) throws IOException {
         writeSubject(output, assembly.cargoCarrierId()); output.writeByte(assembly.members().size());

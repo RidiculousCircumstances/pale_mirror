@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-/** Operation-owned crew transitions commit positions, job data and exclusive execution together. */
+/** Operation owns crew progress; only COLD traversal may commit background positions. */
 final class OperationActorStateSupport {
     private OperationActorStateSupport() { }
     static FrontierWorldState createOperation(FrontierWorldState state, RouteOperation operation, ActorExecutionGroup executions) {
@@ -30,42 +30,54 @@ final class OperationActorStateSupport {
         executions.requireDeclaration(ActorActivityKind.LOGISTICS, operation.id(), operation.participantIds());
         RouteOperation started = operation.startTravel(Objects.requireNonNull(travel, "operation travel"));
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(state.operations()); nextOperations.put(operation.id(), started);
-        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(state.actorLocations());
-        travel.formation().forEach((actor, position) -> nextActors.put(actor, state.actorLocations().get(actor).withBody(position)));
-        var update = FrontierWorldStateUpdate.begin().actorLocations(nextActors).operations(nextOperations);
+        if (!travel.approaches().isEmpty() || travel.formation().entrySet().stream().anyMatch(entry ->
+                !entry.getValue().equals(state.actorLocations().get(entry.getKey()).body())))
+            throw new IllegalArgumentException("starting travel must retain independently established assembly/arrival positions");
+        var update = FrontierWorldStateUpdate.begin().operations(nextOperations);
         if (operation.stage() == OperationStage.ASSEMBLING)
             return ActorExecutionComposition.LIFECYCLE.prepareTerminalGroupReplacement(state,
                     OperationExecutionAuthority.assemblyCurrent(state, operation), executions).commit(state, update);
         executions.requireCurrent(state.actorExecutions());
         return state.withChanges(update);
     }
-    static FrontierWorldState advanceOperationTravel(FrontierWorldState state, SubjectId operationId, OperationTravel travel, ActorExecutionGroup executions) {
+    static FrontierWorldState advanceOperationTravel(FrontierWorldState state, SubjectId operationId, OperationTravel travel, OperationTravelObservation observation) {
         RouteOperation operation = state.operations().get(Objects.requireNonNull(operationId, "operation travel operation id"));
         if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalArgumentException("operation has no active exact travel");
         requireTactical(state, operation);
+        var executions = observation.executions();
         executions.requireDeclaration(ActorActivityKind.LOGISTICS, operation.id(), operation.participantIds());
         executions.requireCurrent(state.actorExecutions());
         OperationTravel current = operation.activeTravel().orElseThrow();
-        if (!current.corridor().equals(travel.corridor()) || travel.cursor() <= current.cursor() || travel.cursor() > current.nextColdCursor()) {
-            throw new IllegalArgumentException("operation travel must advance its current bounded corridor");
+        if (!current.equals(observation.predecessor())) throw new IllegalArgumentException("operation receipt has a stale spatial/route predecessor");
+        var update = FrontierWorldStateUpdate.begin();
+        if (observation instanceof OperationTravelObservation.HotSegment hot) {
+            if (!current.canAdvanceNextEdge() || !travel.isExactHotAdvanceFrom(current))
+                throw new IllegalArgumentException("HOT travel must advance one exact OPEN semantic edge");
+            SceneLease activeScene = hot.require(state, operation, travel);
+            var leases = new LinkedHashMap<>(state.sceneLeases());
+            leases.put(activeScene.id(), activeScene.rebaseHotOperationTravel(current, travel));
+            update.sceneLeases(leases); // All HOT positions were independently inspected; never install them here.
+        } else {
+            observation.requireColdEpochs(state);
+            if (!ActorExecutionCoordinator.coldAvailable(state, operation.participantIds())
+                    || FrontierSceneAdmission.hasActiveSceneLease(state, operation.id()))
+                throw new IllegalArgumentException("COLD travel cannot advance physically held or scene-scoped crew");
+            Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+            if (observation instanceof OperationTravelObservation.ColdApproach) {
+                if (travel.equals(current) || !travel.equals(OperationTravelContinuation.coldApproached(state, operation)))
+                    throw new IllegalArgumentException("COLD approach needs its exact bounded known-geometry successor");
+                travel.approaches().keySet().forEach(actor -> actors.put(actor,
+                        state.actorLocations().get(actor).withBody(travel.memberCheckpoint(actor))));
+            } else if (observation instanceof OperationTravelObservation.ColdSegment) {
+                if (!current.advance(travel.cursor(), travel.formation(), travel.cargoAnchor()).equals(travel)
+                        || !OperationTravelContinuation.coldSegmentAvailable(state, current, travel))
+                    throw new IllegalArgumentException("COLD travel must preserve formation through every known legal edge");
+                travel.formation().forEach((actor, position) -> actors.put(actor, state.actorLocations().get(actor).withBody(position)));
+            } else throw new IllegalArgumentException("unsupported travel observation provider");
+            update.actorLocations(actors);
         }
-        RouteOperation advanced = operation.withTravel(travel); Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(state.operations()); nextOperations.put(operation.id(), advanced);
-        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(state.actorLocations());
-        travel.formation().forEach((actor, position) -> nextActors.put(actor, state.actorLocations().get(actor).withBody(position)));
-        Map<SceneLeaseId, SceneLease> nextLeases = state.sceneLeases();
-        SceneLease activeScene = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(lease -> FrontierSceneBehaviors.logistics(lease).operationId().equals(operation.id()))
-                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED).findFirst().orElse(null);
-        if (activeScene != null) {
-            if (!travel.isExactHotAdvanceFrom(current)) {
-                throw new IllegalArgumentException("HOT operation travel may advance only one exact cursor");
-            }
-            SceneLease rebased = activeScene.rebaseHotOperationTravel(current, travel);
-            nextLeases = new LinkedHashMap<>(state.sceneLeases()); nextLeases.put(rebased.id(), rebased);
-        } else if (!ActorExecutionCoordinator.coldAvailable(state, operation.participantIds())) {
-            throw new IllegalArgumentException("COLD operation travel cannot advance physically held participants");
-        }
-        return state.next(nextActors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), nextOperations,
-                state.physicalIntents(), state.physicalObservations(), nextLeases, state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+        var operations = new LinkedHashMap<>(state.operations()); operations.put(operation.id(), operation.withTravel(travel));
+        return state.withChanges(update.operations(operations));
     }
     static FrontierWorldState advanceOperationAssembly(FrontierWorldState state, SubjectId operationId, OperationAssembly assembly, ActorExecutionGroup executions) {
         RouteOperation operation = state.operations().get(Objects.requireNonNull(operationId, "operation assembly operation id"));
@@ -113,6 +125,10 @@ final class OperationActorStateSupport {
         requireTactical(state, operation);
         executions.requireDeclaration(ActorActivityKind.LOGISTICS, operation.id(), operation.participantIds());
         executions.requireCurrent(state.actorExecutions());
+        var travel = operation.activeTravel().orElseThrow();
+        if (!OperationTravelContinuation.approachesReady(travel) || travel.formation().entrySet().stream().anyMatch(entry ->
+                !entry.getValue().equals(state.actorLocations().get(entry.getKey()).body())))
+            throw new IllegalArgumentException("segment completion needs every exact member at its independently established formation goal");
         RouteOperation completed = operation.completeTravelSegment();
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(state.operations()); nextOperations.put(operation.id(), completed);
         var update = FrontierWorldStateUpdate.begin().operations(nextOperations);

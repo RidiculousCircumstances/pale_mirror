@@ -36,6 +36,7 @@ class RouteSceneReturnRepairTest {
         SceneLease lease = lease(initial, engine.checkpoint(), operation);
 
         submit(engine, world, new SceneLeasePrepared(lease));
+        FrontierTestActorBodies.present(engine, world, lease);
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         // One lateral physical carriageway cell of the exact currently retained HOT edge.
         // The observation must update both the durable settlement topology and this existing
@@ -85,6 +86,7 @@ class RouteSceneReturnRepairTest {
         SceneLease lease = lease(state(engine), engine.checkpoint(), operation);
 
         submit(engine, world, new SceneLeasePrepared(lease));
+        FrontierTestActorBodies.present(engine, world, lease);
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         advanceHot(engine, world, operation.id());
         advanceHot(engine, world, operation.id());
@@ -154,9 +156,15 @@ class RouteSceneReturnRepairTest {
         int deltaZ = to.z() - from.z();
         Map<SubjectId, BodyPosition> formation = new LinkedHashMap<>();
         current.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, deltaY, deltaZ)));
-        submit(engine, world, new OperationTravelAdvanced(operationId, new OperationTravel(current.topology(), current.nextHotCursor(), formation,
-                current.cargoAnchor().offset(deltaX, deltaY, deltaZ)),
-                OperationExecutionAuthority.logisticsCurrent(state(engine), state(engine).operations().get(operationId))));
+        var initial = state(engine); var operation = initial.operations().get(operationId);
+        var scope = initial.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics)
+                .filter(value -> FrontierSceneBehaviors.logistics(value).operationId().equals(operationId) && value.status() == SceneLeaseStatus.HOT)
+                .findFirst().orElseThrow();
+        FrontierTestActorBodies.present(engine, world, scope);
+        var observation = ModeledActorBodyFacts.operationTravelObservation(state(engine), operation, scope);
+        for (var entry : formation.entrySet()) ModeledActorBodyFacts.inspected(engine, entry.getKey(), entry.getValue());
+        submit(engine, world, new OperationTravelAdvanced(operationId, current.advance(current.nextHotCursor(), formation,
+                current.cargoAnchor().offset(deltaX, deltaY, deltaZ)), observation));
     }
     /** Pure fixture acknowledges physical removal separately; scene closure never proves it. */
     private static void releaseRemovedBodies(FrontierEngine<FrontierWorldProjection> engine, WorldId world, RouteOperation operation) {

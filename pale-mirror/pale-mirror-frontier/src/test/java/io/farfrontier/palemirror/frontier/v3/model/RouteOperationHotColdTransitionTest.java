@@ -12,6 +12,65 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 /** State-machine checks for the transient COLD segment boundary between two HOT scenes. */
 class RouteOperationHotColdTransitionTest {
+    @Test void savedDepartureRejoinsTheOriginalFormationGoalWithoutMovingCargoOrCreditingTheRoute() {
+        var world = new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:logistics-owned-rejoin");
+        var configuration = FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L);
+        var initial = configuration.initialState();
+        var operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(initial).orElseThrow();
+        var original = operation.activeTravel().orElseThrow();
+        var scope = FrontierTestSceneLeases.exact(initial,
+                new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:logistics-owned-rejoin"),
+                operation.id(), operation.cargoId(), operation.currentPosition(), configuration.initialInstant(),
+                1L, java.util.Optional.empty(), operation.participantIds());
+        var state = initial.prepareSceneLease(scope);
+        state = FrontierTestActorBodies.present(state, scope).transitionSceneLease(scope.id(), SceneLeaseStatus.HOT);
+        var actor = operation.participantIds().getFirst();
+        var goal = original.nextFormationBody(actor).supportingSurface();
+        var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
+        var ground = KnownPedestrianGround.forFrontier(state);
+        var order = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(operation.id(), actor,
+                0L, 1L, java.util.List.of(goal), TraversalCapability.PEDESTRIAN,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var origin = java.util.List.of(goal.support().offset(0, 0, 1), goal.support().offset(0, 0, -1),
+                        goal.support().offset(1, 0, 0), goal.support().offset(-1, 0, 0)).stream()
+                .map(cell -> ground.at(cell.x(), cell.z())).filter(surface -> !surface.equals(goal)
+                        && !surface.equals(original.formation().get(actor).supportingSurface()))
+                .filter(surface -> {
+                    try { return !knowledge.path(surface, order).isEmpty(); }
+                    catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) { return false; }
+                }).findFirst().orElseThrow();
+        state = ModeledActorBodyFacts.inspected(state, actor, origin.standingBody());
+        state = state.transitionSceneLease(scope.id(), SceneLeaseStatus.DRAINING);
+        var releaseState = state;
+        var positions = scope.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
+                releaseState.actorLocations().get(member.actorId()).body(), releaseState.actorLocations().get(member.actorId()).condition().health())).toList();
+        state = state.releaseSceneLease(scope.id(), positions);
+        for (var member : operation.participantIds()) state = ModeledActorBodyFacts.unloaded(state, member);
+        operation = state.operations().get(operation.id());
+        var checkpoint = operation.activeTravel().orElseThrow();
+        assertEquals(original.formation(), checkpoint.formation());
+        assertEquals(goal, checkpoint.approaches().get(actor).approach().orElseThrow().target());
+        assertEquals(origin.standingBody(), checkpoint.memberCheckpoint(actor));
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        state = codec.decode(codec.encode(state));
+        var observation = OperationTravelObservation.ColdApproach.capture(state, operation);
+        var approached = OperationTravelContinuation.coldApproached(state, operation);
+        assertEquals(checkpoint.cursor(), approached.cursor());
+        assertEquals(checkpoint.formation(), approached.formation());
+        assertEquals(checkpoint.cargoAnchor(), approached.cargoAnchor());
+        var before = state;
+        state = state.advanceOperationTravel(operation.id(), approached, observation);
+        assertSame(before.inventory(), state.inventory());
+        assertSame(before.actorExecutions(), state.actorExecutions());
+        assertEquals(goal, state.actorLocations().get(actor).supportingSurface());
+        var repeated = state;
+        var operationId = operation.id();
+        assertThrows(IllegalArgumentException.class, () -> repeated.advanceOperationTravel(operationId, approached, observation));
+        var payload = new OperationTravelAdvanced(operationId, approached, observation);
+        var payloads = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(payload, payloads.decode(payload.type(), payloads.encode(payload)));
+        assertEquals(state, codec.decode(codec.encode(state)));
+    }
     @Test void compactedSceneCannotRestoreRouteOwnershipOfALoadedActorPosition() {
         var world = new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:route-body-compaction");
         var configuration = FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, 91L);
@@ -70,7 +129,10 @@ class RouteOperationHotColdTransitionTest {
         var settledOperation = cold.operations().get(operation.id());
         var checkpoint = settledOperation.activeTravel().orElseThrow();
         assertEquals(observedPosition, cold.actorLocations().get(actor).body());
-        assertEquals(observedPosition, checkpoint.formation().get(actor));
+        assertEquals(observedPosition, checkpoint.memberCheckpoint(actor));
+        assertEquals(originalTravel.formation(), checkpoint.formation(), "saved absence cannot move the next formation goal");
+        checkpoint.approaches().get(actor).approach().ifPresent(approach ->
+                assertEquals(originalTravel.nextFormationBody(actor).supportingSurface(), approach.target()));
         assertSame(originalTravel.topology(), checkpoint.topology());
         assertEquals(originalTravel.cursor(), checkpoint.cursor(), "saved absence cannot certify route progress");
         assertEquals(originalTravel.cargoAnchor(), checkpoint.cargoAnchor(), "saved actor absence cannot move cargo");
@@ -82,7 +144,8 @@ class RouteOperationHotColdTransitionTest {
                 "another independently held crew body still excludes COLD");
         assertEquals(cold, codec.decode(codec.encode(cold)));
         assertThrows(IllegalArgumentException.class, () -> originalTravel.checkpointMember(
-                new io.farfrontier.palemirror.frontier.v3.api.SubjectId("resident:foreign-checkpoint"), observedPosition));
+                new io.farfrontier.palemirror.frontier.v3.api.SubjectId("resident:foreign-checkpoint"),
+                new StationApproachState(1L, java.util.Optional.empty(), java.util.Optional.of(observedPosition.supportingSurface()))));
         for (var member : operation.participantIds()) {
             if (member.equals(actor)) continue;
             var position = cold.actorLocations().get(member);
@@ -110,6 +173,12 @@ class RouteOperationHotColdTransitionTest {
                 "COLD owns an arrived segment until it atomically opens the next corridor");
         assertEquals(Set.copyOf(operation.participantIds()), travel.formation().keySet(),
                 "the hand-off retains the exact formation identities");
+        var displaced = travel.checkpointMember(operation.participantIds().getFirst(),
+                new StationApproachState(1L, java.util.Optional.empty(), java.util.Optional.of(
+                        travel.formation().get(operation.participantIds().getFirst()).supportingSurface().offset(1, 0, 1))));
+        assertThrows(IllegalArgumentException.class, () -> operation.withTravel(displaced).completeTravelSegment(),
+                "an arrived cargo cursor cannot complete a still-unavailable member departure approach");
+        awaitingNextSegment.completeTravelSegment();
         BodyPosition initialCarrier = initial.formation().get(operation.cargoCarrierId());
         BodyPosition arrivedCarrier = travel.formation().get(operation.cargoCarrierId());
         assertEquals(initial.cargoAnchor().x() - initialCarrier.x(), travel.cargoAnchor().x() - arrivedCarrier.x());

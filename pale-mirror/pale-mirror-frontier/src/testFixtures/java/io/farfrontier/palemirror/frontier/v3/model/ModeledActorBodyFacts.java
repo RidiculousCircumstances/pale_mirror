@@ -10,6 +10,14 @@ import java.util.Optional;
 /** Explicit unit/GameTest fixture facts only; never native insertion or death evidence. */
 public final class ModeledActorBodyFacts {
     private ModeledActorBodyFacts() { }
+    /** Captures the existing modeled cohort; it does not move bodies or certify arrival. */
+    public static OperationTravelObservation.HotSegment operationTravelObservation(FrontierWorldState state,
+                                                                                    RouteOperation operation, SceneLease scope) {
+        var executions = OperationExecutionAuthority.logisticsCurrent(state, operation);
+        var members = new java.util.LinkedHashMap<SubjectId, ActorHotObservation>();
+        for (var execution : executions.members()) members.put(execution.actorId(), hotObservation(state, execution, scope.revision()));
+        return new OperationTravelObservation.HotSegment(executions, operation.activeTravel().orElseThrow(), scope.id(), members);
+    }
     /** Captures a declared running fixture's tuple; it does not establish arrival or create a body. */
     public static ActorHotObservation hotObservation(FrontierWorldState state, ActorExecutionId execution, long scopeRevision) {
         var id = new ActorActuationId(ActorBodyAuthority.current(state, execution.actorId()), execution);

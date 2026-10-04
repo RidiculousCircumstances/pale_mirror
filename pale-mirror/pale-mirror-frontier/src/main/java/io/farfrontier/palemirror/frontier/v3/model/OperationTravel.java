@@ -16,12 +16,17 @@ import java.util.Objects;
  * Minecraft identity or physics policy.</p>
  */
 public record OperationTravel(SubjectId frontId, TraversalTopology topology, int cursor, Map<SubjectId, BodyPosition> formation,
-                              TransportAnchor cargoAnchor) {
+                              TransportAnchor cargoAnchor, Map<SubjectId, StationApproachState> approaches) {
     public static final int MAX_CELLS = 4_096;
     public static final int MAX_COLD_ADVANCE = 32;
 
     public OperationTravel(TraversalTopology topology, int cursor, Map<SubjectId, BodyPosition> formation, TransportAnchor cargoAnchor) {
-        this(frontIdFor(topology), topology, cursor, formation, cargoAnchor);
+        this(frontIdFor(topology), topology, cursor, formation, cargoAnchor, Map.of());
+    }
+    /** Fresh segment admission; hydration supplies explicit saved approaches. */
+    public OperationTravel(SubjectId frontId, TraversalTopology topology, int cursor, Map<SubjectId, BodyPosition> formation,
+                           TransportAnchor cargoAnchor) {
+        this(frontId, topology, cursor, formation, cargoAnchor, Map.of());
     }
 
     public OperationTravel {
@@ -58,6 +63,15 @@ public record OperationTravel(SubjectId frontId, TraversalTopology topology, int
         if (formation.values().stream().anyMatch(cargoAnchor::sharesSupportColumn)) {
             throw new IllegalArgumentException("operation travel cargo anchor must remain in a separate support column from every exact actor");
         }
+        approaches = Map.copyOf(Objects.requireNonNull(approaches, "operation member approaches"));
+        if (!formation.keySet().containsAll(approaches.keySet()))
+            throw new IllegalArgumentException("operation approach names a foreign member");
+        for (var entry : approaches.entrySet()) {
+            if (!entry.getValue().pending() || entry.getValue().approach().isPresent()
+                    && !entry.getValue().approach().orElseThrow().target().equals(nextFormationBody(
+                            topology, cursor, formation.get(entry.getKey())).supportingSurface()))
+                throw new IllegalArgumentException("operation approach must retain its unfinished formation goal");
+        }
     }
 
     public List<BlockPosition> corridor() { return corridor(topology); }
@@ -82,25 +96,45 @@ public record OperationTravel(SubjectId frontId, TraversalTopology topology, int
 
     /** Physical evidence may change retained edge availability, never geometry or the cursor. */
     public OperationTravel withAvailability(java.util.Set<TraversalEdgeId> affected, TraversalAvailability availability) {
-        return new OperationTravel(frontId, topology.withAvailability(affected, availability), cursor, formation, cargoAnchor);
+        return new OperationTravel(frontId, topology.withAvailability(affected, availability), cursor, formation, cargoAnchor, approaches);
     }
 
-    /** A saved physical member position changes only that member's continuation origin.
-     * It cannot advance the route, relocate cargo or certify an arrival. */
-    public OperationTravel checkpointMember(SubjectId actor, BodyPosition observed) {
+    /** Saved departure changes only the member's approach, never its semantic formation goal. */
+    public OperationTravel checkpointMember(SubjectId actor, StationApproachState approach) {
         if (!formation.containsKey(Objects.requireNonNull(actor)))
             throw new IllegalArgumentException("operation checkpoint names a foreign member");
-        Objects.requireNonNull(observed);
-        if (formation.get(actor).equals(observed)) return this;
-        var next = new LinkedHashMap<>(formation);
-        next.put(actor, observed);
-        return new OperationTravel(frontId, topology, cursor, next, cargoAnchor);
+        Objects.requireNonNull(approach);
+        if (approach.equals(approaches.get(actor))) return this;
+        var next = new LinkedHashMap<>(approaches);
+        next.put(actor, approach);
+        return withApproaches(next);
+    }
+
+    public OperationTravel withApproaches(Map<SubjectId, StationApproachState> next) {
+        return new OperationTravel(frontId, topology, cursor, formation, cargoAnchor, next);
+    }
+    public BodyPosition memberCheckpoint(SubjectId actor) {
+        BodyPosition semantic = formation.get(Objects.requireNonNull(actor));
+        if (semantic == null) throw new IllegalArgumentException("foreign operation member");
+        var approach = approaches.get(actor);
+        return approach == null ? semantic : approach.current(semantic.supportingSurface()).standingBody();
+    }
+    public BodyPosition nextFormationBody(SubjectId actor) {
+        BodyPosition semantic = formation.get(Objects.requireNonNull(actor));
+        if (semantic == null) throw new IllegalArgumentException("foreign operation formation goal");
+        return nextFormationBody(topology, cursor, semantic);
+    }
+    private static BodyPosition nextFormationBody(TraversalTopology topology, int cursor, BodyPosition semantic) {
+        var corridor = corridor(topology);
+        var from = corridor.get(cursor); var to = corridor.get(Math.min(cursor + 1, corridor.size() - 1));
+        return semantic.offset(to.x() - from.x(), to.y() - from.y(), to.z() - from.z());
     }
 
     /** A loaded physical caravan may certify only its immediately adjacent cell. */
     public boolean isExactHotAdvanceFrom(OperationTravel prior) {
         Objects.requireNonNull(prior, "prior operation travel");
-        if (!topology.equals(prior.topology()) || cursor != prior.cursor() + 1 || !formation.keySet().equals(prior.formation.keySet())) return false;
+        if (!frontId.equals(prior.frontId) || !topology.equals(prior.topology()) || !approaches.isEmpty()
+                || cursor != prior.cursor() + 1 || !formation.keySet().equals(prior.formation.keySet())) return false;
         BlockPosition from = prior.currentPosition(), to = currentPosition();
         int deltaX = to.x() - from.x(), deltaY = to.y() - from.y(), deltaZ = to.z() - from.z();
         if (Math.abs(deltaX) + Math.abs(deltaZ) != 1 || Math.abs(deltaY) > 1) return false;
@@ -109,10 +143,15 @@ public record OperationTravel(SubjectId frontId, TraversalTopology topology, int
     }
 
     public OperationTravel advance(int nextCursor, Map<SubjectId, BodyPosition> nextFormation, TransportAnchor nextCargoAnchor) {
-        if (nextCursor <= cursor || nextCursor > nextColdCursor()) {
+        if (nextCursor <= cursor || nextCursor > nextColdCursor() || !approaches.isEmpty() && nextCursor != nextHotCursor()) {
             throw new IllegalArgumentException("operation travel cursor must advance by one bounded COLD step");
         }
-        return new OperationTravel(frontId, topology, nextCursor, nextFormation, nextCargoAnchor);
+        var from = currentPosition(); var to = corridor().get(nextCursor);
+        if (!nextFormation.keySet().equals(formation.keySet()) || formation.entrySet().stream().anyMatch(entry ->
+                !entry.getValue().offset(to.x() - from.x(), to.y() - from.y(), to.z() - from.z()).equals(nextFormation.get(entry.getKey())))
+                || !cargoAnchor.offset(to.x() - from.x(), to.y() - from.y(), to.z() - from.z()).equals(nextCargoAnchor))
+            throw new IllegalArgumentException("operation route advance must preserve the exact formation and cargo translation");
+        return new OperationTravel(frontId, topology, nextCursor, nextFormation, nextCargoAnchor, Map.of());
     }
 
     private static List<BlockPosition> corridor(TraversalTopology topology) {
