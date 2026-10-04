@@ -21,6 +21,56 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void serviceGeometryIsReusedButPhysicalChangesInvalidateIt() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:service-geometry-reuse"), 20260918065L));
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), new SubjectId("settlement:7"));
+        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
+                .findFirst().orElseThrow();
+        var port = SettlementDepotServicePort.forDepot(depot);
+        var point = SettlementServiceAccessPoints.forDepot(state, settlement, depot);
+        var resident = settlement.residents().getFirst().id();
+        var moved = state.withActorBody(resident, port.serviceSurface().standingBody());
+        org.junit.jupiter.api.Assertions.assertSame(point, SettlementServiceAccessPoints.forDepot(moved, settlement, depot));
+        org.junit.jupiter.api.Assertions.assertSame(SettlementPedestrianGround.localSupports(state.bootstrap(), settlement.id()),
+                SettlementPedestrianGround.localSupports(moved.bootstrap(), settlement.id()));
+        assertEquals(point.egressSurfaces(), SettlementServiceAccessPoints.egress(moved, port));
+        assertTrue(ServiceAccessCoordinator.boundary(moved, FrontierWorldState.depotId(settlement.id()))
+                .occupied(moved.actorLocations().get(resident).body()));
+        var blocked = point.egressSurfaces().iterator().next();
+        var damaged = moved.recordPhysicalDelta(new PhysicalDelta(blocked.support().offset(0, 1, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:service-exit-obstruction"));
+        var rebuilt = SettlementServiceAccessPoints.forDepot(damaged, settlement, depot);
+        org.junit.jupiter.api.Assertions.assertNotSame(point, rebuilt);
+        assertTrue(!rebuilt.egressSurfaces().contains(blocked));
+        assertTrue(!SettlementServiceAccessPoints.egress(damaged, port).contains(blocked));
+        // Switching to recovered immutable geometry must not retain another world's cache.
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var recovered = codec.decode(codec.encode(damaged));
+        assertEquals(rebuilt, SettlementServiceAccessPoints.forDepot(recovered,
+                FrontierWorldStateSupport.settlement(recovered.bootstrap(), settlement.id()), depot));
+        assertEquals(point, SettlementServiceAccessPoints.forDepot(state, settlement, depot));
+    }
+
+    @Test void serviceClearanceFindsAnotherExitWhenThePreferredCellIsBlocked() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:alternate-service-exit"), 20260918065L));
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), new SubjectId("settlement:7"));
+        var port = SettlementServiceAccessPoints.depotPort(state, settlement.id());
+        var resident = settlement.residents().getFirst().id();
+        state = state.withActorBody(resident, port.serviceSurface().standingBody());
+        var first = KnownServiceExitNavigation.clearancePathFrom(state, settlement.id(), FrontierWorldState.depotId(settlement.id()),
+                resident, resident, 0, 1L, port.serviceSurface());
+        var blocked = first.getLast();
+        state = state.recordPhysicalDelta(new PhysicalDelta(blocked.support().offset(0, 1, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:preferred-exit-blocked"));
+        var alternate = KnownServiceExitNavigation.clearancePathFrom(state, settlement.id(), FrontierWorldState.depotId(settlement.id()),
+                resident, resident, 0, 1L, port.serviceSurface());
+        assertTrue(!alternate.getLast().equals(blocked));
+        assertTrue(port.accessBoundary().cleared(alternate.getLast().standingBody()));
+        assertTrue(alternate.subList(0, alternate.size() - 1).stream()
+                .allMatch(surface -> port.accessBoundary().occupied(surface.standingBody())));
+    }
     @Test void mutableRouteOverlaysCannotPoisonCachedBootstrapOccupancy() {
         var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:occupancy-cache"), 421L);
         var original = KnownPedestrianRouteKnowledge.staticOccupancy(bootstrap);

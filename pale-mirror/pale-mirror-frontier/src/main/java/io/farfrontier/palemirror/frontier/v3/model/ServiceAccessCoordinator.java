@@ -49,8 +49,7 @@ public final class ServiceAccessCoordinator {
         Objects.requireNonNull(residentId, "service access resident");
         SettlementDepotServicePort servicePort = port(state, depotId);
         ServiceAccessBoundary access = servicePort.accessBoundary();
-        var egress = SettlementServiceAccessPoints.forSettlement(state, servicePort.settlementId()).stream()
-                .filter(point -> point.facilityId().equals(servicePort.depotId())).findFirst().orElseThrow().egressSurfaces();
+        var egress = SettlementServiceAccessPoints.egress(state, servicePort);
         var first = state.humanPopulation().meals().values().stream()
                 .filter(meal -> meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal, access, egress))
                 .min(Comparator.<ResidentMeal, Boolean>comparing(meal -> !access.occupied(currentBody(state, meal.residentId())))
@@ -89,8 +88,7 @@ public final class ServiceAccessCoordinator {
         Objects.requireNonNull(workerId, "service access worker");
         SettlementDepotServicePort servicePort = port(state, depotId);
         ServiceAccessBoundary access = servicePort.accessBoundary();
-        var egress = SettlementServiceAccessPoints.forSettlement(state, servicePort.settlementId()).stream()
-                .filter(point -> point.facilityId().equals(servicePort.depotId())).findFirst().orElseThrow().egressSurfaces();
+        var egress = SettlementServiceAccessPoints.egress(state, servicePort);
         var applicant = workApplicants(state, depotId).stream().findFirst();
         boolean mealAtPort = state.humanPopulation().meals().values().stream().anyMatch(meal ->
                 meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal, access, egress));
@@ -158,7 +156,8 @@ public final class ServiceAccessCoordinator {
         // Access ends on a physical exit toward any non-depot goal, including
         // carrying picked-up input to the station. Waiting for final delivery
         // leaves a phantom occupant while the next worker holds the station.
-        if (boundary.occupied(BakeryWorkGoal.current(state, job).station().standingBody())) return false;
+        var phase = job.bakeryWork().orElseThrow().phase();
+        if (phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY) return false;
         SceneLease lease = state.sceneLeases().values().stream()
                 .filter(candidate -> candidate.status() == SceneLeaseStatus.HOT
                         && FrontierSceneBehaviors.isProductionWork(candidate)
@@ -270,8 +269,7 @@ public final class ServiceAccessCoordinator {
         var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
                         new KnownPedestrianRouteKnowledge.Passage(depot,
                                 KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
-        return ServiceClearanceTargets.select(SettlementServiceAccessPoints.forDepot(settlement, depot, knowledge,
-                        SettlementServiceAccessPoints.population(state, settlement.id())),
+        return ServiceClearanceTargets.select(SettlementServiceAccessPoints.forDepot(state, settlement, depot),
                 residentId, knowledge, excluded);
     }
 

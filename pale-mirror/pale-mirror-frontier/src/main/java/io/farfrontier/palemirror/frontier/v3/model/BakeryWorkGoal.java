@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 import java.util.List;
 import java.util.Objects;
 
-/** One semantic depot or machine station shared by COLD planning and HOT navigation. */
+/** Semantic work goal. DELIVERED names the service boundary's anchor, not an exact exit destination. */
 public record BakeryWorkGoal(SubjectId jobId, SubjectId workerId, BakeryWorkState.Phase phase,
                              SurfaceAnchor station) {
     public BakeryWorkGoal {
@@ -24,9 +24,7 @@ public record BakeryWorkGoal(SubjectId jobId, SubjectId workerId, BakeryWorkStat
             SettlementStructure depot = settlement.structures().stream()
                     .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
             var port = SettlementDepotServicePort.forDepot(depot);
-            var outside = port.facing().step(port.exteriorApproach(), 1);
-            target = SettlementPedestrianGround.surveyedSupport(state.bootstrap(),
-                    SettlementPedestrianGround.localSupports(state.bootstrap(), job.settlementId()), outside.x(), outside.z());
+            target = port.serviceSurface();
         } else if (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY) {
             SettlementStructure depot = settlement.structures().stream()
@@ -50,6 +48,8 @@ public record BakeryWorkGoal(SubjectId jobId, SubjectId workerId, BakeryWorkStat
     }
 
     public MovementOrder movementOrder() {
+        if (phase == BakeryWorkState.Phase.DELIVERED)
+            throw new IllegalArgumentException("service clearance requires its shared exit region, not an exact station");
         return new MovementOrder(jobId, workerId, phase.wireTag(), 1L, List.of(station),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
     }

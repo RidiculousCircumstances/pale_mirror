@@ -110,7 +110,8 @@ final class FrontierV3SceneDiagnosticJson {
             return ",\"productionStage\":\"" + work.phase() + "\",\"productionCursor\":-1"
                     + ",\"productionCurrent\":" + FrontierV3DiagnosticJson.position(goal.station().support())
                     + ",\"productionNext\":null,\"productionNextBody\":"
-                    + FrontierV3DiagnosticJson.position(goal.station().standingBody())
+                    + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DELIVERED
+                        ? "null" : FrontierV3DiagnosticJson.position(goal.station().standingBody()))
                     + ",\"productionFutureBody\":null,\"bakeryCompletedTicks\":" + work.completedWorkTicks()
                     + ",\"bakeryPendingPhysicalEffect\":" + work.pendingPhysicalStep().isPresent();
         }

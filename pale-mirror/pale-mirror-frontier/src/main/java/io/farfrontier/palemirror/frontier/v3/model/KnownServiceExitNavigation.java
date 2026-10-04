@@ -32,6 +32,31 @@ public final class KnownServiceExitNavigation {
         return pathFrom(state, settlementId, depotId, order, actor.supportingSurface());
     }
 
+    /** Any supported exit clears access; neither parking nor return-to-work is part of service. */
+    public static List<SurfaceAnchor> clearancePathFrom(FrontierWorldState state, SubjectId settlementId,
+            SubjectId depotId, SubjectId ownerId, SubjectId actorId, int phase, long generation, SurfaceAnchor start) {
+        var stations = exitStations(state, settlementId, depotId, actorId, start);
+        for (int offset = 0; offset < stations.size(); offset += MovementOrder.MAX_LEGAL_STATIONS) {
+            var batch = stations.subList(offset, Math.min(stations.size(), offset + MovementOrder.MAX_LEGAL_STATIONS));
+            var order = new MovementOrder(ownerId, actorId, phase, generation, batch,
+                    TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
+            try {
+                var route = pathFrom(state, settlementId, depotId, order, start);
+                var boundary = ServiceAccessCoordinator.boundary(state, depotId);
+                for (int index = 0; index < route.size(); index++) {
+                    if (boundary.cleared(route.get(index).standingBody()))
+                        return List.copyOf(route.subList(0, index + 1));
+                }
+                throw new IllegalArgumentException("service exit route never clears its declared boundary");
+            }
+            catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                // Try the remaining bounded region, without changing the semantic goal.
+            }
+        }
+        throw new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable(
+                "no reachable supported service exit");
+    }
+
     public static List<SurfaceAnchor> pathFrom(FrontierWorldState state, SubjectId settlementId,
                                                SubjectId depotId, MovementOrder order,
                                                SurfaceAnchor start) {

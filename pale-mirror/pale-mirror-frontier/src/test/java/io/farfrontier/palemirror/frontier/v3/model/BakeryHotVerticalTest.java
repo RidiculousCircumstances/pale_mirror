@@ -468,6 +468,17 @@ class BakeryHotVerticalTest {
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, deliverySlot)),
                 "minecraft:bread", 64))));
         assertEquals(BakeryWorkState.Phase.DELIVERED, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        var deliveredGoal = BakeryWorkGoal.current(state, state.productionJobs().get(job.id()));
+        assertThrows(IllegalArgumentException.class, deliveredGoal::movementOrder,
+                "a delivered job cannot retain an exact exit-cell obligation");
+        var firstExit = BakeryKnownNavigation.path(state, state.productionJobs().get(job.id()));
+        assertTrue(ServiceAccessCoordinator.boundary(state, depot).cleared(firstExit.getLast().standingBody()));
+        var exitObstructed = state.recordPhysicalDelta(new PhysicalDelta(firstExit.getLast().support().offset(0, 1, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:bakery-preferred-exit-blocked"));
+        var alternativeExit = BakeryKnownNavigation.path(exitObstructed, exitObstructed.productionJobs().get(job.id()));
+        assertNotEquals(firstExit.getLast(), alternativeExit.getLast());
+        assertTrue(ServiceAccessCoordinator.boundary(exitObstructed, depot).cleared(alternativeExit.getLast().standingBody()));
+        assertEquals(state.inventory(), exitObstructed.inventory(), "clearance planning cannot replay delivery");
         assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().get(task.id()).status());
         // The input hold still names the historical wheat source, but this depot
         // now owns bread under a newer physical authority. Its checkpoint must

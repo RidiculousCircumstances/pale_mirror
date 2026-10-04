@@ -73,6 +73,15 @@ final class FrontierV3BakeryWorkSceneExecutor {
                     new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             return;
         }
+        if (goal.phase() == BakeryWorkState.Phase.DELIVERED) {
+            var movement = FrontierV3ServiceClearanceNavigation.pursue(level, worker, state, job.settlementId(),
+                    FrontierWorldState.depotId(job.settlementId()), job.id(), job.workerId(), goal.phase().wireTag(),
+                    1L, actuation);
+            if (movement.status() == FrontierV3GoalNavigation.Status.BLOCKED)
+                FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "delivered-clearance:" + movement.reason());
+            else FrontierV3PhysicalWaitTrace.clear(worker);
+            return; // Access completion is witnessed above, never arrival at one preferred cell.
+        }
         if ((goal.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || goal.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
                 && !ServiceAccessCoordinator.depotAvailableForWork(state,
@@ -91,11 +100,6 @@ final class FrontierV3BakeryWorkSceneExecutor {
             }
             if (!lease.memberBody(state.actorLocations(), job.workerId()).equals(goal.station().standingBody())) {
                 FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);
-                return;
-            }
-            if (job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED) {
-                FrontierV3CommandSubmission.submit(runtime, "bakery-delivered-draining", lease.id().value(),
-                        new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
                 return;
             }
             BakeryWorkState work = job.bakeryWork().orElseThrow();
@@ -126,14 +130,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
         FrontierV3GoalNavigation.Result movement = FrontierV3GoalNavigation.pursue(level, worker,
                 FrontierV3GoalNavigation.Goal.routed(order, known, state.bootstrap().bounds()), actuation);
         BakeryWorkState work = job.bakeryWork().orElseThrow();
-        // Delivery is an already confirmed inventory effect. Clearance can wait for
-        // navigation, but cannot retroactively block that completed production.
-        if (work.phase() == BakeryWorkState.Phase.DELIVERED
-                && movement.status() == FrontierV3GoalNavigation.Status.BLOCKED) {
-            FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "delivered-clearance:" + movement.reason());
-        } else {
-            FrontierV3PhysicalWaitTrace.clear(worker);
-        }
+        FrontierV3PhysicalWaitTrace.clear(worker);
         switch (navigationBlockChange(work.phase(), work.block(), movement)) {
         case BLOCK -> {
             FrontierV3BakeryPhysicalEffect.block(level, runtime, lease, job,

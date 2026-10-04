@@ -17,11 +17,25 @@ import java.util.Objects;
  * invitation for an actuator to guess a height at runtime.</p>
  */
 public final class SettlementPedestrianGround {
+    private static FrontierBootstrap cachedBootstrap;
+    private static final Map<SubjectId, Map<TerrainColumn, SurfaceAnchor>> LOCAL = new LinkedHashMap<>();
     private SettlementPedestrianGround() { }
 
-    public static Map<TerrainColumn, SurfaceAnchor> localSupports(FrontierBootstrap bootstrap, SubjectId settlementId) {
+    public static synchronized Map<TerrainColumn, SurfaceAnchor> localSupports(FrontierBootstrap bootstrap, SubjectId settlementId) {
         Objects.requireNonNull(bootstrap, "settlement pedestrian ground bootstrap");
         Objects.requireNonNull(settlementId, "settlement pedestrian ground settlement");
+        if (cachedBootstrap != bootstrap) {
+            LOCAL.clear();
+            cachedBootstrap = bootstrap;
+        }
+        var prior = LOCAL.get(settlementId);
+        if (prior != null) return prior;
+        var result = compile(bootstrap, settlementId);
+        LOCAL.put(settlementId, result); // Only validated settlements in the one current bootstrap.
+        return result;
+    }
+
+    private static Map<TerrainColumn, SurfaceAnchor> compile(FrontierBootstrap bootstrap, SubjectId settlementId) {
         Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("settlement pedestrian ground has no settlement: " + settlementId.value()));
         LinkedHashMap<TerrainColumn, SurfaceAnchor> surfaces = new LinkedHashMap<>();

@@ -42,33 +42,12 @@ final class FrontierV3ResidentMealNavigation {
         }
         if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS) {
             ROUTES.remove(body);
-            var knownStations = KnownServiceExitNavigation.exitStations(state, meal.settlementId(), meal.depotId(),
-                    meal.residentId(), FrontierV3SurfaceObservation.observedBody(body).supportingSurface());
-            var stations = knownStations.stream().filter(station -> available(level, body, station)).toList();
-            if (stations.isEmpty()) {
-                blocked(body, meal, "service_exit:no-available-supported-exit candidates=" + knownStations.stream()
-                        .map(station -> station.support() + ":" + (level.hasChunkAt(new net.minecraft.core.BlockPos(
-                                station.x(), station.y(), station.z()))
-                                ? FrontierV3SemanticMovement.detail(FrontierV3SemanticMovement.target(level, body, station))
-                                : "unloaded")).toList());
-                FrontierV3GoalNavigation.stop(body, actuation);
-                return;
-            }
-            String lastReason = "no-reachable-exit";
-            for (int offset = 0; offset < stations.size(); offset += MovementOrder.MAX_LEGAL_STATIONS) {
-                var batch = stations.subList(offset, Math.min(stations.size(), offset + MovementOrder.MAX_LEGAL_STATIONS));
-                MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
-                        FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, batch,
-                        TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
-                var result = FrontierV3GoalNavigation.pursue(level, body,
-                        FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()), actuation);
-                if (result.status() != FrontierV3GoalNavigation.Status.BLOCKED) {
-                    BLOCKED.remove(body);
-                    return;
-                }
-                lastReason = result.reason();
-            }
-            blocked(body, meal, "service_exit:" + lastReason);
+            var result = FrontierV3ServiceClearanceNavigation.pursue(level, body, state, meal.settlementId(),
+                    meal.depotId(), meal.residentId(), meal.residentId(), FrontierWireTags.tag(meal.phase()),
+                    meal.startedAtTick() + 1L, actuation);
+            if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
+                blocked(body, meal, "service_exit:" + result.reason());
+            else BLOCKED.remove(body);
             return;
         }
         Route route = ROUTES.get(body);

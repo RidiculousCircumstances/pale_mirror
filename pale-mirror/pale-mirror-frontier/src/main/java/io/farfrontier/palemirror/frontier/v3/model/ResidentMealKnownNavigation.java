@@ -26,20 +26,17 @@ public final class ResidentMealKnownNavigation {
     }
 
     public static List<SurfaceAnchor> clearancePathFrom(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start) {
+        if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS)
+            return KnownServiceExitNavigation.clearancePathFrom(state, meal.settlementId(), meal.depotId(),
+                    meal.residentId(), meal.residentId(), FrontierWireTags.tag(meal.phase()), 1L, start);
         List<SurfaceAnchor> destinations = List.of(meal.clearingSurface());
-        if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS) {
-            destinations = KnownServiceExitNavigation.exitStations(state, meal.settlementId(), meal.depotId(),
-                    meal.residentId(), start);
-            if (destinations.isEmpty()) throw new KnownPedestrianNavigation.RouteUnavailable("no available service exit");
-        }
         List<SurfaceAnchor> route = null;
         for (int offset = 0; offset < destinations.size(); offset += MovementOrder.MAX_LEGAL_STATIONS) {
             List<SurfaceAnchor> batch = destinations.subList(offset,
                     Math.min(destinations.size(), offset + MovementOrder.MAX_LEGAL_STATIONS));
             MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
                     FrontierWireTags.tag(meal.phase()), 1L, batch, TraversalCapability.PEDESTRIAN,
-                    meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
-                            ? MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION : MovementOrder.ArrivalPolicy.EXACT_STATION);
+                    MovementOrder.ArrivalPolicy.EXACT_STATION);
             try {
                 route = KnownServiceExitNavigation.pathFrom(state, meal.settlementId(), meal.depotId(), order, start);
                 break;
@@ -48,16 +45,6 @@ public final class ResidentMealKnownNavigation {
             }
         }
         if (route == null) throw new KnownPedestrianNavigation.RouteUnavailable("no reachable service exit");
-        ServiceAccessBoundary boundary = ServiceAccessCoordinator.boundary(state, meal.depotId());
-        // CLEAR_ACCESS asks for an exit, not an exact parking trip. The retained parking
-        // spot can become unreachable after selection; do not keep the socket hostage
-        // for the remainder of a route after its semantic exit has been reached.
-        if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS) {
-            for (int index = 0; index < route.size(); index++) {
-                if (boundary.cleared(route.get(index).standingBody()))
-                    return List.copyOf(route.subList(0, index + 1));
-            }
-        }
         return route;
     }
 

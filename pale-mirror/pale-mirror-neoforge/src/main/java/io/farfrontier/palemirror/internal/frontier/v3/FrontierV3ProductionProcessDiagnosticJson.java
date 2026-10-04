@@ -43,7 +43,9 @@ final class FrontierV3ProductionProcessDiagnosticJson {
             long stationBindings = state.inventory().fungibleResources().bindings().values().stream()
                     .filter(value -> value.accountId().equals(work.stationAccountId())).count();
             return ",\"cursor\":null,\"goal\":{\"kind\":\"" + work.phase()
-                    + "\",\"station\":" + FrontierV3DiagnosticJson.position(goal.station().standingBody())
+                    + "\",\"station\":" + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DELIVERED
+                        ? "null" : FrontierV3DiagnosticJson.position(goal.station().standingBody()))
+                    + ",\"clearServiceAccess\":" + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DELIVERED)
                     + "},\"result\":{\"workStage\":\"" + work.phase()
                     + "\",\"completedTicks\":" + work.completedWorkTicks()
                     + ",\"terminalEffectEligible\":" + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DELIVERED)
