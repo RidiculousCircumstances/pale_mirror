@@ -133,14 +133,20 @@ class FrontierV3ServerRuntimeTest {
 
     @Test
     void failedRecoverySelectionRemainsAVisibleQuarantinedV3Runtime(@TempDir Path directory) {
+        var cause = new IllegalArgumentException("recovery header does not match selected physical world");
         FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.failedStart(
                 configuration(), new FrontierFileStore(directory, codecs()), 20,
-                new IllegalArgumentException("recovery header does not match selected physical world"));
+                cause);
 
         assertEquals(FrontierV3RuntimeStatus.Kind.QUARANTINED, runtime.status().kind());
         assertTrue(runtime.status().detail().orElseThrow().contains("recovery header"));
         assertTrue(runtime.checkpointImage().isEmpty());
         assertTrue(runtime.submit(command("command:must-not-run", Revision.ZERO, SimInstant.ZERO, 1)).isEmpty());
+        var failure = assertThrows(IllegalStateException.class,
+                () -> FrontierV3StartupExposure.requireActive(runtime.status(), cause));
+        assertSame(cause, failure.getCause(), "failed startup must stop the host with the original recovery trace");
+        assertTrue(failure.getMessage().contains("refusing world exposure"));
+        FrontierV3StartupExposure.requireActive(FrontierV3RuntimeStatus.active(), null);
     }
 
     @Test

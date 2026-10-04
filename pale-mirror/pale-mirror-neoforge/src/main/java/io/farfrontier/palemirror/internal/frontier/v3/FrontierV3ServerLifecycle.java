@@ -191,6 +191,7 @@ public final class FrontierV3ServerLifecycle {
         // The NeoForge host, not the reducer, supplies actual build/artifact/session provenance.
         var diagnosticIdentity = FrontierV3DiagnosticRuntimeIdentity.openServerSession();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime;
+        RuntimeException startupFailure = null;
         try {
             RecoveryImage recovery = store.recover(configuration.worldId());
             configuration = FrontierWorldRecoveryConfiguration.select(configuration,
@@ -210,6 +211,7 @@ public final class FrontierV3ServerLifecycle {
             runtime.decodedState().ifPresent(recovered -> FrontierV3ActorBirthRecovery.retireUnpublished(recovered,
                     birthLedger, () -> birthLedger.persist(physicalWorld, birthWorld)));
         } catch (RuntimeException error) {
+            startupFailure = error;
             runtime = FrontierV3ServerRuntime.failedStart(configuration.withExecutionMetrics(metrics), store, 200, error, diagnosticIdentity);
         }
         RUNTIMES.put(server, runtime);
@@ -239,6 +241,7 @@ public final class FrontierV3ServerLifecycle {
                     PaleMirrorMod.LOGGER.warn("Frontier v3 conflicted {} cocoon release(s) with an uninspected restart outcome", mobilizationUnknown);
                 }
             } catch (RuntimeException error) {
+                startupFailure = error;
                 runtime.quarantine(error);
             }
         }
@@ -251,6 +254,7 @@ public final class FrontierV3ServerLifecycle {
         } else {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined at startup: {}", runtime.status().detail().orElse("unknown"));
         }
+        FrontierV3StartupExposure.requireActive(runtime.status(), startupFailure);
     }
     private static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
     initialConfiguration(ServerLevel physicalWorld) {

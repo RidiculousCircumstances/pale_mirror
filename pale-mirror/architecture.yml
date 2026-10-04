@@ -387,7 +387,7 @@ critical_flows:
     verification: "focused policy/negative ownership/recovery tests, existing farmer/bakery regressions and read-only management diagnostic; no future trade/combat implementation claim"
   - id: "frontier-v3-command-event"
     lifecycle: "active-development"
-    path: "typed command or persisted due action -> expected-revision and invariant validation -> deterministic events and cause chain -> required WAL durability -> atomic canonical transition -> immutable revisioned projections"
+    path: "typed command or persisted due action -> expected-revision and invariant validation -> deterministic events and cause chain -> required WAL durability -> atomic canonical transition -> immutable revisioned projections; startup recovery failure aborts host exposure with original cause, never an online unverified entity firewall"
     owner: "pure-Java FrontierEngine kernel; NeoForge will own only server-thread invocation and storage implementation"
     verification: "critical-code"
   - id: "frontier-v3-scheduled-world"
