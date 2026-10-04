@@ -99,7 +99,8 @@ class ResidentFoodPortionTest {
         assertEquals(9, started.meal().portion().quantity());
         assertEquals(Map.of(LOT_A, 3, LOT_B, 6), started.meal().portion().lotQuantities());
         state = ResidentActivityProcess.reduceMealStarted(state, resident, roundtrip(started));
-        state = ResidentMealProcess.reduceHotArrived(state, resident, new ResidentMealHotArrived(resident, 1, fixture.service().standingBody(), started.meal().executionId()));
+        state = ResidentMealProcess.reduceHotArrived(state, resident, new ResidentMealHotArrived(resident, 1,
+                fixture.service().standingBody(), ModeledActorBodyFacts.hotObservation(state, started.meal().executionId(), 1)));
         var prepared = roundtrip(new ResidentMealHotEffectPrepared(resident,
                 new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, Map.of(7, 3, 19, 8), 0, 1, 1, 1, started.meal().executionId())));
         var before = state;
@@ -137,8 +138,10 @@ class ResidentFoodPortionTest {
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotPrepared(atService, resident,
                 new ResidentMealHotEffectPrepared(resident,
                         new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1, started.meal().executionId()))));
+        state = ModeledActorBodyFacts.inspected(state, resident, eating);
         state = ResidentMealProcess.reduceHotAccessCleared(state, resident,
-                roundtrip(new ResidentMealHotAccessCleared(resident, 1, eating, started.meal().executionId())));
+                roundtrip(new ResidentMealHotAccessCleared(resident, 1, eating,
+                        ModeledActorBodyFacts.hotObservation(state, started.meal().executionId(), 1))));
         state = ResidentMealProcess.reduceHotPrepared(state, resident, roundtrip(new ResidentMealHotEffectPrepared(resident,
                 new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1, started.meal().executionId()))));
         var consumed = new ResidentMealHotEffectObserved(resident, ResidentMeal.Phase.CONSUME, 1,

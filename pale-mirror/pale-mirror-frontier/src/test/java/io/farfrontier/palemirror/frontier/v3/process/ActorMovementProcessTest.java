@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
-import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
+import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -216,6 +216,56 @@ class ActorMovementProcessTest {
         assertEquals(successor, next.actorMovements().get(actor));
         next.actorExecutions().requireCurrent(successor.executionId());
         assertEquals(next, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(next)));
+    }
+
+    @Test void hotGoalReceiptRequiresIndependentPoseAndCapturedBodyScopeBeforeFinishing() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:movement-common-body-arrival"), 421L));
+        var settlement = initial.bootstrap().settlements().getFirst();
+        var actor = settlement.residents().getFirst().id();
+        var depot = FrontierWorldState.depotId(settlement.id());
+        var station = SettlementServiceAccessPoints.depotPort(initial, settlement.id()).serviceSurface();
+        var state = initial.withActorBody(actor, station.standingBody());
+        var destination = ServiceAccessCoordinator.mealClearingSurface(state, actor).orElseThrow();
+        var order = new MovementOrder(actor, actor, 0L, 1L, List.of(destination), TraversalCapability.PEDESTRIAN,
+                MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var movement = new ActorMovement(order, 1L, new ActorMovementContext.ServiceExit(settlement.id(), depot),
+                state.actorExecutions().next(actor, ActorActivityKind.SERVICE_EXIT, actor));
+        state = retainMovement(state, movement);
+        var lease = AmbientActorProcess.nextLease(state, actor, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(2L));
+        state = AmbientLeaseStateProcess.prepare(state, lease);
+        state = ModeledActorBodyFacts.present(state, actor);
+        state = AmbientLeaseStateProcess.transition(state, actor, AmbientLeaseStatus.HOT);
+        var witness = ModeledActorBodyFacts.hotObservation(state, movement.executionId(), lease.revision());
+        var arrived = new ActorMovementHotObserved(actor, order.goalRevision(), lease.revision(), destination.standingBody(), witness);
+        var uninspected = state;
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.reduceHotObserved(uninspected, actor, arrived, 3L));
+        var atStart = new ActorMovementHotObserved(actor, order.goalRevision(), lease.revision(), station.standingBody(), witness);
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.reduceHotObserved(uninspected, actor, atStart, 3L),
+                "an independently known non-goal body is not semantic completion");
+        state = ModeledActorBodyFacts.inspected(state, actor, destination.standingBody());
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        var inspected = state;
+        var actuation = witness.actuation();
+        var staleBody = new ActorHotObservation(new ActorActuationId(new ActorBodyId(actor,
+                actuation.body().physicalEpoch() + 1L), movement.executionId()), lease.revision());
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.reduceHotObserved(inspected, actor,
+                new ActorMovementHotObserved(actor, order.goalRevision(), lease.revision(), destination.standingBody(), staleBody), 3L));
+        var staleScope = new ActorHotObservation(actuation, lease.revision() + 1L);
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.reduceHotObserved(inspected, actor,
+                new ActorMovementHotObserved(actor, order.goalRevision(), staleScope.scopeRevision(), destination.standingBody(), staleScope), 3L));
+        var staleExecution = new ActorExecutionId(actor, ActorActivityKind.SERVICE_EXIT, actor, movement.executionId().generation() + 1L);
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.reduceHotObserved(inspected, actor,
+                new ActorMovementHotObserved(actor, order.goalRevision(), lease.revision(), destination.standingBody(),
+                        new ActorHotObservation(new ActorActuationId(actuation.body(), staleExecution), lease.revision())), 3L));
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(arrived, codecs.decode(arrived.type(), codecs.encode(arrived)));
+        var after = ActorMovementProcess.reduceHotObserved(state, actor, arrived, 3L);
+        assertEquals(inspected.actorLocations(), after.actorLocations());
+        assertFalse(after.actorMovements().containsKey(actor));
+        assertEquals(inspected.inventory(), after.inventory());
+        assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.reduceHotObserved(after, actor, arrived, 3L));
     }
 
     private static FrontierWorldState retainMovement(FrontierWorldState state, ActorMovement movement) {

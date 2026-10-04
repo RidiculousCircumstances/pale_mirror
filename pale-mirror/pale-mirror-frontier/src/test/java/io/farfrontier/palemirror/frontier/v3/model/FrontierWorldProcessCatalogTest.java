@@ -45,7 +45,7 @@ class FrontierWorldProcessCatalogTest {
                 "frontier.resident_meal_resource_effect_observed",
                 "frontier.resident_meal_portion_disposition_observed",
                 "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
-                "frontier.resident_meal_hot_returned")) {
+                "frontier.resident_meal_hot_access_cleared")) {
             assertEquals("population", registry.requireCommandOwner(type), type);
         }
         assertEquals("actor-movement", registry.requireCommandOwner("frontier.actor_movement_hot_observed"));

@@ -202,25 +202,21 @@ public final class ActorMovementProcess {
                 || !lease.goalBody().supportingSurface().equals(movement.order().legalStations().getFirst()))
             throw new IllegalArgumentException("HOT movement lacks exact order, lease or actor");
         state.actorExecutions().requireCurrent(movement.executionId());
+        observed.observation().require(state, movement.executionId(), lease.revision(), observed.observedBody());
         boolean arrived = movement.order().arrivedAt(observed.observedBody().supportingSurface());
-        boolean exited = ServiceAccessCoordinator.witnessedActorMovementExit(state, movement, observed.observedBody());
-        if (!arrived && !exited)
-            throw new IllegalArgumentException("HOT movement observation is neither goal arrival nor service exit");
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(subject, actor.withBody(observed.observedBody()));
+        if (!arrived)
+            throw new IllegalArgumentException("HOT movement receipt is not a semantic goal arrival");
         Map<SubjectId, ActorMovement> movements = new LinkedHashMap<>(state.actorMovements());
-        if (arrived) movements.remove(subject);
+        movements.remove(subject);
         FrontierWorldState next = state.withChanges(FrontierWorldStateUpdate.begin()
-                .actorLocations(actors).actorMovements(movements)
-                .actorExecutions(arrived ? state.actorExecutions().finish(movement.executionId()) : state.actorExecutions()));
-        return arrived ? ResidentActivityProcess.retargetHotResident(next, subject, atTick) : next;
+                .actorMovements(movements)
+                .actorExecutions(state.actorExecutions().finish(movement.executionId())));
+        return ResidentActivityProcess.retargetHotResident(next, subject, atTick);
     }
 
     public static List<ProposedEvent> planHotObserved(FrontierWorldState state,
                                                       ActorMovementHotObserved observed, long atTick) {
-        FrontierWorldState next = reduceHotObserved(state, observed.actorId(), observed, atTick);
-        if (next.actorMovements().containsKey(observed.actorId()))
-            return List.of(new ProposedEvent(observed.actorId(), observed));
+        reduceHotObserved(state, observed.actorId(), observed, atTick);
         ActorMovement prior = state.actorMovements().get(observed.actorId());
         return List.of(new ProposedEvent(observed.actorId(), observed),
                 ResidentActivityProcess.wakeAfterMeal(observed.actorId(), atTick),

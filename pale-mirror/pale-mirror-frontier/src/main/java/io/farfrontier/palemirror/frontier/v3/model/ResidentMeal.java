@@ -21,11 +21,11 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
     public static final String BREAD_KIND = "minecraft:bread";
     public static final ActorItemSlot.Pocket CARRIED_PORTION_SLOT = new ActorItemSlot.Pocket(0);
     /** CLEAR_ACCESS carries the retained portion outside the shared service passage before eating. */
-    public enum Phase { MOVE, TAKE, CONSUME, RETURN, CLEAR_ACCESS }
+    public enum Phase { MOVE, TAKE, CONSUME, CLEAR_ACCESS }
 
     public boolean carriesFood() { return phase == Phase.CLEAR_ACCESS || phase == Phase.CONSUME; }
 
-    public boolean movesToClearance() { return phase == Phase.CLEAR_ACCESS || phase == Phase.RETURN; }
+    public boolean movesToClearance() { return phase == Phase.CLEAR_ACCESS; }
 
     public ResidentMeal {
         Objects.requireNonNull(residentId, "meal resident");
@@ -101,7 +101,6 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
             case TAKE -> next == Phase.CLEAR_ACCESS;
             case CLEAR_ACCESS -> next == Phase.CONSUME;
             case CONSUME -> false; // only confirmed consumption retires the meal
-            case RETURN -> false;
         };
         if (!legal) throw new IllegalArgumentException("meal phase cannot skip a physical custody receipt");
         return new ResidentMeal(residentId, settlementId, depotId, clearingSurface, sourceAccountId, actorAccountId,
@@ -109,7 +108,7 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
     }
 
     private static boolean movesToClearancePhase(Phase phase) {
-        return phase == Phase.CLEAR_ACCESS || phase == Phase.RETURN;
+        return phase == Phase.CLEAR_ACCESS;
     }
 
     public ResidentMeal waitFor(ResidentActivityChoice.Wait reason) {

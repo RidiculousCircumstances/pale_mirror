@@ -47,8 +47,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Disposable old worlds are rejected, never given inferred activity authority.
     // Version 228 requires activity-independent physical body metadata/history.
     // Version 239 retains patrol rejoin/predecessor versions and captured physical arrival authority.
-    // Version 242 removes family-owned HOT pose receipts and captures field arrival authority.
-    static final int VERSION = 242; private static final int MAX_ENTRIES = 65_535;
+    // Version 243 captures meal/movement body authority and retires the post-consumption meal return.
+    static final int VERSION = 243; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

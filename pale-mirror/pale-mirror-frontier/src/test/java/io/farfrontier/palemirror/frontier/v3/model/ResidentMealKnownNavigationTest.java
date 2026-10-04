@@ -187,7 +187,7 @@ class ResidentMealKnownNavigationTest {
         ResidentMeal returning = new ResidentMeal(resident, settlement.id(), depot,
                 state.actorLocations().get(resident).supportingSurface(),
                 meal.sourceAccountId(), meal.actorAccountId(), meal.portion(), meal.claimId(),
-                meal.retainedWorkOwner(), ResidentMeal.Phase.RETURN, meal.startedAtTick(), Optional.empty(),
+                meal.retainedWorkOwner(), ResidentMeal.Phase.CLEAR_ACCESS, meal.startedAtTick(), Optional.empty(),
                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, meal.claimId(), 1L));
         var serviceActors = new java.util.LinkedHashMap<>(state.actorLocations());
         serviceActors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT));
@@ -195,7 +195,8 @@ class ResidentMealKnownNavigationTest {
                 state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(serviceActors)), returning);
         assertEquals(service, exit.getFirst());
         assertTrue(exit.contains(SettlementDepotServicePort.forDepot(depotStructure).exteriorApproach()));
-        assertEquals(returning.clearingSurface(), exit.getLast());
+        assertTrue(SettlementDepotServicePort.forDepot(depotStructure).accessBoundary().cleared(exit.getLast().standingBody()),
+                "clearance ends at a safe exit, not at the resident's former parking point");
         SettlementStructure workshop = settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
         SurfaceAnchor work = SettlementWorkshopServicePort.forWorkshop(workshop).workStation();

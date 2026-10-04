@@ -65,7 +65,7 @@ public record ResidentMealResourceObligation(ActorExecutionId executionId, Actor
             case TAKE -> CustodyState.SOURCE_TAKE_PENDING;
             case CLEAR_ACCESS, CONSUME -> meal.pendingPhysicalStep().isPresent()
                     ? CustodyState.ACTOR_CONSUMPTION_PENDING : CustodyState.ACTOR_PORTION;
-            case MOVE, RETURN -> throw new IllegalArgumentException("unbegun or completed meal has no resource obligation");
+            case MOVE -> throw new IllegalArgumentException("unbegun meal has no resource obligation");
         };
         return new ResidentMealResourceObligation(meal.executionId(), body, meal.settlementId(), meal.depotId(),
                 meal.sourceAccountId(), meal.actorAccountId(), meal.portion(), state, meal.pendingPhysicalStep(), atTick);

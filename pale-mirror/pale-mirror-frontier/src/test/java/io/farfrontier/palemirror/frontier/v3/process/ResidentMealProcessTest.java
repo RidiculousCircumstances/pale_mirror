@@ -489,7 +489,8 @@ class ResidentMealProcessTest {
                 "the HOT executor owns this meal; its COLD timer must not append no-op retries");
         assertEquals(AmbientGoalKind.MEAL, state.ambientLeases().get(resident).goal());
         state = ResidentMealProcess.reduceHotArrived(state, resident,
-                new ResidentMealHotArrived(resident, 1L, service.standingBody(), meal.executionId()));
+                new ResidentMealHotArrived(resident, 1L, service.standingBody(),
+                        ModeledActorBodyFacts.hotObservation(state, meal.executionId(), 1L)));
         assertEquals(ResidentMeal.Phase.TAKE, state.humanPopulation().meals().get(resident).phase());
         state = ResidentMealProcess.reduceHotPrepared(state, resident,
                 new ResidentMealHotEffectPrepared(resident,
@@ -513,15 +514,18 @@ class ResidentMealProcessTest {
         assertEquals(firstExit, ResidentMealKnownNavigation.returnPath(state,
                 state.humanPopulation().meals().get(resident)).getLast(),
                 "HOT navigation must target the first semantic exit, not the remaining parking route");
+        state = ModeledActorBodyFacts.inspected(state, resident, firstExit.standingBody());
         state = ResidentMealProcess.reduceHotAccessCleared(state, resident,
-                new ResidentMealHotAccessCleared(resident, 1, firstExit.standingBody(), meal.executionId()));
+                new ResidentMealHotAccessCleared(resident, 1, firstExit.standingBody(),
+                        ModeledActorBodyFacts.hotObservation(state, meal.executionId(), 1L)));
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"),
                 "releasing the access point is not consumption");
         assertEquals(ResidentMeal.Phase.CONSUME, state.humanPopulation().meals().get(resident).phase(),
                 "a supported exit permits eating without waiting for the exact parking point");
         FrontierWorldState outside = state;
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotAccessCleared(outside, resident,
-                new ResidentMealHotAccessCleared(resident, 1, meal.clearingSurface().standingBody(), meal.executionId())),
+                new ResidentMealHotAccessCleared(resident, 1, meal.clearingSurface().standingBody(),
+                        ModeledActorBodyFacts.hotObservation(outside, meal.executionId(), 1L))),
                 "a duplicate clearance cannot advance an already consumable portion");
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         state = ResidentMealProcess.reduceHotPrepared(state, resident,
@@ -539,6 +543,13 @@ class ResidentMealProcessTest {
                         service.standingBody(), List.of(), List.of(), meal.executionId()), 48_002L));
         ResidentMealHotEffectObserved consumed = new ResidentMealHotEffectObserved(resident,
                 ResidentMeal.Phase.CONSUME, 1L, displaced, List.of(), List.of(), meal.executionId());
+        var otherClearedPose = meal.clearingSurface().standingBody();
+        FrontierWorldState resourceAcknowledged = ResidentMealProcess.reduceHotObserved(state, resident,
+                new ResidentMealHotEffectObserved(resident, ResidentMeal.Phase.CONSUME, 1L,
+                        otherClearedPose, List.of(), List.of(), meal.executionId()), 48_002L);
+        assertEquals(state.actorLocations(), resourceAcknowledged.actorLocations(),
+                "an exact resource receipt must not become a competing physical position writer");
+        assertFalse(resourceAcknowledged.humanPopulation().meals().containsKey(resident));
         var plannedEvents = ResidentMealProcess.planHotObserved(state, consumed, 48_002L);
         var healthFact = assertInstanceOf(ResidentStarvationIntegrated.class, plannedEvents.getFirst().payload());
         assertEquals(100, healthFact.next().severityUnits());
@@ -632,7 +643,8 @@ class ResidentMealProcessTest {
         assertFalse(engine.checkpoint().schedules().stream().anyMatch(action -> action.id().equals(due.id())));
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind());
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotArrived(after, resident,
-                new ResidentMealHotArrived(resident, 1L, location.body(), meal.executionId())));
+                new ResidentMealHotArrived(resident, 1L, location.body(),
+                        ModeledActorBodyFacts.hotObservation(state, meal.executionId(), 1L))));
         if (meal.pendingPhysicalStep().isPresent()) {
             var stale = new ResidentMealHotEffectObserved(resident, meal.phase(),
                     meal.pendingPhysicalStep().orElseThrow().ambientRevision(), location.body(), List.of(), List.of(), meal.executionId());

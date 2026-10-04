@@ -89,14 +89,14 @@ class ResidentActivityCoordinatorTest {
         assertEquals(ResidentActivityChoice.Kind.WORK, resumed.kind());
     }
 
-    @Test void retainedMealKeepsTheBodyUntilReturnEvenAfterHungerIsRelieved() {
+    @Test void unconfirmedMealKeepsCurrentActivityUntilConsumptionEvenIfNutritionIsAlreadyRelieved() {
         SubjectId settlement = new SubjectId("settlement:one");
         SubjectId depot = FrontierWorldState.depotId(settlement);
         ResidentMeal meal = new ResidentMeal(RESIDENT, settlement, depot, SurfaceAnchor.at(0, 64, 0),
                 ReferenceContainerCustody.scopeId(depot),
                 new SubjectId("custody:resident-meal-one"),
                 new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:bread-one"), 1)), new SubjectId("claim:meal-one"),
-                Optional.of(JOB), ResidentMeal.Phase.RETURN, 24_000L, Optional.empty(),
+                Optional.of(JOB), ResidentMeal.Phase.CONSUME, 24_000L, Optional.empty(),
                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(RESIDENT, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:meal-one"), 1L));
         var activity = ResidentActivityCoordinator.choose(SettlementDailySchedule.initial(),
                 24_001L, ResidentNutrition.nourishedAt(1), ASSIGNED,

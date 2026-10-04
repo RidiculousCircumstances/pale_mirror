@@ -93,7 +93,7 @@ public final class DiagnosticProducerContract {
         "frontier.resident_meal_resource_effect_observed",
         "frontier.resident_meal_portion_disposition_observed",
         "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
-        "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_hot_returned", "frontier.resident_migrated", "frontier.resident_migration_advanced", "frontier.resident_migration_rejoin_advanced",
+        "frontier.resident_meal_hot_access_cleared", "frontier.resident_migrated", "frontier.resident_migration_advanced", "frontier.resident_migration_rejoin_advanced",
         "frontier.resident_migration_resumed", "frontier.resident_migration_started", "frontier.resident_transit_advanced", "frontier.resource_deposited",
         "frontier.resource_field_cell_observed", "frontier.resource_field_work_access_observed", "frontier.resource_field_world_change_held", "frontier.resource_field_world_change_acknowledged",
         "frontier.resource_field_foreign_change_held", "frontier.resource_field_foreign_cell_observed",

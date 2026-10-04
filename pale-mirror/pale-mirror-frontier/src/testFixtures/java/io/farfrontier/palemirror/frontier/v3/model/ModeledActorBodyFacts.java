@@ -10,6 +10,12 @@ import java.util.Optional;
 /** Explicit unit/GameTest fixture facts only; never native insertion or death evidence. */
 public final class ModeledActorBodyFacts {
     private ModeledActorBodyFacts() { }
+    /** Captures a declared running fixture's tuple; it does not establish arrival or create a body. */
+    public static ActorHotObservation hotObservation(FrontierWorldState state, ActorExecutionId execution, long scopeRevision) {
+        var id = new ActorActuationId(ActorBodyAuthority.current(state, execution.actorId()), execution);
+        ActorBodyAuthority.requireActuation(state, id);
+        return new ActorHotObservation(id, scopeRevision);
+    }
     public static FrontierWorldState present(FrontierWorldState state, SubjectId actor) {
         state = ActorBodyAuthority.demand(state, actor);
         var id = ActorBodyAuthority.current(state, actor);

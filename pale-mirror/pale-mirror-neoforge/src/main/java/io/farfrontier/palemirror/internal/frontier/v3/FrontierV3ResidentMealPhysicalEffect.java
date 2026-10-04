@@ -58,6 +58,14 @@ final class FrontierV3ResidentMealPhysicalEffect {
                                     meal.portion().itemKind(), meal.portion().quantity()), meal.executionId()));
         var observedBody = FrontierV3SupportedBodyCapture.observe(level, body);
         if (observedBody.isEmpty()) return false;
+        // Resource confirmation never installs pose. Inspect the exact live body separately;
+        // retired/possibly applied operations are settled by their retained resource owner.
+        var actuation = FrontierV3AmbientActuation.capture(state, runtime, body, lease, meal.executionId()).orElse(null);
+        if (actuation == null || !FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)
+                || !actuation.current(body)) return false;
+        state = runtime.decodedState().orElseThrow();
+        var currentMeal = state.humanPopulation().meals().get(residentId);
+        if (currentMeal == null || !currentMeal.equals(meal)) return false;
         if (meal.phase() == ResidentMeal.Phase.CONSUME) {
             if (!ResidentMealProcess.mayConsumeAt(state, meal, observedBody.orElseThrow())) return false;
             return consume(level, runtime, state, meal, worker, lease);

@@ -101,12 +101,6 @@ public final class ResidentActivityProcess {
         return retargetHotResident(next, subject, started.meal().startedAtTick());
     }
 
-    public static FrontierWorldState reduceMealReturned(FrontierWorldState state, SubjectId subject,
-                                                        ResidentMealHotReturned returned, long atTick) {
-        FrontierWorldState next = ResidentMealProcess.reduceHotReturned(state, subject, returned);
-        return retargetHotResident(next, subject, atTick);
-    }
-
     /** Meal receipts own food effects; activity orchestration alone retargets the retained HOT executor. */
     public static FrontierWorldState reduceMealEffectObserved(FrontierWorldState state, SubjectId subject,
             ResidentMealHotEffectObserved observed, long atTick) {

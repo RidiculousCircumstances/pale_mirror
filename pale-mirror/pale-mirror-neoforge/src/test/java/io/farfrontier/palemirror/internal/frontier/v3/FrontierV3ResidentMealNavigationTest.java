@@ -27,6 +27,6 @@ class FrontierV3ResidentMealNavigationTest {
         assertFalse(FrontierV3ResidentMealNavigation.completedWaitingLegRequiresReplan(
                 List.of(pocket, service), service, service, true, ResidentMeal.Phase.MOVE));
         assertFalse(FrontierV3ResidentMealNavigation.completedWaitingLegRequiresReplan(
-                approach, pocket, service, true, ResidentMeal.Phase.RETURN));
+                approach, pocket, service, true, ResidentMeal.Phase.CLEAR_ACCESS));
     }
 }

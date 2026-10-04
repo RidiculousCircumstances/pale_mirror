@@ -23,13 +23,6 @@ final class MealActivityCapability implements ActorActivityCapability {
                         .humanPopulation(state.humanPopulation().retainMealResources(meal, obligation)),
                         ActorActivityDeath.Disposition.RETIRE_EXACT_EXECUTION);
             }
-            if (meal.phase() == ResidentMeal.Phase.RETURN) {
-                if (resources.claims().containsKey(meal.claimId()) || resources.accounts().containsKey(meal.actorAccountId()))
-                    throw new IllegalArgumentException("completed meal still retains an unsettled portion");
-                return new ActorActivityDeath.Acknowledgement(state, execution, FrontierWorldStateUpdate.begin()
-                        .humanPopulation(state.humanPopulation().completeMeal(meal)),
-                        ActorActivityDeath.Disposition.RETIRE_EXACT_EXECUTION);
-            }
             var claim = resources.claims().get(meal.claimId());
             var source = resources.accounts().get(meal.sourceAccountId());
             if (claim == null || claim.purpose() != ClaimPurpose.RESIDENT_MEAL
