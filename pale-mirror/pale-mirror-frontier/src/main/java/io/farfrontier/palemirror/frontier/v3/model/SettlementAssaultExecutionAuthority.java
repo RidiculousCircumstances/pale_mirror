@@ -58,7 +58,20 @@ public final class SettlementAssaultExecutionAuthority {
         return assault;
     }
     static ActorActivityCapability capability() { return new ActorActivityCapability() {
+        @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId id, AmbientActorLease lease) {
+            return false; // The assault owns formation/tactical goals, never ambient fallback motion.
+        }
         @Override public ActorActivityKind kind() { return ActorActivityKind.SETTLEMENT_ASSAULT; }
+        @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
+        @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
+            return request -> {
+                var owner = require(request.expectedState().strategicPlans().settlementAssaults(), request.execution());
+                var checkpoint = owner.formationBodies().get(request.execution().actorId());
+                if (checkpoint != null && !checkpoint.equals(request.observedPosition()))
+                    throw new IllegalArgumentException("assault march requires its observed formation rejoin before COLD");
+                return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+            };
+        }
         @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
         @Override public void validateReference(FrontierWorldState state, ActorExecutionId id) { require(state.strategicPlans().settlementAssaults(), id); }
         @Override public ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId id) {

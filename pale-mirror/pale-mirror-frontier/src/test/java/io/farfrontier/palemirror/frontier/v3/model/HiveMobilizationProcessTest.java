@@ -38,6 +38,81 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HiveMobilizationProcessTest {
+    @Test void returnCasualtyRetiresOnlyItsExecutionAndRemainingSurvivorsContinueWithoutReplay() {
+        var state = returningState();
+        var parent = state.hiveColony().mobilizations().values().stream().findFirst().orElseThrow();
+        var casualty = parent.returnAssembly().orElseThrow().members().keySet().stream().sorted().findFirst().orElseThrow();
+        var oldExecution = HiveReturnExecutionAuthority.current(state, parent.id(), casualty);
+        var beforeMembers = parent.returnAssembly().orElseThrow().members();
+        state = ModeledActorBodyFacts.present(state, casualty);
+        state = ModeledActorBodyFacts.died(state, casualty, state.actorLocations().get(casualty).body(), "return-casualty", 10_000L);
+        var updated = state.hiveColony().mobilizations().get(parent.id());
+        assertEquals(parent.memberIds(), updated.memberIds(), "the original expedition roster still records the casualty");
+        assertFalse(updated.returnAssembly().orElseThrow().members().containsKey(casualty));
+        assertEquals(ActorLifeStatus.DEAD, state.actorLocations().get(casualty).condition().status());
+        assertTrue(state.actorExecutions().actors().get(casualty).current().isEmpty());
+        updated.returnAssembly().orElseThrow().members().forEach((actor, member) -> assertEquals(beforeMembers.get(actor), member,
+                "a casualty must not replay or advance another participant's return"));
+        var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(state, restored);
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceReturnAdvanced(restored, parent.hiveId(),
+                new HiveMobilizationReturnAdvanced(parent.id(), casualty, beforeMembers.get(casualty).cursor(), oldExecution)));
+        var planned = HiveMobilizationProcess.planReturnProgress(restored, HiveMobilizationProcess.returnProgress(parent.id(), 10_001L));
+        var advance = assertInstanceOf(HiveMobilizationReturnAdvanced.class, planned.getFirst().payload());
+        assertFalse(advance.bioformId().equals(casualty));
+        var progressed = HiveMobilizationProcess.reduceReturnAdvanced(restored, parent.hiveId(), advance);
+        assertEquals(restored.actorLocations().get(casualty), progressed.actorLocations().get(casualty));
+        // Separate fatality fork: no remaining body is fabricated when all survivors die.
+        var allLost = restored;
+        for (var actor : updated.returnAssembly().orElseThrow().members().keySet()) {
+            allLost = ModeledActorBodyFacts.present(allLost, actor);
+            allLost = ModeledActorBodyFacts.died(allLost, actor, allLost.actorLocations().get(actor).body(),
+                    "return-all-lost", 10_001L);
+        }
+        var terminal = allLost.hiveColony().mobilizations().get(parent.id());
+        assertEquals(HiveMobilizationStatus.COMPLETED, terminal.status());
+        assertEquals(parent.memberIds(), terminal.memberIds());
+        assertTrue(terminal.returnAssembly().orElseThrow().members().isEmpty());
+        assertTrue(HiveMobilizationProcess.planReturnProgress(allLost, HiveMobilizationProcess.returnProgress(parent.id(), 10_002L)).isEmpty());
+        assertEquals(allLost, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(allLost)));
+    }
+
+    @Test void finalReturnCasualtyClosesTheParentAndRetiresAlreadyArrivedSurvivorsAtomically() {
+        var state = returningState();
+        var parent = state.hiveColony().mobilizations().values().stream().findFirst().orElseThrow();
+        // Advance all participants normally until only one unfinished survivor remains.
+        // Parking an arbitrarily selected walker first could legitimately block a shared edge.
+        for (int step = 0; step < 256; step++) {
+            var current = state.hiveColony().mobilizations().get(parent.id());
+            var returning = current.returnAssembly().orElseThrow();
+            if (returning.members().values().stream().filter(member -> !member.arrived()).count() == 1) break;
+            var actor = returning.safeAdvances().getFirst();
+            state = HiveMobilizationProcess.reduceReturnAdvanced(state, parent.hiveId(), new HiveMobilizationReturnAdvanced(
+                    parent.id(), actor, returning.members().get(actor).cursor(), HiveReturnExecutionAuthority.current(state, parent.id(), actor)));
+        }
+        var before = state.hiveColony().mobilizations().get(parent.id());
+        var unfinished = before.returnAssembly().orElseThrow().members().entrySet().stream()
+                .filter(entry -> !entry.getValue().arrived()).map(java.util.Map.Entry::getKey).toList();
+        assertEquals(1, unfinished.size());
+        var finalWalker = unfinished.getFirst();
+        assertTrue(before.returnAssembly().orElseThrow().members().entrySet().stream()
+                .allMatch(entry -> entry.getKey().equals(finalWalker) || entry.getValue().arrived()));
+        state = ModeledActorBodyFacts.present(state, finalWalker);
+        state = ModeledActorBodyFacts.died(state, finalWalker, state.actorLocations().get(finalWalker).body(), "last-return-casualty", 10_000L);
+        assertEquals(HiveMobilizationStatus.COMPLETED, state.hiveColony().mobilizations().get(parent.id()).status());
+        for (var actor : before.returnAssembly().orElseThrow().members().keySet())
+            assertTrue(state.actorExecutions().actors().get(actor).current().isEmpty(), "no terminal parent can retain runnable participant authority");
+        assertTrue(HiveMobilizationProcess.planReturnProgress(state, HiveMobilizationProcess.returnProgress(parent.id(), 10_001L)).isEmpty());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
+    private static FrontierWorldState returningState() {
+        var departed = depart(assemble(fixture()));
+        var assault = departed.strategicPlans().settlementAssaults().values().stream().findFirst().orElseThrow();
+        return HiveSettlementAssaultProcess.reduceResolved(departed, departed.bootstrap().hive().id(),
+                HiveSettlementAssaultProcess.resolution(departed, assault, SettlementAssaultOutcome.ABORTED));
+    }
+
     @Test void oneRetainedParentSurvivesAssemblyTravelHotContactRestartAndReturn() {
         FrontierWorldState state = depart(assemble(fixture()));
         HiveMobilization parent = state.hiveColony().mobilizations().values().stream().findFirst().orElseThrow();
@@ -83,8 +158,7 @@ class HiveMobilizationProcessTest {
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(worldId, leaseId, actor))).toList();
         SceneLease lease = SceneLease.forCause(leaseId, worldId, new SettlementAssaultSceneCause(assault.id(), assault.settlementId()),
-                candidate.handoffPosition(), new SimInstant(900L), 9L, SceneLeaseStatus.PREPARED, members,
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+                candidate.handoffPosition(), new SimInstant(900L), 9L, SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         SubjectId attacker = assault.combatantAttackerIds().stream().sorted().findFirst().orElseThrow();
         SubjectId defender = assault.defenderIds().stream().sorted().findFirst().orElseThrow();

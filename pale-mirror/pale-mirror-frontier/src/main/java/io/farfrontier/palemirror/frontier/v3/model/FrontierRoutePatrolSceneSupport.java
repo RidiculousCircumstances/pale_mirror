@@ -57,7 +57,7 @@ public final class FrontierRoutePatrolSceneSupport {
         Candidate candidate = candidate(state, patrol).orElseThrow(() -> new IllegalArgumentException("route-patrol scene has no exact ready formation"));
         Set<SubjectId> members = lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
         if (!lease.handoffPosition().equals(candidate.handoffPosition()) || !members.equals(new LinkedHashSet<>(patrol.memberIds()))
-                || !lease.memberPositions().equals(candidate.memberBodies())) {
+                || !lease.memberBodies(state.actorLocations()).equals(candidate.memberBodies())) {
             throw new IllegalArgumentException("route-patrol scene must retain its exact formation and cursor");
         }
     }
@@ -67,7 +67,7 @@ public final class FrontierRoutePatrolSceneSupport {
         if (lease == null || lease.status() != SceneLeaseStatus.HOT || !FrontierSceneBehaviors.isRoutePatrol(lease)
                 || !FrontierSceneBehaviors.routePatrol(lease).taskId().equals(patrol.taskId())
                 || !lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet())
-                .equals(new LinkedHashSet<>(patrol.memberIds())) || !lease.memberPositions().equals(bodies(patrol))) {
+                .equals(new LinkedHashSet<>(patrol.memberIds())) || !lease.memberBodies(state.actorLocations()).equals(bodies(patrol))) {
             throw new IllegalArgumentException("route-patrol observation has no matching HOT formation lease");
         }
         return lease;
@@ -80,7 +80,6 @@ public final class FrontierRoutePatrolSceneSupport {
         requireCurrentPlan(state, current); SceneLease lease = requireHotLease(state, current, leaseId);
         RoutePatrol next = current.advanceFormation(); Map<SubjectId, BodyPosition> expected = bodies(next);
         if (!expected.equals(observedBodies)) throw new IllegalArgumentException("route-patrol formation observation did not reach its retained edge");
-        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, lease.withMemberPositions(expected));
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         for (var entry : expected.entrySet()) {
             var actor = actors.get(entry.getKey());
@@ -89,23 +88,22 @@ public final class FrontierRoutePatrolSceneSupport {
             actors.put(entry.getKey(), actor.withBody(entry.getValue()));
         }
         var update = FrontierWorldStateUpdate.begin().actorLocations(actors)
-                .strategicPlans(state.strategicPlans().advancePatrolFormation(current.taskId())).sceneLeases(leases);
+                .strategicPlans(state.strategicPlans().advancePatrolFormation(current.taskId()));
         if (!next.active()) update.actorExecutions(RoutePatrolExecutionAuthority.retired(state, current));
         return state.withChanges(update);
     }
 
-    public static BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+    public static void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
         RoutePatrol patrol = require(state, FrontierSceneBehaviors.routePatrol(lease));
         if (!patrol.active()) {
             if (!patrol.memberIds().contains(actorId)) throw new IllegalArgumentException("terminal patrol release has a foreign member");
             // A stopped formation may be between checkpoints (including assembly).
             // Releasing its observed bodies must not teleport them onto the travel route.
-            return observed;
+            return;
         }
         requireCurrentPlan(state, patrol);
         BodyPosition expected = bodies(patrol).get(actorId);
         if (expected == null || !expected.equals(observed)) throw new IllegalArgumentException("route-patrol scene release diverged from its retained formation");
-        return expected;
     }
 
     public static Map<SubjectId, BodyPosition> bodies(RoutePatrol patrol) {

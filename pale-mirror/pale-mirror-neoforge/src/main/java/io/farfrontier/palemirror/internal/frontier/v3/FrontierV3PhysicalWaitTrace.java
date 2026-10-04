@@ -23,8 +23,7 @@ final class FrontierV3PhysicalWaitTrace {
                 + ";ambientActorTag=" + tag.getString(FrontierV3AmbientActorExecutor.ACTOR_KEY);
         if (body.level() instanceof net.minecraft.server.level.ServerLevel level) {
             var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-            reason += ";inactiveCarrier=" + ledger.hasCarrier(actor) + ";handoffTarget="
-                    + ledger.pendingHandoff(actor).map(FrontierV3ActorHandoff::currentBinding)
+            reason += ";inactiveCarrier=" + ledger.hasCarrier(actor)
                     + ";adoption=" + ledger.pendingAdoption(actor)
                     + ";departureConflict=" + ledger.hasDepartureConflict(actor);
         }

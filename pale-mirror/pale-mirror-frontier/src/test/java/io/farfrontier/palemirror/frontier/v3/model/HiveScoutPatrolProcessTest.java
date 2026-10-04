@@ -55,6 +55,7 @@ class HiveScoutPatrolProcessTest {
         Bioform scout = scout(state);
         AmbientActorLease lease = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
         state = AmbientLeaseStateProcess.prepare(state, lease);
+        state = confirmFixturePhysicalBody(state, scout.id());
         state = AmbientLeaseStateProcess.transition(state, scout.id(), AmbientLeaseStatus.HOT);
 
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveScoutPatrolProcess.plan(state,
@@ -89,9 +90,11 @@ class HiveScoutPatrolProcessTest {
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(admission), HiveScoutPatrolProcess.start(before, scout.id())))
                 instanceof CommandResult.Accepted);
         CommandId command = new CommandId("command:scout-patrol-death");
+        ModeledActorBodyFacts.present(engine, scout.id());
+        var dying = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertTrue(engine.submit(new FrontierCommand(1, command, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command),
-                new AmbientActorDied(scout.id(), before.actorLocations().get(scout.id()).body(), "entity:test-player")))
+                ModeledActorBodyFacts.death(dying, scout.id(), dying.actorLocations().get(scout.id()).body(), "entity:test-player")))
                 instanceof CommandResult.Accepted);
 
         ScheduledAction duePatrol = engine.checkpoint().schedules().stream()
@@ -137,6 +140,8 @@ class HiveScoutPatrolProcessTest {
         FrontierWorldState state = null;
         for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+            assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE,
+                    engine.status().kind(), engine.status().toString());
             if (tick % 100L != 0L) continue;
             state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
             if (!state.strategicPlans().hiveSettlementKnowledge().entries().isEmpty()) break;
@@ -151,12 +156,19 @@ class HiveScoutPatrolProcessTest {
         AmbientActorLease lease = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
         assertEquals(AmbientGoalKind.SCOUT_PATROL, lease.goal());
         state = AmbientLeaseStateProcess.prepare(state, lease);
+        state = confirmFixturePhysicalBody(state, scout.id());
         state = AmbientLeaseStateProcess.transition(state, scout.id(), AmbientLeaseStatus.HOT);
         state = HiveScoutPatrolProcess.reduceStarted(state, state.bootstrap().hive().id(), HiveScoutPatrolProcess.start(state, scout.id()));
+        var captured = HiveScoutPatrolProcess.requireExecution(state, scout.id());
+        ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(state, captured, state.ambientLeases().get(scout.id()));
         ScoutPatrolAdvanced advanced = new ScoutPatrolAdvanced(HiveScoutPatrolProcess.requireExecution(state, scout.id()),
                 1L, lease.goalBody().supportingSurface().support(), prior);
 
         FrontierWorldState moved = HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), advanced);
+        ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(moved, captured, moved.ambientLeases().get(scout.id()));
+        var capturedPresentation = state.ambientLeases().get(scout.id());
+        assertThrows(IllegalArgumentException.class, () -> ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(
+                moved, captured, capturedPresentation), "old scout target cannot borrow the next goal's authority");
         assertEquals(lease.goalBody().supportingSurface().support(), FrontierTestPositions.supportOf(moved.actorLocations().get(scout.id())));
         assertEquals(AmbientGoalKind.SCOUT_PATROL, moved.ambientLeases().get(scout.id()).goal());
         assertEquals(HiveScoutPatrolProcess.nextPosition(moved, scout), moved.ambientLeases().get(scout.id()).goalBody().supportingSurface().support());
@@ -189,6 +201,14 @@ class HiveScoutPatrolProcessTest {
         });
         assertThrows(IllegalArgumentException.class, () ->
                 FrontierWorldRuntimeDefinition.payloadCodecs().decode("frontier.scout_patrol_advanced", old));
+    }
+
+    /** Modeled body confirmation, not a shortcut through activity admission. */
+    private static FrontierWorldState confirmFixturePhysicalBody(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
+        var location = state.actorLocations().get(actor);
+        return ActorBodyAuthority.present(state, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(
+                ActorBodyAuthority.current(state, actor), location.body(), location.condition().health(),
+                location.body(), location.condition().health()));
     }
 
     private static Bioform scout(FrontierWorldState state) {

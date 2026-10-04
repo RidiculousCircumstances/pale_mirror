@@ -94,6 +94,49 @@ public final class FrontierWorldStateUpdate {
 
     public Set<Component> changedComponents() { return Set.copyOf(changed); }
 
+    /** Compose independently owned contributions before one aggregate validation.
+     * Duplicate component writers are rejected, never resolved by last-write-wins. */
+    public FrontierWorldStateUpdate merge(FrontierWorldStateUpdate contribution) {
+        Objects.requireNonNull(contribution, "owned contribution");
+        for (var component : contribution.changed) {
+            if (changed.contains(component)) throw new IllegalArgumentException("competing state contribution: " + component);
+        }
+        for (var component : contribution.changed) {
+            switch (component) {
+                case ACTOR_LOCATIONS -> actorLocations(contribution.actorLocations);
+                case STRUCTURE_CONDITIONS -> structureConditions(contribution.structureConditions);
+                case INFECTION -> infection(contribution.infection);
+                case INVENTORY -> inventory(contribution.inventory);
+                case PRODUCTION_JOBS -> productionJobs(contribution.productionJobs);
+                case SERVICE_WORKS -> serviceWorks(contribution.serviceWorks);
+                case CONTRACTS -> contracts(contribution.contracts);
+                case OPERATIONS -> operations(contribution.operations);
+                case LOGISTICS_HISTORY -> logisticsHistory(contribution.logisticsHistory);
+                case PHYSICAL_INTENTS -> physicalIntents(contribution.physicalIntents);
+                case PHYSICAL_OBSERVATIONS -> physicalObservations(contribution.physicalObservations);
+                case SCENE_LEASES -> sceneLeases(contribution.sceneLeases);
+                case HIVE_COLONY -> hiveColony(contribution.hiveColony);
+                case STRUCTURE_DAMAGE -> structureDamage(contribution.structureDamage);
+                case PHYSICAL_DELTAS -> physicalDeltas(contribution.physicalDeltas);
+                case AMBIENT_LEASES -> ambientLeases(contribution.ambientLeases);
+                case ROUTE_CONSTRUCTIONS -> routeConstructions(contribution.routeConstructions);
+                case ROUTE_MAINTENANCES -> routeMaintenances(contribution.routeMaintenances);
+                case ROUTE_TOPOLOGY -> routeTopology(contribution.routeTopology);
+                case STRATEGIC_PLANS -> strategicPlans(contribution.strategicPlans);
+                case HUMAN_POPULATION -> humanPopulation(contribution.humanPopulation);
+                case COMPANIES -> companies(contribution.companies);
+                case RESOURCE_SITES -> resourceSites(contribution.resourceSites);
+                case REPLICA_CUSTODY -> replicaCustody(contribution.replicaCustody);
+                case DEFERRED_AFTERMATH -> deferredAftermath(contribution.deferredAftermath);
+                case FENCED_RECOVERY -> fencedRecovery(contribution.fencedRecovery);
+                case DIAGNOSTIC_INCIDENTS -> diagnosticIncidents(contribution.diagnosticIncidents);
+                case ACTOR_MOVEMENTS -> actorMovements(contribution.actorMovements);
+                case ACTOR_EXECUTIONS -> actorExecutions(contribution.actorExecutions);
+            }
+        }
+        return this;
+    }
+
     public FrontierWorldStateUpdate actorLocations(Map<SubjectId, ActorLocation> next) {
         mark(Component.ACTOR_LOCATIONS); actorLocations = require(next, "actor locations"); return this;
     }

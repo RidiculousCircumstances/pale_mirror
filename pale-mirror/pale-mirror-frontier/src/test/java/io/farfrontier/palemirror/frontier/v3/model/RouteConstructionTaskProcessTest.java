@@ -262,14 +262,17 @@ class RouteConstructionTaskProcessTest {
                 "the admitted engineering owner holds its member in place until it declares an actual journey");
         assertEquals(state.actorLocations().get(member).body().supportingSurface().support(), ordinary.goalBody().supportingSurface().support(),
                 "the ordinary predecessor must retain the exact canonical station until the engineering owner admits its assembly");
-        state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, ordinary), member, AmbientLeaseStatus.HOT);
+        state = AmbientLeaseStateProcess.prepare(state, ordinary);
+        state = confirmFixturePhysicalBody(state, member);
+        state = AmbientLeaseStateProcess.transition(state, member, AmbientLeaseStatus.HOT);
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> blockedAdmission = RouteConstructionProcess.plan(state,
                 RouteConstructionProcess.scan(1, 200L));
         assertFalse(blockedAdmission.stream().anyMatch(event -> event.payload() instanceof RouteConstructionAssemblyStarted),
                 "COLD must not compile from an actor whose physical predecessor lease still owns its final floor");
 
         state = AmbientLeaseStateProcess.transition(state, member, AmbientLeaseStatus.DRAINING);
-        state = AmbientLeaseStateProcess.release(state, new AmbientLeaseReleased(member, ordinary.handoffBody(), FixedScalar.whole(8)));
+        state = AmbientLeaseStateProcess.release(state, new AmbientLeaseReleased(member, state.actorLocations().get(member).body(),
+                state.actorLocations().get(member).condition().health()));
         // This pure fixture separately acknowledges actual physical departure. Closing an
         // activity lease alone cannot declare its canonical body absent or enable COLD work.
         state = ActorBodyAuthority.released(state, ActorBodyAuthority.current(state, member));
@@ -283,13 +286,18 @@ class RouteConstructionTaskProcessTest {
         EngineeringWorkAssembly assembly = state.routeConstructions().get(project.id()).assembly().orElseThrow();
         EngineeringWorkAssembly.Member before = assembly.members().get(member);
         assertEquals(before.corridor().get(before.cursor() + 1), engineering.goalBody().supportingSurface().support());
-        state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, engineering), member, AmbientLeaseStatus.HOT);
+        state = AmbientLeaseStateProcess.prepare(state, engineering);
+        state = confirmFixturePhysicalBody(state, member);
+        state = AmbientLeaseStateProcess.transition(state, member, AmbientLeaseStatus.HOT);
 
+        var capturedExecution = EngineeringExecutionAuthority.assemblyCurrent(state, state.routeConstructions().get(project.id())).requireMember(member);
+        ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(state, capturedExecution, state.ambientLeases().get(member));
         EngineeringWorkAssembly advanced = assembly.advance(member);
         state = RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER,
                 io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyAdvanced(state, project.id(), advanced));
         EngineeringWorkAssembly.Member after = state.routeConstructions().get(project.id()).assembly().orElseThrow().members().get(member);
         AmbientActorLease retargeted = state.ambientLeases().get(member);
+        ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(state, capturedExecution, retargeted);
         BlockPosition expectedGoal = after.arrived() ? after.currentPosition() : after.corridor().get(after.cursor() + 1);
         assertEquals(expectedGoal, retargeted.goalBody().supportingSurface().support(), "HOT arrival must advance and retarget the same retained COLD cursor");
 
@@ -298,7 +306,8 @@ class RouteConstructionTaskProcessTest {
                 new AmbientLeaseReleased(member, FrontierTestPositions.bodyAboveSupport(before.currentPosition()), FixedScalar.whole(8))),
                 "a HOT body may not silently return the assembly to a stale predecessor position");
         FrontierWorldState released = AmbientLeaseStateProcess.release(releaseState,
-                new AmbientLeaseReleased(member, FrontierTestPositions.bodyAboveSupport(after.currentPosition()), FixedScalar.whole(8)));
+                new AmbientLeaseReleased(member, FrontierTestPositions.bodyAboveSupport(after.currentPosition()),
+                        releaseState.actorLocations().get(member).condition().health()));
         assertEquals(AmbientLeaseStatus.CLOSED, released.ambientLeases().get(member).status());
         assertEquals(after.currentPosition(), FrontierTestPositions.supportOf(released.actorLocations().get(member)));
     }
@@ -315,7 +324,9 @@ class RouteConstructionTaskProcessTest {
                 .map(RouteConstructionAssemblyStarted.class::cast).findFirst().orElseThrow();
         state = RouteConstructionStateSupport.reduceAssemblyStarted(state, FrontierRouteNetwork.OWNER, started);
         AmbientActorLease lease = AmbientActorProcess.nextLease(state, member, new SimInstant(400L));
-        state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, lease), member, AmbientLeaseStatus.HOT);
+        state = AmbientLeaseStateProcess.prepare(state, lease);
+        state = confirmFixturePhysicalBody(state, member);
+        state = AmbientLeaseStateProcess.transition(state, member, AmbientLeaseStatus.HOT);
         EngineeringWorkAssembly next = state.routeConstructions().get(project.id()).assembly().orElseThrow().advance(member);
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(
                 world, state, new SimInstant(400L), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
@@ -393,6 +404,15 @@ class RouteConstructionTaskProcessTest {
     }
     private static StrategicTask constructionTask(FrontierWorldState state, StrategicTaskStatus status) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS && task.status() == status).findFirst().orElseThrow();
+    }
+
+    /** Modeled physical observation, independent of the activity's HOT transition. */
+    private static FrontierWorldState confirmFixturePhysicalBody(FrontierWorldState state, SubjectId member) {
+        var actor = state.actorLocations().get(member);
+        return ActorBodyAuthority.present(state,
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(
+                        ActorBodyAuthority.current(state, member), actor.body(), actor.condition().health(),
+                        actor.body(), actor.condition().health()));
     }
 
     private static FrontierWorldState issueAllFixtureTools(FrontierWorldState state) {

@@ -36,8 +36,8 @@ class FrontierV3ActorBirthRecoveryTest {
             var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); var permission = permit("resident:unpublished");
             ledger.registerFirstAdmission(permission);
             var id = permission.identity();
-            var binding = FrontierV3ActorOwnerBinding.ambient(new Declaration(id.actorId(), id.kind(), Owner.AMBIENT_LEASE,
-                    id.entityId(), Representation.LIVE_BODY, 1, 1));
+            var binding = FrontierV3ActorOwnerBinding.body(new Declaration(id.actorId(), id.kind(), Owner.ACTOR_BODY,
+                    id.entityId(), Representation.LIVE_BODY, 0L, 1));
             assertTrue(ledger.beginFirstAdmission(binding));
             if (established) assertTrue(ledger.acknowledgeFirstAdmission(ledger.firstAdmission(id.actorId()).orElseThrow(), binding));
             var before = ledger.save(new CompoundTag(), null);

@@ -255,9 +255,9 @@ public final class BakeryProcess {
         BodyPosition expected = BakeryWorkGoal.current(state, job).station().standingBody();
         if (!arrived.observedWorker().equals(expected))
             throw new IllegalArgumentException("bakery HOT arrival differs from the semantic station");
-        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
-        leases.put(lease.id(), lease.withMemberPositions(Map.of(job.workerId(), expected)));
-        return state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        actors.put(job.workerId(), actors.get(job.workerId()).withBody(expected));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
     }
 
     static FrontierWorldState hotAccessCleared(FrontierWorldState state, SubjectId subject,
@@ -269,9 +269,9 @@ public final class BakeryProcess {
         SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, cleared.leaseId());
         if (!ServiceAccessCoordinator.witnessedBakeryExit(state, job, cleared.observedWorker()))
             throw new IllegalArgumentException("bakery access exit lacks its physical boundary witness");
-        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
-        leases.put(lease.id(), lease.withMemberPositions(Map.of(job.workerId(), cleared.observedWorker())));
-        return state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        actors.put(job.workerId(), actors.get(job.workerId()).withBody(cleared.observedWorker()));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
     }
 
     static FrontierWorldState hotBlockChanged(FrontierWorldState state, SubjectId subject, BakeryHotBlockChanged changed) {
@@ -325,7 +325,7 @@ public final class BakeryProcess {
         SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, prepared.leaseId());
         ProductionStationSpec station = station(state, job);
         if (work.phase() != prepared.phase() || work.pendingPhysicalStep().isPresent()
-                || !lease.memberPosition(job.workerId()).equals(BakeryWorkGoal.current(state, job).station().standingBody())
+                || !lease.memberBody(state.actorLocations(), job.workerId()).equals(BakeryWorkGoal.current(state, job).station().standingBody())
                 || prepared.phase() == BakeryWorkState.Phase.PROCESSING
                 && work.completedWorkTicks() != ProductionWorkProgress.REQUIRED_PROCESSING_TICKS)
             throw new IllegalArgumentException("bakery HOT effect is not at a ready current station");
@@ -354,7 +354,7 @@ public final class BakeryProcess {
         if (work.phase() != BakeryWorkState.Phase.PROCESSING || work.pendingPhysicalStep().isPresent()
                 || tick.nextCompletedTicks() != work.completedWorkTicks() + 1
                 || !tick.observedWorker().equals(station(state, job).workerStation().standingBody())
-                || !lease.memberPosition(job.workerId()).equals(tick.observedWorker()))
+                || !lease.memberBody(state.actorLocations(), job.workerId()).equals(tick.observedWorker()))
             throw new IllegalArgumentException("bakery labor was not observed at its retained station");
         return FrontierProductionWorkSceneSupport.replaceJob(state, job.withBakeryWork(work.workTick()));
     }
@@ -443,7 +443,7 @@ public final class BakeryProcess {
             throw new IllegalArgumentException("bakery physical receipt has no current retained worker scene");
         if (pending.phase() != observed.phase() || !pending.leaseId().equals(observed.leaseId())
                 || !observed.observedWorker().equals(BakeryWorkGoal.current(state, job).station().standingBody())
-                || !lease.memberPosition(job.workerId()).equals(observed.observedWorker()))
+                || !lease.memberBody(state.actorLocations(), job.workerId()).equals(observed.observedWorker()))
             throw new IllegalArgumentException("observed bakery effect has a foreign phase, body or lease");
         if (observed.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
                 && !(job.inputHold() instanceof ProductionInputHold.Materialized)

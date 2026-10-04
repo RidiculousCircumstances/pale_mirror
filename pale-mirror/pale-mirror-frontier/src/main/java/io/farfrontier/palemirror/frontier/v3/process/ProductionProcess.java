@@ -424,7 +424,7 @@ public final class ProductionProcess {
         if (!progressed.observedWorker().equals(observedStation.standingBody())) {
             throw new IllegalArgumentException("production work progress must name the observed retained worker station");
         }
-        if (!lease.memberPosition(job.workerId()).equals(observedStation.standingBody())) {
+        if (!lease.memberBody(state.actorLocations(), job.workerId()).equals(observedStation.standingBody())) {
             throw new IllegalArgumentException("production work progress must retain the HOT worker at its current station");
         }
         boolean legal = switch (current.stage()) {
@@ -573,7 +573,7 @@ public final class ProductionProcess {
         }
         SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, blocked.leaseId());
         BodyPosition current = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
-        if (!blocked.observedWorker().equals(current) || !lease.memberPosition(job.workerId()).equals(current)) {
+        if (!blocked.observedWorker().equals(current) || !lease.memberBody(state.actorLocations(), job.workerId()).equals(current)) {
             throw new IllegalArgumentException("production work traversal block must retain its worker at the current cursor");
         }
         return state;

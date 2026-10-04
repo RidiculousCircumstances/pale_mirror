@@ -135,7 +135,7 @@ public final class HiveSettlementAssaultProcess {
         }
         List<SubjectId> attackers = livingCombatantAttackers(state, assault), defenders = livingDefenders(state, assault);
         if (attackers.isEmpty() || defenders.isEmpty()) return terminal(state, assault, attackers, defenders, action.dueAt().ticks());
-        if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
+        if (!FrontierSettlementAssaultBattlefield.permitsColdContinuation(state, assault)) {
             return List.of(new ProposedEvent(assault.hiveId(), TerminalDiagnosticProducer.assaultConflict(assault.id(), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault))));
         }
         if (!coldAvailable(state, assault)) return List.of(schedule(combat(assault, action.dueAt().ticks()
@@ -373,8 +373,8 @@ public final class HiveSettlementAssaultProcess {
         combatants.addAll(assault.defenderIds());
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         return ActorExecutionCoordinator.coldAvailable(state, combatants)
-                && assault.attackerIds().stream().allMatch(id -> availableBioform(state, id, assault))
-                && assault.defenderIds().stream().allMatch(id -> assignments.assignment(id).kind() == HumanAssignmentKind.SETTLEMENT_DEFENCE
+                && assault.attackerIds().stream().filter(id -> alive(state, id)).allMatch(id -> availableBioform(state, id, assault))
+                && assault.defenderIds().stream().filter(id -> alive(state, id)).allMatch(id -> assignments.assignment(id).kind() == HumanAssignmentKind.SETTLEMENT_DEFENCE
                 && assignments.assignment(id).ownerId().filter(assault.id()::equals).isPresent()
                 && !FrontierSceneAdmission.reservedByOtherThanSettlementAssault(state, id, assault.id()));
     }

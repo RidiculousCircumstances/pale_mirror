@@ -118,6 +118,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         PresenceActivityCapability.validateReferences(actorLocations, actorExecutions);
         ScoutPatrolActivityCapability.validateReferences(bootstrap, hiveColony, actorExecutions);
         OperationExecutionAuthority.validateReferences(operations, actorExecutions);
+        RouteEngagementExecutionAuthority.validateReferences(strategicPlans.routeEngagements(), actorExecutions);
         RoutePatrolExecutionAuthority.validateReferences(strategicPlans.routePatrols(), actorExecutions);
         HiveAssemblyExecutionAuthority.validateReferences(hiveColony.mobilizations(), actorExecutions);
         HiveReturnExecutionAuthority.validateReferences(hiveColony.mobilizations(), actorExecutions);
@@ -137,7 +138,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             validateFullState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs,
                 serviceWorks, contracts, operations, logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony,
                 structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeMaintenances, routeTopology, strategicPlans,
-                humanPopulation, companies, resourceSites);
+                humanPopulation, companies, resourceSites, fencedRecovery, actorExecutions);
         }
     }
     /** Keeps the high-frequency immutable-state constructor below the JIT's large-method threshold. */
@@ -154,7 +155,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                                           Map<SubjectId, RouteConstruction> routeConstructions,
                                           Map<SubjectId, RouteMaintenance> routeMaintenances, RouteTopology routeTopology,
                                           StrategicPlanState strategicPlans, HumanPopulation humanPopulation,
-                                          CompanyRegistry companies, ResourceSiteState resourceSites) {
+                                          CompanyRegistry companies, ResourceSiteState resourceSites, FencedRecoveryState fencedRecovery,
+                                          io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState actorExecutions) {
             resourceSites.validate(bootstrap); HarvestContainerReservations.validate(inventory, resourceSites);
             HarvestContainerReservations.validateAccounts(inventory, resourceSites);
             strategicPlans.validate(bootstrap, routeTopology, humanPopulation); strategicPlans.hiveOperationKnowledge().validate(bootstrap, hiveColony, actorLocations);
@@ -172,8 +174,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
         Set<SubjectId> expectedActors = ActorIdentityDeclarations.validate(bootstrap, hiveColony, humanPopulation, actorLocations);
-                FrontierWorldStateSupport.validateActorItemCustody(bootstrap.worldId(), expectedActors, inventory, sceneLeases, ambientLeases);
-        HiveLifecycleStateSupport.validateCocoonCustody(bootstrap, hiveColony, actorLocations, ambientLeases, physicalDeltas);
+        FrontierWorldStateSupport.validateActorItemCustody(bootstrap.worldId(), actorLocations, inventory, fencedRecovery);
+        HiveLifecycleStateSupport.validateCocoonCustody(bootstrap, hiveColony, actorLocations, ambientLeases, physicalDeltas, actorExecutions);
         FrontierWorldStateSupport.validateSettlementPolicies(bootstrap, humanPopulation);
         for (Settlement settlement : bootstrap.settlements()) for (Resident bootstrapResident : settlement.residents()) {
             ResidentProfile profile = humanPopulation.resident(bootstrapResident.id());
@@ -218,10 +220,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         StrategicPlanState validatedPlans = strategicPlans;
         for (ResidentMigrationJourney journey : humanPopulation.migrations().values()) {
             ActorLocation actor = actorLocations.get(journey.residentId());
-            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.supportingSurface().support().equals(journey.currentPosition())) {
-                throw new IllegalArgumentException("migration journey must retain one living resident at its exact route cursor");
+            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
+                    || !ActorBodyAuthority.retainsPhysicalCustody(fencedRecovery, journey.residentId())
+                        && !actor.supportingSurface().support().equals(journey.currentPosition())) {
+                throw new IllegalArgumentException("migration requires one living resident and a reconciled COLD checkpoint");
             }
             journey.route().forEach(position -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position));
+            journey.rejoin().ifPresent(approach -> approach.path().forEach(surface ->
+                    FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), surface.support())));
             if (sceneLeases.values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
                     && lease.members().stream().anyMatch(member -> member.actorId().equals(journey.residentId())))) {
                 throw new IllegalArgumentException("migration journey resident may not retain a competing scene executor");
@@ -345,8 +351,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
         }
         if (operations.size() > MAX_OPERATIONS) throw new IllegalArgumentException("route operation retention limit exceeded");
-        Set<SubjectId> leaseHistoryOperations = sceneLeases.values().stream().filter(FrontierSceneBehaviors::isLogistics)
-                .map(lease -> FrontierSceneBehaviors.logistics(lease).operationId()).collect(java.util.stream.Collectors.toSet());
         Map<SubjectId, Set<SubjectId>> residentsBySettlement = new LinkedHashMap<>();
         for (ResidentProfile resident : humanPopulation.residents().values()) {
             residentsBySettlement.computeIfAbsent(resident.settlementId(), ignored -> new HashSet<>()).add(resident.id());
@@ -390,13 +394,19 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     throw new IllegalArgumentException("active route operation participant cannot retain a competing migration or patrol claim");
                 }
                 if (operation.stage() != OperationStage.COMPLETED && operation.stage() != OperationStage.FAILED && operation.stage() != OperationStage.INTERRUPTED && actorLocations.get(participant).condition().status() == ActorLifeStatus.ALIVE
-                        && !leaseHistoryOperations.contains(operation.id())
+                        // A retained physical body owns its observed location even after
+                        // process closure/history compaction. A historical scene is neither
+                        // that authority nor permission for divergent COLD progression.
+                        && !ActorBodyAuthority.retainsPhysicalCustody(fencedRecovery, participant)
                         && !actorLocations.get(participant).supportingSurface().support().equals(operation.activeTravel().map(travel -> travel.formation().get(participant).supportingSurface().support())
                         .orElseGet(() -> operation.activeAssembly().map(assembly -> assembly.positions().get(participant).support()).orElseGet(operation::currentPosition)))) {
                     throw new IllegalArgumentException("active route operation participant must be at its canonical travel position");
                 }
             }
             operation.route().forEach(position -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position));
+            operation.activeAssembly().ifPresent(assembly -> assembly.members().values().forEach(member ->
+                    member.rejoin().ifPresent(approach -> approach.path().forEach(surface ->
+                            FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), surface.support())))));
         }
         FrontierRouteEngagementSupport.validate(bootstrap, hiveColony, actorLocations, operations, strategicPlans);
         FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
@@ -825,29 +835,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     /** Atomically records loaded-body evidence, closes ambient authority and prepares one scene. */ public FrontierWorldState handoffAmbientScene(SceneLeaseHandoff handoff) { return FrontierSceneLeaseStateSupport.handoff(this, handoff); }
     public FrontierWorldState transitionSceneLease(SceneLeaseId leaseId, SceneLeaseStatus nextStatus) { return FrontierSceneLeaseStateSupport.transition(this, Objects.requireNonNull(leaseId, "scene lease id"), nextStatus); }
     public FrontierWorldState releaseSceneLease(SceneLeaseId leaseId, java.util.List<SceneMemberPosition> positions) { return FrontierSceneLeaseStateSupport.release(this, Objects.requireNonNull(leaseId, "scene lease id"), positions); }
-    public FrontierWorldState recordActorDeath(ActorDied death, long atTick) {
-        Objects.requireNonNull(death, "actor death");
-        SceneLease lease = sceneLeases.get(death.leaseId());
-        if (lease == null || !lease.retainsMemberCustody(death.actorId())) {
-            throw new IllegalArgumentException("actor death is not evidence for an active scene member");
-        }
-        ActorLocation current = actorLocations.get(death.actorId());
-        if (current.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("actor death is already recorded");
-        FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), death.body().supportingSurface().support());
-        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        nextActors.put(death.actorId(), current.deadAt(death.body()));
-        FrontierSceneBehaviors.SceneDeathOutcome outcome = FrontierSceneBehaviors.afterActorDeath(this, lease, death.actorId(), atTick);
-        FencedRecoveryState recovery = fencedRecovery;
-        SubjectId recoveryBinding = ActorBodyId.recoveryBindingId(death.actorId());
-        FencedRecoveryBinding binding = recovery.current().get(recoveryBinding);
-        if (binding != null) {
-            recovery = ActorBodyAuthority.death(recovery, new ActorBodyId(death.actorId(), binding.authorityEpoch()));
-        }
-        return ActorExecutionComposition.LIFECYCLE.preparePassiveDeath(this, death.actorId(), outcome.actorExecutions()).commit(this,
-                FrontierWorldStateUpdate.begin().actorLocations(nextActors).humanPopulation(outcome.humanPopulation())
-                .resourceSites(outcome.resourceSites()).strategicPlans(outcome.strategicPlans()).physicalIntents(outcome.physicalIntents())
-                .serviceWorks(outcome.serviceWorks()).fencedRecovery(recovery));
-    }
     public FrontierWorldState failOperation(SubjectId operationId) { return FrontierOperationStateSupport.fail(this, operationId); }
     public FrontierWorldState compactTerminalLogistics(SubjectId operationId, long terminalAtTick) {
         TerminalLogisticsReceipt receipt = FrontierOperationStateSupport.terminalLogisticsReceipt(this, operationId, terminalAtTick);

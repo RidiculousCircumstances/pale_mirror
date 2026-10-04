@@ -279,9 +279,8 @@ class MedicalEvacuationOperationTest {
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList();
         SceneLease lease = SceneLease.forCause(leaseId, world, new MedicalTreatmentSceneCause(started.operation().id()), candidate.infirmaryAnchor(),
-                new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED, members,
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), java.util.Optional.empty());
-        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED, members, java.util.Set.of(), java.util.Optional.empty());
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertTrue(FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, prepared.intent()));
 
         state = PhysicalIntentLifecycleFixture.transition(state, settlement.id(), prepared.intent(),
@@ -360,7 +359,8 @@ class MedicalEvacuationOperationTest {
                 List.of(), base.transactionCommitter()));
         SceneMember dead = fixture.lease().members().getFirst();
         CommandResult result = engine.submit(command(fixture.world(), engine, "command:medical-participant-death",
-                new ActorDied(fixture.lease().id(), dead.actorId(), FrontierTestPositions.bodyCellOf(fixture.state().actorLocations().get(dead.actorId())), "test:medical-death")));
+                ModeledActorBodyFacts.death(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()), dead.actorId(),
+                        FrontierTestPositions.bodyCellOf(fixture.state().actorLocations().get(dead.actorId())), "test:medical-death")));
         assertInstanceOf(CommandResult.Accepted.class, result, result::toString);
 
         FrontierWorldState afterDeath = state(engine);
@@ -455,9 +455,8 @@ class MedicalEvacuationOperationTest {
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList();
         SceneLease lease = SceneLease.forCause(leaseId, world, new MedicalTreatmentSceneCause(operation.id()), candidate.infirmaryAnchor(),
-                new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED, members,
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), java.util.Optional.empty());
-        return new TreatmentSceneFixture(world, state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT), operation, lease);
+                new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED, members, java.util.Set.of(), java.util.Optional.empty());
+        return new TreatmentSceneFixture(world, FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT), operation, lease);
     }
 
     private record TreatmentSceneFixture(WorldId world, FrontierWorldState state, MedicalEvacuationOperation operation, SceneLease lease) { }

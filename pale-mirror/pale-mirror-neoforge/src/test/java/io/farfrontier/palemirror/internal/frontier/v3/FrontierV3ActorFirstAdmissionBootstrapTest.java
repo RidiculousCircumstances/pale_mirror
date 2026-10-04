@@ -20,9 +20,9 @@ class FrontierV3ActorFirstAdmissionBootstrapTest {
         assertTrue(FrontierV3ActorFirstAdmissionBootstrap.initialize(restored, state, recovery, writes::incrementAndGet));
         assertEquals(2, writes.get());
         var first = restored.firstAdmissions().getFirst();
-        var target = FrontierV3ActorOwnerBinding.ambient(new FrontierV3ActorCarrierComposition.Declaration(
-                first.identity().actorId(), first.identity().kind(), FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                first.identity().entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L, 1L));
+        var target = FrontierV3ActorOwnerBinding.body(new FrontierV3ActorCarrierComposition.Declaration(
+                first.identity().actorId(), first.identity().kind(), FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                first.identity().entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 1L));
         assertTrue(restored.beginFirstAdmission(target));
         assertThrows(IllegalStateException.class, () -> FrontierV3ActorFirstAdmissionBootstrap.initialize(restored, state, recovery,
                 () -> fail("used first-admission history must not be republished as fresh")));
@@ -51,9 +51,9 @@ class FrontierV3ActorFirstAdmissionBootstrapTest {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         assertTrue(ledger.registerFirstAdmission(permit));
         var id = permit.identity();
-        var binding = FrontierV3ActorOwnerBinding.ambient(new FrontierV3ActorCarrierComposition.Declaration(
-                id.actorId(), id.kind(), FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                id.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1, 1));
+        var binding = FrontierV3ActorOwnerBinding.body(new FrontierV3ActorCarrierComposition.Declaration(
+                id.actorId(), id.kind(), FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                id.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 1));
         assertTrue(ledger.beginFirstAdmission(binding));
         var before = ledger.save(new net.minecraft.nbt.CompoundTag(), null);
         assertThrows(IllegalStateException.class, () -> FrontierV3ActorFirstAdmissionBootstrap.initialize(ledger, state, recovery,

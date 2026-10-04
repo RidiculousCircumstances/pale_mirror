@@ -125,17 +125,15 @@ class FrontierWorldStateTest {
         assertThrows(IllegalArgumentException.class, () -> SettlementServiceInputIssueStateSupport.validateIntent(stolen, inputIssue));
         SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:service-work-snapshot"), state.bootstrap().worldId(),
                 new SettlementServiceWorkSceneCause(work.id()), medicLocation.supportingSurface().support(), new SimInstant(100L), 1L,
-                SceneLeaseStatus.PREPARED, List.of(new SceneMember(medic.id(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), medic.id()))),
-                Map.of(medic.id(), medicLocation.body()), Set.of(), Optional.empty());
+                SceneLeaseStatus.PREPARED, List.of(new SceneMember(medic.id(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), medic.id()))), Set.of(), Optional.empty());
         SceneLease forgedLease = SceneLease.forCause(new SceneLeaseId("lease:service-work-forged-station"), state.bootstrap().worldId(),
                 new SettlementServiceWorkSceneCause(work.id()), medicLocation.supportingSurface().support().offset(1, 0, 0), new SimInstant(100L), 1L,
-                SceneLeaseStatus.PREPARED, List.of(new SceneMember(medic.id(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), medic.id()))),
-                Map.of(medic.id(), medicLocation.body()), Set.of(), Optional.empty());
+                SceneLeaseStatus.PREPARED, List.of(new SceneMember(medic.id(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), medic.id()))), Set.of(), Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> state.prepareSceneLease(forgedLease));
         FrontierWorldState withScene = state.prepareSceneLease(lease);
         assertEquals(lease, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(withScene)).sceneLeases().get(lease.id()));
-        FrontierWorldState afterDeath = withScene.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
-                .recordActorDeath(new ActorDied(lease.id(), medic.id(), medicLocation.body(), "test:service-worker-death"), 101L);
+        var physicallyPresent = FrontierTestActorBodies.present(withScene, lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        FrontierWorldState afterDeath = ModeledActorBodyFacts.died(physicallyPresent, medic.id(), medicLocation.body(), "test:service-worker-death", 101L);
         assertEquals(SettlementServiceWorkPhase.BLOCKED, afterDeath.serviceWorks().get(work.id()).phase());
         assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, afterDeath.physicalIntents().get(work.inputIssueIntentId()).status());
         assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, afterDeath.physicalIntents().get(work.endpointIntentId()).status());

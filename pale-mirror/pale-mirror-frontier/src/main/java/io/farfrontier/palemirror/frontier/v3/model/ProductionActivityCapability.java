@@ -6,7 +6,18 @@ import java.util.Optional;
 /** Production owner, not hunger or the lifecycle, decides its physical effect checkpoint. */
 final class ProductionActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.PRODUCTION; }
+    @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
+    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return ActorActivityBodyCheckpoint.usesActorLocation(); }
     @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
+    @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
+        return Optional.of((state, execution, tick) -> {
+            job(state, execution);
+            // Production's post-death planner refunds only proven pre-effect jobs.
+            // A possibly applied transform retains the exact job/input/effect for settlement.
+            return new ActorActivityDeath.Acknowledgement(state, execution, FrontierWorldStateUpdate.begin(),
+                    ActorActivityDeath.Disposition.RETAIN_CAUSAL_OWNER);
+        });
+    }
     @Override public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {
         throw new IllegalArgumentException("production must retain its continuation or complete through its owner");
     }
@@ -39,6 +50,9 @@ final class ProductionActivityCapability implements ActorActivityCapability {
         else if (status == ResidentWorkYield.Status.READY) waiting = Optional.empty();
         else throw new IllegalArgumentException("production checkpoint has no declared UAE translation");
         return new ActorActivityCheckpoint(state, execution, waiting);
+    }
+    @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease) {
+        return false; // Production goals are issued by the exact production-scene consumer.
     }
     static ResidentWorkYield.Status checkpointStatus(ProductionJob job) {
         return job.bakeryWork().isEmpty() ? ResidentWorkYield.Status.OWNER_SAFETY_HOLD

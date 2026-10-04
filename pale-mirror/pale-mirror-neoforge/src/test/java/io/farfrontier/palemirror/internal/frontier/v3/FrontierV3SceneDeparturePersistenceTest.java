@@ -27,9 +27,9 @@ class FrontierV3SceneDeparturePersistenceTest {
     private static FrontierV3SceneDeparture receipt(long health) {
         var declaration = new FrontierV3ActorCarrierComposition.Declaration(ACTOR,
                 ActorKind.RESIDENT,
-                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, ID,
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7, 2);
-        return new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, 7, 3),
+                FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, ID,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, 2);
+        return new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, 7, 3), 1L,
                 LEASE, 7, new SceneMemberPosition(ACTOR, new BodyPosition(12, 65, 10), FixedScalar.whole(health)),
                 FixedScalar.whole(20));
     }
@@ -46,12 +46,11 @@ class FrontierV3SceneDeparturePersistenceTest {
         var owner = new CompoundTag();
         owner.putString(FrontierV3ActorCarrierComposition.ACTOR_KEY, ACTOR.value());
         owner.putString(FrontierV3ActorCarrierComposition.KIND_KEY, "RESIDENT");
-        owner.putString(FrontierV3ActorCarrierComposition.OWNER_KEY, "SCENE_LEASE");
+        owner.putString(FrontierV3ActorCarrierComposition.OWNER_KEY, "ACTOR_BODY");
         owner.putString(FrontierV3ActorCarrierComposition.REPRESENTATION_KEY, "LIVE_BODY");
-        owner.putLong(FrontierV3ActorCarrierComposition.REVISION_KEY, 7);
+        owner.putLong(FrontierV3ActorCarrierComposition.REVISION_KEY, 0);
         owner.putLong(FrontierV3ActorCarrierComposition.EPOCH_KEY, 2);
-        owner.putString(FrontierV3SceneExecutor.LEASE_KEY, LEASE.value());
-        owner.putLong(FrontierV3SceneExecutor.REVISION_KEY, 7);
+        owner.putLong(FrontierV3ActorBodyController.RESIDENCE_KEY, 1L);
         body.put("NeoForgeData", owner);
         var bodies = new ListTag(); bodies.add(body);
         var chunk = new CompoundTag(); chunk.putIntArray("Position", new int[]{0, 0}); chunk.put("Entities", bodies);
@@ -85,9 +84,9 @@ class FrontierV3SceneDeparturePersistenceTest {
 
     @Test void savedWheatHandMustMatchTheUnloadReceiptBeforeRelease() {
         var base = receipt(9);
-        var withWheat = new FrontierV3SceneDeparture(base.carrier(), base.leaseId(), base.sceneRevision(),
+        var withWheat = new FrontierV3SceneDeparture(base.carrier(), base.residenceGeneration(), base.leaseId(), base.sceneRevision(),
                 base.observed(), base.canonicalHealthAtCapture(),
-                java.util.Optional.of(new FrontierV3SceneDeparture.HandStack("minecraft:wheat", 4)));
+                java.util.Optional.of(new FrontierV3ActorBodyDeparture.HandStack("minecraft:wheat", 4)));
         assertEquals(withWheat, FrontierV3SceneDeparture.load(withWheat.save()));
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         assertTrue(ledger.recordDeparture(withWheat));
@@ -103,9 +102,9 @@ class FrontierV3SceneDeparturePersistenceTest {
 
     @Test void savedBakeryMainHandRequiresExactKindQuantityAndComponentsBeforeRelease() {
         var base = receipt(9);
-        var bakery = new FrontierV3SceneDeparture(base.carrier(), base.leaseId(), base.sceneRevision(),
+        var bakery = new FrontierV3SceneDeparture(base.carrier(), base.residenceGeneration(), base.leaseId(), base.sceneRevision(),
                 base.observed(), base.canonicalHealthAtCapture(), java.util.Optional.empty(),
-                java.util.Optional.of(new FrontierV3SceneDeparture.HandStack("minecraft:bread", 4)));
+                java.util.Optional.of(new FrontierV3ActorBodyDeparture.HandStack("minecraft:bread", 4)));
         assertEquals(bakery, FrontierV3SceneDeparture.load(bakery.save()));
         var chunk = storedChunkWithWheat(4);
         var entity = chunk.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
@@ -148,14 +147,13 @@ class FrontierV3SceneDeparturePersistenceTest {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         var observed = receipt(9).observed();
         var identity = new FrontierV3ActorCarrierComposition.Declaration(ACTOR, ActorKind.RESIDENT,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, ID,
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 2L);
-        var receipt = new FrontierV3AmbientDeparture(new FrontierV3AmbientCarrierLedger.Carrier(identity, 7L, 7L),
+                FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, ID,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, 2L);
+        var receipt = new FrontierV3AmbientDeparture(new FrontierV3AmbientCarrierLedger.Carrier(identity, 7L, 7L), 1L,
                 observed, observed.body(), FixedScalar.whole(20));
         var stored = storedChunk(9);
         var tag = stored.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).getCompound("NeoForgeData");
-        tag.putString(FrontierV3ActorCarrierComposition.OWNER_KEY, "AMBIENT_LEASE");
-        tag.remove(FrontierV3SceneExecutor.LEASE_KEY); tag.remove(FrontierV3SceneExecutor.REVISION_KEY);
+        assertFalse(tag.contains(FrontierV3SceneExecutor.LEASE_KEY), "physical storage has no activity owner");
         var written = new CompletableFuture<Void>();
         var batch = new FrontierV3SceneDeparturePersistence.Batch();
         batch.observe(new ChunkPos(0, 0), stored, written);

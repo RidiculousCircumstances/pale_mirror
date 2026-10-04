@@ -45,8 +45,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 222 retains exact settlement work authorization; old test worlds are rejected.
     // Version 225 retains UAE execution identities separately from movement and physical custody.
     // Disposable old worlds are rejected, never given inferred activity authority.
-    // Version 227 admits selected passive execution and retains exact resume predecessors.
-    static final int VERSION = 227; private static final int MAX_ENTRIES = 65_535;
+    // Version 228 requires activity-independent physical body metadata/history.
+    static final int VERSION = 236; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -706,6 +706,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (var entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             writeString(output, entry.getKey().value()); TraversalTopologyStateCodec.write(output, entry.getValue().topology());
             writeCount(output, entry.getValue().cursor());
+            output.writeLong(entry.getValue().routeRevision()); TraversalRejoinCodec.write(output, entry.getValue().rejoin());
         }
         output.writeBoolean(assembly.deferral().isPresent());
         if (assembly.deferral().isPresent()) {
@@ -717,7 +718,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         SubjectId carrier = new SubjectId(readString(input)); Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId actor = new SubjectId(readString(input));
-            if (members.put(actor, new OperationAssembly.Member(TraversalTopologyStateCodec.read(input), readCount(input))) != null) throw new IllegalArgumentException("duplicate operation assembly member");
+            if (members.put(actor, new OperationAssembly.Member(TraversalTopologyStateCodec.read(input), readCount(input), input.readLong(), TraversalRejoinCodec.read(input))) != null) throw new IllegalArgumentException("duplicate operation assembly member");
         }
         java.util.Optional<OperationAssemblyDeferral> deferral = java.util.Optional.empty();
         if (hasDeferral && input.readBoolean()) {

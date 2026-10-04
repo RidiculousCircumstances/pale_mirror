@@ -36,8 +36,7 @@ class ProductionResumedHandoffTest {
             var leaseId = new SceneLeaseId("lease:production-resume");
             SceneLease lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()),
                     body.supportingSurface().support(), now, 1L, SceneLeaseStatus.PREPARED,
-                    List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), leaseId, job.workerId()))),
-                    Map.of(job.workerId(), body), Set.of(job.workerId()), Optional.empty());
+                    List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), leaseId, job.workerId()))), Set.of(job.workerId()), Optional.empty());
             var handoff = new ProductionWorkSceneLeaseHandoff(lease, List.of(new SceneMemberPosition(job.workerId(), body,
                     locations.get(job.workerId()).condition().health())));
             BodyPosition stale = original.workTraversal().linearCorridorSurfaces().getFirst().standingBody();
@@ -60,7 +59,7 @@ class ProductionResumedHandoffTest {
                     engine.checkpoint().revision(), now, FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), handoff)));
             FrontierWorldState accepted = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
             assertEquals(job, accepted.productionJobs().get(job.id()), "the complete job, topology, cursor and partial labor survive ingress");
-            assertEquals(body, accepted.sceneLeases().get(leaseId).memberPosition(job.workerId()));
+            assertEquals(body, accepted.sceneLeases().get(leaseId).memberBody(accepted.actorLocations(), job.workerId()));
             assertEquals(AmbientLeaseStatus.CLOSED, accepted.ambientLeases().get(job.workerId()).status());
             assertEquals(state.inventory(), accepted.inventory(), "worker transfer does not manufacture or consume resources");
             assertEquals(List.of(due), engine.checkpoint().schedules());

@@ -51,7 +51,7 @@ public final class SettlementServiceDecontaminationStateSupport {
             throw new IllegalArgumentException("service decontamination lost its exact held reagent or infection target");
         }
         SceneLease lease = FrontierSettlementServiceWorkSceneSupport.requireHotLease(state, work, findHotLease(state, work));
-        if (!lease.memberPosition(work.workerId()).equals(work.workStation().standingBody())) {
+        if (!lease.memberBody(state.actorLocations(), work.workerId()).equals(work.workStation().standingBody())) {
             throw new IllegalArgumentException("service decontamination worker is not at its retained work station");
         }
     }

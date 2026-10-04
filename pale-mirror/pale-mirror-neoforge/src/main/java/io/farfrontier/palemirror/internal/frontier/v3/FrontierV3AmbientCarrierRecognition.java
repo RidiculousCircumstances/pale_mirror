@@ -29,36 +29,13 @@ final class FrontierV3AmbientCarrierRecognition {
         if (!recognizesOwnership(state, carrier)) return false;
         var actor = actorId(carrier);
         if (ledger.hasCarrier(actor) || ledger.hasDepartureConflict(actor)
-                || ledger.departure(actor).isPresent() || ledger.ambientDeparture(actor).isPresent()) return false;
-        var handoff = ledger.pendingHandoff(actor);
-        if (handoff.isPresent()) return carrier.matches(handoff.orElseThrow().current());
+                || ledger.hasBodyDeparture(actor)) return false;
         var first = ledger.firstAdmission(actor).orElse(null);
-        if (first != null && (first.phase() == FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED
+        if (first == null || first.phase() == FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED
                 || first.phase() == FrontierV3ActorFirstAdmission.Phase.PROVEN_ABSENT
                 || first.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING
-                    && !carrier.matches(first.attempt().orElseThrow().declaration()))) return false;
+                    && !carrier.matches(first.attempt().orElseThrow().declaration())) return false;
         return ledger.pendingAdoption(actor).map(value -> carrier.matches(value.admitted())).orElse(true);
-    }
-
-    /** Retiring a stale saved body requires its completed canonical owner AND exact retained fence. */
-    static boolean retainedClosedRelease(FrontierWorldState state, ManagedCarrier carrier,
-                                         FrontierV3AmbientCarrierLedger ledger) {
-        var actor = actorId(carrier);
-        if (actor == null || carrier.epoch() < 1L) return false;
-        var lease = state.ambientLeases().get(actor);
-        var location = state.actorLocations().get(actor);
-        if (lease == null || lease.status() != AmbientLeaseStatus.CLOSED || location == null
-                || location.condition().status() != ActorLifeStatus.ALIVE
-                || ledger.hasDepartureConflict(actor) || ledger.pendingAdoption(actor).isPresent()
-                || state.sceneLeases().values().stream().anyMatch(scene -> scene.status()
-                    != io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED
-                    && scene.members().stream().anyMatch(member -> member.actorId().equals(actor)))) return false;
-        var expected = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actor,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                FrontierV3AmbientActorExecutor.entityId(state, actor),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), carrier.epoch());
-        return carrier.ownedBy(actor, FrontierV3AmbientActorExecutor.bioform(state, actor)) && carrier.matches(expected)
-                && ledger.matchesCarrier(expected.inactiveCarrier(), lease.revision(), lease.revision());
     }
 
     static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ManagedCarrier carrier) {
@@ -93,13 +70,16 @@ final class FrontierV3AmbientCarrierRecognition {
     }
 
     private static boolean recognizesOwnership(FrontierWorldState state, ManagedCarrier carrier, SubjectId actorId) {
-        var location = state.actorLocations().get(actorId); var lease = state.ambientLeases().get(actorId);
-        return location != null && location.condition().status() == ActorLifeStatus.ALIVE
-                && lease != null && lease.status() != AmbientLeaseStatus.CLOSED
+        var location = state.actorLocations().get(actorId);
+        if (location == null || location.condition().status() != ActorLifeStatus.ALIVE) return false;
+        final long epoch;
+        try { epoch = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId).physicalEpoch(); }
+        catch (IllegalArgumentException absent) { return false; }
+        return location.kind().name().equals(carrier.kind())
                 && FrontierV3AmbientActorExecutor.entityId(state, actorId).equals(carrier.entityId())
-                && FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE.name().equals(carrier.owner())
+                && FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY.name().equals(carrier.owner())
                 && FrontierV3ActorCarrierComposition.Representation.LIVE_BODY.name().equals(carrier.representation())
-                && carrier.authorityRevision() == lease.revision() && carrier.epoch() >= 1L
+                && carrier.authorityRevision() == 0L && carrier.epoch() == epoch
                 && carrier.ownedBy(actorId, FrontierV3AmbientActorExecutor.bioform(state, actorId));
     }
 
@@ -124,8 +104,8 @@ final class FrontierV3AmbientCarrierRecognition {
                     exactLong(entity.getPersistentData(), FrontierV3ActorCarrierComposition.EPOCH_KEY));
         }
         private static long exactLong(net.minecraft.nbt.CompoundTag tag, String key) {
-            // Zero is an invalid raw observation, never a synthesized authority.
-            return tag.contains(key, net.minecraft.nbt.Tag.TAG_LONG) ? tag.getLong(key) : 0L;
+            // Revision zero is explicit body authority, not the missing-NBT default.
+            return tag.contains(key, net.minecraft.nbt.Tag.TAG_LONG) ? tag.getLong(key) : Long.MIN_VALUE;
         }
         boolean matches(FrontierV3ActorCarrierComposition.Declaration declaration) {
             return !removed && entityId.equals(declaration.entityId()) && actorId.equals(declaration.actorId().value())

@@ -65,7 +65,6 @@ class FrontierV3SceneTurnSchedulerTest {
         var world = new WorldId("frontier:service-order");
         var actor = new SubjectId("resident:test");
         return SceneLease.forCause(new SceneLeaseId(id(cause, suffix)), world, cause, new BlockPosition(0, 0, 0),
-                new SimInstant(0), 1, status, List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))),
-                Map.of(actor, new BodyPosition(0, 1, 0)), Set.of(), Optional.empty());
+                new SimInstant(0), 1, status, List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))), Set.of(), Optional.empty());
     }
 }

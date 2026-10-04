@@ -451,8 +451,7 @@ class BakeryColdVerticalTest {
         SceneLease lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(),
                 new ProductionWorkSceneCause(job.id()), actor.supportingSurface().support(),
                 new SimInstant(800L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))),
-                java.util.Map.of(job.workerId(), actor.body()), java.util.Set.of(), Optional.empty());
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))), java.util.Set.of(), Optional.empty());
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
                 lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN), "minecraft:wheat", 64);

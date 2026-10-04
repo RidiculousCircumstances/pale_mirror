@@ -76,7 +76,16 @@ final class OperationActorStateSupport {
         OperationAssembly advanced = operation.activeAssembly().orElseThrow().advance(Objects.requireNonNull(assembly, "operation assembly").members());
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(state.operations()); nextOperations.put(operation.id(), operation.withAssembly(advanced));
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(state.actorLocations());
-        advanced.positions().forEach((actor, position) -> nextActors.put(actor, state.actorLocations().get(actor).withBody(position.standingBody())));
+        advanced.members().forEach((actor, member) -> {
+            if (member.equals(operation.activeAssembly().orElseThrow().members().get(actor))) return;
+            if (ActorExecutionCoordinator.coldAvailable(state, actor)) {
+                if (!OperationExecutionAuthority.coldAssemblyTraversalAvailable(state, operation,
+                        operation.activeAssembly().orElseThrow().members().get(actor), member))
+                    throw new IllegalArgumentException("COLD assembly traversal is blocked by known geometry");
+                nextActors.put(actor, state.actorLocations().get(actor).withBody(member.currentSurface().standingBody()));
+            } else if (!state.actorLocations().get(actor).body().equals(member.currentSurface().standingBody()))
+                throw new IllegalArgumentException("HOT assembly progress needs independent physical position evidence");
+        });
         Map<SubjectId, AmbientActorLease> nextAmbient = new LinkedHashMap<>(state.ambientLeases());
         advanced.members().forEach((actor, member) -> {
             AmbientActorLease lease = nextAmbient.get(actor);

@@ -10,6 +10,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FrontierV3PilotDiagnosticMatcherTest {
     private static JsonObject json(String value) { return JsonParser.parseString(value).getAsJsonObject(); }
 
+    @Test void exactConfirmedHarvestDoesNotDependOnWholeFieldEpochOrAnotherWorker() {
+        JsonObject site = json("""
+                {"status":"ok","phase":"HARVESTING","growthEpoch":1,"terminalHarvest":[
+                 {"outputItem":"item:wheat","intentStatus":"CONFIRMED", "physicalReceiptResolved":true,
+                  "physicalReceiptConfirmed":true}]}
+                """);
+        JsonObject intent = json("""
+                {"status":"ok","intentStatus":"CONFIRMED","intentKind":"RESOURCE_SITE_HARVEST",
+                 "receiptId":"receipt:harvest","subjects":["item:wheat"]}
+                """);
+        assertTrue(FrontierV3PilotDiagnosticMatcher.harvestComplete(site, intent, "item:wheat"));
+        assertFalse(FrontierV3PilotDiagnosticMatcher.harvestComplete(site, intent, "item:other"));
+        site.getAsJsonArray("terminalHarvest").get(0).getAsJsonObject().addProperty("physicalReceiptConfirmed", false);
+        assertFalse(FrontierV3PilotDiagnosticMatcher.harvestComplete(site, intent, "item:wheat"));
+        site.getAsJsonArray("terminalHarvest").get(0).getAsJsonObject().addProperty("physicalReceiptConfirmed", true);
+        intent.addProperty("intentStatus", "PREPARED");
+        assertFalse(FrontierV3PilotDiagnosticMatcher.harvestComplete(site, intent, "item:wheat"));
+    }
+
     @Test void exactAndObservedFungibleStacksAreBothAdmissibleButStalePhysicalCustodyIsNot() {
         JsonObject action = json("""
                 {"item":"minecraft:wheat","count":63,"slot":0}

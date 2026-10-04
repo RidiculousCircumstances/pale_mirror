@@ -86,13 +86,9 @@ final class FrontierV3ActorAdoptionPersistence {
             if (overflowed || writes.overflowed() || !FrontierV3CargoCleanupPersistence.matchesStoredChunk(data, chunk)) return;
             var entities = FrontierV3CargoCleanupPersistence.serializedEntities(data).orElse(null);
             if (entities == null) return;
-            var transfers = java.util.stream.Stream.concat(
-                    ledger.pendingAdoptions().stream().filter(value -> ledger.pendingHandoff(value.admitted().actorId()).isEmpty())
-                        .map(AdoptionCandidate::new),
-                    ledger.pendingHandoffs().stream().map(HandoffCandidate::new)).map(value -> (SaveCandidate) value);
+            var transfers = ledger.pendingAdoptions().stream().map(AdoptionCandidate::new).map(value -> (SaveCandidate) value);
             var births = ledger.firstAdmissions().stream()
-                    .filter(value -> value.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING
-                            && ledger.pendingHandoff(value.identity().actorId()).isEmpty())
+                    .filter(value -> value.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING)
                     .map(FirstCandidate::new);
             var selected = java.util.stream.Stream.concat(transfers, births)
                     .filter(value -> value.matchesSaved(entities.get(value.declaration().entityId()))).toList();
@@ -128,7 +124,7 @@ final class FrontierV3ActorAdoptionPersistence {
         }
     }
 
-    private sealed interface SaveCandidate permits AdoptionCandidate, HandoffCandidate, FirstCandidate {
+    private sealed interface SaveCandidate permits AdoptionCandidate, FirstCandidate {
         FrontierV3ActorCarrierComposition.Declaration declaration();
         boolean acknowledge(FrontierV3AmbientCarrierLedger ledger);
         default boolean matchesSaved(CompoundTag entity) { return FrontierV3ActorAdoptionPersistence.matchesSaved(declaration(), entity); }
@@ -146,12 +142,6 @@ final class FrontierV3ActorAdoptionPersistence {
         public boolean matchesCurrentOwner(Predicate<FrontierV3ActorOwnerBinding> currentOwner) { return currentOwner.test(adoption.admittedBinding()); }
         public FrontierV3ActorCarrierComposition.Declaration declaration() { return adoption.admitted(); }
         public boolean acknowledge(FrontierV3AmbientCarrierLedger ledger) { return ledger.acknowledgeAdoption(adoption, adoption.admittedBinding()); }
-    }
-    private record HandoffCandidate(FrontierV3ActorHandoff handoff) implements SaveCandidate {
-        public boolean matchesSaved(CompoundTag entity) { return handoff.currentBinding().matchesSaved(entity); }
-        public boolean matchesCurrentOwner(Predicate<FrontierV3ActorOwnerBinding> currentOwner) { return currentOwner.test(handoff.currentBinding()); }
-        public FrontierV3ActorCarrierComposition.Declaration declaration() { return handoff.current(); }
-        public boolean acknowledge(FrontierV3AmbientCarrierLedger ledger) { return ledger.acknowledgeHandoff(handoff, declaration()); }
     }
     record Ticket(FrontierV3EntitySaveBatch.Ticket write, List<SaveCandidate> candidates) {
         Ticket { candidates = List.copyOf(candidates); }

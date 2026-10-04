@@ -137,6 +137,8 @@ public final class SupplyOperationProcess {
         // canonical floor in one transaction. HOT members keep their durable observed cursor.
         OperationAssembly next = assembly.safeAdvances().stream()
                 .filter(actor -> ActorExecutionCoordinator.coldAvailable(state, actor))
+                .filter(actor -> OperationExecutionAuthority.coldAssemblyTraversalAvailable(state, operation,
+                        assembly.members().get(actor), assembly.members().get(actor).advanceOne()))
                 .map(assembly::advance).findFirst().orElse(null);
         if (next == null) return List.of(reschedule(action, operationAssembly(operation, action.dueAt().ticks() + 20L)));
         if (next.complete()) {
@@ -431,7 +433,7 @@ public final class SupplyOperationProcess {
             SubjectId escort = escorts.get(index);
             destinations.put(escort, escortSlots.get(index));
         }
-        OperationAssembly assembly = OperationAssemblyCorridor.compileJoint(state, operationId, hauler, destinations);
+        OperationAssembly assembly = OperationAssemblyCorridor.compileJoint(state, operationId, settlement.id(), hauler, destinations);
         List<BlockPosition> route = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
         TacticalPlan tacticalPlan = TacticalPlan.cargoEscort(operationId, delivery.authorityId(), delivery.authorityEpoch(), unit, route);
         return new RouteOperation(operationId, contract.id(), settlement.id(), contract.cargoId(), contract.recipientId(), unit,

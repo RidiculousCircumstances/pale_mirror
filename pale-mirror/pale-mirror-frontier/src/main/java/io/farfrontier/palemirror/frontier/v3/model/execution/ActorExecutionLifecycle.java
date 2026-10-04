@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model.execution;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
+import io.farfrontier.palemirror.frontier.v3.model.ActorDeathConsequences;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import java.util.Objects;
@@ -181,6 +182,76 @@ public final class ActorExecutionLifecycle {
         if (!resumed.actorExecutions().equals(state.actorExecutions()))
             throw new IllegalArgumentException("family resume changed common execution authority");
         return new Transition(state, resumed, executions);
+    }
+    /** Prepare all retained owner checkpoints against the same observed physical fact.
+     * The body owner combines these changes with its pose/absence update atomically. */
+    public FrontierWorldStateUpdate checkpointBodyDeparture(FrontierWorldState state, ActorBodyId body,
+                                                            io.farfrontier.palemirror.frontier.v3.model.BodyPosition position) {
+        var binding = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.require(state, body);
+        if (binding.phase() != io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhase.RUNNING
+                && binding.phase() != io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhase.AMBIGUOUS)
+            throw new IllegalArgumentException("body checkpoint requires an actually admitted physical incarnation");
+        var changes = FrontierWorldStateUpdate.begin();
+        var retained = state.actorExecutions().actors().get(body.actorId());
+        if (retained == null) return changes;
+        var claims = new java.util.ArrayList<ActorExecutionId>(2);
+        retained.current().ifPresent(claims::add);
+        retained.suspended().ifPresent(claims::add);
+        for (var id : claims) {
+            var capability = capabilities.require(id.activityKind());
+            capability.validateReference(state, id);
+            var request = new ActorActivityBodyCheckpoint.Request(state, id, body, position);
+            var result = Objects.requireNonNull(capability.bodyCheckpoint().acknowledge(request));
+            if (result.request().expectedState() != state || !result.request().equals(request))
+                throw new IllegalArgumentException("body checkpoint owner acknowledged stale or foreign evidence");
+            var owned = result.changes();
+            if (owned.changedComponents().contains(FrontierWorldStateUpdate.Component.ACTOR_LOCATIONS)
+                    || owned.changedComponents().contains(FrontierWorldStateUpdate.Component.FENCED_RECOVERY)
+                    || owned.changedComponents().contains(FrontierWorldStateUpdate.Component.ACTOR_EXECUTIONS))
+                throw new IllegalArgumentException("body checkpoint owner cannot replace physical or execution authority");
+            changes.merge(owned);
+        }
+        return changes;
+    }
+
+    /** Notify exact registered owners even when no scene exists or another purpose is current.
+     * The owner may retain unresolved cargo/effects; this does not fabricate completion. */
+    public ActorDeathConsequences.Settlement acknowledgeActivityDeath(
+            FrontierWorldState state, SubjectId actor, ActorExecutionState ownedRetirements, long atTick) {
+        Objects.requireNonNull(actor);
+        if (atTick < 0) throw new IllegalArgumentException("death acknowledgement requires canonical time");
+        var retained = state.actorExecutions().actors().get(actor);
+        var acknowledged = FrontierWorldStateUpdate.begin();
+        Objects.requireNonNull(ownedRetirements);
+        if (retained == null) return new ActorDeathConsequences.Settlement(state, acknowledged, ownedRetirements);
+        var claims = new java.util.ArrayList<ActorExecutionId>(2);
+        retained.current().ifPresent(claims::add);
+        retained.suspended().ifPresent(claims::add);
+        for (var id : claims) {
+            var capability = capabilities.require(id.activityKind());
+            var death = capability.deathAcknowledgement();
+            if (death.isEmpty()) continue; // Existing coordinated owners still use their declared scene consequence port.
+            capability.validateReference(state, id);
+            var result = Objects.requireNonNull(death.orElseThrow().acknowledge(state, id, atTick), "owner death acknowledgement");
+            if (result.expectedState() != state || !result.execution().equals(id))
+                throw new IllegalArgumentException("activity death acknowledgement has stale or foreign evidence");
+            var changes = result.changes();
+            if (changes.changedComponents().contains(FrontierWorldStateUpdate.Component.ACTOR_LOCATIONS)
+                    || changes.changedComponents().contains(FrontierWorldStateUpdate.Component.FENCED_RECOVERY)
+                    || changes.changedComponents().contains(FrontierWorldStateUpdate.Component.ACTOR_EXECUTIONS))
+                throw new IllegalArgumentException("activity death cannot replace physical or common execution authority");
+            acknowledged.merge(changes);
+            if (result.disposition() == ActorActivityDeath.Disposition.RETIRE_EXACT_EXECUTION) {
+                ownedRetirements = retained.current().equals(java.util.Optional.of(id))
+                        ? ownedRetirements.finish(id) : ownedRetirements.retireSuspended(id);
+            } else if (result.disposition() == ActorActivityDeath.Disposition.RETIRE_DECLARED_GROUP) {
+                var group = result.retiringGroup().orElseThrow();
+                group.requireCurrent(state.actorExecutions());
+                for (var member : group.members()) capabilities.require(member.activityKind()).validateReference(state, member);
+                ownedRetirements = retireCurrentGroup(ownedRetirements, group);
+            }
+        }
+        return new ActorDeathConsequences.Settlement(state, acknowledged, ownedRetirements);
     }
     /** Release-only owners have no retained work; other families acknowledge death separately. */
     public Transition preparePassiveDeath(FrontierWorldState state, SubjectId actor, ActorExecutionState ownedRetirements) {

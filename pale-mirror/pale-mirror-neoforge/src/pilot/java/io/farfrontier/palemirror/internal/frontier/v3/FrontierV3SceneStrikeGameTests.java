@@ -152,7 +152,7 @@ public final class FrontierV3SceneStrikeGameTests {
             positions.put(canonical.members().get(index).actorId(), new BodyPosition(cell.getX(), cell.getY(), cell.getZ()));
         }
         // Component-only coordinate projection; canonical commands still bind the original lease.
-        var local = canonical.withMemberPositions(positions).withHandoffPosition(new BlockPosition(origin.getX(), origin.getY(), origin.getZ()));
+        var local = canonical.withHandoffPosition(new BlockPosition(origin.getX(), origin.getY(), origin.getZ()));
         for (var member : local.members()) {
             var body = positions.get(member.actorId());
             addOwnedBody(helper, level, state(runtime), local, member, new BlockPos(body.x(), body.y(), body.z()));
@@ -215,7 +215,7 @@ public final class FrontierV3SceneStrikeGameTests {
         SceneLease canonical = settlementAssaultLease(runtime, initial, candidate, new SceneLeaseId("lease:" + fixture));
         FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-prepare", canonical.id().value(), new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePrepared(canonical));
         FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-hot", canonical.id().value(), new SceneLeaseTransition(canonical.id(), SceneLeaseStatus.HOT));
-        SceneLease local = FrontierV3GameTestSceneLeases.projectedIntoFixture(canonical, new BodyPosition(origin.getX(), origin.getY() + 1, origin.getZ()));
+        SceneLease local = canonical;
         int fixtureColumns = 6, fixtureRows = 6;
         helper.assertTrue(local.members().size() <= fixtureColumns * fixtureRows,
                 "the authored template reserves a bounded 6 by 6 local body grid");
@@ -274,8 +274,8 @@ public final class FrontierV3SceneStrikeGameTests {
                     // the actual observed death at its canonical fixture station; this does
                     // not claim the production dimension's event-to-coordinate bridge.
                     FrontierV3CommandSubmission.submit(runtime, "fixture-observed-death", deadActor.value(),
-                            new io.farfrontier.palemirror.frontier.v3.model.ActorDied(local.id(), deadActor,
-                                    canonical.memberPosition(deadActor), "fixture-observed-physical-death"));
+                            io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts.death(state(runtime), deadActor,
+                                    canonical.memberBody(state(runtime).actorLocations(), deadActor), "fixture-observed-physical-death"));
                     helper.assertValueEqual(state(runtime).sceneLeases().get(local.id()).status(), SceneLeaseStatus.DRAINING,
                             "registered death must itself drain the scene atomically");
                     living.discard();
@@ -440,8 +440,7 @@ public final class FrontierV3SceneStrikeGameTests {
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList();
         return SceneLease.forCause(id, checkpoint.worldId(), new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
-                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members,
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
     }
 
     /** Cheap discriminators for the framed production receipt fence; none relies on a native carrier. */
@@ -461,7 +460,7 @@ public final class FrontierV3SceneStrikeGameTests {
 
     private static SceneLease receiptLease(SceneLease source, SceneLeaseId id, long revision) {
         return SceneLease.forCause(id, source.worldId(), source.cause(), source.handoffPosition(), source.handoffInstant(), revision,
-                source.status(), source.members(), source.memberPositions(), source.ambientHandoffActorIds(), source.recoveryEvidence());
+                source.status(), source.members(), source.ambientHandoffActorIds(), source.recoveryEvidence());
     }
     private static PhysicalIntent onlyStrike(FrontierWorldState state) {
         return state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE).reduce((left, right) -> right)

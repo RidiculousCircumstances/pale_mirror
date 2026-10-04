@@ -45,7 +45,6 @@ record FrontierV3AmbientAdmissionDiagnostic(String status, UUID entityId, boolea
     /** Read-only history explanation; never authorization to create or discard a body. */
     static java.util.Optional<String> unresolvedCreationReason(FrontierV3AmbientCarrierLedger ledger,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
-        if (ledger.pendingHandoff(actor).isPresent()) return java.util.Optional.of("HANDOFF_SAVE_PENDING");
         if (ledger.pendingAdoption(actor).isPresent()) return java.util.Optional.of("ADOPTION_SAVE_PENDING");
         return ledger.firstAdmission(actor)
                 .filter(first -> first.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING)

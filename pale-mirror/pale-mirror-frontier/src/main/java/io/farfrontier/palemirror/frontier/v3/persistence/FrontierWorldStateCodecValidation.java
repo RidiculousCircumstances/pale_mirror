@@ -18,6 +18,6 @@ final class FrontierWorldStateCodecValidation {
         FrontierWorldProcessCatalog.requirePhysicalLifecycleState(state);
         FrontierDomainRelationships.validate(state);
         ResidentMealReferenceClosure.validate(state);
-        FrontierDurationProcessDriverRegistry.requireRetainedSceneLeases(state.sceneLeases().values());
+        FrontierDurationProcessDriverRegistry.requireRetainedSceneLeases(state.sceneLeases().values(), state.actorLocations());
     }
 }

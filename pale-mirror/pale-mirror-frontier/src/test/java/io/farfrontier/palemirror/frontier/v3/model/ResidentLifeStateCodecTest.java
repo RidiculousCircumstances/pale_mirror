@@ -18,6 +18,11 @@ class ResidentLifeStateCodecTest {
         assertEquals(2, FrontierWireTags.tag(ResidentMeal.Phase.CONSUME));
         assertEquals(3, FrontierWireTags.tag(ResidentActivityChoice.Wait.HAND_OCCUPIED));
         assertEquals(4, FrontierWireTags.tag(ResidentMeal.Phase.CLEAR_ACCESS));
+        assertEquals(10, FrontierWireTags.tag(ResidentMealResourceObligation.CustodyState.SOURCE_TAKE_PENDING));
+        assertEquals(11, FrontierWireTags.tag(ResidentMealResourceObligation.CustodyState.ACTOR_PORTION));
+        assertEquals(12, FrontierWireTags.tag(ResidentMealResourceObligation.CustodyState.ACTOR_CONSUMPTION_PENDING));
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierWireTags.require(ResidentMealResourceObligation.CustodyState.class, 0));
         assertThrows(IllegalArgumentException.class,
                 () -> FrontierWireTags.require(ResidentMeal.Phase.class, 5));
     }

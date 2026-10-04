@@ -94,7 +94,16 @@ class ResourceSiteHarvestSceneReconciliationTest {
         var receipt = new ResourceSiteHarvestSceneReconciled(hot.site(), job.id(), lease.id(), lease.revision(), epoch, displaced, hand);
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         assertEquals(receipt, codecs.decode(receipt.type(), codecs.encode(receipt)));
-        var restored = ResourceSiteHarvestSceneReconciliation.reduce(state, hot.site(), receipt);
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestSceneReconciliation.reduce(state, hot.site(), receipt),
+                "a field receipt cannot manufacture common body permission or change its position");
+        var inspected = ActorBodyAuthority.inspected(state,
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(
+                        ActorBodyAuthority.current(state, job.workerId()),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING, original,
+                        state.actorLocations().get(job.workerId()).condition().health(), displaced,
+                        state.actorLocations().get(job.workerId()).condition().health(),
+                        state.actorExecutions().actors().get(job.workerId()).current()));
+        var restored = ResourceSiteHarvestSceneReconciliation.reduce(inspected, hot.site(), receipt);
         assertEquals(SceneLeaseStatus.HOT, restored.sceneLeases().get(lease.id()).status());
         assertEquals(displaced, restored.actorLocations().get(job.workerId()).body());
         assertEquals(epoch, restored.fencedRecovery().current().get(bindingId).authorityEpoch());

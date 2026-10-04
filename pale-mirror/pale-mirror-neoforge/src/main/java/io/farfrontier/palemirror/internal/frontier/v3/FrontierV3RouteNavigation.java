@@ -18,12 +18,17 @@ final class FrontierV3RouteNavigation {
     private FrontierV3RouteNavigation() { }
 
     static FrontierV3MinecraftGoalNavigation.Result pursue(ServerLevel level, Mob actor,
-                                                           FrontierV3GoalNavigation.Goal goal) {
+                                                           FrontierV3GoalNavigation.Goal goal,
+                                                           FrontierV3GoalNavigation.ProviderPermission permission) {
+        java.util.Objects.requireNonNull(permission, "route provider permission");
+        if (!permission.current(actor))
+            return new FrontierV3MinecraftGoalNavigation.Result(FrontierV3MinecraftGoalNavigation.Status.AMBIGUOUS,
+                    "stale-provider-authority");
         List<SurfaceAnchor> route = goal.routeHint();
         if (route.isEmpty() || goal.legalStations().stream().anyMatch(station ->
                 FrontierV3SemanticMovement.arrived(level, actor, station))) {
             LEGS.remove(actor);
-            return FrontierV3MinecraftGoalNavigation.pursue(level, actor, goal.legalStations(), goal.scope(), goal.order());
+            return FrontierV3MinecraftGoalNavigation.pursue(level, actor, goal.legalStations(), goal.scope(), goal.order(), permission);
         }
         Leg leg = LEGS.get(actor);
         if (leg == null || !leg.goal().equals(goal)) {
@@ -31,7 +36,7 @@ final class FrontierV3RouteNavigation {
             leg = leg(goal, nearest(actor, route));
             LEGS.put(actor, leg);
         }
-        var result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order());
+        var result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order(), permission);
         if (result.status() == FrontierV3MinecraftGoalNavigation.Status.BLOCKED
                 && !leg.stations().equals(goal.legalStations())
                 && result.blockReason().filter(reason -> reason == FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE
@@ -40,7 +45,7 @@ final class FrontierV3RouteNavigation {
             // retain that choice so successive ticks cannot oscillate back to a buried hint.
             leg = new Leg(goal, leg.startIndex(), goal.legalStations());
             LEGS.put(actor, leg);
-            result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order());
+            result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order(), permission);
         }
         if (result.status() != FrontierV3MinecraftGoalNavigation.Status.ARRIVED) return result;
         SurfaceAnchor arrived = result.arrivedStation().orElseThrow();

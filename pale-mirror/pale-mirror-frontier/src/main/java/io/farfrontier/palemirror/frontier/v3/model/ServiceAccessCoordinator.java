@@ -147,7 +147,7 @@ public final class ServiceAccessCoordinator {
                         && FrontierSceneBehaviors.productionWork(candidate).jobId().equals(job.id()))
                 .findFirst().orElse(null);
         if (lease == null) return false;
-        BodyPosition previous = lease.memberPosition(job.workerId());
+        BodyPosition previous = lease.memberBody(state.actorLocations(), job.workerId());
         ServiceAccessBoundary boundary = port(state, FrontierWorldState.depotId(job.settlementId())).accessBoundary();
         if (!boundary.occupied(previous) || !boundary.cleared(observedBody)) return false;
         return witnessedExit(boundary, previous, observedBody);
@@ -160,7 +160,7 @@ public final class ServiceAccessCoordinator {
             return false;
         SceneLease lease = FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, leaseId);
         ServiceAccessBoundary boundary = ResourceSiteHarvestGoal.depotPort(state, job).accessBoundary();
-        return witnessedExit(boundary, lease.memberPosition(job.workerId()), observedBody);
+        return witnessedExit(boundary, lease.memberBody(state.actorLocations(), job.workerId()), observedBody);
     }
 
     /** A service permit ends at the first witnessed exit, independently of the owner's later route. */
@@ -201,13 +201,6 @@ public final class ServiceAccessCoordinator {
 
     private static SurfaceAnchor currentSurface(FrontierWorldState state, SubjectId workerId) {
         if (awaitingBody(state, workerId)) return null;
-        BodyPosition leased = state.sceneLeases().values().stream()
-                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED
-                        && lease.retainsMemberCustody(workerId))
-                .map(lease -> lease.memberPosition(workerId))
-                .reduce((left, right) -> { throw new IllegalArgumentException("worker has competing physical service custody"); })
-                .orElse(null);
-        if (leased != null) return leased.supportingSurface();
         ActorLocation actor = state.actorLocations().get(workerId);
         return actor == null ? null : actor.supportingSurface();
     }

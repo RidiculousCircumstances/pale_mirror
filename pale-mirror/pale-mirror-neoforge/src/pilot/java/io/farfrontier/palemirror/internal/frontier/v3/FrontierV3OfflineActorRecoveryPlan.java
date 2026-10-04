@@ -28,7 +28,7 @@ record FrontierV3OfflineActorRecoveryPlan(SubjectId actor, long cancelledRevisio
         var carrier = recoveryCarrier;
         if (ledger.firstAdmission(actor).isPresent()
                 || ledger.departure(actor).isPresent() || ledger.ambientDeparture(actor).isPresent()
-                || ledger.hasDepartureConflict(actor) || ledger.pendingAdoption(actor).isPresent() || ledger.pendingHandoff(actor).isPresent()
+                || ledger.hasDepartureConflict(actor) || ledger.pendingAdoption(actor).isPresent()
                 || ledger.hasCarrier(actor) && !ledger.matchesCarrier(carrier.identity(),
                     carrier.physicalRevision(), carrier.ambientRevision()))
             throw new IllegalStateException("offline recovery custody changed");
@@ -61,7 +61,7 @@ record FrontierV3OfflineActorRecoveryPlan(SubjectId actor, long cancelledRevisio
         if (!uuid.equals(absence.actorUuid()) || lease == null || lease.status() != AmbientLeaseStatus.PREPARED
                 || location == null || location.condition().status() != ActorLifeStatus.ALIVE
                 || !location.body().equals(lease.handoffBody()) || ledger.hasCarrier(actor) || ledger.pendingAdoption(actor).isPresent()
-                || ledger.pendingHandoff(actor).isPresent() || ledger.firstAdmission(actor).isPresent()
+                || ledger.firstAdmission(actor).isPresent()
                 || ledger.departure(actor).isPresent() || ledger.ambientDeparture(actor).isPresent()
                 || ledger.hasDepartureConflict(actor)
                 || state.sceneLeases().values().stream().anyMatch(scene -> scene.status() != SceneLeaseStatus.CLOSED
@@ -80,8 +80,8 @@ record FrontierV3OfflineActorRecoveryPlan(SubjectId actor, long cancelledRevisio
         // This is a NEW inactive recovery carrier for the cancelled generation. It does not
         // assert that an old physical body/epoch was observed, nor restore historical health.
         var declaration = FrontierV3ActorCarrierComposition.fromCanonical(closed, actor,
-                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                uuid, FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, lease.revision(), 1L);
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                uuid, FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, 1L);
         var carrier = new FrontierV3AmbientCarrierLedger.Carrier(declaration, lease.revision(), lease.revision());
         return new FrontierV3OfflineActorRecoveryPlan(actor, lease.revision(), state, draining, closed, carrier, List.of(transition, release));
     }

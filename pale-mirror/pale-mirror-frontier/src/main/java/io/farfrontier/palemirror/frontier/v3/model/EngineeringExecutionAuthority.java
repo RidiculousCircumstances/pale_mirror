@@ -130,7 +130,26 @@ public final class EngineeringExecutionAuthority {
     static ActorActivityCapability capability(ActorActivityKind kind) {
         if (!engineering(kind)) throw new IllegalArgumentException("unsupported engineering activity kind");
         return new ActorActivityCapability() {
+            @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
+                return request -> {
+                    var owner = require(EngineeringWorkOrderSupport.registry(request.expectedState().routeConstructions(),
+                            request.expectedState().routeMaintenances()), request.execution());
+                    if (owner.assembly().isPresent() && !owner.assembly().orElseThrow().members().get(
+                            request.execution().actorId()).currentPosition().equals(request.observedPosition().supportingSurface().support()))
+                        throw new IllegalArgumentException("engineering assembly requires its observed rejoin before COLD");
+                    return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+                };
+            }
+            @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId id, AmbientActorLease lease) {
+                if (kind != ActorActivityKind.ENGINEERING_ASSEMBLY || lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY) return false;
+                var owner = require(EngineeringWorkOrderSupport.registry(state.routeConstructions(), state.routeMaintenances()), id);
+                if (owner.assembly().isEmpty()) return lease.goalBody().equals(state.actorLocations().get(id.actorId()).body());
+                var member = owner.assembly().orElseThrow().members().get(id.actorId());
+                var target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
+                return lease.goalBody().supportingSurface().support().equals(target);
+            }
             @Override public ActorActivityKind kind() { return kind; }
+            @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
             @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
             @Override public void validateReference(FrontierWorldState state, ActorExecutionId id) {
                 if (id.activityKind() != kind) throw new IllegalArgumentException("foreign engineering capability kind");

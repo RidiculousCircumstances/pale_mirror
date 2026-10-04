@@ -76,12 +76,10 @@ class FrontierV3DiagnosticSceneJsonTest {
                 io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(checkpoint.worldId(), leaseId, actor))).toList();
         var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(leaseId, checkpoint.worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause(candidate.jobId()), candidate.handoffPosition(), checkpoint.instant(),
-                checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED, members,
-                io.farfrontier.palemirror.frontier.v3.model.SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+                checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED, members, java.util.Set.of(), Optional.empty());
         FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
         var historical = SceneLease.forCause(new SceneLeaseId("lease:diagnostic-production-r-1"), checkpoint.worldId(),
-                lease.cause(), lease.handoffPosition(), new SimInstant(0L), 0L, SceneLeaseStatus.CLOSED, lease.members(),
-                lease.memberPositions(), lease.ambientHandoffActorIds(), Optional.empty());
+                lease.cause(), lease.handoffPosition(), new SimInstant(0L), 0L, SceneLeaseStatus.CLOSED, lease.members(), lease.ambientHandoffActorIds(), Optional.empty());
         FrontierWorldState withHistoricalReceipt = hot.withChanges(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate.begin()
                 .sceneLeases(java.util.Map.of(historical.id(), historical, lease.id(), hot.sceneLeases().get(lease.id()))));
 
@@ -152,7 +150,7 @@ class FrontierV3DiagnosticSceneJsonTest {
         var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(leaseId, checkpoint.worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentSceneCause(operation.id()), candidate.infirmaryAnchor(),
                 checkpoint.instant(), checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
-                members, io.farfrontier.palemirror.frontier.v3.model.SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+                members, java.util.Set.of(), Optional.empty());
         FrontierWorldState diagnosticState = state.prepareSceneLease(lease);
 
         String medical = FrontierV3DiagnosticJson.render("medical", operation.id().value(), checkpoint, diagnosticState, Optional.empty());

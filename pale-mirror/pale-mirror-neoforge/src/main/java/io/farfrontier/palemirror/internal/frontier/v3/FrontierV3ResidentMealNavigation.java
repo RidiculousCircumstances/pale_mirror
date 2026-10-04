@@ -31,8 +31,8 @@ final class FrontierV3ResidentMealNavigation {
             BLOCKED.remove(body);
             return; // Its retired command is quiesced at the common entity boundary, never by a new owner.
         }
-        var actuation = FrontierV3ActorActuation.capture(state, body, meal.executionId(), runtime::decodedState);
-        if (!actuation.current(body)) return;
+        var actuation = FrontierV3AmbientActuation.capture(state, runtime, body, lease, meal.executionId()).orElse(null);
+        if (actuation == null || !actuation.current(body)) return;
         if (meal.phase() != ResidentMeal.Phase.MOVE
                 && !meal.movesToClearance()) {
             ROUTES.remove(body);

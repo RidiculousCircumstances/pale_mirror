@@ -546,6 +546,33 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
                 claimQuantities, remainingSource, destinationBindings);
     }
 
+    /** Whole physically observed actor pocket/hand release, under its resource owner's fence.
+     * This port accepts no container transfer or arbitrary replacement actor layout. */
+    public FungibleResourceLedger releaseObservedActorAccountToWorld(SubjectId accountId, SubjectId actorId,
+            java.util.UUID bodyId, long sourceEpoch, java.util.UUID carrierId) {
+        CustodyAccount source = requireAccount(accountId);
+        List<PhysicalStackBinding> current = bindings.values().stream()
+                .filter(binding -> binding.accountId().equals(accountId)).toList();
+        if (!source.custody().equals(new ResourceCustody.Actor(actorId)) || !source.claimQuantities().isEmpty()
+                || current.size() != 1 || current.getFirst().authorityEpoch() != sourceEpoch
+                || !current.getFirst().lotQuantities().equals(source.lotQuantities()))
+            throw new IllegalArgumentException("actor world release lacks one exact unclaimed bound account");
+        boolean sameBody = switch (current.getFirst().address()) {
+            case PhysicalStackAddress.ActorHand hand -> hand.actorId().equals(actorId) && hand.entityId().equals(bodyId);
+            case PhysicalStackAddress.ActorPocket pocket -> pocket.actorId().equals(actorId) && pocket.entityId().equals(bodyId);
+            default -> false;
+        };
+        if (!sameBody) throw new IllegalArgumentException("actor world release names a foreign body address");
+        SubjectId destinationId = new SubjectId("custody:world-" + carrierId);
+        CustodyAccount destination = new CustodyAccount(destinationId, new ResourceCustody.WorldCarrier(carrierId),
+                source.lotQuantities(), Map.of());
+        PhysicalStackBinding drop = new PhysicalStackBinding(new SubjectId("binding:world-" + carrierId + "-e1"),
+                destinationId, new PhysicalStackAddress.WorldEntity(carrierId), 1L, current.getFirst().itemKind(),
+                source.lotQuantities(), Map.of());
+        return transferObserved(accountId, destination, false, sourceEpoch, 1L, source.lotQuantities(), Map.of(),
+                List.of(), List.of(drop));
+    }
+
     private static void requireNonActorTransfer(CustodyAccount source, CustodyAccount destination) {
         if (source.custody() instanceof ResourceCustody.Actor || destination.custody() instanceof ResourceCustody.Actor)
             throw new IllegalArgumentException("actor-held resources require their typed work and handoff owner");

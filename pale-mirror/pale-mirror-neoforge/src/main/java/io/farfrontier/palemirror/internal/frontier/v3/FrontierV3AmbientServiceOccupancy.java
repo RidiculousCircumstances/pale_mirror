@@ -16,9 +16,11 @@ final class FrontierV3AmbientServiceOccupancy {
         ActorLocation actor = state.actorLocations().get(actorId);
         if (supported.isEmpty() || actor == null || !AmbientBodyConfirmationProcess.serviceOccupancyChanged(state,
                 actorId, actor.body(), supported.orElseThrow())) return false;
+        var bodyId = ActorBodyAuthority.current(state, actorId);
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return false;
         var result = FrontierV3AmbientActorExecutor.submit(runtime, "ambient-service-occupancy", actorId.value(),
                 new AmbientBodyConfirmed(actorId, lease.revision(), AmbientBodyConfirmed.Boundary.SERVICE_OCCUPANCY,
-                        actor.body(), supported.orElseThrow()));
+                        actor.body(), supported.orElseThrow(), bodyId));
         FrontierV3DiagnosticTrace.record(level.getServer(), "service-access:" + actorId.value(),
                 "ambient_service_occupancy", actorId, result);
         return result instanceof CommandResult.Accepted;

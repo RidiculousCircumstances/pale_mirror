@@ -103,8 +103,6 @@ public final class ActorExecutionCoordinator {
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                     || !ambientAvailable(state, List.of(member.actorId())) || sceneOwns(state, member.actorId()))
                 throw new IllegalArgumentException("scene preparation lacks exclusive living actor authority");
-            if (!actor.body().equals(lease.memberPosition(member.actorId())))
-                throw new IllegalArgumentException("scene preparation must retain the exact captured body");
         }
     }
 

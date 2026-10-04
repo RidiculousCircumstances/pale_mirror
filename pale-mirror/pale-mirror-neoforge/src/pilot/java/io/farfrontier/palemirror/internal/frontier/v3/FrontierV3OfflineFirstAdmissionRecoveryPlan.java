@@ -19,7 +19,7 @@ record FrontierV3OfflineFirstAdmissionRecoveryPlan(FrontierV3ActorFirstAdmission
                 || !first.identity().entityId().equals(absence.actorUuid())
                 || !first.identity().entityId().equals(SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))
                 || ledger.hasCarrier(actor) || ledger.pendingAdoption(actor).isPresent()
-                || ledger.pendingHandoff(actor).isPresent() || ledger.departure(actor).isPresent()
+                || ledger.departure(actor).isPresent()
                 || ledger.ambientDeparture(actor).isPresent() || ledger.hasDepartureConflict(actor))
             throw new IllegalArgumentException("first-body recovery needs one exact pending, absent ambient owner");
 
@@ -39,10 +39,8 @@ record FrontierV3OfflineFirstAdmissionRecoveryPlan(FrontierV3ActorFirstAdmission
                 || state.hiveColony().mobilizations().values().stream().anyMatch(work -> work.memberIds().contains(actor)))
             throw new IllegalArgumentException("first-body recovery cannot cross another work or physical owner");
 
-        var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actor,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, absence.actorUuid(),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L);
-        var owner = FrontierV3ActorOwnerBinding.ambient(declaration);
+        var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actor, absence.actorUuid(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L);
+        var owner = FrontierV3ActorOwnerBinding.body(declaration);
         if (!first.identity().matches(declaration) || !first.attempt().orElseThrow().equals(owner))
             throw new IllegalArgumentException("first-body recovery does not match the attempted owner");
         return new FrontierV3OfflineFirstAdmissionRecoveryPlan(first, owner);

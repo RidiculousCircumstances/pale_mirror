@@ -76,7 +76,7 @@ public final class FrontierProductionWorkSceneSupport {
         }
         if (job.bakeryWork().isPresent()) return lease;
         BodyPosition retainedStation = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
-        if (!retainedStation.equals(lease.memberPosition(job.workerId()))) {
+        if (!retainedStation.equals(lease.memberBody(state.actorLocations(), job.workerId()))) {
             throw new IllegalArgumentException("production work HOT lease diverges from its retained worker cursor");
         }
         return lease;
@@ -108,8 +108,8 @@ public final class FrontierProductionWorkSceneSupport {
     }
     /**
      * Commits one observed worker arrival as one causal fact: the work cursor and the
-     * matching persisted HOT-body position may never diverge.  The ordinary actor location
-     * remains COLD ownership and is updated only by the scene-release receipt.
+     * canonical actor position may never diverge. The scene retains participant identity
+     * only, not a second position to be synchronized at release.
      */
     public static FrontierWorldState advanceWorker(FrontierWorldState state, ProductionJob current, ProductionJob replacement,
                                                    io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId leaseId,
@@ -125,13 +125,13 @@ public final class FrontierProductionWorkSceneSupport {
         SceneLease lease = requireHotLease(state, current, leaseId);
         BodyPosition expectedCurrent = current.workTraversal().linearCorridorSurfaces().get(current.traversalCursor()).standingBody();
         BodyPosition expectedNext = replacement.workTraversal().linearCorridorSurfaces().get(replacement.traversalCursor()).standingBody();
-        if (!lease.memberPosition(current.workerId()).equals(expectedCurrent) || !observedWorker.equals(expectedNext)) {
+        if (!lease.memberBody(state.actorLocations(), current.workerId()).equals(expectedCurrent) || !observedWorker.equals(expectedNext)) {
             throw new IllegalArgumentException("production worker advance must retain its prior and observed next lease positions");
         }
         Map<SubjectId, ProductionJob> jobs = new java.util.LinkedHashMap<>(state.productionJobs()); jobs.put(replacement.id(), replacement);
-        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new java.util.LinkedHashMap<>(state.sceneLeases());
-        leases.put(leaseId, lease.withMemberPositions(Map.of(current.workerId(), observedWorker)));
-        return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs).sceneLeases(leases));
+        Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(current.workerId(), actors.get(current.workerId()).withBody(observedWorker));
+        return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs).actorLocations(actors));
     }
     /** The worker may not continue a visual cycle after its named player-observable input departed. */
     public static boolean hasPhysicalInput(FrontierWorldState state, ProductionJob job) {
@@ -156,7 +156,7 @@ public final class FrontierProductionWorkSceneSupport {
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
         ProductionWorkSceneCause cause = FrontierSceneBehaviors.productionWork(lease); ProductionJob job = require(state, cause);
         Candidate candidate = candidate(state, job).orElseThrow(() -> new IllegalArgumentException("production-work scene has no exact ready worker"));
-        if (!lease.handoffPosition().equals(candidate.handoffPosition()) || !lease.memberPositions().equals(SceneLease.bodiesAboveSupportCells(candidate.memberPositions()))
+        if (!lease.handoffPosition().equals(candidate.handoffPosition()) || !lease.memberBodies(state.actorLocations()).equals(SceneLease.bodiesAboveSupportCells(candidate.memberPositions()))
                 || !lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).equals(Set.of(job.workerId()))) {
             throw new IllegalArgumentException("production-work scene must retain its exact worker and cursor surface");
         }

@@ -53,7 +53,7 @@ final class FrontierV3SceneReadiness {
             }
             allCurrent = false;
             if (lease.ambientHandoffActorIds().contains(member.actorId())) return "AWAITING_AMBIENT_HANDOFF";
-            BodyPosition canonical = lease.memberPosition(member.actorId());
+            BodyPosition canonical = lease.memberBody(state.actorLocations(), member.actorId());
             BlockPos candidate = new BlockPos(canonical.x(), canonical.y() - 1, canonical.z());
             if (!level.hasChunkAt(candidate)) return "UNLOADED";
             if (FrontierV3SceneBehaviorRegistry.standingPositionProvider(lease).resolve(level, candidate) == null) {

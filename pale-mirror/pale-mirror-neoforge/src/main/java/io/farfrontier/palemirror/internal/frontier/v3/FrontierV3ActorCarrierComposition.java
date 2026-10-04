@@ -31,7 +31,7 @@ final class FrontierV3ActorCarrierComposition {
 
     private FrontierV3ActorCarrierComposition() { }
 
-    enum Owner { AMBIENT_LEASE, SCENE_LEASE }
+    enum Owner { ACTOR_BODY }
     enum Representation { LIVE_BODY, INACTIVE_CARRIER }
     enum Role { PRODUCER, ADOPTER }
 
@@ -68,10 +68,9 @@ final class FrontierV3ActorCarrierComposition {
             Objects.requireNonNull(actorId, "actor id"); Objects.requireNonNull(kind, "actor kind");
             Objects.requireNonNull(owner, "lifecycle owner"); Objects.requireNonNull(entityId, "entity id");
             Objects.requireNonNull(representation, "representation");
-            // The canonical bootstrap's first durable lease is revision -1 until its prepare
-            // transaction is committed.  It is still an explicit authority value, not an
-            // omitted tuple dimension; values below that sentinel are invalid.
-            if (authorityRevision < -1L || epoch < 1L) throw new IllegalArgumentException("invalid actor carrier authority revision="
+            // Body ownership is the actor's single retained BODY binding. Activity
+            // clocks are never written into this declaration, including bootstrap.
+            if (authorityRevision != 0L || epoch < 1L) throw new IllegalArgumentException("invalid actor carrier authority revision="
                     + authorityRevision + " epoch=" + epoch);
         }
         Declaration inactiveCarrier() { return new Declaration(actorId, kind, owner, entityId, Representation.INACTIVE_CARRIER, authorityRevision, epoch); }
@@ -94,12 +93,21 @@ final class FrontierV3ActorCarrierComposition {
     private static boolean matchesDeclaration(Entity entity, Declaration declaration) {
         if (!declaration.entityId().equals(entity.getUUID())) return false;
         if (declaration.kind() == ActorKind.BIOFORM ? !(entity instanceof Zombie) : !(entity instanceof Villager)) return false;
+        if (!entity.getPersistentData().contains(REVISION_KEY, net.minecraft.nbt.Tag.TAG_LONG)
+                || !entity.getPersistentData().contains(EPOCH_KEY, net.minecraft.nbt.Tag.TAG_LONG)) return false;
         return declaration.actorId().value().equals(entity.getPersistentData().getString(ACTOR_KEY))
                 && declaration.kind().name().equals(entity.getPersistentData().getString(KIND_KEY))
                 && declaration.owner().name().equals(entity.getPersistentData().getString(OWNER_KEY))
                 && declaration.representation().name().equals(entity.getPersistentData().getString(REPRESENTATION_KEY))
                 && declaration.authorityRevision() == entity.getPersistentData().getLong(REVISION_KEY)
                 && declaration.epoch() == entity.getPersistentData().getLong(EPOCH_KEY);
+    }
+    /** Presence of any owned schema field excludes the unmodeled provider-test path.
+     * Partial/malformed metadata is not permission to rediscover a type or owner. */
+    static boolean hasDeclarationMetadata(net.minecraft.nbt.CompoundTag tag) {
+        return tag.contains(ACTOR_KEY) || tag.contains(KIND_KEY) || tag.contains(OWNER_KEY)
+                || tag.contains(REPRESENTATION_KEY) || tag.contains(REVISION_KEY) || tag.contains(EPOCH_KEY)
+                || tag.contains(FrontierV3ActorBodyController.RESIDENCE_KEY);
     }
 
     static void stamp(Entity entity, Declaration declaration) {
@@ -113,6 +121,16 @@ final class FrontierV3ActorCarrierComposition {
 
     /** Decode only the entity's own complete declaration; class/ID never supplies a missing tag. */
     static java.util.Optional<Declaration> declaredBy(Entity entity) {
+        return entity == null || entity.isRemoved() ? java.util.Optional.empty() : decodeDeclaration(entity);
+    }
+
+    /** Vanilla marks the entity removed before its final unload callback. */
+    static java.util.Optional<Declaration> declaredByUnloading(Entity entity) {
+        return entity == null || entity.getRemovalReason() != Entity.RemovalReason.UNLOADED_TO_CHUNK
+                ? java.util.Optional.empty() : decodeDeclaration(entity);
+    }
+
+    private static java.util.Optional<Declaration> decodeDeclaration(Entity entity) {
         var tag = entity.getPersistentData();
         if (!tag.contains(ACTOR_KEY, net.minecraft.nbt.Tag.TAG_STRING)
                 || !tag.contains(KIND_KEY, net.minecraft.nbt.Tag.TAG_STRING)
@@ -124,7 +142,7 @@ final class FrontierV3ActorCarrierComposition {
             var declaration = new Declaration(new SubjectId(tag.getString(ACTOR_KEY)), ActorKind.valueOf(tag.getString(KIND_KEY)),
                     Owner.valueOf(tag.getString(OWNER_KEY)), entity.getUUID(), Representation.valueOf(tag.getString(REPRESENTATION_KEY)),
                     tag.getLong(REVISION_KEY), tag.getLong(EPOCH_KEY));
-            return owns(entity, declaration) ? java.util.Optional.of(declaration) : java.util.Optional.empty();
+            return matchesDeclaration(entity, declaration) ? java.util.Optional.of(declaration) : java.util.Optional.empty();
         } catch (IllegalArgumentException invalid) { return java.util.Optional.empty(); }
     }
 

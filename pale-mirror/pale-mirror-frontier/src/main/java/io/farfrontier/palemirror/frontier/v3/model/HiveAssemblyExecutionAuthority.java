@@ -57,7 +57,25 @@ public final class HiveAssemblyExecutionAuthority {
         return mobilization;
     }
     static ActorActivityCapability capability() { return new ActorActivityCapability() {
+        @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId id, AmbientActorLease lease) {
+            if (lease.goal() != AmbientGoalKind.HIVE_TASK_ASSEMBLY) return false;
+            var owner = require(state.hiveColony().mobilizations(), id);
+            if (owner.status() != HiveMobilizationStatus.ASSEMBLING)
+                return lease.goalBody().equals(state.actorLocations().get(id.actorId()).body());
+            var member = owner.assembly().orElseThrow().members().get(id.actorId());
+            return lease.goalBody().supportingSurface().equals(member.arrived() ? member.currentSurface() : member.nextSurface());
+        }
         @Override public ActorActivityKind kind() { return ActorActivityKind.HIVE_TASK_ASSEMBLY; }
+        @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
+        @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
+            return request -> {
+                var owner = require(request.expectedState().hiveColony().mobilizations(), request.execution());
+                if (owner.assembly().isPresent() && !owner.assembly().orElseThrow().members().get(
+                        request.execution().actorId()).currentSurface().equals(request.observedPosition().supportingSurface()))
+                    throw new IllegalArgumentException("hive assembly requires its observed rejoin before COLD");
+                return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+            };
+        }
         @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
         @Override public void validateReference(FrontierWorldState state, ActorExecutionId id) {
             require(state.hiveColony().mobilizations(), id);

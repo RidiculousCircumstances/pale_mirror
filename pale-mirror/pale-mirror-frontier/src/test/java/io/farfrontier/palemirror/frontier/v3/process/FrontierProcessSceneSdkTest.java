@@ -99,26 +99,26 @@ class FrontierProcessSceneSdkTest {
     @Test
     void registeredSceneAdmissionAndTickRejectEveryLiveHarvestBudgetOverflow() {
         SceneLease one = budgetLease(1);
-        FrontierDurationProcessDriverRegistry.SceneWorkUsage base = FrontierDurationProcessDriverRegistry.SceneWorkUsage.forLease(one, 0, 0);
-        FrontierSceneLeaseAdmissionGuard.require(new ResourceSiteHarvestSceneLeasePrepared(one));
-        assertThrows(IllegalArgumentException.class, () -> FrontierSceneLeaseAdmissionGuard.require(
+        FrontierDurationProcessDriverRegistry.SceneWorkUsage base = FrontierDurationProcessDriverRegistry.SceneWorkUsage.forLease(one, budgetLocations(one), 0, 0);
+        FrontierSceneLeaseAdmissionGuard.require(budgetLocations(one), new ResourceSiteHarvestSceneLeasePrepared(one));
+        assertThrows(IllegalArgumentException.class, () -> FrontierSceneLeaseAdmissionGuard.require(budgetLocations(budgetLease(17)),
                 new ResourceSiteHarvestSceneLeasePrepared(budgetLease(17))),
                 "the generic command/replay guard must use the registered harvest descriptor");
-        FrontierDurationProcessDriverRegistry.requireSceneAdmission(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST, one, base);
+        FrontierDurationProcessDriverRegistry.requireSceneAdmission(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST, one, budgetLocations(one), base);
         assertThrows(IllegalArgumentException.class, () -> FrontierDurationProcessDriverRegistry.requireSceneAdmission(
-                FrontierDurationProcessDriverRegistry.Family.PRODUCTION_WORK, one, base),
+                FrontierDurationProcessDriverRegistry.Family.PRODUCTION_WORK, one, budgetLocations(one), base),
                 "a lease may not borrow a different family's descriptor limits");
         assertThrows(IllegalArgumentException.class, () -> FrontierDurationProcessDriverRegistry.requireSceneAdmission(
-                FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST, budgetLease(17),
-                FrontierDurationProcessDriverRegistry.SceneWorkUsage.forLease(budgetLease(17), 0, 0)));
+                FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST, budgetLease(17), budgetLocations(budgetLease(17)),
+                FrontierDurationProcessDriverRegistry.SceneWorkUsage.forLease(budgetLease(17), budgetLocations(budgetLease(17)), 0, 0)));
         assertThrows(IllegalArgumentException.class, () -> FrontierDurationProcessDriverRegistry.requireSceneAdmission(
-                FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST, one,
+                FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST, one, budgetLocations(one),
                 new FrontierDurationProcessDriverRegistry.SceneWorkUsage(1, 33, 0, base.localChunks(), base.navigationNodes(), 0,
                         base.retainedRecords(), base.retainedBytes(), 1, 1)));
         assertThrows(IllegalArgumentException.class, () -> FrontierDurationProcessDriverRegistry.requireSceneTick(
-                FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST, one, base.withObservations(33)));
+                FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST, one, budgetLocations(one), base.withObservations(33)));
         assertThrows(IllegalArgumentException.class, () -> FrontierDurationProcessDriverRegistry.requireSceneAdmission(
-                FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST, one,
+                FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST, one, budgetLocations(one),
                 new FrontierDurationProcessDriverRegistry.SceneWorkUsage(1, 0, 0, base.localChunks(), base.navigationNodes(), 0,
                         1_025, base.retainedBytes(), 1, 1)));
         assertEquals(1, FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST.definition().limits().maxActors(),
@@ -126,6 +126,13 @@ class FrontierProcessSceneSdkTest {
         assertNotEquals(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST.definition().limits(),
                 FrontierDurationProcessDriverRegistry.Family.ROUTE_OPERATION.definition().limits(),
                 "a broad execution archetype must not silently supply every family's limits");
+    }
+
+    private static java.util.Map<SubjectId, ActorLocation> budgetLocations(SceneLease lease) {
+        var actors = new java.util.LinkedHashMap<SubjectId, ActorLocation>();
+        for (int index = 0; index < lease.members().size(); index++) actors.put(lease.members().get(index).actorId(),
+                new ActorLocation(new BodyPosition(index * 16, 65, 0), ActorCondition.HEALTHY, ActorKind.RESIDENT));
+        return actors;
     }
 
     private static SceneLease budgetLease(int count) {
@@ -139,7 +146,7 @@ class FrontierProcessSceneSdkTest {
         return SceneLease.forCause(new SceneLeaseId("lease:f0v-sdk-budget-" + count), world,
                 new ResourceSiteHarvestSceneCause(new SubjectId("site:f0v-sdk-budget"),
                         new SubjectId("job:site-harvest-f0v-sdk-budget")), new BlockPosition(0, 64, 0), new SimInstant(1L), 1L,
-                SceneLeaseStatus.PREPARED, members, positions, Set.of(), Optional.empty());
+                SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
     }
 
     @Test
@@ -294,10 +301,10 @@ class FrontierProcessSceneSdkTest {
             BlockPosition crop = FrontierResourceSitePlan.compile(state(engine).bootstrap()).get(context.site()).cropSlots().get(job.progress().nextCropSlotIndex());
             SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:f0v-sdk-harvest-" + revision(engine).value()), state(engine).bootstrap().worldId(),
                     new ResourceSiteHarvestSceneCause(job.siteId(), job.id()), crop, instant(engine), revision(engine).value(), SceneLeaseStatus.PREPARED,
-                    List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state(engine).bootstrap().worldId(), job.workerId()))),
-                    java.util.Map.of(job.workerId(), body), Set.of(job.workerId()), Optional.empty());
+                    List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state(engine).bootstrap().worldId(), job.workerId()))), Set.of(job.workerId()), Optional.empty());
             engine = submitBound(engine, new ResourceSiteHarvestSceneLeasePrepared(lease),
                     scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId()));
+            engine = bodyPresent(engine, job.workerId());
             return context.with(submit(engine, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));
         }
         @Override public HarvestContext hotCheckpoint(HarvestContext context) {
@@ -313,8 +320,9 @@ class FrontierProcessSceneSdkTest {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site()); SceneLease lease = activeHarvestLease(state(engine), job);
             engine = submit(engine, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             ActorLocation actor = state(engine).actorLocations().get(job.workerId());
-            return context.with(submitBound(engine, new SceneLeaseReleased(lease.id(), List.of(new SceneMemberPosition(job.workerId(), actor.body(), actor.condition().health()))),
-                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId())));
+            engine = submitBound(engine, new SceneLeaseReleased(lease.id(), List.of(new SceneMemberPosition(job.workerId(), actor.body(), actor.condition().health()))),
+                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId()));
+            return context.with(bodyUnloaded(engine, job.workerId()));
         }
         @Override public HarvestContext snapshotWalRecovery(HarvestContext context) { assertRecovery(context.engine()); return context; }
         @Override public FrontierProcessSceneSdk.SemanticCheckpoint checkpoint(HarvestContext context) {
@@ -352,13 +360,13 @@ class FrontierProcessSceneSdkTest {
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectConcurrentAuthority(HarvestContext context) {
             ResourceSiteHarvestJob job = harvest(context); SceneLease current = activeHarvestLease(state(context.engine()), job);
             SceneLease duplicate = SceneLease.forCause(new SceneLeaseId("lease:f0v-sdk-harvest-duplicate"), state(context.engine()).bootstrap().worldId(), new ResourceSiteHarvestSceneCause(job.siteId(), job.id()),
-                    current.handoffPosition(), instant(context.engine()), revision(context.engine()).value(), SceneLeaseStatus.PREPARED, current.members(), current.memberPositions(), current.ambientHandoffActorIds(), Optional.empty());
+                    current.handoffPosition(), instant(context.engine()), revision(context.engine()).value(), SceneLeaseStatus.PREPARED, current.members(), current.ambientHandoffActorIds(), Optional.empty());
             assertRejectedBound(context.engine(), new ResourceSiteHarvestSceneLeasePrepared(duplicate),
                     scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId())); return rejected(context, "concurrent harvest lease");
         }
         @Override public FrontierProcessSceneSdk.ProcessOwnedIntervention<HarvestContext> interventionOwnedByProcess(HarvestContext context) {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site()); SceneLease lease = activeHarvestLease(state(engine), job);
-            engine = submit(engine, new ActorDied(lease.id(), job.workerId(), state(engine).actorLocations().get(job.workerId()).body(), "test:f0v"));
+            engine = submit(engine, ModeledActorBodyFacts.death(state(engine), job.workerId(), state(engine).actorLocations().get(job.workerId()).body(), "test:f0v"));
             assertEquals(ActorLifeStatus.DEAD, state(engine).actorLocations().get(job.workerId()).condition().status());
             return new FrontierProcessSceneSdk.ProcessOwnedIntervention<>(context.with(engine), "harvest farmer death entered its owning scene process");
         }
@@ -381,17 +389,27 @@ class FrontierProcessSceneSdkTest {
         }
         @Override public TransitContext acquireHot(TransitContext context) {
             EngineContext engine = fork(context.engine()); AmbientActorLease lease = AmbientActorProcess.nextLease(state(engine), context.resident(), instant(engine));
-            engine = submit(engine, new AmbientLeasePrepared(lease)); return context.with(submit(engine,
-                    new AmbientBodyConfirmed(context.resident(), lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody())));
+            engine = submit(engine, new AmbientLeasePrepared(lease));
+            engine = bodyPresent(engine, context.resident());
+            return context.with(submit(engine,
+                    new AmbientBodyConfirmed(context.resident(), lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody(), ActorBodyAuthority.current(state(engine), context.resident()))));
         }
         @Override public TransitContext hotCheckpoint(TransitContext context) {
             EngineContext engine = fork(context.engine()); ResidentMigrationJourney journey = migration(engine, context.resident());
-            return context.with(submit(engine, new ResidentTransitAdvanced(context.resident(), journey.nextRouteIndex(), journey.executionId())));
+            var state = state(engine); var actor = state.actorLocations().get(context.resident());
+            var body = ActorBodyAuthority.current(state, context.resident());
+            engine = submit(engine, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(body,
+                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING,
+                    actor.body(), actor.condition().health(), BodyPosition.aboveSupportCell(journey.nextColdPosition()),
+                    actor.condition().health(), Optional.of(journey.executionId())));
+            return context.with(submit(engine, new ResidentTransitAdvanced(context.resident(), journey.nextRouteIndex(), journey.routeRevision(),
+                    state.ambientLeases().get(context.resident()).revision(), journey.executionId(), body)));
         }
         @Override public TransitContext releaseToCold(TransitContext context) {
             EngineContext engine = submit(fork(context.engine()), new AmbientLeaseTransition(context.resident(), AmbientLeaseStatus.DRAINING));
             ActorLocation actor = state(engine).actorLocations().get(context.resident());
-            return context.with(submit(engine, new AmbientLeaseReleased(context.resident(), actor.body(), actor.condition().health())));
+            engine = submit(engine, new AmbientLeaseReleased(context.resident(), actor.body(), actor.condition().health()));
+            return context.with(bodyUnloaded(engine, context.resident()));
         }
         @Override public TransitContext snapshotWalRecovery(TransitContext context) { assertRecovery(context.engine()); return context; }
         @Override public FrontierProcessSceneSdk.SemanticCheckpoint checkpoint(TransitContext context) {
@@ -410,12 +428,16 @@ class FrontierProcessSceneSdkTest {
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<TransitContext> rejectStaleObservation(TransitContext context) {
             ResidentMigrationJourney journey = migration(context.engine(), context.resident());
-            assertRejected(context.engine(), new ResidentTransitAdvanced(context.resident(), journey.routeIndex(), journey.executionId()));
+            assertRejected(context.engine(), new ResidentTransitAdvanced(context.resident(), journey.routeIndex(), journey.routeRevision(),
+                    state(context.engine()).ambientLeases().get(context.resident()).revision(), journey.executionId(),
+                    ActorBodyAuthority.current(state(context.engine()), context.resident())));
             return rejected(context, "stale transit observation");
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<TransitContext> rejectSecondCursor(TransitContext context) {
             ResidentMigrationJourney journey = migration(context.engine(), context.resident());
-            assertRejected(context.engine(), new ResidentTransitAdvanced(context.resident(), journey.nextRouteIndex() + 1, journey.executionId()));
+            assertRejected(context.engine(), new ResidentTransitAdvanced(context.resident(), journey.nextRouteIndex() + 1, journey.routeRevision(),
+                    state(context.engine()).ambientLeases().get(context.resident()).revision(), journey.executionId(),
+                    ActorBodyAuthority.current(state(context.engine()), context.resident())));
             return rejected(context, "skipped transit cursor");
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<TransitContext> rejectDuplicateSchedule(TransitContext context) {
@@ -433,7 +455,8 @@ class FrontierProcessSceneSdkTest {
             return rejected(context, "concurrent ambient lease");
         }
         @Override public FrontierProcessSceneSdk.ProcessOwnedIntervention<TransitContext> interventionOwnedByProcess(TransitContext context) {
-            EngineContext engine = submit(fork(context.engine()), new AmbientActorDied(context.resident(), state(context.engine()).actorLocations().get(context.resident()).body(), "test:f0v"));
+            EngineContext engine = submit(fork(context.engine()), ModeledActorBodyFacts.death(state(context.engine()),
+                    context.resident(), state(context.engine()).actorLocations().get(context.resident()).body(), "test:f0v"));
             assertNull(state(engine).humanPopulation().migration(context.resident()));
             return new FrontierProcessSceneSdk.ProcessOwnedIntervention<>(context.with(engine), "transit death entered its owning ambient process");
         }
@@ -509,6 +532,22 @@ class FrontierProcessSceneSdkTest {
         assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), () -> result.status().failureDetail().orElse("engine quarantined"));
         assertTransactionCodecs(context); return context;
     }
+    /** Isolated model facts, not proof of native insertion, entity save or storage sync. */
+    private static EngineContext bodyPresent(EngineContext context, SubjectId actor) {
+        var state = state(context);
+        var location = state.actorLocations().get(actor);
+        return submit(context, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(
+                ActorBodyAuthority.current(state, actor), location.body(), location.condition().health(),
+                location.body(), location.condition().health()));
+    }
+    private static EngineContext bodyUnloaded(EngineContext context, SubjectId actor) {
+        var state = state(context);
+        var location = state.actorLocations().get(actor);
+        var execution = state.actorExecutions().actors().get(actor);
+        return submit(context, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded(
+                ActorBodyAuthority.current(state, actor), location.body(), location.condition().health(),
+                location.body(), location.condition().health(), execution == null ? Optional.empty() : execution.current()));
+    }
     private static EngineContext submit(EngineContext context, FrontierPayload payload) {
         FrontierCanonicalState<FrontierWorldState> canonical = context.engine().canonicalState(); CommandId id = new CommandId("command:f0v-sdk-" + context.nextCommand());
         CommandResult result = context.engine().submit(new FrontierCommand(1, id, canonical.worldId(), canonical.revision(), canonical.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), payload));
@@ -576,7 +615,7 @@ class FrontierProcessSceneSdkTest {
     private static SceneLease activeOrClosedHarvestLease(FrontierWorldState state, ResourceSiteHarvestJob job) {
         return state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isResourceSiteHarvest)
                 .filter(lease -> FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()))
-                .max(Comparator.comparing(SceneLease::id)).orElse(null);
+                .max(Comparator.comparingLong(SceneLease::revision)).orElse(null);
     }
     private static FrontierWorldState matureField(FrontierWorldState state, SubjectId site) {
         List<ProposedEvent> preparation = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(site, 4_000L));

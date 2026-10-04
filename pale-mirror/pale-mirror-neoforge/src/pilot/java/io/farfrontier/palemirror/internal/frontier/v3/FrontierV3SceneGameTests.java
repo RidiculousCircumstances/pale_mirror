@@ -179,16 +179,16 @@ public final class FrontierV3SceneGameTests {
             SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
             FrontierV3CommandSubmission.submit(runtime, "two-observer-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
             FrontierV3CommandSubmission.submit(runtime, "two-observer-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-            SceneLease fixtureProjection = FrontierV3GameTestSceneLeases.projectedIntoFixture(lease,
+            var fixtureProjection = FrontierV3GameTestSceneLeases.projectedIntoFixture(state(runtime), lease,
                     new BodyPosition(anchor.getX() + 4, anchor.getY(), anchor.getZ()));
             bootstrapFirstAdmissions(level, state(runtime));
-            for (BodyPosition body : fixtureProjection.memberPositions().values()) {
+            for (BodyPosition body : fixtureProjection.values()) {
                 BlockPos floor = new BlockPos(body.x(), body.y() - 1, body.z());
                 level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
                 level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3);
                 level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
             }
-            helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state(runtime), fixtureProjection),
+            helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state(runtime), lease, fixtureProjection),
                     FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                     "one canonical HOT lease must materialize one exact test-cell projection before observer aggregation is assessed");
             var beforeObservers = runtime.checkpointImage().orElseThrow();
@@ -224,7 +224,7 @@ public final class FrontierV3SceneGameTests {
             long revisionBeforeRelease = runtime.canonicalState().orElseThrow().revision().value();
             FrontierV3CommandSubmission.submit(runtime, "two-observer-lease-release", leaseId.value(), new SceneLeaseReleased(leaseId,
                     lease.members().stream().map(member -> new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(
-                            member.actorId(), lease.memberPosition(member.actorId()))).toList()));
+                            member.actorId(), lease.memberBody(state(runtime).actorLocations(), member.actorId()))).toList()));
             helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.CLOSED,
                     "the exact canonical lease must close once, after its final aggregate-demand release");
             helper.assertValueEqual(runtime.canonicalState().orElseThrow().revision().value(), revisionBeforeRelease + 1L,
@@ -287,9 +287,7 @@ public final class FrontierV3SceneGameTests {
         SceneLease lease = SceneLease.atExactPositions(new SceneLeaseId("lease:frontier-v3-game-test"), world,
                 new SubjectId("operation:frontier-v3-game-test"), new SubjectId("cargo:frontier-v3-game-test"),
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), new BlockPosition(origin.getX() + 3, origin.getY() - 1, origin.getZ()),
-                SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(), members,
-                java.util.Map.of(members.getFirst().actorId(), new BodyPosition(origin.getX(), origin.getY() + 1, origin.getZ()),
-                        members.getLast().actorId(), new BodyPosition(origin.getX() + 2, origin.getY(), origin.getZ())));
+                SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(), members);
 
         helper.assertFalse(FrontierV3SceneExecutor.entityStorageReady(true, false),
                 "a production scene must wait for saved entity storage before admitting deterministic body UUIDs");
@@ -348,7 +346,7 @@ public final class FrontierV3SceneGameTests {
                 FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
                 FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-drain", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.DRAINING));
                 FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-close", leaseId.value(), new io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased(leaseId,
-                        lease.members().stream().map(member -> new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()))).toList()));
+                        lease.members().stream().map(member -> new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(member.actorId(), lease.memberBody(state(runtime).actorLocations(), member.actorId()))).toList()));
                 Entity formerBody = level.getEntity(lease.members().getFirst().entityId());
                 helper.assertTrue(formerBody != null && !FrontierV3SceneExecutor.recognizes(runtime, formerBody),
                         "a stale body from a closed scene must be denied rather than retained as a permanent exception");
@@ -423,7 +421,7 @@ public final class FrontierV3SceneGameTests {
             for (var owner : FrontierV3ActorCarrierComposition.Owner.values()) {
                 var declaration = new FrontierV3ActorCarrierComposition.Declaration(
                         new SubjectId(("actor:health-" + kind.name() + "-" + owner.name()).toLowerCase(java.util.Locale.ROOT)), kind, owner,
-                        java.util.UUID.randomUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L, 1L);
+                        java.util.UUID.randomUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 1L);
                 var producer = FrontierV3ActorCarrierComposition.InventoryEntry.ACTOR_BODY;
                 var body = FrontierV3ActorCarrierFactory.create(producer, helper.getLevel(), declaration, condition);
                 helper.assertValueEqual(body.getHealth(), 7.25F, "new body must retain canonical injury");
@@ -606,9 +604,7 @@ public final class FrontierV3SceneGameTests {
         restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
         restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
         restored.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
-        FrontierV3ActorCarrierComposition.stamp(restored, FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), resident,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, restored.getUUID(),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, state(runtime).ambientLeases().get(resident).revision(), 1L));
+        FrontierV3ActorCarrierComposition.stamp(restored, FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), resident, restored.getUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L));
 
         FrontierV3ServerLifecycle.JoinFirewallProof restoredProof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, restored);
         helper.assertValueEqual(restoredProof.lifecycleAdmission(), FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED,
@@ -872,7 +868,7 @@ public final class FrontierV3SceneGameTests {
         for (int index = 0; index < members.size(); index++) {
             bodies.put(members.get(index).actorId(), new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(handoff.x() + index * 2, handoff.y(), handoff.z()));
         }
-        return SceneLease.atExactPositions(id, world, operation, cargo, handoff, handoff, instant, revision, status, engagement, members, bodies);
+        return SceneLease.atExactPositions(id, world, operation, cargo, handoff, handoff, instant, revision, status, engagement, members);
     }
     private static SceneMember member(WorldId world, String actorId) {
         SubjectId actor = new SubjectId(actorId);
@@ -914,9 +910,7 @@ public final class FrontierV3SceneGameTests {
         body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
         body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
         body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
-        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
-                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
+        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(), member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L));
         helper.assertTrue(level.addFreshEntity(body), "the exact HOT body fixture must enter the loaded world");
         return body;
     }

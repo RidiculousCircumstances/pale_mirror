@@ -11,6 +11,7 @@ public final class KnownPedestrianGround {
     // Rebuildable knowledge cache: one current bootstrap identity/road revision, never world state.
     private static FrontierBootstrap cachedBootstrap;
     private static Roads cachedRoads;
+    private static ChunkSurfaceIndex frontierLocal;
     private static final Map<SubjectId, ChunkSurfaceIndex> LOCAL = new LinkedHashMap<>();
     private KnownPedestrianGround() { }
 
@@ -28,6 +29,25 @@ public final class KnownPedestrianGround {
             return settlement != null ? settlement : SurfaceAnchor.at(x,
                     terrain.supportYAt(x, z), z);
         };
+    }
+
+    /** Cross-settlement movement uses all authored local floors, not one origin's datum. */
+    public static BoundedPedestrianApproach.SurveyedSurface forFrontier(FrontierWorldState state) {
+        var roads = roads(state.bootstrap(), state.routeTopology());
+        var local = frontierLocal(state.bootstrap());
+        var terrain = state.bootstrap().terrain();
+        return (x, z) -> {
+            var road = roads.at(x, z); var floor = local.at(x, z);
+            if (road != null && floor != null) return road.y() >= floor.y() ? road : floor;
+            return road != null ? road : floor != null ? floor : SurfaceAnchor.at(x, terrain.supportYAt(x, z), z);
+        };
+    }
+
+    private static synchronized ChunkSurfaceIndex frontierLocal(FrontierBootstrap bootstrap) {
+        useBootstrap(bootstrap);
+        if (frontierLocal == null) frontierLocal = ChunkSurfaceIndex.of(bootstrap.settlements().stream()
+                .flatMap(settlement -> SettlementPedestrianGround.localSupports(bootstrap, settlement.id()).values().stream()).toList());
+        return frontierLocal;
     }
 
     private static synchronized ChunkSurfaceIndex roads(FrontierBootstrap bootstrap,
@@ -51,6 +71,7 @@ public final class KnownPedestrianGround {
         if (cachedBootstrap == bootstrap) return;
         cachedBootstrap = bootstrap;
         cachedRoads = null;
+        frontierLocal = null;
         LOCAL.clear();
     }
 }

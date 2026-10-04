@@ -17,8 +17,8 @@ class FrontierV3ActorAdoptionAdmissionTest {
     @TempDir Path directory;
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     private static final Declaration OLD = new Declaration(new SubjectId("resident:1-1"), ActorKind.RESIDENT,
-            Owner.AMBIENT_LEASE, new UUID(0, 1), Representation.INACTIVE_CARRIER, 2L, 1L);
-    private static final Declaration LIVE = OLD.liveBody(Owner.AMBIENT_LEASE, 3L, 2L);
+            Owner.ACTOR_BODY, new UUID(0, 1), Representation.INACTIVE_CARRIER, 0L, 1L);
+    private static final Declaration LIVE = OLD.liveBody(Owner.ACTOR_BODY, 0L, 2L);
     private FrontierV3AmbientCarrierLedger ledger() {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); assertTrue(ledger.fence(OLD, 2L, 2L)); return ledger;
     }

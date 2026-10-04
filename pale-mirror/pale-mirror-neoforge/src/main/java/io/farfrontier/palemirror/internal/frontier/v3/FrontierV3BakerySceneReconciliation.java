@@ -17,6 +17,8 @@ final class FrontierV3BakerySceneReconciliation {
         var entity = level.getEntity(member.entityId());
         if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3SceneExecutor.owned(body, state, lease, member)
                 || !FrontierV3BakeryHandProjection.matchesCurrent(state, lease, member, body)) return;
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
+        state = runtime.decodedState().orElseThrow();
         var observed = FrontierV3SupportedBodyCapture.observe(level, body);
         var fence = state.fencedRecovery().current().get(ActorBodyId.recoveryBindingId(member.actorId()));
         if (observed.isEmpty() || fence == null || body.getMainHandItem().isEmpty()) return;

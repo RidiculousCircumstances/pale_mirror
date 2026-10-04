@@ -45,6 +45,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
+        if (FrontierV3ResidentMealDeathResources.reconcileOneDrop(level, runtime, state)) return;
         if (FrontierV3DepotClickExecutor.reconcileOne(level, runtime, state)) return;
         // This is deliberately before ordinary return/departure observation: only an exact
         // canonical-first fence without its later persisted player witness is reversible.

@@ -25,7 +25,7 @@ public record HiveReturnAssembly(SubjectId nestId, Map<SubjectId, HiveTaskAssemb
                 throw new IllegalArgumentException("duplicate hive return actor");
             }
         });
-        if (copy.isEmpty() || copy.size() > HiveMobilization.MAX_MEMBERS
+        if (copy.size() > HiveMobilization.MAX_MEMBERS
                 || copy.values().stream().map(HiveTaskAssembly.Member::destinationSurface).distinct().count() != copy.size()
                 || copy.values().stream().map(HiveTaskAssembly.Member::currentSurface).distinct().count() != copy.size()) {
             throw new IllegalArgumentException("hive return members or home surfaces are invalid");
@@ -34,6 +34,15 @@ public record HiveReturnAssembly(SubjectId nestId, Map<SubjectId, HiveTaskAssemb
     }
 
     public boolean complete() { return members.values().stream().allMatch(HiveTaskAssembly.Member::arrived); }
+
+    /** Remove one acknowledged casualty from locomotion, not from the parent's original roster. */
+    public HiveReturnAssembly withoutCasualty(SubjectId actorId) {
+        Objects.requireNonNull(actorId, "exact returning casualty");
+        if (!members.containsKey(actorId)) throw new IllegalArgumentException("casualty is not a returning participant");
+        var next = new LinkedHashMap<>(members);
+        next.remove(actorId);
+        return new HiveReturnAssembly(nestId, next);
+    }
 
     /** Exact collision-free COLD candidates; HOT checks the same retained edge. */
     public List<SubjectId> safeAdvances() {

@@ -19,28 +19,34 @@ final class RouteEngagementPayloadCodecs {
     static PayloadCodecs codecs() { return new PayloadCodecs(List.of(started(), advanced(), transition(), strike(), resolved(), commandAuthorityChanged())); }
     static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_engagement_started"; }
-        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> write(output, ((RouteEngagementStarted) payload).engagement())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RouteEngagementStarted(read(input))); }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            var started = (RouteEngagementStarted) payload;
+            write(output, started.engagement()); ActorExecutionStateCodec.writeGroup(output, started.executions());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                new RouteEngagementStarted(read(input), ActorExecutionStateCodec.readGroup(input))); }
     }; }
     static PayloadCodec advanced() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_engagement_attacker_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             RouteEngagementAttackerAdvanced advanced = (RouteEngagementAttackerAdvanced) payload;
             subject(output, advanced.engagementId()); subject(output, advanced.attackerId()); output.writeByte(advanced.routeIndex());
+            ActorExecutionStateCodec.writeId(output, advanced.execution());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
-                new RouteEngagementAttackerAdvanced(subject(input), subject(input), input.readUnsignedByte())); }
+                new RouteEngagementAttackerAdvanced(subject(input), subject(input), input.readUnsignedByte(), ActorExecutionStateCodec.readId(input))); }
     }; }
     static PayloadCodec transition() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_engagement_transition"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             RouteEngagementTransition transition = (RouteEngagementTransition) payload;
             subject(output, transition.engagementId()); output.writeByte(transition.status().wireTag());
+            ActorExecutionStateCodec.writeGroup(output, transition.executions());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             SubjectId engagement = subject(input); int status = input.readUnsignedByte();
             if (status >= RouteEngagementStatus.values().length) throw new IllegalArgumentException("unknown route engagement status");
-            return new RouteEngagementTransition(engagement, FrontierWireTags.require(RouteEngagementStatus.class, status));
+            return new RouteEngagementTransition(engagement, FrontierWireTags.require(RouteEngagementStatus.class, status), ActorExecutionStateCodec.readGroup(input));
         }); }
     }; }
     static PayloadCodec strike() { return new PayloadCodec() {
@@ -48,19 +54,22 @@ final class RouteEngagementPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             RouteEngagementStrike strike = (RouteEngagementStrike) payload;
             subject(output, strike.engagementId()); subject(output, strike.attackerId()); subject(output, strike.targetId()); output.writeInt(strike.epoch()); output.writeLong(strike.damage().raw());
+            ActorExecutionStateCodec.writeId(output, strike.attackerExecution()); ActorExecutionStateCodec.writeId(output, strike.targetExecution());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
-                new RouteEngagementStrike(subject(input), subject(input), subject(input), input.readInt(), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()))); }
+                new RouteEngagementStrike(subject(input), subject(input), subject(input), input.readInt(), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()),
+                        ActorExecutionStateCodec.readId(input), ActorExecutionStateCodec.readId(input))); }
     }; }
     static PayloadCodec resolved() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_engagement_resolved"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             RouteEngagementResolved resolved = (RouteEngagementResolved) payload; subject(output, resolved.engagementId()); output.writeByte(resolved.outcome().wireTag());
+            ActorExecutionStateCodec.writeGroup(output, resolved.executions());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             int outcome; SubjectId engagement = subject(input); outcome = input.readUnsignedByte();
             if (outcome >= RouteEngagementOutcome.values().length) throw new IllegalArgumentException("unknown route engagement outcome");
-            return new RouteEngagementResolved(engagement, FrontierWireTags.require(RouteEngagementOutcome.class, outcome));
+            return new RouteEngagementResolved(engagement, FrontierWireTags.require(RouteEngagementOutcome.class, outcome), ActorExecutionStateCodec.readGroup(input));
         }); }
     }; }
     static PayloadCodec commandAuthorityChanged() { return new PayloadCodec() {
@@ -68,9 +77,11 @@ final class RouteEngagementPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             RouteEngagementCommandAuthorityChanged changed = (RouteEngagementCommandAuthorityChanged) payload;
             subject(output, changed.engagementId()); HiveOperationCommandAuthorityCodec.write(output, changed.expected()); HiveOperationCommandAuthorityCodec.write(output, changed.next());
+            ActorExecutionStateCodec.writeGroup(output, changed.executions());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
-                new RouteEngagementCommandAuthorityChanged(subject(input), HiveOperationCommandAuthorityCodec.read(input), HiveOperationCommandAuthorityCodec.read(input))); }
+                new RouteEngagementCommandAuthorityChanged(subject(input), HiveOperationCommandAuthorityCodec.read(input), HiveOperationCommandAuthorityCodec.read(input),
+                        ActorExecutionStateCodec.readGroup(input))); }
     }; }
     private static void write(DataOutputStream output, RouteEngagement engagement) throws IOException {
         subject(output, engagement.id()); subject(output, engagement.taskId()); subject(output, engagement.operationId()); subject(output, engagement.hiveId());

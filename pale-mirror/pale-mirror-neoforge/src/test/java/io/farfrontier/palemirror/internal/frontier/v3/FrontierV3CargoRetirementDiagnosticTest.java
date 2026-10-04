@@ -23,7 +23,7 @@ class FrontierV3CargoRetirementDiagnosticTest {
         var travel = operation.activeTravel().orElseThrow();
         var lease = SceneLease.atExactPositions(leaseId, configuration.worldId(), operation.id(), operation.cargoId(),
                 operation.currentPosition(), travel.cargoAnchor().surface().support(), configuration.initialInstant(),
-                checkpoint.revision().value(), SceneLeaseStatus.PREPARED, Optional.empty(), members, travel.formation());
+                checkpoint.revision().value(), SceneLeaseStatus.PREPARED, Optional.empty(), members);
         var oldLease = new SceneLeaseId("lease:diagnostic-retired");
         var proof = new FencedRecoveryTombstone(FrontierSceneLeaseStateSupport.cargoRecoveryBindingId(operation.cargoId()),
                 FencedRecoveryAsset.CARGO, FrontierSceneLeaseStateSupport.recoveryOwner(oldLease), 1, 1,

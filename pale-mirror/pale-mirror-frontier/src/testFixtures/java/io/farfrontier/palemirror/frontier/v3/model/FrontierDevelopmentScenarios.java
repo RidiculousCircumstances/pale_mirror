@@ -27,7 +27,15 @@ final class FrontierDevelopmentScenarios {
     }
 
     static RouteSceneReturnFixture hotSceneStrikeFixture(WorldId worldId, long seed) {
-        var base = routeSceneReturnFixture(worldId, seed);
+        return hotSceneStrikeFixture(routeSceneReturnFixture(worldId, seed));
+    }
+
+    static RouteSceneReturnFixture hotSceneStrikeFixture(FrontierBootstrap bootstrap) {
+        return hotSceneStrikeFixture(routeSceneReturnFixture(routeCustodyConfiguration(
+                FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(bootstrap))));
+    }
+
+    private static RouteSceneReturnFixture hotSceneStrikeFixture(RouteSceneReturnFixture base) {
         FrontierWorldState state = base.state();
         RouteOperation operation = initialNorthwatchShipment(state).orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
@@ -365,7 +373,11 @@ final class FrontierDevelopmentScenarios {
      */
     static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
             routeCustodyConfiguration(WorldId worldId, long seed) {
-        var configuration = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed);
+        return routeCustodyConfiguration(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed));
+    }
+
+    private static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
+            routeCustodyConfiguration(io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
         // This fixture isolates route custody/recovery, not competition with population
         // growth. With real production labor, Northwatch's birth review can now consume
         // the exact export surplus before cargo admission. Keep ordinary reserve rules and
@@ -382,13 +394,20 @@ final class FrontierDevelopmentScenarios {
     }
 
     static RouteSceneReturnFixture routeSceneReturnFixture(WorldId worldId, long seed) {
-        var configuration = routeCustodyConfiguration(worldId, seed);
+        return routeSceneReturnFixture(routeCustodyConfiguration(worldId, seed));
+    }
+
+    private static RouteSceneReturnFixture routeSceneReturnFixture(
+            io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
         var engine = FrontierEngines.create(configuration);
         var codec = new FrontierWorldStateCodec(configuration.initialState().bootstrap());
         io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint = null;
         FrontierWorldState state = null; RouteOperation operation = null;
         for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+            if (engine.status().kind() != io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE)
+                throw new IllegalStateException("route-return fixture stopped at " + engine.checkpoint().instant() + ": "
+                        + engine.status().failureDetail().orElse("no failure detail"));
             if (tick % 20L != 0L) continue;
             checkpoint = engine.checkpoint(); state = codec.decode(checkpoint.canonicalState());
             RouteOperation candidate = initialNorthwatchShipment(state).orElse(null);
@@ -397,8 +416,11 @@ final class FrontierDevelopmentScenarios {
                 operation = candidate; break;
             }
         }
-        BlockPosition start = new BlockPosition(-366, 64, -340);
-        BlockPosition next = new BlockPosition(-366, 64, -304);
+        BlockPosition anchor = configuration.initialState().bootstrap().settlements().stream()
+                .filter(settlement -> settlement.id().equals(new SubjectId("settlement:1")))
+                .findFirst().orElseThrow().anchor();
+        BlockPosition start = new BlockPosition(anchor.x() - 6, anchor.y(), anchor.z());
+        BlockPosition next = new BlockPosition(anchor.x() - 6, anchor.y(), anchor.z() + 36);
         if (checkpoint == null || state == null || operation == null || !operation.route().getFirst().equals(start) || !operation.route().get(1).equals(next)
                 || !operation.participantIds().equals(List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16"), new SubjectId("resident:1-28")))) {
             throw new IllegalStateException("development route-return fixture did not retain its exact assembled Northwatch shipment: instant="
@@ -802,7 +824,7 @@ final class FrontierDevelopmentScenarios {
                 Math.subtractExact(Math.multiplyExact(units, unit), depletion)));
         state = state.withHumanPopulation(new HumanPopulation(population.households(), population.residents(),
                 population.birthJobs(), population.health(), population.quarantines(), population.migrations(),
-                population.provisions(), nutrition, population.medicalOperations(), population.schedules(), population.meals()));
+                population.provisions(), nutrition, population.medicalOperations(), population.schedules(), population.meals(), population.mealResourceObligations()));
         List<ScheduledAction> schedules = new java.util.ArrayList<>();
         schedules.add(ResidentNeedProcess.review(resident, 1_000L));
         return new MaterializedProductionFixture(state, base.instant(), schedules, base.orderId());

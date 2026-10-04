@@ -18,8 +18,7 @@ class FrontierV3SceneReleaseReadinessTest {
     private static final SceneLease LEASE = SceneLease.forCause(new SceneLeaseId("lease:release-readiness"), STATE.bootstrap().worldId(),
             new ProductionWorkSceneCause(new SubjectId("job:production-release-readiness")), EARLIER.supportingSurface().support(),
             new SimInstant(0), 1, SceneLeaseStatus.DRAINING,
-            List.of(new SceneMember(ACTOR, SceneLease.deterministicEntityId(STATE.bootstrap().worldId(), ACTOR))),
-            Map.of(ACTOR, EARLIER), Set.of(), Optional.empty());
+            List.of(new SceneMember(ACTOR, SceneLease.deterministicEntityId(STATE.bootstrap().worldId(), ACTOR))), Set.of(), Optional.empty());
 
     @Test
     void presentMovingBodyDoesNotWaitForTheOldHandoffChunk() {
@@ -73,8 +72,7 @@ class FrontierV3SceneReleaseReadinessTest {
         var lease = SceneLease.atExactPositions(new SceneLeaseId("lease:cargo-readiness"), state.bootstrap().worldId(),
                 operation.id(), operation.cargoId(), operation.currentPosition(), retained, new SimInstant(0), 1,
                 SceneLeaseStatus.DRAINING, Optional.empty(), operation.participantIds().stream()
-                        .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))).toList(),
-                travel.formation());
+                        .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))).toList());
         assertTrue(FrontierV3SceneReleaseReadiness.awaitingCargoStorage(state, lease, id -> false, current::equals));
         assertTrue(FrontierV3SceneReleaseReadiness.awaitingCargoStorage(state, lease, id -> false, retained::equals));
         assertFalse(FrontierV3SceneReleaseReadiness.awaitingCargoStorage(state, lease, id -> false, support -> true));

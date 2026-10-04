@@ -17,8 +17,7 @@ class SceneLeaseRecoveryTransitionTest {
         BlockPosition support = new BlockPosition(0, 64, 0);
         return SceneLease.forCause(ID, world, new ProductionWorkSceneCause(new SubjectId("job:production-recovery-transition")),
                 support, SimInstant.ZERO, 7, status,
-                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))),
-                Map.of(actor, BodyPosition.aboveSupportCell(support)), Set.of(), Optional.empty());
+                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))), Set.of(), Optional.empty());
     }
 
     @Test

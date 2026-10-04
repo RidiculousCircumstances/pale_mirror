@@ -22,4 +22,10 @@ public record ActorExecutionGroup(List<ActorExecutionId> members) {
             throw new IllegalArgumentException("group execution differs from its declared kind, owner or complete roster");
     }
     public void requireCurrent(ActorExecutionState executions) { members.forEach(executions::requireCurrent); }
+    /** Selects an already declared participant, never discovers an activity owner. */
+    public ActorExecutionId requireMember(SubjectId actorId) {
+        Objects.requireNonNull(actorId, "declared participant");
+        return members.stream().filter(id -> id.actorId().equals(actorId)).findFirst().orElseThrow(
+                () -> new IllegalArgumentException("actor is not a declared execution-group participant"));
+    }
 }

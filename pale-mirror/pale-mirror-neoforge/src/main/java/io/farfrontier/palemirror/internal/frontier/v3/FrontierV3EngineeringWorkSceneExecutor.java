@@ -56,11 +56,11 @@ final class FrontierV3EngineeringWorkSceneExecutor {
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
         return SceneLease.forCause(id, checkpoint.worldId(), new EngineeringWorkSceneCause(candidate.projectId(), candidate.workCellIndex()),
                 candidate.workCell(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED,
-                members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+                members, Set.of(), Optional.empty());
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(state, lease);
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
@@ -90,14 +90,26 @@ final class FrontierV3EngineeringWorkSceneExecutor {
             return;
         }
         if (!demand.active()) return;
+        var projectOwner = EngineeringWorkOrderSupport.require(state, FrontierSceneBehaviors.engineeringWorksite(lease).projectId());
+        // Settlement of this cell can already have admitted the next assembly execution.
+        // Closing its old effect scope must not issue movement (or STOP) for that successor.
+        if (!projectOwner.building() || projectOwner.confirmedCells() != FrontierSceneBehaviors.engineeringWorksite(lease).workCellIndex()) {
+            submit(runtime, "engineering-cell-settled-draining", lease.id().value(),
+                    new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+            return;
+        }
+        var executions = io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionAuthority.current(state, projectOwner);
+        executions.requireDeclaration(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.ENGINEERING_WORK,
+                projectOwner.id(), projectOwner.engineeringTeam().orElseThrow().memberIds());
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob mob) || !FrontierV3SceneExecutor.recognizes(runtime, entity)) {
                 conflict(level, runtime, lease, "hot-body-unavailable"); return;
             }
-            BodyPosition slot = lease.memberPosition(member.actorId());
+            BodyPosition slot = lease.memberBody(state.actorLocations(), member.actorId());
             FrontierV3GoalNavigation.pursue(level, mob, FrontierV3GoalNavigation.Goal.station(slot.supportingSurface(),
-                    new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
+                    new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())),
+                    FrontierV3ActorActuation.capture(state, mob, executions.requireMember(member.actorId()), runtime::decodedState));
             if (level.getGameTime() % 12L == 0L) mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         }
 

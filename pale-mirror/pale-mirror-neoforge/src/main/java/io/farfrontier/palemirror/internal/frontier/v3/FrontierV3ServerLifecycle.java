@@ -711,24 +711,19 @@ public final class FrontierV3ServerLifecycle {
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
             return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
         }
+        FrontierV3ActorBodyController.observeJoin(level, runtime, entity);
         JoinFirewallProof proof = observeSourceJoin(runtime, entity);
+        if (proof.verifiedV3Carrier() && proof.lifecycleAdmission() != EntityJoinAdmission.DUPLICATE_UNINDEXED)
+            FrontierV3ActorBodyController.confirmPresent(level, runtime, entity);
         FrontierV3CargoDepartureObserver.observeJoin(level, runtime, entity);
-        if (proof.verifiedV3Carrier()) {
-            FrontierV3SceneDepartureObserver.observeJoin(level, runtime, entity);
-            FrontierV3AmbientDepartureObserver.observeJoin(level, runtime, entity);
-        }
         return proof;
     }
     static JoinFirewallProof observeSourceJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity");
-        if (entity.level() instanceof ServerLevel level) runtime.decodedState().ifPresent(state ->
-                FrontierV3ActorHandoffRecovery.resume(level, state, entity));
         return composeSourceJoin(() -> observeEntityJoin(runtime, entity),
-                () -> FrontierV3AmbientActorExecutor.retainsPendingJoin(runtime, entity)
-                        || entity.level() instanceof ServerLevel level && runtime.decodedState()
-                            .map(state -> FrontierV3ActorHandoffRecovery.retainsRecordedBody(level, state, entity)).orElse(false)
-                        || recognizesManagedAmbientCarrier(runtime, FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(entity))
-                        || FrontierV3SceneExecutor.recognizesDeclaration(runtime, entity));
+                () -> entity.level() instanceof ServerLevel level && runtime.decodedState()
+                        .map(state -> FrontierV3ActorBodyController.retainsRecordedBody(level, state, entity)
+                                || FrontierV3ActorBodyController.recognizesRecordedBody(level, state, entity)).orElse(false));
     }
     static JoinFirewallProof observeSourceJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier,
@@ -752,7 +747,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
                 && (recognizesManagedAmbientCarrier(runtime, FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(entity))
-                || runtime.decodedState().map(state -> FrontierV3ActorHandoffRecovery.retainsRecordedBody(level, state, entity)).orElse(false)
+                || runtime.decodedState().map(state -> FrontierV3ActorBodyController.recognizesRecordedBody(level, state, entity)).orElse(false)
                 || FrontierV3SceneExecutor.recognizesDeclaration(runtime, entity));
     }
     static boolean recognizesManagedAmbientCarrier(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -763,12 +758,7 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
-        boolean sceneBody = FrontierV3SceneExecutor.recognizesDeclaration(runtime, entity);
-        boolean ambientBody = FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity);
-        if (!sceneBody && !ambientBody) return false;
-        FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, entity);
-        return sceneBody ? FrontierV3SceneExecutor.observeDeath(runtime, entity, source)
-                : FrontierV3AmbientActorExecutor.observeDeath(runtime, entity, source);
+        return FrontierV3ActorBodyController.observeDeath(level, runtime, entity, source);
     }
     public static boolean observeEntityLeave(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
@@ -786,8 +776,7 @@ public final class FrontierV3ServerLifecycle {
         }
         if (entity.getRemovalReason() != Entity.RemovalReason.UNLOADED_TO_CHUNK) return false;
         return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && (FrontierV3SceneDepartureObserver.observeLeave(level, runtime, entity)
-                    || FrontierV3AmbientDepartureObserver.observeLeave(level, runtime, entity)
+                && (FrontierV3ActorBodyController.observeLeave(level, runtime, entity)
                     || FrontierV3CargoDepartureObserver.observeLeave(level, runtime, entity));
     }
 

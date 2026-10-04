@@ -116,6 +116,10 @@ public final class FrontierV3FixtureCatalog {
         return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, false), false);
     }
 
+    static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> uncontestedSupplyConfiguration(FrontierBootstrap bootstrap) {
+        return withReserve(FrontierWorldRuntimeDefinition.configuration(bootstrap), false);
+    }
+
     /** Test-only COLD supply path without an unrelated initial birth consuming the exact export reserve. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> coldSupplyDeliveryConfiguration(WorldId worldId, long seed) {
         return FrontierDevelopmentScenarios.routeCustodyConfiguration(worldId, seed);
@@ -132,6 +136,12 @@ public final class FrontierV3FixtureCatalog {
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotSceneStrikeConfiguration(WorldId worldId, long seed) {
         var fixture = FrontierDevelopmentScenarios.hotSceneStrikeFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+    }
+
+    /** Native templates supply an immutable translated manifest, never relocate a live actor. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotSceneStrikeConfiguration(FrontierBootstrap bootstrap) {
+        var fixture = FrontierDevelopmentScenarios.hotSceneStrikeFixture(bootstrap);
+        return configured(bootstrap.worldId(), fixture.state(), fixture.instant(), fixture.schedules(), true);
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> settlementAssaultConfiguration(WorldId worldId, long seed) {
@@ -530,7 +540,7 @@ public final class FrontierV3FixtureCatalog {
                 Math.subtractExact(Math.multiplyExact(units, unit), depletion)));
         people = new HumanPopulation(people.households(), people.residents(), people.birthJobs(), people.health(),
                 people.quarantines(), people.migrations(), people.provisions(), needs, people.medicalOperations(),
-                people.schedules(), people.meals());
+                people.schedules(), people.meals(), people.mealResourceObligations());
         state = state.withHumanPopulation(people);
         List<ScheduledAction> schedules = new ArrayList<>();
         schedules.add(ResourceSiteHarvestProcess.coldProgress(job, workDue));
@@ -645,12 +655,22 @@ public final class FrontierV3FixtureCatalog {
         return new FrontierEngineConfiguration<>(worldId, state, instant, FrontierWorldRuntimeDefinition::planCommand,
                 new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledActionPlanner<FrontierWorldState>() {
                     @Override public List<ProposedEvent> plan(FrontierWorldState candidate, ScheduledAction action) {
-                        List<ProposedEvent> planned = frozenOperation.isPresent() ? frozenScoutSightingProgress(candidate, action, frozenOperation.orElseThrow())
-                                : FrontierWorldRuntimeDefinition.planScheduled(candidate, action, autonomousInterception);
+                        return plan(candidate, action, action.dueAt());
+                    }
+                    @Override public List<ProposedEvent> plan(FrontierWorldState candidate, ScheduledAction action, SimInstant currentInstant) {
+                        List<ProposedEvent> planned = frozenOperation.isPresent() ? frozenScoutSightingProgress(candidate, action, frozenOperation.orElseThrow(), currentInstant)
+                                : FrontierWorldRuntimeDefinition.planScheduled(candidate, action, autonomousInterception, currentInstant);
                         return explicitDevelopmentSupply ? withDevelopmentSupplyOrder(candidate, action, planned) : planned;
                     }
                     @Override public boolean held(FrontierWorldState candidate, ScheduledAction action) {
                         return FrontierWorldRuntimeDefinition.scheduledHeld(candidate, action);
+                    }
+                    @Override public java.util.Set<SubjectId> holdWakeKeys(FrontierWorldState candidate, ScheduledAction action) {
+                        return FrontierWorldRuntimeDefinition.holdWakeKeys(candidate, action);
+                    }
+                    @Override public java.util.Set<SubjectId> wakeKeys(FrontierWorldState previous, FrontierWorldState next,
+                            io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
+                        return FrontierWorldRuntimeDefinition.wakeKeys(previous, next, event);
                     }
                     @Override public List<ScheduledAction> retiredBy(FrontierWorldState previous, FrontierWorldState next,
                             io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event,
@@ -662,11 +682,12 @@ public final class FrontierV3FixtureCatalog {
                 new EngineLimits(4_096, 1_200L, 4_096), schedules, TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE);
     }
 
-    private static List<ProposedEvent> frozenScoutSightingProgress(FrontierWorldState state, ScheduledAction action, SubjectId operationId) {
+    private static List<ProposedEvent> frozenScoutSightingProgress(FrontierWorldState state, ScheduledAction action, SubjectId operationId,
+                                                                 SimInstant currentInstant) {
         if (action.subject().equals(operationId) && action.kind().equals("frontier.operation.progress")) {
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         }
-        return FrontierWorldRuntimeDefinition.planScheduled(state, action, false);
+        return FrontierWorldRuntimeDefinition.planScheduled(state, action, false, currentInstant);
     }
 
     /** Explicit test demand; production settlement policy never invents tribute to the hive. */

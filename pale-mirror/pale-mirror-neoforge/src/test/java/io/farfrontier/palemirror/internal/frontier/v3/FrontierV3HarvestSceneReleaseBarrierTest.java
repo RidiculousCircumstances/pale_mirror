@@ -18,8 +18,7 @@ class FrontierV3HarvestSceneReleaseBarrierTest {
         var lease = SceneLease.forCause(new SceneLeaseId("lease:delivery-release"), base.worldId(),
                 new ResourceSiteHarvestSceneCause(site, job.id()), body.supportingSurface().support(),
                 base.initialInstant(), 17L, SceneLeaseStatus.UNKNOWN_AFTER_RESTART,
-                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(base.worldId(), job.workerId()))),
-                Map.of(job.workerId(), body), Set.of(), Optional.empty());
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(base.worldId(), job.workerId()))), Set.of(), Optional.empty());
         var witness = new FrontierV3ResourceSiteDeliveryWitness(site, job.id(), job.intentId(), job.workerId(),
                 lease.members().getFirst().entityId(), lease.id(), lease.revision(), job.outputSlot().containerId(),
                 job.outputSlot().slot(), 64, 3L, "sha256:" + "a".repeat(64), "sha256:" + "b".repeat(64),
@@ -34,7 +33,7 @@ class FrontierV3HarvestSceneReleaseBarrierTest {
                 "restart must retain the effect barrier even when the saved farmer hand is already empty");
         var other = SceneLease.forCause(new SceneLeaseId("lease:another-farmer"), base.worldId(), lease.cause(),
                 lease.handoffPosition(), base.initialInstant(), 18L, SceneLeaseStatus.UNKNOWN_AFTER_RESTART,
-                lease.members(), lease.memberPositions(), Set.of(), Optional.empty());
+                lease.members(), Set.of(), Optional.empty());
         assertTrue(FrontierV3HarvestSceneReleaseBarrier.ready(restored, other),
                 "an independent scene on the same field must not wait for this delivery");
         restored.retireFieldDelivery(witness);

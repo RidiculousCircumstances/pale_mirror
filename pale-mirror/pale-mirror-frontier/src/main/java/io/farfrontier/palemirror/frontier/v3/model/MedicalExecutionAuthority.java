@@ -55,7 +55,12 @@ public final class MedicalExecutionAuthority {
         return operation;
     }
     static ActorActivityCapability capability() { return new ActorActivityCapability() {
+        @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId id, AmbientActorLease lease) {
+            return false; // Patient/team motion enters the coordinated clinical consumer.
+        }
         @Override public ActorActivityKind kind() { return ActorActivityKind.MEDICAL_TREATMENT; }
+        @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
+        @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return ActorActivityBodyCheckpoint.usesActorLocation(); }
         @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
         @Override public void validateReference(FrontierWorldState state, ActorExecutionId id) { require(state.humanPopulation().medicalOperations(), id); }
         @Override public ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId id) {

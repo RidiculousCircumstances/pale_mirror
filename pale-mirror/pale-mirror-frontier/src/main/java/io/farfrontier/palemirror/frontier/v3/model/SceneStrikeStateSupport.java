@@ -195,7 +195,7 @@ public final class SceneStrikeStateSupport {
 
     /**
      * A non-lethal physical hit is the exact durable wound for the same actor.  A lethal hit is
-     * deliberately different: {@link ActorDied} must have already recorded its body/death
+     * deliberately different: the common ActorBodyDied must have already recorded its body/death
      * evidence, so a delayed receipt cannot manufacture a death or revive that actor.
      */
     private static void validateObservedWound(Map<SubjectId, ActorLocation> actors, PhysicalIntent intent,

@@ -21,8 +21,8 @@ class FrontierV3ActorBodyCustodyTest {
         assertFalse(FrontierV3ActorBodyCustody.unstartedEvidence(body, ActorKind.BIOFORM, id, never, Optional.empty(), false));
         assertFalse(FrontierV3ActorBodyCustody.unstartedEvidence(body, ActorKind.RESIDENT, UUID.randomUUID(), never, Optional.empty(), false));
         var declaration = new FrontierV3ActorCarrierComposition.Declaration(actor, ActorKind.RESIDENT,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, id,
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 1L);
+                FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, id,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, 1L);
         var prior = Optional.of(new FrontierV3AmbientCarrierLedger.Carrier(declaration, 7L, 7L));
         assertTrue(FrontierV3ActorBodyCustody.unstartedEvidence(body, ActorKind.RESIDENT, id, Optional.empty(), prior, false));
         assertFalse(FrontierV3ActorBodyCustody.unstartedEvidence(new ActorBodyId(actor, 1L), ActorKind.RESIDENT, id,

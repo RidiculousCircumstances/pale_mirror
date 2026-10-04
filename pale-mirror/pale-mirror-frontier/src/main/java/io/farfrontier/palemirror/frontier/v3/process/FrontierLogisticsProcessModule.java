@@ -246,7 +246,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             RouteOperation operation = state.operations().get(advanced.operationId());
             if (operation == null) return FrontierWorldCommandPlanner.rejected("operation assembly observation has no active operation");
             try {
-                validateHotAssemblyObservation(state, operation, advanced.assembly());
+                validateHotAssemblyObservation(state, operation, advanced);
                 state.advanceOperationAssembly(advanced.operationId(), advanced.assembly(), advanced.executions());
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(operation.settlementId(), advanced)));
@@ -320,14 +320,18 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             SceneLease lease = state.sceneLeases().get(transition.leaseId());
             if (lease == null) return FrontierWorldCommandPlanner.rejected("scene lease is unknown");
             if (!transition.appliesTo(lease)) return FrontierWorldCommandPlanner.rejected("scene lease transition is not allowed from its current status");
-            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), transition))); }
+            try {
+                // Physical participants must already be confirmed by the body owner.
+                // Reject an invalid transition before WAL admission, never in its reducer.
+                state.transitionSceneLease(transition.leaseId(), transition.status());
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), transition)));
+            }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof SceneLeaseReleased released) return planSceneReleased(state, command, released);
         if (command.payload() instanceof SceneLeaseRecoveryUnresolved unresolved) return planRecoveryUnresolved(state, command, unresolved);
         if (command.payload() instanceof SceneLeaseRecoveryRevoked)
             return FrontierWorldCommandPlanner.rejected("scene recovery revoke has no saved body/health proof");
-        if (command.payload() instanceof ActorDied death) return planActorDied(state, death);
         return FrontierWorldCommandPlanner.rejected("logistics process does not admit command: " + command.payload().type());
     }
 
@@ -355,7 +359,6 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             case SceneLeaseReleased released -> reduceSceneReleased(state, event.subject(), released);
             case SceneLeaseRecoveryUnresolved unresolved -> reduceRecoveryUnresolved(state, event.subject(), unresolved);
             case SceneLeaseRecoveryRevoked revoked -> reduceRecoveryRevoked(state, event.subject(), revoked);
-            case ActorDied death -> reduceActorDied(state, event.subject(), event.instant().ticks(), death);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             case TerminalLogisticsCompacted compacted -> reduceCompacted(state, event.subject(), event.instant().ticks(), compacted);
             default -> throw new IllegalArgumentException("logistics process does not own event: " + event.payload().type());
@@ -379,24 +382,6 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
 
-    private static CommandPlan planActorDied(FrontierWorldState state, ActorDied death) {
-        SceneLease lease = state.sceneLeases().get(death.leaseId());
-        if (lease == null || !lease.retainsMemberCustody(death.actorId())
-                || state.actorLocations().get(death.actorId()) == null
-                || state.actorLocations().get(death.actorId()).condition().status() != ActorLifeStatus.ALIVE) {
-            return FrontierWorldCommandPlanner.rejected("actor death is not evidence for an active scene member");
-        }
-        SubjectId owner;
-        try { owner = FrontierSceneOwnerSupport.owner(state, lease); }
-        catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-        List<ProposedEvent> events = new ArrayList<>();
-        events.add(new ProposedEvent(owner, death));
-        CompanyFoundationProcess.terminationForDeath(state, death.actorId()).ifPresent(events::add);
-        events.addAll(ProductionProcess.failPreEffectWorkForDeath(state, death.actorId()));
-        if (lease.status() == SceneLeaseStatus.HOT) events.add(new ProposedEvent(owner, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)));
-        if (lease.status() == SceneLeaseStatus.PREPARED) events.add(new ProposedEvent(owner, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));
-        return new CommandPlan.Accepted(List.copyOf(events));
-    }
 
     private static FrontierWorldState reduceContractCreated(FrontierWorldState state, SubjectId subject, SupplyContractCreated created) {
         SupplyContract contract = created.contract();
@@ -461,6 +446,11 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
     }
     private static FrontierWorldState reduceAssemblyAdvanced(FrontierWorldState state, SubjectId subject, OperationAssemblyAdvanced advanced) {
         requireOperation(state, subject, advanced.operationId(), "operation assembly");
+        if (advanced.hotArrival().isPresent()) validateHotAssemblyObservation(state, state.operations().get(advanced.operationId()), advanced);
+        else if (advanced.assembly().members().entrySet().stream().anyMatch(entry ->
+                !entry.getValue().equals(state.operations().get(advanced.operationId()).activeAssembly().orElseThrow().members().get(entry.getKey()))
+                        && !ActorExecutionCoordinator.coldAvailable(state, entry.getKey())))
+            throw new IllegalArgumentException("COLD assembly transition cannot advance a physically held actor");
         return state.advanceOperationAssembly(advanced.operationId(), advanced.assembly(), advanced.executions());
     }
     private static FrontierWorldState reduceAssemblyDeferred(FrontierWorldState state, SubjectId subject, OperationAssemblyDeferred deferred) {
@@ -579,11 +569,6 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         return FrontierSceneLeaseStateSupport.revokeUnknownPatrolToCold(state, revoked);
     }
 
-    private static FrontierWorldState reduceActorDied(FrontierWorldState state, SubjectId subject, long atTick, ActorDied death) {
-        SceneLease lease = state.sceneLeases().get(death.leaseId());
-        if (lease == null || !subject.equals(FrontierSceneOwnerSupport.owner(state, lease))) throw new IllegalArgumentException("actor death lacks its owning scene");
-        return state.recordActorDeath(death, atTick);
-    }
 
     private static FrontierWorldState reduceOperationFailed(FrontierWorldState state, SubjectId subject, OperationFailed failed) {
         RouteOperation operation = state.operations().get(failed.operationId());
@@ -605,21 +590,26 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         return state.compactTerminalLogistics(compacted.operationId(), atTick);
     }
 
-    private static void validateHotAssemblyObservation(FrontierWorldState state, RouteOperation operation, OperationAssembly next) {
+    private static void validateHotAssemblyObservation(FrontierWorldState state, RouteOperation operation, OperationAssemblyAdvanced evidence) {
+        var physical = evidence.hotArrival().orElseThrow(() -> new IllegalArgumentException("HOT assembly requires captured body and scope evidence"));
+        OperationAssembly next = evidence.assembly();
         OperationAssembly current = operation.activeAssembly().orElseThrow(() -> new IllegalArgumentException("operation has no active assembly"));
         if (!current.members().keySet().equals(next.members().keySet())) throw new IllegalArgumentException("HOT assembly observation changes formation");
         SubjectId observed = null;
         for (SubjectId actor : current.members().keySet()) {
             OperationAssembly.Member before = current.members().get(actor), after = next.members().get(actor);
-            if (!before.topology().equals(after.topology()) || after.cursor() < before.cursor() || after.cursor() > before.cursor() + 1) {
+            if (!before.equals(after) && !after.equals(before.advanceOne())) {
                 throw new IllegalArgumentException("HOT assembly observation may advance only one adjacent cursor");
             }
-            if (after.cursor() > before.cursor()) {
+            if (!before.equals(after)) {
                 if (observed != null) throw new IllegalArgumentException("HOT assembly observation may acknowledge only one actor");
                 observed = actor;
             }
         }
         if (observed == null) throw new IllegalArgumentException("HOT assembly observation did not advance an actor");
+        if (!physical.body().actorId().equals(observed)
+                || ActorBodyAuthority.require(state, physical.body()).phase() != FencedRecoveryPhase.RUNNING)
+            throw new IllegalArgumentException("assembly arrival has stale or foreign physical custody");
         if (current.deferral().isPresent()) {
             OperationAssemblyDeferral blocked = current.deferral().orElseThrow();
             if (!blocked.actorId().equals(observed) || !next.members().get(observed).currentSurface().equals(blocked.target())) {
@@ -628,8 +618,9 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         }
         AmbientActorLease lease = state.ambientLeases().get(observed);
         OperationAssembly.Member arrived = next.members().get(observed);
-        if (lease == null || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY
-                || !lease.goalBody().equals(arrived.currentSurface().standingBody())) {
+        if (lease == null || lease.revision() != physical.leaseRevision() || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY
+                || !lease.goalBody().equals(arrived.currentSurface().standingBody())
+                || !state.actorLocations().get(observed).body().equals(arrived.currentSurface().standingBody())) {
             throw new IllegalArgumentException("HOT assembly observation lacks its exact active actor lease");
         }
     }

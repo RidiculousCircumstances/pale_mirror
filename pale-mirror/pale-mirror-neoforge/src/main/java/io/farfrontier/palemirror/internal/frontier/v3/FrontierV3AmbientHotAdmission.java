@@ -29,9 +29,11 @@ final class FrontierV3AmbientHotAdmission {
                 || !FrontierV3AmbientActorExecutor.owned(admittedBody, actorId, FrontierV3AmbientActorExecutor.bioform(current, actorId))) return;
         var supported = FrontierV3BodyObservation.capture(admittedBody).supportedBody();
         if (supported.isEmpty()) return;
+        var bodyId = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(current, actorId);
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, admittedBody)) return;
         var result = FrontierV3AmbientActorExecutor.submit(runtime, "ambient-hot-body-confirmed", actorId.value(),
                 new AmbientBodyConfirmed(actorId, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION,
-                        current.actorLocations().get(actorId).body(), supported.orElseThrow()));
+                        lease.handoffBody(), supported.orElseThrow(), bodyId));
         FrontierV3DiagnosticTrace.record(level.getServer(), "ambient-admission:" + actorId.value(),
                 "ambient_body_admitted", actorId, result);
         current = runtime.decodedState().orElse(null);

@@ -30,6 +30,7 @@ final class FrontierV3ResidentLifeDiagnostic {
         SettlementDailySchedule schedule = state.humanPopulation().schedule(resident.settlementId());
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(subject);
         ResidentMeal meal = state.humanPopulation().meals().get(subject);
+        var mealResources = state.humanPopulation().mealResourceObligations().get(subject);
         String activity, pending = "", activityError = "", workYield = "";
         String activityAdmission = "UNAVAILABLE", activityWait = "", activityWakeKeys = "[]";
         try {
@@ -110,6 +111,13 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + ",\"mealActionHeld\":" + mealAction.map(action -> ResidentMealProcess.held(state, action)).orElse(false)
                 + ",\"mealFood\":\"" + (meal == null ? "" : quote(meal.portion().itemKind())) + "\""
                 + ",\"mealQuantity\":" + (meal == null ? 0 : meal.portion().quantity())
+                + ",\"mealResourceObligation\":" + (mealResources == null ? "null" : "{\"custodyState\":\""
+                    + mealResources.custodyState().name() + "\",\"claim\":\"" + quote(mealResources.claimId().value())
+                    + "\",\"executionGeneration\":" + mealResources.executionId().generation()
+                    + ",\"physicalEpoch\":" + mealResources.body().physicalEpoch()
+                    + ",\"quantity\":" + mealResources.portion().quantity()
+                    + ",\"pendingPhysicalStep\":" + mealResources.pendingPhysicalStep().isPresent()
+                    + ",\"retiredAtTick\":" + mealResources.retiredAtTick() + "}")
                 + ",\"mealNutritionPerItem\":" + (meal == null ? 0 : meal.portion().nutritionPerItem())
                 + ",\"mealNutritionUnits\":" + (meal == null ? 0 : meal.portion().nutritionUnits())
                 + ",\"mealTravelArrivalAt\":" + (meal == null ? "null" : meal.coldTravel()

@@ -18,29 +18,27 @@ final class FrontierV3BodyPlacement {
         Selection { rejections = List.copyOf(rejections); }
     }
     private FrontierV3BodyPlacement() { }
-    /** Admission-only relocation: a failed selection must not leave a retained body at a probe point. */
-    static boolean placeRetained(ServerLevel level, Mob body, List<SurfaceAnchor> surfaces,
-                                 FrontierV3NavigationScope scope,
-                                 java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing) {
-        var previous = body.position();
-        boolean placed = false;
-        try {
-            placed = select(level, body, surfaces, scope, standing).isPresent();
-            if (placed) FrontierV3BodyObservation.refreshGroundContact(level, body);
-            return placed;
-        } finally {
-            if (!placed) {
-                body.setPos(previous.x, previous.y, previous.z);
-                FrontierV3BodyObservation.refreshGroundContact(level, body);
-            }
-        }
-    }
     static Optional<SurfaceAnchor> select(ServerLevel level, Mob candidate, List<SurfaceAnchor> surfaces,
                                           FrontierV3NavigationScope scope,
                                           java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing) {
         return assess(level, candidate, surfaces, scope, standing).surface();
     }
     static Selection assess(ServerLevel level, Mob candidate, List<SurfaceAnchor> surfaces,
+                             FrontierV3NavigationScope scope,
+                             java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing) {
+        if (candidate.isRemoved() || candidate.level() != level || level.getEntity(candidate.getUUID()) != null)
+            throw new IllegalArgumentException("placement selection requires an unpublished live body prototype");
+        var previous = candidate.position();
+        boolean previousOnGround = candidate.onGround();
+        try {
+            return probe(level, candidate, surfaces, scope, standing);
+        } finally {
+            candidate.setPos(previous.x, previous.y, previous.z);
+            candidate.setOnGround(previousOnGround);
+        }
+    }
+    /** Probe only an unpublished prototype. Selection never installs a live body's position. */
+    private static Selection probe(ServerLevel level, Mob candidate, List<SurfaceAnchor> surfaces,
                              FrontierV3NavigationScope scope,
                              java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing) {
         if (surfaces.isEmpty()) throw new IllegalArgumentException("body placement needs an explicit zone");

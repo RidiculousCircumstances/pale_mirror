@@ -15,20 +15,17 @@ import java.util.Objects;
  */
 record FrontierV3ActorAdoption(FrontierV3AmbientCarrierLedger.Carrier predecessor,
                              FrontierV3ActorOwnerBinding admittedBinding) {
-    private static final int FORMAT = 2;
+    private static final int FORMAT = 3;
 
     FrontierV3ActorAdoption {
         Objects.requireNonNull(predecessor, "predecessor");
         Objects.requireNonNull(admittedBinding, "admitted binding");
         var admitted = admittedBinding.declaration();
         var old = predecessor.identity();
-        long priorRevision = admitted.owner() == FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE
-                ? predecessor.physicalRevision() : predecessor.ambientRevision();
         if (!old.actorId().equals(admitted.actorId()) || !old.entityId().equals(admitted.entityId())
                 || old.kind() != admitted.kind()
                 || admitted.representation() != FrontierV3ActorCarrierComposition.Representation.LIVE_BODY
-                || admitted.epoch() <= old.epoch()
-                || admitted.authorityRevision() <= priorRevision) {
+                || admitted.epoch() <= old.epoch()) {
             throw new IllegalArgumentException("invalid actor adoption endpoints");
         }
     }

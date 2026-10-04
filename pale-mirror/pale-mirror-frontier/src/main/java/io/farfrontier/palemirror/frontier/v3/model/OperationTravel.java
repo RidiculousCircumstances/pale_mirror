@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * The exact spatial truth for one in-progress logistics operation.
+ * The retained route and spatial checkpoint for one in-progress logistics operation.
  *
  * <p>Strategic route milestones remain on {@link RouteOperation}; this value is the bounded
  * adjacent-cell corridor between two such milestones.  Its cursor, member formation and cargo
@@ -83,6 +83,18 @@ public record OperationTravel(SubjectId frontId, TraversalTopology topology, int
     /** Physical evidence may change retained edge availability, never geometry or the cursor. */
     public OperationTravel withAvailability(java.util.Set<TraversalEdgeId> affected, TraversalAvailability availability) {
         return new OperationTravel(frontId, topology.withAvailability(affected, availability), cursor, formation, cargoAnchor);
+    }
+
+    /** A saved physical member position changes only that member's continuation origin.
+     * It cannot advance the route, relocate cargo or certify an arrival. */
+    public OperationTravel checkpointMember(SubjectId actor, BodyPosition observed) {
+        if (!formation.containsKey(Objects.requireNonNull(actor)))
+            throw new IllegalArgumentException("operation checkpoint names a foreign member");
+        Objects.requireNonNull(observed);
+        if (formation.get(actor).equals(observed)) return this;
+        var next = new LinkedHashMap<>(formation);
+        next.put(actor, observed);
+        return new OperationTravel(frontId, topology, cursor, next, cargoAnchor);
     }
 
     /** A loaded physical caravan may certify only its immediately adjacent cell. */

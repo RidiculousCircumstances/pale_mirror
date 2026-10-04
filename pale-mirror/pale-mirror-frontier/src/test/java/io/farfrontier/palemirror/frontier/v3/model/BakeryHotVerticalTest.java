@@ -245,10 +245,9 @@ class BakeryHotVerticalTest {
         ActorLocation actor = state.actorLocations().get(job.workerId());
         SceneLease lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()),
                 actor.supportingSurface().support(), new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))),
-                Map.of(job.workerId(), actor.body()), java.util.Set.of(), Optional.empty());
-        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
-        assertEquals(BakeryWorkGoal.current(state, job).station().standingBody(), state.sceneLeases().get(leaseId).memberPosition(job.workerId()));
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))), java.util.Set.of(), Optional.empty());
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        assertEquals(BakeryWorkGoal.current(state, job).station().standingBody(), state.sceneLeases().get(leaseId).memberBody(state.actorLocations(), job.workerId()));
         BakeryWorkBlock changedSource = new BakeryWorkBlock(BakeryWorkBlock.Reason.SOURCE_CHANGED,
                 depot, 0, "minecraft:wheat", 32);
         BakeryHotBlockChanged blocked = new BakeryHotBlockChanged(job.id(), leaseId,
@@ -478,7 +477,7 @@ class BakeryHotVerticalTest {
                 .accessBoundary();
         SurfaceAnchor exit = BakeryKnownNavigation.pathFrom(checkpointedDepot,
                         checkpointedDepot.productionJobs().get(job.id()),
-                        checkpointedDepot.sceneLeases().get(leaseId).memberPosition(job.workerId()).supportingSurface())
+                        checkpointedDepot.sceneLeases().get(leaseId).memberBody(checkpointedDepot.actorLocations(), job.workerId()).supportingSurface())
                 .stream().filter(surface -> access.cleared(surface.standingBody())).findFirst().orElseThrow();
         BakeryHotAccessCleared exitObserved = new BakeryHotAccessCleared(job.id(), leaseId, exit.standingBody());
         assertEquals(exitObserved, FrontierWorldRuntimeDefinition.payloadCodecs().decode(exitObserved.type(),
@@ -512,8 +511,8 @@ class BakeryHotVerticalTest {
 
     private static FrontierWorldState at(FrontierWorldState state, SceneLeaseId leaseId,
                                          SubjectId actor, BodyPosition body) {
-        Map<SceneLeaseId, SceneLease> leases = new java.util.LinkedHashMap<>(state.sceneLeases());
-        leases.put(leaseId, leases.get(leaseId).withMemberPositions(Map.of(actor, body)));
-        return state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
+        Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(actor, actors.get(actor).withBody(body));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
     }
 }

@@ -40,17 +40,71 @@ class FrontierV3ActorCarrierCompositionTest {
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
                 methodCallBoundaries(FrontierV3ActorCarrierFactory.class, "create"),
                 "only the shared body controller may construct an exact actor body");
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
+                methodCallBoundaries(FrontierV3BodyPlacement.class, "select"),
+                "activity executors cannot re-place a body under a new activity or scene");
+        assertEquals(Set.of(FrontierV3BodyPlacement.class.getName()),
+                methodCallBoundaries(FrontierV3BodyPlacement.class, "assess"),
+                "production placement probes enter the common provider, not a family handoff");
         assertEquals(Set.of(FrontierV3AmbientActorExecutor.class.getName(), FrontierV3SceneExecutor.class.getName()),
                 methodCallBoundaries(FrontierV3ActorBodyController.class, "materialize"),
                 "every activity body demand must enter shared admission through the registered adapters");
+        assertEquals(Set.of(FrontierV3SceneExecutor.class.getName()),
+                methodCallBoundaries(FrontierV3SceneExecutor.class, "materializeBodiesForFixture"),
+                "fixture-only translated poses cannot become a production activity-position bypass");
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
                 methodCallBoundaries(FrontierV3ActorFirstAdmissionBoundary.class, "admit"),
                 "first insertion is not an activity-owned physical operation");
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
                 methodCallBoundaries(FrontierV3ActorAdoptionAdmission.class, "admit"),
                 "reconstruction is not an activity-owned physical operation");
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
+                methodCallBoundaries(FrontierV3AmbientCarrierLedger.class, "beginBodyResidence"),
+                "only the common body owner may start a new loaded residency; an activity cannot reset unload proof");
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
+                methodCallBoundaries(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent.class, "<init>"),
+                "physical admission/inspection must be reported by the common body boundary, not an activity executor");
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
+                methodCallBoundaries(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied.class, "<init>"),
+                "physical death must carry exact body/execution evidence from the common boundary");
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
+                methodCallBoundaries(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.class, "<init>"),
+                "family recovery cannot independently restore physical permission or position");
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
+                methodCallBoundaries(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded.class, "<init>"),
+                "scope closure cannot independently certify physical absence");
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName(), FrontierV3AmbientCarrierLedger.class.getName()),
+                methodCallBoundaries(FrontierV3AmbientCarrierLedger.class, "fence"),
+                "only the body controller and the store's own atomic batch primitive may fence an actor");
+        assertTrue(methodCallBoundaries(FrontierV3AmbientCarrierLedger.class, "fenceAll").isEmpty(),
+                "an old scene batch fence must not remain an active production caller");
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName(), FrontierV3ActorBodyDeparture.class.getName()),
+                methodCallBoundaries(FrontierV3ActorBodyDeparture.class, "<init>"),
+                "callback and no-load disk recovery both capture body-owned evidence; only its codec may hydrate it");
+        assertEquals(Set.of(FrontierV3AmbientCarrierLedger.class.getName()),
+                methodCallBoundaries(FrontierV3AmbientCarrierLedger.class, "recordDeparture"),
+                "family departure records are read views/retained hydration, not a parallel physical capture source");
+        assertEquals(Set.of(FrontierV3ServerLifecycle.class.getName()),
+                methodCallBoundaries(FrontierV3ActorBodyController.class, "observeDeath"),
+                "the actual death listener enters one common body observer, not a family observer");
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
+                methodCallBoundaries(FrontierV3ActorDeathResourceComposition.class, "prepare"),
+                "pre-loot resource owners enter only after common fatality provenance validation");
+        assertEquals(Set.of(FrontierV3ResidentMealDeathResources.class.getName()),
+                methodCallBoundaries(io.farfrontier.palemirror.frontier.v3.model.ResidentMealResourceEffectObserved.class, "<init>"),
+                "retired meal receipts have one positively indexed pre-loot observation producer");
+        assertEquals(Set.of(FrontierV3ResidentMealDeathResources.class.getName()),
+                methodCallBoundaries(io.farfrontier.palemirror.frontier.v3.model.ResidentMealPortionDispositionObserved.class, "<init>"),
+                "retired portion dispositions are published by the food resource owner, never body/scene controllers");
+        assertFalse(classBytes(FrontierV3ActorBodyController.class).contains("ResidentMeal"),
+                "the common body observer cannot own food phases or nutrition");
+        assertFalse(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs().types().contains("frontier.actor_died"),
+                "the obsolete scene death decoder must not remain an unversioned recovery bypass");
+        assertFalse(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs().types().contains("frontier.ambient_actor_died"),
+                "the obsolete ambient death decoder must not remain an unversioned recovery bypass");
         assertFalse(classBytes(FrontierV3ActorCarrierFactory.class).contains("StackWalker"),
                 "actor-carrier authority must be supplied explicitly, never inferred from the runtime call stack");
+        assertSourceJoinUsesOnlyCommonBodyRecognition();
         assertEquals(Set.of(FrontierV3ActorCarrierFactory.class.getName(),
                         "io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter",
                         "io.farfrontier.palemirror.internal.integration.crimson.CrimsonActorProfile",
@@ -74,14 +128,14 @@ class FrontierV3ActorCarrierCompositionTest {
         UUID entity = FrontierV3AmbientActorExecutor.entityId(state, resident);
 
         FrontierV3ActorCarrierComposition.Declaration declaration = FrontierV3ActorCarrierComposition.fromCanonical(state, resident,
-                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                entity, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L, 1L);
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                entity, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 1L);
 
         assertEquals(resident, declaration.actorId());
         assertEquals(ActorKind.RESIDENT, declaration.kind());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorCarrierComposition.fromCanonical(state, resident,
-                ActorKind.BIOFORM, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                entity, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L, 1L),
+                ActorKind.BIOFORM, FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                entity, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 1L),
                 "a body producer cannot substitute a compatible Minecraft type for the declared canonical kind");
     }
 
@@ -90,13 +144,13 @@ class FrontierV3ActorCarrierCompositionTest {
         SubjectId actor = new SubjectId("resident:xact-7");
         UUID entity = UUID.fromString("7f65aa31-f6d9-42f7-9e05-8d1fe830644a");
         assertThrows(IllegalArgumentException.class, () -> new FrontierV3ActorCarrierComposition.Declaration(actor,
-                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
                 entity, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, -2L, 1L));
         FrontierV3ActorCarrierComposition.Declaration live = new FrontierV3ActorCarrierComposition.Declaration(actor,
-                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                entity, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 4L, 2L);
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                entity, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 2L);
         assertEquals(FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, live.inactiveCarrier().representation());
-        assertEquals(5L, live.liveBody(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, 5L, 3L).authorityRevision());
+        assertEquals(0L, live.liveBody(FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, 0L, 3L).authorityRevision());
     }
 
     @Test
@@ -107,9 +161,9 @@ class FrontierV3ActorCarrierCompositionTest {
         var body = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actor);
         UUID uuid = FrontierV3AmbientActorExecutor.entityId(state, actor);
         var declaration = FrontierV3ActorCarrierComposition.fromCanonical(state, actor, ActorKind.RESIDENT,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, uuid,
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 7L, body.physicalEpoch());
-        var binding = FrontierV3ActorOwnerBinding.ambient(declaration);
+                FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, uuid,
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, body.physicalEpoch());
+        var binding = FrontierV3ActorOwnerBinding.body(declaration);
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         assertEquals(FrontierV3ActorBodyController.Admission.CONFLICT,
                 FrontierV3ActorBodyController.admission(state, binding, ledger, false),
@@ -130,25 +184,68 @@ class FrontierV3ActorCarrierCompositionTest {
                 FrontierV3ActorBodyController.admission(state, binding, recovered, false),
                 "interrupted insertion must be recovered, not issued again");
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorBodyController.admission(state,
-                FrontierV3ActorOwnerBinding.ambient(declaration.liveBody(declaration.owner(), 8L, body.physicalEpoch() + 1L)),
+                FrontierV3ActorOwnerBinding.body(declaration.liveBody(declaration.owner(), 0L, body.physicalEpoch() + 1L)),
                 recovered, false), "a new activity revision cannot allocate a new body epoch");
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorBodyController.admission(state,
-                FrontierV3ActorOwnerBinding.ambient(new FrontierV3ActorCarrierComposition.Declaration(actor,
-                        ActorKind.RESIDENT, declaration.owner(), new UUID(3, 4), declaration.representation(), 7L, body.physicalEpoch())),
+                FrontierV3ActorOwnerBinding.body(new FrontierV3ActorCarrierComposition.Declaration(actor,
+                        ActorKind.RESIDENT, declaration.owner(), new UUID(3, 4), declaration.representation(), 0L, body.physicalEpoch())),
                 recovered, false), "physical identity is the canonical actor UUID, not a caller-selected body");
         assertTrue(recovered.fence(declaration.inactiveCarrier(), 7L, 7L));
+        assertEquals(FrontierV3ActorFirstAdmission.Phase.ESTABLISHED, recovered.firstAdmission(actor).orElseThrow().phase(),
+                "exact absence of an interrupted first incarnation establishes its history without a second birth");
         var reconstructionLedger = FrontierV3AmbientCarrierLedger.load(recovered.save(new net.minecraft.nbt.CompoundTag(), null), null);
         var next = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.demand(
                 io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.released(state, body), actor);
         var nextBody = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(next, actor);
         assertEquals(body.physicalEpoch() + 1L, nextBody.physicalEpoch());
-        var reconstruction = FrontierV3ActorOwnerBinding.ambient(declaration.liveBody(declaration.owner(), 8L, nextBody.physicalEpoch()));
+        var reconstruction = FrontierV3ActorOwnerBinding.body(declaration.liveBody(declaration.owner(), 0L, nextBody.physicalEpoch()));
         assertEquals(FrontierV3ActorBodyController.Admission.RECONSTRUCTION,
                 FrontierV3ActorBodyController.admission(next, reconstruction, reconstructionLedger, false),
                 "released and recovered incarnation must use the common reconstruction protocol, not first birth");
         assertEquals(FrontierV3ActorBodyController.Admission.CONFLICT,
                 FrontierV3ActorBodyController.admission(next, reconstruction, reconstructionLedger, true),
                 "inactive evidence plus an indexed body is concurrent custody, not a reconstruction opportunity");
+        // The same canonical epoch allocation also occurs when preparation was
+        // cancelled before insertion. It must not strand the unused birth permit.
+        var unused = FrontierV3AmbientCarrierLedger.emptyForTest();
+        assertTrue(unused.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(
+                new FrontierV3ActorFirstAdmission.Identity(actor, ActorKind.RESIDENT, uuid))));
+        assertEquals(FrontierV3ActorBodyController.Admission.FIRST,
+                FrontierV3ActorBodyController.admission(next, reconstruction, unused, false));
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierV3ActorBodyController.admission(next, binding, unused, false),
+                "an unused first permission cannot override the current canonical epoch");
+        assertTrue(unused.beginFirstAdmission(reconstruction));
+        assertEquals(reconstruction, unused.firstAdmission(actor).orElseThrow().attempt().orElseThrow());
+        assertFalse(unused.acknowledgeFirstAdmission(unused.firstAdmission(actor).orElseThrow(), binding));
+        assertTrue(unused.acknowledgeFirstAdmission(unused.firstAdmission(actor).orElseThrow(), reconstruction));
+    }
+
+    private static void assertSourceJoinUsesOnlyCommonBodyRecognition() throws java.io.IOException {
+        var recognition = new java.util.HashSet<String>();
+        try (var stream = FrontierV3ServerLifecycle.class.getResourceAsStream("FrontierV3ServerLifecycle.class")) {
+            new org.objectweb.asm.ClassReader(stream).accept(new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                @Override public org.objectweb.asm.MethodVisitor visitMethod(int access, String name, String descriptor,
+                        String signature, String[] exceptions) {
+                    if (!(name.equals("observeSourceJoin") || name.startsWith("lambda$observeSourceJoin$"))
+                            || !descriptor.contains("net/minecraft/world/entity/Entity;")) return null;
+                    return new org.objectweb.asm.MethodVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                        @Override public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean itf) {
+                            assertFalse(owner.equals(FrontierV3SceneExecutor.class.getName().replace('.', '/'))
+                                            && name.equals("recognizesDeclaration")
+                                    || owner.equals(FrontierV3AmbientActorExecutor.class.getName().replace('.', '/'))
+                                            && name.equals("retainsPendingJoin")
+                                    || name.equals("recognizesManagedAmbientCarrier"),
+                                    "a family projection cannot grant source-join permission behind the common lifetime");
+                            if (owner.equals(FrontierV3ActorBodyController.class.getName().replace('.', '/'))
+                                    && (name.equals("retainsRecordedBody") || name.equals("recognizesRecordedBody")))
+                                recognition.add(name);
+                        }
+                    };
+                }
+            }, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+        }
+        assertEquals(Set.of("retainsRecordedBody", "recognizesRecordedBody"), recognition);
     }
 
     private static String classBytes(Class<?> type) {
@@ -199,7 +296,11 @@ class FrontierV3ActorCarrierCompositionTest {
         } catch (java.io.IOException failure) { throw new IllegalStateException(failure); }
         return found[0];
     }
-    private static Set<String> methodCallBoundaries(Class<?> target, String method) {
+    static Set<String> methodCallBoundaries(Class<?> target, String method) {
+        return methodCallBoundaries(target, method, descriptor -> true);
+    }
+    static Set<String> methodCallBoundaries(Class<?> target, String method,
+                                           java.util.function.Predicate<String> descriptorPredicate) {
         try {
             Path classes = Path.of(FrontierV3ActorCarrierComposition.class.getProtectionDomain().getCodeSource().getLocation().toURI());
             Path packageRoot = classes.resolve("io/farfrontier/palemirror");
@@ -216,7 +317,8 @@ class FrontierV3ActorCarrierCompositionTest {
                                                 return new org.objectweb.asm.MethodVisitor(org.objectweb.asm.Opcodes.ASM9) {
                                                     @Override public void visitMethodInsn(int opcode, String owner, String name,
                                                             String descriptor, boolean isInterface) {
-                                                        if (owner.equals(target.getName().replace('.', '/')) && name.equals(method)) found[0] = true;
+                                                        if (owner.equals(target.getName().replace('.', '/')) && name.equals(method)
+                                                                && descriptorPredicate.test(descriptor)) found[0] = true;
                                                     }
                                                 };
                                             }

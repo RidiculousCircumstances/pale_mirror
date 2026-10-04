@@ -1,6 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind;
+import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
@@ -144,10 +146,10 @@ public final class FrontierDurationProcessDriverRegistry {
                     retainedBytes, cadenceTicks, workWeight }) if (value < 0) throw new IllegalArgumentException("scene work usage cannot be negative");
         }
 
-        public static SceneWorkUsage forLease(SceneLease lease, int cargo, int effects) {
+        public static SceneWorkUsage forLease(SceneLease lease, Map<SubjectId, ActorLocation> actorLocations, int cargo, int effects) {
             Objects.requireNonNull(lease, "scene work lease");
             Set<String> chunks = new java.util.HashSet<>(); chunks.add(chunkKey(lease.handoffPosition()));
-            lease.memberPositions().values().forEach(position -> chunks.add((position.x() >> 4) + ":" + (position.z() >> 4)));
+            lease.memberBodies(actorLocations).values().forEach(position -> chunks.add((position.x() >> 4) + ":" + (position.z() >> 4)));
             int actors = lease.members().size();
             return new SceneWorkUsage(actors, cargo, effects, chunks.size(), actors, 0, actors + 1,
                     Math.addExact(128, Math.multiplyExact(actors, 128)), 1, Math.addExact(actors, Math.addExact(cargo, effects)));
@@ -333,8 +335,8 @@ public final class FrontierDurationProcessDriverRegistry {
     }
 
     /** Admission boundary shared by every registered scene behavior. */
-    public static void requireSceneAdmission(Family family, SceneLease lease) {
-        requireSceneAdmission(family, lease, SceneWorkUsage.forLease(lease, 0, 0));
+    public static void requireSceneAdmission(Family family, SceneLease lease, Map<SubjectId, ActorLocation> actorLocations) {
+        requireSceneAdmission(family, lease, actorLocations, SceneWorkUsage.forLease(lease, actorLocations, 0, 0));
     }
 
     /**
@@ -342,18 +344,18 @@ public final class FrontierDurationProcessDriverRegistry {
      * closed process registry selects its descriptor and exact bounded usage. No model class
      * imports the SDK or decides a process-family budget.
      */
-    public static void requireSceneAdmission(SceneLease lease) {
-        CURRENT_SCENE_ADMISSIONS.requireAdmission(lease);
+    public static void requireSceneAdmission(SceneLease lease, Map<SubjectId, ActorLocation> actorLocations) {
+        CURRENT_SCENE_ADMISSIONS.requireAdmission(lease, actorLocations);
     }
 
     /** Every retained lease is re-fenced after snapshot hydration before it can execute. */
-    public static void requireRetainedSceneLeases(Iterable<SceneLease> leases) {
+    public static void requireRetainedSceneLeases(Iterable<SceneLease> leases, Map<SubjectId, ActorLocation> actorLocations) {
         Objects.requireNonNull(leases, "retained scene leases");
-        for (SceneLease lease : leases) requireSceneAdmission(Objects.requireNonNull(lease, "retained scene lease"));
+        for (SceneLease lease : leases) requireSceneAdmission(Objects.requireNonNull(lease, "retained scene lease"), actorLocations);
     }
 
     /** Registered behavior passes exact retained-scene usage; every declared bound is enforced. */
-    public static void requireSceneAdmission(Family family, SceneLease lease, SceneWorkUsage usage) {
+    public static void requireSceneAdmission(Family family, SceneLease lease, Map<SubjectId, ActorLocation> actorLocations, SceneWorkUsage usage) {
         Objects.requireNonNull(family, "process/scene family"); Objects.requireNonNull(lease, "scene lease"); Objects.requireNonNull(usage, "scene work usage");
         requireSceneProvider(family, lease);
         FrontierProcessSceneSdk.Limits limits = currentDefinition(family).limits();
@@ -362,7 +364,7 @@ public final class FrontierDurationProcessDriverRegistry {
         }
         Set<String> localChunks = new java.util.HashSet<>();
         localChunks.add(chunkKey(lease.handoffPosition()));
-        lease.memberPositions().values().forEach(position -> localChunks.add((position.x() >> 4) + ":" + (position.z() >> 4)));
+        lease.memberBodies(actorLocations).values().forEach(position -> localChunks.add((position.x() >> 4) + ":" + (position.z() >> 4)));
         if (usage.localChunks() != localChunks.size()) throw new IllegalArgumentException("scene local-space usage does not match retained lease for " + family);
         requireBound(usage.cargo(), limits.maxCargo(), "cargo", family);
         requireBound(usage.effects(), limits.maxEffects(), "effects", family);
@@ -376,18 +378,18 @@ public final class FrontierDurationProcessDriverRegistry {
     }
 
     /** Tick boundary: the provider has one bounded observation turn and cannot bypass admission. */
-    public static void requireSceneTick(Family family, SceneLease lease, int observations) {
-        requireSceneTick(family, lease, SceneWorkUsage.forLease(lease, 0, 0).withObservations(observations));
+    public static void requireSceneTick(Family family, SceneLease lease, Map<SubjectId, ActorLocation> actorLocations, int observations) {
+        requireSceneTick(family, lease, actorLocations, SceneWorkUsage.forLease(lease, actorLocations, 0, 0).withObservations(observations));
     }
 
     /** The same registry binding fences every HOT observation turn after durable admission. */
-    public static void requireSceneTick(SceneLease lease, int observations) {
-        CURRENT_SCENE_ADMISSIONS.requireTick(lease, observations);
+    public static void requireSceneTick(SceneLease lease, Map<SubjectId, ActorLocation> actorLocations, int observations) {
+        CURRENT_SCENE_ADMISSIONS.requireTick(lease, actorLocations, observations);
     }
 
     /** Tick boundary repeats the exact admission ledger; a provider cannot bypass it after HOT acquisition. */
-    public static void requireSceneTick(Family family, SceneLease lease, SceneWorkUsage usage) {
-        requireSceneAdmission(family, lease, usage);
+    public static void requireSceneTick(Family family, SceneLease lease, Map<SubjectId, ActorLocation> actorLocations, SceneWorkUsage usage) {
+        requireSceneAdmission(family, lease, actorLocations, usage);
     }
 
     /** Closed stable-key lookup used by the internal process/scene SDK composition checks. */
@@ -414,7 +416,7 @@ public final class FrontierDurationProcessDriverRegistry {
      */
     private record SceneAdmissionBinding(SceneCauseKind kind, Set<Family> families,
                                          Function<SceneLease, Family> familyResolver,
-                                         Function<SceneLease, SceneWorkUsage> usageResolver) {
+                                         java.util.function.BiFunction<SceneLease, Map<SubjectId, ActorLocation>, SceneWorkUsage> usageResolver) {
         private SceneAdmissionBinding {
             kind = Objects.requireNonNull(kind, "scene admission cause kind");
             families = Set.copyOf(Objects.requireNonNull(families, "scene admission families"));
@@ -431,13 +433,13 @@ public final class FrontierDurationProcessDriverRegistry {
         static SceneAdmissionBinding fixed(SceneCauseKind kind, Family family, int cargo, int effects) {
             if (cargo < 0 || effects < 0) throw new IllegalArgumentException("scene admission fixed usage cannot be negative");
             return new SceneAdmissionBinding(kind, Set.of(family), lease -> family,
-                    lease -> SceneWorkUsage.forLease(lease, cargo, effects));
+                    (lease, actorLocations) -> SceneWorkUsage.forLease(lease, actorLocations, cargo, effects));
         }
 
         static SceneAdmissionBinding logistics() {
             return new SceneAdmissionBinding(SceneCauseKind.LOGISTICS, Set.of(Family.ROUTE_OPERATION, Family.ROUTE_ENGAGEMENT),
                     lease -> logisticsCause(lease).engagementId().isPresent() ? Family.ROUTE_ENGAGEMENT : Family.ROUTE_OPERATION,
-                    lease -> SceneWorkUsage.forLease(lease, 1, logisticsCause(lease).engagementId().isPresent() ? 1 : 0));
+                    (lease, actorLocations) -> SceneWorkUsage.forLease(lease, actorLocations, 1, logisticsCause(lease).engagementId().isPresent() ? 1 : 0));
         }
 
         Family resolveFamily(SceneLease lease) {
@@ -447,9 +449,9 @@ public final class FrontierDurationProcessDriverRegistry {
             return family;
         }
 
-        SceneWorkUsage resolveUsage(SceneLease lease) {
+        SceneWorkUsage resolveUsage(SceneLease lease, Map<SubjectId, ActorLocation> actorLocations) {
             requireKind(lease);
-            return Objects.requireNonNull(usageResolver.apply(lease), "scene admission resolved usage");
+            return Objects.requireNonNull(usageResolver.apply(lease, actorLocations), "scene admission resolved usage");
         }
 
         private void requireKind(SceneLease lease) {
@@ -490,15 +492,15 @@ public final class FrontierDurationProcessDriverRegistry {
             this.bindings = Map.copyOf(collected);
         }
 
-        void requireAdmission(SceneLease lease) {
+        void requireAdmission(SceneLease lease, Map<SubjectId, ActorLocation> actorLocations) {
             SceneAdmissionBinding binding = binding(lease);
-            requireSceneAdmission(binding.resolveFamily(lease), lease, binding.resolveUsage(lease));
+            requireSceneAdmission(binding.resolveFamily(lease), lease, actorLocations, binding.resolveUsage(lease, actorLocations));
         }
 
-        void requireTick(SceneLease lease, int observations) {
+        void requireTick(SceneLease lease, Map<SubjectId, ActorLocation> actorLocations, int observations) {
             if (observations < 0) throw new IllegalArgumentException("scene observation count cannot be negative");
             SceneAdmissionBinding binding = binding(lease);
-            requireSceneTick(binding.resolveFamily(lease), lease, binding.resolveUsage(lease).withObservations(observations));
+            requireSceneTick(binding.resolveFamily(lease), lease, actorLocations, binding.resolveUsage(lease, actorLocations).withObservations(observations));
         }
 
         void requireRegisteredProviders(Set<SceneCauseKind> providers) {

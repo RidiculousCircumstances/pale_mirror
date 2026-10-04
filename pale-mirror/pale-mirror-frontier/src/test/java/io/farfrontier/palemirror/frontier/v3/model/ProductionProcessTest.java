@@ -110,16 +110,18 @@ class ProductionProcessTest {
         PreparedProduction prepared = activePhysicalProduction();
         WorldId world = new WorldId("frontier:production-physical");
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
-        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, prepared.state(), SimInstant.ZERO,
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, ModeledActorBodyFacts.present(prepared.state(), prepared.job().workerId()), SimInstant.ZERO,
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
         assertInstanceOf(CommandResult.Accepted.class, submitTransition(engine, world, "worker-running-before-death", prepared.intent().id(),
                 PhysicalIntentStatus.RUNNING, Optional.empty()));
         BodyPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).body();
         CommandId deathId = new CommandId("command:production-worker-died-after-effect-prepared");
 
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
+        var deathResult = engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(deathId),
-                new AmbientActorDied(prepared.job().workerId(), position, "entity:test-explosion"))));
+                ModeledActorBodyFacts.death(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()),
+                        prepared.job().workerId(), position, "entity:test-explosion")));
+        assertInstanceOf(CommandResult.Accepted.class, deathResult, deathResult::toString);
         FrontierWorldState afterDeath = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         EmploymentContract terminated = afterDeath.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(prepared.settlementId(), prepared.job().workerId()));
         assertEquals(ActorLifeStatus.DEAD, afterDeath.actorLocations().get(prepared.job().workerId()).condition().status());
@@ -152,13 +154,15 @@ class ProductionProcessTest {
         ColdMarketJob prepared = coldMarketJob();
         WorldId world = new WorldId("frontier:production-cold-cancel");
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
-        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, prepared.state(), SimInstant.ZERO,
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, ModeledActorBodyFacts.present(prepared.state(), prepared.job().workerId()), SimInstant.ZERO,
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
         BodyPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).body();
         CommandId deathId = new CommandId("command:cold-production-worker-died");
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
+        var deathResult = engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(deathId),
-                new AmbientActorDied(prepared.job().workerId(), position, "entity:test-explosion"))));
+                ModeledActorBodyFacts.death(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()),
+                        prepared.job().workerId(), position, "entity:test-explosion")));
+        assertInstanceOf(CommandResult.Accepted.class, deathResult, deathResult::toString);
         FrontierWorldState released = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
 
         assertEquals(EmploymentContractStatus.TERMINATED, released.companies().employmentContracts()
@@ -174,14 +178,16 @@ class ProductionProcessTest {
         PreparedProduction prepared = activePhysicalProduction();
         WorldId world = new WorldId("frontier:production-physical");
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
-        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, prepared.state(), SimInstant.ZERO,
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, ModeledActorBodyFacts.present(prepared.state(), prepared.job().workerId()), SimInstant.ZERO,
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
         BodyPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).body();
         CommandId deathId = new CommandId("command:prepared-production-worker-died");
 
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
+        var deathResult = engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(deathId),
-                new AmbientActorDied(prepared.job().workerId(), position, "entity:test-explosion"))));
+                ModeledActorBodyFacts.death(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()),
+                        prepared.job().workerId(), position, "entity:test-explosion")));
+        assertInstanceOf(CommandResult.Accepted.class, deathResult, deathResult::toString);
         FrontierWorldState cancelled = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
 
         assertEquals(EmploymentContractStatus.TERMINATED, cancelled.companies().employmentContracts()
@@ -332,8 +338,9 @@ class ProductionProcessTest {
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-player-input-hot");
         SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(),
                 new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
-                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Map.of(job.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
-        FrontierWorldState hot = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = ModeledActorBodyFacts.present(withWork.prepareSceneLease(lease), job.workerId())
+                .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         WorldId world = new WorldId("frontier:production-hot-player-input");
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,
@@ -371,8 +378,9 @@ class ProductionProcessTest {
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-workshop-loss-hot");
         SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(),
                 new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
-                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Map.of(job.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
-        FrontierWorldState hot = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = ModeledActorBodyFacts.present(withWork.prepareSceneLease(lease), job.workerId())
+                .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         BlockPosition lostStation = SettlementWorkshopServicePort.forWorkshop(workshop).workStation().support();
         FrontierWorldState damaged = hot.recordPhysicalDelta(new PhysicalDelta(lostStation, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, workshop.id())), Optional.of(GrayboxSemanticPart.WORKSHOP_PROCESS_STATION), "player:test-workshop-loss"));
@@ -408,8 +416,9 @@ class ProductionProcessTest {
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-observed-workshop-loss-hot");
         SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(),
                 new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
-                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Map.of(job.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
-        FrontierWorldState hot = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = ModeledActorBodyFacts.present(withWork.prepareSceneLease(lease), job.workerId())
+                .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         WorldId world = new WorldId("frontier:production-observed-workshop-loss");
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,
@@ -439,7 +448,7 @@ class ProductionProcessTest {
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-player-input-prepared");
         SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(),
                 new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
-                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Map.of(job.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
+                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Set.of(), Optional.empty());
         FrontierWorldState scenePrepared = withWork.prepareSceneLease(lease);
         WorldId world = new WorldId("frontier:production-prepared-player-input");
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);

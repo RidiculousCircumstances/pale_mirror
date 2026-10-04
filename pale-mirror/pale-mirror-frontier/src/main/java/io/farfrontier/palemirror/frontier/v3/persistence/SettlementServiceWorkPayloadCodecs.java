@@ -105,7 +105,9 @@ final class SettlementServiceWorkPayloadCodecs {
     private static IdLeaseBody readIdLeaseBody(DataInputStream input) throws IOException {
         return new IdLeaseBody(FrontierWorldPayloadCodecs.readSubject(input).value(), new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)), FrontierWorldPayloadCodecs.readBody(input));
     }
+    private static final int PARTICIPANT_LEASE_MARKER = 0xffe0;
     private static void writeLease(DataOutputStream output, SceneLease lease) throws IOException {
+        output.writeShort(PARTICIPANT_LEASE_MARKER);
         if (!(lease.cause() instanceof SettlementServiceWorkSceneCause cause)) throw new IllegalArgumentException("service-work payload requires its typed cause");
         FrontierWorldPayloadCodecs.writeString(output, lease.id().value()); FrontierWorldPayloadCodecs.writeString(output, lease.worldId().value());
         FrontierWorldPayloadCodecs.writeSubject(output, cause.workId());
@@ -115,24 +117,24 @@ final class SettlementServiceWorkPayloadCodecs {
         output.writeByte(lease.members().size());
         for (SceneMember member : lease.members()) {
             FrontierWorldPayloadCodecs.writeSubject(output, member.actorId()); FrontierWorldPayloadCodecs.writeString(output, member.entityId().toString());
-            FrontierWorldPayloadCodecs.writeBody(output, lease.memberPosition(member.actorId()));
         }
         output.writeByte(lease.ambientHandoffActorIds().size());
         for (SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) FrontierWorldPayloadCodecs.writeSubject(output, actor);
     }
     private static SceneLease readLease(DataInputStream input) throws IOException {
+        if (input.readUnsignedShort() != PARTICIPANT_LEASE_MARKER)
+            throw new IllegalArgumentException("service-work payload requires current participant-only envelope");
         SceneLeaseId id = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)); WorldId world = new WorldId(FrontierWorldPayloadCodecs.readString(input));
         SettlementServiceWorkSceneCause cause = new SettlementServiceWorkSceneCause(FrontierWorldPayloadCodecs.readSubject(input).value());
         BlockPosition handoff = FrontierWorldStateCodec.readPosition(input); long instant = input.readLong(), revision = input.readLong();
         SceneLeaseStatus status = FrontierWireTags.require(SceneLeaseStatus.class, input.readUnsignedByte());
-        List<SceneMember> members = new ArrayList<>(); Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
+        List<SceneMember> members = new ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
             SubjectId actor = FrontierWorldPayloadCodecs.readSubject(input).value(); members.add(new SceneMember(actor, UUID.fromString(FrontierWorldPayloadCodecs.readString(input))));
-            positions.put(actor, FrontierWorldPayloadCodecs.readBody(input));
         }
         Set<SubjectId> ambient = new LinkedHashSet<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) ambient.add(FrontierWorldPayloadCodecs.readSubject(input).value());
-        return SceneLease.forCause(id, world, cause, handoff, new SimInstant(instant), revision, status, members, positions, ambient, Optional.empty());
+        return SceneLease.forCause(id, world, cause, handoff, new SimInstant(instant), revision, status, members, ambient, Optional.empty());
     }
     private static void writeMembers(DataOutputStream output, List<SceneMemberPosition> members) throws IOException {
         output.writeByte(members.size());

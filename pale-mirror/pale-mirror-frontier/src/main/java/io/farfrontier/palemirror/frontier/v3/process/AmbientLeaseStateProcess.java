@@ -77,7 +77,8 @@ public final class AmbientLeaseStateProcess {
         Map<SubjectId, AmbientActorLease> next = new LinkedHashMap<>(state.ambientLeases()); next.put(actorId, current.withStatus(nextStatus));
         FrontierWorldState changed = copy(state, state.actorLocations(), next);
         if (nextStatus != AmbientLeaseStatus.HOT) return changed;
-        changed = ActorBodyAuthority.observedPresent(changed, actorId);
+        if (ActorBodyAuthority.require(changed, ActorBodyAuthority.current(changed, actorId)).phase() != FencedRecoveryPhase.RUNNING)
+            throw new IllegalArgumentException("ambient HOT requires independently confirmed physical custody");
         BioformLifecycle lifecycle = changed.hiveColony().bioformLifecycles().get(actorId);
         if (lifecycle == null || lifecycle.phase() != BioformLifecyclePhase.WAKING) return changed;
         Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(changed.hiveColony().bioformLifecycles());
@@ -91,61 +92,13 @@ public final class AmbientLeaseStateProcess {
         ActorLocation actor = state.actorLocations().get(release.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("ambient release actor is not alive");
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), release.body().supportingSurface().support());
-        ResidentMigrationJourney journey = state.humanPopulation().migration(release.actorId());
-        if (journey != null && !release.body().supportingSurface().support().equals(journey.currentPosition())) {
-            throw new IllegalArgumentException("HOT transit may return to COLD only at its exact canonical cursor");
-        }
-        RouteOperation assembling = state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.ASSEMBLING)
-                .filter(operation -> operation.activeAssembly().map(assembly -> assembly.members().containsKey(release.actorId())).orElse(false)).findFirst().orElse(null);
-        if (assembling != null && !release.body().supportingSurface().support().equals(assembling.activeAssembly().orElseThrow().members().get(release.actorId()).currentSurface().support())) {
-            throw new IllegalArgumentException("HOT operation assembly may return to COLD only at its exact cursor");
-        }
-        EngineeringWorkOrder engineering = io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionAuthority.owner(state, release.actorId()).orElse(null);
-        if (engineering != null && engineering.assembly().isPresent()) {
-            EngineeringWorkAssembly.Member member = engineering.assembly().orElseThrow().members().get(release.actorId());
-            if (current.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY || !release.body().supportingSurface().support().equals(member.currentPosition())) {
-                throw new IllegalArgumentException("HOT engineering assembly may return to COLD only at its exact cursor");
-            }
-        }
-        HiveMobilization mobilization = io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyExecutionAuthority.owner(state, release.actorId())
-                .filter(value -> value.status() == HiveMobilizationStatus.ASSEMBLING)
-                .orElse(null);
-        if (mobilization != null) {
-            HiveTaskAssembly.Member member = mobilization.assembly().orElseThrow().members().get(release.actorId());
-            if (current.goal() != AmbientGoalKind.HIVE_TASK_ASSEMBLY
-                    || !release.body().supportingSurface().equals(member.currentSurface())) {
-                throw new IllegalArgumentException("HOT hive task assembly may return to COLD only at its exact retained cursor");
-            }
-        }
-        HiveMobilization returning = io.farfrontier.palemirror.frontier.v3.model.HiveReturnExecutionAuthority.owner(state, release.actorId()).orElse(null);
-        if (returning != null) {
-            HiveTaskAssembly.Member member = returning.returnAssembly().orElseThrow().members().get(release.actorId());
-            if (current.goal() != AmbientGoalKind.HIVE_TASK_RETURN
-                    || !release.body().supportingSurface().equals(member.currentSurface())) {
-                throw new IllegalArgumentException("HOT hive return may return to COLD only at its exact retained cursor");
-            }
-        }
-        ResourceSiteHarvestJob harvest = state.resourceSites().sites().values().stream()
-                .flatMap(site -> site.harvestJobs().values().stream())
-                .filter(job -> job.workerId().equals(release.actorId()))
-                .reduce((left, right) -> { throw new IllegalArgumentException("ambient farmer belongs to more than one active field job"); })
-                .orElse(null);
-        if (harvest != null) {
-            if (current.goal() != AmbientGoalKind.PATROL && current.goal() != AmbientGoalKind.WORK
-                    && !(current.goal() == AmbientGoalKind.ACTOR_MOVEMENT
-                        && state.actorMovements().containsKey(release.actorId()))
-                    && !(current.goal() == AmbientGoalKind.MEAL
-                        && state.humanPopulation().meals().containsKey(release.actorId()))) {
-                throw new IllegalArgumentException("HOT field worker has a foreign ambient purpose");
-            }
-        }
-        if (state.humanPopulation().meals().containsKey(release.actorId())
-                && state.humanPopulation().meals().get(release.actorId()).pendingPhysicalStep().isPresent())
-            throw new IllegalArgumentException("ambient meal has an unresolved physical effect");
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(release.actorId(), new ActorLocation(release.body(), actor.condition().withHealth(release.health()), actor.kind()));
+        if (!actor.body().equals(release.body()) || !actor.condition().health().equals(release.health()))
+            throw new IllegalArgumentException("ambient release requires independently recorded common body observation");
+        // Closing presentation neither releases the common body nor acknowledges
+        // a route cursor. Exact registered owners alone assess outstanding effects.
+        ActorExecutionComposition.CAPABILITIES.validateAmbientRelease(state, release.actorId());
         Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(release.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
-        return copy(state, actors, leases);
+        return copy(state, state.actorLocations(), leases);
     }
 
     /**
@@ -169,23 +122,6 @@ public final class AmbientLeaseStateProcess {
         return copy(state, state.actorLocations(), leases);
     }
 
-    public static FrontierWorldState recordDeath(FrontierWorldState state, AmbientActorDied death) {
-        Objects.requireNonNull(death, "ambient actor death"); AmbientActorLease lease = state.ambientLeases().get(death.actorId());
-        if (lease == null || (lease.status() != AmbientLeaseStatus.HOT && lease.status() != AmbientLeaseStatus.DRAINING)) throw new IllegalArgumentException("ambient death is not evidence for an active ambient lease");
-        ActorLocation actor = state.actorLocations().get(death.actorId());
-        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("ambient actor death is already recorded");
-        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), death.body().supportingSurface().support());
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations()); actors.put(death.actorId(), actor.deadAt(death.body()));
-        Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(death.actorId(), lease.withStatus(AmbientLeaseStatus.CLOSED));
-        var recovery = state.fencedRecovery();
-        if (recovery.current().containsKey(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(death.actorId())))
-            recovery = ActorBodyAuthority.observedDeath(state, ActorBodyAuthority.current(state, death.actorId()));
-        return ActorExecutionComposition.LIFECYCLE.preparePassiveDeath(state, death.actorId(),
-                HumanPopulationStateSupport.migrationRetirement(state, death.actorId())).commit(state,
-                FrontierWorldStateUpdate.begin().actorLocations(actors).ambientLeases(leases)
-                .humanPopulation(state.humanPopulation().cancelMigration(death.actorId()))
-                .fencedRecovery(recovery));
-    }
 
     public static FrontierWorldState retarget(FrontierWorldState state, SubjectId actorId, AmbientGoalKind goal, BodyPosition goalBody) {
         return ActorExecutionCoordinator.retargetAmbient(state, actorId, goal, goalBody);

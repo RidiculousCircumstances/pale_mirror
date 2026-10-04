@@ -37,7 +37,9 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-scene-cargo-interaction");
             case "cargo-authority" -> batchName.equals("pm-frontier-v3-scene-cargo-authority");
             case "cargo-interaction" -> batchName.equals("pm-frontier-v3-scene-cargo-interaction");
-            case "scene-departure" -> batchName.equals("pm-frontier-v3-scene-departure") || batchName.equals("pm-frontier-v3-scene-deaths");
+            case "scene-departure" -> batchName.equals("pm-frontier-v3-scene-departure") || batchName.equals("pm-frontier-v3-scene-deaths")
+                    || batchName.equals("pm-frontier-v3-scene-body-lifetime");
+            case "body-lifetime" -> batchName.equals("pm-frontier-v3-scene-body-lifetime");
             case "scene-restart-reclaim" -> batchName.equals("pm-frontier-v3-scene-restart-reclaim");
             case "first-admission" -> batchName.equals("pm-frontier-v3-scene-first-admission");
             case "harvest-support" -> batchName.equals("pm-frontier-v3-scene-harvest-support")

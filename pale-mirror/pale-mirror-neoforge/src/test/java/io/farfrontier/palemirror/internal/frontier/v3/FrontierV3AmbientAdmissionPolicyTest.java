@@ -208,7 +208,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
             assertEquals(1, preparedWork.providerAcquisitions());
             assertEquals((members + prepared.get().members().size()) * 3, preparedWork.pointQueries(),
                     "candidate selection and final trusted-command binding must use only named provider cells");
-            io.farfrontier.palemirror.frontier.v3.model.BlockPosition lostFloor = prepared.get().memberPosition(prepared.get().members().getFirst().actorId())
+            io.farfrontier.palemirror.frontier.v3.model.BlockPosition lostFloor = prepared.get().memberBody(state.actorLocations(), prepared.get().members().getFirst().actorId())
                     .supportingSurface().support();
             GrayboxCell lostProviderFloor = FrontierGrayboxPlan.compile(state).cells().get(lostFloor);
             assertNotNull(lostProviderFloor, "the captured member starts on one retained provider floor");
@@ -222,7 +222,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
             SceneLease forged = reducerAcceptedLostProviderHandoff(lossState, prepared.get(), prepared.get().members().getFirst().actorId(),
                     lostFloor);
             assertFalse(FrontierV3SettlementAssaultSceneExecutor.submitHandoff(retainedProvider, forged,
-                    rejectedSubmits::incrementAndGet),
+                    forged.memberBodies(lossState.actorLocations()), rejectedSubmits::incrementAndGet),
                     "the physical-executor handoff reducer may retain its exact moving body, but the final production boundary must reject a non-provider floor");
             assertEquals(0, rejectedSubmits.get(), "a rejected floor must never submit its trusted physical-executor handoff command");
 
@@ -395,13 +395,15 @@ class FrontierV3AmbientAdmissionPolicyTest {
                 .filter(actor -> base.strategicPlans().settlementAssaults().values().stream()
                         .noneMatch(assault -> assault.attackerIds().contains(actor) || assault.defenderIds().contains(actor)))
                 .findFirst().orElseThrow();
-        FrontierWorldState state = withPreparedLease(base, ambientResident);
+        FrontierWorldState state = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.demand(
+                withPreparedLease(base, ambientResident), ambientResident);
         EphemeralStore store = new EphemeralStore();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state, List.of(), store);
         try {
             FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(
                     FrontierV3AmbientActorExecutor.entityId(state, ambientResident), ambientResident.value(), false, false, "RESIDENT",
-                    "AMBIENT_LEASE", "LIVE_BODY", state.ambientLeases().get(ambientResident).revision(), 1L);
+                    "ACTOR_BODY", "LIVE_BODY", 0L,
+                    io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, ambientResident).physicalEpoch());
             assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.NOT_MANAGED, true,
                     "an absent projection must fail closed through the same lifecycle/firewall composition");
             FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
@@ -476,7 +478,8 @@ class FrontierV3AmbientAdmissionPolicyTest {
         FrontierWorldState initial = nutrientRuntimeState();
         SubjectId resident = initial.actorLocations().keySet().stream()
                 .filter(actor -> !initial.hiveColony().bioformLifecycles().containsKey(actor)).findFirst().orElseThrow();
-        FrontierWorldState state = withPreparedLease(initial, resident);
+        FrontierWorldState state = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.demand(
+                withPreparedLease(initial, resident), resident);
         StrategicTask task = state.strategicPlans().tasks().get(new SubjectId("task:runtime-nutrient"));
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state,
                 List.of(io.farfrontier.palemirror.frontier.v3.process.HiveGrowthProcess.start(task, 1L)));
@@ -499,7 +502,8 @@ class FrontierV3AmbientAdmissionPolicyTest {
             FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
             FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(
                     FrontierV3AmbientActorExecutor.entityId(nutrientReplacement, resident), resident.value(), false, false, "RESIDENT",
-                    "AMBIENT_LEASE", "LIVE_BODY", nutrientReplacement.ambientLeases().get(resident).revision(), 1L);
+                    "ACTOR_BODY", "LIVE_BODY", 0L,
+                    io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(nutrientReplacement, resident).physicalEpoch());
             assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED, false,
                     "the installed nutrient replacement must retain the exact joining body through the ordinary runtime provider and firewall");
             FrontierV3GrayboxExecutor.admissionProvider(runtime, nutrientReplacement).orElseThrow()
@@ -693,12 +697,10 @@ class FrontierV3AmbientAdmissionPolicyTest {
         hot.put(actor, new AmbientActorLease(actor, original, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 1L,
                 AmbientLeaseStatus.HOT, AmbientGoalKind.GUARD, original));
         FrontierWorldState captureState = state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(hot));
-        Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>(lease.memberPositions());
-        positions.put(actor, BodyPosition.aboveSupportCell(lostFloor));
-        SceneLease forged = lease.withMemberPositions(positions).withAmbientHandoff(Set.of(actor));
+        SceneLease forged = lease.withAmbientHandoff(Set.of(actor));
         captureState.handoffAmbientScene(new SceneLeaseHandoff(forged, List.of(
                 new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(actor,
-                        forged.memberPosition(actor), state.actorLocations().get(actor).condition().health()))));
+                        BodyPosition.aboveSupportCell(lostFloor), state.actorLocations().get(actor).condition().health()))));
         return forged;
     }
 

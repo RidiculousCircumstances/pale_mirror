@@ -15,22 +15,27 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3SceneDepartureConsumptionTest {
-    private static final FrontierWorldState STATE = FrontierWorldState.initial(
-            FrontierBootstrapper.create(new WorldId("frontier:departure-consumer"), 93L));
+    private static final FrontierWorldState STATE = preparedBody();
+    private static FrontierWorldState preparedBody() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:departure-consumer"), 93L));
+        var actor = state.bootstrap().settlements().getFirst().residents().getFirst().id();
+        return ActorBodyAuthority.demand(state, actor);
+    }
     private static final SubjectId ACTOR = STATE.bootstrap().settlements().getFirst().residents().getFirst().id();
     private static final SceneMember MEMBER = new SceneMember(ACTOR, SceneLease.deterministicEntityId(STATE.bootstrap().worldId(), ACTOR));
     private static final BodyPosition BODY = STATE.actorLocations().get(ACTOR).body();
     private static final FixedScalar BASELINE = STATE.actorLocations().get(ACTOR).condition().health();
     private static final SceneLease LEASE = SceneLease.forCause(new SceneLeaseId("lease:departure-consumer"), STATE.bootstrap().worldId(),
             new ProductionWorkSceneCause(new SubjectId("job:production-departure-consumer")), BODY.supportingSurface().support(),
-            new SimInstant(0), 7, SceneLeaseStatus.DRAINING, List.of(MEMBER), Map.of(ACTOR, BODY), Set.of(), Optional.empty());
+            new SimInstant(0), 7, SceneLeaseStatus.DRAINING, List.of(MEMBER), Set.of(), Optional.empty());
 
     private static FrontierV3SceneDeparture receipt(SceneLeaseId lease, long revision, FixedScalar baseline,
                                                     ActorKind kind) {
         var declaration = new FrontierV3ActorCarrierComposition.Declaration(ACTOR, kind,
-                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, MEMBER.entityId(),
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, revision, 4);
-        return new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, revision, 0), lease, revision,
+                FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, MEMBER.entityId(),
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L,
+                ActorBodyAuthority.current(STATE, ACTOR).physicalEpoch());
+        return new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, revision, 0), 1L, lease, revision,
                 new SceneMemberPosition(ACTOR, BODY, FixedScalar.whole(9)), baseline);
     }
 
@@ -59,8 +64,9 @@ class FrontierV3SceneDepartureConsumptionTest {
         var ledger = FrontierV3AmbientCarrierLedger.load(initial.save(new CompoundTag(), null), null);
         assertEquals(FixedScalar.whole(9), FrontierV3SceneDepartureObserver.validDeparture(STATE, LEASE, MEMBER, ledger)
                 .orElseThrow().observed().health());
-        assertTrue(FrontierV3SceneDepartureObserver.fenceDeparture(STATE, LEASE, MEMBER, ledger));
-        assertTrue(FrontierV3SceneDepartureObserver.fenceDeparture(STATE, LEASE, MEMBER, ledger));
+        // Explicit unit fixture for the retained carrier store, not a scene-owned physical fence.
+        assertTrue(ledger.fence(valid().carrier().identity(), valid().carrier().physicalRevision(), valid().carrier().ambientRevision()));
+        assertTrue(ledger.fence(valid().carrier().identity(), valid().carrier().physicalRevision(), valid().carrier().ambientRevision()));
         assertTrue(ledger.hasCarrier(ACTOR));
         assertEquals(valid(), ledger.departure(ACTOR).orElseThrow(),
                 "a refused canonical release must be able to retry the same receipt");
@@ -78,7 +84,6 @@ class FrontierV3SceneDepartureConsumptionTest {
             assertTrue(ledger.recordDeparture(receipt));
             assertTrue(ledger.confirmSavedDeparture(receipt), "negative isolates the canonical binding from storage proof");
             assertTrue(FrontierV3SceneDepartureObserver.validDeparture(STATE, LEASE, MEMBER, ledger).isEmpty());
-            assertFalse(FrontierV3SceneDepartureObserver.fenceDeparture(STATE, LEASE, MEMBER, ledger));
             assertFalse(ledger.hasCarrier(ACTOR));
         }
         assertTrue(FrontierV3SceneDepartureObserver.validDeparture(STATE, LEASE, MEMBER,
@@ -90,7 +95,8 @@ class FrontierV3SceneDepartureConsumptionTest {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         ledger.recordDeparture(valid());
         assertTrue(ledger.confirmSavedDeparture(valid()));
-        assertTrue(FrontierV3SceneDepartureObserver.fenceDeparture(STATE, LEASE, MEMBER, ledger));
+        // Explicit retained-store fixture; actual body fencing is controller-owned.
+        assertTrue(ledger.fence(valid().carrier().identity(), valid().carrier().physicalRevision(), valid().carrier().ambientRevision()));
         assertFalse(ledger.resumeDeparture(receipt(LEASE.id(), 8, BASELINE, ActorKind.RESIDENT)));
         assertTrue(ledger.hasCarrier(ACTOR));
         assertTrue(ledger.resumeDeparture(valid()));
@@ -111,10 +117,18 @@ class FrontierV3SceneDepartureConsumptionTest {
         assertTrue(recovered.returnRead(ACTOR));
         assertFalse(recovered.savedDeparture(receipt));
         assertTrue(recovered.recordDeparture(receipt));
-        assertFalse(recovered.returnRead(ACTOR));
+        assertTrue(recovered.returnRead(ACTOR), "identical callback cannot create a second unload");
         assertFalse(recovered.savedDeparture(receipt), "old save marker cannot certify the new unload");
-        assertTrue(recovered.confirmSavedDeparture(receipt));
-        assertTrue(recovered.noLoadRecoverableDeparture(receipt));
+        assertFalse(recovered.confirmSavedDeparture(receipt));
+        assertFalse(recovered.noLoadRecoverableDeparture(receipt));
+        assertTrue(recovered.resumeDeparture(receipt));
+        var next = new FrontierV3SceneDeparture(receipt.carrier(), receipt.residenceGeneration() + 1L,
+                receipt.leaseId(), receipt.sceneRevision(), receipt.observed(), receipt.canonicalHealthAtCapture(),
+                receipt.offhand(), receipt.mainhand());
+        assertTrue(recovered.recordDeparture(next));
+        assertFalse(recovered.confirmSavedDeparture(receipt));
+        assertTrue(recovered.confirmSavedDeparture(next));
+        assertTrue(recovered.noLoadRecoverableDeparture(next));
     }
 
     @Test
@@ -146,8 +160,8 @@ class FrontierV3SceneDepartureConsumptionTest {
 
     private static FrontierV3ActorCarrierComposition.Declaration live(long epoch) {
         return new FrontierV3ActorCarrierComposition.Declaration(ACTOR, ActorKind.RESIDENT,
-                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, MEMBER.entityId(),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, LEASE.revision(), epoch);
+                FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, MEMBER.entityId(),
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, epoch);
     }
 
     @Test
@@ -156,14 +170,14 @@ class FrontierV3SceneDepartureConsumptionTest {
         ledger.recordDeparture(valid());
         assertFalse(FrontierV3SceneDepartureObserver.permitsLiveWork(ledger, MEMBER));
         var hot = LEASE.withStatus(SceneLeaseStatus.HOT);
-        assertFalse(FrontierV3SceneDepartureObserver.resumeReturned(STATE, hot, MEMBER, live(5), valid().observed(), ledger));
-        assertFalse(FrontierV3SceneDepartureObserver.resumeReturned(STATE, hot, MEMBER, live(4),
+        assertFalse(FrontierV3SceneDepartureObserver.resumeReturned(STATE, hot, MEMBER, live(2), valid().observed(), ledger));
+        assertFalse(FrontierV3SceneDepartureObserver.resumeReturned(STATE, hot, MEMBER, live(1),
                 new SceneMemberPosition(ACTOR, BODY, FixedScalar.whole(10)), ledger));
-        assertFalse(FrontierV3SceneDepartureObserver.resumeReturned(STATE, hot, MEMBER, live(4),
+        assertFalse(FrontierV3SceneDepartureObserver.resumeReturned(STATE, hot, MEMBER, live(1),
                 new SceneMemberPosition(ACTOR, new BodyPosition(BODY.x() + 1, BODY.y(), BODY.z()), FixedScalar.whole(9)), ledger));
         assertEquals(valid(), ledger.departure(ACTOR).orElseThrow());
         assertFalse(FrontierV3SceneDepartureObserver.permitsLiveWork(ledger, MEMBER));
-        assertTrue(FrontierV3SceneDepartureObserver.resumeReturned(STATE, hot, MEMBER, live(4), valid().observed(), ledger));
+        assertTrue(FrontierV3SceneDepartureObserver.resumeReturned(STATE, hot, MEMBER, live(1), valid().observed(), ledger));
         assertTrue(FrontierV3SceneDepartureObserver.permitsLiveWork(ledger, MEMBER));
     }
 
@@ -172,12 +186,12 @@ class FrontierV3SceneDepartureConsumptionTest {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         var first = valid();
         ledger.recordDeparture(first);
-        assertFalse(ledger.recordDeparture(new FrontierV3SceneDeparture(first.carrier(), first.leaseId(),
+        assertFalse(ledger.recordDeparture(new FrontierV3SceneDeparture(first.carrier(), first.residenceGeneration(), first.leaseId(),
                 first.sceneRevision(), new SceneMemberPosition(ACTOR, BODY, FixedScalar.whole(8)), BASELINE)));
         var recovered = FrontierV3AmbientCarrierLedger.load(ledger.save(new CompoundTag(), null), null);
         assertTrue(FrontierV3SceneDepartureObserver.validDeparture(STATE, LEASE, MEMBER, recovered).isEmpty());
-        assertFalse(FrontierV3SceneDepartureObserver.fenceDeparture(STATE, LEASE, MEMBER, recovered));
-        assertFalse(FrontierV3SceneDepartureObserver.resumeReturned(STATE, LEASE, MEMBER, live(4), first.observed(), recovered));
+        assertFalse(recovered.hasCarrier(ACTOR));
+        assertFalse(FrontierV3SceneDepartureObserver.resumeReturned(STATE, LEASE, MEMBER, live(1), first.observed(), recovered));
         assertFalse(FrontierV3SceneDepartureObserver.permitsLiveWork(recovered, MEMBER));
     }
 
@@ -186,7 +200,7 @@ class FrontierV3SceneDepartureConsumptionTest {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         var stale = receipt(LEASE.id(), 7, BASELINE.plus(FixedScalar.ONE), ActorKind.RESIDENT);
         ledger.recordDeparture(stale);
-        assertFalse(FrontierV3SceneDepartureObserver.resumeReturned(STATE, LEASE, MEMBER, live(4), stale.observed(), ledger));
+        assertFalse(FrontierV3SceneDepartureObserver.resumeReturned(STATE, LEASE, MEMBER, live(1), stale.observed(), ledger));
         assertEquals(stale, ledger.departure(ACTOR).orElseThrow());
         assertFalse(FrontierV3SceneDepartureObserver.permitsLiveWork(ledger, MEMBER));
     }

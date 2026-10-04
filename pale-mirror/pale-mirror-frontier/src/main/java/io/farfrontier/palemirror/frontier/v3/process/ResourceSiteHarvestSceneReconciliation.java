@@ -61,18 +61,13 @@ public final class ResourceSiteHarvestSceneReconciliation {
         var recovery = state.fencedRecovery().current().get(recoveryId);
         if (recovery == null || recovery.asset() != FencedRecoveryAsset.BODY
                 || !recovery.ownerId().equals(job.workerId())
-                || recovery.ownerRevision() != 0L || recovery.authorityEpoch() != receipt.recoveryEpoch())
+                || recovery.ownerRevision() != 0L || recovery.authorityEpoch() != receipt.recoveryEpoch()
+                || recovery.phase() != FencedRecoveryPhase.RUNNING || !actor.body().equals(receipt.observedBody()))
             throw new IllegalArgumentException("harvest reconciliation has a stale or foreign recovery epoch");
-        var inspected = ActorBodyAuthority.inspectedPresent(state, new ActorBodyId(job.workerId(), receipt.recoveryEpoch()));
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), receipt.observedBody().supportingSurface().support());
-        var actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(job.workerId(), actor.withBody(receipt.observedBody()));
-        var positions = new LinkedHashMap<>(lease.memberPositions());
-        positions.put(job.workerId(), receipt.observedBody());
         var leases = new LinkedHashMap<>(state.sceneLeases());
-        leases.put(lease.id(), lease.withMemberPositions(positions).withStatus(SceneLeaseStatus.HOT));
-        var restored = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).sceneLeases(leases)
-                .fencedRecovery(inspected));
+        leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.HOT));
+        var restored = state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
         // Admission can fail before the already-witnessed carried part gets its hand binding.
         // Use the ordinary exact projection reducer in this SAME recovery event: no second
         // resource issuer, no partially resumed scene and no replacement of an existing binding.

@@ -42,7 +42,7 @@ class FrontierV3OfflineActorRecoveryPlanTest {
         var next = AmbientActorProcess.nextLease(plan.closed(), ACTOR, new SimInstant(20L));
         assertEquals(3L, next.revision());
         assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.READY,
-                ledger.reconciliation(carrier.identity().liveBody(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                ledger.reconciliation(carrier.identity().liveBody(FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
                         next.revision(), ledger.reconstructionEpoch(ACTOR))));
     }
     @Test void hotAuthorityAndForeignAbsenceCannotBeRepaired() {
@@ -55,12 +55,9 @@ class FrontierV3OfflineActorRecoveryPlanTest {
 
     @Test void unresolvedAdoptionIsNotLegacyMissingCustody() {
         var state = prepared(); var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
-        var old = FrontierV3AmbientActorExecutor.carrierDeclaration(state, ACTOR,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                FrontierV3AmbientActorExecutor.entityId(state, ACTOR),
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 1L, 1L);
+        var old = FrontierV3AmbientActorExecutor.carrierDeclaration(state, ACTOR, FrontierV3AmbientActorExecutor.entityId(state, ACTOR), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 1L);
         assertTrue(ledger.fence(old, 1L, 1L));
-        assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(old.liveBody(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, 2L, 2L))));
+        assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(old.liveBody(FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, 0L, 2L))));
         assertThrows(IllegalArgumentException.class,
                 () -> FrontierV3OfflineActorRecoveryPlan.create(state, ACTOR, proof(state), ledger));
         assertTrue(ledger.pendingAdoption(ACTOR).isPresent());
@@ -79,9 +76,9 @@ class FrontierV3OfflineActorRecoveryPlanTest {
                     ActorKind.RESIDENT,
                     FrontierV3AmbientActorExecutor.entityId(state, ACTOR));
             assertTrue(ledger.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(identity)));
-            var target = FrontierV3ActorOwnerBinding.ambient(FrontierV3AmbientActorExecutor.carrierDeclaration(
-                    state, ACTOR, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, identity.entityId(),
-                    FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 2L, 1L));
+            var target = FrontierV3ActorOwnerBinding.body(FrontierV3AmbientActorExecutor.carrierDeclaration(
+                    state, ACTOR, identity.entityId(),
+                    FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L));
             if (phase != FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED) {
                 assertTrue(ledger.beginFirstAdmission(target));
                 if (phase == FrontierV3ActorFirstAdmission.Phase.ESTABLISHED)

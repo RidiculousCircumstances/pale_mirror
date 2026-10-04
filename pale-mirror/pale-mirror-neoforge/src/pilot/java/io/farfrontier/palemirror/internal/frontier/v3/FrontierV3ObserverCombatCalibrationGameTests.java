@@ -157,7 +157,7 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
                 new SceneLeaseTransition(session.lease().id(), SceneLeaseStatus.DRAINING));
         FrontierWorldState draining = state(session.runtime());
         List<SceneMemberPosition> released = session.lease().members().stream().map(member -> new SceneMemberPosition(member.actorId(),
-                session.lease().memberPosition(member.actorId()), draining.actorLocations().get(member.actorId()).condition().health())).toList();
+                session.lease().memberBody(draining.actorLocations(), member.actorId()), draining.actorLocations().get(member.actorId()).condition().health())).toList();
         FrontierV3CommandSubmission.submit(session.runtime(), "observer-combat-release", session.lease().id().value(),
                 new SceneLeaseReleased(session.lease().id(), released));
         FrontierWorldState after = state(session.runtime());
@@ -231,7 +231,7 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
         return SceneLease.forCause(id, runtime.checkpointImage().orElseThrow().worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
                 candidate.handoffPosition(), runtime.checkpointImage().orElseThrow().instant(), runtime.checkpointImage().orElseThrow().revision().value(),
-                SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+                SceneLeaseStatus.PREPARED, members, java.util.Set.of(), Optional.empty());
     }
 
     private static Entity addOwnedBody(GameTestHelper helper, ServerLevel level, FrontierWorldState state, SceneLease lease,
@@ -248,9 +248,7 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
         body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
         body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
         body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
-        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
-                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
+        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(), member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L));
         helper.assertTrue(level.addFreshEntity(body), "the exact HOT calibration body must enter the physical level");
         return body;
     }

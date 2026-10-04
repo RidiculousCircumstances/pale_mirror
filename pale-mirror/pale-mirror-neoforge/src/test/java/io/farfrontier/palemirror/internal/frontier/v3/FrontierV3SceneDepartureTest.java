@@ -15,10 +15,10 @@ class FrontierV3SceneDepartureTest {
 
     private static FrontierV3SceneDeparture receipt(long epoch, long health) {
         var declaration = new FrontierV3ActorCarrierComposition.Declaration(ACTOR,
-                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE,
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
                 UUID.fromString("ef562345-8f47-37ec-af28-d12c259ab948"),
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7, epoch);
-        return new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, 7, 3),
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, epoch);
+        return new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, 7, 3), 1L,
                 new SceneLeaseId("lease:departure-test"), 7,
                 new SceneMemberPosition(ACTOR, new BodyPosition(12, 65, 10), FixedScalar.whole(health)), FixedScalar.whole(20));
     }
@@ -103,7 +103,7 @@ class FrontierV3SceneDepartureTest {
         assertFalse(recovered.fence(first.carrier().identity(), 7, 3));
         var live = new FrontierV3ActorCarrierComposition.Declaration(ACTOR, first.carrier().identity().kind(),
                 first.carrier().identity().owner(), first.carrier().identity().entityId(),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 8, 5);
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 5);
         assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.DEPARTURE_CONFLICT, recovered.reconciliation(live));
         assertFalse(recovered.adopt(FrontierV3ActorAdoptionFixture.binding(live)));
         assertEquals(first, recovered.departure(ACTOR).orElseThrow());
@@ -127,9 +127,9 @@ class FrontierV3SceneDepartureTest {
     @Test
     void foreignObservedActorOrLeaseRevisionIsRejected() {
         var valid = receipt(4, 9);
-        assertThrows(IllegalArgumentException.class, () -> new FrontierV3SceneDeparture(valid.carrier(), valid.leaseId(), 8,
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3SceneDeparture(valid.carrier(), valid.residenceGeneration(), valid.leaseId(), 8,
                 valid.observed(), valid.canonicalHealthAtCapture()));
-        assertThrows(IllegalArgumentException.class, () -> new FrontierV3SceneDeparture(valid.carrier(), valid.leaseId(), 7,
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3SceneDeparture(valid.carrier(), valid.residenceGeneration(), valid.leaseId(), 7,
                 new SceneMemberPosition(new SubjectId("resident:foreign"), valid.observed().body(), valid.observed().health()),
                 valid.canonicalHealthAtCapture()));
     }

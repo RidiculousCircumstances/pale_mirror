@@ -27,18 +27,26 @@ class AmbientBodyConfirmationProcessTest {
         for (SubjectId resident : List.of(security, medic)) {
             AmbientActorLease lease = AmbientActorProcess.nextLease(state, resident, new SimInstant(27_001L));
             state = AmbientLeaseStateProcess.prepare(state, lease);
-            if (resident.equals(security)) state = AmbientBodyConfirmationProcess.reduce(state, confirmation(state, resident,
+            state = ModeledActorBodyFacts.present(state, resident);
+            if (resident.equals(security)) state = confirmed(state, confirmation(state, resident,
                     AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody()));
         }
         return new Fixture(state, security, medic, port);
     }
     private AmbientBodyConfirmed confirmation(FrontierWorldState state, SubjectId actor, AmbientBodyConfirmed.Boundary boundary, BodyPosition body) {
         return new AmbientBodyConfirmed(actor, state.ambientLeases().get(actor).revision(), boundary,
-                state.actorLocations().get(actor).body(), body);
+                boundary == AmbientBodyConfirmed.Boundary.ADMISSION ? state.ambientLeases().get(actor).handoffBody()
+                        : state.actorLocations().get(actor).body(), body, ActorBodyAuthority.current(state, actor));
+    }
+    private FrontierWorldState confirmed(FrontierWorldState state, AmbientBodyConfirmed evidence) {
+        var inspected = ModeledActorBodyFacts.inspected(state, evidence.actorId(), evidence.observedBody());
+        var next = AmbientBodyConfirmationProcess.reduce(inspected, evidence);
+        assertSame(inspected.actorLocations(), next.actorLocations(), "scope acknowledgement cannot write physical position");
+        return next;
     }
     @Test void realSocketOccupantDoesNotWaitForAnUnmaterializedColdTake() {
         Fixture f = fixture();
-        FrontierWorldState state = AmbientBodyConfirmationProcess.reduce(f.state(), confirmation(f.state(), f.security(),
+        FrontierWorldState state = confirmed(f.state(), confirmation(f.state(), f.security(),
                 AmbientBodyConfirmed.Boundary.SERVICE_OCCUPANCY, f.port().serviceSurface().standingBody()));
         assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, FrontierWorldState.depotId(f.port().settlementId()), f.security()));
         assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, FrontierWorldState.depotId(f.port().settlementId()), f.medic()));
@@ -56,7 +64,9 @@ class AmbientBodyConfirmationProcessTest {
         AmbientBodyConfirmed evidence = confirmation(f.state(), f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION, waiting.standingBody());
         var codecs = FrontierWorldPayloadCodecs.create();
         assertEquals(evidence, codecs.decode(evidence.type(), codecs.encode(evidence)));
-        FrontierWorldState next = AmbientBodyConfirmationProcess.reduce(f.state(), evidence);
+        assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(f.state(), evidence),
+                "scope receipt cannot substitute for an independent body observation");
+        FrontierWorldState next = confirmed(f.state(), evidence);
         assertEquals(waiting.standingBody(), next.actorLocations().get(f.medic()).body());
         assertEquals(AmbientLeaseStatus.HOT, next.ambientLeases().get(f.medic()).status());
         assertEquals(ResidentMeal.Phase.MOVE, next.humanPopulation().meals().get(f.medic()).phase());
@@ -76,9 +86,11 @@ class AmbientBodyConfirmationProcessTest {
         AmbientBodyConfirmed valid = confirmation(f.state(), f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION,
                 f.port().serviceSurface().standingBody());
         for (AmbientBodyConfirmed invalid : List.of(
-                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision() + 1, valid.boundary(), valid.previousBody(), valid.observedBody()),
-                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision(), valid.boundary(), new BodyPosition(0, 65, 0), valid.observedBody()),
-                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision(), valid.boundary(), valid.previousBody(), new BodyPosition(0, 65, 0))))
+                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision() + 1, valid.boundary(), valid.previousBody(), valid.observedBody(), valid.bodyId()),
+                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision(), valid.boundary(), new BodyPosition(0, 65, 0), valid.observedBody(), valid.bodyId()),
+                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision(), valid.boundary(), valid.previousBody(), new BodyPosition(0, 65, 0), valid.bodyId()),
+                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision(), valid.boundary(), valid.previousBody(), valid.observedBody(),
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(valid.actorId(), valid.bodyId().physicalEpoch() + 1))))
             assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(f.state(), invalid));
         assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmed.Boundary.fromWireTag(99));
         assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(f.state(), confirmation(f.state(), f.medic(),
@@ -91,7 +103,7 @@ class AmbientBodyConfirmationProcessTest {
         var lease = f.state().ambientLeases().get(f.medic());
         var waiting = AmbientPlacementPolicy.candidates(f.state(), lease).stream()
                 .filter(surface -> f.port().accessBoundary().cleared(surface.standingBody())).findFirst().orElseThrow();
-        var hot = AmbientBodyConfirmationProcess.reduce(f.state(), confirmation(f.state(), f.medic(),
+        var hot = confirmed(f.state(), confirmation(f.state(), f.medic(),
                 AmbientBodyConfirmed.Boundary.ADMISSION, waiting.standingBody()));
         var draining = AmbientLeaseStateProcess.transition(hot, f.medic(), AmbientLeaseStatus.DRAINING);
         var cold = AmbientLeaseStateProcess.release(draining, new AmbientLeaseReleased(f.medic(),
@@ -101,7 +113,7 @@ class AmbientBodyConfirmationProcessTest {
         var candidates = AmbientPlacementPolicy.candidates(prepared, prepared.ambientLeases().get(f.medic()));
         assertEquals(waiting, candidates.getFirst());
         var alternative = candidates.stream().filter(surface -> !surface.equals(waiting)).findFirst().orElseThrow();
-        var next = AmbientBodyConfirmationProcess.reduce(prepared, confirmation(prepared, f.medic(),
+        var next = confirmed(prepared, confirmation(prepared, f.medic(),
                 AmbientBodyConfirmed.Boundary.ADMISSION, alternative.standingBody()));
         assertEquals(alternative.standingBody(), next.actorLocations().get(f.medic()).body());
         assertEquals(ResidentMeal.Phase.MOVE, next.humanPopulation().meals().get(f.medic()).phase());
@@ -114,7 +126,7 @@ class AmbientBodyConfirmationProcessTest {
     @Test void unauthorizedResidentAtStationGetsAnExitRatherThanASingletonWait() {
         Fixture f = fixture();
         FrontierWorldState state = f.state().withActorBody(f.security(), f.port().serviceSurface().standingBody());
-        state = AmbientBodyConfirmationProcess.reduce(state, confirmation(state, f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION,
+        state = confirmed(state, confirmation(state, f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION,
                 f.port().serviceSurface().standingBody()));
         // Earlier security meal owns arbitration; the medic must leave rather than stand in its socket.
         assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, FrontierWorldState.depotId(f.port().settlementId()), f.medic()));
@@ -126,16 +138,17 @@ class AmbientBodyConfirmationProcessTest {
     }
     @Test void registeredCommandCommitsPlacementAndWakesTheExactServicePoint() {
         Fixture f = fixture();
+        SurfaceAnchor waiting = AmbientPlacementPolicy.candidates(f.state(), f.state().ambientLeases().get(f.medic())).stream()
+                .filter(surface -> f.port().accessBoundary().cleared(surface.standingBody())).findFirst().orElseThrow();
+        AmbientBodyConfirmed evidence = confirmation(f.state(), f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION, waiting.standingBody());
+        var inspected = ModeledActorBodyFacts.inspected(f.state(), f.medic(), waiting.standingBody());
         var definition = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(f.state().bootstrap());
         var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
-                f.state().bootstrap().worldId(), f.state(), new SimInstant(27_001L), definition.commandPlanner(),
+                f.state().bootstrap().worldId(), inspected, new SimInstant(27_001L), definition.commandPlanner(),
                 definition.scheduledPlanner(), definition.reducer(), definition.stateCodec(), definition.projectionMapper(),
                 definition.limits(), List.of(ResidentMealProcess.progress(f.state().humanPopulation().meals().get(f.medic()), 27_002L)),
                 definition.transactionCommitter());
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(configuration);
-        SurfaceAnchor waiting = AmbientPlacementPolicy.candidates(f.state(), f.state().ambientLeases().get(f.medic())).stream()
-                .filter(surface -> f.port().accessBoundary().cleared(surface.standingBody())).findFirst().orElseThrow();
-        AmbientBodyConfirmed evidence = confirmation(f.state(), f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION, waiting.standingBody());
         CommandId id = new CommandId("command:body-confirmation");
         CommandResult result = engine.submit(new FrontierCommand(1, id, f.state().bootstrap().worldId(), engine.checkpoint().revision(),
                 new SimInstant(27_001L), io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,

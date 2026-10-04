@@ -499,8 +499,7 @@ class RouteMaintenanceProcessTest {
         SceneLeaseId leaseId = new SceneLeaseId("lease:maintenance-hot-worksite");
         SceneLease lease = SceneLease.forCause(leaseId, world, new EngineeringWorkSceneCause(candidate.projectId(), candidate.workCellIndex()),
                 candidate.workCell(), io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
-                candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(),
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+                candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(), java.util.Set.of(), Optional.empty());
 
         FrontierWorldState prepared = assembled.prepareSceneLease(lease);
         assertEquals(SceneLeaseStatus.HOT, prepared.transitionSceneLease(leaseId, SceneLeaseStatus.HOT).sceneLeases().get(leaseId).status(),
@@ -539,8 +538,7 @@ class RouteMaintenanceProcessTest {
         SceneLeaseId leaseId = new SceneLeaseId("lease:maintenance-conflict-drain");
         SceneLease lease = SceneLease.forCause(leaseId, world, new EngineeringWorkSceneCause(candidate.projectId(), candidate.workCellIndex()),
                 candidate.workCell(), io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
-                candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(),
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+                candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(), java.util.Set.of(), Optional.empty());
         FrontierWorldState hot = assembled.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         // Completed-cell input isolates recovery policy; this does not claim a physical repair receipt.
         var completedInput = hot.withChanges(FrontierWorldStateUpdate.begin()

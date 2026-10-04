@@ -207,8 +207,20 @@ class ResourceSiteHarvestProcessTest {
     static HotHarvest hotHarvestAfterColdSteps(long seed, int coldSteps) {
         ColdHarvest cold = coldHarvestAfterSteps(seed, coldSteps);
         SceneLease lease = newHarvestLease(cold.state(), cold.site(), cold.job(), "hot-goal-" + seed + "-" + coldSteps);
-        FrontierWorldState state = cold.state().prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        FrontierWorldState state = confirmedPhysicalParticipants(cold.state().prepareSceneLease(lease), lease)
+                .transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         return new HotHarvest(state, cold.site(), cold.job(), state.sceneLeases().get(lease.id()));
+    }
+    /** Modeled physical evidence, not native acceptance or a scene-owned body transition. */
+    static FrontierWorldState confirmedPhysicalParticipants(FrontierWorldState state, SceneLease lease) {
+        for (var member : lease.members()) {
+            var body = ActorBodyAuthority.current(state, member.actorId());
+            if (ActorBodyAuthority.require(state, body).phase() == FencedRecoveryPhase.RUNNING) continue;
+            var location = state.actorLocations().get(member.actorId());
+            state = ActorBodyAuthority.present(state, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(
+                    body, location.body(), location.condition().health(), location.body(), location.condition().health()));
+        }
+        return state;
     }
     static SceneLease newHarvestLease(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job, String suffix) {
         BodyPosition current = state.actorLocations().get(job.workerId()).body();
@@ -218,8 +230,7 @@ class ResourceSiteHarvestProcessTest {
         return SceneLease.forCause(new SceneLeaseId("lease:site-harvest-" + suffix), state.bootstrap().worldId(),
                 new ResourceSiteHarvestSceneCause(site, job.id()), anchor, new SimInstant(22_300L), 1L,
                 SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))),
-                Map.of(job.workerId(), current), java.util.Set.of(job.workerId()), Optional.empty());
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))), java.util.Set.of(job.workerId()), Optional.empty());
     }
     static FrontierWorldState completeHarvestWorkHot(FrontierWorldState state, SubjectId site,
                                                     ResourceSiteHarvestJob job, SceneLeaseId leaseId) {
@@ -377,7 +388,7 @@ class ResourceSiteHarvestProcessTest {
                 ActorBodyAuthority.current(restartResumed, start.job().workerId()));
         assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(restartResumed, due));
 
-        FrontierWorldState attempted = state.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
+        FrontierWorldState attempted = confirmedPhysicalParticipants(state, lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
                 .transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
         assertInstanceOf(CommandPlan.Rejected.class,
                 FrontierWorldProcessCatalog.planCommand("resource-sites", attempted, command),

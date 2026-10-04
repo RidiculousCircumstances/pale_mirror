@@ -56,6 +56,20 @@ public final class FrontierSettlementAssaultBattlefield {
             return Optional.empty();
         }
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId());
+        return livingPositions(state, assault, provider).map(positions ->
+                new SettlementAssaultSceneCandidate(assault.id(), settlement.id(), settlement.anchor(), positions));
+    }
+
+    /** Continuation is not a second admission of the original, now partly dead roster. */
+    public static boolean permitsColdContinuation(FrontierWorldState state, SettlementAssault assault) {
+        return assault.status() == SettlementAssaultStatus.COLD_COMBAT
+                && FrontierSettlementAssaultSceneSupport.targetIntact(state, assault)
+                && livingPositions(state, assault, providerView(state)).isPresent();
+    }
+
+    private static Optional<Map<SubjectId, BlockPosition>> livingPositions(FrontierWorldState state,
+            SettlementAssault assault, Provider provider) {
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId());
         Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
         long settlementEnvelopeSquared = residentEnvelopeSquared(state, settlement);
         Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
@@ -63,15 +77,18 @@ public final class FrontierSettlementAssaultBattlefield {
         members.sort(Comparator.naturalOrder());
         for (SubjectId member : members) {
             ActorLocation location = state.actorLocations().get(member);
-            if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
-                    || !serviceableFloor(provider, location.supportingSurface().support())
+            if (location == null) return Optional.empty();
+            // Death is retained in the exact canonical roster, not silently replaced with
+            // another person. It is no longer a body to admit or a floor to reserve.
+            if (location.condition().status() == ActorLifeStatus.DEAD) continue;
+            if (!serviceableFloor(provider, location.supportingSurface().support())
                     || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), settlementEnvelopeSquared, structureCells,
                     location.supportingSurface().support()) || positions.put(member, location.supportingSurface().support()) != null) {
                 return Optional.empty();
             }
         }
-        if (positions.values().stream().distinct().count() != positions.size()) return Optional.empty();
-        return Optional.of(new SettlementAssaultSceneCandidate(assault.id(), settlement.id(), settlement.anchor(), positions));
+        if (positions.isEmpty() || positions.values().stream().distinct().count() != positions.size()) return Optional.empty();
+        return Optional.of(Map.copyOf(positions));
     }
 
     static boolean localClearFloor(FrontierWorldState state, Settlement settlement, BlockPosition position) {

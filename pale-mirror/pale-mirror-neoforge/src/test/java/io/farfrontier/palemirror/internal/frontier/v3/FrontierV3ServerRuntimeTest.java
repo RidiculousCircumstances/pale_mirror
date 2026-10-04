@@ -223,10 +223,7 @@ class FrontierV3ServerRuntimeTest {
                 operation.currentPosition(), java.util.Optional.empty(), operation.participantIds());
         SceneMemberPosition capture = new SceneMemberPosition(participant, new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(12, 64, -12),
                 overlapped.actorLocations().get(participant).condition().health());
-        java.util.Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.BodyPosition> capturedPositions =
-                new java.util.LinkedHashMap<>(lease.memberPositions());
-        capturedPositions.put(participant, capture.body());
-        lease = lease.withMemberPositions(capturedPositions).withAmbientHandoff(java.util.Set.of(participant));
+        lease = lease.withAmbientHandoff(java.util.Set.of(participant));
         SceneLeaseHandoff handoff = new SceneLeaseHandoff(lease, List.of(capture));
         SceneLease handoffLease = lease;
 
@@ -650,8 +647,7 @@ class FrontierV3ServerRuntimeTest {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         SceneLease lease = SceneLease.forCause(leaseId, world, new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause(job.id()),
                 candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED,
-                List.of(new io.farfrontier.palemirror.frontier.v3.model.SceneMember(job.workerId(), SceneLease.deterministicEntityId(world, job.workerId()))),
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), java.util.Optional.empty());
+                List.of(new io.farfrontier.palemirror.frontier.v3.model.SceneMember(job.workerId(), SceneLease.deterministicEntityId(world, job.workerId()))), Set.of(), java.util.Optional.empty());
         submitWorld(runtime, "production-restart-prepare", new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneLeasePrepared(lease));
         submitWorld(runtime, "production-restart-hot", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         int inputCursor = job.workTraversal().linearCorridorSurfaces().size() - 2;
@@ -729,7 +725,7 @@ class FrontierV3ServerRuntimeTest {
         transitionScene(recovered, world, leaseId, SceneLeaseStatus.DRAINING, "command:scene-recovery-draining");
         CheckpointImage draining = recovered.checkpointImage().orElseThrow();
         SceneLeaseReleased released = new SceneLeaseReleased(leaseId, lease.members().stream().map(member -> {
-            var body = lease.memberPosition(member.actorId());
+            var body = lease.memberBody(worldState(recovered).actorLocations(), member.actorId());
             return new SceneMemberPosition(member.actorId(), body);
         }).toList());
         CommandId releaseCommand = new CommandId("command:scene-recovery-release");
@@ -801,7 +797,7 @@ class FrontierV3ServerRuntimeTest {
         AmbientActorLease lease = state.ambientLeases().get(actor);
         return new io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed(actor, lease.revision(),
                 io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed.Boundary.ADMISSION,
-                lease.handoffBody(), lease.handoffBody());
+                lease.handoffBody(), lease.handoffBody(), io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actor));
     }
     private static void submitAmbient(FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime,
                                       WorldId world, FrontierPayload payload, String command) {

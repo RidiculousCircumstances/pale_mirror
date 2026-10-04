@@ -138,6 +138,15 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         FencedRecoveryBinding binding = requireCurrent(bindingId, epoch).confirmed();
         return retire(binding, FencedRecoveryDisposition.REJECT_STALE, "confirmed");
     }
+    /** Positive saved-body absence is not a rollback of a reversible effect checkpoint. */
+    FencedRecoveryState retireObservedBodyAbsence(SubjectId bindingId, long epoch, SubjectId actor) {
+        FencedRecoveryBinding binding = requireCurrent(bindingId, epoch);
+        if (binding.asset() != FencedRecoveryAsset.BODY || !binding.ownerId().equals(actor)
+                || binding.ownerRevision() != 0L
+                || binding.phase() != FencedRecoveryPhase.RUNNING && binding.phase() != FencedRecoveryPhase.AMBIGUOUS)
+            throw new IllegalArgumentException("saved absence requires one exact admitted actor body");
+        return retire(binding, FencedRecoveryDisposition.RESUME_COLD, "observed-saved-body-absence");
+    }
     /** Exact observed death is terminal even if work was unstarted or recovery ambiguous. */
     FencedRecoveryState retireObservedBodyDeath(SubjectId bindingId, long epoch, SubjectId owner, long revision) {
         FencedRecoveryBinding binding = requireCurrent(bindingId, epoch);

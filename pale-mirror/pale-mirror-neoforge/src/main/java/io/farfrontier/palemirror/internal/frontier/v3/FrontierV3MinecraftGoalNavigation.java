@@ -53,7 +53,10 @@ final class FrontierV3MinecraftGoalNavigation {
     private FrontierV3MinecraftGoalNavigation() { }
 
     static Result pursue(ServerLevel level, Mob actor, List<SurfaceAnchor> legalStations,
-                         FrontierV3NavigationScope scope, Optional<MovementOrder> order) {
+                         FrontierV3NavigationScope scope, Optional<MovementOrder> order,
+                         FrontierV3GoalNavigation.ProviderPermission permission) {
+        Objects.requireNonNull(permission, "physical provider permission");
+        if (!permission.current(actor)) return new Result(Status.AMBIGUOUS, "stale-provider-authority");
         Objects.requireNonNull(level); Objects.requireNonNull(actor);
         legalStations = List.copyOf(Objects.requireNonNull(legalStations));
         Objects.requireNonNull(scope);
@@ -111,7 +114,7 @@ final class FrontierV3MinecraftGoalNavigation {
                         Optional.of(FrontierV3GoalNavigation.BlockReason.PATH_STALLED));
             }
             if (activePath != null && !actor.getNavigation().isDone()) {
-                ACTIVE.put(actor, current.refreshed(level.getGameTime()));
+                ACTIVE.put(actor, current.refreshed(level.getGameTime(), permission));
                 return new Result(Status.IN_PROGRESS, "minecraft-path-active");
             }
             stopPath(actor);
@@ -119,6 +122,12 @@ final class FrontierV3MinecraftGoalNavigation {
             stopPath(actor);
         }
         failed = FAILURES.get(actor);
+        if (failed != null) {
+            // A validated fresh request may retain the same leg/deadline, but must
+            // explicitly replace its old presentation witness, never look it up later.
+            failed = failed.withPermission(permission);
+            FAILURES.put(actor, failed);
+        }
         FrontierV3BodyObservation.refreshGroundContact(level, actor);
         if (failed != null && failed.groundedAtAttempt() == actor.onGround()
                 && failed.goalOccupants().equals(FrontierV3PedestrianTraffic.goalOccupants(level, actor, legalStations))
@@ -155,12 +164,12 @@ final class FrontierV3MinecraftGoalNavigation {
                 target = station;
             }
         }
-        if (path == null) return retry(level, actor, legalStations, scope, order, level.getGameTime(),
+        if (path == null) return retry(level, actor, legalStations, scope, order, permission, level.getGameTime(),
                 unloaded ? "target-chunk-unloaded" : "minecraft-path-unavailable[" + rejection + "]",
                 unloaded ? FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED
                         : rejectionReason);
         if (!actor.getNavigation().moveTo(path, SPEED))
-            return retry(level, actor, legalStations, scope, order, level.getGameTime(),
+            return retry(level, actor, legalStations, scope, order, permission, level.getGameTime(),
                     "minecraft-path-refused", FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE);
         // Finding another path is not progress. Keep the same no-motion deadline
         // across path recomputations; only a real body displacement can reset it.
@@ -168,9 +177,9 @@ final class FrontierV3MinecraftGoalNavigation {
                 && current.scope().equals(scope) && current.order().equals(order)
                 ? current : null;
         ACTIVE.put(actor, retained == null
-                ? new Control(legalStations, target, scope, FrontierV3PhysicalPathPolicy.corridor(path, target), order,
+                ? new Control(legalStations, target, scope, FrontierV3PhysicalPathPolicy.corridor(path, target), order, permission,
                     level.getGameTime(), level.getGameTime(), actor.position(), path, remainingDistance(path, actor.position()))
-                : new Control(legalStations, target, scope, FrontierV3PhysicalPathPolicy.corridor(path, target), order,
+                : new Control(legalStations, target, scope, FrontierV3PhysicalPathPolicy.corridor(path, target), order, permission,
                     level.getGameTime(), retained.lastProgressAt(),
                         actor.position(), path, remainingDistance(path, actor.position())));
         return new Result(Status.IN_PROGRESS, "minecraft-path-started");
@@ -180,13 +189,16 @@ final class FrontierV3MinecraftGoalNavigation {
     static boolean advanceAtEntityBoundary(Mob actor) {
         Control control = ACTIVE.get(actor);
         if (control == null) {
-            if (!FAILURES.containsKey(actor)) return false;
+            var failure = FAILURES.get(actor);
+            if (failure == null) return false;
+            if (!failure.permission().current(actor)) { stop(actor); return false; }
             // An unfinished jump may temporarily make GroundPathNavigation unable to
             // replan. Keep ordinary collision/gravity alive while the bounded retry
             // waits for the same body to land; NoAI otherwise freezes it in mid-air.
             FrontierV3ControlledMobMotion.advanceOrdinaryGravity(actor);
             return true;
         }
+        if (!control.permission().current(actor)) { stop(actor); return false; }
         if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()
                 || level.getGameTime() - control.refreshedAt() > RETRY_TICKS) {
             stop(actor);
@@ -226,7 +238,10 @@ final class FrontierV3MinecraftGoalNavigation {
         return true;
     }
 
-    static boolean controls(Mob actor) { return ACTIVE.containsKey(actor); }
+    static boolean controls(Mob actor) {
+        var control = ACTIVE.get(actor);
+        return control != null && control.permission().current(actor);
+    }
 
     static boolean canReach(ServerLevel level, Mob actor, List<SurfaceAnchor> stations, FrontierV3NavigationScope scope) {
         if (actor.level() != level || !actor.isAlive() || actor.isRemoved()) return false;
@@ -253,14 +268,14 @@ final class FrontierV3MinecraftGoalNavigation {
     }
 
     private static Result retry(ServerLevel level, Mob actor, List<SurfaceAnchor> legalStations, FrontierV3NavigationScope scope,
-                                Optional<MovementOrder> order, long tick,
+                                Optional<MovementOrder> order, FrontierV3GoalNavigation.ProviderPermission permission, long tick,
                                 String reason, FrontierV3GoalNavigation.BlockReason blockReason) {
         Failure previous = FAILURES.get(actor);
         Failure next = previous == null || !previous.legalStations().equals(legalStations) || !previous.scope().equals(scope)
                 || !previous.order().equals(order)
-                ? new Failure(legalStations, scope, order, tick, tick, reason, blockReason, actor.onGround(),
+                ? new Failure(legalStations, scope, order, permission, tick, tick, reason, blockReason, actor.onGround(),
                         FrontierV3PedestrianTraffic.goalOccupants(level, actor, legalStations))
-                : new Failure(legalStations, scope, order, previous.since(), tick, reason, blockReason, actor.onGround(),
+                : new Failure(legalStations, scope, order, permission, previous.since(), tick, reason, blockReason, actor.onGround(),
                         FrontierV3PedestrianTraffic.goalOccupants(level, actor, legalStations));
         FAILURES.put(actor, next);
         return failureResult(next, tick);
@@ -286,7 +301,7 @@ final class FrontierV3MinecraftGoalNavigation {
 
     private record Control(List<SurfaceAnchor> legalStations, SurfaceAnchor target, FrontierV3NavigationScope scope,
                            LocalNavigationEnvelope corridor,
-                           Optional<MovementOrder> order, long refreshedAt,
+                           Optional<MovementOrder> order, FrontierV3GoalNavigation.ProviderPermission permission, long refreshedAt,
                            long lastProgressAt, Vec3 lastProgressPosition, Path progressPath, double bestRemaining) {
         private Control observed(Path path, Vec3 position, long tick) {
             if (path == null) return this;
@@ -295,19 +310,19 @@ final class FrontierV3MinecraftGoalNavigation {
             // Progress is actual planar displacement along the accepted path, not
             // decreasing straight-line goal distance or mere path recomputation.
             if (progressPath != path)
-                return new Control(legalStations, target, scope, corridor, order, refreshedAt,
+                return new Control(legalStations, target, scope, corridor, order, permission, refreshedAt,
                         lastProgressAt, position, path, remaining);
             double displacement = Math.hypot(position.x - lastProgressPosition.x, position.z - lastProgressPosition.z);
             if (bestRemaining - remaining >= 0.25D && displacement >= 0.25D)
-                return new Control(legalStations, target, scope, corridor, order, refreshedAt, tick, position, path, remaining);
+                return new Control(legalStations, target, scope, corridor, order, permission, refreshedAt, tick, position, path, remaining);
             return this;
         }
-        private Control refreshed(long tick) {
-            return new Control(legalStations, target, scope, corridor, order, tick, lastProgressAt,
+        private Control refreshed(long tick, FrontierV3GoalNavigation.ProviderPermission currentPermission) {
+            return new Control(legalStations, target, scope, corridor, order, currentPermission, tick, lastProgressAt,
                     lastProgressPosition, progressPath, bestRemaining);
         }
         private Control withCorridor(LocalNavigationEnvelope value) {
-            return new Control(legalStations, target, scope, value, order, refreshedAt, lastProgressAt,
+            return new Control(legalStations, target, scope, value, order, permission, refreshedAt, lastProgressAt,
                     lastProgressPosition, progressPath, bestRemaining);
         }
     }
@@ -326,7 +341,13 @@ final class FrontierV3MinecraftGoalNavigation {
         return Math.hypot(position.x - (target.x() + 0.5D), position.z - (target.z() + 0.5D));
     }
     private record Failure(List<SurfaceAnchor> legalStations, FrontierV3NavigationScope scope,
-                           Optional<MovementOrder> order, long since, long lastAttemptAt, String reason,
+                           Optional<MovementOrder> order, FrontierV3GoalNavigation.ProviderPermission permission,
+                           long since, long lastAttemptAt, String reason,
                            FrontierV3GoalNavigation.BlockReason blockReason, boolean groundedAtAttempt,
-                           List<FrontierV3PedestrianTraffic.Body> goalOccupants) { }
+                           List<FrontierV3PedestrianTraffic.Body> goalOccupants) {
+        private Failure withPermission(FrontierV3GoalNavigation.ProviderPermission currentPermission) {
+            return new Failure(legalStations, scope, order, currentPermission, since, lastAttemptAt, reason,
+                    blockReason, groundedAtAttempt, goalOccupants);
+        }
+    }
 }

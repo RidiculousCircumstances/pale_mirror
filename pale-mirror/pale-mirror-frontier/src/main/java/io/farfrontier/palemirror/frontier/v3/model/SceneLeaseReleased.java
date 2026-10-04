@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import java.util.List;
 import java.util.Objects;
 
-/** Durable capture of a HOT scene before its owned bodies are released back to COLD execution. */
+/** Process-scope closure referencing common body observations; it grants no physical absence or pose. */
 public record SceneLeaseReleased(SceneLeaseId leaseId, List<SceneMemberPosition> members) implements FrontierPayload {
     public SceneLeaseReleased {
         Objects.requireNonNull(leaseId, "scene lease id");

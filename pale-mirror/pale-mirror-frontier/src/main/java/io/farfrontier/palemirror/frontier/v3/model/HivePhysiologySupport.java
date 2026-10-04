@@ -21,7 +21,13 @@ public final class HivePhysiologySupport {
      */
     public static boolean permitsAmbientLease(FrontierWorldState state, SubjectId actorId) {
         Objects.requireNonNull(state, "hive physiology state"); Objects.requireNonNull(actorId, "actor id");
-        BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(actorId);
+        return permitsAmbientLease(state.hiveColony(), state.physicalDeltas(), actorId);
+    }
+
+    static boolean permitsAmbientLease(HiveColony colony, java.util.Map<BlockPosition, PhysicalDelta> physicalDeltas,
+                                       SubjectId actorId) {
+        Objects.requireNonNull(colony); Objects.requireNonNull(physicalDeltas); Objects.requireNonNull(actorId);
+        BioformLifecycle lifecycle = colony.bioformLifecycles().get(actorId);
         if (lifecycle == null) return true;
         if (lifecycle.phase() == BioformLifecyclePhase.ASSEMBLING) {
             // A confirmed individual release is deliberately not enough to produce one visible
@@ -29,7 +35,7 @@ public final class HivePhysiologySupport {
             // every exact cocoon has opened.  A conflict is the explicit recovery boundary:
             // members already released by an observed effect may remain real bodies, while the
             // unopened members stay dormant/waking without an invented replacement.
-            return state.hiveColony().mobilizations().values().stream().anyMatch(mobilization ->
+            return colony.mobilizations().values().stream().anyMatch(mobilization ->
                     (mobilization.status() == HiveMobilizationStatus.ASSEMBLING
                             || mobilization.status() == HiveMobilizationStatus.CONFLICT)
                             && mobilization.releasedMemberIds().contains(actorId));
@@ -37,7 +43,7 @@ public final class HivePhysiologySupport {
         if (lifecycle.phase() != BioformLifecyclePhase.WAKING) return lifecycle.phase().permitsAmbientBody();
         // A player/world loss is already canonical physical evidence; an automatic release
         // advances to ASSEMBLING only after its own loaded-world confirmation.
-        return state.physicalDeltas().values().stream().anyMatch(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+        return physicalDeltas.values().stream().anyMatch(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
                 && delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.HIVE_COCOON
                 && target.subjectId().equals(actorId)).isPresent()
                 && delta.semanticPart().filter(GrayboxSemanticPart.COCOON::equals).isPresent());

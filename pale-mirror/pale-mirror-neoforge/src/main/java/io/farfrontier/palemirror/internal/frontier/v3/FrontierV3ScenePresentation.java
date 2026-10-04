@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.CargoBatch;
-import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLabels;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.ChatFormatting;
@@ -23,17 +22,12 @@ final class FrontierV3ScenePresentation {
 
     /**
      * Applies the current pure actor presentation without making it another source of state.
-     * Ambient civilians intentionally keep their nameplate quiet; a mobilized resident must be
-     * identifiable at a glance, and every hive bioform is a deliberate non-civilian presence.
-     * A retained WORK return is also deliberately legible: it is the same live actor crossing
-     * a just-closed scene boundary, not a new idle civilian.  Hiding its plate at that instant
-     * made an ordinary player lose the exact farmer although its UUID body remained loaded.
+     * All presentation scopes use the same execution-derived visibility policy. An ambient
+     * meal scope must not hide the same actor after its work execution has already resumed.
      */
     static void applyAmbientActorPresentation(Mob body, FrontierWorldState state, SubjectId actorId, boolean bioform) {
         body.setCustomName(actorName(state, actorId, bioform));
-        boolean retainedWorkReturn = state.ambientLeases().get(actorId) != null
-                && state.ambientLeases().get(actorId).goal() == AmbientGoalKind.WORK;
-        body.setCustomNameVisible(retainedWorkReturn || FrontierSceneLabels.ambientActorNameVisible(state, actorId, bioform));
+        body.setCustomNameVisible(FrontierSceneLabels.ambientActorNameVisible(state, actorId, bioform));
     }
 
     static Component cargoName(FrontierWorldState state, CargoBatch cargo) {

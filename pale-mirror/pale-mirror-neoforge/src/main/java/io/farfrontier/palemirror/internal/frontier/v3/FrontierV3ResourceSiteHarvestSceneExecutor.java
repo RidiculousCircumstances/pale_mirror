@@ -150,13 +150,12 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 // Lease ownership remains fully typed by the scene tags and revision.
                 .map(actor -> new SceneMember(actor, FrontierV3AmbientActorExecutor.entityId(current, actor))).toList();
         return SceneLease.forCause(id, checkpoint.worldId(), new ResourceSiteHarvestSceneCause(candidate.siteId(), candidate.jobId()), candidate.cropSlot(),
-                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members,
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(state, lease);
         if ((lease.status() == SceneLeaseStatus.PREPARED || lease.status() == SceneLeaseStatus.HOT)
                 && state.resourceSites().hasPendingWorldChange(
                 FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId())) return;
@@ -226,10 +225,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                     new FixedScalar(Math.round(body.getHealth() * FixedScalar.SCALE))));
         }
         if (!captures.isEmpty()) {
-            java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, io.farfrontier.palemirror.frontier.v3.model.BodyPosition> positions =
-                    new java.util.LinkedHashMap<>(lease.memberPositions());
-            captures.forEach(capture -> positions.put(capture.actorId(), capture.body()));
-            SceneLease captured = lease.withMemberPositions(positions).withAmbientHandoff(captures.stream()
+            SceneLease captured = lease.withAmbientHandoff(captures.stream()
                     .map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet()));
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_handoff", captured,
                     submitBound(runtime, "resource-site-harvest-scene-handoff", lease.id().value(),
@@ -931,28 +927,4 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         return FrontierV3ResourceSiteHarvestReleaseBinding.forPhase(checkpoint, siteId, phase);
     }
 
-    /** Resource-harvest-specific closed-body retention stays at the registered behavior edge. */
-    static boolean retainsClosedBody(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
-        if (!FrontierSceneBehaviors.isResourceSiteHarvest(lease)
-                || !member.entityId().equals(FrontierV3AmbientActorExecutor.entityId(state, member.actorId()))
-                || !FrontierV3SceneExecutor.ownedByClosedLease(entity, state, lease, member)) return false;
-        var actor = state.actorLocations().get(member.actorId());
-        if (actor == null || actor.condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE) return false;
-        // A CLOSED lease is historical ownership evidence.  Its member position is the
-        // original scene admission anchor, while release records the last observed station in
-        // actor custody.  Neither is a second live-body authority: a Minecraft body can cross
-        // an exact standing-column boundary between the observation and the durable close.
-        // The immutable closed-lease tag, deterministic UUID, expected body type and living
-        // canonical actor are therefore the complete same-actor proof.  In particular, using
-        // either position as an additional deletion predicate made the lawful last-cell body
-        // disappear in that close window.  Foreign/stale/mismatched bodies still fail at
-        // ownedByClosedLease before this point and never become a replacement candidate.
-        return true;
-    }
-
-    static boolean adoptableClosedBody(Entity entity, FrontierWorldState state, SceneLease successor, SceneMember member) {
-        return state.sceneLeases().values().stream().filter(previous -> previous.status() == SceneLeaseStatus.CLOSED)
-                .filter(FrontierSceneBehaviors::isResourceSiteHarvest).filter(previous -> previous.members().contains(member))
-                .anyMatch(previous -> retainsClosedBody(entity, state, previous, member));
-    }
 }

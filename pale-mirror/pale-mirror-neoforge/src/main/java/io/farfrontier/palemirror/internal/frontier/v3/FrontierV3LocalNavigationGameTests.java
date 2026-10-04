@@ -12,8 +12,6 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.DoorBlock;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -307,8 +305,7 @@ public final class FrontierV3LocalNavigationGameTests {
                 FrontierV3GoalNavigation.stop(farmer);
                 level.setBlock(next.above(), Blocks.AIR.defaultBlockState(), 3);
                 for (int workTurn = 0; workTurn < 20; workTurn++) {
-                    FrontierV3ControlledMobMotion.tendCurrentCrop(level, farmer,
-                            new BlockPosition(next.getX(), next.getY() + 1, next.getZ()));
+                    FrontierV3ControlledMobMotion.showStationWorkGesture(level, farmer);
                     FrontierV3ControlledMobMotion.advanceAtEntityBoundary(farmer);
                     farmer.aiStep();
                 }
@@ -346,17 +343,16 @@ public final class FrontierV3LocalNavigationGameTests {
                                 + " pos=" + worker.position() + " fall=" + worker.fallDistance
                                 + " motion=" + FrontierV3ControlledMobMotion.motionObservation(worker));
                 if (turn < 50) {
-                    FrontierV3ControlledMobMotion.tendCurrentCrop(level, worker,
-                            new BlockPosition(soil.getX(), soil.getY() + 1, soil.getZ()));
+                    FrontierV3ControlledMobMotion.showStationWorkGesture(level, worker);
                 } else {
                     if (turn == 50) level.setBlock(soil.above(), Blocks.AIR.defaultBlockState(), 3);
-                    FrontierV3ControlledMobMotion.pursueRetainedSemanticCheckpoint(level, worker,
-                            FrontierV3SemanticMovement.point(level, to),
-                            LocalNavigationEnvelope.around(from.standingBody(), to.standingBody()));
+                    if (turn == 50) FrontierV3ControlledMobMotion.clearStationWorkGesture(level, worker);
+                    pursueFixtureRetainedEdge(level, worker, from, to);
                 }
                 // GameTest callbacks can run after EntityTick.Pre; drive that same
                 // idempotent boundary explicitly so a missed tick is not an arrival proof.
                 FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(worker);
             });
         }
         helper.runAtTickTime(110, () -> {
@@ -367,104 +363,6 @@ public final class FrontierV3LocalNavigationGameTests {
                             + " motion=" + FrontierV3ControlledMobMotion.motionObservation(worker));
             helper.assertTrue(level.getBlockState(soil).is(Blocks.FARMLAND), "soil remains after exit");
             FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
-        });
-    }
-
-    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
-    public static void hotEnvelopeUsesOpenDoorStairAndHarmlessDetourWithoutChangingCheckpoint(GameTestHelper helper) {
-        // Keep the full retained envelope inside the stock blank GameTest room rather than on
-        // its structural perimeter, which is itself a real collision wall.
-        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
-        Set<BlockPosition> supports = new LinkedHashSet<>();
-        for (int x = 0; x <= 5; x++) for (int z = -1; z <= 1; z++) {
-            int rise = x >= 4 ? 1 : 0;
-            BlockPos floor = origin.offset(x, rise, z);
-            helper.getLevel().setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
-            supports.add(new BlockPosition(floor.getX(), floor.getY(), floor.getZ()));
-        }
-        // The physical door is deliberately already open: this actor uses normal collision, not
-        // a synthetic world mutation or a hidden alternative port.
-        BlockPos door = origin.offset(0, 1, 1);
-        BlockState openDoor = Blocks.OAK_DOOR.defaultBlockState().setValue(DoorBlock.OPEN, true);
-        helper.getLevel().setBlock(door, openDoor, 3);
-        helper.getLevel().setBlock(door.above(), openDoor.setValue(DoorBlock.HALF, net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER), 3);
-        // A single ordinary obstruction on the retained edge has harmless latitude in the
-        // declared local envelope; it must not alter the port, checkpoint, or canonical intent.
-        helper.getLevel().setBlock(origin.offset(2, 1, 0), Blocks.STONE.defaultBlockState(), 3);
-        helper.getLevel().setBlock(origin.offset(4, 1, 0), Blocks.OAK_STAIRS.defaultBlockState(), 3);
-
-        LocalNavigationEnvelope envelope = new LocalNavigationEnvelope(supports);
-        Zombie actor = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
-        Vec3 checkpoint = new Vec3(origin.getX() + 5.5D, origin.getY() + 2.0D, origin.getZ() + .5D);
-        AtomicBoolean detoured = new AtomicBoolean();
-
-        helper.runAfterDelay(1, () -> {
-            // Vanilla GameTest collapses registered onEachTick callbacks after a server
-            // catch-up into one game-time observation. Execute the actual pre-tick delegate
-            // and post-tick submit pair as separate bounded physical turns here instead: no
-            // synthetic position, goal, route, or collision result is supplied by the test.
-            for (int turn = 0; turn < 48; turn++) {
-                BlockPosition observed = support(actor.position());
-                helper.assertTrue(FrontierV3ControlledMobMotion.insideEnvelope(helper.getLevel(), actor, checkpoint, envelope),
-                        "HOT local navigation must stay inside its retained envelope: " + observed);
-                if (Math.abs(actor.getZ() - (origin.getZ() + .5D)) > .35D) detoured.set(true);
-                FrontierV3ControlledMobMotion.advance(actor);
-                FrontierV3ControlledMobMotion.moveWithinEnvelope(helper.getLevel(), actor, checkpoint, envelope);
-            }
-            FrontierV3ControlledMobMotion.advance(actor);
-            helper.assertTrue(actor.getBlockX() == origin.getX() + 5 && actor.getBlockY() == origin.getY() + 2 && actor.getBlockZ() == origin.getZ(),
-                    "only the retained stair-top checkpoint may complete local travel; observed=" + actor.position()
-                            + " motion=" + FrontierV3ControlledMobMotion.readiness(actor));
-            helper.assertTrue(detoured.get(), "the harmless blocked column must use only envelope-local avoidance");
-            helper.assertTrue(helper.getLevel().getBlockState(door).getValue(DoorBlock.OPEN), "local traversal must not rewrite the physical door");
-            helper.succeed();
-        });
-    }
-
-    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 240)
-    public static void hotWorkerPursuesOneRetainedEdgeWithoutSyntheticReversal(GameTestHelper helper) {
-        // This stock blank template has its safe interior at local z=2; z=10 is a real
-        // template wall and would turn a cadence proof into an obstruction test.
-        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
-        for (int x = 0; x <= 5; x++) {
-            helper.getLevel().setBlock(origin.offset(x, 0, 0), Blocks.STONE.defaultBlockState(), 3);
-            // `bastion/mobs/empty` is a normal vanilla structure, not an air-only harness.
-            // Make this particular retained pedestrian corridor genuinely unobstructed so a
-            // failed cadence trace cannot be misclassified from template collision.
-            helper.getLevel().setBlock(origin.offset(x, 1, 0), Blocks.AIR.defaultBlockState(), 3);
-            helper.getLevel().setBlock(origin.offset(x, 2, 0), Blocks.AIR.defaultBlockState(), 3);
-        }
-        // GameTestHelper converts spawn vectors from template-relative to world coordinates;
-        // the retained checkpoint below is already absolute because it comes from the physical
-        // provider. Mixing the two would place the body outside this natural test cell.
-        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
-        Vec3 currentCanonicalCheckpoint = new Vec3(origin.getX() + .5D, origin.getY() + 1.0D, origin.getZ() + .5D);
-        Vec3 nextCanonicalCheckpoint = new Vec3(origin.getX() + 1.5D, origin.getY() + 1.0D, origin.getZ() + .5D);
-        // The physical actuator receives only the retained next checkpoint.  Scheduler time is
-        // intentionally absent: it must not manufacture an edge-local turnaround while a
-        // production process awaits the observed checkpoint command.
-        for (int turn = 1; turn <= 24; turn++) {
-            helper.runAtTickTime(turn, () -> {
-                FrontierV3ControlledMobMotion.advance(worker);
-                FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(helper.getLevel(), worker, nextCanonicalCheckpoint);
-            });
-        }
-        helper.runAtTickTime(25, () -> {
-            FrontierV3ControlledMobMotion.advance(worker);
-            List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
-            long distinctSubBlockPositions = trace.stream().map(value -> Math.round(value.x() * 1_000.0D)).distinct().count();
-            long timestampedTurns = trace.stream().map(FrontierV3ControlledMobMotion.MotionSample::gameTime).distinct().count();
-            long distinctColumns = trace.stream().map(value -> (int) Math.floor(value.x())).distinct().count();
-            long normalCadenceTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
-            helper.assertTrue(distinctSubBlockPositions >= 3 && timestampedTurns >= 3 && distinctColumns >= 2
-                            && normalCadenceTurns >= 3,
-                    "a HOT worker must pursue the retained checkpoint at normal cadence without synthetic pacing: "
-                            + "samples=" + trace.size() + " subBlocks=" + distinctSubBlockPositions
-                            + " turns=" + timestampedTurns + " columns=" + distinctColumns
-                            + " normalCadenceTurns=" + normalCadenceTurns);
-            helper.assertTrue(worker.getX() >= currentCanonicalCheckpoint.x - .35D && worker.getX() <= nextCanonicalCheckpoint.x + .35D,
-                    "smooth local pose remains on the retained edge and does not create a canonical route cursor");
-            helper.succeed();
         });
     }
 
@@ -499,11 +397,11 @@ public final class FrontierV3LocalNavigationGameTests {
             // ordinary scene-post submission and following entity-pre turn directly here.  It
             // still invokes the production actuator's real gravity/collision path and supplies
             // no body position, target, route, or collision result from the fixture.
-            FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, retainedCurrent, retainedNext);
+            pursueFixtureRetainedEdge(helper.getLevel(), worker, retainedCurrent, retainedNext);
             for (int turn = 0; turn < 40; turn++) {
                 FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker);
                 worker.aiStep();
-                FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, retainedCurrent, retainedNext);
+                pursueFixtureRetainedEdge(helper.getLevel(), worker, retainedCurrent, retainedNext);
             }
             FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker);
             worker.aiStep();
@@ -572,45 +470,6 @@ public final class FrontierV3LocalNavigationGameTests {
     }
 
     /**
-     * Farmland's real collision top is 15/16 of a block, while the retained semantic surface
-     * remains its exact integer floor cell.  The common support provider must therefore hand
-     * the actuator that physical feet height; otherwise each gravity turn is mistaken for a
-     * new ascent and the worker never starts the next retained horizontal edge.
-     */
-    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
-    public static void retainedHarvestEdgeUsesSharedFarmlandSupportTopWithoutAscentLoop(GameTestHelper helper) {
-        BlockPos currentSupport = helper.absolutePos(new BlockPos(4, 0, 4));
-        BlockPos nextSupport = currentSupport.north();
-        for (BlockPos support : List.of(currentSupport, nextSupport)) {
-            helper.getLevel().setBlock(support, Blocks.FARMLAND.defaultBlockState(), 3);
-            helper.getLevel().setBlock(support.above(), Blocks.WHEAT.defaultBlockState(), 3);
-            helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
-        }
-        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(4.5D, 1.0D, 4.5D));
-        SurfaceAnchor current = SurfaceAnchor.at(currentSupport.getX(), currentSupport.getY(), currentSupport.getZ());
-        SurfaceAnchor next = SurfaceAnchor.at(nextSupport.getX(), nextSupport.getY(), nextSupport.getZ());
-        Vec3 physicalNext = FrontierV3SemanticMovement.point(helper.getLevel(), next);
-        helper.assertTrue(Math.abs(physicalNext.y - (nextSupport.getY() + .9375D)) <= 1.0E-8D,
-                "the shared support point must be the real farmland top, not its logical air cell: " + physicalNext);
-        FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(worker);
-        helper.runAfterDelay(1, () -> {
-            for (int turn = 0; turn < 24; turn++) {
-                FrontierV3ControlledMobMotion.pursueRetainedSemanticCheckpoint(helper.getLevel(), worker, physicalNext,
-                        LocalNavigationEnvelope.around(current.standingBody(), next.standingBody()));
-                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
-            }
-            helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next),
-                    "a retained harvest worker must reach the next exact farmland support instead of repeating ascent: actual="
-                            + worker.position() + " motion=" + FrontierV3ControlledMobMotion.motionObservation(worker));
-            helper.assertTrue(FrontierV3SurfaceObservation.observedAt(worker, next).equals(next.standingBody()),
-                    "the fractional farmland feet position must checkpoint as the named retained semantic body, not floor into its support cell");
-            helper.assertTrue(FrontierV3ControlledMobMotion.trace(worker).stream().anyMatch(sample -> sample.horizontalVelocity() > .0D),
-                    "farmland support must admit an actual horizontal collision move");
-            FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
-        });
-    }
-
-    /**
      * A second naturally loaded body can occupy a retained production column after COLD
      * admission.  The exact worker may use only the fixed current/next neighborhood to pass
      * it; no alternate route or cursor is supplied to the physical actuator.
@@ -636,7 +495,7 @@ public final class FrontierV3LocalNavigationGameTests {
         helper.runAfterDelay(1, () -> {
             try {
                 for (int turn = 0; turn < 32; turn++) {
-                    FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, current, next);
+                    pursueFixtureRetainedEdge(helper.getLevel(), worker, current, next);
                     FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker);
                     worker.aiStep();
                     BlockPosition support = support(worker.position());
@@ -647,7 +506,7 @@ public final class FrontierV3LocalNavigationGameTests {
                 }
                 blocker.discard();
                 for (int turn = 0; turn < 32; turn++) {
-                    FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, current, next);
+                    pursueFixtureRetainedEdge(helper.getLevel(), worker, current, next);
                     FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker);
                     worker.aiStep();
                 }
@@ -681,7 +540,7 @@ public final class FrontierV3LocalNavigationGameTests {
         helper.runAfterDelay(1, () -> {
             for (int turn = 0; turn < 45; turn++) {
                 if (!FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next))
-                    FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, current, next);
+                    pursueFixtureRetainedEdge(helper.getLevel(), worker, current, next);
                 FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker);
                 worker.aiStep();
             }
@@ -734,30 +593,6 @@ public final class FrontierV3LocalNavigationGameTests {
         helper.succeed();
     }
 
-    /** A reserved production worker must not retain an old ambient WORK actuator into hand-off. */
-    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
-    public static void productionPreLeaseReservationStopsOnlyTheAmbientLocalPose(GameTestHelper helper) {
-        BlockPos support = helper.absolutePos(new BlockPos(4, 0, 4));
-        helper.getLevel().setBlock(support, Blocks.STONE.defaultBlockState(), 3);
-        helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
-        helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
-        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(support.getX() + .5D, support.getY() + 1.0D, support.getZ() + .5D));
-        helper.runAtTickTime(1, () -> FrontierV3ControlledMobMotion.followContinuously(helper.getLevel(), worker,
-                new Vec3(support.getX() + 4.5D, support.getY() + 1.0D, support.getZ() + .5D)));
-        helper.runAtTickTime(2, () -> {
-            FrontierV3ControlledMobMotion.advance(worker);
-            double observedX = worker.getX(), observedY = worker.getY(), observedZ = worker.getZ();
-            FrontierV3AmbientActorExecutor.holdForPreLeaseHandoff(worker);
-            FrontierV3ControlledMobMotion.advance(worker);
-            helper.assertTrue("IDLE".equals(FrontierV3ControlledMobMotion.readiness(worker))
-                            && Math.abs(worker.getX() - observedX) < 1.0E-8D
-                            && Math.abs(worker.getY() - observedY) < 1.0E-8D
-                            && Math.abs(worker.getZ() - observedZ) < 1.0E-8D,
-                    "a production pre-lease hold must retire only the old ambient actuator, without moving the exact body: " + worker.position());
-            helper.succeed();
-        });
-    }
-
     /** A retained scene body on its named support must not manufacture fall velocity between hand-off turns. */
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void groundedHandoffBodyDoesNotAccumulateSyntheticFallVelocity(GameTestHelper helper) {
@@ -776,98 +611,6 @@ public final class FrontierV3LocalNavigationGameTests {
                             + worker.position() + " velocity=" + worker.getDeltaMovement());
             FrontierV3ControlledMobMotion.stop(worker);
             helper.succeed();
-        });
-    }
-
-    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
-    public static void continuousTendingSurvivesOneShotSceneSubmissionUntilRealHandoff(GameTestHelper helper) {
-        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
-        for (int x = 0; x <= 5; x++) {
-            helper.getLevel().setBlock(origin.offset(x, 0, 0), Blocks.STONE.defaultBlockState(), 3);
-            helper.getLevel().setBlock(origin.offset(x, 1, 0), Blocks.AIR.defaultBlockState(), 3);
-            helper.getLevel().setBlock(origin.offset(x, 2, 0), Blocks.AIR.defaultBlockState(), 3);
-        }
-        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(2.5D, 1.0D, 2.5D));
-        Vec3 localTendingPose = new Vec3(origin.getX() + 4.5D, origin.getY() + 1.0D, origin.getZ() + .5D);
-        // One scene submission models the production interval between durable semantic turns.
-        // The actuator must not consume it as a three-frame tracker burst followed by a frozen
-        // worker; only a real retained checkpoint or stop may supersede this local pose.
-        helper.runAtTickTime(1, () -> FrontierV3ControlledMobMotion.followContinuously(helper.getLevel(), worker, localTendingPose));
-        for (int turn = 2; turn <= 7; turn++) {
-            helper.runAtTickTime(turn, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
-        }
-        helper.runAtTickTime(8, () -> {
-            List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
-            long normalCadenceTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
-            helper.assertTrue(normalCadenceTurns >= 5 && longestStall(trace.stream()
-                            .map(FrontierV3ControlledMobMotion.MotionSample::x).toList()) == 0,
-                    "a one-shot local tending directive must retain normal physical cadence until handoff: " + trace);
-            FrontierV3ControlledMobMotion.stop(worker);
-            helper.succeed();
-        });
-    }
-
-    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
-    public static void retainedTravelSupersedesTheFormerCropTendingPose(GameTestHelper helper) {
-        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
-        for (int x = 0; x <= 5; x++) {
-            helper.getLevel().setBlock(origin.offset(x, 0, 0), Blocks.STONE.defaultBlockState(), 3);
-            helper.getLevel().setBlock(origin.offset(x, 1, 0), Blocks.AIR.defaultBlockState(), 3);
-            helper.getLevel().setBlock(origin.offset(x, 2, 0), Blocks.AIR.defaultBlockState(), 3);
-        }
-        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
-        BlockPosition currentCrop = new BlockPosition(origin.getX(), origin.getY() + 1, origin.getZ());
-        Vec3 nextCheckpoint = new Vec3(origin.getX() + 4.5D, origin.getY() + 1.0D, origin.getZ() + .5D);
-        helper.runAtTickTime(1, () -> FrontierV3ControlledMobMotion.tendCurrentCrop(helper.getLevel(), worker, currentCrop));
-        helper.runAtTickTime(2, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
-        helper.runAtTickTime(3, () -> FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(helper.getLevel(), worker, nextCheckpoint));
-        for (int turn = 4; turn <= 20; turn++) {
-            helper.runAtTickTime(turn, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
-        }
-        helper.runAtTickTime(21, () -> {
-            List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
-            long forwardTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
-            helper.assertTrue(worker.getX() >= origin.getX() + 4.1D && forwardTurns >= 3,
-                    "the next retained edge must displace a former crop worker instead of preserving its stale tending pose: " + trace);
-            FrontierV3ControlledMobMotion.stop(worker);
-            helper.succeed();
-        });
-    }
-
-    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
-    public static void retainedHarvestEdgeRemainsContinuousInsideItsSemanticEnvelope(GameTestHelper helper) {
-        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
-        for (int x = 0; x <= 5; x++) {
-            helper.getLevel().setBlock(origin.offset(x, 0, 0), Blocks.STONE.defaultBlockState(), 3);
-            helper.getLevel().setBlock(origin.offset(x, 1, 0), Blocks.AIR.defaultBlockState(), 3);
-            helper.getLevel().setBlock(origin.offset(x, 2, 0), Blocks.AIR.defaultBlockState(), 3);
-        }
-        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
-        BlockPosition formerCrop = new BlockPosition(origin.getX(), origin.getY() + 1, origin.getZ());
-        SurfaceAnchor current = SurfaceAnchor.at(origin.getX(), origin.getY(), origin.getZ());
-        SurfaceAnchor next = SurfaceAnchor.at(origin.getX() + 1, origin.getY(), origin.getZ());
-        LocalNavigationEnvelope envelope = LocalNavigationEnvelope.around(current.standingBody(), next.standingBody());
-        Vec3 target = new Vec3(next.x() + .5D, next.y() + 1.0D, next.z() + .5D);
-        // A production field does not travel through empty air: the next exact standing cell
-        // contains the mature crop that it is about to harvest.  Keep that collision shape in
-        // this EntityTick-owned regression instead of proving only an empty corridor.
-        helper.getLevel().setBlock(origin.east().above(), Blocks.WHEAT.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.CropBlock.AGE, 7), 3);
-
-        helper.runAtTickTime(1, () -> FrontierV3ControlledMobMotion.tendCurrentCrop(helper.getLevel(), worker, formerCrop));
-        // One scene hand-off is deliberately enough.  A later semantic callback must not be
-        // required to keep the post-crop field edge moving. Do not invoke the actuator directly
-        // below: this proves the ordinary EntityTick.Pre owner that the live field uses.
-        helper.runAtTickTime(3, () -> FrontierV3ControlledMobMotion.pursueRetainedSemanticCheckpoint(
-                helper.getLevel(), worker, target, envelope));
-        helper.runAfterDelay(24, () -> {
-            List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
-            long forwardTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
-            boolean inside = trace.stream().allMatch(value -> envelope.contains(support(new Vec3(value.x(), value.y(), value.z()))));
-            helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next)
-                            && forwardTurns > 0 && inside,
-                    "a harvested field edge must continue at normal cadence only inside its declared envelope: " + trace);
-            FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
         });
     }
 
@@ -900,69 +643,29 @@ public final class FrontierV3LocalNavigationGameTests {
         helper.getLevel().setBlock(origin.above(), Blocks.AIR.defaultBlockState(), 3);
         helper.getLevel().setBlock(origin.above(2), Blocks.AIR.defaultBlockState(), 3);
         Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
-        BlockPosition crop = new BlockPosition(origin.getX(), origin.getY() + 1, origin.getZ());
-        helper.runAtTickTime(1, () -> FrontierV3ControlledMobMotion.tendCurrentCrop(helper.getLevel(), worker, crop));
-        for (int turn = 2; turn <= 16; turn++) helper.runAtTickTime(turn, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
+        Vec3 station = worker.position();
+        for (int turn = 1; turn <= 16; turn++) helper.runAtTickTime(turn, () -> {
+            FrontierV3ControlledMobMotion.showStationWorkGesture(helper.getLevel(), worker);
+            helper.assertTrue(worker.position().distanceToSqr(station) < .0001D,
+                    "the production work gesture must not move the worker away from its station: " + worker.position());
+        });
         helper.runAtTickTime(17, () -> {
-            List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
-            double totalHorizontalMotion = trace.stream().mapToDouble(FrontierV3ControlledMobMotion.MotionSample::horizontalVelocity).sum();
-            helper.assertTrue(totalHorizontalMotion < .01D,
-                    "a retained crop work pose must stay at its exact station rather than circle as filler: " + trace);
-            FrontierV3ControlledMobMotion.stop(worker);
+            helper.assertTrue(worker.position().distanceToSqr(station) < .0001D,
+                    "a crop work gesture must stay at its station rather than circle as filler: " + worker.position());
+            FrontierV3ControlledMobMotion.clearStationWorkGesture(helper.getLevel(), worker);
             helper.succeed();
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 120)
-    public static void providerRecurrenceChangesRetainedEdgesOnlyAfterObservedArrival(GameTestHelper helper) {
-        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
-        for (int x = 0; x <= 5; x++) {
-            helper.getLevel().setBlock(origin.offset(x, 0, 0), Blocks.STONE.defaultBlockState(), 3);
-            helper.getLevel().setBlock(origin.offset(x, 1, 0), Blocks.AIR.defaultBlockState(), 3);
-            helper.getLevel().setBlock(origin.offset(x, 2, 0), Blocks.AIR.defaultBlockState(), 3);
-        }
-        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
-        // Each 16-turn interval models the same production hand-off: physical arrival is
-        // observed first, then and only then does the canonical owner expose the next retained
-        // edge. The test never invents a presentation cursor or lets a body skip a support.
-        for (int turn = 1; turn <= 30; turn++) {
-            int edge = Math.min(4, (turn - 1) / 6);
-            int withinEdge = (turn - 1) % 6;
-            Vec3 current = new Vec3(origin.getX() + edge + .5D, origin.getY() + 1.0D, origin.getZ() + .5D);
-            Vec3 next = new Vec3(origin.getX() + edge + 1.5D, origin.getY() + 1.0D, origin.getZ() + .5D);
-            helper.runAtTickTime(turn, () -> {
-                FrontierV3ControlledMobMotion.advance(worker);
-                FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(helper.getLevel(), worker, next);
-            });
-            if (withinEdge == 5 && edge < 4) {
-                helper.runAtTickTime(turn + 1, () -> helper.assertTrue(worker.getBlockX() == (int) Math.floor(next.x()),
-                        "the next retained edge may appear only after the exact physical body cell is observed: actual="
-                                + worker.getX() + " expectedCell=" + (int) Math.floor(next.x())));
-            }
-        }
-        helper.runAtTickTime(31, () -> {
-            FrontierV3ControlledMobMotion.advance(worker);
-            List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
-            long columns = trace.stream().map(value -> (int) Math.floor(value.x())).distinct().count();
-            long normalCadenceTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
-            helper.assertTrue(columns >= 5 && normalCadenceTurns >= 15 && normalCadenceTurns == trace.size() && longestStall(trace.stream()
-                            .map(FrontierV3ControlledMobMotion.MotionSample::x).toList()) <= 2,
-                    "successive observed retained edges must retain normal cadence without a route/cursor fork: columns="
-                            + columns + " normalCadenceTurns=" + normalCadenceTurns + " samples=" + trace.size());
-            helper.succeed();
-        });
+    /** Disposable path-provider fixture; no canonical actor or activity is admitted here. */
+    private static void pursueFixtureRetainedEdge(net.minecraft.server.level.ServerLevel level,
+            net.minecraft.world.entity.Mob worker, SurfaceAnchor current, SurfaceAnchor next) {
+        FrontierV3GoalNavigation.pursue(level, worker, FrontierV3GoalNavigation.Goal.station(next,
+                new FrontierV3NavigationScope.Restricted(io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope.around(
+                        current.standingBody(), next.standingBody()))));
     }
 
     private static BlockPosition support(Vec3 feet) {
         return new BlockPosition((int) Math.floor(feet.x), (int) Math.floor(feet.y) - 1, (int) Math.floor(feet.z));
-    }
-
-    private static int longestStall(List<Double> trace) {
-        int longest = 0, current = 0;
-        for (int index = 1; index < trace.size(); index++) {
-            current = Math.abs(trace.get(index) - trace.get(index - 1)) < 0.00001D ? current + 1 : 0;
-            longest = Math.max(longest, current);
-        }
-        return longest;
     }
 }

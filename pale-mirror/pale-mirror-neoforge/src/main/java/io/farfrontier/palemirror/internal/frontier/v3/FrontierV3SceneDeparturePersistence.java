@@ -63,6 +63,9 @@ final class FrontierV3SceneDeparturePersistence {
             if (current == null) return;
             var currentLedger = FrontierV3AmbientCarrierLedger.get(level, current.bootstrap().worldId());
             try {
+                selectedIndex.batch.acknowledgeBodies(ticket, currentLedger, receipt -> receipt.current(current)
+                        && level.getEntity(receipt.identity().entityId()) == null,
+                        () -> currentLedger.persist(level, current.bootstrap().worldId()));
                 selectedIndex.batch.acknowledge(ticket, currentLedger, receipt -> {
                     var lease = current.sceneLeases().get(receipt.leaseId());
                     if (lease == null || lease.revision() != receipt.sceneRevision()
@@ -128,9 +131,25 @@ final class FrontierV3SceneDeparturePersistence {
                 var appearances = saved.getOrDefault(receipt.carrier().identity().entityId(), List.of());
                 if (appearances.size() == 1 && appearances.getFirst().matches(receipt)) ambient.add(receipt);
             }
-            return writes.completePass(complete, selected.isEmpty() && ambient.isEmpty()
+            var bodies = new ArrayList<FrontierV3ActorBodyDeparture>();
+            for (var receipt : ledger.bodyDepartures()) {
+                if (ledger.savedBodyDeparture(receipt)) continue;
+                var appearances = saved.getOrDefault(receipt.identity().entityId(), List.of());
+                if (appearances.size() == 1 && appearances.getFirst().matches(receipt)) bodies.add(receipt);
+            }
+            return writes.completePass(complete, selected.isEmpty() && ambient.isEmpty() && bodies.isEmpty()
                     ? () -> CompletableFuture.completedFuture(null) : synchronize)
-                    .map(write -> new Ticket(write, List.copyOf(selected), List.copyOf(ambient)));
+                    .map(write -> new Ticket(write, List.copyOf(selected), List.copyOf(ambient), List.copyOf(bodies)));
+        }
+
+        boolean acknowledgeBodies(Ticket ticket, FrontierV3AmbientCarrierLedger ledger,
+                                   java.util.function.Predicate<FrontierV3ActorBodyDeparture> current, Runnable persist) {
+            if (!writes.current(ticket.write()) || !ticket.saved().isDone()
+                    || ticket.saved().isCompletedExceptionally()) return false;
+            for (var receipt : ticket.bodies()) {
+                if (current.test(receipt) && ledger.confirmSavedBodyDeparture(receipt)) persist.run();
+            }
+            return true;
         }
 
         boolean acknowledge(Ticket ticket, FrontierV3AmbientCarrierLedger ledger,
@@ -152,27 +171,27 @@ final class FrontierV3SceneDeparturePersistence {
     }
 
     record Ticket(FrontierV3EntitySaveBatch.Ticket write, List<FrontierV3SceneDeparture> departures,
-                  List<FrontierV3AmbientDeparture> ambientDepartures) {
-        Ticket { departures = List.copyOf(departures); ambientDepartures = List.copyOf(ambientDepartures); }
+                  List<FrontierV3AmbientDeparture> ambientDepartures, List<FrontierV3ActorBodyDeparture> bodies) {
+        Ticket { departures = List.copyOf(departures); ambientDepartures = List.copyOf(ambientDepartures); bodies = List.copyOf(bodies); }
         CompletableFuture<Void> saved() { return write.saved(); }
     }
 
     /** Only bounded primitive evidence is retained; arbitrary entity NBT is never cached. */
     record SavedBody(UUID id, String type, String actor, String kind, String owner, String representation,
-                     long revision, long epoch, String lease, long sceneRevision,
+                     long revision, long epoch, long residenceGeneration,
                      BodyPosition body, FixedScalar health,
-                     Optional<FrontierV3SceneDeparture.HandStack> offhand,
-                     Optional<FrontierV3SceneDeparture.HandStack> mainhand) {
+                     Optional<FrontierV3ActorBodyDeparture.HandStack> offhand,
+                     Optional<FrontierV3ActorBodyDeparture.HandStack> mainhand) {
         SavedBody(UUID id, String type, String actor, String kind, String owner, String representation,
-                  long revision, long epoch, String lease, long sceneRevision,
-                  BodyPosition body, FixedScalar health, Optional<FrontierV3SceneDeparture.HandStack> offhand) {
-            this(id, type, actor, kind, owner, representation, revision, epoch, lease, sceneRevision,
+                  long revision, long epoch, long residenceGeneration,
+                  BodyPosition body, FixedScalar health, Optional<FrontierV3ActorBodyDeparture.HandStack> offhand) {
+            this(id, type, actor, kind, owner, representation, revision, epoch, residenceGeneration,
                     body, health, offhand, Optional.empty());
         }
         SavedBody(UUID id, String type, String actor, String kind, String owner, String representation,
-                  long revision, long epoch, String lease, long sceneRevision,
+                  long revision, long epoch, long residenceGeneration,
                   BodyPosition body, FixedScalar health) {
-            this(id, type, actor, kind, owner, representation, revision, epoch, lease, sceneRevision,
+            this(id, type, actor, kind, owner, representation, revision, epoch, residenceGeneration,
                     body, health, Optional.empty(), Optional.empty());
         }
 
@@ -187,26 +206,26 @@ final class FrontierV3SceneDeparturePersistence {
             catch (IllegalArgumentException missingOrUnknown) { return Optional.empty(); }
             if (!tag.contains(FrontierV3ActorCarrierComposition.REVISION_KEY, Tag.TAG_LONG)
                     || !tag.contains(FrontierV3ActorCarrierComposition.EPOCH_KEY, Tag.TAG_LONG)
-                    || declaredOwner == FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE
-                        && !tag.contains(FrontierV3SceneExecutor.REVISION_KEY, Tag.TAG_LONG)) return Optional.empty();
+                    || !tag.contains(FrontierV3ActorBodyController.RESIDENCE_KEY, Tag.TAG_LONG)
+                    || tag.getLong(FrontierV3ActorBodyController.RESIDENCE_KEY) < 1L
+                    || tag.getLong(FrontierV3ActorCarrierComposition.REVISION_KEY) != 0L
+                    || tag.getLong(FrontierV3ActorCarrierComposition.EPOCH_KEY) < 1L) return Optional.empty();
             ListTag position = entity.getList("Pos", Tag.TAG_DOUBLE);
             if (position.size() != 3 || !position.equals(entity.get("Pos"))) return Optional.empty();
             String type = entity.getString("id"), actor = tag.getString(FrontierV3ActorCarrierComposition.ACTOR_KEY);
             String kind = tag.getString(FrontierV3ActorCarrierComposition.KIND_KEY);
             String owner = tag.getString(FrontierV3ActorCarrierComposition.OWNER_KEY);
             String representation = tag.getString(FrontierV3ActorCarrierComposition.REPRESENTATION_KEY);
-            String lease = tag.getString(FrontierV3SceneExecutor.LEASE_KEY);
             if (type.length() > 64 || actor.isEmpty() || actor.length() > 128 || kind.length() > 32
-                    || representation.length() > 32 || lease.length() > 128
-                    || declaredOwner == FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE && lease.isEmpty()) return Optional.empty();
+                    || representation.length() > 32) return Optional.empty();
             double x = position.getDouble(0), y = position.getDouble(1), z = position.getDouble(2);
             float health = entity.getFloat("Health");
             if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)
                     || !Float.isFinite(health) || health <= 0.0F) return Optional.empty();
             var observedBody = FrontierV3BodyObservationSave.read(entity, x, y, z);
             if (observedBody.isEmpty()) return Optional.empty();
-            Optional<FrontierV3SceneDeparture.HandStack> offhand = Optional.empty();
-            Optional<FrontierV3SceneDeparture.HandStack> mainhand = Optional.empty();
+            Optional<FrontierV3ActorBodyDeparture.HandStack> offhand = Optional.empty();
+            Optional<FrontierV3ActorBodyDeparture.HandStack> mainhand = Optional.empty();
             if (entity.contains("HandItems", Tag.TAG_LIST)) {
                 ListTag hands = entity.getList("HandItems", Tag.TAG_COMPOUND);
                 if (hands.size() != 2) return Optional.empty();
@@ -215,21 +234,21 @@ final class FrontierV3SceneDeparturePersistence {
                 if (main.contains("id", Tag.TAG_STRING) && main.contains("count", Tag.TAG_INT)
                         && !main.contains("components")) {
                     try {
-                        mainhand = Optional.of(new FrontierV3SceneDeparture.HandStack(main.getString("id"), main.getInt("count")));
+                        mainhand = Optional.of(new FrontierV3ActorBodyDeparture.HandStack(main.getString("id"), main.getInt("count")));
                     } catch (IllegalArgumentException invalidHand) { return Optional.empty(); }
                 }
                 if (held.contains("id", Tag.TAG_STRING) && held.contains("count", Tag.TAG_INT)
                         && !held.contains("components")) {
                     try {
-                        offhand = Optional.of(new FrontierV3SceneDeparture.HandStack(
+                        offhand = Optional.of(new FrontierV3ActorBodyDeparture.HandStack(
                                 held.getString("id"), held.getInt("count")));
                     } catch (IllegalArgumentException invalidHand) { return Optional.empty(); }
                 }
             }
             return Optional.of(new SavedBody(entity.getUUID("UUID"), type, actor, kind, owner, representation,
                     tag.getLong(FrontierV3ActorCarrierComposition.REVISION_KEY),
-                    tag.getLong(FrontierV3ActorCarrierComposition.EPOCH_KEY), lease,
-                    tag.getLong(FrontierV3SceneExecutor.REVISION_KEY),
+                    tag.getLong(FrontierV3ActorCarrierComposition.EPOCH_KEY),
+                    tag.getLong(FrontierV3ActorBodyController.RESIDENCE_KEY),
                     observedBody.orElseThrow(),
                     new FixedScalar(Math.round((double) health * FixedScalar.SCALE)), offhand, mainhand));
         }
@@ -237,10 +256,9 @@ final class FrontierV3SceneDeparturePersistence {
         boolean matches(FrontierV3SceneDeparture receipt) {
             var declaration = receipt.carrier().identity();
             return id.equals(declaration.entityId()) && actor.equals(declaration.actorId().value())
-                    && kind.equals(declaration.kind().name()) && owner.equals("SCENE_LEASE")
-                    && representation.equals("LIVE_BODY") && revision == receipt.sceneRevision()
-                    && epoch == declaration.epoch() && lease.equals(receipt.leaseId().value())
-                    && sceneRevision == receipt.sceneRevision()
+                    && kind.equals(declaration.kind().name()) && owner.equals(declaration.owner().name())
+                    && representation.equals("LIVE_BODY") && revision == declaration.authorityRevision()
+                    && epoch == declaration.epoch() && residenceGeneration == receipt.residenceGeneration()
                     && type.equals(declaration.kind() == ActorKind.RESIDENT
                         ? "minecraft:villager" : "minecraft:zombie")
                     && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health())
@@ -252,9 +270,19 @@ final class FrontierV3SceneDeparturePersistence {
             return id.equals(declaration.entityId()) && actor.equals(declaration.actorId().value())
                     && kind.equals(declaration.kind().name()) && owner.equals(declaration.owner().name())
                     && representation.equals("LIVE_BODY") && revision == declaration.authorityRevision()
-                    && epoch == declaration.epoch()
+                    && epoch == declaration.epoch() && residenceGeneration == receipt.residenceGeneration()
                     && type.equals(declaration.kind() == ActorKind.RESIDENT ? "minecraft:villager" : "minecraft:zombie")
                     && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health());
+        }
+        boolean matches(FrontierV3ActorBodyDeparture receipt) {
+            var declaration = receipt.identity();
+            return id.equals(declaration.entityId()) && actor.equals(declaration.actorId().value())
+                    && kind.equals(declaration.kind().name()) && owner.equals(declaration.owner().name())
+                    && representation.equals("LIVE_BODY") && revision == declaration.authorityRevision()
+                    && epoch == declaration.epoch() && residenceGeneration == receipt.residenceGeneration()
+                    && type.equals(declaration.kind() == ActorKind.RESIDENT ? "minecraft:villager" : "minecraft:zombie")
+                    && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health())
+                    && offhand.equals(receipt.offhand()) && mainhand.equals(receipt.mainhand());
         }
     }
 

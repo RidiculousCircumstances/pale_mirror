@@ -425,8 +425,7 @@ class FrontierV3FixtureCatalogTest {
         SceneLeaseId leaseId = new SceneLeaseId("lease:engineering-worksite-release");
         SceneLease lease = SceneLease.forCause(leaseId, world, new EngineeringWorkSceneCause(candidate.projectId(), candidate.workCellIndex()),
                 candidate.workCell(), engine.checkpoint().instant(), engine.checkpoint().revision().value(), SceneLeaseStatus.PREPARED,
-                candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(),
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+                candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(), java.util.Set.of(), Optional.empty());
         RouteConstruction project = initial.routeConstructions().get(candidate.projectId());
         var workIntent = io.farfrontier.palemirror.frontier.v3.process.RouteConstructionProcess.workIntent(project,
                 project.cargoId().orElseThrow(), project.cargoId().map(initial.inventory().cargo()::get).orElseThrow().itemIds().getFirst());

@@ -10,10 +10,13 @@ import java.util.WeakHashMap;
 
 /** Temporary clearance of a service point by an idle actor, not a new activity or return job. */
 final class FrontierV3ServicePointClearance {
-    private record Target(long revision, List<SurfaceAnchor> surfaces) { }
+    private record Target(long revision, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId actuation,
+                          List<SurfaceAnchor> surfaces) { }
     private static final Map<Mob, Target> TARGETS = new WeakHashMap<>();
     private FrontierV3ServicePointClearance() { }
-    static boolean pursue(ServerLevel level, FrontierWorldState state, Mob body, AmbientActorLease lease) {
+    static boolean pursue(ServerLevel level, FrontierWorldState state, Mob body, AmbientActorLease lease,
+                           FrontierV3ActorActuation actuation) {
+        if (!actuation.current(body)) return false;
         ResidentProfile resident = state.humanPopulation().resident(lease.actorId());
         if (resident == null) return false;
         BodyPosition observed = FrontierV3BodyObservation.position(body);
@@ -21,7 +24,9 @@ final class FrontierV3ServicePointClearance {
         ServiceAccessPoint point = points.stream().filter(candidate -> ServiceAreaDestinations.temporary(
                 candidate, observed.supportingSurface())).findFirst().orElse(null);
         Target target = TARGETS.get(body);
-        if (target != null && target.revision() != lease.revision()) { TARGETS.remove(body); target = null; }
+        if (target != null && (target.revision() != lease.revision() || !target.actuation().equals(actuation.id()))) {
+            TARGETS.remove(body); target = null;
+        }
         if (point == null && target == null) return false;
         if (target == null || target.revision() != lease.revision()
                 || target.surfaces().stream().noneMatch(surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface))) {
@@ -37,16 +42,17 @@ final class FrontierV3ServicePointClearance {
                     surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface))
                     .map(List::of).orElse(List.of());
             if (surfaces.isEmpty()) {
-                FrontierV3GoalNavigation.stop(body);
+                FrontierV3GoalNavigation.stop(body, actuation);
                 FrontierV3PhysicalWaitTrace.actor(body, state, lease.actorId(), "service-clearance:no-safe-waiting-position");
                 return true;
             }
-            target = new Target(lease.revision(), surfaces);
+            target = new Target(lease.revision(), actuation.id(), surfaces);
             TARGETS.put(body, target);
         }
         MovementOrder order = new MovementOrder(lease.actorId(), lease.actorId(), 0, lease.revision(), target.surfaces(),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
-        var result = FrontierV3GoalNavigation.pursue(level, body, FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()));
+        var result = FrontierV3GoalNavigation.pursue(level, body,
+                FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()), actuation);
         if (result.status() == FrontierV3GoalNavigation.Status.ARRIVED) TARGETS.remove(body);
         return true;
     }

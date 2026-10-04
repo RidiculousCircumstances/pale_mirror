@@ -82,7 +82,7 @@ public final class FrontierV3CargoRetirementGameTests {
                 helper.assertValueEqual(FrontierV3ServerLifecycle.releaseCargoCarrier(level, runtime, cart, Optional.empty()),
                         FrontierV3ServerLifecycle.CargoCarrierInteraction.RELEASED, "ordinary player handoff");
                 FrontierV3CommandSubmission.submit(runtime, "missing-birth-close", lease.id().value(), new SceneLeaseReleased(lease.id(),
-                        lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()))).toList()));
+                        lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(), lease.memberBody(state(runtime).actorLocations(), member.actorId()))).toList()));
                 var closed = state(runtime); var retirement = closed.fencedRecovery().cargoRetirements().pending().get(cart.getUUID());
                 FrontierV3CargoCarrierExecutor.cleanRetired(level, closed, retirement);
                 var entity = new net.minecraft.nbt.CompoundTag(); helper.assertTrue(cart.save(entity), "serialize real retained cart");
@@ -146,7 +146,7 @@ public final class FrontierV3CargoRetirementGameTests {
                         restore ? FrontierV3ServerLifecycle.CargoCarrierInteraction.NOT_MANAGED
                                 : FrontierV3ServerLifecycle.CargoCarrierInteraction.RELEASED, "handoff commits exactly once");
                 FrontierV3CommandSubmission.submit(runtime, "footprint-close", lease.id().value(), new SceneLeaseReleased(lease.id(),
-                        lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()))).toList()));
+                        lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(), lease.memberBody(state(runtime).actorLocations(), member.actorId()))).toList()));
                 var closed = state(runtime); var retirement = closed.fencedRecovery().cargoRetirements().pending().get(cart.getUUID());
                 helper.assertTrue(retirement != null, "closed scene retains exact cleanup obligation");
                 helper.assertTrue(FrontierV3SceneDiagnosticJson.render(FrontierSceneBehaviors.logistics(lease).operationId().value(), runtime.checkpointImage().orElseThrow(),

@@ -15,19 +15,6 @@ import java.util.List;
 public final class AmbientActorProcess {
     private AmbientActorProcess() { }
 
-    public static CommandPlan plan(FrontierWorldState state, AmbientActorDied death) {
-        try {
-            validate(state, death);
-        } catch (IllegalArgumentException invalid) {
-            return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
-                    io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
-        }
-        java.util.ArrayList<ProposedEvent> events = new java.util.ArrayList<>();
-        events.add(new ProposedEvent(owner(state, death.actorId()), death));
-        CompanyFoundationProcess.terminationForDeath(state, death.actorId()).ifPresent(events::add);
-        events.addAll(ProductionProcess.failPreEffectWorkForDeath(state, death.actorId()));
-        return new CommandPlan.Accepted(List.copyOf(events));
-    }
 
     public static CommandPlan plan(FrontierWorldState state, AmbientActorObserved observation) {
         try {
@@ -115,21 +102,6 @@ public final class AmbientActorProcess {
                 revision, AmbientLeaseStatus.PREPARED, goal.kind(), BodyPosition.above(new SurfaceAnchor(goal.position())));
     }
 
-    public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, AmbientActorDied death) {
-        validate(state, death);
-        if (!subject.equals(owner(state, death.actorId()))) throw new IllegalArgumentException("ambient actor death lacks its canonical owner");
-        AmbientActorLease lease = state.ambientLeases().get(death.actorId());
-        if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED) return AmbientLeaseStateProcess.recordDeath(state, death);
-        var nextActors = new LinkedHashMap<>(state.actorLocations());
-        nextActors.put(death.actorId(), state.actorLocations().get(death.actorId()).deadAt(death.body()));
-        var recovery = state.fencedRecovery();
-        if (recovery.current().containsKey(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(death.actorId())))
-            recovery = ActorBodyAuthority.observedDeath(state, ActorBodyAuthority.current(state, death.actorId()));
-        return ActorExecutionComposition.LIFECYCLE.preparePassiveDeath(state, death.actorId(),
-                HumanPopulationStateSupport.migrationRetirement(state, death.actorId())).commit(state,
-                FrontierWorldStateUpdate.begin().actorLocations(nextActors).fencedRecovery(recovery)
-                        .humanPopulation(state.humanPopulation().cancelMigration(death.actorId())));
-    }
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, AmbientActorObserved observation) {
         validate(state, observation.actorId(), observation.body());
@@ -176,9 +148,6 @@ public final class AmbientActorProcess {
         return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, confirmed.actorId()), confirmed)));
     }
 
-    private static void validate(FrontierWorldState state, AmbientActorDied death) {
-        validate(state, death.actorId(), death.body());
-    }
     private static void requireUnleased(FrontierWorldState state, SubjectId actorId) {
         AmbientActorLease lease = state.ambientLeases().get(actorId);
         if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED) {
@@ -200,6 +169,8 @@ public final class AmbientActorProcess {
     }
 
     public static AmbientGoal goalFor(FrontierWorldState state, SubjectId actorId, long atTick) {
+        ActorLocation declaration = state.actorLocations().get(actorId);
+        if (declaration == null) throw new IllegalArgumentException("ambient goal lacks its declared canonical actor");
         HiveMobilization assemblingMobilization = io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyExecutionAuthority.owner(state, actorId).orElse(null);
         if (assemblingMobilization != null) {
             if (assemblingMobilization.status() != HiveMobilizationStatus.ASSEMBLING)
@@ -222,8 +193,7 @@ public final class AmbientActorProcess {
             BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
             return new AmbientGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target);
         }
-        RouteOperation assembling = state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.ASSEMBLING)
-                .filter(operation -> operation.activeAssembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false)).findFirst().orElse(null);
+        RouteOperation assembling = OperationExecutionAuthority.assemblyOwner(state, actorId).orElse(null);
         if (assembling != null) {
             OperationAssembly.Member member = assembling.activeAssembly().orElseThrow().members().get(actorId);
             SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
@@ -235,8 +205,9 @@ public final class AmbientActorProcess {
                     ? journey.nextColdPosition() : journey.currentPosition();
             return new AmbientGoal(AmbientGoalKind.TRANSIT, target);
         }
-        ResidentProfile resident = state.humanPopulation().resident(actorId);
-        if (resident != null) {
+        if (declaration.kind() == ActorKind.RESIDENT) {
+            ResidentProfile resident = state.humanPopulation().resident(actorId);
+            if (resident == null) throw new IllegalArgumentException("declared resident goal lacks its exact resident profile");
             var movement = state.actorMovements().get(actorId);
             if (movement != null) return new AmbientGoal(AmbientGoalKind.ACTOR_MOVEMENT,
                     movement.order().legalStations().getFirst().support());
@@ -273,8 +244,7 @@ public final class AmbientActorProcess {
             return new AmbientGoal(AmbientGoalKind.PATROL,
                     state.actorLocations().get(actorId).body().supportingSurface().support());
         }
-        Bioform bioform = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-                .filter(value -> value.id().equals(actorId)).findFirst().orElseThrow(() -> new IllegalArgumentException("ambient actor has no canonical role"));
+        Bioform bioform = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), actorId);
         BlockPosition nest = state.bootstrap().hive().seedNests().stream().filter(value -> value.id().equals(bioform.nestId())).findFirst().orElseThrow().anchor();
         if (bioform.isScout()) return new AmbientGoal(AmbientGoalKind.SCOUT_PATROL,
                 HiveScoutPatrolProcess.nextPosition(state, bioform));

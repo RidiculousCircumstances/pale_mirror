@@ -11,11 +11,16 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarte
 final class FrontierActorExecutionProcessModule implements FrontierWorldProcessModule {
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         if (event.payload() instanceof ActorPresenceStarted presence) {
-            if (!event.subject().equals(presence.execution().actorId()) || event.instant().ticks() != presence.atTick())
-                throw new IllegalArgumentException("presence event has foreign subject or time");
+            if (!event.subject().equals(presence.execution().actorId()))
+                throw new IllegalArgumentException("presence event subject=" + event.subject() + " differs from actor=" + presence.execution().actorId());
+            if (event.instant().ticks() != presence.atTick())
+                throw new IllegalArgumentException("presence event tick=" + event.instant().ticks() + " differs from activity tick="
+                        + presence.atTick() + " for " + presence.execution());
             var retained = state.actorExecutions().actors().get(event.subject());
             if (retained != null && retained.current().isPresent())
                 throw new IllegalArgumentException("presence cannot replace an active execution");
+            ActorExecutionComposition.CAPABILITIES.require(presence.execution().activityKind())
+                    .validateReference(state, presence.execution());
             return ActorExecutionComposition.LIFECYCLE.prepareBegin(state, presence.execution(), presence.atTick())
                     .commit(state, FrontierWorldStateUpdate.begin());
         }

@@ -143,8 +143,8 @@ class HumanRoleAssignmentTest {
     }
 
     private static FrontierWorldState kill(FrontierWorldState state, SubjectId actorId) {
-        return AmbientActorProcess.reduce(state, FrontierWorldStateSupport.actorOwner(state, actorId),
-                new AmbientActorDied(actorId, state.actorLocations().get(actorId).body(), "test:replacement"));
+        var present = ModeledActorBodyFacts.present(state, actorId);
+        return ModeledActorBodyFacts.died(present, actorId, present.actorLocations().get(actorId).body(), "test:replacement", 0L);
     }
 
     private static FrontierWorldState killRole(FrontierWorldState state, ResidentRole role) {

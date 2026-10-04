@@ -96,12 +96,23 @@ final class FrontierV3DepartureReturnReadFence {
                 inChunk(receipt.observed().body().x(), receipt.observed().body().z(), chunk)).toList();
         var cargoReceipts = cargo.observations().stream().filter(receipt ->
                 inChunk(receipt.body().x(), receipt.body().z(), chunk)).toList();
-        if (actorReceipts.isEmpty() && cargoReceipts.isEmpty()) return new boolean[] {false, false};
+        var bodyReceipts = actors.bodyDepartures().stream().filter(receipt ->
+                inChunk(receipt.observed().body().x(), receipt.observed().body().z(), chunk)).toList();
+        var ambientReceipts = actors.ambientDepartures().stream().filter(receipt ->
+                inChunk(receipt.observed().body().x(), receipt.observed().body().z(), chunk)).toList();
+        if (actorReceipts.isEmpty() && bodyReceipts.isEmpty() && ambientReceipts.isEmpty() && cargoReceipts.isEmpty())
+            return new boolean[] {false, false};
         if (!FrontierV3CargoCleanupPersistence.matchesStoredChunk(raw, chunk))
             throw new IllegalStateException("misplaced stored entity chunk during return fencing");
         var entities = FrontierV3CargoCleanupPersistence.serializedEntities(raw)
                 .orElseThrow(() -> new IllegalStateException("invalid stored entity inventory during return fencing"));
         boolean actorReturn = false, cargoReturn = false;
+        for (var receipt : bodyReceipts) {
+            if (entities.containsKey(receipt.identity().entityId())) actorReturn |= actors.markBodyReturnRead(receipt);
+        }
+        for (var receipt : ambientReceipts) {
+            if (entities.containsKey(receipt.carrier().identity().entityId())) actorReturn |= actors.markAmbientReturnRead(receipt);
+        }
         for (var receipt : actorReceipts) {
             if (entities.containsKey(receipt.carrier().identity().entityId()))
                 actorReturn |= actors.markReturnRead(receipt);

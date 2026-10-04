@@ -11,21 +11,19 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ActorCarr
 
 class FrontierV3ActorFirstAdmissionLedgerTest {
     private static final Declaration BODY = new Declaration(new SubjectId("resident:1-1"), ActorKind.RESIDENT,
-            Owner.AMBIENT_LEASE, new UUID(0, 1), Representation.LIVE_BODY, 1L, 1L);
-    private static final FrontierV3ActorOwnerBinding TARGET = FrontierV3ActorOwnerBinding.ambient(BODY);
+            Owner.ACTOR_BODY, new UUID(0, 1), Representation.LIVE_BODY, 0L, 1L);
+    private static final FrontierV3ActorOwnerBinding TARGET = FrontierV3ActorOwnerBinding.body(BODY);
     private static FrontierV3ActorFirstAdmission permit() {
         return FrontierV3ActorFirstAdmission.neverCreated(new FrontierV3ActorFirstAdmission.Identity(BODY.actorId(), BODY.kind(), BODY.entityId()));
     }
     private static FrontierV3AmbientCarrierLedger reload(FrontierV3AmbientCarrierLedger ledger) {
         return FrontierV3AmbientCarrierLedger.load(ledger.save(new CompoundTag(), null), null);
     }
-    @Test void pendingRestartRequiresExactLateBodyForBothKindsAndInitialOwners() {
+    @Test void pendingRestartRequiresExactLateIncarnationForBothKinds() {
         for (var kind : ActorKind.values()) for (var owner : Owner.values()) {
             var body = new Declaration(new SubjectId("actor:first-admission"), kind, owner,
-                    new UUID(7, 31), Representation.LIVE_BODY, 11L, 1L);
-            var target = owner == Owner.AMBIENT_LEASE
-                    ? FrontierV3ActorOwnerBinding.ambient(body)
-                    : FrontierV3ActorOwnerBinding.scene(body, new SceneLeaseId("lease:first"));
+                    new UUID(7, 31), Representation.LIVE_BODY, 0L, 1L);
+            var target = FrontierV3ActorOwnerBinding.body(body);
             var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
             ledger.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(
                     new FrontierV3ActorFirstAdmission.Identity(body.actorId(), kind, body.entityId())));
@@ -39,9 +37,7 @@ class FrontierV3ActorFirstAdmissionLedgerTest {
             assertFalse(FrontierV3ActorFirstAdmissionBoundary.admit(recovered, target,
                     () -> fail("restart must not reissue creation"),
                     () -> { fail("local absence must not produce a duplicate"); return true; }));
-            var foreign = owner == Owner.AMBIENT_LEASE
-                    ? FrontierV3ActorOwnerBinding.ambient(body.liveBody(owner, 12L, 1L))
-                    : FrontierV3ActorOwnerBinding.scene(body, new SceneLeaseId("lease:foreign"));
+            var foreign = FrontierV3ActorOwnerBinding.body(body.liveBody(owner, 0L, 2L));
             assertFalse(recovered.acknowledgeFirstAdmission(pending, foreign));
             assertEquals(pending, reload(recovered).firstAdmission(body.actorId()).orElseThrow());
             assertTrue(recovered.acknowledgeFirstAdmission(pending, target));
@@ -67,7 +63,7 @@ class FrontierV3ActorFirstAdmissionLedgerTest {
         assertFalse(rearmed.permitsRecordedOwner(TARGET), "a proved-absent body is not a live owner");
         assertFalse(rearmed.rearmFirstAdmissionAfterAbsence(pending, "b".repeat(64)));
         assertFalse(rearmed.rejectUncreatedFirstAdmission(pending));
-        var foreign = FrontierV3ActorOwnerBinding.ambient(BODY.liveBody(Owner.AMBIENT_LEASE, 2L, 1L));
+        var foreign = FrontierV3ActorOwnerBinding.body(BODY.liveBody(Owner.ACTOR_BODY, 0L, 2L));
         assertThrows(IllegalStateException.class, () -> rearmed.firstAdmission(BODY.actorId()).orElseThrow().begin(foreign));
         assertTrue(rearmed.beginFirstAdmission(TARGET));
         var attemptedAgain = reload(rearmed).firstAdmission(BODY.actorId()).orElseThrow();
@@ -78,9 +74,9 @@ class FrontierV3ActorFirstAdmissionLedgerTest {
         assertEquals(FrontierV3ActorFirstAdmission.Phase.PENDING,
                 reload(rearmed).firstAdmission(BODY.actorId()).orElseThrow().phase());
     }
-    @Test void oldHistoryLoadsButCannotForgeAProofBackedPermission() {
+    @Test void oldHistoryIsRejectedAndCannotForgeAProofBackedPermission() {
         var old = permit().save(); old.putInt("format", 1);
-        assertEquals(permit(), FrontierV3ActorFirstAdmission.load(old));
+        assertThrows(IllegalStateException.class, () -> FrontierV3ActorFirstAdmission.load(old));
         old.putString("phase", "absence_proven");
         assertThrows(IllegalStateException.class, () -> FrontierV3ActorFirstAdmission.load(old));
         var forged = permit().save(); forged.putString("phase", "absence_proven");
@@ -102,18 +98,15 @@ class FrontierV3ActorFirstAdmissionLedgerTest {
                 reload(exact).firstAdmission(BODY.actorId()).orElseThrow().phase());
         assertFalse(exact.beginFirstAdmission(TARGET));
     }
-    @Test void existingBodyCannotBypassUnusedPermitOrAnotherPendingSceneOwner() {
+    @Test void existingBodyCannotBypassUnusedPermitOrAnotherPhysicalIncarnation() {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); ledger.registerFirstAdmission(permit());
-        var scene = FrontierV3ActorOwnerBinding.scene(BODY.liveBody(Owner.SCENE_LEASE, 17L, 1L), new SceneLeaseId("lease:first-scene"));
-        assertFalse(ledger.permitsRecordedOwner(scene));
+        var foreign = FrontierV3ActorOwnerBinding.body(BODY.liveBody(Owner.ACTOR_BODY, 0L, 2L));
+        assertFalse(ledger.permitsRecordedOwner(foreign));
         assertTrue(ledger.beginFirstAdmission(TARGET));
         assertTrue(ledger.permitsRecordedOwner(TARGET));
-        assertFalse(ledger.permitsRecordedOwner(scene));
-        assertTrue(ledger.prepareHandoff(TARGET, scene));
-        assertTrue(ledger.permitsRecordedOwner(scene));
-        assertFalse(ledger.permitsRecordedOwner(TARGET));
-        assertFalse(ledger.permitsRecordedOwner(FrontierV3ActorOwnerBinding.scene(scene.declaration(), new SceneLeaseId("lease:impostor"))));
-        assertTrue(reload(ledger).permitsRecordedOwner(scene));
+        assertFalse(ledger.permitsRecordedOwner(foreign));
+        assertTrue(reload(ledger).permitsRecordedOwner(TARGET));
+        assertFalse(reload(ledger).permitsRecordedOwner(foreign));
     }
     @Test void creationRunsOnlyAfterPersistenceAndFalseRestoresPermitDurably() {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); ledger.registerFirstAdmission(permit());
@@ -164,21 +157,20 @@ class FrontierV3ActorFirstAdmissionLedgerTest {
         assertTrue(ledger.beginFirstAdmission(TARGET));
         var old = ledger.firstAdmission(BODY.actorId()).orElseThrow();
         assertTrue(ledger.rejectUncreatedFirstAdmission(old));
-        var next = FrontierV3ActorOwnerBinding.ambient(BODY.liveBody(Owner.AMBIENT_LEASE, 2L, 1L));
+        var next = TARGET;
         assertTrue(ledger.beginFirstAdmission(next));
         assertFalse(ledger.rejectUncreatedFirstAdmission(old));
         assertFalse(ledger.acknowledgeFirstAdmission(old, TARGET));
+        assertTrue(ledger.firstAdmission(BODY.actorId()).orElseThrow().attemptGeneration() > old.attemptGeneration(),
+                "a retry has a separate identity even though no physical body or activity changed");
         assertEquals(next, reload(ledger).firstAdmission(BODY.actorId()).orElseThrow().attempt().orElseThrow());
     }
-    @Test void handoffLatestSaveSettlesBirthWithoutRestoringFirstCreation() {
+    @Test void exactLatestSaveSettlesBirthWithoutRestoringFirstCreation() {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); ledger.registerFirstAdmission(permit());
         ledger.beginFirstAdmission(TARGET); var pending = ledger.firstAdmission(BODY.actorId()).orElseThrow();
-        var scene = FrontierV3ActorOwnerBinding.scene(BODY.liveBody(Owner.SCENE_LEASE, 17L, 1L), new SceneLeaseId("lease:successor"));
-        assertTrue(ledger.prepareHandoff(TARGET, scene));
-        assertFalse(ledger.acknowledgeFirstAdmission(pending, TARGET));
-        assertFalse(ledger.rejectUncreatedFirstAdmission(pending));
         ledger = reload(ledger);
-        assertTrue(ledger.acknowledgeHandoff(ledger.pendingHandoff(BODY.actorId()).orElseThrow(), scene.declaration()));
+        assertTrue(ledger.acknowledgeFirstAdmission(pending, TARGET));
+        assertFalse(ledger.rejectUncreatedFirstAdmission(pending));
         assertEquals(FrontierV3ActorFirstAdmission.Phase.ESTABLISHED, reload(ledger).firstAdmission(BODY.actorId()).orElseThrow().phase());
         assertFalse(ledger.beginFirstAdmission(TARGET));
     }
@@ -186,13 +178,13 @@ class FrontierV3ActorFirstAdmissionLedgerTest {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); ledger.registerFirstAdmission(permit());
         assertFalse(ledger.fence(BODY.inactiveCarrier(), 1L, 1L), "never-created permit is not a real physical predecessor");
         ledger.beginFirstAdmission(TARGET); var pending = ledger.firstAdmission(BODY.actorId()).orElseThrow();
-        assertFalse(ledger.fence(BODY.liveBody(Owner.AMBIENT_LEASE, 2L, 1L).inactiveCarrier(), 2L, 2L));
+        assertFalse(ledger.fence(BODY.liveBody(Owner.ACTOR_BODY, 0L, 2L).inactiveCarrier(), 2L, 2L));
         assertTrue(ledger.fence(BODY.inactiveCarrier(), 1L, 1L));
         assertFalse(ledger.acknowledgeFirstAdmission(pending, TARGET));
         assertFalse(ledger.rejectUncreatedFirstAdmission(pending));
         ledger = reload(ledger);
         assertTrue(ledger.hasCarrier(BODY.actorId()));
-        assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(BODY.liveBody(Owner.AMBIENT_LEASE, 2L, 2L))));
+        assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(BODY.liveBody(Owner.ACTOR_BODY, 0L, 2L))));
         assertEquals(FrontierV3ActorFirstAdmission.Phase.ESTABLISHED, reload(ledger).firstAdmission(BODY.actorId()).orElseThrow().phase());
     }
 }

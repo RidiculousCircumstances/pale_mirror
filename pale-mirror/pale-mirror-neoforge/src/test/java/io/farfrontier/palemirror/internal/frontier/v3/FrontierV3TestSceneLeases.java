@@ -34,6 +34,6 @@ final class FrontierV3TestSceneLeases {
         }).toList();
         BlockPosition cargo = operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support()).orElse(demand);
         return SceneLease.atExactPositions(id, checkpoint.worldId(), operationId, cargoId, demand, cargo,
-                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, engagementId, members, positions);
+                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, engagementId, members);
     }
 }

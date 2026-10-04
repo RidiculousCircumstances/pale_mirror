@@ -79,6 +79,17 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
         return new CompanyRegistry(companies, next, market);
     }
 
+    /** Institutional consequence in the same update as exact physical death, not a later event. */
+    public CompanyRegistry acknowledgeDeath(SubjectId residentId) {
+        Objects.requireNonNull(residentId, "dead resident");
+        var active = employmentContracts.values().stream()
+                .filter(contract -> contract.residentId().equals(residentId)
+                        && contract.status() == EmploymentContractStatus.ACTIVE)
+                .reduce((left, right) -> { throw new IllegalArgumentException("resident has ambiguous active employment"); });
+        // Already committed work may still invoice this retained terminated contract.
+        return active.map(contract -> terminate(contract.id())).orElse(this);
+    }
+
     public CompanyRegistry withMarket(MarketOrderBook nextMarket) {
         return new CompanyRegistry(companies, employmentContracts, nextMarket);
     }

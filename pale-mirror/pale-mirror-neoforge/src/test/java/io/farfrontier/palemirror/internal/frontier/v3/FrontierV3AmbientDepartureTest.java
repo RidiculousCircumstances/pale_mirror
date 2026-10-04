@@ -20,7 +20,7 @@ class FrontierV3AmbientDepartureTest {
         state = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.retarget(
                 state, ACTOR, AmbientGoalKind.WORK, moved);
         var original = receipt(state);
-        var departure = new FrontierV3AmbientDeparture(original.carrier(),
+        var departure = new FrontierV3AmbientDeparture(original.carrier(), original.residenceGeneration(),
                 new SceneMemberPosition(ACTOR, moved, original.observed().health()),
                 original.canonicalBodyAtCapture(), original.canonicalHealthAtCapture());
         assertTrue(departure.current(state));
@@ -40,7 +40,7 @@ class FrontierV3AmbientDepartureTest {
         assertTrue(ledger.fence(carrier.identity(), carrier.physicalRevision(), carrier.ambientRevision()));
         ledger = FrontierV3AmbientCarrierLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
         var successor = carrier.identity().liveBody(carrier.identity().owner(),
-                carrier.ambientRevision() + 1L, ledger.reconstructionEpoch(ACTOR));
+                0L, ledger.reconstructionEpoch(ACTOR));
         assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(successor)));
         assertTrue(ledger.ambientDeparture(ACTOR).isEmpty());
         assertFalse(ledger.hasCarrier(ACTOR));
@@ -50,6 +50,10 @@ class FrontierV3AmbientDepartureTest {
     private static FrontierWorldState hot() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ambient-departure"), 91L));
         state = AmbientLeaseStateProcess.prepare(state, AmbientActorProcess.nextLease(state, ACTOR, SimInstant.ZERO));
+        var location = state.actorLocations().get(ACTOR);
+        state = ActorBodyAuthority.present(state, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(
+                ActorBodyAuthority.current(state, ACTOR), location.body(), location.condition().health(),
+                location.body(), location.condition().health()));
         return AmbientLeaseStateProcess.transition(state, ACTOR, AmbientLeaseStatus.HOT);
     }
 
@@ -57,10 +61,10 @@ class FrontierV3AmbientDepartureTest {
         var location = state.actorLocations().get(ACTOR);
         long revision = state.ambientLeases().get(ACTOR).revision();
         var declaration = FrontierV3ActorCarrierComposition.fromCanonical(state, ACTOR,
-                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
                 SceneLease.deterministicEntityId(state.bootstrap().worldId(), ACTOR),
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, revision, 1L);
-        return new FrontierV3AmbientDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, revision, revision),
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, 1L);
+        return new FrontierV3AmbientDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, revision, revision), 1L,
                 new SceneMemberPosition(ACTOR, location.body(), FixedScalar.whole(7L)), location.body(), location.condition().health());
     }
 
@@ -96,7 +100,7 @@ class FrontierV3AmbientDepartureTest {
         var receipt = receipt(hot()); var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         assertTrue(ledger.recordAmbientDeparture(receipt));
         assertFalse(ledger.hasCarrier(ACTOR));
-        var changed = new FrontierV3AmbientDeparture(receipt.carrier(),
+        var changed = new FrontierV3AmbientDeparture(receipt.carrier(), receipt.residenceGeneration(),
                 new SceneMemberPosition(ACTOR, receipt.observed().body(), FixedScalar.whole(8L)),
                 receipt.canonicalBodyAtCapture(), receipt.canonicalHealthAtCapture());
         assertFalse(ledger.recordAmbientDeparture(changed));

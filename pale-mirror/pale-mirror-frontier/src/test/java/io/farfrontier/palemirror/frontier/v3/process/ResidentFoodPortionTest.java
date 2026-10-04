@@ -93,7 +93,8 @@ class ResidentFoodPortionTest {
                         1, 7, 2, PhysicalCustodyLeaseStatus.ACQUIRED, null))));
         var ambient = new AmbientActorLease(resident, fixture.service().standingBody(), new SimInstant(96_000), 1,
                 AmbientLeaseStatus.PREPARED, AmbientGoalKind.PATROL, fixture.service().standingBody());
-        state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, ambient), resident, AmbientLeaseStatus.HOT);
+        state = AmbientLeaseStateProcess.transition(ModeledActorBodyFacts.present(AmbientLeaseStateProcess.prepare(state, ambient), resident),
+                resident, AmbientLeaseStatus.HOT);
         var started = ResidentMealProcess.selectSourceAtYield(state, resident, 96_000).orElseThrow();
         assertEquals(9, started.meal().portion().quantity());
         assertEquals(Map.of(LOT_A, 3, LOT_B, 6), started.meal().portion().lotQuantities());

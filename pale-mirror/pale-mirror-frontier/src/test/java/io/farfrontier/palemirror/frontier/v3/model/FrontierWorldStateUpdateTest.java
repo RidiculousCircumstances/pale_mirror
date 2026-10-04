@@ -10,6 +10,24 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierWorldStateUpdateTest {
+    @Test void ownedContributionsComposeAtomicallyAndRejectCompetingWritersBeforeAddingAnything() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:update-composition"), 91L));
+        var first = FrontierWorldStateUpdate.begin().inventory(state.inventory());
+        var second = FrontierWorldStateUpdate.begin().humanPopulation(state.humanPopulation());
+        first.merge(second);
+        org.junit.jupiter.api.Assertions.assertEquals(java.util.Set.of(FrontierWorldStateUpdate.Component.INVENTORY,
+                FrontierWorldStateUpdate.Component.HUMAN_POPULATION), first.changedComponents());
+        org.junit.jupiter.api.Assertions.assertEquals(java.util.Set.of(FrontierWorldStateUpdate.Component.HUMAN_POPULATION),
+                second.changedComponents(), "composition does not consume or mutate the contributing patch");
+        var changed = state.withChanges(first);
+        assertSame(state.inventory(), changed.inventory());
+        assertSame(state.humanPopulation(), changed.humanPopulation());
+        var before = first.changedComponents();
+        assertThrows(IllegalArgumentException.class, () -> first.merge(FrontierWorldStateUpdate.begin()
+                .actorLocations(state.actorLocations()).inventory(state.inventory())));
+        org.junit.jupiter.api.Assertions.assertEquals(before, first.changedComponents(),
+                "a duplicate writer must fail before an unrelated component is partially copied");
+    }
     @Test
     void namedChangeReplacesOnlyItsDeclaredComponent() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:update"), 91L));

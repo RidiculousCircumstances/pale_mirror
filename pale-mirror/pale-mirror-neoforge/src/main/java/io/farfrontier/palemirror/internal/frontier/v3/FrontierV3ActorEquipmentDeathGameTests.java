@@ -47,7 +47,7 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
         helper.setBlock(new BlockPos(2, 7, 0), Blocks.STONE.defaultBlockState());
         Villager firstBody = body(level, state(runtime), firstActor, helper.absolutePos(new BlockPos(2, 8, 0)));
         firstBody.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(first)); level.addFreshEntity(firstBody);
-        helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, firstBody), "the exact actor-held stack must be accounted before the managed body dies");
+        helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, firstBody, firstActor), "the exact actor-held stack must be accounted before the managed body dies");
         ExactItemStack released = state(runtime).inventory().items().get(first.id());
         helper.assertTrue(released.custody() instanceof InventoryCustody.WorldCarrier, "the same canonical stack must become one world carrier");
         helper.assertTrue(firstBody.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty(), "the durable release clears the physical hand before vanilla death");
@@ -67,7 +67,7 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
             helper.setBlock(new BlockPos(6, 7, 0), Blocks.STONE.defaultBlockState());
             Villager secondBody = body(level, state(changedRuntime), secondActor, helper.absolutePos(new BlockPos(6, 8, 0)));
             secondBody.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance()); level.addFreshEntity(secondBody);
-            helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, changedRuntime, secondBody), "a changed physical hand is still an accounted equipment outcome");
+            helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, changedRuntime, secondBody, secondActor), "a changed physical hand is still an accounted equipment outcome");
             helper.assertTrue(!state(changedRuntime).inventory().items().containsKey(second.id()), "a missing exact hand is destroyed rather than replaced or dropped");
             helper.assertTrue(level.getEntitiesOfClass(ItemEntity.class, secondBody.getBoundingBox().inflate(2.0D), drop -> FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), second)).isEmpty(),
                     "a changed hand cannot manufacture an exact physical drop");
@@ -102,6 +102,10 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
         // physical drop at the declared fixture location while the postcondition is observed.
         body.setNoAi(true);
         body.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, actorId.value()); body.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
+        // Isolated equipment-custody fixture, not a claim of body insertion/admission.
+        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3ActorCarrierComposition.fromCanonical(state, actorId,
+                io.farfrontier.palemirror.frontier.v3.model.ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                body.getUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 1L));
         return body;
     }
 

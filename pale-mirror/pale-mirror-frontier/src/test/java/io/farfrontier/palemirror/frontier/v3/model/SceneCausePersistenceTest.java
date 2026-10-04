@@ -29,8 +29,7 @@ class SceneCausePersistenceTest {
         BlockPosition support = new BlockPosition(8, 64, 8);
         SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:harvest-scene-owner-wire"), world,
                 cause, support, new SimInstant(10L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))),
-                Map.of(actor, BodyPosition.aboveSupportCell(support)), Set.of(), Optional.empty());
+                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))), Set.of(), Optional.empty());
         ResourceSiteHarvestSceneLeasePrepared payload = new ResourceSiteHarvestSceneLeasePrepared(lease);
         byte[] encoded = FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload);
         assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), encoded));
@@ -84,8 +83,7 @@ class SceneCausePersistenceTest {
         SceneLease assault = SceneLease.forCause(new SceneLeaseId("lease:assault-wal"), world,
                 new SettlementAssaultSceneCause(new SubjectId("assault:scene-cause-wal"), new SubjectId("settlement:northwatch")),
                 new BlockPosition(8, 64, 8), new SimInstant(10L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))),
-                Map.of(actor, BodyPosition.aboveSupportCell(new BlockPosition(8, 64, 8))), Set.of(), Optional.empty());
+                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))), Set.of(), Optional.empty());
 
         assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.payloadCodecs().encode(new SceneLeasePrepared(assault)));
         SettlementAssaultSceneLeasePrepared payload = new SettlementAssaultSceneLeasePrepared(assault);
@@ -98,8 +96,7 @@ class SceneCausePersistenceTest {
         SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:engineering-wal"), world,
                 new EngineeringWorkSceneCause(new SubjectId("construction:engineering-wal"), 3),
                 new BlockPosition(8, 64, 8), new SimInstant(10L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))),
-                Map.of(actor, BodyPosition.aboveSupportCell(new BlockPosition(7, 64, 7))), Set.of(), Optional.empty());
+                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))), Set.of(), Optional.empty());
 
         EngineeringWorkSceneLeasePrepared payload = new EngineeringWorkSceneLeasePrepared(lease);
         EngineeringWorkSceneLeasePrepared decoded = assertInstanceOf(EngineeringWorkSceneLeasePrepared.class,
@@ -117,8 +114,7 @@ class SceneCausePersistenceTest {
         SceneLease assault = SceneLease.forCause(new SceneLeaseId("lease:assault-owner"), state.bootstrap().worldId(),
                 new SettlementAssaultSceneCause(new SubjectId("assault:owner"), new SubjectId("settlement:northwatch")),
                 FrontierTestPositions.supportOf(state.actorLocations().get(actor)), new SimInstant(10L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))),
-                positions, Set.of(), Optional.empty());
+                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))), Set.of(), Optional.empty());
 
         assertThrows(IllegalArgumentException.class, () -> state.prepareSceneLease(assault));
     }

@@ -25,8 +25,7 @@ class ProductionWorkClockTest {
         var world = state.bootstrap().worldId();
         var lease = SceneLease.forCause(new SceneLeaseId("lease:production-clock"), world, new ProductionWorkSceneCause(job.id()),
                 body.supportingSurface().support(), SimInstant.ZERO, 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(world, job.workerId()))),
-                Map.of(job.workerId(), body), Set.of(), Optional.empty());
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(world, job.workerId()))), Set.of(), Optional.empty());
         var hot = cold.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,

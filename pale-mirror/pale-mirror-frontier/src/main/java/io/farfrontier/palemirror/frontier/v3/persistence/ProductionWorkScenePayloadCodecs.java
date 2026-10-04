@@ -24,7 +24,7 @@ import java.util.UUID;
 
 /** Stable WAL boundary for the one-worker production-work scene. */
 final class ProductionWorkScenePayloadCodecs {
-    private static final int MARKER = 0xfffc;
+    private static final int MARKER = 0xffe0;
     private ProductionWorkScenePayloadCodecs() { }
     static PayloadCodecs codecs() { return new PayloadCodecs(List.of(new Prepared(), new Handoff())); }
     static PayloadCodecs productionEvents() { return new PayloadCodecs(List.of(new Progressed(), new TraversalAdvanced(), new ColdWorkAdvanced(), new TraversalBlocked(), new Finalized(), new PreparationAborted())); }
@@ -103,24 +103,22 @@ final class ProductionWorkScenePayloadCodecs {
         output.writeByte(lease.members().size());
         for (SceneMember member : lease.members()) {
             FrontierWorldPayloadCodecs.writeSubject(output, member.actorId()); FrontierWorldPayloadCodecs.writeString(output, member.entityId().toString());
-            BodyPosition body = lease.memberPosition(member.actorId()); writePosition(output, new BlockPosition(body.x(), body.y(), body.z()));
         }
         output.writeByte(lease.ambientHandoffActorIds().size()); for (SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) FrontierWorldPayloadCodecs.writeSubject(output, actor);
     }
     private static SceneLease readLease(DataInputStream input) throws IOException {
-        if (input.readUnsignedShort() != MARKER) throw new IllegalArgumentException("production-work payload requires current typed-body envelope");
+        if (input.readUnsignedShort() != MARKER) throw new IllegalArgumentException("production-work payload requires current participant-only envelope");
         SceneLeaseId id = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)); WorldId world = new WorldId(FrontierWorldPayloadCodecs.readString(input));
         ProductionWorkSceneCause cause = new ProductionWorkSceneCause(FrontierWorldPayloadCodecs.readSubject(input).value()); BlockPosition handoff = readPosition(input);
         long instant = input.readLong(), revision = input.readLong(); int status = input.readUnsignedByte(); if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
-        List<SceneMember> members = new ArrayList<>(); Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
+        List<SceneMember> members = new ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
             SubjectId actor = FrontierWorldPayloadCodecs.readSubject(input).value();
             members.add(new SceneMember(actor, UUID.fromString(FrontierWorldPayloadCodecs.readString(input))));
-            BlockPosition position = readPosition(input); positions.put(actor, new BodyPosition(position.x(), position.y(), position.z()));
         }
         Set<SubjectId> ambient = new LinkedHashSet<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) ambient.add(FrontierWorldPayloadCodecs.readSubject(input).value());
-        return SceneLease.forCause(id, world, cause, handoff, new SimInstant(instant), revision, FrontierWireTags.require(SceneLeaseStatus.class, status), members, positions, ambient, Optional.empty());
+        return SceneLease.forCause(id, world, cause, handoff, new SimInstant(instant), revision, FrontierWireTags.require(SceneLeaseStatus.class, status), members, ambient, Optional.empty());
     }
     private static void writeMembers(DataOutputStream output, List<SceneMemberPosition> members) throws IOException {
         output.writeByte(members.size());

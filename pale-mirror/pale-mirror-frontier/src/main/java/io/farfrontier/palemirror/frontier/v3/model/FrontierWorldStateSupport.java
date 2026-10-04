@@ -62,10 +62,13 @@ public final class FrontierWorldStateSupport {
     }
 
     public static SubjectId actorOwner(FrontierWorldState state, SubjectId actorId) {
-        ResidentProfile resident = state.humanPopulation().resident(actorId);
-        if (resident != null) return resident.settlementId();
-        return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-                .anyMatch(bioform -> bioform.id().equals(actorId)) ? state.bootstrap().hive().id() : null;
+        ActorLocation declaration = state.actorLocations().get(actorId);
+        if (declaration == null) return null;
+        // The stored nominal kind selects the owner schema. Membership only validates it.
+        return switch (declaration.kind()) {
+            case RESIDENT -> resident(state, actorId).settlementId();
+            case BIOFORM -> bioform(state.bootstrap(), state.hiveColony(), actorId).hiveId();
+        };
     }
 
     static ResidentProfile resident(FrontierWorldState state, SubjectId residentId) {
@@ -171,9 +174,9 @@ public final class FrontierWorldStateSupport {
         return item.economicOwnerId();
     }
 
-    static void validateActorItemCustody(WorldId worldId, Set<SubjectId> actors, ExactInventory inventory,
-                                         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> sceneLeases,
-                                         Map<SubjectId, AmbientActorLease> ambientLeases) {
+    static void validateActorItemCustody(WorldId worldId, Map<SubjectId, ActorLocation> locations,
+                                         ExactInventory inventory, FencedRecoveryState recovery) {
+        var actors = locations.keySet();
         if (inventory.items().values().stream().anyMatch(item -> item.custody() instanceof InventoryCustody.Actor actor
                 && !actors.contains(actor.actorId()))) throw new IllegalArgumentException("actor-held item must retain one canonical actor");
         for (CustodyAccount account : inventory.fungibleResources().accounts().values()) {
@@ -181,29 +184,28 @@ public final class FrontierWorldStateSupport {
                 throw new IllegalArgumentException("actor-held resource must retain one canonical actor");
             }
         }
-        List<PhysicalStackAddress.ActorStack> hands = new java.util.ArrayList<>();
         for (PhysicalStackBinding binding : inventory.fungibleResources().bindings().values()) {
             if (binding.address() instanceof PhysicalStackAddress.ActorStack hand
                     && (!actors.contains(hand.actorId())
                     || !hand.entityId().equals(SceneLease.deterministicEntityId(worldId, hand.actorId())))) {
                 throw new IllegalArgumentException("actor-hand resource binding has a foreign actor or body");
             }
-            if (binding.address() instanceof PhysicalStackAddress.ActorStack hand) hands.add(hand);
-        }
-        if (hands.isEmpty()) return;
-        Set<SubjectId> physicalOwners = new HashSet<>();
-        for (SceneLease lease : sceneLeases.values()) {
-            if (lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.PREPARED) {
-                lease.members().forEach(member -> physicalOwners.add(member.actorId()));
-            }
-        }
-        for (AmbientActorLease lease : ambientLeases.values()) {
-            if (lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.PREPARED)
-                physicalOwners.add(lease.actorId());
-        }
-        for (PhysicalStackAddress.ActorStack hand : hands) {
-            if (!physicalOwners.contains(hand.actorId())) {
-                throw new IllegalArgumentException("actor-hand resource binding lacks an admitted physical owner");
+            if (binding.address() instanceof PhysicalStackAddress.ActorStack hand) {
+                var id = io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(hand.actorId());
+                var body = recovery.current().get(id);
+                var retired = recovery.tombstones().get(id);
+                if (locations.get(hand.actorId()).condition().status() == ActorLifeStatus.ALIVE) {
+                    if (body == null || body.asset() != FencedRecoveryAsset.BODY || body.ownerRevision() != 0L
+                            || !body.ownerId().equals(hand.actorId())
+                            || body.phase() != FencedRecoveryPhase.RUNNING && body.phase() != FencedRecoveryPhase.AMBIGUOUS)
+                        throw new IllegalArgumentException("actor resource binding lacks its independently admitted body");
+                } else if (body != null || retired == null || retired.asset() != FencedRecoveryAsset.BODY
+                        || retired.ownerRevision() != 0L || !retired.ownerId().equals(hand.actorId())
+                        || retired.disposition() != FencedRecoveryDisposition.REJECT_STALE) {
+                    throw new IllegalArgumentException("deceased actor resource binding lacks its retained body retirement");
+                }
+                // Retained bindings are last resource-layout evidence, not actuation
+                // authority or a declaration that a fatality consumed/dropped the stack.
             }
         }
     }

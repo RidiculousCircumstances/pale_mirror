@@ -32,6 +32,8 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             var entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob worker) || !worker.isAlive()
                     || !FrontierV3SceneExecutor.owned(worker, state, lease, member)) continue;
+            if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker)) continue;
+            state = runtime.decodedState().orElseThrow();
             var observed = FrontierV3SupportedBodyCapture.observe(level, worker);
             if (observed.isEmpty()) continue;
             ItemStack hand = worker.getOffhandItem();
@@ -45,9 +47,8 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                     || FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()) != null
                     || FrontierV3ResourceSiteLedger.get(level).fieldHandProjection(job.siteId()) != null
                     || !FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), worker))) continue;
-            // owned() already proves the live carrier epoch against its physical ledger.
-            // The canonical recovery fence advances on scene admission, not carrier recreation;
-            // these are independent clocks and must never be compared for equality.
+            // Common body inspection has already committed current physical permission/pose.
+            // This family receipt only resumes the inspected process and exact carried batch.
             var recoveryEpoch = recoveryEpoch(state, lease);
             if (recoveryEpoch.isEmpty()) continue;
             var receipt = new ResourceSiteHarvestSceneReconciled(job.siteId(), job.id(), lease.id(), lease.revision(),
@@ -70,7 +71,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
         return recovery != null && recovery.asset() == FencedRecoveryAsset.BODY
                 && recovery.ownerId().equals(lease.members().getFirst().actorId())
                 && recovery.ownerRevision() == 0L
-                && (recovery.phase() == FencedRecoveryPhase.AMBIGUOUS || recovery.phase() == FencedRecoveryPhase.RUNNING)
+                && recovery.phase() == FencedRecoveryPhase.RUNNING
                 ? java.util.OptionalLong.of(recovery.authorityEpoch()) : java.util.OptionalLong.empty();
     }
 

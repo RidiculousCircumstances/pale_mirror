@@ -20,7 +20,6 @@ final class FrontierAmbientProcessModule implements FrontierWorldProcessModule {
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.AMBIENT_ACTOR_CUSTODY));
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
-        if (command.payload() instanceof AmbientActorDied death) return AmbientActorProcess.plan(state, death);
         if (command.payload() instanceof AmbientActorObserved observation) return AmbientActorProcess.plan(state, observation);
         if (command.payload() instanceof AmbientBodyConfirmed || command.payload() instanceof AmbientLeasePrepared || command.payload() instanceof AmbientLeaseTransition
                 || command.payload() instanceof AmbientLeaseReleased || command.payload() instanceof AmbientLeaseRestartAbsenceObserved)
@@ -34,7 +33,6 @@ final class FrontierAmbientProcessModule implements FrontierWorldProcessModule {
             return AmbientActorProcess.reduceLease(state, event.subject(), event.instant(), event.payload());
         }
         return switch (event.payload()) {
-            case AmbientActorDied death -> AmbientActorProcess.reduce(state, event.subject(), death);
             case AmbientActorObserved observation -> AmbientActorProcess.reduce(state, event.subject(), observation);
             default -> throw new IllegalArgumentException("ambient process does not own event: " + event.payload().type());
         };

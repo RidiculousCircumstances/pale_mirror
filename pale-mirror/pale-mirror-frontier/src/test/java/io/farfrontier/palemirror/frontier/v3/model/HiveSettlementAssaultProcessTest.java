@@ -172,6 +172,46 @@ class HiveSettlementAssaultProcessTest {
         assertEquals(DeferredAftermathKnowledge.KNOWN_CLEAR, aftermath.aftermath().knowledge());
         assertEquals(DeferredAftermathCellStatus.PENDING, aftermath.aftermath().nextPending().status());
         assertEquals(aftermath, FrontierWorldRuntimeDefinition.payloadCodecs().decode(aftermath.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(aftermath)));
+        java.util.Map<SubjectId, BlockPosition> originalPositions = state.coldSettlementAssaultSceneCandidates().getFirst().memberPositions();
+        SubjectId casualty = null;
+        for (int turn = 0; turn < 512 && casualty == null; turn++) {
+            List<ProposedEvent> candidate = HiveSettlementAssaultProcess.planCombat(state, bomberTurn);
+            SettlementAssaultStrike ordinary = candidate.stream().map(ProposedEvent::payload)
+                    .filter(SettlementAssaultStrike.class::isInstance).map(SettlementAssaultStrike.class::cast).findFirst().orElseThrow();
+            state = HiveSettlementAssaultProcess.reduceStrike(state, fixture.hive(), ordinary);
+            if (state.actorLocations().get(ordinary.targetId()).condition().status() == ActorLifeStatus.DEAD) casualty = ordinary.targetId();
+            bomberTurn = scheduled(candidate, "frontier.settlement_assault.combat");
+        }
+        assertTrue(casualty != null, "an ordinary lethal strike must reach survivor continuation, not just the first bomber turn");
+        assertEquals(assault.attackerIds(), state.strategicPlans().settlementAssaults().get(assault.id()).attackerIds());
+        assertEquals(assault.defenderIds(), state.strategicPlans().settlementAssaults().get(assault.id()).defenderIds());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        List<ProposedEvent> survivorTurn = HiveSettlementAssaultProcess.planCombat(state, bomberTurn);
+        assertEquals(survivorTurn, HiveSettlementAssaultProcess.planCombat(recovered, bomberTurn));
+        SettlementAssaultStrike survivorStrike = survivorTurn.stream().map(ProposedEvent::payload)
+                .filter(SettlementAssaultStrike.class::isInstance).map(SettlementAssaultStrike.class::cast).findFirst().orElseThrow();
+        assertFalse(survivorStrike.attackerId().equals(casualty));
+        assertFalse(survivorStrike.targetId().equals(casualty));
+        state = HiveSettlementAssaultProcess.reduceStrike(state, fixture.hive(), survivorStrike);
+        java.util.Map<SubjectId, BlockPosition> survivors = state.coldSettlementAssaultSceneCandidates().getFirst().memberPositions();
+        assertFalse(survivors.containsKey(casualty), "fresh physical admission must not create a body for a retained casualty");
+        assertEquals(originalPositions.size() - 1, survivors.size());
+        SubjectId dead = casualty;
+        FrontierWorldState afterCasualty = state;
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> ActorBodyAuthority.demand(afterCasualty, dead));
+        SceneLease staleRoster = battleLease(state, assault, originalPositions, "lease:assault-dead-roster");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> afterCasualty.prepareSceneLease(staleRoster));
+        SceneLease survivorLease = battleLease(state, assault, survivors, "lease:assault-survivors");
+        state = state.prepareSceneLease(survivorLease);
+        FrontierWorldState withoutPhysicalPresence = state;
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> withoutPhysicalPresence.transitionSceneLease(survivorLease.id(), SceneLeaseStatus.HOT));
+        state = FrontierTestActorBodies.present(state, survivorLease).transitionSceneLease(survivorLease.id(), SceneLeaseStatus.HOT);
+        assertEquals(SettlementAssaultStatus.HOT, state.strategicPlans().settlementAssaults().get(assault.id()).status());
+        assertFalse(ActorExecutionCoordinator.coldAvailable(state, survivors.keySet()));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
@@ -320,14 +360,15 @@ class HiveSettlementAssaultProcessTest {
                 SceneLease.deterministicEntityId(positioned.bootstrap().worldId(), actor))).toList();
         SceneLease lease = SceneLease.forCause(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:assault-hot"), state.bootstrap().worldId(),
                 new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), assault.settlementAnchor(), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(400L),
-                7L, SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(positions), java.util.Set.of(), java.util.Optional.empty());
+                7L, SceneLeaseStatus.PREPARED, members, java.util.Set.of(), java.util.Optional.empty());
         SettlementAssaultSceneLeasePrepared payload = new SettlementAssaultSceneLeasePrepared(lease);
         assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
         FrontierWorldState unknown = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
         unknown = FrontierSceneLeaseStateSupport.recoveryUnresolved(unknown, new SceneLeaseRecoveryUnresolved(lease.id(), java.util.Set.of(members.getFirst().actorId()), false));
         assertEquals(SettlementAssaultStatus.UNKNOWN_AFTER_RESTART, unknown.strategicPlans().settlementAssaults().get(assault.id()).status());
         assertEquals(unknown, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknown)));
-        state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT).transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease)
+                .transitionSceneLease(lease.id(), SceneLeaseStatus.HOT).transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
         FrontierWorldState draining = state;
         List<SceneMemberPosition> captured = members.stream().map(member -> {
             ActorLocation actor = draining.actorLocations().get(member.actorId()); return new SceneMemberPosition(member.actorId(), actor.body(), actor.condition().health());
@@ -415,6 +456,15 @@ class HiveSettlementAssaultProcessTest {
         return events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
                 .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).filter(action -> action.kind().equals(kind))
                 .findFirst().orElseThrow(() -> new AssertionError("missing scheduled action: " + kind));
+    }
+
+    private static SceneLease battleLease(FrontierWorldState state, SettlementAssault assault,
+            java.util.Map<SubjectId, BlockPosition> positions, String id) {
+        List<SceneMember> members = positions.keySet().stream().sorted().map(actor -> new SceneMember(actor,
+                SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))).toList();
+        return SceneLease.forCause(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(id), state.bootstrap().worldId(),
+                new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), assault.settlementAnchor(), new SimInstant(400L),
+                7L, SceneLeaseStatus.PREPARED, members, java.util.Set.of(), Optional.empty());
     }
 
     private record Fixture(FrontierWorldState state, SubjectId hive, StrategicTask task, HiveSettlementKnowledge.Sighting sighting) { }

@@ -43,8 +43,7 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
                 state.resourceSite(site).cropSlots().get(job.progress().nextCropSlotIndex()), config.initialInstant(), 17L,
                 io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
                 List.of(new io.farfrontier.palemirror.frontier.v3.model.SceneMember(job.workerId(),
-                        io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(config.worldId(), job.workerId()))),
-                java.util.Map.of(job.workerId(), body), java.util.Set.of(), java.util.Optional.empty());
+                        io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(config.worldId(), job.workerId()))), java.util.Set.of(), java.util.Optional.empty());
         state = state.prepareSceneLease(lease);
         assertTrue(FrontierV3ResourceSiteHarvestReconciliation.recoveryEpoch(state, lease).isEmpty());
         state = state.transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CONFLICT);
@@ -52,9 +51,7 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
         long canonicalEpoch = state.fencedRecovery().current().get(
                 ActorBodyId.recoveryBindingId(job.workerId()))
                 .authorityEpoch();
-        var carrier = FrontierV3AmbientActorExecutor.carrierDeclaration(state, job.workerId(),
-                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, lease.members().getFirst().entityId(),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), canonicalEpoch + 5L);
+        var carrier = FrontierV3AmbientActorExecutor.carrierDeclaration(state, job.workerId(), lease.members().getFirst().entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, canonicalEpoch + 5L);
         assertTrue(carrier.epoch() != canonicalEpoch);
         assertEquals(canonicalEpoch, FrontierV3ResourceSiteHarvestReconciliation.recoveryEpoch(state, conflict).orElseThrow());
         assertTrue(FrontierV3ResourceSiteHarvestReconciliation.recoveryEpoch(config.initialState(), conflict).isEmpty());
@@ -75,8 +72,7 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
                 body.supportingSurface().support(), config.initialInstant(), 1L,
                 io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.DRAINING,
                 List.of(new io.farfrontier.palemirror.frontier.v3.model.SceneMember(worker,
-                        io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(config.worldId(), worker))),
-                java.util.Map.of(worker, body), java.util.Set.of(), java.util.Optional.empty());
+                        io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(config.worldId(), worker))), java.util.Set.of(), java.util.Optional.empty());
         var checkpoint = new CheckpointImage(config.worldId(), new Revision(1L), config.initialInstant(),
                 new byte[0], config.initialSchedules(), List.of());
         var expected = FrontierV3ContinuationBinding.require(checkpoint, site, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND);

@@ -18,14 +18,10 @@ class FrontierV3OfflineFirstAdmissionRecoveryPublicationTest {
 
     private static FrontierV3AmbientCarrierLedger pending(FrontierWorldState state) {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
-        var body = FrontierV3AmbientActorExecutor.carrierDeclaration(state, ACTOR,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                FrontierV3AmbientActorExecutor.entityId(state, ACTOR),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
-                state.ambientLeases().get(ACTOR).revision(), 1L);
+        var body = FrontierV3AmbientActorExecutor.carrierDeclaration(state, ACTOR, FrontierV3AmbientActorExecutor.entityId(state, ACTOR), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L);
         assertTrue(ledger.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(
                 new FrontierV3ActorFirstAdmission.Identity(ACTOR, body.kind(), body.entityId()))));
-        assertTrue(ledger.beginFirstAdmission(FrontierV3ActorOwnerBinding.ambient(body)));
+        assertTrue(ledger.beginFirstAdmission(FrontierV3ActorOwnerBinding.body(body)));
         return ledger;
     }
 
@@ -90,7 +86,7 @@ class FrontierV3OfflineFirstAdmissionRecoveryPublicationTest {
         var absence = proof(directory, state, "exact");
         assertNotNull(FrontierV3OfflineFirstAdmissionRecoveryPlan.create(state, ACTOR, absence, ledger));
         var hot = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.transition(
-                state, ACTOR, AmbientLeaseStatus.HOT);
+                io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts.present(state, ACTOR), ACTOR, AmbientLeaseStatus.HOT);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3OfflineFirstAdmissionRecoveryPlan.create(hot, ACTOR, absence, ledger));
         var foreign = new FrontierV3OfflineActorAbsence.Proof(directory, java.util.UUID.randomUUID(), 1, absence.files());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3OfflineFirstAdmissionRecoveryPlan.create(state, ACTOR, foreign, ledger));
@@ -107,15 +103,11 @@ class FrontierV3OfflineFirstAdmissionRecoveryPublicationTest {
         var state = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.prepare(initial,
                 io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess.nextLease(initial, actor,
                         io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO));
-        var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actor,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                FrontierV3AmbientActorExecutor.entityId(state, actor),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
-                state.ambientLeases().get(actor).revision(), 1L);
+        var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actor, FrontierV3AmbientActorExecutor.entityId(state, actor), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L);
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         assertTrue(ledger.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(
                 new FrontierV3ActorFirstAdmission.Identity(actor, declaration.kind(), declaration.entityId()))));
-        assertTrue(ledger.beginFirstAdmission(FrontierV3ActorOwnerBinding.ambient(declaration)));
+        assertTrue(ledger.beginFirstAdmission(FrontierV3ActorOwnerBinding.body(declaration)));
         var proof = new FrontierV3OfflineActorAbsence.Proof(directory, declaration.entityId(), 1,
                 List.of(new FrontierV3OfflineActorAbsence.FileProof("entities/r.0.0.mca", "bioform-proof")));
         assertEquals(declaration, FrontierV3OfflineFirstAdmissionRecoveryPlan.create(state, actor, proof, ledger)

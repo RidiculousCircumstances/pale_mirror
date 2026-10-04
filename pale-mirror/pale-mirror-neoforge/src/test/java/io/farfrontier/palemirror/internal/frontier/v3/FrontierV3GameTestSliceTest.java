@@ -45,6 +45,11 @@ class FrontierV3GameTestSliceTest {
         assertFalse(FrontierV3GameTestSlice.includes("cargo-interaction", "pm-frontier-v3-scene-cargo-authority"));
         assertTrue(FrontierV3GameTestSlice.includes("scene-departure", "pm-frontier-v3-scene-departure"));
         assertTrue(FrontierV3GameTestSlice.includes("scene-departure", "pm-frontier-v3-scene-deaths"));
+        assertTrue(FrontierV3GameTestSlice.includes("body-lifetime", "pm-frontier-v3-scene-body-lifetime"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene-departure", "pm-frontier-v3-scene-body-lifetime"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-body-lifetime"));
+        assertTrue(FrontierV3GameTestSlice.includes("", "pm-frontier-v3-scene-body-lifetime"));
+        assertFalse(FrontierV3GameTestSlice.includes("body-lifetime", "pm-frontier-v3-scene-deaths"));
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-departure"));
         assertFalse(FrontierV3GameTestSlice.includes("scene-departure", "pm-frontier-v3-scene-cargo"));
     }

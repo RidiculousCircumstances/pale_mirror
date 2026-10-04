@@ -65,6 +65,7 @@ final class CargoCarrierReleaseStateSupport {
         FencedRecoveryState recovery = FrontierSceneLeaseStateSupport.observeCargoCarrier(state.fencedRecovery(), lease);
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).contracts(contracts).operations(operations)
                 .sceneLeases(leases).strategicPlans(plans).fencedRecovery(recovery).actorExecutions(
-                        OperationExecutionAuthority.retired(state, OperationExecutionAuthority.logisticsCurrent(state, operation))));
+                        RouteEngagementExecutionAuthority.retireInterrupted(state, operation.id(),
+                                OperationExecutionAuthority.retired(state, OperationExecutionAuthority.logisticsCurrent(state, operation)))));
     }
 }

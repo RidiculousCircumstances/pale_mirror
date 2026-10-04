@@ -19,7 +19,7 @@ import java.util.Set;
  * Naturally loaded infirmary treatment for one exact patient and retained local staff.
  *
  * <p>The canonical operation chooses people, building and the exact remedy.  This adapter only
- * transfers already owned ambient bodies or materializes them at their current canonical
+ * references the existing physical bodies or materializes them at their current canonical
  * positions, walks those same bodies to visible infirmary positions, then makes the pre-existing
  * exact-consumption intent eligible.  It never teleports a person, creates a replacement or
  * writes an inventory slot.</p>
@@ -59,13 +59,12 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
         return SceneLease.forCause(id, checkpoint.worldId(), new MedicalTreatmentSceneCause(candidate.operationId()), candidate.infirmaryAnchor(),
-                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members,
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(state, lease);
         switch (lease.status()) {
             case PREPARED -> assemble(level, runtime, state, lease);
             case HOT -> treat(level, runtime, state, lease);
@@ -128,7 +127,13 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
 
     private static boolean atInfirmary(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                        FrontierWorldState state, SceneLease lease) {
+        // Admission callbacks may confirm individual bodies before the complete group is ready.
+        state = runtime.decodedState().orElseThrow();
         MedicalEvacuationOperation operation = FrontierMedicalTreatmentSceneSupport.require(state, FrontierSceneBehaviors.medicalTreatment(lease));
+        var executions = MedicalExecutionAuthority.current(state, operation).members().stream().collect(
+                java.util.stream.Collectors.toUnmodifiableMap(
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId::actorId,
+                        java.util.function.Function.identity()));
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), operation.settlementId());
         SettlementStructure infirmary = settlement.structures().stream().filter(structure -> structure.id().equals(operation.infirmaryId()))
                 .findFirst().orElseThrow(() -> new IllegalStateException("medical operation infirmary is absent from its settlement"));
@@ -154,7 +159,8 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
             if (body.distanceToSqr(target) > READY_DISTANCE_SQUARED) {
                 FrontierV3GoalNavigation.pursue(level, body, FrontierV3GoalNavigation.Goal.station(
                         route.get(ObservedTraversalCursor.nextTargetIndex(observed, targetBodies, 0)),
-                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
+                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())),
+                        FrontierV3ActorActuation.capture(state, body, executions.get(member.actorId()), runtime::decodedState));
                 allPresent = false;
             }
         }

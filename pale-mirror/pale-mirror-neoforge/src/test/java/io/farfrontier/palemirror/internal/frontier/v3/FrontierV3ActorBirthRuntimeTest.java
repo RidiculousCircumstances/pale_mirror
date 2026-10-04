@@ -70,9 +70,9 @@ class FrontierV3ActorBirthRuntimeTest {
         assertTrue(recoveredStore.recover(WORLD).walTail().isEmpty());
 
         // Exercise only the durable first-admission boundary, not a fake physical evidence claim.
-        var target = FrontierV3ActorOwnerBinding.ambient(new FrontierV3ActorCarrierComposition.Declaration(
-                permit.identity().actorId(), permit.identity().kind(), FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                permit.identity().entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1, 1));
+        var target = FrontierV3ActorOwnerBinding.body(new FrontierV3ActorCarrierComposition.Declaration(
+                permit.identity().actorId(), permit.identity().kind(), FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                permit.identity().entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 1));
         assertTrue(FrontierV3ActorFirstAdmissionBoundary.admit(disk, target, () -> disk.save(ledgerFile.toFile(), null), () -> true));
         var afterAdmission = readLedger(ledgerFile);
         var snapshotImage = recoveredStore.recover(WORLD);

@@ -7,17 +7,15 @@ class FrontierV3PreparedAmbientCancellationTest {
     @Test void restartClosureRequiresExactRetainedGenerationRatherThanEmptyAnchor() {
         var actor = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("resident:1-1");
         var prepared = FrontierV3OfflineActorRecoveryPlanTest.prepared();
-        var hot = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.transition(prepared, actor,
+        var hot = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.transition(
+                io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts.present(prepared, actor), actor,
                 io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT);
         var unknown = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.transition(hot, actor,
                 io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.UNKNOWN_AFTER_RESTART);
         var lease = unknown.ambientLeases().get(actor);
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         assertFalse(FrontierV3AmbientActorExecutor.restartCustodyIsRetained(unknown, actor, lease, ledger));
-        var inactive = FrontierV3AmbientActorExecutor.carrierDeclaration(unknown, actor,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                FrontierV3AmbientActorExecutor.entityId(unknown, actor),
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, lease.revision(), 1L);
+        var inactive = FrontierV3AmbientActorExecutor.carrierDeclaration(unknown, actor, FrontierV3AmbientActorExecutor.entityId(unknown, actor), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 1L);
         var stale = FrontierV3AmbientCarrierLedger.emptyForTest();
         assertTrue(stale.fence(inactive, lease.revision(), lease.revision() - 1));
         assertFalse(FrontierV3AmbientActorExecutor.restartCustodyIsRetained(unknown, actor, lease, stale));

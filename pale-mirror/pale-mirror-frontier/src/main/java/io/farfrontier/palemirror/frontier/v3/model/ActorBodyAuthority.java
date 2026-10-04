@@ -97,40 +97,63 @@ public final class ActorBodyAuthority {
             throw new IllegalArgumentException("body authority is absent, foreign or stale");
         return binding;
     }
-    static FencedRecoveryState observedPresent(FencedRecoveryState recovery,
-            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
-        var binding = recovery.current().get(ActorBodyId.recoveryBindingId(actor));
-        if (binding == null) throw new IllegalArgumentException("body confirmation has no prepared incarnation");
-        require(recovery, new ActorBodyId(actor, binding.authorityEpoch()));
-        if (binding.phase() == FencedRecoveryPhase.RUNNING) return recovery;
-        if (binding.phase() != FencedRecoveryPhase.PREPARED)
-            throw new IllegalArgumentException("ambiguous body requires exact common-body inspection");
-        return recovery.running(binding.bindingId(), binding.authorityEpoch());
-    }
-    public static FrontierWorldState observedPresent(FrontierWorldState state,
-            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
-        requireLiving(state, actor);
-        var recovery = observedPresent(state.fencedRecovery(), actor);
-        return recovery == state.fencedRecovery() ? state : state.withChanges(
-                FrontierWorldStateUpdate.begin().fencedRecovery(recovery));
-    }
     /** Only an exact observed body-death boundary retires this identity, not job completion. */
     static FencedRecoveryState death(FencedRecoveryState recovery, ActorBodyId body) {
         var binding = require(recovery, body);
         return recovery.retireObservedBodyDeath(binding.bindingId(), body.physicalEpoch(), body.actorId(), 0L);
     }
-    public static FencedRecoveryState observedDeath(FrontierWorldState state, ActorBodyId body) {
-        requireLiving(state, body.actorId());
-        return death(state.fencedRecovery(), body);
+    /** One independent physical boundary, with family-owned consequences supplied as a port. */
+    public static FrontierWorldState died(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied observed,
+            ActorDeathConsequences consequences, long atTick) {
+        requireLiving(state, observed.body().actorId());
+        var actor = state.actorLocations().get(observed.body().actorId());
+        var binding = require(state, observed.body());
+        if (binding.phase() != FencedRecoveryPhase.RUNNING && binding.phase() != FencedRecoveryPhase.AMBIGUOUS)
+            throw new IllegalArgumentException("body death requires an actually admitted incarnation");
+        if (!actor.body().equals(observed.expectedBody()) || !actor.condition().health().equals(observed.expectedHealth()))
+            throw new IllegalArgumentException("body death has a stale canonical baseline");
+        var execution = state.actorExecutions().actors().get(observed.body().actorId());
+        var current = execution == null ? java.util.Optional.<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId>empty()
+                : execution.current();
+        if (!current.equals(observed.expectedExecution()))
+            throw new IllegalArgumentException("body death has stale execution evidence");
+        var position = observed.observedBody().orElse(actor.body());
+        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), position.supportingSurface().support());
+        var settlement = Objects.requireNonNull(consequences).settle(state, observed.body().actorId(), atTick);
+        if (settlement.expectedState() != state
+                || settlement.changes().changedComponents().contains(FrontierWorldStateUpdate.Component.ACTOR_LOCATIONS)
+                || settlement.changes().changedComponents().contains(FrontierWorldStateUpdate.Component.FENCED_RECOVERY)
+                || settlement.changes().changedComponents().contains(FrontierWorldStateUpdate.Component.ACTOR_EXECUTIONS))
+            throw new IllegalArgumentException("death consequence port cannot replace physical/common execution authority");
+        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(observed.body().actorId(), actor.deadAt(position));
+        return ActorExecutionComposition.LIFECYCLE.preparePassiveDeath(state, observed.body().actorId(), settlement.executions())
+                .commit(state, settlement.changes().actorLocations(actors).fencedRecovery(death(state.fencedRecovery(), observed.body())));
     }
-    /** An exact inspection can confirm an unchanged running incarnation or resolve ambiguity. */
-    public static FencedRecoveryState inspectedPresent(FrontierWorldState state, ActorBodyId body) {
-        requireLiving(state, body.actorId());
-        var binding = require(state, body);
-        if (binding.phase() == FencedRecoveryPhase.RUNNING) return state.fencedRecovery();
-        if (binding.phase() != FencedRecoveryPhase.AMBIGUOUS)
-            throw new IllegalArgumentException("body inspection is not a confirmation of unstarted insertion");
-        return state.fencedRecovery().inspectedRunning(binding.bindingId(), body.physicalEpoch());
+    /** Physical observation and eligibility are independent from any family's reconciliation. */
+    public static FrontierWorldState inspected(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected observed) {
+        requireLiving(state, observed.body().actorId());
+        var actor = state.actorLocations().get(observed.body().actorId());
+        var execution = state.actorExecutions().actors().get(observed.body().actorId());
+        var current = execution == null ? java.util.Optional.<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId>empty()
+                : execution.current();
+        if (!actor.body().equals(observed.expectedBody()) || !actor.condition().health().equals(observed.expectedHealth())
+                || !current.equals(observed.expectedExecution()))
+            throw new IllegalArgumentException("body inspection has stale canonical or execution evidence");
+        var binding = require(state, observed.body());
+        if (binding.phase() != FencedRecoveryPhase.RUNNING && binding.phase() != FencedRecoveryPhase.AMBIGUOUS)
+            throw new IllegalArgumentException("body inspection cannot admit an uncreated incarnation");
+        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observed.observedBody().supportingSurface().support());
+        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(observed.body().actorId(), new ActorLocation(observed.observedBody(),
+                actor.condition().withHealth(observed.observedHealth()), actor.kind()));
+        var recovery = binding.phase() == FencedRecoveryPhase.AMBIGUOUS
+                && observed.source() == io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING
+                ? state.fencedRecovery().inspectedRunning(binding.bindingId(), observed.body().physicalEpoch())
+                : state.fencedRecovery();
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).fencedRecovery(recovery));
     }
     public static FrontierWorldState running(FrontierWorldState state, ActorBodyId body) {
         requireLiving(state, body.actorId());
@@ -145,12 +168,36 @@ public final class ActorBodyAuthority {
             throw new IllegalArgumentException("body actuator requires current running physical custody");
         state.actorExecutions().requireCurrent(actuation.execution());
     }
+    /** An actual body is ready before a process group is ready; no semantic arrival is implied. */
+    public static FrontierWorldState present(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent observed) {
+        requireLiving(state, observed.body().actorId());
+        var actor = state.actorLocations().get(observed.body().actorId());
+        var binding = require(state, observed.body());
+        if (!actor.body().equals(observed.expectedBody()) || !actor.condition().health().equals(observed.expectedHealth()))
+            throw new IllegalArgumentException("body presence has a stale canonical baseline");
+        if (binding.phase() != FencedRecoveryPhase.PREPARED && binding.phase() != FencedRecoveryPhase.AMBIGUOUS)
+            throw new IllegalArgumentException("body presence requires exact pending admission or inspection");
+        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observed.observedBody().supportingSurface().support());
+        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(observed.body().actorId(), new ActorLocation(observed.observedBody(),
+                actor.condition().withHealth(observed.observedHealth()), actor.kind()));
+        var recovery = binding.phase() == FencedRecoveryPhase.PREPARED
+                ? state.fencedRecovery().running(binding.bindingId(), observed.body().physicalEpoch())
+                : state.fencedRecovery().inspectedRunning(binding.bindingId(), observed.body().physicalEpoch());
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).fencedRecovery(recovery));
+    }
     /** Includes unstarted/recovery custody: absence of observers never permits a competing writer. */
     public static boolean retainsPhysicalCustody(FrontierWorldState state,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
-        var binding = state.fencedRecovery().current().get(ActorBodyId.recoveryBindingId(actor));
+        return retainsPhysicalCustody(state.fencedRecovery(), actor);
+    }
+    /** Aggregate validation uses the same owner before a complete state can be constructed. */
+    static boolean retainsPhysicalCustody(FencedRecoveryState recovery,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
+        var binding = recovery.current().get(ActorBodyId.recoveryBindingId(actor));
         if (binding == null) return false;
-        require(state, new ActorBodyId(actor, binding.authorityEpoch()));
+        require(recovery, new ActorBodyId(actor, binding.authorityEpoch()));
         return true;
     }
     /** The physical owner supplies absence only after its exact durable carrier fence. */
@@ -159,8 +206,36 @@ public final class ActorBodyAuthority {
         var phase = require(state, body).phase();
         if (phase != FencedRecoveryPhase.RUNNING && phase != FencedRecoveryPhase.PREPARED)
             throw new IllegalArgumentException("body absence requires an exact unambiguous incarnation");
-        return state.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+        var checkpoint = phase == FencedRecoveryPhase.RUNNING
+                ? ActorExecutionComposition.LIFECYCLE.checkpointBodyDeparture(state, body,
+                    state.actorLocations().get(body.actorId()).body()) : FrontierWorldStateUpdate.begin();
+        return state.withChanges(checkpoint.fencedRecovery(
                 state.fencedRecovery().revokeToCold(ActorBodyId.recoveryBindingId(body.actorId()), body.physicalEpoch())));
+    }
+    /** Physical facts do not complete, pause or replace an activity or a resource operation. */
+    public static FrontierWorldState unloaded(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded observed) {
+        requireLiving(state, observed.body().actorId());
+        var actor = state.actorLocations().get(observed.body().actorId());
+        var execution = state.actorExecutions().actors().get(observed.body().actorId());
+        var current = execution == null ? java.util.Optional.<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId>empty()
+                : execution.current();
+        if (!actor.body().equals(observed.expectedBody()) || !actor.condition().health().equals(observed.expectedHealth())
+                || !current.equals(observed.expectedExecution()))
+            throw new IllegalArgumentException("body unload has a stale canonical baseline or execution");
+        var binding = require(state, observed.body());
+        if (binding.phase() != FencedRecoveryPhase.RUNNING && binding.phase() != FencedRecoveryPhase.AMBIGUOUS)
+            throw new IllegalArgumentException("observed body unload requires an actually admitted incarnation");
+        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observed.observedBody().supportingSurface().support());
+        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(observed.body().actorId(), new ActorLocation(observed.observedBody(),
+                actor.condition().withHealth(observed.observedHealth()), actor.kind()));
+        // Exact saved-absence evidence may resolve body ambiguity, never a resource effect.
+        // There is no published RUNNING intermediate or permission to actuate a saved body.
+        var checkpoint = ActorExecutionComposition.LIFECYCLE.checkpointBodyDeparture(state, observed.body(), observed.observedBody());
+        return state.withChanges(checkpoint.actorLocations(actors).fencedRecovery(
+                state.fencedRecovery().retireObservedBodyAbsence(binding.bindingId(),
+                    observed.body().physicalEpoch(), observed.body().actorId())));
     }
     public static FrontierWorldState isolate(FrontierWorldState state, ActorBodyId body, String reason) {
         var binding = require(state, body);

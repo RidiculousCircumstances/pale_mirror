@@ -44,7 +44,19 @@ public final class RoutePatrolExecutionAuthority {
         return patrol;
     }
     static ActorActivityCapability capability() { return new ActorActivityCapability() {
+        @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId id, AmbientActorLease lease) {
+            return false; // The patrol owns its retained formation, not ambient presentation.
+        }
         @Override public ActorActivityKind kind() { return ActorActivityKind.ROUTE_PATROL; }
+        @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
+        @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
+            return request -> {
+                var patrol = require(request.expectedState().strategicPlans().routePatrols(), request.execution());
+                if (!FrontierRoutePatrolSceneSupport.bodies(patrol).get(request.execution().actorId()).equals(request.observedPosition()))
+                    throw new IllegalArgumentException("patrol requires its observed formation rejoin before COLD");
+                return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+            };
+        }
         @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
         @Override public void validateReference(FrontierWorldState state, ActorExecutionId id) {
             require(state.strategicPlans().routePatrols(), id);

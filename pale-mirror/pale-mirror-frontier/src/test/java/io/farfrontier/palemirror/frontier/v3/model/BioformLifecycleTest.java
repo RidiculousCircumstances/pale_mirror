@@ -51,6 +51,11 @@ class BioformLifecycleTest {
         assertFalse(FrontierGrayboxPlan.compile(released).cells().containsKey(cocoon));
         var lease = AmbientActorProcess.nextLease(released, dormant.id(), new SimInstant(1L));
         released = AmbientLeaseStateProcess.prepare(released, lease);
+        var body = ActorBodyAuthority.current(released, dormant.id());
+        var location = released.actorLocations().get(dormant.id());
+        released = ActorBodyAuthority.present(released,
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(body,
+                        location.body(), location.condition().health(), location.body(), location.condition().health()));
         released = AmbientLeaseStateProcess.transition(released, dormant.id(), AmbientLeaseStatus.HOT);
         assertEquals(BioformLifecyclePhase.ACTIVE, released.hiveColony().bioformLifecycles().get(dormant.id()).phase());
     }
@@ -71,7 +76,8 @@ class BioformLifecycleTest {
                 new SimInstant(1L), 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.PATROL,
                 state.actorLocations().get(dormant.id()).body());
         assertThrows(IllegalArgumentException.class, () -> HiveLifecycleStateSupport.validateCocoonCustody(state.bootstrap(),
-                state.hiveColony(), state.actorLocations(), java.util.Map.of(dormant.id(), forbidden), state.physicalDeltas()));
+                state.hiveColony(), state.actorLocations(), java.util.Map.of(dormant.id(), forbidden), state.physicalDeltas(),
+                state.actorExecutions()));
     }
 
     @Test

@@ -240,7 +240,7 @@ public final class FrontierV3CargoCarrierGameTests {
                 helper.assertTrue(FrontierV3CargoDepartureObserver.prepareRelease(level, state(runtime), state(runtime).sceneLeases().get(lease.id())),
                         "physical cleanup witness must be durable before canonical release");
                 FrontierV3CommandSubmission.submit(runtime, "scene-cargo-stale-release", lease.id().value(), new SceneLeaseReleased(lease.id(),
-                        lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()))).toList()));
+                        lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(), lease.memberBody(state(runtime).actorLocations(), member.actorId()))).toList()));
                 FrontierWorldState closed = state(runtime);
                 FrontierWorldState unfenced = closed.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(FencedRecoveryState.empty()));
                 FrontierV3SceneExecutor.cleanClosedBodies(level, unfenced);
@@ -463,18 +463,18 @@ public final class FrontierV3CargoCarrierGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-departure", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void departedSceneBodyRetainsFinalHealthAndBlocksDivergentReturn(GameTestHelper helper) {
-        // Native body/NBT/callback boundary only. Fixture positions are outside the domain
-        // world and are deliberately not submitted as a canonical release or restart proof.
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 4));
-        var runtime = runtime("frontier:scene-body-departure");
+        // Actual native insertion/NBT/callback boundary; no entity-region durability claim.
+        ServerLevel level = helper.getLevel();
+        var runtime = FrontierV3SceneBodyGameTestFixture.start(helper,
+                new WorldId("frontier:scene-body-departure"), 91L, new EphemeralStore());
         FrontierWorldState initial = state(runtime);
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(initial, runtime.checkpointImage().orElseThrow(),
                 initial.coldEngagementSceneCandidates().getFirst(), new SceneLeaseId("lease:scene-body-departure"));
         FrontierV3CommandSubmission.submit(runtime, "departure-prepare", lease.id().value(), new SceneLeasePrepared(lease));
+        var bodies = FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease);
         FrontierV3CommandSubmission.submit(runtime, "departure-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         SceneMember member = lease.members().getFirst();
-        prepareFloor(level, origin);
-        Mob body = addOwnedBody(helper, level, state(runtime), lease, member, origin);
+        Mob body = (Mob) bodies.getFirst();
         helper.runAfterDelay(1L, () -> {
             try {
                 helper.assertTrue(FrontierV3SceneExecutor.owned(body, state(runtime), lease, member),
@@ -483,32 +483,32 @@ public final class FrontierV3CargoCarrierGameTests {
                 net.minecraft.nbt.CompoundTag saved = new net.minecraft.nbt.CompoundTag();
                 helper.assertTrue(body.save(saved), "capture the actual Minecraft entity serialization before departure");
                 body.remove(Entity.RemovalReason.UNLOADED_TO_CHUNK);
-                helper.assertTrue(FrontierV3SceneDepartureObserver.observeLeave(level, runtime, body), "chunk departure must capture the final physical body");
+                helper.assertTrue(FrontierV3ActorBodyController.observeLeave(level, runtime, body), "chunk departure must capture the final physical body");
                 var ledger = FrontierV3AmbientCarrierLedger.get(level, initial.bootstrap().worldId());
-                helper.assertValueEqual(ledger.departure(member.actorId()).orElseThrow().observed().health(),
+                helper.assertValueEqual(ledger.bodyDeparture(member.actorId()).orElseThrow().observed().health(),
                         io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(9), "departure must retain changed health, not the initial sample");
                 helper.runAfterDelay(1L, () -> {
                     Mob returned = (Mob) EntityType.loadEntityRecursive(saved, level, entity -> entity);
                     try {
                         helper.assertTrue(returned != null && level.addFreshEntity(returned), "the actual saved body must return with its original declaration");
                         returned.setHealth(8.0F); // Deliberately divergent physical input, not an automatic repair.
-                        FrontierV3SceneDepartureObserver.observeJoin(level, runtime, returned);
+                        FrontierV3ActorBodyController.observeJoin(level, runtime, returned);
                         helper.assertTrue(FrontierV3SceneExecutor.recognizesDeclaration(runtime, returned), "divergence must not erase managed provenance");
                         helper.assertFalse(FrontierV3SceneExecutor.recognizes(runtime, returned), "family-level execution lookup must also reject divergent return");
                         helper.assertFalse(FrontierV3SceneExecutor.owned(returned, state(runtime), lease, member), "divergent HOT return cannot resume physical work");
                         returned.setHealth(0.0F); // Separate death-boundary input; no tick or canonical death is injected.
-                        FrontierV3SceneDepartureObserver.observeJoin(level, runtime, returned);
-                        helper.assertTrue(ledger.departure(member.actorId()).isPresent(), "a dead returned body must retain evidence for the death owner without throwing");
+                        FrontierV3ActorBodyController.observeJoin(level, runtime, returned);
+                        helper.assertTrue(ledger.bodyDeparture(member.actorId()).isPresent(), "a dead returned body must retain evidence for the death owner without throwing");
                         returned.setHealth(9.0F); // Separate exact-return input to the same boundary.
-                        FrontierV3SceneDepartureObserver.observeJoin(level, runtime, returned);
+                        FrontierV3ActorBodyController.observeJoin(level, runtime, returned);
                         helper.assertTrue(FrontierV3SceneExecutor.owned(returned, state(runtime), lease, member), "only the matching snapshot can resume the retained scene");
-                        helper.assertTrue(ledger.departure(member.actorId()).isEmpty(), "exact return consumes its departure receipt");
-                        returned.discard(); runtime.shutdown(); helper.succeed();
+                        helper.assertTrue(ledger.bodyDeparture(member.actorId()).isEmpty(), "exact return consumes its departure receipt");
+                        returned.discard(); FrontierV3SceneBodyGameTestFixture.cleanup(bodies); runtime.shutdown(); helper.succeed();
                     } catch (RuntimeException failure) {
-                        if (returned != null) returned.discard(); runtime.shutdown(); throw failure;
+                        if (returned != null) returned.discard(); FrontierV3SceneBodyGameTestFixture.cleanup(bodies); runtime.shutdown(); throw failure;
                     }
                 });
-            } catch (RuntimeException failure) { body.discard(); runtime.shutdown(); throw failure; }
+            } catch (RuntimeException failure) { FrontierV3SceneBodyGameTestFixture.cleanup(bodies); runtime.shutdown(); throw failure; }
         });
     }
 
@@ -600,14 +600,17 @@ public final class FrontierV3CargoCarrierGameTests {
     private static void lateCargoReturn(GameTestHelper helper, boolean worldCustody) {
         // Isolated return/deletion boundary: registered domain commands establish the
         // retired precondition. This is not physical actor release or process-crash proof.
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 4));
-        var runtime = runtime("frontier:late-cargo-" + worldCustody);
+        ServerLevel level = helper.getLevel();
+        var runtime = FrontierV3SceneBodyGameTestFixture.start(helper,
+                new WorldId("frontier:late-cargo-" + worldCustody), 91L, new EphemeralStore());
         var initial = state(runtime);
         var lease = FrontierV3GameTestSceneLeases.exact(initial, runtime.checkpointImage().orElseThrow(),
                 initial.coldEngagementSceneCandidates().getFirst(), new SceneLeaseId("lease:late-cargo-" + worldCustody));
         FrontierV3CommandSubmission.submit(runtime, "late-cargo-prepare", lease.id().value(), new SceneLeasePrepared(lease));
-        prepareSupport(level, cargoPosition(origin, lease));
-        var cart = addOwnedCarrier(helper, level, state(runtime), lease, cargoPosition(origin, lease));
+        var bodies = FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease);
+        var cargoFeet = helper.absolutePos(new BlockPos(2, 1, 2));
+        prepareFloor(level, cargoFeet);
+        var cart = addOwnedCarrier(helper, level, state(runtime), lease, cargoFeet);
         FrontierV3CommandSubmission.submit(runtime, "late-cargo-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         helper.runAfterDelay(1L, () -> {
             try {
@@ -623,12 +626,20 @@ public final class FrontierV3CargoCarrierGameTests {
                     FrontierV3CommandSubmission.submit(runtime, "late-cargo-drain", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
                 }
                 FrontierV3CommandSubmission.submit(runtime, "late-cargo-release", lease.id().value(), new SceneLeaseReleased(lease.id(),
-                        lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()))).toList()));
+                        lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(), lease.memberBody(state(runtime).actorLocations(), member.actorId()))).toList()));
                 var closed = state(runtime);
                 helper.assertValueEqual(closed.sceneLeases().get(lease.id()).status(), SceneLeaseStatus.CLOSED, "registered commands must establish retired scene");
                 helper.assertTrue(FrontierV3CargoDepartureObserver.retired(closed, lease, receipt), "exact retirement must be retained");
+                // Remove only the cargo's authorization. Erasing every recovery binding
+                // would also strip the independently confirmed live actors of custody.
+                var missingTombstones = new java.util.LinkedHashMap<>(closed.fencedRecovery().tombstones());
+                missingTombstones.remove(FrontierSceneLeaseStateSupport.cargoRecoveryBindingId(receipt.cargoId()));
+                var missingCleanup = new java.util.LinkedHashMap<>(closed.fencedRecovery().cargoRetirements().pending());
+                missingCleanup.remove(receipt.entityId());
+                var missingRetirement = new FencedRecoveryState(closed.fencedRecovery().current(), missingTombstones,
+                        new io.farfrontier.palemirror.frontier.v3.model.CargoProjectionRetirements(missingCleanup));
                 helper.assertFalse(FrontierV3CargoDepartureObserver.retired(
-                        closed.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(FencedRecoveryState.empty())), lease, receipt),
+                        closed.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(missingRetirement)), lease, receipt),
                         "missing retirement cannot authorize deletion");
                 var compactedScenes = new java.util.LinkedHashMap<>(closed.sceneLeases());
                 compactedScenes.remove(lease.id());
@@ -667,10 +678,10 @@ public final class FrontierV3CargoCarrierGameTests {
                         helper.assertTrue(compacted.fencedRecovery().cargoRetirements().pending().containsKey(cart.getUUID()),
                                 "physical discard must not acknowledge durable entity removal");
                         if (!returned.isRemoved()) { returned.clearContent(); returned.discard(); }
-                        runtime.shutdown(); helper.succeed();
-                    } catch (RuntimeException failure) { if (returned != null) returned.discard(); runtime.shutdown(); throw failure; }
+                        FrontierV3SceneBodyGameTestFixture.cleanup(bodies); runtime.shutdown(); helper.succeed();
+                    } catch (RuntimeException failure) { if (returned != null) returned.discard(); FrontierV3SceneBodyGameTestFixture.cleanup(bodies); runtime.shutdown(); throw failure; }
                 });
-            } catch (RuntimeException failure) { cart.discard(); runtime.shutdown(); throw failure; }
+            } catch (RuntimeException failure) { cart.discard(); FrontierV3SceneBodyGameTestFixture.cleanup(bodies); runtime.shutdown(); throw failure; }
         });
     }
 
@@ -818,7 +829,7 @@ public final class FrontierV3CargoCarrierGameTests {
                 FrontierV3CargoCleanupPersistence.observeRead(level, runtime, chunk, source);
                 if (!delayed) source.complete(Optional.empty());
                 FrontierV3CommandSubmission.submit(runtime, "early-read-close", lease.id().value(), new SceneLeaseReleased(lease.id(),
-                        lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()))).toList()));
+                        lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(), lease.memberBody(state(runtime).actorLocations(), member.actorId()))).toList()));
                 helper.assertTrue(state(runtime).fencedRecovery().cargoRetirements().pending().containsKey(cart.getUUID()), "retirement created after read");
                 var sync = new java.util.concurrent.CompletableFuture<Void>();
                 var syncCalls = new java.util.concurrent.atomic.AtomicInteger();
@@ -858,9 +869,7 @@ public final class FrontierV3CargoCarrierGameTests {
         // Only the read-only physical projection moves into the GameTest cell. Canonical
         // preparation and recovery authority use the real retained scene positions.
         return SceneLease.atExactPositions(new SceneLeaseId(id), state.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(), handoff,
-                new BlockPosition(cargo.getX(), cargo.getY(), cargo.getZ()), canonical.handoffInstant(), canonical.revision(), SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), members,
-                members.stream().collect(java.util.stream.Collectors.toMap(SceneMember::actorId,
-                        ignored -> BodyPosition.aboveSupportCell(handoff), (left, right) -> left, java.util.LinkedHashMap::new)));
+                new BlockPosition(cargo.getX(), cargo.getY(), cargo.getZ()), canonical.handoffInstant(), canonical.revision(), SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), members);
     }
     private static void prepareFloor(ServerLevel level, BlockPos position) {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
@@ -888,7 +897,7 @@ public final class FrontierV3CargoCarrierGameTests {
         body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
         FrontierV3ActorCarrierComposition.stamp(body, FrontierV3ActorCarrierComposition.fromCanonical(state, member.actorId(),
                 bioform ? ActorKind.BIOFORM : ActorKind.RESIDENT,
-                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
+                FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, member.entityId(),
                 FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
         helper.assertTrue(level.addFreshEntity(body), "the exact recovery body fixture must enter the loaded world");
         return body;
@@ -923,7 +932,7 @@ public final class FrontierV3CargoCarrierGameTests {
                 .filter(account -> account.custody().equals(new ResourceCustody.WorldCarrier(carrierId))).findFirst().orElseThrow();
     }
     static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+        return runtime.decodedState().orElseThrow();
     }
     private static final class EphemeralStore implements FrontierStore {
         private boolean rejectAppend;

@@ -63,6 +63,9 @@ class ActorExecutionStateTest {
         assertThrows(NullPointerException.class, () -> new ActorExecutionId(ACTOR, null, OWNER, 1L));
         assertThrows(NullPointerException.class, () -> new ActorExecutionId(ACTOR, id.activityKind(), null, 1L));
         assertThrows(IllegalArgumentException.class, () -> new ActorExecutionId(ACTOR, id.activityKind(), OWNER, 0L));
+        var group = new ActorExecutionGroup(java.util.List.of(id));
+        assertSame(id, group.requireMember(ACTOR), "participant lookup retains the complete declared execution");
+        assertThrows(IllegalArgumentException.class, () -> group.requireMember(new SubjectId("resident:other")));
     }
 
     @Test void startRequiresExactVacantGenerationAndIndexCannotAliasActor() {

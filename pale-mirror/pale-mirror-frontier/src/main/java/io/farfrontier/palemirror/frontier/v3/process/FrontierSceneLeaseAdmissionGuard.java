@@ -15,9 +15,10 @@ import java.util.Objects;
 final class FrontierSceneLeaseAdmissionGuard {
     private FrontierSceneLeaseAdmissionGuard() { }
 
-    static void require(FrontierPayload payload) {
+    static void require(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId,
+                        io.farfrontier.palemirror.frontier.v3.model.ActorLocation> actorLocations, FrontierPayload payload) {
         if (Objects.requireNonNull(payload, "scene admission payload") instanceof SceneLeaseAdmission admission) {
-            FrontierDurationProcessDriverRegistry.requireSceneAdmission(admission.lease());
+            FrontierDurationProcessDriverRegistry.requireSceneAdmission(admission.lease(), actorLocations);
         }
     }
 }

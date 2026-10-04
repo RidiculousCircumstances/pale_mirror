@@ -74,11 +74,16 @@ public final class FrontierSettlementAssaultSceneSupport {
         // not rebuild a physical projection merely to repeat that observation.
         Set<SubjectId> expected = new HashSet<>(assault.attackerIds());
         if (!march) expected.addAll(assault.defenderIds());
+        if (!march) expected.removeIf(id -> {
+            ActorLocation actor = state.actorLocations().get(id);
+            if (actor == null) throw new IllegalArgumentException("assault retained an unknown combatant");
+            return actor.condition().status() == ActorLifeStatus.DEAD;
+        });
         Set<SubjectId> actual = new HashSet<>();
         Set<BlockPosition> floors = new HashSet<>();
         for (SceneMember member : lease.members()) {
             ActorLocation actor = state.actorLocations().get(member.actorId());
-            BlockPosition floor = lease.memberPosition(member.actorId()).supportingSurface().support();
+            BlockPosition floor = lease.memberBody(state.actorLocations(), member.actorId()).supportingSurface().support();
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.supportingSurface().support().equals(floor)
                     || !actual.add(member.actorId()) || !floors.add(floor)
                     || (march && !actor.body().equals(assault.formationBodies().get(member.actorId()))) || !march && !FrontierSettlementAssaultBattlefield.localClearFloor(state,
@@ -99,17 +104,15 @@ public final class FrontierSettlementAssaultSceneSupport {
         SceneLease lease = state.sceneLeases().get(observed.leaseId());
         if (lease == null || !FrontierSceneBehaviors.isSettlementAssault(lease)
                 || !FrontierSceneBehaviors.settlementAssault(lease).assaultId().equals(assault.id())
-                || !lease.memberPositions().equals(assault.formationBodies())) {
+                || !lease.memberBodies(state.actorLocations()).equals(assault.formationBodies())) {
             throw new IllegalArgumentException("expedition formation observation has no matching lease/cursor");
         }
         SettlementAssault next = assault.advanceFormation();
         if (!next.formationBodies().equals(observed.bodies())) throw new IllegalArgumentException("expedition formation did not reach its retained next edge");
-        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
-        leases.put(lease.id(), lease.withMemberPositions(observed.bodies()));
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         observed.bodies().forEach((actor, body) -> actors.put(actor, actors.get(actor).withBody(body)));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
-                .strategicPlans(state.strategicPlans().replaceSettlementAssault(next)).sceneLeases(leases));
+                .strategicPlans(state.strategicPlans().replaceSettlementAssault(next)));
     }
 
     /** Closes the exact loaded march lease with durable, member/edge-specific evidence. */
@@ -124,7 +127,7 @@ public final class FrontierSettlementAssaultSceneSupport {
         SceneLease lease = state.sceneLeases().get(observed.leaseId());
         if (lease == null || lease.status() != SceneLeaseStatus.HOT || !FrontierSceneBehaviors.isSettlementAssault(lease)
                 || !FrontierSceneBehaviors.settlementAssault(lease).assaultId().equals(assault.id())
-                || !lease.memberPositions().equals(assault.formationBodies())) {
+                || !lease.memberBodies(state.actorLocations()).equals(assault.formationBodies())) {
             throw new IllegalArgumentException("expedition march issue has no matching current lease/cursor");
         }
         SettlementAssault blocked = assault.recordMarchIssue(observed.issue()).withStatus(SettlementAssaultStatus.CONFLICT);

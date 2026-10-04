@@ -37,9 +37,11 @@ class CargoCarrierReleaseStateTest {
                 candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), engine.checkpoint().instant(),
                 engine.checkpoint().revision().value(), Optional.of(candidate.engagementId()), candidate.actorIds());
         submit(engine, world, "prepare", new SceneLeasePrepared(lease));
+        FrontierTestActorBodies.present(engine, world, lease);
         submit(engine, world, "hot", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         var target = before.strategicPlans().routeEngagements().get(candidate.engagementId()).attackerIds().getFirst();
-        submit(engine, world, "death", new ActorDied(lease.id(), target, lease.memberPosition(target), "test-death"));
+        submit(engine, world, "death", ModeledActorBodyFacts.death(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()),
+                target, lease.memberBody(state(engine).actorLocations(), target), "test-death"));
         submit(engine, world, "unknown", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
         var unknown = state(engine);
         assertEquals(SceneLeaseStatus.DRAINING,
@@ -67,6 +69,7 @@ class CargoCarrierReleaseStateTest {
                 operation.id(), operation.cargoId(), operation.currentPosition(), engine.checkpoint().instant(),
                 engine.checkpoint().revision().value(), Optional.empty(), operation.participantIds());
         submit(engine, world, "prepare", new SceneLeasePrepared(lease));
+        FrontierTestActorBodies.present(engine, world, lease);
         submit(engine, world, "hot", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         submit(engine, world, "unknown", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
         submit(engine, world, "missing", new SceneLeaseRecoveryUnresolved(lease.id(),
@@ -112,6 +115,7 @@ class CargoCarrierReleaseStateTest {
                     engine.checkpoint().instant(), engine.checkpoint().revision().value(),
                     Optional.of(candidate.engagementId()), candidate.actorIds());
             submit(engine, world, "prepare", new SceneLeasePrepared(lease));
+            FrontierTestActorBodies.present(engine, world, lease);
             submit(engine, world, "hot", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
             if (cargoReleased) {
                 submit(engine, world, "release", new CargoCarrierReleased(lease.id(), candidate.cargoId(),
@@ -165,7 +169,7 @@ class CargoCarrierReleaseStateTest {
         var lease = FrontierTestSceneLeases.exact(before, new SceneLeaseId("lease:cargo-drain-race"),
                 candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), new SimInstant(2_600L),
                 1L, Optional.of(candidate.engagementId()), candidate.actorIds());
-        var hot = before.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        var hot = FrontierTestActorBodies.present(before.prepareSceneLease(lease), lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         var carrier = CargoCarrierIdentity.id(lease);
         var cargoAccount = hot.inventory().fungibleResources().accounts().values().stream()
                 .filter(account -> account.custody().equals(new ResourceCustody.Cargo(candidate.cargoId())))
@@ -221,7 +225,7 @@ class CargoCarrierReleaseStateTest {
         var lease = FrontierTestSceneLeases.exact(before, new SceneLeaseId("lease:cargo-cleanup"),
                 operation.id(), operation.cargoId(), operation.currentPosition(), engine.checkpoint().instant(),
                 engine.checkpoint().revision().value(), Optional.empty(), operation.participantIds());
-        var draining = before.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
+        var draining = FrontierTestActorBodies.present(before.prepareSceneLease(lease), lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
                 .transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
         var preparedPayload = new SceneLeasePrepared(lease);
         var payloadCodecs = FrontierWorldRuntimeDefinition.payloadCodecs();
@@ -261,7 +265,7 @@ class CargoCarrierReleaseStateTest {
         SceneLease lease = FrontierTestSceneLeases.exact(before, leaseId, operation.id(), operation.cargoId(),
                 operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(),
                 Optional.empty(), operation.participantIds());
-        FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        FrontierWorldState hot = FrontierTestActorBodies.present(before.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         SubjectId recoveryBinding = FrontierSceneLeaseStateSupport.cargoRecoveryBindingId(operation.cargoId());
         assertEquals(FencedRecoveryPhase.RUNNING, hot.fencedRecovery().current().get(recoveryBinding).phase());
         UUID carrier = CargoCarrierIdentity.id(lease);
@@ -311,7 +315,7 @@ class CargoCarrierReleaseStateTest {
         SceneLease lease = FrontierTestSceneLeases.exact(before, leaseId, candidate.operationId(), candidate.cargoId(),
                 candidate.handoffPosition(), new SimInstant(2_600L), 1L, Optional.of(candidate.engagementId()),
                 candidate.actorIds());
-        FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        FrontierWorldState hot = FrontierTestActorBodies.present(before.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         CargoCarrierReleased released = new CargoCarrierReleased(leaseId, FrontierSceneBehaviors.logistics(lease).cargoId(),
                 CargoCarrierIdentity.id(lease), Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000052")));
         FrontierWorldState interrupted = hot.releaseCargoCarrier(released);
@@ -344,6 +348,7 @@ class CargoCarrierReleaseStateTest {
                 Optional.of(candidate.engagementId()), candidate.actorIds());
 
         submit(engine, world, "prepare", new SceneLeasePrepared(lease));
+        FrontierTestActorBodies.present(engine, world, lease);
         submit(engine, world, "hot", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         submit(engine, world, "cargo-loss", new CargoCarrierReleased(leaseId, FrontierSceneBehaviors.logistics(lease).cargoId(), CargoCarrierIdentity.id(lease),
                 Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000055"))));

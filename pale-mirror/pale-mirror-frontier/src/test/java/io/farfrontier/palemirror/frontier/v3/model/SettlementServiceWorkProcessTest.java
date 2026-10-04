@@ -125,9 +125,9 @@ class SettlementServiceWorkProcessTest {
         SurfaceAnchor start = work.inputTraversal().linearCorridorSurfaces().getFirst();
         SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:service-work-hot"), bootstrap.worldId(), new SettlementServiceWorkSceneCause(work.id()),
                 start.support(), new SimInstant(1_001L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(work.workerId(), SceneLease.deterministicEntityId(bootstrap.worldId(), work.workerId()))),
-                java.util.Map.of(work.workerId(), start.standingBody()), java.util.Set.of(), Optional.empty());
-        FrontierWorldState hot = admitted.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+                List.of(new SceneMember(work.workerId(), SceneLease.deterministicEntityId(bootstrap.worldId(), work.workerId()))), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = FrontierTestActorBodies.present(admitted.prepareSceneLease(lease), lease)
+                .transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         FrontierWorldState afterRestart = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(
                 hot.transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART)));
         assertEquals(SceneLeaseStatus.UNKNOWN_AFTER_RESTART, afterRestart.sceneLeases().get(lease.id()).status());
@@ -155,7 +155,7 @@ class SettlementServiceWorkProcessTest {
         FrontierWorldState advanced = SettlementServiceWorkProcess.reduceHotTraversalAdvanced(reclaimed, settlement.id(), advance);
 
         assertEquals(1, advanced.serviceWorks().get(work.id()).inputTraversalCursor());
-        assertEquals(next.standingBody(), advanced.sceneLeases().get(lease.id()).memberPosition(work.workerId()));
+        assertEquals(next.standingBody(), advanced.sceneLeases().get(lease.id()).memberBody(advanced.actorLocations(), work.workerId()));
         assertEquals(next.standingBody(), advanced.actorLocations().get(work.workerId()).body(),
                 "the observed HOT cursor is also the sole canonical worker position for the later exact hand-off");
         assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceHotTraversalAdvanced(reclaimed, settlement.id(),
@@ -179,7 +179,10 @@ class SettlementServiceWorkProcessTest {
         var death = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, bootstrap.worldId(),
                 engine.checkpoint().revision(), engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
                 io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId),
-                new ActorDied(lease.id(), work.workerId(), start.standingBody(), "test:service-worker-death")));
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied(
+                        ActorBodyAuthority.current(reclaimed, work.workerId()), reclaimed.actorLocations().get(work.workerId()).body(),
+                        reclaimed.actorLocations().get(work.workerId()).condition().health(), Optional.of(start.standingBody()),
+                        Optional.of(SettlementServiceExecutionAuthority.current(reclaimed, work)), "test:service-worker-death")));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, death, death::toString);
         var deadState = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertTrue(deadState.actorExecutions().actors().get(work.workerId()).current().isEmpty());
@@ -264,9 +267,9 @@ class SettlementServiceWorkProcessTest {
         SurfaceAnchor initialSurface = FrontierSettlementServiceWorkSceneSupport.currentSurface(work);
         SceneLease lease = SceneLease.forCause(leaseId, bootstrap.worldId(), new SettlementServiceWorkSceneCause(work.id()), initialSurface.support(),
                 new SimInstant(1_001L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(work.workerId(),
-                SceneLease.deterministicEntityId(bootstrap.worldId(), leaseId, work.workerId()))),
-                Map.of(work.workerId(), initialSurface.standingBody()), java.util.Set.of(), Optional.empty());
-        FrontierWorldState ready = admitted.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                SceneLease.deterministicEntityId(bootstrap.worldId(), leaseId, work.workerId()))), java.util.Set.of(), Optional.empty());
+        FrontierWorldState ready = ModeledActorBodyFacts.present(admitted.prepareSceneLease(lease), work.workerId())
+                .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         while (work.inputTraversalCursor() < work.inputTraversal().linearCorridorSurfaces().size() - 1) {
             int next = work.inputTraversalCursor() + 1;
             ready = SettlementServiceWorkProcess.reduceHotTraversalAdvanced(ready, settlement.id(),

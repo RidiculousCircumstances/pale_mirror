@@ -18,7 +18,6 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.ActorDied;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
@@ -124,29 +123,25 @@ final class FrontierV3SceneReleaseExecutor {
         }
         List<SceneMemberPosition> positions = new ArrayList<>();
         List<SceneMember> departedMembers = new ArrayList<>();
-        List<Mob> retireLoadedBodies = new ArrayList<>();
-        List<FrontierV3AmbientCarrierLedger.Carrier> releaseCarriers = new ArrayList<>();
         var actorLedger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var releasePolicy = FrontierV3SceneBehaviorRegistry.bodyReleasePolicy(lease.cause().kind());
-        boolean retainVisible = releasePolicy
-                .retainsLiveBody(demandExists(level, lease.handoffPosition()) || playerWithinSafeRadius(level, lease));
         for (SceneMember member : lease.members()) {
             if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
             Entity entity = level.getEntity(member.entityId());
             if (entity == null) {
                 var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-                if (ledger.departure(member.actorId()).isPresent()
-                        && !ledger.savedDeparture(ledger.departure(member.actorId()).orElseThrow())
-                        && !ledger.hasDepartureConflict(member.actorId())
-                        && FrontierV3SceneDepartureObserver.observedDeparture(state, lease, member, ledger).isPresent()) return;
+                var observed = FrontierV3SceneDepartureObserver.observedDeparture(state, lease, member, ledger);
+                if (observed.isPresent() && !ledger.savedDeparture(observed.orElseThrow())
+                        && !ledger.hasDepartureConflict(member.actorId())) return;
                 var receipt = FrontierV3SceneDepartureObserver.validDeparture(state, lease, member, ledger);
                 if (receipt.isEmpty()) { conflict(level, runtime, state, lease, "release-departure-unproven"); return; }
+                if (!FrontierV3ActorBodyController.checkpointSavedDeparture(level, runtime, member.actorId())) return;
+                state = runtime.decodedState().orElseThrow();
                 positions.add(receipt.orElseThrow().observed());
                 departedMembers.add(member);
-                releaseCarriers.add(receipt.orElseThrow().carrier());
                 continue;
             }
-            if (FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).departure(member.actorId()).isPresent()) {
+            if (FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).hasBodyDeparture(member.actorId())) {
                 conflict(level, runtime, state, lease, "release-concurrent-departure-evidence"); return;
             }
             if (!owned(entity, state, lease, member)) {
@@ -158,24 +153,12 @@ final class FrontierV3SceneReleaseExecutor {
             if (!FrontierV3BakeryHandProjection.matchesCurrent(state, lease, member, body)) {
                 conflict(level, runtime, state, lease, "release-bakery-hand-mismatch"); return;
             }
-            long health = Math.round((double) body.getHealth() * FixedScalar.SCALE);
-            var supported = releasePolicy.captureReleasedBody(level, body);
-            if (supported.isEmpty()) return; // keep DRAINING until a real supported body can be captured
-            BodyPosition observedBody = supported.orElseThrow();
-            positions.add(new SceneMemberPosition(member.actorId(), observedBody, new FixedScalar(health)));
-            if (!retainVisible) {
-                var live = FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow();
-                var ambient = state.ambientLeases().get(member.actorId());
-                if (ambient != null && ambient.status() != AmbientLeaseStatus.CLOSED) {
-                    releasePolicy.conflict(level, runtime, state, lease, "release-ambient-authority-open"); return;
-                }
-                releaseCarriers.add(new FrontierV3AmbientCarrierLedger.Carrier(live.inactiveCarrier(),
-                        Math.max(1L, lease.revision()), ambient == null ? 0L : ambient.revision()));
-                retireLoadedBodies.add(body);
-            }
-        }
-        if (!actorLedger.canFenceAll(releaseCarriers)) {
-            releasePolicy.conflict(level, runtime, state, lease, "release-survivor-fence-conflict"); return;
+            if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
+            state = runtime.decodedState().orElseThrow();
+            var currentActor = state.actorLocations().get(member.actorId());
+            positions.add(new SceneMemberPosition(member.actorId(), currentActor.body(), currentActor.condition().health()));
+            // A process releases its participant, not that participant's body.
+            // Natural unload and the body controller alone settle physical absence.
         }
         // A field worker may still carry an already-accounted HOT wheat part. Its physical
         // offhand, fungible binding and scene exit must close in the same WAL transition.
@@ -191,13 +174,13 @@ final class FrontierV3SceneReleaseExecutor {
                 }
                 var work = job.bakeryWork().orElseThrow();
                 Entity carrier = level.getEntity(lease.members().getFirst().entityId());
-                FrontierV3SceneDeparture.HandStack hand;
+                FrontierV3ActorBodyDeparture.HandStack hand;
                 if (carrier instanceof Mob worker && owned(carrier, state, lease, lease.members().getFirst())) {
                     var held = worker.getMainHandItem();
                     if (held.isEmpty()) {
                         releasePolicy.conflict(level, runtime, state, lease, "release-bakery-hand-binding-unavailable"); return;
                     }
-                    hand = new FrontierV3SceneDeparture.HandStack(
+                    hand = new FrontierV3ActorBodyDeparture.HandStack(
                             net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem()).toString(), held.getCount());
                 } else if (carrier == null && departedMembers.contains(lease.members().getFirst())) {
                     var departure = FrontierV3SceneDepartureObserver.validDeparture(state, lease,
@@ -235,7 +218,7 @@ final class FrontierV3SceneReleaseExecutor {
             var cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
             var job = io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport.require(state, cause);
             Entity carrier = level.getEntity(lease.members().getFirst().entityId());
-            FrontierV3SceneDeparture.HandStack hand;
+            FrontierV3ActorBodyDeparture.HandStack hand;
             if (carrier instanceof Mob worker && owned(carrier, state, lease, lease.members().getFirst())) {
                 var held = worker.getOffhandItem();
                 if (held.isEmpty() || !net.minecraft.world.item.ItemStack.isSameItemSameComponents(held,
@@ -243,7 +226,7 @@ final class FrontierV3SceneReleaseExecutor {
                     FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
                             "bound-hand-release-physical-foreign"); return;
                 }
-                hand = new FrontierV3SceneDeparture.HandStack("minecraft:wheat", held.getCount());
+                hand = new FrontierV3ActorBodyDeparture.HandStack("minecraft:wheat", held.getCount());
             } else if (carrier == null && departedMembers.contains(lease.members().getFirst())) {
                 var departure = FrontierV3SceneDepartureObserver.validDeparture(state, lease,
                         lease.members().getFirst(), actorLedger).orElse(null);
@@ -273,10 +256,6 @@ final class FrontierV3SceneReleaseExecutor {
             }
         }
         if (!FrontierV3CargoDepartureObserver.prepareRelease(level, state, lease)) return;
-        if (!actorLedger.fenceAll(releaseCarriers)) {
-            releasePolicy.conflict(level, runtime, state, lease, "release-survivor-fence-conflict"); return;
-        }
-        if (!releaseCarriers.isEmpty()) actorLedger.persist(level, state.bootstrap().worldId());
         CommandResult result = releaseLoaded(runtime, lease, positions, binding, harvestHandRelease, bakeryHandRelease);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released", lease, result);
         if (result instanceof CommandResult.Accepted) {
@@ -285,17 +264,10 @@ final class FrontierV3SceneReleaseExecutor {
                 if (level.getEntity(member.entityId()) instanceof Mob body)
                     FrontierV3ActorCarryProjection.rememberConfirmed(releasedState, member.actorId(), body);
             }
-            for (Mob body : retireLoadedBodies) {
-                FrontierV3ControlledMobMotion.stop(body);
-                body.discard();
-            }
-            // Closing the process is not physical absence. Only after removal (or exact
-            // saved departure above) may the common incarnation owner permit COLD again.
-            for (var carrier : releaseCarriers)
-                FrontierV3ActorBodyCustody.releaseFencedAbsence(level, runtime, carrier.identity(),
-                        carrier.physicalRevision(), carrier.ambientRevision());
+            // Scope closure never publishes physical absence. The common owner checks its
+            // retained save/sync/read proof again, then commits pose and body release together.
             for (SceneMember member : departedMembers) {
-                FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).forgetDeparture(member.actorId());
+                FrontierV3ActorBodyController.progressDeparture(level, runtime, runtime.decodedState().orElseThrow(), member.actorId());
             }
         }
     }

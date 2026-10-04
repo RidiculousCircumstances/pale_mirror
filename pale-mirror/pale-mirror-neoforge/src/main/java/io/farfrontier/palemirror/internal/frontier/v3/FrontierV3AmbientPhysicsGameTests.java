@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
-import io.farfrontier.palemirror.frontier.v3.kernel.StateValidator;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
@@ -82,55 +81,6 @@ public final class FrontierV3AmbientPhysicsGameTests {
             helper.assertTrue(admitted != null && admitted.blockPosition().equals(support.above()),
                     "the admitted body must retain its exact canonical column rather than an alternate physical placement");
             admitted.discard();
-            helper.succeed();
-        });
-    }
-
-    /**
-     * A retained physical edge may wait behind a live body, but must never manufacture an
-     * overlap and leave vanilla's push-out/fall mechanics to arbitrate two exact owners.
-     */
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
-    public static void retainedMotionDefersAtOccupiedLivingBodyWithoutSideStep(GameTestHelper helper) {
-        BlockPos firstSupport = helper.absolutePos(new BlockPos(2, 4, 2));
-        BlockPos occupiedSupport = helper.absolutePos(new BlockPos(3, 4, 2));
-        prepareFallArena(helper.getLevel(), firstSupport);
-        prepareFallArena(helper.getLevel(), occupiedSupport);
-        Villager moving = EntityType.VILLAGER.create(helper.getLevel());
-        Villager occupant = EntityType.VILLAGER.create(helper.getLevel());
-        if (moving == null || occupant == null) throw new IllegalStateException("test retained bodies could not be created");
-        moving.setNoAi(true);
-        occupant.setNoAi(true);
-        moving.setPos(firstSupport.getX() + .5D, firstSupport.getY() + 1.0D, firstSupport.getZ() + .5D);
-        occupant.setPos(occupiedSupport.getX() + .5D, occupiedSupport.getY() + 1.0D, occupiedSupport.getZ() + .5D);
-        helper.getLevel().addFreshEntity(moving);
-        helper.getLevel().addFreshEntity(occupant);
-        double initialX = moving.getX();
-        Vec3 retainedTarget = new Vec3(occupiedSupport.getX() + 1.5D, occupiedSupport.getY() + 1.0D, occupiedSupport.getZ() + .5D);
-
-        for (int tick = 1; tick <= 16; tick++) {
-            helper.runAtTickTime(tick, () -> {
-                FrontierV3ControlledMobMotion.moveToward(helper.getLevel(), moving, retainedTarget);
-                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(moving);
-            });
-        }
-        helper.runAtTickTime(17, () -> {
-            helper.assertTrue(moving.getX() > initialX && moving.getX() < occupiedSupport.getX() - .10D,
-                    "the exact retained edge may approach but must stop before its living-body obstruction: moving=" + moving.position());
-            helper.assertTrue(Math.abs(occupant.getX() - (occupiedSupport.getX() + .5D)) < 1.0E-6D,
-                    "the waiting body must not push or relocate the unrelated living occupant");
-            occupant.discard();
-        });
-        for (int tick = 18; tick <= 23; tick++) {
-            helper.runAtTickTime(tick, () -> {
-                FrontierV3ControlledMobMotion.moveToward(helper.getLevel(), moving, retainedTarget);
-                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(moving);
-            });
-        }
-        helper.runAtTickTime(24, () -> {
-            helper.assertTrue(moving.getX() > occupiedSupport.getX() + .10D,
-                    "clearing the observed obstruction must resume the same retained edge without a side-step or coordinate reset: moving=" + moving.position());
-            moving.discard();
             helper.succeed();
         });
     }

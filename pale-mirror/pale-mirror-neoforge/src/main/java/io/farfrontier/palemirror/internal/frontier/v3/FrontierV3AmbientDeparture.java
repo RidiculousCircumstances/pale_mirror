@@ -7,16 +7,15 @@ import net.minecraft.nbt.Tag;
 import java.util.Objects;
 
 /** Final unload observation bound to one ambient authority; never a periodic pose cache. */
-record FrontierV3AmbientDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier,
+record FrontierV3AmbientDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, long residenceGeneration,
                                   SceneMemberPosition observed, BodyPosition canonicalBodyAtCapture,
                                   FixedScalar canonicalHealthAtCapture) {
     FrontierV3AmbientDeparture {
         Objects.requireNonNull(carrier); Objects.requireNonNull(observed);
         Objects.requireNonNull(canonicalBodyAtCapture); Objects.requireNonNull(canonicalHealthAtCapture);
         var identity = carrier.identity();
-        if (identity.owner() != FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE
-                || !identity.actorId().equals(observed.actorId())
-                || identity.authorityRevision() != carrier.ambientRevision()
+        if (identity.owner() != FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY
+                || residenceGeneration < 1L || !identity.actorId().equals(observed.actorId())
                 || carrier.physicalRevision() != carrier.ambientRevision()
                 || observed.health().compareTo(FixedScalar.ZERO) <= 0
                 || canonicalHealthAtCapture.compareTo(FixedScalar.ZERO) <= 0)
@@ -31,8 +30,8 @@ record FrontierV3AmbientDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier
                 || (lease.status() != AmbientLeaseStatus.HOT && lease.status() != AmbientLeaseStatus.DRAINING
                     && lease.status() != AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)
                 || lease.revision() != carrier.ambientRevision()
-                || !actor.body().equals(canonicalBodyAtCapture)
-                || !actor.condition().health().equals(canonicalHealthAtCapture)) return false;
+                || !(actor.body().equals(canonicalBodyAtCapture) && actor.condition().health().equals(canonicalHealthAtCapture)
+                    || actor.body().equals(observed.body()) && actor.condition().health().equals(observed.health()))) return false;
         if (state.sceneLeases().values().stream().anyMatch(scene -> scene.status() != SceneLeaseStatus.CLOSED
                 && scene.members().stream().anyMatch(member -> member.actorId().equals(identity.actorId())))) return false;
         try {
@@ -42,17 +41,18 @@ record FrontierV3AmbientDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier
     }
 
     CompoundTag save() {
-        var tag = new CompoundTag(); tag.put("carrier", carrier.save());
+        var tag = new CompoundTag(); tag.put("carrier", carrier.save()); tag.putLong("residenceGeneration", residenceGeneration);
         position(tag, "observed", observed.body()); position(tag, "canonical", canonicalBodyAtCapture);
         tag.putLong("health", observed.health().raw()); tag.putLong("canonicalHealth", canonicalHealthAtCapture.raw());
         return tag;
     }
 
     static FrontierV3AmbientDeparture load(CompoundTag tag) {
-        if (!tag.contains("carrier", Tag.TAG_COMPOUND) || !tag.contains("health", Tag.TAG_LONG)
+        if (!tag.contains("carrier", Tag.TAG_COMPOUND) || !tag.contains("residenceGeneration", Tag.TAG_LONG)
+                || !tag.contains("health", Tag.TAG_LONG)
                 || !tag.contains("canonicalHealth", Tag.TAG_LONG)) throw new IllegalStateException("incomplete ambient departure evidence");
         var carrier = FrontierV3AmbientCarrierLedger.Carrier.load(tag.getCompound("carrier"));
-        return new FrontierV3AmbientDeparture(carrier,
+        return new FrontierV3AmbientDeparture(carrier, tag.getLong("residenceGeneration"),
                 new SceneMemberPosition(carrier.identity().actorId(), position(tag, "observed"), new FixedScalar(tag.getLong("health"))),
                 position(tag, "canonical"), new FixedScalar(tag.getLong("canonicalHealth")));
     }

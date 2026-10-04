@@ -59,10 +59,10 @@ final class FrontierV3ProductionWorkSceneExecutor {
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor,
                 SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
         return SceneLease.forCause(id, checkpoint.worldId(), new ProductionWorkSceneCause(candidate.jobId()), candidate.handoffPosition(), checkpoint.instant(),
-                checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+                checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
     }
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(state, lease);
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
@@ -112,7 +112,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
         // validation.  The reducer rebases the unstarted traversal from this same observation,
         // so retain the support beneath the captured body as well as the captured body itself.
         SceneLease captured = lease.withHandoffPosition(capture.body().supportingSurface().support())
-                .withMemberPositions(Map.of(member.actorId(), capture.body())).withAmbientHandoff(Set.of(member.actorId()));
+                .withAmbientHandoff(Set.of(member.actorId()));
         CommandResult handoff = submit(runtime, "production-work-handoff", lease.id().value(),
                 new ProductionWorkSceneLeaseHandoff(captured, List.of(capture)));
         ProductionJob job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(lease));
@@ -160,6 +160,11 @@ final class FrontierV3ProductionWorkSceneExecutor {
         if (!demand.active() && !operationalCustody) return;
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) { conflict(level, runtime, lease, "worker-unavailable"); return; }
+        var execution = state.actorExecutions().current(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
+        if (execution == null || !execution.activityOwnerId().equals(job.id()))
+            throw new IllegalArgumentException("production command lost its exact admitted execution");
+        var actuation = FrontierV3ActorActuation.capture(state, worker, execution, runtime::decodedState);
         List<SurfaceAnchor> route = job.workTraversal().linearCorridorSurfaces(); SurfaceAnchor current = route.get(job.traversalCursor());
         int inputCursor = route.size() - 2;
         // Entity motion runs at the normal entity boundary, while a canonical command is
@@ -179,7 +184,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
                 // new route nor a completed edge; keep pursuing the named next surface rather
                 // than turning an ordinary in-flight workshop approach into an off-contract
                 // conflict (the same ownership rule used by field harvesting).
-                pursueRetainedTraversalEdge(level, worker, current, route.get(job.traversalCursor() + 1));
+                FrontierV3GoalNavigation.pursueRetainedEdge(level, worker, current, route.get(job.traversalCursor() + 1), actuation);
             } else conflict(level, runtime, lease, "production-work-cursor-" + FrontierV3SemanticMovement.detail(
                     FrontierV3SemanticMovement.at(level, worker, current)));
             return;
@@ -194,7 +199,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
             if (FrontierV3SemanticMovement.arrived(level, worker, next)) submit(runtime, "production-work-traversal", lease.id().value(), new ProductionWorkTraversalAdvanced(job.id(), lease.id(),
                     FrontierV3SurfaceObservation.observedAt(worker, next), job.traversalCursor() + 1));
             else if (!FrontierV3SemanticMovement.targetIsNavigable(level, worker, next)) blocked(level, runtime, lease, job, worker, current, next);
-            else pursueRetainedTraversalEdge(level, worker, current, next);
+            else FrontierV3GoalNavigation.pursueRetainedEdge(level, worker, current, next, actuation);
             return;
         }
         var checkpoint = runtime.executionView().orElseThrow();
@@ -223,16 +228,6 @@ final class FrontierV3ProductionWorkSceneExecutor {
         SceneLease draining = current.sceneLeases().get(lease.id());
         if (draining != null && draining.status() == SceneLeaseStatus.DRAINING)
             execute(level, runtime, current, draining);
-    }
-    /**
-     * Keeps one admitted production body inside the fixed neighborhood of its current and next
-     * canonical supports when a live body temporarily occupies the direct physical column.
-     * This is actuator-only collision latitude: the target remains {@code next}, and only an
-     * observation at that target can advance the durable traversal cursor.
-     */
-    static void pursueRetainedTraversalEdge(ServerLevel level, Mob worker, SurfaceAnchor current, SurfaceAnchor next) {
-        FrontierV3GoalNavigation.pursue(level, worker, FrontierV3GoalNavigation.Goal.station(next,
-                new FrontierV3NavigationScope.Restricted(LocalNavigationEnvelope.around(current.standingBody(), next.standingBody()))));
     }
     /** Tests the exact retained target support and body against loaded physical collision without choosing an alternate edge. */
     static boolean clearNextBody(ServerLevel level, Mob worker, SurfaceAnchor surface) {

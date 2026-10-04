@@ -173,8 +173,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList();
         return SceneLease.forCause(id, checkpoint.worldId(), new SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
-                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members,
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
     }
 
     private static void prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -197,12 +196,12 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             captures.add(new SceneMemberPosition(member.actorId(), at(body), fixed(mob.getHealth())));
         }
         if (captures.isEmpty()) return;
-        Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>(lease.memberPositions());
+        Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>(lease.memberBodies(state.actorLocations()));
         captures.forEach(capture -> positions.put(capture.actorId(),
                 capture.body()));
-        SceneLease handed = lease.withMemberPositions(positions).withAmbientHandoff(captures.stream()
+        SceneLease handed = lease.withAmbientHandoff(captures.stream()
                 .map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet()));
-        submitHandoff(provider, handed, () -> FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_handoff", handed,
+        submitHandoff(provider, handed, positions, () -> FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_handoff", handed,
                 submit(runtime, "settlement-assault-handoff", new SettlementAssaultSceneLeaseHandoff(handed, captures))));
     }
 
@@ -212,14 +211,18 @@ final class FrontierV3SettlementAssaultSceneExecutor {
      */
     static boolean providerAuthorizesPreparedLease(SettlementAssaultSceneCandidate candidate,
                                                    FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease) {
-        if (!lease.memberPositions().equals(SceneLease.bodiesAboveSupportCells(candidate.memberPositions()))) return false;
-        return providerAuthorizesHandoffLease(provider, lease);
+        if (!lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet())
+                .equals(candidate.memberPositions().keySet())) return false;
+        return providerAuthorizesHandoffLease(provider, lease, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()));
     }
 
     /** A captured HOT body may move, but its final submitted support still needs this provider. */
-    static boolean providerAuthorizesHandoffLease(FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease) {
+    static boolean providerAuthorizesHandoffLease(FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease,
+                                                  Map<SubjectId, BodyPosition> observedBodies) {
+        if (!lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet())
+                .equals(observedBodies.keySet())) return false;
         return lease.members().stream().allMatch(member -> FrontierSettlementAssaultBattlefield.providerAuthorizesFloor(provider,
-                lease.memberPosition(member.actorId()).supportingSurface().support()));
+                observedBodies.get(member.actorId()).supportingSurface().support()));
     }
 
     /** Final production authority boundary for a newly selected scene lease. */
@@ -231,15 +234,16 @@ final class FrontierV3SettlementAssaultSceneExecutor {
     }
 
     /** Final production authority boundary after the moving ambient bodies are captured. */
-    static boolean submitHandoff(FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease, Runnable acceptedSubmit) {
-        if (!providerAuthorizesHandoffLease(provider, lease)) return false;
+    static boolean submitHandoff(FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease,
+                                  Map<SubjectId, BodyPosition> observedBodies, Runnable acceptedSubmit) {
+        if (!providerAuthorizesHandoffLease(provider, lease, observedBodies)) return false;
         acceptedSubmit.run();
         return true;
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(state, lease);
         switch (lease.status()) {
             case PREPARED -> materializePrepared(level, runtime, state, lease);
             case HOT -> executeHot(level, runtime, state, lease);
@@ -278,8 +282,10 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             conflict(level, runtime, lease, "hot-body-unavailable");
             return;
         }
+        var executions = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault);
         for (Body actor : bodies) FrontierV3GoalNavigation.pursueLocalFeetTarget(level, actor.mob(),
-                target(state, lease, actor, bodies), new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds()));
+                target(state, lease, actor, bodies), new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds()),
+                FrontierV3ActorActuation.capture(state, actor.mob(), executions.requireMember(actor.member().actorId()), runtime::decodedState));
         if (confirmedStrikeForThisLease(state, lease)) {
             // One HOT lease owns one exact COLD epoch.  Its durable receipt remains visible
             // across restart while ordinary demand loss decides when the completed lease drains;
@@ -322,6 +328,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 assault.overseerId(), ExpeditionMarchIssueKind.BLOCKED_EDGE); return; }
         boolean arrived = true;
         Set<java.util.UUID> members = lease.members().stream().map(SceneMember::entityId).collect(java.util.stream.Collectors.toSet());
+        var executions = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault);
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId()); BodyPosition target = targets.get(member.actorId());
             if (!(entity instanceof Mob mob) || !mob.isAlive() || target == null) { marchIssue(level, runtime, lease, assault,
@@ -333,7 +340,8 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                     marchIssue(level, runtime, lease, assault, member.actorId(), ExpeditionMarchIssueKind.OCCUPIED_NEXT_BODY); return;
                 }
                 FrontierV3GoalNavigation.pursue(level, mob, FrontierV3GoalNavigation.Goal.station(target.supportingSurface(),
-                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
+                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())),
+                        FrontierV3ActorActuation.capture(state, mob, executions.requireMember(member.actorId()), runtime::decodedState));
             }
         }
         if (arrived) {

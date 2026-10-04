@@ -25,10 +25,7 @@ class FrontierV3AmbientCarrierPersistenceTest {
         assertEquals(0, FrontierV3AmbientCarrierLedger.load(before.getCompound("data"), null).inactiveCount());
         var state = FrontierV3OfflineActorRecoveryPlanTest.prepared();
         var actor = new SubjectId("resident:1-1");
-        var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actor,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                FrontierV3AmbientActorExecutor.entityId(state, actor),
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 2L, 1L);
+        var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actor, FrontierV3AmbientActorExecutor.entityId(state, actor), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 1L);
         assertTrue(ledger.fence(declaration, 2L, 2L));
         ledger.save(file.toFile(), null);
         assertFalse(ledger.isDirty());
@@ -54,12 +51,12 @@ class FrontierV3AmbientCarrierPersistenceTest {
     @Test void savingAnotherActorsReleaseKeepsUnacknowledgedAdoptionOnDisk() throws Exception {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         var old = new FrontierV3ActorCarrierComposition.Declaration(new SubjectId("resident:1-1"),
-                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                new java.util.UUID(0, 1), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 2L, 1L);
-        var live = old.liveBody(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, 3L, 2L);
+                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                new java.util.UUID(0, 1), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, 1L);
+        var live = old.liveBody(FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, 0L, 2L);
         assertTrue(ledger.fence(old, 2L, 2L)); assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(live)));
         var other = new FrontierV3ActorCarrierComposition.Declaration(new SubjectId("resident:1-2"), old.kind(), old.owner(),
-                new java.util.UUID(0, 2), old.representation(), 7L, 4L);
+                new java.util.UUID(0, 2), old.representation(), 0L, 4L);
         assertTrue(ledger.fence(other, 7L, 7L));
         Path file = directory.resolve("mixed.dat"); ledger.save(file.toFile(), null);
         var restored = FrontierV3AmbientCarrierLedger.load(NbtIo.readCompressed(file,

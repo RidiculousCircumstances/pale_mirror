@@ -1,84 +1,77 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
-
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ActorCarrierComposition.*;
 
 class FrontierV3AmbientCarrierRecognitionTest {
-    @Test void closedStatusAloneCannotAuthorizeDeletingReturnedBody() {
-        var prepared = FrontierV3OfflineActorRecoveryPlanTest.prepared();
-        var actor = new SubjectId("resident:1-1");
-        var draining = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.transition(prepared, actor,
-                io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.DRAINING);
-        var closed = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.release(draining,
-                new io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseReleased(actor,
-                        draining.actorLocations().get(actor).body(), draining.actorLocations().get(actor).condition().health()));
-        long revision = closed.ambientLeases().get(actor).revision();
-        var id = FrontierV3AmbientActorExecutor.entityId(closed, actor);
-        var observed = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                "RESIDENT", "AMBIENT_LEASE", "LIVE_BODY", revision, 3L);
-        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
-        assertFalse(FrontierV3AmbientCarrierRecognition.retainedClosedRelease(closed, observed, ledger));
-        var fence = FrontierV3AmbientActorExecutor.carrierDeclaration(closed, actor,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, id,
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, revision, 3L);
-        assertTrue(ledger.fence(fence, revision, revision));
-        assertTrue(FrontierV3AmbientCarrierRecognition.retainedClosedRelease(closed, observed, ledger));
-        assertFalse(FrontierV3AmbientCarrierRecognition.retainedClosedRelease(prepared, observed, ledger));
-        var anotherGeneration = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                "RESIDENT", "AMBIENT_LEASE", "LIVE_BODY", revision, 2L);
-        assertFalse(FrontierV3AmbientCarrierRecognition.retainedClosedRelease(closed, anotherGeneration, ledger));
-        var anotherOwner = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                "RESIDENT", "SCENE_LEASE", "LIVE_BODY", revision, 3L);
-        assertFalse(FrontierV3AmbientCarrierRecognition.retainedClosedRelease(closed, anotherOwner, ledger));
-        assertTrue(ledger.matchesCarrier(fence, revision, revision), "inspection cannot consume the release proof");
+    private static final SubjectId ACTOR = new SubjectId("resident:1-1");
+    private static Declaration declaration(FrontierWorldState state) {
+        return FrontierV3AmbientActorExecutor.carrierDeclaration(state, ACTOR,
+                FrontierV3AmbientActorExecutor.entityId(state, ACTOR), Representation.LIVE_BODY,
+                ActorBodyAuthority.current(state, ACTOR).physicalEpoch());
     }
+    private static FrontierV3AmbientCarrierRecognition.ManagedCarrier observed(Declaration body) {
+        return observed(body, body.owner().name(), body.authorityRevision(), body.epoch(), body.representation().name());
+    }
+    private static FrontierV3AmbientCarrierRecognition.ManagedCarrier observed(Declaration body, String owner,
+                                                                             long revision, long epoch, String representation) {
+        return new FrontierV3AmbientCarrierRecognition.ManagedCarrier(body.entityId(), body.actorId().value(), false, false,
+                body.kind().name(), owner, representation, revision, epoch);
+    }
+
+    @Test void closingActivityCannotAuthorizeRetiringItsPhysicalBody() {
+        var prepared = FrontierV3OfflineActorRecoveryPlanTest.prepared();
+        var body = declaration(prepared);
+        var draining = AmbientLeaseStateProcess.transition(prepared, ACTOR, AmbientLeaseStatus.DRAINING);
+        var location = draining.actorLocations().get(ACTOR);
+        var closed = AmbientLeaseStateProcess.release(draining,
+                new AmbientLeaseReleased(ACTOR, location.body(), location.condition().health()));
+        assertTrue(FrontierV3AmbientCarrierRecognition.recognizesOwnership(closed, observed(body)));
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        assertFalse(ledger.fencesBody(body), "closed activity without exact physical evidence is not retirement authority");
+        FrontierV3ActorAdoptionFixture.establishPhysicalHistory(ledger, body);
+        assertTrue(ledger.fence(body.inactiveCarrier(), body.epoch(), 0L));
+        assertTrue(ledger.fencesBody(body));
+        assertFalse(ledger.fencesBody(body.liveBody(body.owner(), 0L, body.epoch() + 1L)));
+        assertTrue(ledger.matchesCarrier(body.inactiveCarrier(), body.epoch(), 0L), "inspection cannot consume the proof");
+    }
+
     @Test void retainedInactiveCustodyAndDifferentPendingGenerationCannotBecomeHot() {
         var state = FrontierV3OfflineActorRecoveryPlanTest.prepared();
-        var actor = new SubjectId("resident:1-1");
-        var id = FrontierV3AmbientActorExecutor.entityId(state, actor);
-        long revision = state.ambientLeases().get(actor).revision();
-        var observed = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                "RESIDENT", "AMBIENT_LEASE", "LIVE_BODY", revision, 2L);
+        var old = declaration(state);
+        state = ActorBodyAuthority.demand(ActorBodyAuthority.released(state, ActorBodyAuthority.current(state, ACTOR)), ACTOR);
+        var current = declaration(state);
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
-        assertTrue(FrontierV3AmbientCarrierRecognition.recoverableOwnership(state, observed, ledger));
-        var old = new FrontierV3ActorCarrierComposition.Declaration(actor,
-                ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                id, FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, revision - 1, 1L);
-        assertTrue(ledger.fence(old, revision - 1, revision - 1));
-        assertFalse(FrontierV3AmbientCarrierRecognition.recoverableOwnership(state, observed, ledger));
-        assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(old.liveBody(old.owner(), revision, 2L))));
-        assertTrue(FrontierV3AmbientCarrierRecognition.recoverableOwnership(state, observed, ledger));
-        var wrongEpoch = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                "RESIDENT", "AMBIENT_LEASE", "LIVE_BODY", revision, 3L);
-        assertFalse(FrontierV3AmbientCarrierRecognition.recoverableOwnership(state, wrongEpoch, ledger));
-        assertTrue(ledger.pendingAdoption(actor).isPresent(), "recognition never acknowledges persistence");
+        assertFalse(FrontierV3AmbientCarrierRecognition.recoverableOwnership(state, observed(current), ledger),
+                "canonical identity alone cannot fabricate physical history");
+        FrontierV3ActorAdoptionFixture.establishPhysicalHistory(ledger, old);
+        assertTrue(FrontierV3AmbientCarrierRecognition.recoverableOwnership(state, observed(current), ledger));
+        assertTrue(ledger.fence(old.inactiveCarrier(), old.epoch(), 0L));
+        assertFalse(FrontierV3AmbientCarrierRecognition.recoverableOwnership(state, observed(current), ledger));
+        assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(current)));
+        assertTrue(FrontierV3AmbientCarrierRecognition.recoverableOwnership(state, observed(current), ledger));
+        assertFalse(FrontierV3AmbientCarrierRecognition.recoverableOwnership(state,
+                observed(current, "ACTOR_BODY", 0L, current.epoch() + 1L, "LIVE_BODY"), ledger));
+        assertTrue(ledger.pendingAdoption(ACTOR).isPresent(), "recognition never acknowledges persistence");
     }
-    @Test void stableUuidAloneDoesNotRecoverStaleOrForeignAuthority() {
+
+    @Test void stableUuidAloneDoesNotRecoverStaleForeignOrMissingAuthority() {
         var state = FrontierV3OfflineActorRecoveryPlanTest.prepared();
-        var actor = new SubjectId("resident:1-1");
-        var id = FrontierV3AmbientActorExecutor.entityId(state, actor);
-        long revision = state.ambientLeases().get(actor).revision();
-        var valid = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                "RESIDENT", "AMBIENT_LEASE", "LIVE_BODY", revision, 2L);
-        assertTrue(FrontierV3AmbientCarrierRecognition.recognizesOwnership(state, valid));
+        var body = declaration(state);
+        assertTrue(FrontierV3AmbientCarrierRecognition.recognizesOwnership(state, observed(body)));
         for (var invalid : java.util.List.of(
-                new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                        "RESIDENT", "AMBIENT_LEASE", "LIVE_BODY", revision - 1, 2L),
-                new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                        "RESIDENT", "AMBIENT_LEASE", "LIVE_BODY", revision + 1, 2L),
-                new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                        "RESIDENT", "SCENE_LEASE", "LIVE_BODY", revision, 2L),
-                new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                        "RESIDENT", "", "LIVE_BODY", revision, 2L),
-                new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                        "RESIDENT", "AMBIENT_LEASE", "INACTIVE_CARRIER", revision, 2L),
-                new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                        "RESIDENT", "AMBIENT_LEASE", "", revision, 2L),
-                new FrontierV3AmbientCarrierRecognition.ManagedCarrier(id, actor.value(), false, false,
-                        "RESIDENT", "AMBIENT_LEASE", "LIVE_BODY", revision, 0L))) {
+                observed(body, "ACTOR_BODY", -1L, body.epoch(), "LIVE_BODY"),
+                observed(body, "ACTOR_BODY", 1L, body.epoch(), "LIVE_BODY"),
+                observed(body, "SCENE_LEASE", 0L, body.epoch(), "LIVE_BODY"),
+                observed(body, "AMBIENT_LEASE", 0L, body.epoch(), "LIVE_BODY"),
+                observed(body, "", 0L, body.epoch(), "LIVE_BODY"),
+                observed(body, "ACTOR_BODY", 0L, body.epoch(), "INACTIVE_CARRIER"),
+                observed(body, "ACTOR_BODY", 0L, body.epoch(), ""),
+                observed(body, "ACTOR_BODY", 0L, 0L, "LIVE_BODY"))) {
             assertFalse(FrontierV3AmbientCarrierRecognition.recognizesOwnership(state, invalid), invalid.toString());
         }
     }

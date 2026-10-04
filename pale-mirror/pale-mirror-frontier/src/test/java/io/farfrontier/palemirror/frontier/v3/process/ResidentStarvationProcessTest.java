@@ -46,7 +46,7 @@ class ResidentStarvationProcessTest {
         nutrition.put(resident, new ResidentNutrition(ResidentNutritionStatus.STARVING, 0, 0, 0));
         state = state.withHumanPopulation(new HumanPopulation(people.households(), people.residents(), people.birthJobs(),
                 people.health(), people.quarantines(), people.migrations(), people.provisions(), nutrition,
-                people.medicalOperations(), people.schedules(), people.meals()));
+                people.medicalOperations(), people.schedules(), people.meals(), people.mealResourceObligations()));
         var configuration = new FrontierEngineConfiguration<>(base.worldId(), state, new SimInstant(0),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
                 base.limits(), List.of(ResidentNeedProcess.review(resident, 24_000)), base.transactionCommitter());

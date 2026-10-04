@@ -28,8 +28,6 @@ final class SceneLeaseStateCodec {
             for (SceneMember member : lease.members()) {
                 writeString(output, member.actorId().value());
                 writeString(output, member.entityId().toString());
-                BodyPosition position = lease.memberPosition(member.actorId());
-                writePosition(output, new BlockPosition(position.x(), position.y(), position.z()));
             }
             writeCount(output, lease.ambientHandoffActorIds().size());
             for (SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) writeString(output, actor.value());
@@ -51,11 +49,9 @@ final class SceneLeaseStateCodec {
             BlockPosition handoff = readPosition(input);
             long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
             if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
-            java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>(); Map<SubjectId, BodyPosition> memberPositions = new LinkedHashMap<>();
+            java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
             for (int member = 0, memberCount = readCount(input); member < memberCount; member++) {
                 SubjectId actor = new SubjectId(readString(input)); members.add(new SceneMember(actor, UUID.fromString(readString(input))));
-                BlockPosition position = readPosition(input);
-                memberPositions.put(actor, new BodyPosition(position.x(), position.y(), position.z()));
             }
             java.util.Set<SubjectId> handoffActors = new java.util.LinkedHashSet<>();
             for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) handoffActors.add(new SubjectId(readString(input)));
@@ -66,7 +62,7 @@ final class SceneLeaseStateCodec {
                 recovery = java.util.Optional.of(new SceneRecoveryEvidence(missing, input.readBoolean()));
             }
             SceneLease lease = SceneLease.forCause(id, world, cause, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
-                    FrontierWireTags.require(SceneLeaseStatus.class, status), members, memberPositions, handoffActors, recovery);
+                    FrontierWireTags.require(SceneLeaseStatus.class, status), members, handoffActors, recovery);
             if (leases.put(id, lease) != null) throw new IllegalArgumentException("duplicate scene lease id");
         }
         return leases;

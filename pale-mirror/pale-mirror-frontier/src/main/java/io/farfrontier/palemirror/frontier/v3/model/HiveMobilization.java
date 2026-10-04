@@ -85,7 +85,8 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
                 || returnAssembly.orElseThrow().nestId().equals(nestId) == false)) {
             throw new IllegalArgumentException("only a returning/completed parent may retain exact surviving return cursors");
         }
-        if (status == HiveMobilizationStatus.RETURNING && returnAssembly.isEmpty()) {
+        if (status == HiveMobilizationStatus.RETURNING && (returnAssembly.isEmpty()
+                || returnAssembly.orElseThrow().complete())) {
             throw new IllegalArgumentException("a returning parent requires its exact surviving-member cursors");
         }
         if (assemblyBlockage.isPresent()) {
@@ -187,6 +188,16 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         HiveMobilizationStatus nextStatus = next.complete() ? HiveMobilizationStatus.COMPLETED : HiveMobilizationStatus.RETURNING;
         return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, sighting, overseerId, memberIds, releasedMemberIds,
                 Optional.empty(), assembly, Optional.of(next), nextStatus, Optional.empty(), Optional.empty(), startedAt);
+    }
+
+    /** A casualty does not count as an arrival and cannot erase surviving routes or the expedition roster. */
+    public HiveMobilization acknowledgeReturnCasualty(SubjectId memberId) {
+        if (status != HiveMobilizationStatus.RETURNING)
+            throw new IllegalArgumentException("return casualty requires its active exact parent");
+        var next = returnAssembly.orElseThrow().withoutCasualty(memberId);
+        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, sighting, overseerId, memberIds, releasedMemberIds,
+                Optional.empty(), assembly, Optional.of(next), next.complete() ? HiveMobilizationStatus.COMPLETED
+                : HiveMobilizationStatus.RETURNING, Optional.empty(), Optional.empty(), startedAt);
     }
 
     public HiveMobilization conflict(HiveMobilizationConflictReason reason) {

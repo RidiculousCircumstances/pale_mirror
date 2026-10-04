@@ -125,6 +125,9 @@ public final class StrategicObjectiveProcess {
     }
 
     public static List<ProposedEvent> planOpportunity(FrontierWorldState state, ScheduledAction action) {
+        return planOpportunity(state, action, action.dueAt().ticks());
+    }
+    public static List<ProposedEvent> planOpportunity(FrontierWorldState state, ScheduledAction action, long currentTick) {
         if (!state.bootstrap().hive().id().equals(action.subject())) throw new IllegalArgumentException("intercept opportunity has a foreign owner");
         if (!action.kind().equals("frontier.objective.interrupt")) throw new IllegalArgumentException("intercept opportunity has an invalid action kind");
         // The wake-up itself contains no target authority.  It identifies exactly one retained
@@ -137,7 +140,7 @@ public final class StrategicObjectiveProcess {
         if (sighting.isEmpty()) {
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         }
-        return plan(state, action, false, true, action.id().value(), sighting);
+        return plan(state, action, false, true, action.id().value(), sighting, currentTick);
     }
 
     /** One exact Scout settlement sighting wakes a one-shot assault admission check. */
@@ -180,6 +183,12 @@ public final class StrategicObjectiveProcess {
     /** Development profiles may retain the same economy without admitting a competing hive strike. */
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean allowHiveInterception) {
         return plan(state, action, true, allowHiveInterception);
+    }
+
+    /** A deferred policy admission records execution at commit time, never backdates it to the due hint. */
+    public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                          boolean allowHiveInterception, long currentTick) {
+        return plan(state, action, true, allowHiveInterception, null, Optional.empty(), currentTick);
     }
 
     /** A ready exact field asks its settlement planner for work without bypassing durable task ownership. */
@@ -250,6 +259,13 @@ public final class StrategicObjectiveProcess {
 
     private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring,
                                             boolean allowHiveInterception, String eventIdentity, Optional<HiveOperationKnowledge.Sighting> interceptSighting) {
+        return plan(state, action, recurring, allowHiveInterception, eventIdentity, interceptSighting, action.dueAt().ticks());
+    }
+
+    private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring,
+                                            boolean allowHiveInterception, String eventIdentity,
+                                            Optional<HiveOperationKnowledge.Sighting> interceptSighting, long currentTick) {
+        if (currentTick < action.dueAt().ticks()) throw new IllegalArgumentException("policy admission precedes its due action");
         SubjectId owner = action.subject(); int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         requireKnownOwner(state.bootstrap(), owner);
         DecisionPolicyRegistry.require(state.strategicPlans().requireDecisionAuthority(owner));
@@ -279,6 +295,8 @@ public final class StrategicObjectiveProcess {
                 ? List.of(new ProposedEvent(owner, new HiveDoctrineSelected(doctrine))) : List.of();
         List<ProposedEvent> observedAndHealth = concatenate(concatenate(concatenate(concatenate(concatenate(concatenate(perception.events(), hivePerception.events()),
                 territoryPerception.events()), settlementPerception.events()), doctrineEvent), health), medical);
+        if (hive) observedAndHealth = concatenate(observedAndHealth,
+                HivePresenceProcess.planFree(state, owner, currentTick));
         Optional<SettlementManagement.Decision> management = state.bootstrap().hive().id().equals(owner)
                 ? Optional.empty() : Optional.of(SettlementManagementComposition.MANAGEMENT.decide(decisionState,
                         FrontierWorldStateSupport.settlement(state.bootstrap(), owner)));

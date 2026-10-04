@@ -55,7 +55,7 @@ public final class FrontierSceneLeaseStateSupport {
         StrategicPlanState plans = FrontierSceneBehaviors.transitionPlans(state, current, nextStatus);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(nextStatus));
         FencedRecoveryState recovery = switch (nextStatus) {
-            case HOT -> runningRecovery(state.fencedRecovery(), current);
+            case HOT -> runningRecovery(state, current);
             case CONFLICT -> isolateRecovery(state.fencedRecovery(), current, "scene-conflict");
             // A scene resolution may supersede its cargo projection, never its actors.
             case PREPARED -> current.status() == SceneLeaseStatus.CONFLICT
@@ -117,19 +117,16 @@ public final class FrontierSceneLeaseStateSupport {
                 .collect(java.util.stream.Collectors.toSet());
         Set<SubjectId> observed = positions.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet());
         if (!expected.equals(observed) || observed.size() != positions.size()) throw new IllegalArgumentException("scene release must capture exactly its leased actors");
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         for (SceneMemberPosition position : positions) {
             FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), position.body().supportingSurface().support());
-            ActorLocation currentActor = actors.get(position.actorId());
-            // The operation cursor is the durable HOT/COLD hand-off.  A body may have been
-            // halfway through ordinary Minecraft movement when its chunk vanished, but that
-            // transient sub-cell location must not become a second strategic travel state.
-            BodyPosition canonical = FrontierSceneBehaviors.releasedBody(state, current, position.actorId(), position.body());
-            actors.put(position.actorId(), new ActorLocation(canonical, currentActor.condition().withHealth(position.health()), currentActor.kind()));
+            ActorLocation currentActor = releaseReady.actorLocations().get(position.actorId());
+            if (!currentActor.body().equals(position.body()) || !currentActor.condition().health().equals(position.health()))
+                throw new IllegalArgumentException("scene release requires independently recorded common body observation");
+            FrontierSceneBehaviors.validateRelease(state, current, position.actorId(), position.body());
         }
         StrategicPlanState plans = FrontierSceneBehaviors.releasePlans(state, current);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
-        return copy(releaseReady, actors, leases, state.ambientLeases(), plans, confirmRecovery(releaseReady, releaseReady.fencedRecovery(), current));
+        return copy(releaseReady, releaseReady.actorLocations(), leases, state.ambientLeases(), plans, confirmRecovery(releaseReady, releaseReady.fencedRecovery(), current));
     }
 
     /** Ordinary scene release cannot discard a body while its physical offhand still owns stock. */
@@ -206,15 +203,12 @@ public final class FrontierSceneLeaseStateSupport {
         return next.supersedeAmbiguous(FencedRecoveryBinding.prepared(id, FencedRecoveryAsset.CARGO, owner, lease.revision(),
                 next.nextEpoch(id), true), "scene-conflict-resolved");
     }
-    private static FencedRecoveryState runningRecovery(FencedRecoveryState recovery, SceneLease lease) {
-        return runningCargo(runningBodies(recovery, lease), lease);
-    }
-    private static FencedRecoveryState runningBodies(FencedRecoveryState recovery, SceneLease lease) {
-        FencedRecoveryState next = recovery;
+    private static FencedRecoveryState runningRecovery(FrontierWorldState state, SceneLease lease) {
         for (SceneMember member : lease.members()) {
-            next = ActorBodyAuthority.observedPresent(next, member.actorId());
+            if (ActorBodyAuthority.require(state, ActorBodyAuthority.current(state, member.actorId())).phase() != FencedRecoveryPhase.RUNNING)
+                throw new IllegalArgumentException("scene HOT requires independently confirmed physical participants");
         }
-        return next;
+        return runningCargo(state.fencedRecovery(), lease);
     }
     private static FencedRecoveryState runningCargo(FencedRecoveryState recovery, SceneLease lease) {
         if (!FrontierSceneBehaviors.isLogistics(lease)) return recovery;

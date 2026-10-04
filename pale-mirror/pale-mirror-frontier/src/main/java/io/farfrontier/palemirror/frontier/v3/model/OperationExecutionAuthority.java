@@ -17,12 +17,37 @@ public final class OperationExecutionAuthority {
     public static ActorExecutionGroup assemblyCurrent(FrontierWorldState state, RouteOperation operation) {
         return current(state, operation, ActorActivityKind.OPERATION_ASSEMBLY);
     }
+    /** Resolve the retained nominal owner; roster membership validates it, never discovers it. */
+    public static Optional<RouteOperation> assemblyOwner(FrontierWorldState state, SubjectId actor) {
+        var execution = state.actorExecutions().current(ActorActivityKind.OPERATION_ASSEMBLY).get(actor);
+        if (execution == null) return Optional.empty();
+        state.actorExecutions().requireCurrent(execution);
+        return Optional.of(require(state.operations(), execution, ActorActivityKind.OPERATION_ASSEMBLY,
+                operation -> operation.stage() == OperationStage.ASSEMBLING));
+    }
     public static ActorExecutionGroup logisticsCurrent(FrontierWorldState state, RouteOperation operation) {
         return current(state, operation, ActorActivityKind.LOGISTICS);
     }
     public static ActorExecutionGroup logisticsAdmission(FrontierWorldState state, RouteOperation operation) {
         return new ActorExecutionGroup(operation.participantIds().stream().map(actor ->
                 state.actorExecutions().next(actor, ActorActivityKind.LOGISTICS, operation.id())).toList());
+    }
+    /** The owner declares its Hall passage; shared knowledge still owns all obstacle rules. */
+    private static KnownPedestrianRouteKnowledge assemblyKnowledge(FrontierWorldState state, RouteOperation operation) {
+        return OperationAssemblyCorridor.knowledge(state, operation.settlementId());
+    }
+    /** Recheck every retained edge, including a rejoin, before any background pose commit. */
+    public static boolean coldAssemblyTraversalAvailable(FrontierWorldState state, RouteOperation operation,
+                                                          OperationAssembly.Member before, OperationAssembly.Member after) {
+        var knowledge = assemblyKnowledge(state, operation);
+        var cursor = before;
+        if (!knowledge.traversable(java.util.List.of(cursor.currentSurface()))) return false;
+        for (int step = 0; step < OperationAssembly.MAX_COLD_ADVANCE && !cursor.arrived(); step++) {
+            cursor = cursor.advanceOne();
+            if (!knowledge.traversable(java.util.List.of(cursor.currentSurface()))) return false;
+            if (cursor.equals(after)) return true;
+        }
+        return false;
     }
     public static OperationTravelStarted travelStarted(FrontierWorldState state, RouteOperation operation, OperationTravel travel) {
         return new OperationTravelStarted(operation.id(), travel, operation.stage() == OperationStage.ASSEMBLING
@@ -80,7 +105,54 @@ public final class OperationExecutionAuthority {
                                                       Predicate<RouteOperation> terminal) {
         Objects.requireNonNull(kind); Objects.requireNonNull(phase); Objects.requireNonNull(terminal);
         return new ActorActivityCapability() {
+            @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
+                return request -> {
+                    var state = request.expectedState();
+                    var id = request.execution();
+                    var operation = require(state.operations(), id, kind, phase);
+                    if (kind == ActorActivityKind.OPERATION_ASSEMBLY) {
+                        var assembly = operation.activeAssembly().orElseThrow();
+                        var member = assembly.members().get(id.actorId());
+                        var start = request.observedPosition().supportingSurface();
+                        if (member.currentSurface().equals(start))
+                            return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+                        if (assembly.deferral().isPresent()) throw new IllegalArgumentException("observed assembly obstruction must settle before rejoin");
+                        var target = member.arrived() ? member.currentSurface() : member.corridor().get(member.cursor() + 1);
+                        var order = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(operation.id(), id.actorId(),
+                                member.cursor(), Math.incrementExact(member.routeRevision()), java.util.List.of(target), TraversalCapability.PEDESTRIAN,
+                                io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+                        var path = assemblyKnowledge(state, operation).path(start, order);
+                        var members = new java.util.LinkedHashMap<>(assembly.members());
+                        members.put(id.actorId(), member.withRejoin(new io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin(path, 0)));
+                        var operations = new java.util.LinkedHashMap<>(state.operations());
+                        operations.put(operation.id(), operation.withAssembly(new OperationAssembly(members, assembly.cargoCarrierId())));
+                        return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin().operations(operations));
+                    }
+                    if (operation.activeTravel().isEmpty()) {
+                        if (!operation.currentPosition().equals(request.observedPosition().supportingSurface().support()))
+                            throw new IllegalArgumentException("operation requires its observed strategic checkpoint before COLD");
+                        return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+                    }
+                    var travel = operation.activeTravel().orElseThrow();
+                    var checkpoint = travel.checkpointMember(id.actorId(), request.observedPosition());
+                    var update = FrontierWorldStateUpdate.begin();
+                    if (checkpoint != travel) {
+                        var operations = new java.util.LinkedHashMap<>(state.operations());
+                        operations.put(operation.id(), operation.withTravel(checkpoint));
+                        update.operations(operations);
+                    }
+                    return new ActorActivityBodyCheckpoint.Acknowledgement(request, update);
+                };
+            }
+            @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId id, AmbientActorLease lease) {
+                if (kind != ActorActivityKind.OPERATION_ASSEMBLY || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY) return false;
+                var operation = require(state.operations(), id, kind, phase);
+                var member = operation.activeAssembly().orElseThrow().members().get(id.actorId());
+                var target = member.arrived() ? member.currentSurface() : member.nextSurface();
+                return lease.goalBody().supportingSurface().equals(target);
+            }
             @Override public ActorActivityKind kind() { return kind; }
+            @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
             @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
             @Override public void validateReference(FrontierWorldState state, ActorExecutionId id) {
                 require(state.operations(), id, kind, phase);

@@ -55,6 +55,7 @@ final class HumanPopulationStateCodec {
             FrontierWorldStateCodec.writeCount(output, journey.routeIndex()); output.writeByte(journey.status().wireTag()); output.writeBoolean(journey.blockReason().isPresent());
             if (journey.blockReason().isPresent()) output.writeByte(journey.blockReason().orElseThrow().wireTag());
             ActorExecutionStateCodec.writeId(output, journey.executionId());
+            output.writeLong(journey.routeRevision()); TraversalRejoinCodec.write(output, journey.rejoin());
         }
         FrontierWorldStateCodec.writeCount(output, population.provisions().size());
         for (SettlementProvision provision : population.provisions().values().stream().sorted(Comparator.comparing(SettlementProvision::settlementId)).toList()) {
@@ -99,6 +100,22 @@ final class HumanPopulationStateCodec {
         FrontierWorldStateCodec.writeCount(output, population.meals().size());
         for (ResidentMeal meal : population.meals().values().stream().sorted(Comparator.comparing(ResidentMeal::residentId)).toList()) {
             writeMeal(output, meal);
+        }
+        FrontierWorldStateCodec.writeCount(output, population.mealResourceObligations().size());
+        for (var obligation : population.mealResourceObligations().values().stream()
+                .sorted(Comparator.comparing(ResidentMealResourceObligation::residentId)).toList()) {
+            ActorExecutionStateCodec.writeId(output, obligation.executionId());
+            FrontierWorldStateCodec.writeString(output, obligation.body().actorId().value());
+            output.writeLong(obligation.body().physicalEpoch());
+            FrontierWorldStateCodec.writeString(output, obligation.settlementId().value());
+            FrontierWorldStateCodec.writeString(output, obligation.depotId().value());
+            FrontierWorldStateCodec.writeString(output, obligation.sourceAccountId().value());
+            FrontierWorldStateCodec.writeString(output, obligation.actorAccountId().value());
+            writeFoodPortion(output, obligation.portion());
+            output.writeByte(FrontierWireTags.tag(obligation.custodyState()));
+            output.writeBoolean(obligation.pendingPhysicalStep().isPresent());
+            if (obligation.pendingPhysicalStep().isPresent()) writeMealPhysicalStep(output, obligation.pendingPhysicalStep().orElseThrow());
+            output.writeLong(obligation.retiredAtTick());
         }
     }
 
@@ -162,7 +179,8 @@ final class HumanPopulationStateCodec {
             java.util.Optional<ResidentMigrationBlockReason> reason = blocked
                     ? java.util.Optional.of(readBlockReason(input)) : java.util.Optional.empty();
             ResidentMigrationJourney journey = new ResidentMigrationJourney(resident, origin, household, destination, route, routeIndex,
-                    FrontierWireTags.require(ResidentMigrationStatus.class, status), reason, ActorExecutionStateCodec.readId(input));
+                    FrontierWireTags.require(ResidentMigrationStatus.class, status), reason, ActorExecutionStateCodec.readId(input),
+                    input.readLong(), TraversalRejoinCodec.read(input));
             if (migrations.put(resident, journey) != null) throw new IllegalArgumentException("duplicate resident migration journey");
         }
         if (!hasProvisions) return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations);
@@ -241,8 +259,28 @@ final class HumanPopulationStateCodec {
             ResidentMeal meal = readMeal(input);
             if (meals.put(meal.residentId(), meal) != null) throw new IllegalArgumentException("duplicate resident meal");
         }
+        Map<SubjectId, ResidentMealResourceObligation> obligations = new LinkedHashMap<>();
+        int retainedCount = FrontierWorldStateCodec.readCount(input);
+        if (retainedCount > HumanPopulation.MAX_RESIDENTS) throw new IllegalArgumentException("too many retired meal resource obligations");
+        for (int index = 0; index < retainedCount; index++) {
+            var execution = ActorExecutionStateCodec.readId(input);
+            var body = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(
+                    new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
+            var settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
+            var depot = new SubjectId(FrontierWorldStateCodec.readString(input));
+            var source = new SubjectId(FrontierWorldStateCodec.readString(input));
+            var held = new SubjectId(FrontierWorldStateCodec.readString(input));
+            var portion = readFoodPortion(input);
+            var custody = FrontierWireTags.require(ResidentMealResourceObligation.CustodyState.class, input.readUnsignedByte());
+            var pending = input.readBoolean() ? java.util.Optional.of(readMealPhysicalStep(input))
+                    : java.util.Optional.<ResidentMealPhysicalStep>empty();
+            var obligation = new ResidentMealResourceObligation(execution, body, settlement, depot, source, held,
+                    portion, custody, pending, input.readLong());
+            if (obligations.put(obligation.residentId(), obligation) != null)
+                throw new IllegalArgumentException("duplicate retired meal resource obligation");
+        }
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
-                provisions, nutrition, medicalOperations, schedules, meals);
+                provisions, nutrition, medicalOperations, schedules, meals, obligations);
     }
 
     static void writeMeal(DataOutputStream output, ResidentMeal meal) throws IOException {

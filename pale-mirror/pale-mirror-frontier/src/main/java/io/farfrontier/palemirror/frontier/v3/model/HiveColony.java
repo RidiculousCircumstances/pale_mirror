@@ -276,6 +276,31 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, lifecycles, next);
     }
 
+    /** The resource-free homeward owner settles casualty and remaining physiology atomically. */
+    public HiveColony acknowledgeReturnCasualty(SubjectId mobilizationId, SubjectId memberId) {
+        var current = mobilizations.get(Objects.requireNonNull(mobilizationId));
+        if (current == null) throw new IllegalArgumentException("unknown returning parent");
+        var updated = current.acknowledgeReturnCasualty(memberId);
+        var lifecycles = new LinkedHashMap<>(bioformLifecycles);
+        var casualty = lifecycles.get(memberId);
+        if (casualty == null || casualty.phase() != BioformLifecyclePhase.RETURNING)
+            throw new IllegalArgumentException("return casualty has no exact returning physiology");
+        // ACTIVE is physiology, not living status or permission to issue a new activity.
+        // Common fatality commits the independent ActorCondition.DEAD in this transaction.
+        lifecycles.put(memberId, casualty.active());
+        if (updated.status() == HiveMobilizationStatus.COMPLETED) {
+            for (var survivor : updated.returnAssembly().orElseThrow().members().keySet()) {
+                var lifecycle = lifecycles.get(survivor);
+                if (lifecycle == null || lifecycle.phase() != BioformLifecyclePhase.RETURNING)
+                    throw new IllegalArgumentException("completed survivor lacks returning physiology");
+                lifecycles.put(survivor, lifecycle.active());
+            }
+        }
+        var next = new LinkedHashMap<>(mobilizations);
+        next.put(mobilizationId, updated);
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, lifecycles, next);
+    }
+
     void validateAgainst(FrontierBootstrap bootstrap) {
         var hive = bootstrap.hive();
         var organIds = hive.organs().stream().map(HiveOrgan::id).collect(java.util.stream.Collectors.toSet());

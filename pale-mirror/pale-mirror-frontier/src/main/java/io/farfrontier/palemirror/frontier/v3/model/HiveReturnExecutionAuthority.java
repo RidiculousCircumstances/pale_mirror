@@ -103,7 +103,35 @@ public final class HiveReturnExecutionAuthority {
         return parent;
     }
     static ActorActivityCapability capability() { return new ActorActivityCapability() {
+        @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
+            return Optional.of((state, execution, tick) -> {
+                var parent = require(state.hiveColony().mobilizations(), execution);
+                var colony = state.hiveColony().acknowledgeReturnCasualty(parent.id(), execution.actorId());
+                var update = FrontierWorldStateUpdate.begin().hiveColony(colony);
+                if (colony.mobilizations().get(parent.id()).status() == HiveMobilizationStatus.COMPLETED)
+                    return new ActorActivityDeath.Acknowledgement(state, execution, update,
+                            ActorActivityDeath.Disposition.RETIRE_DECLARED_GROUP, Optional.of(currentGroup(state, parent)));
+                return new ActorActivityDeath.Acknowledgement(state, execution, update,
+                        ActorActivityDeath.Disposition.RETIRE_EXACT_EXECUTION);
+            });
+        }
+        @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId id, AmbientActorLease lease) {
+            if (lease.goal() != AmbientGoalKind.HIVE_TASK_RETURN) return false;
+            var owner = require(state.hiveColony().mobilizations(), id);
+            var member = owner.returnAssembly().orElseThrow().members().get(id.actorId());
+            return lease.goalBody().supportingSurface().equals(member.arrived() ? member.currentSurface() : member.nextSurface());
+        }
         @Override public ActorActivityKind kind() { return ActorActivityKind.HIVE_TASK_RETURN; }
+        @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
+        @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
+            return request -> {
+                var owner = require(request.expectedState().hiveColony().mobilizations(), request.execution());
+                if (!owner.returnAssembly().orElseThrow().members().get(request.execution().actorId()).currentSurface()
+                        .equals(request.observedPosition().supportingSurface()))
+                    throw new IllegalArgumentException("hive return requires its observed rejoin before COLD");
+                return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+            };
+        }
         @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
         @Override public void validateReference(FrontierWorldState state, ActorExecutionId id) { require(state.hiveColony().mobilizations(), id); }
         @Override public ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId id) {

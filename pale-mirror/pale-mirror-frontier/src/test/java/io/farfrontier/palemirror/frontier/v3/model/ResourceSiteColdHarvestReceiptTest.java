@@ -501,7 +501,7 @@ class ResourceSiteColdHarvestReceiptTest {
         state = state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(new HumanPopulation(
                 population.households(), profiles, population.birthJobs(), population.health(),
                 population.quarantines(), population.migrations(), population.provisions(),
-                population.nutrition(), population.medicalOperations(), population.schedules(), population.meals())));
+                population.nutrition(), population.medicalOperations(), population.schedules(), population.meals(), population.mealResourceObligations())));
         assertEquals(otherFarmer.id(), FrontierWorldStateSupport.availableFieldResident(state, owner,
                 ResidentProfession.AGRICULTURAL_WORKER).orElseThrow().id());
 

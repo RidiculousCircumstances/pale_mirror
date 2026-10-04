@@ -13,8 +13,8 @@ class FrontierV3AmbientAdmissionHistoryDiagnosticTest {
         var actor = new SubjectId("resident:diagnostic");
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         var id = java.util.UUID.randomUUID();
-        var target = FrontierV3ActorOwnerBinding.ambient(new Declaration(actor, ActorKind.RESIDENT,
-                Owner.AMBIENT_LEASE, id, Representation.LIVE_BODY, 2L, 1L));
+        var target = FrontierV3ActorOwnerBinding.body(new Declaration(actor, ActorKind.RESIDENT,
+                Owner.ACTOR_BODY, id, Representation.LIVE_BODY, 0L, 1L));
         assertTrue(FrontierV3AmbientAdmissionDiagnostic.unresolvedCreationReason(ledger, actor).isEmpty());
         assertTrue(ledger.firstAdmissions().isEmpty());
         assertTrue(ledger.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(
@@ -24,9 +24,8 @@ class FrontierV3AmbientAdmissionHistoryDiagnosticTest {
         var before = ledger.save(new CompoundTag(), null);
         assertEquals("FIRST_CREATION_PENDING", FrontierV3AmbientAdmissionDiagnostic.unresolvedCreationReason(ledger, actor).orElseThrow());
         assertEquals(before, ledger.save(new CompoundTag(), null));
-        var scene = FrontierV3ActorOwnerBinding.scene(target.declaration().liveBody(Owner.SCENE_LEASE, 1L, 1L),
-                new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:diagnostic"));
-        assertTrue(ledger.prepareHandoff(target, scene));
-        assertEquals("HANDOFF_SAVE_PENDING", FrontierV3AmbientAdmissionDiagnostic.unresolvedCreationReason(ledger, actor).orElseThrow());
+        var restored = FrontierV3AmbientCarrierLedger.load(before, null);
+        assertEquals("FIRST_CREATION_PENDING", FrontierV3AmbientAdmissionDiagnostic.unresolvedCreationReason(restored, actor).orElseThrow());
+        assertEquals(before, restored.save(new CompoundTag(), null));
     }
 }

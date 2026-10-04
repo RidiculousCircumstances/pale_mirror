@@ -561,8 +561,7 @@ class FrontierV3CrashBoundaryProbeTest {
         return SceneLease.forCause(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(lease), world,
                 new ResourceSiteHarvestSceneCause(new SubjectId("site:crash-probe"), new SubjectId(job)),
                 new BlockPosition(1, 64, 1), new SimInstant(revision), revision,
-                SceneLeaseStatus.PREPARED, List.of(new SceneMember(worker, SceneLease.deterministicEntityId(world, worker))),
-                Map.of(worker, body()), java.util.Set.of(), java.util.Optional.empty());
+                SceneLeaseStatus.PREPARED, List.of(new SceneMember(worker, SceneLease.deterministicEntityId(world, worker))), java.util.Set.of(), java.util.Optional.empty());
     }
 
     private static SubjectId worker() { return new SubjectId("resident:crash-worker"); }

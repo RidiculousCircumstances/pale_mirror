@@ -6,7 +6,32 @@ import java.util.Optional;
 /** Field owner supplies its exact checkpoint and preserves work/cargo through interruption. */
 final class HarvestActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.FIELD_HARVEST; }
+    @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
+    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return ActorActivityBodyCheckpoint.usesActorLocation(); }
     @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
+    @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
+        return Optional.of((state, execution, tick) -> new ActorActivityDeath.Acknowledgement(state, execution,
+                acknowledgeWorkerDeath(state, job(state, execution), tick), ActorActivityDeath.Disposition.RETAIN_CAUSAL_OWNER));
+    }
+    /** Current and paused claims enter the same owning callback; the scene is not the owner. */
+    private static FrontierWorldStateUpdate acknowledgeWorkerDeath(FrontierWorldState state, ResourceSiteHarvestJob job, long tick) {
+        var lifecycle = state.resourceSites().site(job.siteId());
+        var site = state.resourceSite(job.siteId());
+        if (job.progress().work().filter(WorkProgress::running).isPresent())
+            lifecycle = lifecycle.withHarvestLabour(job, job.progress().work().orElseThrow().pause(tick));
+        var conflict = new ResourceSiteConflictObserved(job.siteId(), site.cropSlots().getFirst(),
+                ResourceSiteDiagnosticProducer.WORKER_DIED);
+        var sites = state.resourceSites().replace(lifecycle.conflicted(ResourceSiteConflictDisposition.terminal(
+                site.cropSlots().getFirst(), ResourceSiteConflictReason.WORKER_DIED,
+                ResourceSiteConflictIncidents.first(lifecycle, conflict))));
+        var intent = state.physicalIntents().get(job.intentId());
+        if (intent == null) throw new IllegalArgumentException("dead harvest worker has no exact physical intent");
+        var intents = new java.util.LinkedHashMap<>(state.physicalIntents());
+        intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.RESOURCE_SITE_HARVEST.stamp(intent)));
+        return FrontierWorldStateUpdate.begin().resourceSites(sites)
+                .strategicPlans(state.strategicPlans().transitionTask(job.taskId(), StrategicTaskStatus.BLOCKED))
+                .physicalIntents(intents);
+    }
     @Override public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {
         throw new IllegalArgumentException("field work must retain its continuation or complete through its owner");
     }
@@ -36,6 +61,11 @@ final class HarvestActivityCapability implements ActorActivityCapability {
             default -> throw new IllegalArgumentException("field checkpoint has no declared UAE translation");
         };
         return new ActorActivityCheckpoint(state, execution, waiting);
+    }
+    @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease) {
+        var job = job(state, execution);
+        return lease.goal() == AmbientGoalKind.WORK
+                && lease.goalBody().equals(state.actorLocations().get(job.workerId()).body());
     }
     static ResidentWorkYield.Status checkpointStatus(FrontierWorldState state, ResourceSiteHarvestJob job) {
         return job.progress().hasPendingCrop() || state.resourceSites().hasPendingWorldChange(job.siteId())

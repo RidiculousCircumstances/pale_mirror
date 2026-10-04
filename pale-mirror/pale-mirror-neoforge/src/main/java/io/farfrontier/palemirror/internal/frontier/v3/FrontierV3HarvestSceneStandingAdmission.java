@@ -30,7 +30,7 @@ final class FrontierV3HarvestSceneStandingAdmission {
         var binding = state.fencedRecovery().current().get(
                 ActorBodyId.recoveryBindingId(member.actorId()));
         if (binding == null || binding.phase() != FencedRecoveryPhase.PREPARED) return false;
-        if (!obstructedBodyFreeColumn(level, member.entityId(), lease.memberPosition(member.actorId()))) return false;
+        if (!obstructedBodyFreeColumn(level, member.entityId(), lease.memberBody(state.actorLocations(), member.actorId()))) return false;
         ResourceSiteHarvestSceneCause cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
         CommandResult result = FrontierV3CommandSubmission.submit(runtime, "resource-site-harvest-preparation-aborted",
                 lease.id().value(), new ResourceSiteHarvestScenePreparationAborted(lease.id(), cause.siteId(), cause.jobId(),

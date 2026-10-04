@@ -12,6 +12,10 @@ public final class FrontierRouteEngagementStateSupport {
 
     public static FrontierWorldState strike(FrontierWorldState state, RouteEngagementStrike strike) {
         RouteEngagement engagement = requireColdEngagement(state, strike.engagementId());
+        var declarations = RouteEngagementExecutionAuthority.combatCurrent(state, engagement);
+        if (!declarations.requireMember(strike.attackerId()).equals(strike.attackerExecution())
+                || !declarations.requireMember(strike.targetId()).equals(strike.targetExecution()))
+            throw new IllegalArgumentException("COLD strike has stale or foreign participant execution authority");
         if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
             throw new IllegalArgumentException("COLD strike cannot mutate an ambient-leased combatant");
         }
@@ -40,6 +44,7 @@ public final class FrontierRouteEngagementStateSupport {
         if (engagement == null || engagement.status() == RouteEngagementStatus.RESOLVED || engagement.status() == RouteEngagementStatus.HOT) {
             throw new IllegalArgumentException("route engagement cannot be resolved from its current lifecycle state");
         }
+        RouteEngagementExecutionAuthority.requireCurrent(state, engagement, resolved.executions());
         if (resolved.outcome() != RouteEngagementOutcome.ABORTED && (engagement.status() != RouteEngagementStatus.COLD_COMBAT
                 || RouteEngagementCombatRules.outcome(state, engagement) != resolved.outcome())) {
             throw new IllegalArgumentException("route engagement resolution disagrees with exact living actors");
@@ -63,11 +68,13 @@ public final class FrontierRouteEngagementStateSupport {
                     operation.tacticalPlan().withPhase(TacticalPlanPhase.ABORTED)));
         }
         var update = FrontierWorldStateUpdate.begin().operations(operations).strategicPlans(plans);
+        var executions = RouteEngagementExecutionAuthority.retire(state.actorExecutions(), resolved.executions());
         if (resolved.outcome() == RouteEngagementOutcome.HIVE_VICTORY) {
             var operation = state.operations().get(engagement.operationId());
-            update.actorExecutions(OperationExecutionAuthority.retired(state,
-                    OperationExecutionAuthority.logisticsCurrent(state, operation)));
+            executions = ActorExecutionComposition.LIFECYCLE.retireCurrentGroup(
+                    executions, OperationExecutionAuthority.logisticsCurrent(state, operation));
         }
+        update.actorExecutions(executions);
         return state.withChanges(update);
     }
 

@@ -89,8 +89,8 @@ class SettlementAssaultTest {
                 .map(id -> new SceneMember(id, SceneLease.deterministicEntityId(worldId, id))).toList();
         SceneLease lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(),
                 new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), candidate.handoffPosition(), fixture.instant(), 7L,
-                SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
-        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
 
         List<SubjectId> attackers = assault.combatantAttackerIds().stream().sorted().toList();
         List<SubjectId> targets = assault.defenderIds().stream().sorted().toList();
@@ -141,8 +141,8 @@ class SettlementAssaultTest {
         }
         SceneStrikeObservation observation = new SceneStrikeObservation(new PhysicalObservationId("observation:hot-receipt-selection"), intent.id(), attacker, target,
                 FixedScalar.whole(20), FixedScalar.whole(18));
-        var afterLethalDeath = startedStrike.recordActorDeath(new ActorDied(leaseId, target,
-                startedStrike.actorLocations().get(target).body(), "actual-strike-death"), 11L);
+        var afterLethalDeath = ModeledActorBodyFacts.died(startedStrike, target,
+                startedStrike.actorLocations().get(target).body(), "actual-strike-death", 11L);
         var lethalReceipt = new SceneStrikeObservation(new PhysicalObservationId("observation:hot-lethal-receipt"),
                 intent.id(), attacker, target, FixedScalar.whole(20), FixedScalar.ZERO);
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(startedStrike, hive, intent,
@@ -227,11 +227,16 @@ class SettlementAssaultTest {
                 "the confirmed prior epoch cannot be prepared again while its HOT lease remains authoritative");
 
         FrontierWorldState draining = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
-        // A loaded HOT body can be between the retained provider floors when release observes
-        // it.  That transient position must not become a COLD admission authority.
-        state = draining.releaseSceneLease(leaseId, members.stream()
+        // A scope release cannot manufacture an unsupported displacement or silently snap
+        // it back to the old formation. Common physical observation is independently required.
+        var unrecorded = members.stream()
                 .map(member -> new SceneMemberPosition(member.actorId(), draining.actorLocations().get(member.actorId()).body().offset(0, 10, 0),
+                        draining.actorLocations().get(member.actorId()).condition().health())).toList();
+        assertThrows(IllegalArgumentException.class, () -> draining.releaseSceneLease(leaseId, unrecorded));
+        state = draining.releaseSceneLease(leaseId, members.stream()
+                .map(member -> new SceneMemberPosition(member.actorId(), draining.actorLocations().get(member.actorId()).body(),
                         draining.actorLocations().get(member.actorId()).condition().health())).toList());
+        assertEquals(draining.actorLocations(), state.actorLocations(), "scene release never substitutes a historical formation pose");
         FrontierWorldState restored = new FrontierWorldStateCodec(state.bootstrap()).decode(new FrontierWorldStateCodec(state.bootstrap()).encode(state));
         assertEquals(SettlementAssaultStatus.COLD_COMBAT, restored.strategicPlans().settlementAssaults().get(assault.id()).status());
         assertEquals(1, restored.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch());
@@ -246,7 +251,7 @@ class SettlementAssaultTest {
                 "retained physical history pins its exact closed scene until owner receipt compaction");
         assertTrue(FrontierSceneLeaseStateSupport.mayCompact(hot, lease.withStatus(SceneLeaseStatus.CLOSED)),
                 "an otherwise unreferenced closed scene remains eligible for bounded retention");
-        members.forEach(member -> assertEquals(lease.memberPosition(member.actorId()), restored.actorLocations().get(member.actorId()).body(),
+        members.forEach(member -> assertEquals(lease.memberBody(hot.actorLocations(), member.actorId()), restored.actorLocations().get(member.actorId()).body(),
                 "release must restore the exact provider-approved assault floor rather than a transient HOT observation"));
 
         // The closed receipt owns its completed HOT epoch, not the outcome of a later COLD
@@ -262,8 +267,8 @@ class SettlementAssaultTest {
         SceneLeaseId nextLeaseId = new SceneLeaseId("lease:hot-receipt-next");
         SceneLease nextLease = SceneLease.forCause(nextLeaseId, worldId,
                 new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), nextCandidate.handoffPosition(), fixture.instant(), 8L,
-                SceneLeaseStatus.PREPARED, nextMembers, SceneLease.bodiesAboveSupportCells(nextCandidate.memberPositions()), Set.of(), Optional.empty());
-        FrontierWorldState nextHot = restored.prepareSceneLease(nextLease).transitionSceneLease(nextLeaseId, SceneLeaseStatus.HOT);
+                SceneLeaseStatus.PREPARED, nextMembers, Set.of(), Optional.empty());
+        FrontierWorldState nextHot = FrontierTestActorBodies.present(restored.prepareSceneLease(nextLease), nextLease).transitionSceneLease(nextLeaseId, SceneLeaseStatus.HOT);
         List<SubjectId> nextAttackers = assault.defenderIds().stream().sorted().toList();
         List<SubjectId> nextTargets = assault.combatantAttackerIds().stream().sorted().toList();
         SubjectId nextAttacker = nextAttackers.get(Math.floorMod(1, nextAttackers.size()));
@@ -289,17 +294,17 @@ class SettlementAssaultTest {
                 .map(id -> new SceneMember(id, SceneLease.deterministicEntityId(worldId, id))).toList();
         SceneLease lease = SceneLease.forCause(leaseId, worldId,
                 new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), candidate.handoffPosition(), fixture.instant(), 4L,
-                SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
-        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         long contactPlanEpoch = state.strategicPlans().settlementAssaults().get(assault.id()).tacticalPlan().planEpoch();
 
-        state = state.recordActorDeath(new ActorDied(leaseId, assault.overseerId(), lease.memberPosition(assault.overseerId()), "test-overseer-loss"), 11L);
+        state = ModeledActorBodyFacts.died(state, assault.overseerId(), lease.memberBody(state.actorLocations(), assault.overseerId()), "test-overseer-loss", 11L);
 
         SettlementAssault retreating = state.strategicPlans().settlementAssaults().get(assault.id());
         assertEquals(assault.expeditionId(), retreating.expeditionId());
         assertEquals(TacticalPlanPhase.RETREAT, retreating.tacticalPlan().phase());
         assertEquals(contactPlanEpoch + 1L, retreating.tacticalPlan().planEpoch());
-        assertEquals(SceneLeaseStatus.HOT, state.sceneLeases().get(leaseId).status(), "the same physical lease drains naturally after the canonical retreat order");
+        assertEquals(SceneLeaseStatus.DRAINING, state.sceneLeases().get(leaseId).status(), "exact death quiesces the same scope without removing its surviving bodies");
         PhysicalIntent staleContact = new PhysicalIntent(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:overseer-retreat"),
                 PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.RUNNING,
                 SettlementAssaultCauseIdentity.strike(assault.id(), assault.combatantAttackerIds().getFirst(), 0),
@@ -310,9 +315,8 @@ class SettlementAssaultTest {
         assertThrows(IllegalArgumentException.class, () -> afterLoss.strategicPlans().afterConfirmedHotStrike(staleContact),
                 "the old contact directive cannot commit after the same expedition orders retreat");
 
-        state = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
         state = state.releaseSceneLease(leaseId, members.stream().filter(member -> !member.actorId().equals(assault.overseerId()))
-                .map(member -> new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()), FixedScalar.whole(20))).toList());
+                .map(member -> new SceneMemberPosition(member.actorId(), lease.memberBody(afterLoss.actorLocations(), member.actorId()), FixedScalar.whole(20))).toList());
         SettlementAssault coldRetreat = state.strategicPlans().settlementAssaults().get(assault.id());
         assertEquals(SettlementAssaultStatus.COLD_COMBAT, coldRetreat.status());
         assertEquals(TacticalPlanPhase.RETREAT, coldRetreat.tacticalPlan().phase());
@@ -368,9 +372,8 @@ class SettlementAssaultTest {
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted().map(id -> new SceneMember(id,
                 SceneLease.deterministicEntityId(restored.bootstrap().worldId(), id))).toList();
         SceneLease lease = SceneLease.forCause(leaseId, restored.bootstrap().worldId(), new SettlementAssaultSceneCause(assault.id(), assault.settlementId()),
-                candidate.handoffPosition(), fixture.instant(), 1L, SceneLeaseStatus.PREPARED, members,
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
-        FrontierWorldState hot = restored.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                candidate.handoffPosition(), fixture.instant(), 1L, SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
+        FrontierWorldState hot = FrontierTestActorBodies.present(restored.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         SettlementAssault hotAssault = hot.strategicPlans().settlementAssaults().get(assault.id());
         Map<SubjectId, BodyPosition> forged = new java.util.LinkedHashMap<>(hotAssault.nextFormationBodies());
         forged.put(hotAssault.overseerId(), hotAssault.formationBodies().get(hotAssault.overseerId()));
@@ -412,8 +415,8 @@ class SettlementAssaultTest {
 
         HotMarch controllerHot = hotMarch("typed-controller-loss", 95L);
         SettlementAssault controllerAssault = controllerHot.assault();
-        FrontierWorldState afterDeath = controllerHot.state().recordActorDeath(new ActorDied(controllerHot.lease().id(), controllerAssault.overseerId(),
-                controllerHot.lease().memberPosition(controllerAssault.overseerId()), "test-march-controller-loss"), 19L);
+        FrontierWorldState afterDeath = ModeledActorBodyFacts.died(controllerHot.state(), controllerAssault.overseerId(),
+                controllerHot.lease().memberBody(controllerHot.state().actorLocations(), controllerAssault.overseerId()), "test-march-controller-loss", 19L);
         SettlementAssault controllerRetreat = afterDeath.strategicPlans().settlementAssaults().get(controllerAssault.id());
         assertEquals(ExpeditionMarchIssueKind.CONTROLLER_LOST, controllerRetreat.march().issue().orElseThrow().kind());
         assertEquals(TacticalPlanPhase.RETREAT, controllerRetreat.tacticalPlan().phase());
@@ -430,8 +433,8 @@ class SettlementAssaultTest {
                 .map(id -> new SceneMember(id, SceneLease.deterministicEntityId(state.bootstrap().worldId(), id))).toList();
         SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:" + suffix), state.bootstrap().worldId(),
                 new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), candidate.handoffPosition(), fixture.instant(), 3L,
-                SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
-        FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+                SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
+        FrontierWorldState hot = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         return new HotMarch(hot, hot.strategicPlans().settlementAssaults().get(assault.id()), lease);
     }
 

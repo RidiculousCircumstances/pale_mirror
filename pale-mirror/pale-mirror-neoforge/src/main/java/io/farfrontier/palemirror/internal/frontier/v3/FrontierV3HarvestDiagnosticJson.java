@@ -92,7 +92,7 @@ final class FrontierV3HarvestDiagnosticJson {
         String leaseValue = lease == null || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED ? "null" : "{\"id\":\"" + quote(lease.id().value())
                 + "\",\"status\":\"" + lease.status() + "\",\"revision\":" + lease.revision()
                 + ",\"members\":" + lease.members().size() + ",\"body\":"
-                + (lease.memberPosition(job.workerId()) == null ? "null" : position(lease.memberPosition(job.workerId()))) + "}";
+                + (lease.memberBody(state.actorLocations(), job.workerId()) == null ? "null" : position(lease.memberBody(state.actorLocations(), job.workerId()))) + "}";
         // A normal client may complete its short observed HOT turn before the following pilot
         // diagnostic.  Preserve the same closed lease as historical evidence without reviving
         // it as a current authority claim; this distinguishes an exact crop-1 ingress from a

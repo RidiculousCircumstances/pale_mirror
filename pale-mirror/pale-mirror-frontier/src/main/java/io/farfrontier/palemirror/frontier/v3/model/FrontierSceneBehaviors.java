@@ -120,8 +120,8 @@ public final class FrontierSceneBehaviors {
     static StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) {
         return behavior(lease).releasePlans(state, lease);
     }
-    static BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
-        return behavior(lease).releasedBody(state, lease, actorId, observed);
+    static void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+        behavior(lease).validateRelease(state, lease, actorId, observed);
     }
     /**
      * Cause-owned continuation after the generic infrastructure has captured a released scene.
@@ -212,7 +212,7 @@ public final class FrontierSceneBehaviors {
                                        Map<SubjectId, SettlementServiceWork> serviceWorks, SceneLease lease, Set<SubjectId> leasedOperations);
         StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus);
         StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease);
-        BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed);
+        void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed);
         SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released);
         SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved);
         SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease);
@@ -320,11 +320,7 @@ public final class FrontierSceneBehaviors {
                         ? state.strategicPlans().transitionEngagement(id, RouteEngagementStatus.COLD_COMBAT) : state.strategicPlans();
             }).orElse(state.strategicPlans());
         }
-        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
-            RouteOperation operation = state.operations().get(cause(lease).operationId());
-            boolean checkpoint = cause(lease).engagementId().isEmpty() && operation != null && operation.stage() == OperationStage.EN_ROUTE && operation.activeTravel().isPresent();
-            return checkpoint ? operation.activeTravel().orElseThrow().formation().get(actorId) : observed;
-        }
+        @Override public void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) { }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             LogisticsSceneCause cause = cause(lease);
             RouteOperation operation = state.operations().get(cause.operationId());
@@ -420,7 +416,19 @@ public final class FrontierSceneBehaviors {
                         || assault.status() == SettlementAssaultStatus.RESOLVED || assault.status() == SettlementAssaultStatus.CONFLICT;
             };
             if (!valid) throw new IllegalArgumentException("assault scene lease and canonical lifecycle disagree");
-            Set<SubjectId> values = new HashSet<>(assault.attackerIds()); if (!march) values.addAll(assault.defenderIds()); return Set.copyOf(values);
+            Set<SubjectId> values = new HashSet<>(assault.attackerIds());
+            if (!march) {
+                values.addAll(assault.defenderIds());
+                // A fresh battle presents survivors only. An earlier scope still retains
+                // its explicitly declared casualty participants as historical evidence.
+                Set<SubjectId> declared = lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
+                values.removeIf(id -> {
+                    ActorLocation actor = actors.get(id);
+                    if (actor == null) throw new IllegalArgumentException("assault retained an unknown combatant");
+                    return actor.condition().status() == ActorLifeStatus.DEAD && !declared.contains(id);
+                });
+            }
+            return Set.copyOf(values);
         }
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) {
             SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, cause(lease));
@@ -439,13 +447,7 @@ public final class FrontierSceneBehaviors {
             return state.strategicPlans().transitionSettlementAssault(assault.id(), assault.tacticalPlan().phase() == TacticalPlanPhase.TRAVEL
                     ? SettlementAssaultStatus.APPROACHING : SettlementAssaultStatus.COLD_COMBAT);
         }
-        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
-            // HOT bodies may be observed between the exact provider-approved assault floors
-            // while Minecraft unloads them.  The lease is the sole durable COLD/HOT hand-off:
-            // retaining a transient body here would make the next COLD battlefield admission
-            // depend on a floor that no provider ever approved.
-            return lease.memberPosition(actorId);
-        }
+        @Override public void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) { }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, cause(lease));
             return new SceneReleasePlan(assault.hiveId(), released,
@@ -522,9 +524,7 @@ public final class FrontierSceneBehaviors {
         }
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
-        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
-            return observed;
-        }
+        @Override public void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) { }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             return new SceneReleasePlan(owner(state, lease), released, new SceneContinuation.None());
         }
@@ -574,9 +574,7 @@ public final class FrontierSceneBehaviors {
         }
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
-        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
-            return observed;
-        }
+        @Override public void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) { }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             return new SceneReleasePlan(owner(state, lease), released, new SceneContinuation.None());
         }
@@ -644,7 +642,7 @@ public final class FrontierSceneBehaviors {
         }
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
-        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+        @Override public void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
             ResourceSiteHarvestJob job = null;
             try { job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease)); }
             catch (IllegalArgumentException missing) {
@@ -652,20 +650,14 @@ public final class FrontierSceneBehaviors {
                 if (lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(actorId)) {
                     throw new IllegalArgumentException("terminal resource-site scene release has a foreign worker");
                 }
-                // The completed job has no retained next cursor. Preserve the one observed
-                // body position so its following ambient/successor lifecycle starts from the
-                // same exact actor rather than reusing the last crop station as a fake cursor.
-                return observed;
+                return;
             }
             if (!job.workerId().equals(actorId)) throw new IllegalArgumentException("resource-site scene release has a foreign worker");
             if (ResourceSiteHarvestGoal.actorAtDepot(state, job)) {
                 if (!ResourceSiteHarvestGoal.current(state, job).arrivedAt(observed.supportingSurface()))
                     throw new IllegalArgumentException("resource-site depot release has no observed service station");
-                return observed;
+                return;
             }
-            // The observed supported body is the COLD/HOT hand-off authority.  A route
-            // checkpoint is historical work context, not permission to move the farmer.
-            return observed;
         }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             ResourceSiteHarvestJob job = null;
@@ -683,35 +675,8 @@ public final class FrontierSceneBehaviors {
         @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
             return new SceneRecoveryPlan(owner(state, lease), unresolved, new SceneContinuation.None());
         }
-        @Override public SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
-            if (FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause(lease))) {
-                var site = FrontierResourceSiteHarvestSceneSupport.site(state, cause(lease));
-                if (!state.resourceSites().site(site.id()).harvestLineages().values().stream()
-                        .filter(lineage -> lineage.predecessorJobId().equals(cause(lease).jobId()))
-                        .reduce((left, right) -> { throw new IllegalArgumentException("duplicate terminal harvest owner"); })
-                        .orElseThrow().workerId().equals(actorId)) {
-                    throw new IllegalArgumentException("terminal harvest death has a foreign worker");
-                }
-                // The common death owner retires body custody. Completed economic work and
-                // its already confirmed output must not be reopened as an UNKNOWN effect.
-                return SceneDeathOutcome.unchanged(state);
-            }
-            ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease));
-            if (!job.workerId().equals(actorId)) return SceneDeathOutcome.unchanged(state);
-            ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
-            ResourceSite site = state.resourceSite(job.siteId());
-            ResourceSiteConflictObserved conflict = new ResourceSiteConflictObserved(job.siteId(), site.cropSlots().getFirst(),
-                    ResourceSiteDiagnosticProducer.WORKER_DIED);
-            ResourceSiteState sites = state.resourceSites().replace(lifecycle.conflicted(
-                    ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.WORKER_DIED,
-                            ResourceSiteConflictIncidents.first(lifecycle, conflict))));
-            StrategicPlanState plans = state.strategicPlans().transitionTask(job.taskId(), StrategicTaskStatus.BLOCKED);
-            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent = state.physicalIntents().get(job.intentId());
-            if (intent == null) throw new IllegalArgumentException("dead harvest worker has no exact physical intent");
-            Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
-            intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.RESOURCE_SITE_HARVEST.stamp(intent)));
-            return new SceneDeathOutcome(state.humanPopulation(), sites, plans, Map.copyOf(intents), state.serviceWorks(), state.actorExecutions());
-        }
+        // Worker death is acknowledged by the retained work capability, including
+        // scope-free and suspended work. A terminal scene has no remaining job to reopen.
     }
 
     /** One named industrial worker, never an ambient Villager substituted at the workshop. */
@@ -745,11 +710,9 @@ public final class FrontierSceneBehaviors {
         }
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
-        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+        @Override public void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
             if (!job.workerId().equals(actorId)) throw new IllegalArgumentException("production scene release has a foreign worker");
-            if (job.bakeryWork().isPresent()) return observed;
-            return job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
         }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
@@ -827,10 +790,9 @@ public final class FrontierSceneBehaviors {
             return state.strategicPlans();
         }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
-        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+        @Override public void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
             SettlementServiceWork work = FrontierSettlementServiceWorkSceneSupport.require(state, cause(lease));
             if (!work.workerId().equals(actorId)) throw new IllegalArgumentException("service-work scene release has a foreign worker");
-            return observed;
         }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             return new SceneReleasePlan(owner(state, lease), released, new SceneContinuation.None());
@@ -910,8 +872,8 @@ public final class FrontierSceneBehaviors {
             return state.strategicPlans();
         }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
-        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
-            return FrontierRoutePatrolSceneSupport.releasedBody(state, lease, actorId, observed);
+        @Override public void validateRelease(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+            FrontierRoutePatrolSceneSupport.validateRelease(state, lease, actorId, observed);
         }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, cause(lease));

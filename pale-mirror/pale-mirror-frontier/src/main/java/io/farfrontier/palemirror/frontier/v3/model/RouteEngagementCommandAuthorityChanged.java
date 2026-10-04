@@ -6,10 +6,12 @@ import java.util.Objects;
 
 /** Compare-and-set transition of one engagement's retained command signal. */
 public record RouteEngagementCommandAuthorityChanged(SubjectId engagementId, HiveOperationCommandAuthority expected,
-                                                      HiveOperationCommandAuthority next) implements FrontierPayload {
+                                                      HiveOperationCommandAuthority next,
+        io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions) implements FrontierPayload {
     public RouteEngagementCommandAuthorityChanged {
         Objects.requireNonNull(engagementId, "engagement id"); Objects.requireNonNull(expected, "expected authority"); Objects.requireNonNull(next, "next authority");
         if (expected.equals(next)) throw new IllegalArgumentException("command authority transition must change state");
+        RouteEngagementExecutionAuthority.requireOwner(Objects.requireNonNull(executions, "interception cohort"), engagementId);
     }
     @Override public String type() { return "frontier.route_engagement_command_authority_changed"; }
 }

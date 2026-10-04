@@ -31,10 +31,13 @@ final class AmbientLeasePayloadCodecs {
             AmbientBodyConfirmed confirmed = (AmbientBodyConfirmed) payload;
             FrontierWorldPayloadCodecs.writeSubject(output, confirmed.actorId()); output.writeLong(confirmed.leaseRevision());
             output.writeByte(confirmed.boundary().wireTag()); writeBody(output, confirmed.previousBody()); writeBody(output, confirmed.observedBody());
+            FrontierWorldPayloadCodecs.writeSubject(output, confirmed.bodyId().actorId()); output.writeLong(confirmed.bodyId().physicalEpoch());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
                 new AmbientBodyConfirmed(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong(),
-                        AmbientBodyConfirmed.Boundary.fromWireTag(input.readUnsignedByte()), readBody(input), readBody(input))); }
+                        AmbientBodyConfirmed.Boundary.fromWireTag(input.readUnsignedByte()), readBody(input), readBody(input),
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(
+                                FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong()))); }
     }
     private static final class TransitionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.ambient_lease_transition"; }

@@ -760,9 +760,10 @@ public final class FrontierV3TestPilotClient {
     }
     /**
      * Waits for one complete physical harvest result: the durable intent carries an exact
-     * receipt for its named wheat identity and the site entered its next growth epoch. The
+     * receipt for its named wheat identity and that worker's terminal lineage is confirmed. The
      * stack may already have become a real production input, so current item custody is not
-     * evidence that the completed receipt did or did not happen.
+     * evidence that the completed receipt did or did not happen. Independent crop growth and
+     * another worker's activity cannot redefine completion of this exact job.
      */
     private static void waitUntilHarvestResult(Minecraft minecraft, JsonObject action) {
         String siteId = action.get("siteId").getAsString(); String intentId = action.get("intentId").getAsString(); String itemId = action.get("itemId").getAsString();

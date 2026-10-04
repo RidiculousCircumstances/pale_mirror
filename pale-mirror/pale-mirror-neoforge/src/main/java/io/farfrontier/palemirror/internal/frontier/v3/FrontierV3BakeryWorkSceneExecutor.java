@@ -74,7 +74,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 FrontierV3BakeryPhysicalEffect.clearBlock(level, runtime, lease, job);
                 return;
             }
-            if (!lease.memberPosition(job.workerId()).equals(goal.station().standingBody())) {
+            if (!lease.memberBody(state.actorLocations(), job.workerId()).equals(goal.station().standingBody())) {
                 FrontierV3CommandSubmission.submit(runtime, "bakery-goal-arrived", lease.id().value(),
                         new BakeryHotGoalArrived(job.id(), lease.id(), goal.phase(),
                                 FrontierV3SurfaceObservation.observedAt(worker, goal.station())));
@@ -102,7 +102,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
         }
         List<SurfaceAnchor> known;
         try {
-            known = BakeryKnownNavigation.pathFrom(state, job, lease.memberPosition(job.workerId()).supportingSurface());
+            known = BakeryKnownNavigation.pathFrom(state, job, lease.memberBody(state.actorLocations(), job.workerId()).supportingSurface());
         } catch (IllegalArgumentException unavailable) {
             FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "known-route:" + unavailable.getMessage());
             return; // The job remains retained; an unsupported path is not a fabricated arrival.

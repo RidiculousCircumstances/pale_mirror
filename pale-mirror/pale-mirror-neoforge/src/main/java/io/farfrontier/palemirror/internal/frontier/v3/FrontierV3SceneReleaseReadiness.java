@@ -19,7 +19,7 @@ final class FrontierV3SceneReleaseReadiness {
         // reject stale/conflicting evidence rather than hide it behind an unloaded-column wait.
         return awaitingEntityStorage(state, lease, id -> level.getEntity(id) != null
                         || lease.members().stream().filter(member -> member.entityId().equals(id))
-                            .anyMatch(member -> FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).departure(member.actorId()).isPresent()),
+                            .anyMatch(member -> FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).hasBodyDeparture(member.actorId())),
                 body -> FrontierV3SceneExecutor.entityStorageReady(level, new BlockPos(body.x(), body.y(), body.z())))
                 || awaitingCargoStorage(state, lease, id -> level.getEntity(id) != null
                         || FrontierV3CargoDepartureLedger.get(level, state.bootstrap().worldId()).observation(id).isPresent(),
@@ -53,7 +53,7 @@ final class FrontierV3SceneReleaseReadiness {
             if (evidenceAvailable.test(member.entityId())) continue;
             var body = actor.body();
             if (!storageReady.test(body)) return true;
-            var retained = lease.memberPosition(member.actorId());
+            var retained = lease.memberBody(state.actorLocations(), member.actorId());
             if (!storageReady.test(retained)) return true;
         }
         return false;

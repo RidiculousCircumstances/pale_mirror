@@ -32,7 +32,7 @@ import java.util.UUID;
 
 /** Stable WAL boundary owned by the typed engineering work-site scene. */
 final class EngineeringWorkScenePayloadCodecs {
-    private static final int TYPED_BODY_LEASE_MARKER = 0xfffe;
+    private static final int PARTICIPANT_LEASE_MARKER = 0xffe0;
     private EngineeringWorkScenePayloadCodecs() { }
 
     static PayloadCodecs codecs() {
@@ -58,38 +58,34 @@ final class EngineeringWorkScenePayloadCodecs {
 
     private static void writeLease(DataOutputStream output, SceneLease lease) throws IOException {
         if (!(lease.cause() instanceof EngineeringWorkSceneCause cause)) throw new IllegalArgumentException("engineering scene WAL payload requires its typed cause");
-        output.writeShort(TYPED_BODY_LEASE_MARKER);
+        output.writeShort(PARTICIPANT_LEASE_MARKER);
         FrontierWorldPayloadCodecs.writeString(output, lease.id().value()); FrontierWorldPayloadCodecs.writeString(output, lease.worldId().value());
         FrontierWorldPayloadCodecs.writeSubject(output, cause.projectId()); output.writeInt(cause.workCellIndex());
         writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag()); output.writeByte(lease.members().size());
         for (SceneMember member : lease.members()) {
             FrontierWorldPayloadCodecs.writeSubject(output, member.actorId());
             FrontierWorldPayloadCodecs.writeString(output, member.entityId().toString());
-            BodyPosition position = lease.memberPosition(member.actorId());
-            writePosition(output, new BlockPosition(position.x(), position.y(), position.z()));
         }
         output.writeByte(lease.ambientHandoffActorIds().size());
         for (SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) FrontierWorldPayloadCodecs.writeSubject(output, actor);
     }
 
     private static SceneLease readLease(DataInputStream input) throws IOException {
-        if (input.readUnsignedShort() != TYPED_BODY_LEASE_MARKER) {
-            throw new IllegalArgumentException("engineering scene payload requires the current typed-body envelope");
+        if (input.readUnsignedShort() != PARTICIPANT_LEASE_MARKER) {
+            throw new IllegalArgumentException("engineering scene payload requires the current participant-only envelope");
         }
         SceneLeaseId id = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)); WorldId world = new WorldId(FrontierWorldPayloadCodecs.readString(input));
         EngineeringWorkSceneCause cause = new EngineeringWorkSceneCause(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readInt());
         BlockPosition handoff = readPosition(input); long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
         if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
-        List<SceneMember> members = new ArrayList<>(); Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
+        List<SceneMember> members = new ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
             SubjectId actor = FrontierWorldPayloadCodecs.readSubject(input).value(); members.add(new SceneMember(actor, UUID.fromString(FrontierWorldPayloadCodecs.readString(input))));
-            BlockPosition position = readPosition(input); positions.put(actor,
-                    new BodyPosition(position.x(), position.y(), position.z()));
         }
         Set<SubjectId> ambient = new LinkedHashSet<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) ambient.add(FrontierWorldPayloadCodecs.readSubject(input).value());
         return SceneLease.forCause(id, world, cause, handoff, new SimInstant(instant), revision, FrontierWireTags.require(SceneLeaseStatus.class, status),
-                members, positions, ambient, Optional.empty());
+                members, ambient, Optional.empty());
     }
 
     private static void writeMembers(DataOutputStream output, List<SceneMemberPosition> members) throws IOException {

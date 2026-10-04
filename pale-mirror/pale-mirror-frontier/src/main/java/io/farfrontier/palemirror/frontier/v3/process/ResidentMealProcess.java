@@ -46,6 +46,19 @@ public final class ResidentMealProcess {
                 new SimInstant(dueAt), 12, meal.residentId(), PROGRESS, 1);
     }
 
+    /** Post-death settlement reads the prior exact ID solely to retire its due action.
+     * It cannot infer that ID from the vacant successor state or re-admit the old meal. */
+    static List<ProposedEvent> cancelRetiredMealContinuation(FrontierWorldState beforeDeath,
+                                                           FrontierWorldState afterDeath, SubjectId actor) {
+        var prior = beforeDeath.humanPopulation().meals().get(actor);
+        if (prior == null || afterDeath.humanPopulation().meals().containsKey(actor)) return List.of();
+        if (afterDeath.actorLocations().get(actor).condition().status() != ActorLifeStatus.DEAD
+                || afterDeath.actorExecutions().owns(actor, prior.executionId().activityKind(), prior.executionId().activityOwnerId()))
+            throw new IllegalArgumentException("retired meal continuation requires its acknowledged fatality and retired authority");
+        return List.of(new ProposedEvent(actor, new ScheduleEffect.Cancelled(progress(prior,
+                Math.addExact(prior.startedAtTick(), 1L)).id())));
+    }
+
     /** HOT or an unresolved physical hand owns the meal; no COLD retry is useful. */
     public static boolean held(FrontierWorldState state, ScheduledAction action) {
         if (!PROGRESS.equals(action.kind())) return false;

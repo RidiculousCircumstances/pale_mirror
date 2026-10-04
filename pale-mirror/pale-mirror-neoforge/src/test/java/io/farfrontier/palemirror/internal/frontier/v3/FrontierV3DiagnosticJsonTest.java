@@ -307,8 +307,7 @@ class FrontierV3DiagnosticJsonTest {
         WorldId world = new WorldId("frontier:production-trace-test");
         SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:production-work-development-input-theft-r1"), world,
                 new ProductionWorkSceneCause(job), new BlockPosition(-340, 64, -329), new SimInstant(1L), 1L,
-                SceneLeaseStatus.PREPARED, List.of(new SceneMember(worker, SceneLease.deterministicEntityId(world, worker))),
-                java.util.Map.of(worker, new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(-340, 65, -329)), java.util.Set.of(), Optional.empty());
+                SceneLeaseStatus.PREPARED, List.of(new SceneMember(worker, SceneLease.deterministicEntityId(world, worker))), java.util.Set.of(), Optional.empty());
 
         FrontierV3DiagnosticTrace.SceneTrace trace = FrontierV3DiagnosticTrace.sceneTrace(lease);
 
@@ -841,7 +840,7 @@ class FrontierV3DiagnosticJsonTest {
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:diagnostic-assault-r0"), checkpoint.worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
                 candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
-                members, io.farfrontier.palemirror.frontier.v3.model.SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+                members, java.util.Set.of(), Optional.empty());
         FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
 
         String scene = FrontierV3DiagnosticJson.render("scene", candidate.assaultId().value(), checkpoint, hot, Optional.empty());
@@ -872,8 +871,7 @@ class FrontierV3DiagnosticJsonTest {
         SceneLeaseId firstLeaseId = new SceneLeaseId("lease:diagnostic-assault-current-r0");
         SceneLease firstLease = SceneLease.forCause(firstLeaseId, checkpoint.worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
-                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, firstMembers,
-                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, firstMembers, java.util.Set.of(), Optional.empty());
         state = state.prepareSceneLease(firstLease).transitionSceneLease(firstLeaseId, SceneLeaseStatus.HOT);
         SubjectId firstAttacker = assault.combatantAttackerIds().stream().sorted().findFirst().orElseThrow();
         SubjectId firstTarget = assault.defenderIds().stream().sorted().findFirst().orElseThrow();
@@ -903,8 +901,7 @@ class FrontierV3DiagnosticJsonTest {
         SceneLeaseId secondLeaseId = new SceneLeaseId("lease:diagnostic-assault-current-r1");
         SceneLease secondLease = SceneLease.forCause(secondLeaseId, checkpoint.worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(secondCandidate.assaultId(), secondCandidate.settlementId()),
-                secondCandidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value() + 1L, SceneLeaseStatus.PREPARED, secondMembers,
-                SceneLease.bodiesAboveSupportCells(secondCandidate.memberPositions()), java.util.Set.of(), Optional.empty());
+                secondCandidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value() + 1L, SceneLeaseStatus.PREPARED, secondMembers, java.util.Set.of(), Optional.empty());
         state = state.prepareSceneLease(secondLease).transitionSceneLease(secondLeaseId, SceneLeaseStatus.HOT);
         SubjectId secondAttacker = assault.defenderIds().stream().sorted().skip(1L % assault.defenderIds().size()).findFirst().orElseThrow();
         SubjectId secondTarget = assault.combatantAttackerIds().stream().sorted().skip(1L % assault.combatantAttackerIds().size()).findFirst().orElseThrow();
@@ -963,7 +960,7 @@ class FrontierV3DiagnosticJsonTest {
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:diagnostic-engineering-r0"), checkpoint.worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkSceneCause(project.id(), 0), project.workCells().getFirst(),
                 checkpoint.instant(), checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
-                members, io.farfrontier.palemirror.frontier.v3.model.SceneLease.bodiesAboveSupportCells(positions), java.util.Set.of(), Optional.empty());
+                members, java.util.Set.of(), Optional.empty());
         FrontierWorldState diagnosticState = state.withChanges(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate.begin()
                 .sceneLeases(java.util.Map.of(lease.id(), lease)));
 

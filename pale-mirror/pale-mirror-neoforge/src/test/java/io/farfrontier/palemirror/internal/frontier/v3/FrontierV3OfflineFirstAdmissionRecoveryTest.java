@@ -31,15 +31,11 @@ class FrontierV3OfflineFirstAdmissionRecoveryTest {
         Path entities = Files.createDirectories(dimension.resolve("entities"));
         Files.write(entities.resolve("r.0.0.mca"), new byte[8192]);
         var state = FrontierV3OfflineActorRecoveryPlanTest.prepared(FrontierV3PhysicalWorld.WORLD_ID);
-        var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, ACTOR,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                FrontierV3AmbientActorExecutor.entityId(state, ACTOR),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
-                state.ambientLeases().get(ACTOR).revision(), 1L);
+        var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, ACTOR, FrontierV3AmbientActorExecutor.entityId(state, ACTOR), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L);
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         assertTrue(ledger.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(
                 new FrontierV3ActorFirstAdmission.Identity(ACTOR, declaration.kind(), declaration.entityId()))));
-        assertTrue(ledger.beginFirstAdmission(FrontierV3ActorOwnerBinding.ambient(declaration)));
+        assertTrue(ledger.beginFirstAdmission(FrontierV3ActorOwnerBinding.body(declaration)));
         var root = new CompoundTag(); root.putInt("DataVersion", 3955); root.put("data", ledger.save(new CompoundTag(), null));
         Path carrierFile = saveData.resolve("pale_mirror_frontier_v3_ambient_carriers_ZnJvbnRpZXI6Z3JheWJveA.dat");
         NbtIo.writeCompressed(root, carrierFile);

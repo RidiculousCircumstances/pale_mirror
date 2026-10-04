@@ -135,6 +135,8 @@ public final class FrontierDomainRelationships {
             new Family("service-work-station", FamilyDisposition.RELATION_LAYER_CURRENT, "SettlementServiceWork", "ARC-001C current service endpoints"),
             new Family("cargo-projection-retirement", FamilyDisposition.OWNER_EXPLICIT_UNCHANGED, "FencedRecoveryState/CargoProjectionRetirements",
                     "terminal self-contained authorization; validate world and retained scene, never require compacted historical cargo/scene"),
+            new Family("retired-meal-resources", FamilyDisposition.OWNER_EXPLICIT_UNCHANGED, "HumanPopulation/ResidentMealResourceObligation",
+                    "ResidentMealReferenceClosure validates exact dead actor/body/execution and portion allocation; no active meal or physical permission"),
             new Family("replica-fingerprint", FamilyDisposition.NOT_A_DOMAIN_RELATION, "PhysicalReplicaCustodyState", "adapter evidence, never domain relationship authority"));
     public static List<Family> inventory() { return INVENTORY; }
 
@@ -169,9 +171,10 @@ public final class FrontierDomainRelationships {
                     "actorAccountId", "depotAccountId", "outputItemId", "predecessorIntentId", "successorTaskId", "successorJobId"),
             surface(SettlementProvision.class, "settlementId", "recipientIds", "activeIntentId"),
             surface(SettlementRationAllocation.class, "itemId", "recipientIds"),
-            surface(SceneLease.class, "id", "worldId", "memberPositions", "ambientHandoffActorIds"),
+            surface(SceneLease.class, "id", "worldId", "ambientHandoffActorIds"),
             surface(AmbientActorLease.class, "actorId"),
             surface(CargoProjectionRetirement.class, "worldId", "leaseId", "cargoId"),
+            surface(ResidentMealResourceObligation.class, "settlementId", "depotId", "sourceAccountId", "actorAccountId"),
             surface(FencedRecoveryTombstone.class, "bindingId", "ownerId"));
 
     public static List<OwnerSurface> currentOwnerSurfaces() { return CURRENT_OWNER_SURFACES; }

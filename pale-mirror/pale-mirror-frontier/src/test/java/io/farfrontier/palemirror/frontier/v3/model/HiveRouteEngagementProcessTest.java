@@ -98,7 +98,22 @@ class HiveRouteEngagementProcessTest {
         StrategicTaskPlanned persistedTask = new StrategicTaskPlanned(task);
         assertEquals(persistedTask, FrontierWorldRuntimeDefinition.payloadCodecs().decode(persistedTask.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(persistedTask)));
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
+        var firstDeclaration = started.executions().members().getFirst();
+        var startBasis = state;
+        var staleDeclarations = new java.util.ArrayList<>(started.executions().members());
+        staleDeclarations.set(0, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                firstDeclaration.actorId(), firstDeclaration.activityKind(), firstDeclaration.activityOwnerId(), firstDeclaration.generation() + 1L));
+        var forgedStart = new RouteEngagementStarted(started.engagement(),
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(staleDeclarations));
+        assertThrows(IllegalArgumentException.class, () -> HiveRouteEngagementProcess.reduceStarted(startBasis, objective.ownerId(), forgedStart));
+        var encodedStart = FrontierWorldRuntimeDefinition.payloadCodecs().encode(started);
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(),
+                java.util.Arrays.copyOf(encodedStart, encodedStart.length - Long.BYTES)), "missing declaration bytes never infer a generation");
         state = HiveRouteEngagementProcess.reduceStarted(state, objective.ownerId(), started);
+        assertEquals(started.executions(), RouteEngagementExecutionAuthority.current(state, started.engagement()));
+        assertTrue(OperationExecutionAuthority.logisticsCurrent(state, operation).members().stream().allMatch(
+                id -> id.activityKind() == io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.LOGISTICS),
+                "the interception cannot replace the transport crew's separate purpose");
         ScheduledAction scheduled = start.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
                 .filter(ScheduleEffect.Created.class::isInstance).map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action)
                 .filter(value -> value.kind().equals("frontier.hive_route_engagement.progress")).findFirst().orElseThrow();
@@ -107,6 +122,12 @@ class HiveRouteEngagementProcessTest {
         for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : progress) {
             if (event.payload() instanceof RouteEngagementAttackerAdvanced advanced) {
                 assertEquals(advanced, FrontierWorldRuntimeDefinition.payloadCodecs().decode(advanced.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(advanced)));
+                var exact = advanced.execution();
+                var wrongGeneration = new RouteEngagementAttackerAdvanced(advanced.engagementId(), advanced.attackerId(), advanced.routeIndex(),
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(exact.actorId(), exact.activityKind(),
+                                exact.activityOwnerId(), exact.generation() + 1L));
+                var progressBasis = state;
+                assertThrows(IllegalArgumentException.class, () -> HiveRouteEngagementProcess.reduceAdvanced(progressBasis, objective.ownerId(), wrongGeneration));
                 state = HiveRouteEngagementProcess.reduceAdvanced(state, objective.ownerId(), advanced);
             } else if (event.payload() instanceof RouteEngagementTransition transition) {
                 state = HiveRouteEngagementProcess.reduceTransition(state, objective.ownerId(), transition);
@@ -146,7 +167,7 @@ class HiveRouteEngagementProcessTest {
         SceneLease lease = FrontierTestSceneLeases.exact(state, leaseId, operation.id(), operation.cargoId(), operation.currentPosition(),
                 new SimInstant(3_000L), 0L, Optional.of(engagement.id()), actorIds);
 
-        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT)
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT)
                 .transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
         assertEquals(SceneLeaseStatus.CONFLICT, state.sceneLeases().get(leaseId).status());
         assertTrue(state.sceneLeases().get(leaseId).recoveryEvidence().isEmpty(), "a live obstruction must not manufacture restart evidence");
@@ -231,14 +252,14 @@ class HiveRouteEngagementProcessTest {
         List<SceneMember> incompleteMembers = candidate.actorIds().stream().limit(2).map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();
         FrontierWorldState incompleteState = state;
         SceneLease incomplete = SceneLease.atExactPositions(incompleteLeaseId, world, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(),
-                candidate.cargoPosition(), new SimInstant(3_001L), 1L, SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), incompleteMembers,
-                incompleteMembers.stream().collect(java.util.stream.Collectors.toMap(SceneMember::actorId,
-                        member -> incompleteState.actorLocations().get(member.actorId()).body(), (left, right) -> left, java.util.LinkedHashMap::new)));
+                candidate.cargoPosition(), new SimInstant(3_001L), 1L, SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), incompleteMembers);
         FrontierWorldState coldBeforeLease = state;
         assertThrows(IllegalArgumentException.class, () -> coldBeforeLease.prepareSceneLease(incomplete));
         SceneLease lease = FrontierTestSceneLeases.exact(state, leaseId, candidate.operationId(), candidate.cargoId(),
                 candidate.handoffPosition(), new SimInstant(3_001L), 1L, Optional.of(candidate.engagementId()), candidate.actorIds());
-        FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        FrontierWorldState hot = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        var capturedExecutions = LogisticsSceneExecutionAuthority.current(hot, hot.sceneLeases().get(leaseId));
+        assertTrue(LogisticsSceneExecutionAuthority.permits(hot, hot.sceneLeases().get(leaseId), capturedExecutions));
         assertEquals(RouteEngagementStatus.HOT, hot.strategicPlans().routeEngagements().get(engagementId).status());
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> commandedWhileHot = HiveRouteEngagementProcess.planCommandControl(hot,
                 new ScheduledAction(new ScheduleId("schedule:hot-controller-is-live"), new SimInstant(3_020L), 0, engagementId,
@@ -275,9 +296,8 @@ class HiveRouteEngagementProcessTest {
                 FixedScalar.whole(20), FixedScalar.ZERO);
         FrontierWorldState struck = PhysicalIntentLifecycleFixture.prepare(hot, operation.settlementId(), strikeIntent);
         struck = PhysicalIntentLifecycleFixture.transition(struck, operation.settlementId(), strikeIntent,
-                PhysicalIntentStatus.RUNNING, Optional.empty())
-                .recordActorDeath(new ActorDied(leaseId, target, hot.actorLocations().get(target).body(), "scene-strike-test"), 0L)
-                .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+                PhysicalIntentStatus.RUNNING, Optional.empty());
+        struck = ModeledActorBodyFacts.died(struck, target, hot.actorLocations().get(target).body(), "scene-strike-test", 0L);
         FrontierWorldState drainingStrike = struck;
         assertThrows(IllegalArgumentException.class, () -> SceneStrikeStateSupport.transitionOwner(drainingStrike, strikeIntent,
                 new PhysicalIntentTransition(strikeIntent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())),
@@ -303,7 +323,7 @@ class HiveRouteEngagementProcessTest {
         assertEquals(RouteEngagementStatus.HOT, recovered.strategicPlans().routeEngagements().get(engagementId).status());
         assertEquals(SceneLeaseStatus.HOT, recovered.sceneLeases().get(leaseId).status());
         SubjectId deadActor = candidate.actorIds().stream().filter(actor -> !hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().contains(actor)).findFirst().orElseThrow();
-        FrontierWorldState afterRecordedDeath = hot.recordActorDeath(new ActorDied(leaseId, deadActor, hot.actorLocations().get(deadActor).body(), "restart-fixture"), 0L);
+        FrontierWorldState afterRecordedDeath = ModeledActorBodyFacts.died(hot, deadActor, hot.actorLocations().get(deadActor).body(), "restart-fixture", 0L);
         List<SceneMemberPosition> surviving = candidate.actorIds().stream().filter(actor -> !actor.equals(deadActor))
                 .map(actor -> {
                     ActorLocation location = afterRecordedDeath.actorLocations().get(actor);
@@ -318,6 +338,8 @@ class HiveRouteEngagementProcessTest {
             return new SceneMemberPosition(actor, location.body(), location.condition().health());
         }).toList();
         state = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING).releaseSceneLease(leaseId, captured);
+        assertFalse(LogisticsSceneExecutionAuthority.permits(state, hot.sceneLeases().get(leaseId), capturedExecutions),
+                "a drained scope cannot reauthorize its original movement even when participant generations remain current");
         assertEquals(RouteEngagementStatus.COLD_COMBAT, state.strategicPlans().routeEngagements().get(engagementId).status());
         org.junit.jupiter.api.Assertions.assertInstanceOf(ScheduleEffect.Created.class, HiveRouteEngagementProcess.planCombat(state,
                 new ScheduledAction(new ScheduleId("schedule:test-still-physical"), new SimInstant(3_020L), 0,
@@ -352,6 +374,8 @@ class HiveRouteEngagementProcessTest {
         assertTrue(cancelledFailedOperationProgress);
         assertEquals(OperationStage.FAILED, state.operations().get(operation.id()).stage());
         assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
+        assertTrue(state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.ROUTE_INTERCEPTION).isEmpty());
+        assertTrue(state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.LOGISTICS).isEmpty());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
@@ -423,10 +447,16 @@ class HiveRouteEngagementProcessTest {
         assertEquals(OperationStage.EN_ROUTE, state.operations().get(operation.id()).stage());
 
         RouteEngagementStrike impossible = new RouteEngagementStrike(engagementId, state.strategicPlans().routeEngagements().get(engagementId).attackerIds().getFirst(), defender,
-                0, RouteEngagementCombatRules.damage(state, state.strategicPlans().routeEngagements().get(engagementId).attackerIds().getFirst()));
+                0, RouteEngagementCombatRules.damage(state, state.strategicPlans().routeEngagements().get(engagementId).attackerIds().getFirst()),
+                RouteEngagementExecutionAuthority.current(state, state.strategicPlans().routeEngagements().get(engagementId)).members().getFirst(),
+                OperationExecutionAuthority.logisticsCurrent(state, operation).requireMember(defender));
         FrontierWorldState retained = state;
         assertThrows(IllegalArgumentException.class, () -> HiveRouteEngagementProcess.reduceStrike(retained, hive, impossible));
 
+        var defenderLocation = state.actorLocations().get(defender);
+        state = ActorBodyAuthority.present(state, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(
+                ActorBodyAuthority.current(state, defender), defenderLocation.body(), defenderLocation.condition().health(),
+                defenderLocation.body(), defenderLocation.condition().health()));
         state = AmbientLeaseStateProcess.transition(state, defender, AmbientLeaseStatus.HOT);
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> hotDeferred = HiveRouteEngagementProcess.planCombat(state,
                 new ScheduledAction(new ScheduleId("schedule:ambient-hot-exclusive"), new SimInstant(3_040L), 0, engagementId,
@@ -551,7 +581,8 @@ class HiveRouteEngagementProcessTest {
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
         RouteEngagement engagement = new RouteEngagement(new SubjectId("engagement:relay-loss"), task.id(), operation.id(), hive,
                 attackers, relay.anchor(), authority, RouteEngagementStatus.APPROACHING, 0, Optional.empty());
-        state = HiveRouteEngagementProcess.reduceStarted(state, hive, new RouteEngagementStarted(engagement));
+        state = HiveRouteEngagementProcess.reduceStarted(state, hive, new RouteEngagementStarted(engagement,
+                RouteEngagementExecutionAuthority.admission(state, engagement)));
         assertTrue(HiveRouteEngagementCommandSupport.connected(state, engagement));
 
         HiveOrgan selectedRelay = java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
@@ -606,7 +637,8 @@ class HiveRouteEngagementProcessTest {
         FrontierWorldState retained = state;
 
         assertThrows(IllegalArgumentException.class, () -> HiveRouteEngagementProcess.reduceCommandAuthorityChanged(retained, hive,
-                new RouteEngagementCommandAuthorityChanged(engagement.id(), expected, forged)));
+                new RouteEngagementCommandAuthorityChanged(engagement.id(), expected, forged,
+                        RouteEngagementExecutionAuthority.current(retained, engagement))));
     }
 
     @Test void controllerLossUsesBoundedMemoryThenInstinctAndAnExactSecondOverseerReclaimsSurvivors() {
@@ -653,7 +685,9 @@ class HiveRouteEngagementProcessTest {
         assertEquals("frontier.hive_route_engagement.control", instinctRetry.action().kind());
         RouteEngagementStrike forbiddenStrike = new RouteEngagementStrike(engagement.id(), engagement.attackerIds().getFirst(),
                 operation.participantIds().getFirst(), engagement.nextStrikeEpoch(),
-                RouteEngagementCombatRules.damage(state, engagement.attackerIds().getFirst()));
+                RouteEngagementCombatRules.damage(state, engagement.attackerIds().getFirst()),
+                RouteEngagementExecutionAuthority.current(state, engagement).requireMember(engagement.attackerIds().getFirst()),
+                OperationExecutionAuthority.logisticsCurrent(state, operation).requireMember(operation.participantIds().getFirst()));
         FrontierWorldState instinctRetained = state;
         assertThrows(IllegalArgumentException.class, () -> HiveRouteEngagementProcess.reduceStrike(instinctRetained, hive, forbiddenStrike));
         SceneLease forbiddenScene = FrontierTestSceneLeases.exact(state, new SceneLeaseId("lease:instinct-command-forbidden"), operation.id(), operation.cargoId(),
@@ -667,7 +701,8 @@ class HiveRouteEngagementProcessTest {
         assertEquals(HiveCommandSignalPhase.RECLAIMED, reclaimed.signalPhase());
         assertFalse(reclaimed.currentAuthorityId().equals(fallen));
         assertEquals(engagement.attackerIds(), reclaimed.rosterIds(), "reclaim changes signal authority, not exact survivor roster or actor ownership");
-        RouteEngagementCommandAuthorityChanged persisted = new RouteEngagementCommandAuthorityChanged(engagement.id(), engagement.commandAuthority(), reclaimed);
+        RouteEngagementCommandAuthorityChanged persisted = new RouteEngagementCommandAuthorityChanged(engagement.id(), engagement.commandAuthority(), reclaimed,
+                RouteEngagementExecutionAuthority.current(state, engagement));
         assertEquals(persisted, FrontierWorldRuntimeDefinition.payloadCodecs().decode(persisted.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(persisted)));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }

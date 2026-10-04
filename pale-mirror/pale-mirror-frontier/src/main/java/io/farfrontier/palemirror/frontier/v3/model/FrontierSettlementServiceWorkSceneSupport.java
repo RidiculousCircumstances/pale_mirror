@@ -56,7 +56,7 @@ public final class FrontierSettlementServiceWorkSceneSupport {
             throw new IllegalArgumentException("service-work observation has no matching HOT worker lease");
         }
         BodyPosition retained = currentSurface(work).standingBody();
-        if (!retained.equals(lease.memberPosition(work.workerId()))) {
+        if (!retained.equals(lease.memberBody(state.actorLocations(), work.workerId()))) {
             throw new IllegalArgumentException("service-work HOT lease diverges from its retained worker cursor");
         }
         return lease;
@@ -74,20 +74,17 @@ public final class FrontierSettlementServiceWorkSceneSupport {
         SceneLease lease = requireHotLease(state, current, leaseId);
         BodyPosition expectedCurrent = currentSurface(current).standingBody();
         BodyPosition expectedNext = currentSurface(replacement).standingBody();
-        if (!lease.memberPosition(current.workerId()).equals(expectedCurrent) || !observedWorker.equals(expectedNext)) {
+        if (!lease.memberBody(state.actorLocations(), current.workerId()).equals(expectedCurrent) || !observedWorker.equals(expectedNext)) {
             throw new IllegalArgumentException("service-work worker advance must retain its prior and observed next lease positions");
         }
         Map<SubjectId, SettlementServiceWork> works = new java.util.LinkedHashMap<>(state.serviceWorks());
         works.put(replacement.id(), replacement);
-        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new java.util.LinkedHashMap<>(state.sceneLeases());
-        leases.put(leaseId, lease.withMemberPositions(Map.of(current.workerId(), observedWorker)));
-        // The retained HOT body checkpoint is not a second position authority.  The exact
-        // observed edge commits the service cursor, the lease recovery anchor and the actor's
-        // canonical body together; later custody/effect validation reads that one actor body.
+        // The exact observed edge commits the service cursor and canonical actor body.
+        // No scene recovery position is copied alongside it.
         Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
         actors.put(current.workerId(), actors.get(current.workerId()).withBody(observedWorker));
         return state.withChanges(FrontierWorldStateUpdate.begin()
-                .actorLocations(actors).serviceWorks(works).sceneLeases(leases));
+                .actorLocations(actors).serviceWorks(works));
     }
 
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
@@ -95,7 +92,7 @@ public final class FrontierSettlementServiceWorkSceneSupport {
         Candidate candidate = candidate(state, work).orElseThrow(() -> new IllegalArgumentException("service-work scene has no exact ready worker"));
         if (!lease.handoffPosition().equals(candidate.handoffPosition())
                 || !lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).equals(Set.of(work.workerId()))
-                || !lease.memberPositions().equals(SceneLease.bodiesAboveSupportCells(Map.of(work.workerId(), candidate.handoffPosition())))) {
+                || !lease.memberBodies(state.actorLocations()).equals(SceneLease.bodiesAboveSupportCells(Map.of(work.workerId(), candidate.handoffPosition())))) {
             throw new IllegalArgumentException("service-work scene must retain its exact worker and cursor surface");
         }
     }

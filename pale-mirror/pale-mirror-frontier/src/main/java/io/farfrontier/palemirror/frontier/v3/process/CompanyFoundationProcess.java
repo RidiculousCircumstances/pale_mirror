@@ -83,14 +83,6 @@ public final class CompanyFoundationProcess {
         return state.openEmployment(contract);
     }
 
-    public static java.util.Optional<ProposedEvent> terminationForDeath(FrontierWorldState state, SubjectId residentId) {
-        return state.companies().employmentContracts().values().stream()
-                .filter(contract -> contract.residentId().equals(residentId) && contract.status() == EmploymentContractStatus.ACTIVE)
-                .reduce((left, right) -> { throw new IllegalStateException("resident has ambiguous active employment"); })
-                .map(contract -> new ProposedEvent(state.companies().companies().get(contract.companyId()).settlementId(),
-                        new EmploymentContractTerminated(contract.id(), residentId, EmploymentTerminationReason.DEATH)));
-    }
-
     public static FrontierWorldState reduceEmploymentTermination(FrontierWorldState state, SubjectId subject, EmploymentContractTerminated terminated) {
         EmploymentContract contract = state.companies().employmentContracts().get(terminated.contractId());
         Company company = contract == null ? null : state.companies().companies().get(contract.companyId());

@@ -30,8 +30,8 @@ final class FrontierV3ActorMovementNavigation {
         }
         if (!(movement.context() instanceof ActorMovementContext.ServiceExit))
             throw new IllegalArgumentException("service-exit navigator requires its declared movement context");
-        var actuation = FrontierV3ActorActuation.capture(state, body, movement.executionId(), runtime::decodedState);
-        if (!actuation.current(body)) return;
+        var actuation = FrontierV3AmbientActuation.capture(state, runtime, body, lease, movement.executionId()).orElse(null);
+        if (actuation == null || !actuation.current(body)) return;
         Route route = ROUTES.get(body);
         if (route == null || !route.actuation().equals(actuation.id()) || route.leaseRevision() != lease.revision()
                 || route.goalRevision() != movement.order().goalRevision()

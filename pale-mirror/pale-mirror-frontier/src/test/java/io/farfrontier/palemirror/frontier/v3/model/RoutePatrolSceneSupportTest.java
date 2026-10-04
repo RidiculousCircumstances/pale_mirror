@@ -41,9 +41,8 @@ class RoutePatrolSceneSupportTest {
         SceneLease lease = SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()),
                 candidate.handoffPosition(), new SimInstant(10), 1L, SceneLeaseStatus.PREPARED,
                 candidate.memberBodies().keySet().stream().sorted().map(id -> new SceneMember(id,
-                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(),
-                candidate.memberBodies(), Set.of(), Optional.empty());
-        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(), Set.of(), Optional.empty());
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         RoutePatrol before = state.strategicPlans().routePatrols().get(candidate.taskId());
         RoutePatrol expected = before.advanceFormation();
         var targets = FrontierRoutePatrolSceneSupport.bodies(expected);
@@ -52,7 +51,7 @@ class RoutePatrolSceneSupportTest {
                 RoutePatrolExecutionAuthority.current(state, before));
 
         assertEquals(expected, advanced.strategicPlans().routePatrols().get(candidate.taskId()));
-        assertEquals(FrontierRoutePatrolSceneSupport.bodies(expected), advanced.sceneLeases().get(leaseId).memberPositions());
+        assertEquals(FrontierRoutePatrolSceneSupport.bodies(expected), advanced.sceneLeases().get(leaseId).memberBodies(advanced.actorLocations()));
         targets.forEach((actor, body) -> assertEquals(body, advanced.actorLocations().get(actor).body(),
                 "the observed HOT pose and retained checkpoint share one canonical position"));
         assertNotEquals(before, expected);
@@ -67,16 +66,15 @@ class RoutePatrolSceneSupportTest {
         SceneLease lease = SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()),
                 candidate.handoffPosition(), new SimInstant(10), 1L, SceneLeaseStatus.PREPARED,
                 candidate.memberBodies().keySet().stream().sorted().map(id -> new SceneMember(id,
-                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(),
-                candidate.memberBodies(), Set.of(), Optional.empty());
-        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(), Set.of(), Optional.empty());
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(candidate.taskId());
 
         FrontierWorldState hot = state;
         assertThrows(IllegalArgumentException.class, () -> FrontierRoutePatrolSceneSupport.advanceFormationObserved(hot, patrol, leaseId,
                 FrontierRoutePatrolSceneSupport.bodies(patrol), RoutePatrolExecutionAuthority.current(hot, patrol)));
         assertEquals(patrol, state.strategicPlans().routePatrols().get(candidate.taskId()));
-        assertEquals(candidate.memberBodies(), state.sceneLeases().get(leaseId).memberPositions());
+        assertEquals(candidate.memberBodies(), state.sceneLeases().get(leaseId).memberBodies(state.actorLocations()));
         var current = RoutePatrolExecutionAuthority.current(hot, patrol);
         var stale = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(current.members().stream()
                 .map(id -> new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
@@ -102,9 +100,8 @@ class RoutePatrolSceneSupportTest {
         SceneLease lease = SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()),
                 candidate.handoffPosition(), new SimInstant(10), 1L, SceneLeaseStatus.PREPARED,
                 candidate.memberBodies().keySet().stream().sorted().map(id -> new SceneMember(id,
-                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(),
-                candidate.memberBodies(), Set.of(), Optional.empty());
-        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(), Set.of(), Optional.empty());
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(candidate.taskId());
         var next = FrontierRoutePatrolSceneSupport.bodies(patrol.advanceFormation());
         SubjectId owner = patrol.settlementId();
@@ -116,7 +113,7 @@ class RoutePatrolSceneSupportTest {
                 () -> FrontierRoutePatrolSceneSupport.advanceFormationObserved(reconsidered, patrol, leaseId, next,
                         RoutePatrolExecutionAuthority.current(reconsidered, patrol)));
         assertThrows(IllegalArgumentException.class,
-                () -> FrontierRoutePatrolSceneSupport.releasedBody(reconsidered, reconsidered.sceneLeases().get(leaseId), patrol.memberIds().getFirst(),
+                () -> FrontierRoutePatrolSceneSupport.validateRelease(reconsidered, reconsidered.sceneLeases().get(leaseId), patrol.memberIds().getFirst(),
                         candidate.memberBodies().get(patrol.memberIds().getFirst())));
     }
 
@@ -139,9 +136,8 @@ class RoutePatrolSceneSupportTest {
         SceneLease lease = SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()),
                 candidate.handoffPosition(), new SimInstant(10), 1L, SceneLeaseStatus.PREPARED,
                 candidate.memberBodies().keySet().stream().sorted().map(id -> new SceneMember(id,
-                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(),
-                candidate.memberBodies(), Set.of(), Optional.empty());
-        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(), Set.of(), Optional.empty());
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         SubjectId dead = state.strategicPlans().routePatrols().get(candidate.taskId()).memberIds().getFirst();
 
         var blockedAlive = state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans()
@@ -158,8 +154,8 @@ class RoutePatrolSceneSupportTest {
         assertEquals(SceneLeaseStatus.CLOSED, closed.sceneLeases().get(leaseId).status());
         assertEquals(blockedAlive.strategicPlans(), closed.strategicPlans());
 
-        FrontierWorldState result = state.recordActorDeath(new ActorDied(leaseId, dead,
-                state.sceneLeases().get(leaseId).memberPosition(dead), "test-owned-body-loss"), 11L);
+        FrontierWorldState result = ModeledActorBodyFacts.died(state, dead,
+                state.sceneLeases().get(leaseId).memberBody(state.actorLocations(), dead), "test-owned-body-loss", 11L);
 
         assertEquals(RoutePatrolStatus.BLOCKED, result.strategicPlans().routePatrols().get(candidate.taskId()).status());
         assertEquals(RoutePatrolBlockReason.MISSING_OWNED_BODY,
@@ -178,19 +174,18 @@ class RoutePatrolSceneSupportTest {
         SceneLease lease = SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()),
                 candidate.handoffPosition(), new SimInstant(10), 1L, SceneLeaseStatus.PREPARED,
                 candidate.memberBodies().keySet().stream().sorted().map(id -> new SceneMember(id,
-                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(),
-                candidate.memberBodies(), Set.of(), Optional.empty());
+                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(), Set.of(), Optional.empty());
 
         FrontierWorldState prepared = state.prepareSceneLease(lease);
         assertTrue(lease.members().stream().allMatch(member -> prepared.fencedRecovery().current()
                 .get(ActorBodyId.recoveryBindingId(member.actorId())).phase() == FencedRecoveryPhase.PREPARED));
-        FrontierWorldState hot = prepared.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        FrontierWorldState hot = FrontierTestActorBodies.present(prepared, lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertTrue(lease.members().stream().allMatch(member -> hot.fencedRecovery().current()
                 .get(ActorBodyId.recoveryBindingId(member.actorId())).phase() == FencedRecoveryPhase.RUNNING));
 
         SubjectId dead = lease.members().getFirst().actorId();
-        FrontierWorldState afterDeath = hot.recordActorDeath(new ActorDied(leaseId, dead,
-                hot.sceneLeases().get(leaseId).memberPosition(dead), "recovery-fence-death"), 11L);
+        FrontierWorldState afterDeath = ModeledActorBodyFacts.died(hot, dead,
+                hot.sceneLeases().get(leaseId).memberBody(hot.actorLocations(), dead), "recovery-fence-death", 11L);
         SubjectId bindingId = ActorBodyId.recoveryBindingId(dead);
         assertFalse(afterDeath.fencedRecovery().current().containsKey(bindingId));
         assertEquals(FencedRecoveryDisposition.REJECT_STALE, afterDeath.fencedRecovery().lateLoad(bindingId,
@@ -203,7 +198,7 @@ class RoutePatrolSceneSupportTest {
         FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:route-patrol-conflict-recovery");
         SceneLease lease = patrolLease(state, leaseId, candidate, 1L);
-        FrontierWorldState conflicted = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT)
+        FrontierWorldState conflicted = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT)
                 .transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
         assertEquals(SceneLeaseStatus.CONFLICT, conflicted.sceneLeases().get(leaseId).status());
         assertTrue(lease.members().stream().allMatch(member -> {
@@ -228,11 +223,13 @@ class RoutePatrolSceneSupportTest {
                     base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
                     base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter()));
             submit(engine, world, "prepare", new RoutePatrolSceneLeasePrepared(lease));
+            FrontierTestActorBodies.present(engine, world, lease);
             if (status != SceneLeaseStatus.PREPARED) submit(engine, world, "hot", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
             if (status != SceneLeaseStatus.PREPARED && status != SceneLeaseStatus.HOT)
                 submit(engine, world, "suspend", new SceneLeaseTransition(lease.id(), status));
             var member = lease.members().getFirst();
-            var death = new ActorDied(lease.id(), member.actorId(), lease.memberPosition(member.actorId()), "test:retained-body-death");
+            var death = ModeledActorBodyFacts.death(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()),
+                    member.actorId(), lease.memberBody(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()).actorLocations(), member.actorId()), "test:retained-body-death");
             submit(engine, world, "death", death);
             var after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
             assertEquals(ActorLifeStatus.DEAD, after.actorLocations().get(member.actorId()).condition().status(), status.name());
@@ -242,7 +239,7 @@ class RoutePatrolSceneSupportTest {
             assertEquals(status == SceneLeaseStatus.HOT ? SceneLeaseStatus.DRAINING
                     : status == SceneLeaseStatus.PREPARED ? SceneLeaseStatus.CONFLICT : status, after.sceneLeases().get(lease.id()).status());
             assertFalse(lease.withStatus(SceneLeaseStatus.CLOSED).retainsMemberCustody(member.actorId()));
-            assertThrows(IllegalArgumentException.class, () -> after.recordActorDeath(death, 20L));
+            assertThrows(IllegalArgumentException.class, () -> ActorBodyAuthority.died(after, death, FrontierActorDeathConsequences.INSTANCE, 20L));
             var checkpoint = engine.checkpoint();
             var duplicateId = new CommandId("command:duplicate-retained-death");
             assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(1, duplicateId, world,
@@ -264,6 +261,7 @@ class RoutePatrolSceneSupportTest {
         SceneLease first = patrolLease(state, new SceneLeaseId("lease:route-patrol-no-visit-first"), candidate, 1L);
 
         submit(engine, world, "prepare", new RoutePatrolSceneLeasePrepared(first));
+        FrontierTestActorBodies.present(engine, world, first);
         submit(engine, world, "hot", new SceneLeaseTransition(first.id(), SceneLeaseStatus.HOT));
         submit(engine, world, "unknown", new SceneLeaseTransition(first.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
         var before = engine.checkpoint();
@@ -279,20 +277,30 @@ class RoutePatrolSceneSupportTest {
     }
 
     @Test
-    void savedPatrolInjuryCanBecomeCanonicalOnlyThroughExactRelease() {
+    void savedPatrolInjuryNeedsCommonObservationBeforeScopeRelease() {
         FrontierWorldState state = patrolState(new WorldId("frontier:route-patrol-stored-injury"));
         FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         SceneLease lease = patrolLease(state, new SceneLeaseId("lease:route-patrol-stored-injury"), candidate, 1L);
-        state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
+        state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
                 .transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
                 .transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
         FrontierWorldState draining = state;
         SubjectId injured = lease.members().getFirst().actorId();
         var captured = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
-                lease.memberPosition(member.actorId()), member.actorId().equals(injured)
+                lease.memberBody(draining.actorLocations(), member.actorId()), member.actorId().equals(injured)
                         ? io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(18)
                         : draining.actorLocations().get(member.actorId()).condition().health())).toList();
-        FrontierWorldState released = draining.releaseSceneLease(lease.id(), captured);
+        assertThrows(IllegalArgumentException.class, () -> draining.releaseSceneLease(lease.id(), captured));
+        var location = draining.actorLocations().get(injured);
+        var checkpointed = ActorBodyAuthority.inspected(draining,
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(
+                        ActorBodyAuthority.current(draining, injured),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.SAVED_DEPARTURE,
+                        location.body(), location.condition().health(), location.body(),
+                        io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(18),
+                        draining.actorExecutions().actors().get(injured).current()));
+        FrontierWorldState released = checkpointed.releaseSceneLease(lease.id(), captured);
+        assertEquals(checkpointed.actorLocations(), released.actorLocations());
         assertEquals(SceneLeaseStatus.CLOSED, released.sceneLeases().get(lease.id()).status());
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(18),
                 released.actorLocations().get(injured).condition().health());
@@ -303,8 +311,7 @@ class RoutePatrolSceneSupportTest {
         var world = state.bootstrap().worldId();
         return SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()), candidate.handoffPosition(),
                 SimInstant.ZERO, revision, SceneLeaseStatus.PREPARED, candidate.memberBodies().keySet().stream().sorted()
-                        .map(id -> new SceneMember(id, SceneLease.deterministicEntityId(world, leaseId, id))).toList(),
-                candidate.memberBodies(), Set.of(), Optional.empty());
+                        .map(id -> new SceneMember(id, SceneLease.deterministicEntityId(world, leaseId, id))).toList(), Set.of(), Optional.empty());
     }
 
     private static void submit(FrontierEngine<FrontierWorldProjection> engine, WorldId world, String suffix, FrontierPayload payload) {

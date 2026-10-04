@@ -56,7 +56,7 @@ public final class FrontierMedicalTreatmentSceneSupport {
         MedicalEvacuationOperation operation = require(state, FrontierSceneBehaviors.medicalTreatment(lease));
         Candidate candidate = preparedCandidate(state, operation).orElseThrow(() -> new IllegalArgumentException("medical scene has no exact COLD-ready patient/team"));
         if (!lease.handoffPosition().equals(candidate.infirmaryAnchor())
-                || !lease.memberPositions().equals(SceneLease.bodiesAboveSupportCells(candidate.memberPositions()))) {
+                || !lease.memberBodies(state.actorLocations()).equals(SceneLease.bodiesAboveSupportCells(candidate.memberPositions()))) {
             throw new IllegalArgumentException("medical scene must retain current exact patient/team positions and infirmary");
         }
     }

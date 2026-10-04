@@ -58,7 +58,7 @@ public record OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoC
         if (!safeAdvances().contains(actor)) throw new IllegalArgumentException("assembly actor next cursor is occupied");
         Map<SubjectId, Member> next = new LinkedHashMap<>(members);
         Member current = next.get(actor);
-        next.put(actor, new Member(current.topology(), current.cursor() + 1));
+        next.put(actor, current.advanceOne());
         return advance(next);
     }
 
@@ -90,11 +90,10 @@ public record OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoC
         SubjectId advancedActor = null;
         for (Map.Entry<SubjectId, Member> entry : members.entrySet()) {
             Member current = entry.getValue(); Member candidate = Objects.requireNonNull(nextMembers.get(entry.getKey()), "next assembly member");
-            if (!current.topology().equals(candidate.topology()) || candidate.cursor() < current.cursor()
-                    || candidate.cursor() > current.nextColdCursor()) {
+            if (!current.equals(candidate) && !current.canAdvanceTo(candidate, MAX_COLD_ADVANCE)) {
                 throw new IllegalArgumentException("assembly member must advance its existing bounded corridor");
             }
-            if (candidate.cursor() > current.cursor()) {
+            if (!candidate.equals(current)) {
                 if (advancedActor != null && deferral.isPresent()) {
                     throw new IllegalArgumentException("loaded-world assembly deferral permits only its blocked member to advance");
                 }
@@ -106,7 +105,7 @@ public record OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoC
         if (deferral.isPresent()) {
             OperationAssemblyDeferral blocked = deferral.orElseThrow();
             Member prior = members.get(blocked.actorId()), advanced = next.get(blocked.actorId());
-            if (!blocked.actorId().equals(advancedActor) || advanced.cursor() != prior.cursor() + 1
+            if (!blocked.actorId().equals(advancedActor) || !advanced.equals(prior.advanceOne())
                     || !advanced.currentSurface().equals(blocked.target())) {
                 throw new IllegalArgumentException("loaded-world assembly deferral may clear only through its blocked exact next cursor");
             }
@@ -123,7 +122,9 @@ public record OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoC
     }
 
     /** One exact member's immutable pedestrian topology and its sole assembly cursor. */
-    public record Member(TraversalTopology topology, int cursor) {
+    public record Member(TraversalTopology topology, int cursor, long routeRevision,
+                         Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin> rejoin) {
+        public Member(TraversalTopology topology, int cursor) { this(topology, cursor, 1L, Optional.empty()); }
         public Member {
             topology = Objects.requireNonNull(topology, "assembly topology");
             if (topology.nodes().size() > OperationTravel.MAX_CELLS || topology.edges().stream().anyMatch(edge -> edge.kind() != TraversalKind.PEDESTRIAN
@@ -131,12 +132,39 @@ public record OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoC
                 throw new IllegalArgumentException("assembly requires one open pedestrian topology");
             }
             if (cursor < 0 || cursor >= topology.linearCorridorSurfaces().size()) throw new IllegalArgumentException("assembly cursor is outside topology");
+            if (routeRevision < 1) throw new IllegalArgumentException("assembly requires a positive route revision");
+            rejoin = Objects.requireNonNull(rejoin);
+            if (rejoin.isPresent() && !rejoin.orElseThrow().target().equals(
+                    topology.linearCorridorSurfaces().get(Math.min(cursor + 1, topology.linearCorridorSurfaces().size() - 1))))
+                throw new IllegalArgumentException("assembly rejoin cannot change the next semantic checkpoint");
         }
         public java.util.List<SurfaceAnchor> corridor() { return topology.linearCorridorSurfaces(); }
-        public SurfaceAnchor currentSurface() { return corridor().get(cursor); }
-        public SurfaceAnchor nextSurface() { if (arrived()) throw new IllegalStateException("arrived assembly member has no next surface"); return corridor().get(cursor + 1); }
+        public SurfaceAnchor currentSurface() { return rejoin.map(io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin::current).orElseGet(() -> corridor().get(cursor)); }
+        public SurfaceAnchor nextSurface() {
+            if (arrived()) throw new IllegalStateException("arrived assembly member has no next surface");
+            return rejoin.map(value -> value.path().get(value.nextCursor(1))).orElseGet(() -> corridor().get(cursor + 1));
+        }
         public SurfaceAnchor destinationSurface() { return corridor().getLast(); }
-        public boolean arrived() { return cursor == corridor().size() - 1; }
+        public boolean arrived() { return cursor == corridor().size() - 1 && rejoin.isEmpty(); }
         public int nextColdCursor() { return Math.min(cursor + MAX_COLD_ADVANCE, corridor().size() - 1); }
+        public Member withRejoin(io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin approach) {
+            return new Member(topology, cursor, Math.incrementExact(routeRevision), Optional.of(approach));
+        }
+        public Member advanceOne() {
+            if (arrived()) throw new IllegalArgumentException("complete assembly member cannot advance");
+            if (rejoin.isEmpty()) return new Member(topology, cursor + 1, routeRevision, Optional.empty());
+            var approach = rejoin.orElseThrow();
+            var advanced = approach.arrived() ? approach : approach.advance(approach.nextCursor(1), 1);
+            return advanced.arrived() ? new Member(topology, Math.min(cursor + 1, corridor().size() - 1), routeRevision, Optional.empty())
+                    : new Member(topology, cursor, routeRevision, Optional.of(advanced));
+        }
+        public boolean canAdvanceTo(Member candidate, int maximumSteps) {
+            Member next = this;
+            for (int step = 0; step < maximumSteps && !next.arrived(); step++) {
+                next = next.advanceOne();
+                if (next.equals(candidate)) return true;
+            }
+            return false;
+        }
     }
 }

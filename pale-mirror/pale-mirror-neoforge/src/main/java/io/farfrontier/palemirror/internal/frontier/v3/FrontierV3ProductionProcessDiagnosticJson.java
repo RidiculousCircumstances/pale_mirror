@@ -30,7 +30,7 @@ final class FrontierV3ProductionProcessDiagnosticJson {
         String leaseValue = lease == null || lease.status() == SceneLeaseStatus.CLOSED ? "null"
                 : "{\"id\":\"" + FrontierV3DiagnosticJson.quote(lease.id().value()) + "\",\"status\":\"" + lease.status()
                 + "\",\"revision\":" + lease.revision() + ",\"members\":" + lease.members().size() + ",\"body\":"
-                + (lease.memberPosition(job.workerId()) == null ? "null" : FrontierV3DiagnosticJson.position(lease.memberPosition(job.workerId()))) + "}";
+                + (lease.memberBody(state.actorLocations(), job.workerId()) == null ? "null" : FrontierV3DiagnosticJson.position(lease.memberBody(state.actorLocations(), job.workerId()))) + "}";
         int cursorLength = job.workTraversal().linearCorridorSurfaces().size();
         String progress = job.bakeryWork().map(work -> {
             BakeryWorkGoal goal = BakeryWorkGoal.current(state, job);

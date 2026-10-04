@@ -39,7 +39,7 @@ class FrontierV3SceneStoredRecoveryTest {
         assertFalse(exact.matches(Map.of(first.carrier().identity().entityId(), first)),
                 "a partial roster cannot authorize unattended COLD release");
 
-        var injuredDifferently = new FrontierV3SceneDeparture(second.carrier(), second.leaseId(), second.sceneRevision(),
+        var injuredDifferently = new FrontierV3SceneDeparture(second.carrier(), second.residenceGeneration(), second.leaseId(), second.sceneRevision(),
                 new SceneMemberPosition(second.observed().actorId(), second.observed().body(), FixedScalar.whole(8)),
                 second.canonicalHealthAtCapture());
         assertFalse(exact.matches(Map.of(first.carrier().identity().entityId(), first,
@@ -176,9 +176,9 @@ class FrontierV3SceneStoredRecoveryTest {
         var id = UUID.fromString(uuid);
         var declaration = new FrontierV3ActorCarrierComposition.Declaration(actor,
                 ActorKind.RESIDENT,
-                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, id,
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7, 2);
-        return new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, 7, 3),
+                FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, id,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, 2);
+        return new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, 7, 3), 1L,
                 LEASE, 7, new SceneMemberPosition(actor, new BodyPosition(12, 65, 10), FixedScalar.whole(physicalHealth)),
                 FixedScalar.whole(20));
     }
@@ -186,7 +186,8 @@ class FrontierV3SceneStoredRecoveryTest {
     private static FrontierV3SceneDeparturePersistence.SavedBody saved(FrontierV3SceneDeparture receipt) {
         var identity = receipt.carrier().identity();
         return new FrontierV3SceneDeparturePersistence.SavedBody(identity.entityId(), "minecraft:villager",
-                identity.actorId().value(), "RESIDENT", "SCENE_LEASE", "LIVE_BODY", 7, 2,
-                receipt.leaseId().value(), 7, receipt.observed().body(), receipt.observed().health());
+                identity.actorId().value(), "RESIDENT", "ACTOR_BODY", "LIVE_BODY", 0, identity.epoch(),
+                receipt.residenceGeneration(),
+                receipt.observed().body(), receipt.observed().health());
     }
 }

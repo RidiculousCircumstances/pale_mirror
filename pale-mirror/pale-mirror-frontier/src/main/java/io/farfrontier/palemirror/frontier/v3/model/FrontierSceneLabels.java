@@ -31,11 +31,14 @@ public final class FrontierSceneLabels {
     }
 
     /**
-     * Ambient civilians keep their identity available but their nameplate quiet. Mobilized
-     * residents and hive bioforms are operational information a player must be able to read.
+     * Idle civilians keep their identity available but their nameplate quiet. Active actors
+     * remain legible independently of which presentation scope currently observes their body.
      */
     public static boolean ambientActorNameVisible(FrontierWorldState state, SubjectId actorId, boolean bioform) {
-        return bioform || HumanTacticalFunctionProjection.derive(state, actorId) != HumanTacticalFunction.CIVILIAN;
+        var execution = state.actorExecutions().actors().get(actorId);
+        boolean active = execution != null && execution.current().filter(id ->
+                id.activityKind() != io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE).isPresent();
+        return active || bioform || HumanTacticalFunctionProjection.derive(state, actorId) != HumanTacticalFunction.CIVILIAN;
     }
 
     public static String cargo(FrontierWorldState state, CargoBatch cargo) {

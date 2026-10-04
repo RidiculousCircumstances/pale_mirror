@@ -247,6 +247,16 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(prepared.residentId(), prepared)));
         }
+        if (command.payload() instanceof ResidentMealPortionDispositionObserved observed) {
+            try { ResidentMealResourceProcess.reduceDisposition(state, observed.body().actorId(), observed); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.body().actorId(), observed)));
+        }
+        if (command.payload() instanceof ResidentMealResourceEffectObserved observed) {
+            try { ResidentMealResourceProcess.reduce(state, observed.body().actorId(), observed); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.body().actorId(), observed)));
+        }
         if (command.payload() instanceof ResidentMealHotEffectObserved observed) {
             try { return new CommandPlan.Accepted(ResidentMealProcess.planHotObserved(state, observed, command.submittedAt().ticks())); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
@@ -292,6 +302,12 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case ResidentMigrated migration -> reduceMigrated(state, event.subject(), migration);
             case ResidentMigrationStarted started -> reduceStarted(state, event.subject(), started);
             case ResidentMigrationAdvanced advanced -> reduceAdvanced(state, event.subject(), advanced);
+            case ResidentMigrationRejoinAdvanced advanced -> {
+                var journey = state.humanPopulation().migration(advanced.residentId());
+                if (journey == null || !event.subject().equals(journey.originSettlementId()))
+                    throw new IllegalArgumentException("migration rejoin lacks its declared origin owner");
+                yield HumanPopulationStateSupport.advanceMigrationRejoin(state, advanced);
+            }
             case ResidentTransitAdvanced advanced -> reduceTransit(state, event.subject(), advanced, event.instant().ticks());
             case ResidentMigrationBlocked blocked -> reduceBlocked(state, event.subject(), blocked);
             case ResidentMigrationResumed resumed -> reduceResumed(state, event.subject(), resumed);
@@ -309,6 +325,8 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case ResidentMealHotArrived arrived -> ResidentMealProcess.reduceHotArrived(state, event.subject(), arrived);
             case ResidentMealHotEffectPrepared prepared -> ResidentMealProcess.reduceHotPrepared(state, event.subject(), prepared);
             case ResidentMealHotEffectObserved observed -> ResidentActivityProcess.reduceMealEffectObserved(state, event.subject(), observed, event.instant().ticks());
+            case ResidentMealResourceEffectObserved observed -> ResidentMealResourceProcess.reduce(state, event.subject(), observed);
+            case ResidentMealPortionDispositionObserved observed -> ResidentMealResourceProcess.reduceDisposition(state, event.subject(), observed);
             case ResidentMealHotHandMaterialized observed -> ResidentMealProcess.reduceHotHandMaterialized(state, event.subject(), observed);
             case ResidentMealHotHandReleased observed -> ResidentMealProcess.reduceHotHandReleased(state, event.subject(), observed);
             case ResidentMealHotAccessCleared cleared -> ResidentMealProcess.reduceHotAccessCleared(state, event.subject(), cleared);

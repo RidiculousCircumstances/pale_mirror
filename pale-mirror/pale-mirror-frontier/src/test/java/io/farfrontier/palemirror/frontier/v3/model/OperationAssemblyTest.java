@@ -93,7 +93,7 @@ class OperationAssemblyTest {
                 .filter(structure -> structure.kind() == StructureKind.HALL).findFirst().orElseThrow());
         SubjectId hauler = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.HAULER).orElseThrow().id();
 
-        TraversalTopology corridor = OperationAssemblyCorridor.compile(state, new SubjectId("operation:test"), hauler, new SurfaceAnchor(access.assemblyFloor()));
+        TraversalTopology corridor = OperationAssemblyCorridor.compile(state, new SubjectId("operation:test"), settlement.id(), hauler, new SurfaceAnchor(access.assemblyFloor()));
 
         assertEquals(FrontierTestPositions.supportOf(state.actorLocations().get(hauler)), corridor.linearCorridorSurfaces().getFirst().support());
         assertEquals(access.assemblyFloor(), corridor.linearCorridorSurfaces().getLast().support());

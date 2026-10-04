@@ -40,7 +40,8 @@ class HotScoutOperationObservationTest {
         submit(engine, world, new AmbientActorObserved(scout, FrontierTestPositions.bodyAboveSupport(FrontierSceneBehaviors.logistics(lease).cargoPosition()), state(engine).actorLocations().get(scout).condition().health()));
         AmbientActorLease scoutLease = AmbientActorProcess.nextLease(state(engine), scout, engine.checkpoint().instant());
         submit(engine, world, new AmbientLeasePrepared(scoutLease));
-        submit(engine, world, new AmbientBodyConfirmed(scout, scoutLease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, scoutLease.handoffBody(), scoutLease.handoffBody()));
+        ModeledActorBodyFacts.present(engine, scout);
+        submit(engine, world, new AmbientBodyConfirmed(scout, scoutLease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, scoutLease.handoffBody(), scoutLease.handoffBody(), ActorBodyAuthority.current(state(engine), scout)));
         submit(engine, world, new SceneLeasePrepared(lease));
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
 
@@ -128,7 +129,8 @@ class HotScoutOperationObservationTest {
         submit(engine, world, new AmbientActorObserved(scout, FrontierTestPositions.bodyAboveSupport(FrontierSceneBehaviors.logistics(lease).cargoPosition()), state(engine).actorLocations().get(scout).condition().health()));
         AmbientActorLease scoutLease = AmbientActorProcess.nextLease(state(engine), scout, engine.checkpoint().instant());
         submit(engine, world, new AmbientLeasePrepared(scoutLease));
-        submit(engine, world, new AmbientBodyConfirmed(scout, scoutLease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, scoutLease.handoffBody(), scoutLease.handoffBody()));
+        ModeledActorBodyFacts.present(engine, scout);
+        submit(engine, world, new AmbientBodyConfirmed(scout, scoutLease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, scoutLease.handoffBody(), scoutLease.handoffBody(), ActorBodyAuthority.current(state(engine), scout)));
         submit(engine, world, new SceneLeasePrepared(lease));
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         return new Fixture(world, engine, scout, new HotScoutOperationObserved(lease.id(), operation.id(), scout, FrontierSceneBehaviors.logistics(lease).cargoPosition(), engine.checkpoint().instant().ticks()));

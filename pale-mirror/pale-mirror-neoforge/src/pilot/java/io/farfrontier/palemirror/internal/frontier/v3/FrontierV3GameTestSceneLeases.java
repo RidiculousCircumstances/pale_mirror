@@ -34,7 +34,7 @@ final class FrontierV3GameTestSceneLeases {
         for (SceneMember member : members) positions.put(member.actorId(), state.actorLocations().get(member.actorId()).body());
         return SceneLease.atExactPositions(id, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(),
                 cargoPosition, checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED,
-                Optional.of(candidate.engagementId()), members, positions);
+                Optional.of(candidate.engagementId()), members);
     }
 
     /**
@@ -43,15 +43,15 @@ final class FrontierV3GameTestSceneLeases {
      * while translating only its observed body cells into the naturally loaded template.  It is
      * not a production coordinate conversion and is never submitted back to the canonical lane.
      */
-    static SceneLease projectedIntoFixture(SceneLease canonical, BodyPosition firstBody) {
+    static Map<SubjectId, BodyPosition> projectedIntoFixture(FrontierWorldState state, SceneLease canonical, BodyPosition firstBody) {
         Objects.requireNonNull(canonical, "canonical scene lease"); Objects.requireNonNull(firstBody, "fixture first body");
-        SceneMember first = canonical.members().getFirst(); BodyPosition origin = canonical.memberPosition(first.actorId());
+        SceneMember first = canonical.members().getFirst(); BodyPosition origin = canonical.memberBody(state.actorLocations(), first.actorId());
         int dx = firstBody.x() - origin.x(), dy = firstBody.y() - origin.y(), dz = firstBody.z() - origin.z();
         Map<SubjectId, BodyPosition> translated = new LinkedHashMap<>();
         for (SceneMember member : canonical.members()) {
-            BodyPosition body = canonical.memberPosition(member.actorId());
+            BodyPosition body = canonical.memberBody(state.actorLocations(), member.actorId());
             translated.put(member.actorId(), new BodyPosition(body.x() + dx, body.y() + dy, body.z() + dz));
         }
-        return canonical.withMemberPositions(translated);
+        return Map.copyOf(translated);
     }
 }

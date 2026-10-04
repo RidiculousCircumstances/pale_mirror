@@ -33,7 +33,7 @@ class ActorHandCustodyTest {
         FrontierWorldState bound = draining.withInventory(draining.inventory().withFungibleResources(
                 issued.rebind(accountId, 1L, List.of(binding))));
         SceneLeaseReleased release = new SceneLeaseReleased(lease.id(), List.of(new SceneMemberPosition(actor,
-                lease.memberPosition(actor), bound.actorLocations().get(actor).condition().health())));
+                lease.memberBody(bound.actorLocations(), actor), bound.actorLocations().get(actor).condition().health())));
 
         assertThrows(IllegalArgumentException.class, () -> FrontierSceneContinuationPlanner.releaseEvents(
                 bound, lease, 22_301L, release), "planner must reject before journaling an untransferred hand");

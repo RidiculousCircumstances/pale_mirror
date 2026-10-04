@@ -42,6 +42,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProductionProcessLifecycleTest extends ProductionProcessTest {
+    private static Map<SubjectId, ActorLocation> withBody(FrontierWorldState state, SubjectId actor, BodyPosition body) {
+        var actors = new LinkedHashMap<>(state.actorLocations());
+        actors.put(actor, actors.get(actor).withBody(body));
+        return actors;
+    }
     /** Follow the retained work schedule, bounded by the fixture's remaining route and labor. */
     private static void finishRetainedColdWork(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine) {
         var codec = new FrontierWorldStateCodec();
@@ -409,15 +414,15 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-finalize-test");
         SceneLease lease = SceneLease.forCause(leaseId, prepared.state().bootstrap().worldId(), new ProductionWorkSceneCause(prepared.job().id()),
                 worker.supportingSurface().support(), new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(prepared.job().workerId(), SceneLease.deterministicEntityId(prepared.state().bootstrap().worldId(), prepared.job().workerId()))),
-                java.util.Map.of(prepared.job().workerId(), worker.body()), java.util.Set.of(), Optional.empty());
-        FrontierWorldState hot = prepared.state().prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                List.of(new SceneMember(prepared.job().workerId(), SceneLease.deterministicEntityId(prepared.state().bootstrap().worldId(), prepared.job().workerId()))), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = FrontierTestActorBodies.present(prepared.state().prepareSceneLease(lease), lease)
+                .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         // OUTPUT_READY is input to this recovery-policy test, not a fabricated production receipt.
         int outputCursor = workJob.workTraversal().linearCorridorSurfaces().size() - 1;
         var outputBody = workJob.workTraversal().linearCorridorSurfaces().get(outputCursor).standingBody();
         var outputJob = workJob.withWorkTraversal(workJob.workTraversal(), outputCursor).withWorkProgress(ProductionWorkProgress.outputReady());
         var outputState = hot.withChanges(FrontierWorldStateUpdate.begin().productionJobs(Map.of(outputJob.id(), outputJob))
-                .sceneLeases(Map.of(leaseId, hot.sceneLeases().get(leaseId).withMemberPositions(Map.of(outputJob.workerId(), outputBody)))));
+                .actorLocations(withBody(hot, outputJob.workerId(), outputBody)));
         var outputUnknown = outputState.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
         outputUnknown = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(outputUnknown));
         assertEquals(SceneLeaseStatus.DRAINING, FrontierSceneBehaviors.recoveredStatus(outputUnknown, outputUnknown.sceneLeases().get(leaseId)));
@@ -433,18 +438,18 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         FrontierWorldState advanced = ProductionProcess.reduceWorkTraversalAdvanced(hot, prepared.settlementId(),
                 new ProductionWorkTraversalAdvanced(workJob.id(), leaseId, nextStation, nextCursor));
         assertEquals(nextCursor, advanced.productionJobs().get(workJob.id()).traversalCursor());
-        assertEquals(nextStation, advanced.sceneLeases().get(leaseId).memberPosition(workJob.workerId()),
+        assertEquals(hot.sceneLeases(), advanced.sceneLeases(), "observed movement must not mutate a second scene position store");
+        assertEquals(nextStation, advanced.sceneLeases().get(leaseId).memberBody(advanced.actorLocations(), workJob.workerId()),
                 "one observed arrival must atomically advance both the work cursor and persisted HOT-body position");
         FrontierWorldState recoveredAdvance = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(advanced));
-        assertEquals(nextStation, recoveredAdvance.sceneLeases().get(leaseId).memberPosition(workJob.workerId()),
+        assertEquals(nextStation, recoveredAdvance.sceneLeases().get(leaseId).memberBody(recoveredAdvance.actorLocations(), workJob.workerId()),
                 "restart recovery must retain the current work station rather than the initial workshop approach");
         byte[] preAtomicCursorSchema = new FrontierWorldStateCodec().encode(advanced);
         preAtomicCursorSchema[4] = 118;
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldStateCodec().decode(preAtomicCursorSchema),
                 "the former schema must fail closed because its HOT lease did not retain the current worker cursor");
-        SceneLease staleLease = advanced.sceneLeases().get(leaseId).withMemberPositions(java.util.Map.of(workJob.workerId(), worker.body()));
         FrontierWorldState staleCursor = advanced.withChanges(FrontierWorldStateUpdate.begin()
-                .sceneLeases(java.util.Map.of(leaseId, staleLease)));
+                .actorLocations(withBody(advanced, workJob.workerId(), worker.body())));
         int cursorAfterNext = nextCursor + 1;
         BodyPosition stationAfterNext = workJob.workTraversal().linearCorridorSurfaces().get(cursorAfterNext).standingBody();
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceWorkTraversalAdvanced(staleCursor, settlementId,
@@ -477,9 +482,9 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-finalize-order-task");
         SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(workJob.id()),
                 worker.supportingSurface().support(), new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(workJob.workerId(), SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), workJob.workerId()))),
-                java.util.Map.of(workJob.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
-        FrontierWorldState hot = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                List.of(new SceneMember(workJob.workerId(), SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), workJob.workerId()))), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = FrontierTestActorBodies.present(withWork.prepareSceneLease(lease), lease)
+                .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         StrategicTask bound = hot.strategicPlans().tasks().get(prepared.taskId());
         StrategicTask unrelatedBlocked = new StrategicTask(new SubjectId("task:production-unrelated-blocked"), bound.objectiveId(), bound.ownerId(), bound.kind(),
                 bound.infectionTarget(), bound.operationTarget(), bound.resourceSiteTarget(), bound.requirements(), bound.dependencies(),
@@ -511,8 +516,9 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-route-blocked-hot");
         SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(),
                 new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
-                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Map.of(job.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
-        FrontierWorldState hot = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = FrontierTestActorBodies.present(withWork.prepareSceneLease(lease), lease)
+                .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         WorldId world = new WorldId("frontier:production-route-blocked");
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,
@@ -605,8 +611,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-conflict-reservation");
         SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(workJob.id()),
                 worker.supportingSurface().support(), new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(workJob.workerId(), SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), workJob.workerId()))),
-                java.util.Map.of(workJob.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
+                List.of(new SceneMember(workJob.workerId(), SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), workJob.workerId()))), java.util.Set.of(), Optional.empty());
         FrontierWorldState conflicted = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
 
         assertTrue(FrontierProductionWorkSceneSupport.candidates(conflicted).isEmpty(),
@@ -623,8 +628,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-observed-handoff");
         SceneLease lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()),
                 observedSurface.support(), new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), leaseId, job.workerId()))),
-                java.util.Map.of(job.workerId(), observedBody), java.util.Set.of(job.workerId()), Optional.empty());
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), leaseId, job.workerId()))), java.util.Set.of(job.workerId()), Optional.empty());
         ProductionWorkSceneLeaseHandoff handoff = new ProductionWorkSceneLeaseHandoff(lease,
                 List.of(new SceneMemberPosition(job.workerId(), observedBody, state.actorLocations().get(job.workerId()).condition().health())));
 
@@ -661,8 +665,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-observed-handoff-anchor");
         SceneLease staleAnchor = SceneLease.forCause(leaseId, state.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()),
                 staleSurface.support(), new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), leaseId, job.workerId()))),
-                Map.of(job.workerId(), observedBody), Set.of(job.workerId()), Optional.empty());
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), leaseId, job.workerId()))), Set.of(job.workerId()), Optional.empty());
         ProductionWorkSceneLeaseHandoff handoff = new ProductionWorkSceneLeaseHandoff(staleAnchor,
                 List.of(new SceneMemberPosition(job.workerId(), observedBody, state.actorLocations().get(job.workerId()).condition().health())));
         FrontierWorldState rebased = ProductionProcess.rebaseForAmbientHandoff(state, job.settlementId(), handoff);
@@ -754,15 +757,15 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-output-ready-release");
         SceneLease lease = SceneLease.forCause(leaseId, prepared.state().bootstrap().worldId(), new ProductionWorkSceneCause(workJob.id()),
                 worker.supportingSurface().support(), new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(workJob.workerId(), SceneLease.deterministicEntityId(prepared.state().bootstrap().worldId(), workJob.workerId()))),
-                java.util.Map.of(workJob.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
-        FrontierWorldState hot = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(workJob.id(), workJob)))
-                .prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+                List.of(new SceneMember(workJob.workerId(), SceneLease.deterministicEntityId(prepared.state().bootstrap().worldId(), workJob.workerId()))), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = FrontierTestActorBodies.present(prepared.state()
+                .withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(workJob.id(), workJob)))
+                .prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         ProductionJob outputReady = workJob.withWorkTraversal(workJob.workTraversal(), workJob.workTraversal().linearCorridorSurfaces().size() - 1)
                 .withWorkProgress(ProductionWorkProgress.outputReady());
         BodyPosition completedBody = outputReady.workTraversal().linearCorridorSurfaces().getLast().standingBody();
         hot = hot.withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(outputReady.id(), outputReady))
-                .sceneLeases(Map.of(leaseId, hot.sceneLeases().get(leaseId).withMemberPositions(Map.of(outputReady.workerId(), completedBody)))));
+                .actorLocations(withBody(hot, outputReady.workerId(), completedBody)));
         StrategicTask unrelatedBlockedBread = new StrategicTask(new SubjectId("task:unrelated-blocked-bread"), prepared.state().strategicPlans()
                 .tasks().get(prepared.taskId()).objectiveId(), prepared.settlementId(), StrategicTaskKind.PRODUCE_BREAD, Optional.empty(),
                 List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.BLOCKED);
@@ -789,9 +792,13 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertEquals(outputReady.id(), scheduled.replacement().subject());
 
         FrontierWorldState closed = draining.releaseSceneLease(leaseId, released.members());
+        assertInstanceOf(ScheduleEffect.Rescheduled.class,
+                ProductionProcess.planCompletion(closed, scheduled.replacement()).getFirst().payload(),
+                "closing a process scope cannot discharge the still-present body or grant COLD execution");
+        closed = ModeledActorBodyFacts.unloaded(closed, outputReady.workerId());
         List<ProposedEvent> effect = ProductionProcess.planCompletion(closed, scheduled.replacement());
         ProductionCompleted direct = assertInstanceOf(ProductionCompleted.class, effect.getFirst().payload(),
-                "after release with no current physical lease, the exact retained result belongs to COLD rather than a new observer gate");
+                "after independent physical unload, the retained result belongs to COLD rather than a new observer gate");
         FrontierWorldState completed = ProductionProcess.reduceCompleted(closed, prepared.settlementId(), direct);
         assertTrue(completed.productionJobs().isEmpty());
         assertEquals(SceneLeaseStatus.CLOSED, completed.sceneLeases().get(leaseId).status());
@@ -804,8 +811,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         ActorLocation worker = prepared.state().actorLocations().get(job.workerId());
         SceneLease lease = SceneLease.forCause(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-exact-blocked-release"),
                 prepared.state().bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(), new SimInstant(100L), 1L,
-                SceneLeaseStatus.DRAINING, List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(prepared.state().bootstrap().worldId(), job.workerId()))),
-                java.util.Map.of(job.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
+                SceneLeaseStatus.DRAINING, List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(prepared.state().bootstrap().worldId(), job.workerId()))), java.util.Set.of(), Optional.empty());
         StrategicTask unrelated = new StrategicTask(new SubjectId("task:unrelated-blocked-bread-release"), prepared.state().strategicPlans().tasks()
                 .get(prepared.taskId()).objectiveId(), prepared.settlementId(), StrategicTaskKind.PRODUCE_BREAD, Optional.empty(),
                 List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.BLOCKED);

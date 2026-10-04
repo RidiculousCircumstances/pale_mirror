@@ -56,10 +56,9 @@ class FrontierV3ActorBirthCommitterTest {
         assertThrows(IllegalStateException.class, () -> committer.commit(transaction(BIRTH), Durability.DURABLE_BEFORE_EFFECT));
         var restored = reload(ledger);
         var id = restored.firstAdmission(ACTOR).orElseThrow().identity();
-        assertTrue(restored.beginFirstAdmission(FrontierV3ActorOwnerBinding.ambient(
-                new FrontierV3ActorCarrierComposition.Declaration(ACTOR, id.kind(),
-                        FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, id.entityId(),
-                        FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1, 1))));
+        assertTrue(restored.beginFirstAdmission(FrontierV3ActorOwnerBinding.body(new FrontierV3ActorCarrierComposition.Declaration(ACTOR, id.kind(),
+                        FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, id.entityId(),
+                        FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 1))));
         var denied = new FrontierV3ActorBirthCommitter(WORLD, restored, () -> fail("no reset"),
                 (tx, durability) -> fail("no new birth"));
         assertThrows(IllegalStateException.class, () -> denied.commit(transaction(BIRTH), Durability.DURABLE_BEFORE_EFFECT));
@@ -82,10 +81,9 @@ class FrontierV3ActorBirthCommitterTest {
                 ActorKind.BIOFORM,
                 SceneLease.deterministicEntityId(WORLD, otherActor));
         assertTrue(ledger.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(identity)));
-        assertTrue(ledger.beginFirstAdmission(FrontierV3ActorOwnerBinding.ambient(
-                new FrontierV3ActorCarrierComposition.Declaration(otherActor, identity.kind(),
-                        FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, identity.entityId(),
-                        FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1, 1))));
+        assertTrue(ledger.beginFirstAdmission(FrontierV3ActorOwnerBinding.body(new FrontierV3ActorCarrierComposition.Declaration(otherActor, identity.kind(),
+                        FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, identity.entityId(),
+                        FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 1))));
         var before = ledger.save(new CompoundTag(), null);
         var committer = new FrontierV3ActorBirthCommitter(WORLD, ledger,
                 () -> fail("rejected birth batch must not persist"),

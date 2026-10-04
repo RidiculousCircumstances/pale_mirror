@@ -15,8 +15,7 @@ class FrontierV3CargoCarrierAuthorityTest {
     private static final BlockPosition FLOOR = new BlockPosition(0, 64, 0);
     private static final SceneLease LEASE = SceneLease.atExactPositions(new SceneLeaseId("lease:cargo-authority"), WORLD,
             new SubjectId("operation:cargo-authority"), CARGO, FLOOR, FLOOR, SimInstant.ZERO, 7, SceneLeaseStatus.PREPARED,
-            Optional.empty(), List.of(new SceneMember(ACTOR, SceneLease.deterministicEntityId(WORLD, ACTOR))),
-            Map.of(ACTOR, BodyPosition.aboveSupportCell(FLOOR)));
+            Optional.empty(), List.of(new SceneMember(ACTOR, SceneLease.deterministicEntityId(WORLD, ACTOR))));
     private static final SubjectId BINDING = FrontierSceneLeaseStateSupport.cargoRecoveryBindingId(CARGO);
     private static final SubjectId OWNER = FrontierSceneLeaseStateSupport.recoveryOwner(LEASE);
 

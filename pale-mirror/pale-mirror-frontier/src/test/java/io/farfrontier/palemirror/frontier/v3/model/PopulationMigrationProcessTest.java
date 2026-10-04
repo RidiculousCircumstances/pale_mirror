@@ -21,6 +21,8 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -37,7 +39,7 @@ class PopulationMigrationProcessTest {
                 id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1L);
         var before = state;
         assertThrows(IllegalArgumentException.class, () -> HumanPopulationStateSupport.advanceMigration(before,
-                new ResidentMigrationAdvanced(id.actorId(), started.journey().nextRouteIndex(), foreign)));
+                new ResidentMigrationAdvanced(id.actorId(), started.journey().nextRouteIndex(), started.journey().routeRevision(), foreign)));
         assertEquals(started.journey(), before.humanPopulation().migration(id.actorId()));
         before.actorExecutions().requireCurrent(id);
     }
@@ -82,6 +84,95 @@ class PopulationMigrationProcessTest {
         assertEquals(null, state.humanPopulation().migration(before.id()));
         assertTrue(state.actorExecutions().actors().get(before.id()).current().isEmpty());
         assertTrue(!state.humanPopulation().residents().values().stream().anyMatch(person -> person.id().equals(before.id()) && person.settlementId().equals(source.id())));
+    }
+
+    @Test
+    void closingPresentationMidTransitRetainsObservedBodyAndDoesNotGrantColdOrArrival() {
+        var initial = displaced();
+        var started = payload(PopulationMigrationProcess.planReview(initial, PopulationMigrationProcess.review(1, 100L)), ResidentMigrationStarted.class);
+        var state = HumanPopulationStateSupport.startMigration(initial, started.journey());
+        var journey = started.journey();
+        var actor = journey.residentId();
+        var lease = AmbientActorProcess.nextLease(state, actor, new SimInstant(100L));
+        state = AmbientLeaseStateProcess.prepare(state, lease);
+        state = ModeledActorBodyFacts.present(state, actor);
+        state = AmbientLeaseStateProcess.transition(state, actor, AmbientLeaseStatus.HOT);
+        var body = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actor);
+        var origin = state.actorLocations().get(actor);
+        var observed = BodyPosition.aboveSupportCell(journey.route().get(1));
+        state = ActorBodyAuthority.inspected(state,
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(body,
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING,
+                        origin.body(), origin.condition().health(), observed, origin.condition().health(), Optional.of(journey.executionId())));
+        var draining = AmbientLeaseStateProcess.transition(state, actor, AmbientLeaseStatus.DRAINING);
+        var closed = AmbientLeaseStateProcess.release(draining, new AmbientLeaseReleased(actor, observed, origin.condition().health()));
+        assertEquals(AmbientLeaseStatus.CLOSED, closed.ambientLeases().get(actor).status());
+        assertEquals(observed, closed.actorLocations().get(actor).body());
+        assertSame(draining.humanPopulation(), closed.humanPopulation());
+        assertSame(draining.actorExecutions(), closed.actorExecutions());
+        assertSame(draining.inventory(), closed.inventory());
+        assertEquals(journey, closed.humanPopulation().migration(actor));
+        assertEquals(body, ActorBodyAuthority.current(closed, actor));
+        assertFalse(ActorExecutionCoordinator.coldAvailable(closed, actor));
+        var unloaded = ActorBodyAuthority.unloaded(closed,
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded(body, observed,
+                        origin.condition().health(), observed, origin.condition().health(), Optional.of(journey.executionId())));
+        var rebased = unloaded.humanPopulation().migration(actor);
+        assertEquals(observed, unloaded.actorLocations().get(actor).body());
+        assertEquals(journey.route(), rebased.route(), "the retained strategic corridor is not rewritten");
+        assertEquals(journey.routeIndex(), rebased.routeIndex(), "departure does not award semantic arrival");
+        assertEquals(journey.nextColdPosition(), rebased.rejoin().orElseThrow().target().support());
+        assertEquals(journey.routeRevision() + 1, rebased.routeRevision());
+        assertSame(closed.actorExecutions(), unloaded.actorExecutions());
+        assertSame(closed.inventory(), unloaded.inventory());
+        assertTrue(ActorExecutionCoordinator.coldAvailable(unloaded, actor));
+        assertThrows(IllegalArgumentException.class, () -> HumanPopulationStateSupport.advanceMigration(unloaded,
+                new ResidentMigrationAdvanced(actor, journey.nextRouteIndex(), journey.routeRevision(), journey.executionId())),
+                "old COLD callbacks cannot consume the changed physical continuation");
+        var codec = new FrontierWorldStateCodec();
+        assertEquals(closed, codec.decode(codec.encode(closed)));
+        assertEquals(unloaded, codec.decode(codec.encode(unloaded)));
+        var review = PopulationMigrationProcess.planReview(initial, PopulationMigrationProcess.review(1, 100L));
+        var due = scheduled(review, "frontier.population.migration.progress");
+        var coldEvents = PopulationMigrationProcess.planProgress(unloaded, due);
+        var rejoin = payload(coldEvents, ResidentMigrationRejoinAdvanced.class);
+        assertEquals(rejoin, roundTrip(rejoin));
+        var continued = HumanPopulationStateSupport.advanceMigrationRejoin(unloaded, rejoin);
+        assertEquals(journey.nextRouteIndex(), continued.humanPopulation().migration(actor).routeIndex());
+        assertTrue(continued.humanPopulation().migration(actor).rejoin().isEmpty());
+        assertEquals(journey.nextColdPosition(), continued.actorLocations().get(actor).supportingSurface().support());
+        assertThrows(IllegalArgumentException.class, () -> HumanPopulationStateSupport.advanceMigrationRejoin(continued, rejoin));
+        assertEquals(continued, codec.decode(codec.encode(continued)));
+        var next = payload(PopulationMigrationProcess.planProgress(continued,
+                scheduled(coldEvents, "frontier.population.migration.progress")), ResidentMigrationAdvanced.class);
+        var progressed = HumanPopulationStateSupport.advanceMigration(continued, next);
+        assertTrue(progressed.humanPopulation().migration(actor).routeIndex() > journey.nextRouteIndex());
+    }
+
+    @Test
+    void exactTransitOwnerSettlesDeathWithoutSceneOrGenericMigrationDiscovery() {
+        var initial = displaced();
+        var started = payload(PopulationMigrationProcess.planReview(initial, PopulationMigrationProcess.review(1, 100L)), ResidentMigrationStarted.class);
+        var state = HumanPopulationStateSupport.startMigration(initial, started.journey());
+        var actor = started.journey().residentId();
+        state = ActorBodyAuthority.demand(state, actor);
+        state = ModeledActorBodyFacts.present(state, actor);
+        var body = ActorBodyAuthority.current(state, actor);
+        var basis = state;
+        var dead = ModeledActorBodyFacts.died(state, actor, state.actorLocations().get(actor).body(), "migration-test-fatality", 101L);
+        assertEquals(ActorLifeStatus.DEAD, dead.actorLocations().get(actor).condition().status());
+        assertEquals(null, dead.humanPopulation().migration(actor));
+        assertTrue(dead.actorExecutions().actors().get(actor).current().isEmpty());
+        assertEquals(basis.actorExecutions().generation(actor), dead.actorExecutions().generation(actor));
+        assertSame(basis.inventory(), dead.inventory());
+        assertEquals(basis.humanPopulation().resident(actor), dead.humanPopulation().resident(actor));
+        assertFalse(ActorBodyAuthority.retainsPhysicalCustody(dead, actor));
+        assertTrue(dead.fencedRecovery().tombstones().containsKey(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(body.actorId())));
+        assertThrows(IllegalArgumentException.class, () -> HumanPopulationStateSupport.advanceMigration(dead,
+                new ResidentMigrationAdvanced(actor, started.journey().nextRouteIndex(), started.journey().routeRevision(), started.journey().executionId())));
+        var codec = new FrontierWorldStateCodec();
+        assertEquals(dead, codec.decode(codec.encode(dead)));
     }
 
     @Test
@@ -149,7 +240,8 @@ class PopulationMigrationProcessTest {
         for (ResidentMigrationJourney journey : state.humanPopulation().migrations().values()) {
             assertTrue(journey.route().size() > 255, "the exact COLD route is no longer a coarse waypoint teleport");
             assertEquals(new ResidentMigrationStarted(journey), roundTrip(new ResidentMigrationStarted(journey)));
-            assertEquals(new ResidentMigrationAdvanced(journey.residentId(), 512, journey.executionId()), roundTrip(new ResidentMigrationAdvanced(journey.residentId(), 512, journey.executionId())));
+            var advanced = new ResidentMigrationAdvanced(journey.residentId(), 512, journey.routeRevision(), journey.executionId());
+            assertEquals(advanced, roundTrip(advanced));
             for (int index = 1; index < journey.route().size(); index++) {
                 BlockPosition previous = journey.route().get(index - 1), current = journey.route().get(index);
                 assertEquals(1, Math.abs(previous.x() - current.x()) + Math.abs(previous.z() - current.z()));
@@ -209,14 +301,27 @@ class PopulationMigrationProcessTest {
         assertEquals(AmbientGoalKind.TRANSIT, prepared.goal());
         assertEquals(started.journey().nextColdPosition(), prepared.goalBody().supportingSurface().support());
         state = AmbientLeaseStateProcess.prepare(state, prepared);
+        state = ModeledActorBodyFacts.present(state, resident);
         state = AmbientLeaseStateProcess.transition(state, resident, AmbientLeaseStatus.HOT);
         FrontierWorldState hot = state;
         assertThrows(IllegalArgumentException.class, () -> HumanPopulationStateSupport.advanceMigration(hot,
-                new ResidentMigrationAdvanced(resident, started.journey().nextRouteIndex(), started.journey().executionId())), "COLD may not race a HOT lease");
+                new ResidentMigrationAdvanced(resident, started.journey().nextRouteIndex(), started.journey().routeRevision(), started.journey().executionId())), "COLD may not race a HOT lease");
 
         ResidentMigrationJourney before = state.humanPopulation().migration(resident);
-        ResidentTransitAdvanced first = new ResidentTransitAdvanced(resident, before.nextRouteIndex(), before.executionId());
+        ResidentTransitAdvanced first = transitReceipt(state, before);
         assertEquals(first, roundTrip(first));
+        var beforeObservation = state;
+        assertThrows(IllegalArgumentException.class, () -> PopulationMigrationProcess.reduceHotAdvance(beforeObservation, first, 101L),
+                "family arrival cannot fabricate a physical position");
+        state = observeTransitArrival(state, before);
+        var observedState = state;
+        var wrongBody = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(resident, first.bodyId().physicalEpoch() + 1);
+        assertThrows(IllegalArgumentException.class, () -> PopulationMigrationProcess.reduceHotAdvance(observedState,
+                new ResidentTransitAdvanced(resident, first.nextRouteIndex(), first.routeRevision(), first.leaseRevision(), first.executionId(), wrongBody), 101L));
+        assertThrows(IllegalArgumentException.class, () -> PopulationMigrationProcess.reduceHotAdvance(observedState,
+                new ResidentTransitAdvanced(resident, first.nextRouteIndex(), first.routeRevision() + 1, first.leaseRevision(), first.executionId(), first.bodyId()), 101L));
+        assertThrows(IllegalArgumentException.class, () -> PopulationMigrationProcess.reduceHotAdvance(observedState,
+                new ResidentTransitAdvanced(resident, first.nextRouteIndex(), first.routeRevision(), first.leaseRevision() + 1, first.executionId(), first.bodyId()), 101L));
         state = PopulationMigrationProcess.reduceHotAdvance(state, first, 101L);
         ResidentMigrationJourney after = state.humanPopulation().migration(resident);
         assertEquals(before.nextRouteIndex(), after.routeIndex());
@@ -227,12 +332,27 @@ class PopulationMigrationProcessTest {
 
         while (state.humanPopulation().migration(resident) != null) {
             ResidentMigrationJourney journey = state.humanPopulation().migration(resident);
-            state = PopulationMigrationProcess.reduceHotAdvance(state,
-                    new ResidentTransitAdvanced(resident, journey.nextRouteIndex(), journey.executionId()), 101L);
+            var receipt = transitReceipt(state, journey);
+            state = observeTransitArrival(state, journey);
+            state = PopulationMigrationProcess.reduceHotAdvance(state, receipt, 101L);
         }
         assertEquals(started.journey().destinationSettlementId(), state.humanPopulation().resident(resident).settlementId());
         assertEquals(started.journey().route().getLast(), state.actorLocations().get(resident).supportingSurface().support());
         assertNotEquals(AmbientGoalKind.TRANSIT, state.ambientLeases().get(resident).goal());
+    }
+
+    private static ResidentTransitAdvanced transitReceipt(FrontierWorldState state, ResidentMigrationJourney journey) {
+        return new ResidentTransitAdvanced(journey.residentId(), journey.nextRouteIndex(), journey.routeRevision(),
+                state.ambientLeases().get(journey.residentId()).revision(), journey.executionId(),
+                ActorBodyAuthority.current(state, journey.residentId()));
+    }
+    private static FrontierWorldState observeTransitArrival(FrontierWorldState state, ResidentMigrationJourney journey) {
+        var location = state.actorLocations().get(journey.residentId());
+        return ActorBodyAuthority.inspected(state, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(
+                ActorBodyAuthority.current(state, journey.residentId()),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING,
+                location.body(), location.condition().health(), BodyPosition.aboveSupportCell(journey.nextColdPosition()),
+                location.condition().health(), Optional.of(journey.executionId())));
     }
 
     @Test
@@ -242,8 +362,9 @@ class PopulationMigrationProcessTest {
         state = HumanPopulationStateSupport.startMigration(state, started.journey());
         SubjectId resident = started.journey().residentId();
         state = AmbientLeaseStateProcess.prepare(state, AmbientActorProcess.nextLease(state, resident, new SimInstant(101L)));
+        state = ModeledActorBodyFacts.present(state, resident);
         state = AmbientLeaseStateProcess.transition(state, resident, AmbientLeaseStatus.HOT);
-        state = AmbientLeaseStateProcess.recordDeath(state, new AmbientActorDied(resident, state.actorLocations().get(resident).body(), "test:transit-death"));
+        state = ModeledActorBodyFacts.died(state, resident, state.actorLocations().get(resident).body(), "test:transit-death", 0L);
 
         assertEquals(null, state.humanPopulation().migration(resident));
         assertEquals(0L, state.humanPopulation().inboundHousingReservations(started.journey().destinationSettlementId()));

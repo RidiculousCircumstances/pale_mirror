@@ -23,22 +23,25 @@ final class FrontierV3HiveReturnMotion {
     private FrontierV3HiveReturnMotion() { }
 
     static boolean pursue(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                          FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
+                          FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease,
+                          FrontierV3ActorActuation actuation) {
         HiveMobilization mobilization = mobilization(state, actorId);
+        // An obsolete caller with no owner has no STOP permission over a successor.
+        if (mobilization == null) return false;
         HiveTaskAssembly.Member member = member(mobilization, actorId, lease);
-        if (mobilization == null || member == null || member.arrived()
+        if (member == null || member.arrived()
                 || !mobilization.returnAssembly().orElseThrow().safeAdvances().contains(actorId)) {
-            FrontierV3GoalNavigation.stop(body);
+            FrontierV3GoalNavigation.stop(body, actuation);
             return false;
         }
         BlockPos target = new BlockPos(lease.goalBody().x(), lease.goalBody().y(), lease.goalBody().z());
         if (!level.hasChunkAt(target)
                 || !FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
-            FrontierV3GoalNavigation.stop(body);
+            FrontierV3GoalNavigation.stop(body, actuation);
             return false;
         }
         FrontierV3GoalNavigation.pursue(level, body, FrontierV3GoalNavigation.Goal.station(lease.goalBody().supportingSurface(),
-                new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
+                new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())), actuation);
         return false;
     }
 

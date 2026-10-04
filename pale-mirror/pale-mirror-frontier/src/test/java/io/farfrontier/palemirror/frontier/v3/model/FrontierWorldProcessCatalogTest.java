@@ -42,11 +42,14 @@ class FrontierWorldProcessCatalogTest {
         DeterministicProcessRegistry registry = FrontierWorldRuntimeDefinition.processRegistry();
         for (String type : List.of("frontier.resident_metabolism_changed", "frontier.resident_meal_hot_arrived",
                 "frontier.resident_meal_hot_effect_prepared", "frontier.resident_meal_hot_effect_observed",
+                "frontier.resident_meal_resource_effect_observed",
+                "frontier.resident_meal_portion_disposition_observed",
                 "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
                 "frontier.resident_meal_hot_returned")) {
             assertEquals("population", registry.requireCommandOwner(type), type);
         }
         assertEquals("actor-movement", registry.requireCommandOwner("frontier.actor_movement_hot_observed"));
+        assertEquals("actor-body", registry.requireCommandOwner("frontier.actor_body_died"));
         assertEquals("actor-movement", registry.requireScheduledOwner(
                 io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.PROGRESS));
     }

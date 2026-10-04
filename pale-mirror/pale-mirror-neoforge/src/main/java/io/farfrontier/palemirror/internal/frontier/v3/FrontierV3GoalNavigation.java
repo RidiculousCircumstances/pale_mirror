@@ -15,6 +15,27 @@ import java.util.List;
 /** Provider-neutral HOT boundary: the caller names one retained goal, never a path engine. */
 final class FrontierV3GoalNavigation {
     private static final java.util.Map<Mob, FrontierV3ActorActuation> ACTUATIONS = new java.util.WeakHashMap<>();
+    /** Opaque provider permission, minted here only and bound to the original command/body. */
+    abstract static sealed class ProviderPermission permits CapturedPermission, UnmodeledPermission {
+        private ProviderPermission() { }
+        abstract boolean current(Mob actor);
+    }
+    private static final class CapturedPermission extends ProviderPermission {
+        private final Mob actor;
+        private final FrontierV3ActorActuation actuation;
+        private CapturedPermission(Mob actor, FrontierV3ActorActuation actuation) {
+            this.actor = Objects.requireNonNull(actor); this.actuation = Objects.requireNonNull(actuation);
+        }
+        @Override boolean current(Mob candidate) { return candidate == actor && actuation.current(candidate); }
+    }
+    /** Unmodeled physical fixtures have no canonical identity and cannot acquire one through this permission. */
+    private static final class UnmodeledPermission extends ProviderPermission {
+        private final Mob actor;
+        private UnmodeledPermission(Mob actor) { this.actor = Objects.requireNonNull(actor); }
+        @Override boolean current(Mob candidate) {
+            return candidate == actor && permitsUnmodeledNavigation(candidate.getPersistentData(), ACTUATIONS.containsKey(candidate));
+        }
+    }
     enum Status { IN_PROGRESS, ARRIVED, BLOCKED, AMBIGUOUS }
     enum BlockReason { PATH_UNAVAILABLE, PATH_STALLED, TARGET_CHUNK_UNLOADED, OFF_CONTRACT,
         UNSUPPORTED_CAPABILITY, UNSUPPORTED_MEDIUM, SEARCH_BUDGET_EXHAUSTED }
@@ -69,23 +90,34 @@ final class FrontierV3GoalNavigation {
 
     /** Physical tactical/presentation target, not a producer of canonical ownership or progress. */
     static Result pursueLocalFeetTarget(ServerLevel level, Mob actor, net.minecraft.world.phys.Vec3 feet,
-                                        FrontierV3NavigationScope scope) {
+                                        FrontierV3NavigationScope scope, FrontierV3ActorActuation actuation) {
+        Objects.requireNonNull(actuation, "local target actuation");
+        if (!actuation.current(actor))
+            return new Result(Status.AMBIGUOUS, "stale-body-or-execution-authority", Optional.empty(), Optional.empty());
         // Feet can lie on a fractional collision top (farmland/slab). This conversion names
         // the requested column; only the ordinary shared collision observation can award arrival.
         SurfaceAnchor station = SurfaceAnchor.at((int) Math.floor(feet.x), (int) Math.ceil(feet.y) - 1,
                 (int) Math.floor(feet.z));
         if (!Double.isFinite(feet.x) || !Double.isFinite(feet.y) || !Double.isFinite(feet.z)
                 || !scope.permits(station.support())) {
-            stop(actor);
+            stop(actor, actuation);
             return new Result(Status.BLOCKED, "physical-target-outside-task-scope",
                     Optional.of(BlockReason.OFF_CONTRACT), Optional.empty());
         }
-        return pursue(level, actor, Goal.station(station, scope));
+        return pursue(level, actor, Goal.station(station, scope), actuation);
+    }
+
+    /** A topology owner supplies its retained edge; shared navigation owns physical actuation. */
+    static Result pursueRetainedEdge(ServerLevel level, Mob actor, SurfaceAnchor current, SurfaceAnchor next,
+                                     FrontierV3ActorActuation actuation) {
+        return pursue(level, actor, Goal.station(next, new FrontierV3NavigationScope.Restricted(
+                io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope.around(
+                        current.standingBody(), next.standingBody()))), actuation);
     }
 
     static Result pursue(ServerLevel level, Mob actor, Goal goal) {
         requireUnfenced(actor);
-        return pursueProvider(level, actor, goal);
+        return pursueProvider(level, actor, goal, new UnmodeledPermission(actor));
     }
 
     /** A successor may replace a path, but stale authority cannot refresh or cancel that path. */
@@ -99,10 +131,10 @@ final class FrontierV3GoalNavigation {
             FrontierV3ControlledMobMotion.retireLocalActuation(actor);
         }
         ACTUATIONS.put(actor, actuation);
-        return pursueProvider(level, actor, goal);
+        return pursueProvider(level, actor, goal, new CapturedPermission(actor, actuation));
     }
 
-    private static Result pursueProvider(ServerLevel level, Mob actor, Goal goal) {
+    private static Result pursueProvider(ServerLevel level, Mob actor, Goal goal, ProviderPermission permission) {
         Objects.requireNonNull(level, "navigation level");
         Objects.requireNonNull(actor, "navigation actor");
         Objects.requireNonNull(goal, "navigation goal");
@@ -111,7 +143,7 @@ final class FrontierV3GoalNavigation {
             return new Result(Status.BLOCKED, "no-registered-provider-for-" + goal.capability(),
                     Optional.of(BlockReason.UNSUPPORTED_CAPABILITY), Optional.empty());
         }
-        var physical = FrontierV3RouteNavigation.pursue(level, actor, goal);
+        var physical = FrontierV3RouteNavigation.pursue(level, actor, goal, permission);
         return new Result(switch (physical.status()) {
             case IN_PROGRESS -> Status.IN_PROGRESS;
             case ARRIVED -> Status.ARRIVED;
@@ -148,15 +180,35 @@ final class FrontierV3GoalNavigation {
     }
     private static boolean validateRetainedActuation(Mob actor) {
         var retained = ACTUATIONS.get(actor);
-        if (retained == null || retained.current(actor)) return true;
+        if (retained == null && permitsUnmodeledNavigation(actor.getPersistentData(), false)
+                || retained != null && retained.current(actor)) return true;
         // Keep the fence after quiescing: an unversioned legacy refresh cannot revive this path.
         clearProvider(actor);
         FrontierV3ControlledMobMotion.retireLocalActuation(actor);
         return false;
     }
+    /** Join/inspection cannot take a new activity's STOP authority; only obsolete commands quiesce. */
+    static void quiesceStaleActuation(Mob actor) {
+        validateRetainedActuation(Objects.requireNonNull(actor, "physical actor"));
+    }
+    /** Physical retirement, not a stale activity STOP or a lookup of its successor execution. */
+    static boolean retireIncarnation(Mob actor, io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId body) {
+        var declaration = FrontierV3ActorCarrierComposition.declaredBy(actor).orElse(null);
+        if (declaration == null || !declaration.actorId().equals(body.actorId()) || declaration.epoch() != body.physicalEpoch())
+            return false;
+        var retained = ACTUATIONS.get(actor);
+        if (retained != null && !retained.id().body().equals(body)) return false;
+        clearProvider(actor);
+        FrontierV3ControlledMobMotion.retireLocalActuation(actor);
+        ACTUATIONS.remove(actor);
+        return true;
+    }
     private static void requireUnfenced(Mob actor) {
-        if (ACTUATIONS.containsKey(actor))
+        if (!permitsUnmodeledNavigation(actor.getPersistentData(), ACTUATIONS.containsKey(actor)))
             throw new IllegalArgumentException("actor navigation requires its captured actuation authority");
+    }
+    static boolean permitsUnmodeledNavigation(net.minecraft.nbt.CompoundTag metadata, boolean captured) {
+        return !captured && !FrontierV3ActorCarrierComposition.hasDeclarationMetadata(metadata);
     }
     private static void clearProvider(Mob actor) {
         FrontierV3RouteNavigation.stop(actor);

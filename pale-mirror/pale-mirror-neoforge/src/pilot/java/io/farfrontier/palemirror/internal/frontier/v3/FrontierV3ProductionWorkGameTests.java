@@ -75,7 +75,7 @@ public final class FrontierV3ProductionWorkGameTests {
             SceneMember member = new SceneMember(initialJob.workerId(), SceneLease.deterministicEntityId(world, initialJob.workerId()));
             SceneLease lease = SceneLease.forCause(leaseId, world, new ProductionWorkSceneCause(initialJob.id()), candidate.handoffPosition(),
                     runtime.canonicalState().orElseThrow().instant(), runtime.canonicalState().orElseThrow().revision().value(), SceneLeaseStatus.PREPARED,
-                    List.of(member), SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+                    List.of(member), java.util.Set.of(), Optional.empty());
             FrontierV3CommandSubmission.submit(runtime, "production-work-game-test-prepare", suffix, new ProductionWorkSceneLeasePrepared(lease));
             FrontierV3CommandSubmission.submit(runtime, "production-work-game-test-hot", suffix, new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
 
@@ -87,7 +87,7 @@ public final class FrontierV3ProductionWorkGameTests {
                 FrontierV3CommandSubmission.submit(runtime, "production-work-game-test-approach", suffix + "-" + next,
                         new ProductionWorkTraversalAdvanced(job.id(), leaseId, observed, next));
                 job = state(runtime).productionJobs().get(job.id());
-                helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).memberPosition(job.workerId()), observed,
+                helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).memberBody(state(runtime).actorLocations(), job.workerId()), observed,
                         "each observed approach arrival must persist the same worker position as its retained cursor");
             }
             BodyPosition input = job.workTraversal().linearCorridorSurfaces().get(inputCursor).standingBody();
@@ -102,7 +102,7 @@ public final class FrontierV3ProductionWorkGameTests {
                     FrontierV3ContinuationBinding.require(runtime.checkpointImage().orElseThrow(), job.id(), "frontier.settlement.production.task.complete"));
             helper.assertValueEqual(state(runtime).productionJobs().get(job.id()).workProgress(), ProductionWorkProgress.processing(0),
                     "the exact HOT worker must reach the declared work station before processing starts");
-            helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).memberPosition(job.workerId()), work,
+            helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).memberBody(state(runtime).actorLocations(), job.workerId()), work,
                     "the persisted HOT lease must retain the processing station for restart/reclaim");
 
             level.setBlock(bodyPosition.below(), Blocks.STONE.defaultBlockState(), 3);
@@ -113,9 +113,7 @@ public final class FrontierV3ProductionWorkGameTests {
             body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, job.workerId().value());
             body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
             body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
-            FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), job.workerId(),
-                    FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
-                    FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
+            FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), job.workerId(), member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L));
             helper.assertTrue(level.addFreshEntity(body), "the exact worker body must enter the already-loaded GameTest cell");
             helper.runAfterDelay(2L, () -> {
                 try {
@@ -124,8 +122,8 @@ public final class FrontierV3ProductionWorkGameTests {
                     // position to the observer; setPos has no chunk-loading or world-write authority.
                     body.setPos(work.x() + 0.5D, work.y(), work.z() + 0.5D);
                     body.setHealth(0.0F);
-                    helper.assertTrue(FrontierV3SceneExecutor.observeDeath(runtime, body, null),
-                            "the physical scene-death observer must accept only the exact leased production worker");
+                    helper.assertTrue(FrontierV3ActorBodyController.observeDeath(level, runtime, body, null),
+                            "the common physical observer must accept only the exact production worker incarnation");
                     FrontierWorldState afterDeath = state(runtime);
                     helper.assertValueEqual(afterDeath.sceneLeases().get(leaseId).status(), SceneLeaseStatus.DRAINING,
                             "worker death must drain its same production scene rather than starting a replacement worker");
@@ -171,12 +169,21 @@ public final class FrontierV3ProductionWorkGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-production-work", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void fencedProductionReleaseClosesBeforeSameWorkerProjectionCleanup(GameTestHelper helper) {
+    public static void loadedProductionScopeClosureKeepsSameBodyWithoutInactiveCarrier(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos bodyPosition = helper.absolutePos(new BlockPos(2, 8, 2));
         String suffix = bodyPosition.getX() + "-" + bodyPosition.getZ();
         WorldId world = new WorldId("frontier:production-release-fence-" + suffix);
+        var base = FrontierV3FixtureCatalog.productionWorkConfiguration(world, 41L);
+        var fixtureJob = base.initialState().productionJobs().get(new SubjectId("job:production-development-input-theft"));
+        // Modeled canonical admission is explicit. This component check is not proof of
+        // production insertion, supported observation in the remote map or natural unload.
+        var fixtureState = io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts.present(base.initialState(), fixtureJob.workerId());
+        var configured = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
+                base.worldId(), fixtureState, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(),
+                base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(),
+                base.transactionCommitter(), base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter());
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierV3FixtureCatalog.productionWorkConfiguration(world, 41L), new EphemeralStore(), 20_000);
+                configured, new EphemeralStore(), 20_000);
         try {
             FrontierWorldState initial = state(runtime);
             ProductionJob job = initial.productionJobs().get(new SubjectId("job:production-development-input-theft"));
@@ -189,10 +196,10 @@ public final class FrontierV3ProductionWorkGameTests {
                             runtime.canonicalState().orElseThrow().instant())));
             FrontierV3CommandSubmission.submit(runtime, "production-release-fence-ambient-hot", suffix,
                     new AmbientBodyConfirmed(job.workerId(), state(runtime).ambientLeases().get(job.workerId()).revision(),
-                            AmbientBodyConfirmed.Boundary.ADMISSION, observed, observed));
+                            AmbientBodyConfirmed.Boundary.ADMISSION, observed, observed, io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), job.workerId())));
             SceneLease lease = SceneLease.forCause(leaseId, world, new ProductionWorkSceneCause(job.id()), observed.supportingSurface().support(),
                     runtime.canonicalState().orElseThrow().instant(), runtime.canonicalState().orElseThrow().revision().value(), SceneLeaseStatus.PREPARED,
-                    List.of(member), java.util.Map.of(job.workerId(), observed), java.util.Set.of(job.workerId()), Optional.empty());
+                    List.of(member), java.util.Set.of(job.workerId()), Optional.empty());
             FrontierV3CommandSubmission.submit(runtime, "production-release-fence-handoff", suffix,
                     new ProductionWorkSceneLeaseHandoff(lease, List.of(new SceneMemberPosition(job.workerId(), observed,
                             initial.actorLocations().get(job.workerId()).condition().health()))));
@@ -207,9 +214,7 @@ public final class FrontierV3ProductionWorkGameTests {
             body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, job.workerId().value());
             body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
             body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
-            FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), job.workerId(),
-                    FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
-                    FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
+            FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), job.workerId(), member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L));
             helper.assertTrue(level.addFreshEntity(body), "the exact worker body must enter the loaded GameTest cell");
             helper.runAfterDelay(2L, () -> {
                 try {
@@ -220,25 +225,23 @@ public final class FrontierV3ProductionWorkGameTests {
                     // release observer records a canonical body coordinate, so present the
                     // already-owned body at its retained canonical hand-off without loading or
                     // mutating the remote world.
-                    BodyPosition canonical = draining.sceneLeases().get(leaseId).memberPosition(job.workerId());
+                    BodyPosition canonical = draining.sceneLeases().get(leaseId).memberBody(draining.actorLocations(), job.workerId());
                     body.setPos(canonical.x() + 0.5D, canonical.y(), canonical.z() + 0.5D);
-                    helper.assertValueEqual(FrontierV3AmbientActorExecutor.fenceDrainingSceneBody(level, draining, draining.sceneLeases().get(leaseId), member, body),
-                            FrontierV3AmbientActorExecutor.SceneCarrierFenceResult.FENCED,
-                            "the same drained production body must produce one exact inactive carrier");
+                    helper.assertTrue(io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.retainsPhysicalCustody(draining, job.workerId()),
+                            "closing the process must retain its separately admitted living body");
                     var releasedCommand = FrontierV3CommandSubmission.submit(runtime, "production-release-fence-release", suffix,
                             new SceneLeaseReleased(leaseId, List.of(new SceneMemberPosition(job.workerId(),
                                     new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()),
                                     draining.actorLocations().get(job.workerId()).condition().health()))));
                     helper.assertTrue(releasedCommand instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted,
                             "the fenced same-worker release must be accepted before its old projection can be discarded: " + releasedCommand);
-                    body.discard();
                     FrontierWorldState released = state(runtime);
                     helper.assertValueEqual(released.sceneLeases().get(leaseId).status(), SceneLeaseStatus.CLOSED,
                             "the production release receipt must close only after the worker fence is durable");
-                    helper.assertTrue(FrontierV3AmbientCarrierLedger.get(level, world).hasCarrier(job.workerId()),
-                            "closed-scene cleanup must leave one same-worker inactive carrier for later ambient return");
-                    helper.assertTrue(body.isRemoved(),
-                            "the old scene projection may disappear only after the durable exact-carrier fence");
+                    helper.assertFalse(FrontierV3AmbientCarrierLedger.get(level, world).hasCarrier(job.workerId()),
+                            "scope closure cannot fabricate a saved inactive carrier for a loaded body");
+                    helper.assertFalse(body.isRemoved(), "activity closure cannot discard the same worker");
+                    body.discard(); // disposable GameTest cleanup only, after the assertions
                     runtime.shutdown(); helper.succeed();
                 } catch (RuntimeException failure) {
                     body.discard(); runtime.shutdown(); throw failure;

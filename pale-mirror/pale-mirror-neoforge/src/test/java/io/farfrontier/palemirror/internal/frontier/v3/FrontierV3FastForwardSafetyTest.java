@@ -95,8 +95,7 @@ class FrontierV3FastForwardSafetyTest {
         SceneMember member = new SceneMember(worker, SceneLease.deterministicEntityId(world, worker));
         SceneLease active = SceneLease.forCause(new SceneLeaseId("lease:running-harvest"), world,
                 new ResourceSiteHarvestSceneCause(new SubjectId("site:1-wheat-field"), job),
-                new BlockPosition(48, 64, -32), new SimInstant(7), 9L, SceneLeaseStatus.HOT, List.of(member),
-                Map.of(worker, new BodyPosition(48, 65, -32)), java.util.Set.of(), Optional.empty());
+                new BlockPosition(48, 64, -32), new SimInstant(7), 9L, SceneLeaseStatus.HOT, List.of(member), java.util.Set.of(), Optional.empty());
 
         assertTrue(FrontierV3FastForwardSafety.requiresPhysicalStep(List.of(running), List.of(active), ignored -> true),
                 "an active exact harvest scene retains the loaded physical boundary");

@@ -46,12 +46,11 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
                 + "-r" + checkpoint.revision().value());
         SceneMember member = new SceneMember(candidate.workerId(), SceneLease.deterministicEntityId(checkpoint.worldId(), id, candidate.workerId()));
         return SceneLease.forCause(id, checkpoint.worldId(), new SettlementServiceWorkSceneCause(candidate.workId()), candidate.handoffPosition(),
-                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, List.of(member),
-                SceneLease.bodiesAboveSupportCells(Map.of(candidate.workerId(), candidate.handoffPosition())), Set.of(), Optional.empty());
+                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, List.of(member), Set.of(), Optional.empty());
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(state, lease);
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
@@ -79,20 +78,21 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
         SceneMember member = lease.members().getFirst(); AmbientActorLease ambient = state.ambientLeases().get(member.actorId()); Entity entity = level.getEntity(member.entityId());
         if (ambient == null || ambient.status() != AmbientLeaseStatus.HOT || !(entity instanceof Mob body) || !body.isAlive()
                 || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)
-                || !FrontierV3SemanticMovement.arrived(level, body, lease.memberPosition(member.actorId()).supportingSurface())) return;
-        BodyPosition observed = FrontierV3SurfaceObservation.observedAt(body, lease.memberPosition(member.actorId()).supportingSurface());
+                || !FrontierV3SemanticMovement.arrived(level, body, lease.memberBody(state.actorLocations(), member.actorId()).supportingSurface())) return;
+        BodyPosition observed = FrontierV3SurfaceObservation.observedAt(body, lease.memberBody(state.actorLocations(), member.actorId()).supportingSurface());
         // A scene cursor is not a broad encounter radius.  Ambient motion may only hand this
         // exact body over at the retained canonical cell; it may not rebase a service route to
         // an incidental neighbouring Minecraft position.
-        if (!observed.equals(lease.memberPosition(member.actorId()))) return;
+        if (!observed.equals(lease.memberBody(state.actorLocations(), member.actorId()))) return;
         SceneMemberPosition capture = new SceneMemberPosition(member.actorId(), observed,
                 new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth() * io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE)));
-        SceneLease captured = lease.withMemberPositions(Map.of(member.actorId(), capture.body())).withAmbientHandoff(Set.of(member.actorId()));
+        SceneLease captured = lease.withAmbientHandoff(Set.of(member.actorId()));
+        var work = FrontierSettlementServiceWorkSceneSupport.require(state, FrontierSceneBehaviors.serviceWork(lease));
+        var actuation = FrontierV3ActorActuation.capture(state, body,
+                io.farfrontier.palemirror.frontier.v3.model.SettlementServiceExecutionAuthority.current(state, work), runtime::decodedState);
         CommandResult result = submit(runtime, "settlement-service-work-handoff", lease.id().value(), new SettlementServiceWorkSceneLeaseHandoff(captured, List.of(capture)));
-        // The accepted command transfers authority to this scene before its next entity tick.
-        // Clear the old ambient actuator immediately, rather than allowing one last stale
-        // motion intent to carry the retained medic off its service cursor.
-        if (result instanceof CommandResult.Accepted) FrontierV3ControlledMobMotion.stop(body);
+        // Capture before submission: a later STOP cannot acquire a successor's authority.
+        if (result instanceof CommandResult.Accepted) FrontierV3GoalNavigation.stop(body, actuation);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_service_work_handoff", captured, result);
     }
 
@@ -109,6 +109,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) {
             conflict(level, runtime, lease, "worker-unavailable"); return;
         }
+        var actuation = FrontierV3ActorActuation.capture(state, worker, execution, runtime::decodedState);
         SurfaceAnchor current = FrontierSettlementServiceWorkSceneSupport.currentSurface(work);
         if (!FrontierV3SemanticMovement.arrived(level, worker, current)) {
             // The server can stop after the normal entity pre-tick has physically completed one
@@ -136,10 +137,10 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
             if (FrontierV3SemanticMovement.arrived(level, worker, next)) {
                 submit(runtime, "settlement-service-work-traversal", lease.id().value(),
                         new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, next), cursor + 1, execution));
-            } else if (!FrontierV3ProductionWorkSceneExecutor.clearNextBody(level, worker, next)) {
+            } else if (!FrontierV3SemanticMovement.targetIsNavigable(level, worker, next)) {
                 submit(runtime, "settlement-service-work-route-blocked", lease.id().value(),
                         new SettlementServiceWorkTraversalBlocked(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), cursor + 1, execution));
-            } else FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(level, worker, current, next);
+            } else FrontierV3GoalNavigation.pursueRetainedEdge(level, worker, current, next, actuation);
             return;
         }
         if (work.phase() != SettlementServiceWorkPhase.WORKING) { conflict(level, runtime, lease, "unsupported-work-phase"); return; }

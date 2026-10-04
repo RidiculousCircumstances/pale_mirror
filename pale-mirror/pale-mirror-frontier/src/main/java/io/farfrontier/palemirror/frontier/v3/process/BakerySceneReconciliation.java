@@ -45,16 +45,13 @@ public final class BakerySceneReconciliation {
         var fence = state.fencedRecovery().current().get(recoveryId);
         if (fence == null || fence.asset() != FencedRecoveryAsset.BODY
                 || !fence.ownerId().equals(job.workerId()) || fence.ownerRevision() != 0L
-                || fence.authorityEpoch() != receipt.recoveryEpoch())
+                || fence.authorityEpoch() != receipt.recoveryEpoch() || fence.phase() != FencedRecoveryPhase.RUNNING
+                || !actor.body().equals(receipt.observedBody()))
             throw new IllegalArgumentException("bakery recovery has a stale body fence");
-        var recovery = ActorBodyAuthority.inspectedPresent(state, new ActorBodyId(job.workerId(), receipt.recoveryEpoch()));
         if (!state.bootstrap().bounds().contains(receipt.observedBody().supportingSurface().support()))
             throw new IllegalArgumentException("bakery recovery body is outside world");
-        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.workerId(), actor.withBody(receipt.observedBody()));
-        var positions = new LinkedHashMap<>(lease.memberPositions()); positions.put(job.workerId(), receipt.observedBody());
         var leases = new LinkedHashMap<>(state.sceneLeases());
-        leases.put(lease.id(), lease.withMemberPositions(positions).withStatus(SceneLeaseStatus.HOT));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).sceneLeases(leases)
-                .fencedRecovery(recovery));
+        leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.HOT));
+        return state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
     }
 }

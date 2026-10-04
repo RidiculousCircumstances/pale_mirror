@@ -192,16 +192,19 @@ final class FrontierV3SceneStoredRecovery {
             if (actor == null || !actor.equals(earlier)
                     || !java.util.Objects.equals(ambient, attempt.state().ambientLeases().get(member.actorId()))) return;
             var saved = proof.body(member.entityId());
-            if (saved == null || !saved.id().equals(member.entityId()) || !saved.actor().equals(member.actorId().value())) return;
+            if (saved == null || !saved.id().equals(member.entityId()) || !saved.actor().equals(member.actorId().value())
+                    || !ledger.currentBodyResidence(member.actorId(), saved.residenceGeneration())) return;
+            var bodyId = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(member.actorId(), saved.epoch());
+            if (FrontierV3ActorBodyController.storedDeparture(current, bodyId, saved).isEmpty()) return;
             FrontierV3SceneDeparture receipt;
             try {
                 var kind = ActorKind.valueOf(saved.kind());
                 var inactive = FrontierV3ActorCarrierComposition.fromCanonical(current, member.actorId(), kind,
-                        FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
-                        FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, retained.revision(), saved.epoch());
+                        FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, member.entityId(),
+                        FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, saved.epoch());
                 receipt = new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(inactive,
                         Math.max(1L, retained.revision()), ambient == null ? 0L : ambient.revision()),
-                        retained.id(), retained.revision(), new SceneMemberPosition(member.actorId(), saved.body(), saved.health()),
+                        saved.residenceGeneration(), retained.id(), retained.revision(), new SceneMemberPosition(member.actorId(), saved.body(), saved.health()),
                         actor.condition().health(), saved.offhand(), saved.mainhand());
             } catch (IllegalArgumentException foreign) { return; }
             if (!saved.matches(receipt)) return;
@@ -230,10 +233,15 @@ final class FrontierV3SceneStoredRecovery {
             cargoLedger.persist(level, current.bootstrap().worldId());
         }
         for (var receipt : recoveredActors.values()) {
-            if (!ledger.recordDeparture(receipt) || !ledger.noLoadProofCandidate(receipt)
-                    || !ledger.confirmSavedDeparture(receipt)) return;
+            var actor = receipt.carrier().identity().actorId();
+            var bodyId = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(actor, receipt.carrier().identity().epoch());
+            var sightings = proof.census().sightings().getOrDefault(receipt.carrier().identity().entityId(), Set.of());
+            if (sightings.size() != 1) return;
+            var column = sightings.iterator().next();
+            var snapshot = proof.snapshots().get(column);
+            if (snapshot == null || !FrontierV3ActorBodyController.confirmStoredDeparture(level, runtime, bodyId,
+                    current.actorLocations().get(actor), proof.census(), column, snapshot)) return;
         }
-        if (!recoveredActors.isEmpty()) ledger.persist(level, current.bootstrap().worldId());
         PaleMirrorMod.LOGGER.info("PMV3_SCENE_STORED_RECOVERY missing-callback-proved lease={} actors={} cargo={}",
                 retained.id().value(), recoveredActors.size(), recoveredCargo != null);
         // Retain the already-proven one-body fast path; other compositions run the
@@ -256,12 +264,12 @@ final class FrontierV3SceneStoredRecovery {
             if (actor.condition().status() == ActorLifeStatus.DEAD) continue;
             Entity live = level.getEntity(member.entityId());
             if (live != null) {
-                if (ledger.departure(member.actorId()).isPresent()
+                if (ledger.hasBodyDeparture(member.actorId())
                         || !FrontierV3SceneExecutor.owned(live, state, lease, member)
                         || !(live instanceof Mob body) || body.getHealth() <= 0.0F) return null;
                 continue;
             }
-            if (ledger.departure(member.actorId()).isPresent()) {
+            if (ledger.hasBodyDeparture(member.actorId())) {
                 var receipt = FrontierV3SceneDepartureObserver.observedDeparture(state, lease, member, ledger).orElse(null);
                 if (receipt == null || !ledger.noLoadProofCandidate(receipt)) return null;
                 continue;
@@ -424,7 +432,7 @@ final class FrontierV3SceneStoredRecovery {
             if (!expected.add(member.entityId())) return null;
             Entity live = level.getEntity(member.entityId());
             if (live != null) {
-                if (ledger.departure(member.actorId()).isPresent()
+                if (ledger.hasBodyDeparture(member.actorId())
                         || !FrontierV3SceneExecutor.owned(live, state, lease, member)
                         || !(live instanceof Mob body) || body.getHealth() <= 0.0F) return null;
                 loaded.add(member.entityId());

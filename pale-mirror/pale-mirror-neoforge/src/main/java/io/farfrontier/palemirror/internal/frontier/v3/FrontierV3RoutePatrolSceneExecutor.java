@@ -57,7 +57,7 @@ final class FrontierV3RoutePatrolSceneExecutor {
         List<SceneMember> members = candidate.memberBodies().keySet().stream().sorted().map(actor -> new SceneMember(actor,
                 SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
         return SceneLease.forCause(id, checkpoint.worldId(), new RoutePatrolSceneCause(candidate.taskId()), candidate.handoffPosition(),
-                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members, candidate.memberBodies(), Set.of(), Optional.empty());
+                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
     }
 
     private static void prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
@@ -79,14 +79,12 @@ final class FrontierV3RoutePatrolSceneExecutor {
             if (ambient == null || ambient.status() == AmbientLeaseStatus.CLOSED) continue;
             if (ambient.status() != AmbientLeaseStatus.HOT || !(entity instanceof Mob body) || !body.isAlive()
                     || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)
-                    || !at(body, lease.memberPosition(member.actorId()).supportingSurface())) return;
+                    || !at(body, lease.memberBody(state.actorLocations(), member.actorId()).supportingSurface())) return;
             captures.add(new SceneMemberPosition(member.actorId(), FrontierV3SurfaceObservation.observedAt(body,
-                    lease.memberPosition(member.actorId()).supportingSurface()), fixed(body.getHealth())));
+                    lease.memberBody(state.actorLocations(), member.actorId()).supportingSurface()), fixed(body.getHealth())));
         }
-        Map<SubjectId, BodyPosition> positions = new java.util.LinkedHashMap<>(lease.memberPositions());
-        captures.forEach(capture -> positions.put(capture.actorId(), capture.body()));
         if (captures.isEmpty()) return;
-        SceneLease captured = lease.withMemberPositions(positions).withAmbientHandoff(captures.stream().map(SceneMemberPosition::actorId)
+        SceneLease captured = lease.withAmbientHandoff(captures.stream().map(SceneMemberPosition::actorId)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet()));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_handoff", captured,
                 submit(runtime, "route-patrol-handoff", lease.id().value(), new RoutePatrolSceneLeaseHandoff(captured, captures)));
@@ -94,7 +92,7 @@ final class FrontierV3RoutePatrolSceneExecutor {
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(state, lease);
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> patrol(level, runtime, state, lease);
@@ -133,7 +131,7 @@ final class FrontierV3RoutePatrolSceneExecutor {
             if (terminalDrainGraceExpired(runtime, lease.id(), level.getGameTime())) drain(runtime, lease);
             return;
         }
-        BlockPosition demand = lease.memberPosition(retained.guardId()).supportingSurface().support();
+        BlockPosition demand = lease.memberBody(state.actorLocations(), retained.guardId()).supportingSurface().support();
         FrontierV3SceneDemand.Snapshot demanded = FrontierV3SceneExecutor.demandSnapshot(level, demand);
         if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demanded,
                 FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease))) { drain(runtime, lease); return; }
@@ -168,6 +166,7 @@ final class FrontierV3RoutePatrolSceneExecutor {
             if (!at(candidateBody, targetBody.supportingSurface())) { arrived = false; break; }
         }
         if (arrived) { observeFormation(level, runtime, state, lease, retained, formationBodies); return; }
+        var executions = io.farfrontier.palemirror.frontier.v3.model.RoutePatrolExecutionAuthority.current(state, retained);
         for (SceneMember candidate : lease.members()) {
             Entity candidateEntity = level.getEntity(candidate.entityId()); BodyPosition targetBody = formationBodies.get(candidate.actorId());
             if (!(candidateEntity instanceof Mob candidateBody) || targetBody == null) continue;
@@ -176,7 +175,8 @@ final class FrontierV3RoutePatrolSceneExecutor {
                     block(level, runtime, state, lease, retained, RoutePatrolDiagnosticProducer.OCCUPIED_NEXT_BODY); return;
                 }
                 FrontierV3GoalNavigation.pursue(level, candidateBody, FrontierV3GoalNavigation.Goal.station(targetBody.supportingSurface(),
-                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
+                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())),
+                        FrontierV3ActorActuation.capture(state, candidateBody, executions.requireMember(candidate.actorId()), runtime::decodedState));
             }
         }
     }

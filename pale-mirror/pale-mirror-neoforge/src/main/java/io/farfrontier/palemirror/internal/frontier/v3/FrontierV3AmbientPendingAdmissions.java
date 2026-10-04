@@ -56,19 +56,15 @@ final class FrontierV3AmbientPendingAdmissions {
         if (admissions == null) return;
         for (Map.Entry<UUID, Entity> entry : List.copyOf(admissions.entrySet())) {
             Entity entity = entry.getValue();
-            // This bridge may outlive an ambient -> scene handoff. Ambient-only
-            // recognition then never succeeds again, including after scene close,
-            // and the stale entry blocks the same body's return to ambient execution.
-            // Release only the indexed exact object with recorded scene custody;
-            // this does not create, move or authorize a physical executor.
+            // The indexed body has one physical binding irrespective of its next
+            // activity. Releasing this join bridge grants no execution authority.
             if (!entity.isRemoved() && entity.level() instanceof net.minecraft.server.level.ServerLevel level
                     && level.getEntity(entry.getKey()) == entity) {
                 var binding = FrontierV3ActorOwnerBinding.from(entity);
                 var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-                if (binding.isPresent() && recordedSceneOwns(state, binding.orElseThrow(), ledger)) {
-                    var lease = state.sceneLeases().get(binding.orElseThrow().scene().orElseThrow());
-                    FrontierWorldState current = state;
-                    if (lease.members().stream().anyMatch(member -> FrontierV3SceneExecutor.ownsDeclaration(entity, current, lease, member))) {
+                if (binding.isPresent() && recordedBodyOwns(state, binding.orElseThrow(), ledger)) {
+                    var ambient = state.ambientLeases().get(binding.orElseThrow().declaration().actorId());
+                    if (ambient == null || ambient.status() != AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
                         admissions.remove(entry.getKey(), entity);
                         continue;
                     }
@@ -97,19 +93,13 @@ final class FrontierV3AmbientPendingAdmissions {
         if (admissions.isEmpty()) ADMISSIONS.remove(runtime);
     }
 
-    /** Recorded scene ownership, including retained CLOSED custody, ends the join bridge. */
-    static boolean recordedSceneOwns(FrontierWorldState state, FrontierV3ActorOwnerBinding binding,
+    /** Only current physical identity and retained insertion history end the join bridge. */
+    static boolean recordedBodyOwns(FrontierWorldState state, FrontierV3ActorOwnerBinding binding,
                                      FrontierV3AmbientCarrierLedger ledger) {
-        if (binding.scene().isEmpty()) return false;
-        var lease = state.sceneLeases().get(binding.scene().orElseThrow());
         var declaration = binding.declaration();
-        var actor = state.actorLocations().get(declaration.actorId());
-        return lease != null && lease.worldId().equals(state.bootstrap().worldId())
-                && lease.revision() == declaration.authorityRevision()
-                && actor != null && actor.condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE
-                && declaration.representation() == FrontierV3ActorCarrierComposition.Representation.LIVE_BODY
-                && lease.members().stream().anyMatch(member -> member.actorId().equals(declaration.actorId())
-                    && member.entityId().equals(declaration.entityId()))
+        return FrontierV3ActorBodyController.recognizesDeclaration(state, declaration)
+                && !ledger.hasCarrier(declaration.actorId()) && !ledger.hasDepartureConflict(declaration.actorId())
+                && !ledger.hasBodyDeparture(declaration.actorId())
                 && ledger.permitsRecordedOwner(binding);
     }
 
