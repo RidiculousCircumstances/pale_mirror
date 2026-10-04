@@ -109,12 +109,14 @@ public final class HiveSettlementAssaultProcess {
             }
             if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks()
                     + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
-            return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.COLD_COMBAT, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault))),
+            return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.COLD_COMBAT,
+                    io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault))),
                     schedule(combat(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultCombatInterval())));
         }
         if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks()
                 + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
-        if (assault.march().complete()) return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.WAITING_FOR_BATTLE, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault))),
+        if (assault.march().complete()) return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.WAITING_FOR_BATTLE,
+                io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault))),
                 schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
         // COLD advances exactly one shared formation edge per due action.  The event names the
         // Overseer only as the retained command owner; it does not restore independent member
@@ -143,7 +145,8 @@ public final class HiveSettlementAssaultProcess {
         boolean hiveTurn = (assault.nextStrikeEpoch() & 1) == 0;
         SubjectId attacker = choose(hiveTurn ? attackers : defenders, assault.nextStrikeEpoch());
         SubjectId target = choose(hiveTurn ? defenders : attackers, assault.nextStrikeEpoch());
-        SettlementAssaultStrike strike = new SettlementAssaultStrike(assault.id(), attacker, target, assault.nextStrikeEpoch(), damage(state, attacker), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault));
+        SettlementAssaultStrike strike = new SettlementAssaultStrike(assault.id(), attacker, target, assault.nextStrikeEpoch(), damage(state, attacker),
+                io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault));
         FixedScalar after = state.actorLocations().get(target).condition().health().minus(strike.damage());
         List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(assault.hiveId(), strike)));
         deferredBomberAftermath(state, assault, attacker, action.dueAt().ticks()).ifPresent(aftermath ->

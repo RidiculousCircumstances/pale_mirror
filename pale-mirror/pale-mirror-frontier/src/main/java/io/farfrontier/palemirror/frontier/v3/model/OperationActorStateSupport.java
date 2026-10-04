@@ -94,7 +94,8 @@ final class OperationActorStateSupport {
                 nextAmbient.put(actor, lease.withGoal(AmbientGoalKind.OPERATION_ASSEMBLY, target.standingBody()));
             }
         });
-        return state.next(nextActors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), nextOperations, state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), nextAmbient);
+        return state.next(nextActors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), nextOperations, state.physicalIntents(), state.physicalObservations(),
+                state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), nextAmbient);
     }
     static FrontierWorldState deferOperationAssembly(FrontierWorldState state, SubjectId operationId, OperationAssemblyDeferral deferral, ActorExecutionGroup executions) {
         RouteOperation operation = state.operations().get(Objects.requireNonNull(operationId, "operation assembly operation id"));
@@ -104,7 +105,8 @@ final class OperationActorStateSupport {
         executions.requireCurrent(state.actorExecutions());
         RouteOperation deferred = operation.withAssembly(operation.activeAssembly().orElseThrow().defer(Objects.requireNonNull(deferral, "assembly deferral")));
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(state.operations()); nextOperations.put(operation.id(), deferred);
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), nextOperations, state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), nextOperations, state.physicalIntents(),
+                state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
     static FrontierWorldState completeOperationTravelSegment(FrontierWorldState state, SubjectId operationId, ActorExecutionGroup executions) {
         RouteOperation operation = state.operations().get(Objects.requireNonNull(operationId, "operation travel operation id")); if (operation == null) throw new IllegalArgumentException("unknown operation travel");

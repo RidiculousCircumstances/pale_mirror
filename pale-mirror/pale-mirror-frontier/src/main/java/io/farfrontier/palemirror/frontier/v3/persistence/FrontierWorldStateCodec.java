@@ -718,7 +718,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         SubjectId carrier = new SubjectId(readString(input)); Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId actor = new SubjectId(readString(input));
-            if (members.put(actor, new OperationAssembly.Member(TraversalTopologyStateCodec.read(input), readCount(input), input.readLong(), TraversalRejoinCodec.read(input))) != null) throw new IllegalArgumentException("duplicate operation assembly member");
+            if (members.put(actor, new OperationAssembly.Member(TraversalTopologyStateCodec.read(input), readCount(input), input.readLong(),
+                    TraversalRejoinCodec.read(input))) != null) throw new IllegalArgumentException("duplicate operation assembly member");
         }
         java.util.Optional<OperationAssemblyDeferral> deferral = java.util.Optional.empty();
         if (hasDeferral && input.readBoolean()) {

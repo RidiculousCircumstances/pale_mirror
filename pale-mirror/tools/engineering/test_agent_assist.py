@@ -37,21 +37,40 @@ class VerificationSelectorTest(unittest.TestCase):
         self.assertEqual(1, ids.count("critical-gate"))
 
     def test_direct_java_test_gets_a_class_filter(self) -> None:
-        result = verification_selector.select([
-            "pale-mirror-frontier/src/test/java/io/farfrontier/palemirror/frontier/v3/kernel/KernelCodecTest.java"
-        ])
-        commands = [step["command"] for step in result["steps"]]
-
-        self.assertTrue(any("--tests 'io.farfrontier.palemirror.frontier.v3.kernel.KernelCodecTest'" in command for command in commands))
+        path = "pale-mirror-neoforge/src/test/java/io/farfrontier/palemirror/internal/frontier/v3/CustodyTest.java"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / path
+            source.parent.mkdir(parents=True)
+            source.write_text("class CustodyTest {}", encoding="utf-8")
+            result = verification_selector.select([path], root=root)
+            self.assertTrue(any("--tests 'io.farfrontier.palemirror.internal.frontier.v3.CustodyTest'" in step["command"]
+                                for step in result["steps"]))
+            source.unlink()
+            result = verification_selector.select([path], root=root)
+            self.assertEqual({"neoforge-test-compile"}, {step["id"] for step in result["steps"]})
+            self.assertFalse(any("--tests" in step["command"] for step in result["steps"]))
+            self.assertFalse(any("GameTest" in step["command"] for step in result["steps"] + result["deferred"]))
 
     def test_rejects_paths_outside_repository(self) -> None:
         with self.assertRaises(verification_selector.SelectionError):
             verification_selector.select(["../secret"])
 
-    def test_unmapped_path_widens_to_conservative_gate(self) -> None:
+    def test_unmapped_path_requires_manual_selection_without_launching_a_complete_gate(self) -> None:
         result = verification_selector.select(["unknown/new-owner.file"])
-        self.assertIn("critical-gate", {step["id"] for step in result["steps"]})
+        self.assertNotIn("critical-gate", {step["id"] for step in result["steps"]})
+        self.assertIn("critical-gate", {step["id"] for step in result["deferred"]})
+        self.assertTrue(result["manual_selection_required"])
         self.assertEqual(["unknown/new-owner.file"], result["unmapped_paths"])
+
+    def test_docs_and_production_custody_changes_do_not_infer_native_campaigns(self) -> None:
+        docs = verification_selector.select(["docs/scope.md"])
+        self.assertEqual(["git diff --check"], [step["command"] for step in docs["steps"]])
+        product = verification_selector.select([
+            "pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/Custody.java"
+        ])
+        self.assertFalse(any("GameTest" in step["command"] for step in product["steps"]))
+        self.assertIn("scene-gametest", {step["id"] for step in product["deferred"]})
 
 
 class RuntimeContextTest(unittest.TestCase):

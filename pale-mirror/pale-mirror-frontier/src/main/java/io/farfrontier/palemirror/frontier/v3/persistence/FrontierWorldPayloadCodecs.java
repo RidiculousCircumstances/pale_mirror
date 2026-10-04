@@ -618,7 +618,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, OperationAssembly.Member> members = new java.util.LinkedHashMap<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor = readSubject(input).value();
-            if (members.put(actor, new OperationAssembly.Member(TraversalTopologyStateCodec.read(input), input.readUnsignedShort(), input.readLong(), TraversalRejoinCodec.read(input))) != null) throw new IllegalArgumentException("duplicate operation assembly member");
+            if (members.put(actor, new OperationAssembly.Member(TraversalTopologyStateCodec.read(input), input.readUnsignedShort(), input.readLong(),
+                    TraversalRejoinCodec.read(input))) != null) throw new IllegalArgumentException("duplicate operation assembly member");
         }
         return new OperationAssembly(members, carrier);
     }

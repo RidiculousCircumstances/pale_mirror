@@ -693,8 +693,15 @@ tasks.register('guardrails') {
             tasks.named('verifyPortableConfiguration'), tasks.named('verifyProjectSkills'),
             tasks.named('testContinuityLedgerValidator'), tasks.named('verifyContinuityLedger'),
             tasks.named('testArchitectureContract'), tasks.named('verifyArchitectureContract'),
-            tasks.named('testFrontierV3ArchitectureDebt'), tasks.named('verifyFrontierV3ArchitectureDebt'),
-            tasks.named('testHarvesterContourOverlay'), tasks.named('testHarvesterAnatomicalModels'),
+            tasks.named('testFrontierV3ArchitectureDebt'), tasks.named('verifyFrontierV3ArchitectureDebt')
+}
+
+// Visual-generation experiments are independently owned tooling, not a dependency
+// of documentation edits, simulation checks or ordinary Java compilation.
+tasks.register('verifyVisualTooling') {
+    group = 'verification'
+    description = 'Checks the visual/model-generation toolchain when that toolchain changes.'
+    dependsOn tasks.named('testHarvesterContourOverlay'), tasks.named('testHarvesterAnatomicalModels'),
             tasks.named('testHarvesterVolumeBakeoff'), tasks.named('testHarvesterPrimaryModelOverlay'), tasks.named('testCollectorDirectMeshProtocol'),
             tasks.named('testHarvesterBlindPairwise'), tasks.named('testHunyuan2mvPreparationContract'), tasks.named('testHunyuan2mvExternalSheetPreparation'), tasks.named('testHistoricalBlenderOperationIsolation'),
             tasks.named('testBlenderWinAppControls'), tasks.named('testAutomodelContracts'),

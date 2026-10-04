@@ -17,13 +17,16 @@ final class RouteConstructionPayloadCodecs {
     private RouteConstructionPayloadCodecs() { }
     static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_construction_started"; }
-        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { var value = (RouteConstructionStarted) payload; write(output, value.project()); ActorExecutionStateCodec.writeOptionalGroup(output, value.executions()); }); }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { var value = (RouteConstructionStarted) payload; write(output, value.project());
+                ActorExecutionStateCodec.writeOptionalGroup(output, value.executions()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RouteConstructionStarted(read(input), ActorExecutionStateCodec.readOptionalGroup(input))); }
     }; }
     static PayloadCodec cutover() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_topology_cutover"; }
-        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { var value = (RouteTopologyCutover) payload; FrontierWorldPayloadCodecs.writeString(output, value.projectId().value()); ActorExecutionStateCodec.writeOptionalGroup(output, value.executions()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RouteTopologyCutover(new SubjectId(FrontierWorldPayloadCodecs.readString(input)), ActorExecutionStateCodec.readOptionalGroup(input))); }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { var value = (RouteTopologyCutover) payload; FrontierWorldPayloadCodecs.writeString(output,
+                value.projectId().value()); ActorExecutionStateCodec.writeOptionalGroup(output, value.executions()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RouteTopologyCutover(new SubjectId(FrontierWorldPayloadCodecs.readString(input)),
+                ActorExecutionStateCodec.readOptionalGroup(input))); }
     }; }
     static PayloadCodec materialLoaded() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_construction_material_loaded"; }
@@ -48,19 +51,23 @@ final class RouteConstructionPayloadCodecs {
     static PayloadCodec assemblyStarted() { return assembly("frontier.route_construction_assembly_started", RouteConstructionAssemblyStarted::new); }
     static PayloadCodec assemblyAdvanced() { return assembly("frontier.route_construction_assembly_advanced", RouteConstructionAssemblyAdvanced::new); }
 
-    private interface AssemblyFactory { FrontierPayload apply(SubjectId id, EngineeringWorkAssembly assembly, io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions, java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> workExecutions); }
+    private interface AssemblyFactory { FrontierPayload apply(SubjectId id, EngineeringWorkAssembly assembly, io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> workExecutions); }
     private static PayloadCodec assembly(String type, AssemblyFactory factory) {
         return new PayloadCodec() {
             @Override public String type() { return type; }
             @Override public byte[] encode(FrontierPayload payload) {
-                SubjectId project; EngineeringWorkAssembly assembly; io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions; java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> work;
+                SubjectId project; EngineeringWorkAssembly assembly; io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions;
+                        java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> work;
                 if (payload instanceof RouteConstructionAssemblyStarted started) { project = started.projectId(); assembly = started.assembly(); executions = started.executions(); work = started.workExecutions(); }
                 else if (payload instanceof RouteConstructionAssemblyAdvanced advanced) { project = advanced.projectId(); assembly = advanced.assembly(); executions = advanced.executions(); work = advanced.workExecutions(); }
                 else throw new IllegalArgumentException("route construction assembly codec received foreign payload");
-                return FrontierWorldPayloadCodecs.encodeProduction(output -> { FrontierWorldPayloadCodecs.writeSubject(output, project); writeAssembly(output, assembly); ActorExecutionStateCodec.writeGroup(output, executions); ActorExecutionStateCodec.writeOptionalGroup(output, work); });
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> { FrontierWorldPayloadCodecs.writeSubject(output, project); writeAssembly(output, assembly); ActorExecutionStateCodec.writeGroup(output,
+                        executions); ActorExecutionStateCodec.writeOptionalGroup(output, work); });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
-                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> factory.apply(FrontierWorldPayloadCodecs.readSubject(input).value(), readAssembly(input), ActorExecutionStateCodec.readGroup(input), ActorExecutionStateCodec.readOptionalGroup(input)));
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> factory.apply(FrontierWorldPayloadCodecs.readSubject(input).value(), readAssembly(input), ActorExecutionStateCodec.readGroup(input),
+                        ActorExecutionStateCodec.readOptionalGroup(input)));
             }
         };
     }

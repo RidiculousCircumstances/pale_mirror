@@ -345,7 +345,8 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             }
         }
         if (arrived) {
-            CommandResult result = submit(runtime, "expedition-march-observed", new SettlementAssaultFormationObserved(assault.id(), lease.id(), targets, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
+            CommandResult result = submit(runtime, "expedition-march-observed", new SettlementAssaultFormationObserved(assault.id(), lease.id(), targets,
+                    io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "expedition_march_formation", lease, result);
         }
 

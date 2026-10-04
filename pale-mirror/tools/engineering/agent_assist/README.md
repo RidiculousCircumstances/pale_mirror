@@ -36,6 +36,15 @@ The normal result defers the full local gate; `--milestone` includes one full
 gate after cheap changed lanes pass. A native carrier always requires explicit
 scenario selection.
 
+Removed Java tests select inventory compilation, never a nonexistent class filter.
+Test-only edits do not imply native scene/economy checks. Native families remain
+manual suggestions; neither a filename keyword nor an unknown path can schedule
+an expensive campaign. Unknown paths visibly require engineering selection.
+Use `--root <implementation>` when planning another checkout; MCP uses its
+configured implementation root. Documentation selects `git diff --check`.
+Visual-generation tooling has its own `./gradlew verifyVisualTooling` gate;
+ordinary `guardrails`/`check` retain architecture and source-safety checks only.
+
 ```sh
 python3 tools/engineering/agent_assist/verification_selector.py \
   pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/kernel/ScheduledAction.java

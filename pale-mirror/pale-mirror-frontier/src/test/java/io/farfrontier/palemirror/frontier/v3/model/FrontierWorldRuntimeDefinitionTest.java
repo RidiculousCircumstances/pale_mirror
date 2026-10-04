@@ -158,7 +158,8 @@ class FrontierWorldRuntimeDefinitionTest {
                 submit(engine, world, "assembly-deferral-prepare", new AmbientLeasePrepared(lease)));
         ModeledActorBodyFacts.present(engine, actor);
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
-                submit(engine, world, "assembly-deferral-hot", new AmbientBodyConfirmed(actor, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody(), ActorBodyAuthority.current(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()), actor))));
+                submit(engine, world, "assembly-deferral-hot", new AmbientBodyConfirmed(actor, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody(),
+                        ActorBodyAuthority.current(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()), actor))));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 submit(engine, world, "assembly-deferral", new OperationAssemblyDeferred(operation.id(), deferral, OperationExecutionAuthority.assemblyCurrent(initial, operation))));
 

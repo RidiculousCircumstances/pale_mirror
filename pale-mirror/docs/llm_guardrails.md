@@ -26,7 +26,7 @@ report:
 
 | Risk | Typical scope | Minimum verification |
 | --- | --- | --- |
-| `docs` | Documentation, ledger, process text | `git diff --check`, `./gradlew guardrails` |
+| `docs` | Documentation, ledger, process text | `git diff --check`; relevant contract validation only when that contract changes |
 | `small-code` | Isolated pure-domain helper or narrow command behavior | Focused tests, `./gradlew guardrails check` |
 | `critical-code` | SavedData, domain state, simulation, scenarios, materialization, observation, adapters, migrations, lifecycle | Focused tests plus `./gradlew guardrails check :pale-mirror-neoforge:runGameTestServer :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar` |
 
@@ -47,6 +47,12 @@ report the limitation and preserve the corresponding harness work as open.
 `check` depends on the same guardrails. The limit is a ratchet, not proof that
 a class is cohesive: split by responsibility before it becomes a coordinator
 for simulation, narrative, persistence, and Minecraft side effects.
+
+Visual/model-generation experiments run under `verifyVisualTooling` when their
+own code changes; they are not dependencies of simulation or documentation gates.
+These profiles apply at the relevant integration milestone, not to every edit
+or private WIP checkpoint. Canonical governance's execution protocol owns that
+applicability. A checkpoint records known incomplete behavior, not acceptance.
 
 ## Guardrail tiers
 

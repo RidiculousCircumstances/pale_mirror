@@ -578,7 +578,8 @@ class HiveMobilizationProcessTest {
 
         CommandPlan plan = FrontierWorldRuntimeDefinition.planCommand(hot, new FrontierCommand(1, commandId,
                 hot.bootstrap().worldId(), Revision.ZERO, new SimInstant(700L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
-                CauseChain.root(commandId), new HiveMobilizationAssemblyAdvanced(preFinal.mobilization().id(), preFinal.advancingId(), member.cursor(), HiveAssemblyExecutionAuthority.current(hot, preFinal.mobilization().id(), preFinal.advancingId()))));
+                CauseChain.root(commandId), new HiveMobilizationAssemblyAdvanced(preFinal.mobilization().id(), preFinal.advancingId(), member.cursor(), HiveAssemblyExecutionAuthority.current(hot,
+                        preFinal.mobilization().id(), preFinal.advancingId()))));
 
         List<ProposedEvent> events = assertInstanceOf(CommandPlan.Accepted.class, plan).events();
         assertInstanceOf(HiveMobilizationAssemblyAdvanced.class, events.getFirst().payload());

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 CATALOG = Path(__file__).with_name("verification_catalog.json")
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 MAX_PATHS = 256
 MAX_PATH_CHARS = 512
 
@@ -70,9 +71,9 @@ def _matches(path: str, pattern: str) -> bool:
     return fnmatch.fnmatchcase(path, pattern) or fnmatch.fnmatchcase(path, pattern.replace("/**/", "/"))
 
 
-def _focused_java_test(path: str) -> dict[str, str] | None:
+def _focused_java_test(path: str, root: Path) -> dict[str, str] | None:
     match = re.fullmatch(r"(pale-mirror-[^/]+)/src/test/java/(.+)\.java", path)
-    if not match:
+    if not match or not (root / path).is_file():
         return None
     module, qualified = match.groups()
     class_name = qualified.replace("/", ".")
@@ -87,22 +88,23 @@ def _focused_java_test(path: str) -> dict[str, str] | None:
     }
 
 
-def select(paths: Iterable[str], *, milestone: bool = False, catalog_path: Path = CATALOG) -> dict[str, Any]:
+def select(paths: Iterable[str], *, milestone: bool = False, catalog_path: Path = CATALOG,
+           root: Path = REPOSITORY_ROOT) -> dict[str, Any]:
     changed = normalize_paths(paths)
     catalog = load_catalog(catalog_path)
     selected: dict[str, set[str]] = {}
-    forced: set[str] = set()
     generated: list[dict[str, Any]] = []
     unmapped: list[str] = []
 
     for path in changed:
         matched = False
-        direct = _focused_java_test(path)
+        direct = _focused_java_test(path, root)
         if direct:
             generated.append(direct)
             matched = True
         for rule in catalog["path_rules"]:
-            if _matches(path, rule["pattern"]):
+            if _matches(path, rule["pattern"]) and not any(
+                    _matches(path, exclusion) for exclusion in rule.get("exclude", [])):
                 matched = True
                 for family in rule.get("families", []):
                     selected.setdefault(family, set()).add(path)
@@ -111,13 +113,6 @@ def select(paths: Iterable[str], *, milestone: bool = False, catalog_path: Path 
 
     if unmapped:
         selected.setdefault("critical-gate", set()).update(f"unmapped:{path}" for path in unmapped)
-        forced.add("critical-gate")
-
-    lowered = " ".join(changed).lower()
-    for rule in catalog.get("escalation_rules", []):
-        required = rule.get("requires_matching_path_family")
-        if required in selected and any(keyword in lowered for keyword in rule.get("keywords", [])):
-            selected.setdefault(rule["family"], set()).add("semantic keyword match")
 
     if milestone:
         for family in catalog.get("milestone_families", []):
@@ -128,7 +123,7 @@ def select(paths: Iterable[str], *, milestone: bool = False, catalog_path: Path 
     for name, reasons in selected.items():
         definition = dict(catalog["families"][name])
         definition.update({"id": name, "reason": sorted(reasons), "generated": False})
-        if definition.get("manual_selection") or (definition.get("milestone_only") and not milestone and name not in forced):
+        if definition.get("manual_selection") or (definition.get("milestone_only") and not milestone):
             deferred.append(definition)
         else:
             steps.append(definition)
@@ -153,13 +148,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("paths", nargs="+", help="repository-relative changed paths")
     parser.add_argument("--milestone", action="store_true", help="include the one complete local milestone gate")
     parser.add_argument("--catalog", type=Path, default=CATALOG)
+    parser.add_argument("--root", type=Path, default=REPOSITORY_ROOT,
+                        help="implementation root used to exclude removed test classes")
     return parser
 
 
 def main() -> int:
     arguments = build_parser().parse_args()
     try:
-        print(json.dumps(select(arguments.paths, milestone=arguments.milestone, catalog_path=arguments.catalog), indent=2, sort_keys=True))
+        print(json.dumps(select(arguments.paths, milestone=arguments.milestone,
+                              catalog_path=arguments.catalog, root=arguments.root), indent=2, sort_keys=True))
     except SelectionError as exc:
         print(json.dumps({"error": str(exc), "state": "invalid"}, sort_keys=True))
         return 2

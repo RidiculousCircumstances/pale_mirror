@@ -87,7 +87,8 @@ class ResidentMealKnownNavigationTest {
                 new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:meal-waiting"), 1)),
                 new SubjectId("claim:meal-waiting-" + resident.value().replace(':', '-')), Optional.empty(),
                 ResidentMeal.Phase.MOVE, 24_000L, Optional.empty(),
-                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:meal-waiting-" + resident.value().replace(':', '-')), 1L));
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL,
+                        new SubjectId("claim:meal-waiting-" + resident.value().replace(':', '-')), 1L));
     }
 
     @Test void admittedShortEntranceStillRespectsAChangedPhysicalServiceCell() {

@@ -414,7 +414,9 @@ def serve_mcp(context: RuntimeContext) -> int:
                 elif name == "pm_runtime_why":
                     result = context.why(arguments.get("subject", ""), limit=arguments.get("limit", 20))
                 elif name == "pm_verify_change":
-                    result = select_verification(arguments.get("paths", []), milestone=bool(arguments.get("milestone", False)))
+                    result = select_verification(arguments.get("paths", []),
+                                                 milestone=bool(arguments.get("milestone", False)),
+                                                 root=context.implementation)
                 else:
                     raise RuntimeContextError("unknown tool")
                 content = json.dumps(result, sort_keys=True)

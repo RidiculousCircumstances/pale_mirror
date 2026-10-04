@@ -31,7 +31,6 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.ArrayDeque;
 import java.util.Map;
@@ -46,7 +45,6 @@ import static io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3Pi
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID, value = Dist.CLIENT)
 public final class FrontierV3TestPilotClient {
     private static final String SCENARIO_PROPERTY = "pale_mirror.frontier_v3.test_pilot.scenario";
-    private static final String CAPTURE_CONTROL_PROPERTY = "pale_mirror.frontier_v3.test_pilot.capture_control_directory";
     private static final String SERVER_PROPERTY = "pale_mirror.frontier_v3.test_pilot.server";
     private static final long CAPTURE_SETTLE_TICKS = 10L;
     private static JsonArray actions, setup, frames;
@@ -85,7 +83,7 @@ public final class FrontierV3TestPilotClient {
     private static float attackedEntityInitialHealth = Float.NaN;
     private static long lastEntityAttackTick = Long.MIN_VALUE;
     private static Vec3 lastAttackedEntityPosition;
-    private static CaptureBarrier captureBarrier;
+    private static FrontierV3PilotCaptureBarrier captureBarrier;
     private static FrontierV3HarvestSemanticOracle harvestSemanticOracle;
     /** Local-only focus retained while the asynchronous X11 frame handshake is in flight. */
     private static Vec3 captureFocus;
@@ -926,7 +924,7 @@ public final class FrontierV3TestPilotClient {
             String presentation = frame.has("presentation") ? frame.get("presentation").getAsString() : "clean";
             if (presentation.equals("clean")) FrontierV3TestPilotPresentation.prepareCleanCapture(Minecraft.getInstance());
             else FrontierV3TestPilotPresentation.preparePlayerCapture(Minecraft.getInstance());
-            captureBarrier = new CaptureBarrier(completedAction, frame.get("name").getAsString(), presentation,
+            captureBarrier = new FrontierV3PilotCaptureBarrier(completedAction, frame.get("name").getAsString(), presentation,
                     Minecraft.getInstance().level.getGameTime() + CAPTURE_SETTLE_TICKS, false);
         }
         else if (!runningSetup && index >= actions.size()) {
@@ -947,34 +945,16 @@ public final class FrontierV3TestPilotClient {
             JsonObject frame = element.getAsJsonObject(); if (frame.get("after").getAsInt() == completedAction) return frame;
         } return null;
     }
-    /** A filesystem handshake prevents the next chat/command action racing the X11 capture. */
+    /** The camera stays fixed while the independent X11 capture handshake is pending. */
     private static void advanceCaptureBarrier(Minecraft minecraft) {
-        CaptureBarrier barrier = captureBarrier;
         if (captureFocus != null) look(minecraft, captureFocus);
-        if (minecraft.level.getGameTime() < barrier.readyAtTick()) return;
-        Path control = captureControlDirectory();
-        if (control == null) throw new IllegalStateException("visual frame declared without capture-control directory");
-        Path ready = control.resolve("frame-" + barrier.after() + ".ready");
-        Path captured = control.resolve("frame-" + barrier.after() + ".captured");
-        try {
-            if (!barrier.announced()) {
-                Files.createDirectories(control);
-                Files.writeString(ready, barrier.name() + "\n", StandardCharsets.UTF_8);
-                captureBarrier = new CaptureBarrier(barrier.after(), barrier.name(), barrier.presentation(), barrier.readyAtTick(), true);
-                PaleMirrorMod.LOGGER.info("PMV3_PILOT frame_ready after={} name={} presentation={}", barrier.after(), barrier.name(), barrier.presentation());
-                return;
-            }
-            if (Files.isRegularFile(captured)) {
-                Files.deleteIfExists(ready);
-                captureBarrier = null; captureFocus = null;
-                PaleMirrorMod.LOGGER.info("PMV3_PILOT frame_captured after={} name={}", barrier.after(), barrier.name());
-                if (index >= actions.size()) FrontierV3TestPilotCompletion.complete(actions.size());
-            }
-        } catch (IOException failure) {
-            throw new IllegalStateException("visual frame handshake failed for " + barrier.name(), failure);
+        var next = captureBarrier.advance(minecraft.level.getGameTime());
+        captureBarrier = next.orElse(null);
+        if (next.isEmpty()) {
+            captureFocus = null;
+            if (index >= actions.size()) FrontierV3TestPilotCompletion.complete(actions.size());
         }
     }
-    private static Path captureControlDirectory() { String configured = System.getProperty(CAPTURE_CONTROL_PROPERTY, ""); return configured.isBlank() ? null : Path.of(configured); }
     private static void reset() {
         Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false); FrontierV3TestPilotPresentation.reset(minecraft);
         actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
@@ -998,4 +978,4 @@ public final class FrontierV3TestPilotClient {
     }
     /** Client-only state; it has no authority to select a worker or mutate canonical work. */
     record DiagnosticIdentity(String view, String id) { } record ObservedDiagnostic(long tick, long receiptSequence, JsonObject value) { }
-    private record CaptureBarrier(int after, String name, String presentation, long readyAtTick, boolean announced) { } }
+}
