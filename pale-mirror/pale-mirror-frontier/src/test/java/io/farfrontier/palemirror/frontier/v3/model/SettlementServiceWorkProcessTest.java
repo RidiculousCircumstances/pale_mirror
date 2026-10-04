@@ -57,6 +57,10 @@ class SettlementServiceWorkProcessTest {
         assertEquals(HumanAssignmentKind.SETTLEMENT_SERVICE, HumanAssignmentProjection.compile(admitted).assignment(work.workerId()).kind());
         assertEquals(work.inputIssueIntentId(), admitted.physicalIntents().get(work.inputIssueIntentId()).id());
         assertEquals(work.endpointIntentId(), admitted.physicalIntents().get(work.endpointIntentId()).id());
+        FencedRecoveryPhysicalIntentSupport.requirePreparedExecutionAuthority(admitted.fencedRecovery(),
+                started.inputIssueIntent(), FencedRecoveryAsset.EFFECT);
+        FencedRecoveryPhysicalIntentSupport.requirePreparedExecutionAuthority(admitted.fencedRecovery(),
+                started.endpointIntent(), FencedRecoveryAsset.EFFECT);
         SettlementServiceWorkStarted decoded = assertInstanceOf(SettlementServiceWorkStarted.class,
                 FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         assertEquals(started, decoded);
@@ -325,9 +329,7 @@ class SettlementServiceWorkProcessTest {
     void pendingInputDefersDuringDepartureButAppliedReceiptKeepsItsExactResourceOwner() {
         var input = readyInput(219L); var work = input.work();
         var intent = input.state().physicalIntents().get(work.inputIssueIntentId());
-        var prepared = input.state().withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
-                FencedRecoveryPhysicalIntentSupport.prepared(input.state().fencedRecovery(), intent, FencedRecoveryAsset.EFFECT)));
-        var running = transition(prepared, work.settlementId(), intent,
+        var running = transition(input.state(), work.settlementId(), intent,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
         var path = work.workTraversal().linearCorridorSurfaces();
         assertTrue(path.size() > 1, "fixture must depart the input station");
@@ -386,6 +388,87 @@ class SettlementServiceWorkProcessTest {
         assertEquals(confirmed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(confirmed)));
         assertThrows(IllegalArgumentException.class, () -> transition(confirmed, work.settlementId(), intent,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
+    }
+
+    @Test
+    void serviceDeathWithoutSceneRetiresItsExactExecutionAndKeepsResourceSettlement() {
+        var input = readyInput(220L); var work = input.work();
+        var state = input.state().withChanges(FrontierWorldStateUpdate.begin().sceneLeases(Map.of()));
+        var intent = state.physicalIntents().get(work.inputIssueIntentId());
+        state = transition(state, work.settlementId(), intent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
+        var location = state.actorLocations().get(work.workerId());
+        var death = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied(
+                ActorBodyAuthority.current(state, work.workerId()), location.body(), location.condition().health(),
+                Optional.of(location.body()), Optional.of(SettlementServiceExecutionAuthority.current(state, work)),
+                "test:service-death-without-scene");
+        var dead = ActorBodyAuthority.died(state, death, FrontierActorDeathConsequences.INSTANCE, 1_004L);
+        assertEquals(SettlementServiceWorkPhase.BLOCKED, dead.serviceWorks().get(work.id()).phase());
+        assertTrue(dead.actorExecutions().actors().get(work.workerId()).current().isEmpty());
+        var receipt = new SettlementServiceInputIssueObservation(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-death-no-scene"),
+                intent.id(), work.id(), work.workerId(), work.inputItemId(), work.inputSource());
+        var settled = transition(dead, work.settlementId(), dead.physicalIntents().get(intent.id()),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        assertEquals(dead.actorLocations(), settled.actorLocations());
+        assertEquals(dead.actorExecutions(), settled.actorExecutions());
+        assertEquals(dead.serviceWorks(), settled.serviceWorks());
+        assertEquals(new InventoryCustody.Actor(work.workerId()), settled.inventory().items().get(work.inputItemId()).custody());
+        assertEquals(settled, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(settled)));
+    }
+
+    @Test
+    void alreadyAppliedEndpointSettlesAfterDeathWithoutSceneOrResurrectingWork() {
+        var ready = readyEndpoint(221L); var work = ready.work();
+        var running = transition(ready.state(), work.settlementId(), ready.intent(),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
+        var noScene = running.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(Map.of()));
+        var location = noScene.actorLocations().get(work.workerId());
+        var dead = ActorBodyAuthority.died(noScene, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied(
+                ActorBodyAuthority.current(noScene, work.workerId()), location.body(), location.condition().health(),
+                Optional.of(location.body()), Optional.of(SettlementServiceExecutionAuthority.current(noScene, work)),
+                "test:service-endpoint-death"), FrontierActorDeathConsequences.INSTANCE, 1_004L);
+        var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(dead));
+        var intent = restored.physicalIntents().get(work.endpointIntentId());
+        assertEquals(SettlementServiceDecontaminationStateSupport.ExecutionEligibility.READY,
+                SettlementServiceDecontaminationStateSupport.executionEligibility(restored, intent));
+        var prior = restored.infection().get(ready.cell()).value().raw();
+        var receipt = new DecontaminationObservation(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-endpoint-after-death"),
+                intent.id(), work.inputItemId(), ready.cell(), prior,
+                Math.max(0L, prior - restored.bootstrap().ruleset().rates().decontaminationReduction().raw()));
+        var settled = transition(restored, work.settlementId(), intent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        assertEquals(restored.serviceWorks(), settled.serviceWorks());
+        assertEquals(restored.actorExecutions(), settled.actorExecutions());
+        assertEquals(restored.actorLocations(), settled.actorLocations());
+        assertFalse(settled.inventory().items().containsKey(work.inputItemId()));
+        assertEquals(receipt.remainingRaw(), settled.infection().get(ready.cell()).value().raw());
+        assertEquals(settled, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(settled)));
+        assertThrows(IllegalArgumentException.class, () -> transition(settled, work.settlementId(), intent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
+    }
+
+    @Test
+    void abandoningUnperformedInputNeedsTheRetiredDeadOwnerNotAnActiveWorker() {
+        var input = readyInput(222L); var work = input.work();
+        var intent = input.state().physicalIntents().get(work.inputIssueIntentId());
+        var running = transition(input.state(), work.settlementId(), intent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> transition(running, work.settlementId(), intent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFLICTED, Optional.empty()));
+        var location = running.actorLocations().get(work.workerId());
+        var dead = ActorBodyAuthority.died(running, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied(
+                ActorBodyAuthority.current(running, work.workerId()), location.body(), location.condition().health(),
+                Optional.of(location.body()), Optional.of(SettlementServiceExecutionAuthority.current(running, work)),
+                "test:service-unapplied-death"), FrontierActorDeathConsequences.INSTANCE, 1_004L);
+        var abandoned = transition(dead, work.settlementId(), dead.physicalIntents().get(intent.id()),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFLICTED, Optional.empty());
+        assertEquals(dead.inventory(), abandoned.inventory());
+        assertEquals(dead.actorExecutions(), abandoned.actorExecutions());
+        assertEquals(dead.serviceWorks(), abandoned.serviceWorks());
+        assertFalse(abandoned.physicalIntents().get(intent.id()).postconditionObservationId().isPresent());
+        assertEquals(abandoned, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(abandoned)));
     }
 
     @Test
@@ -458,8 +541,6 @@ class SettlementServiceWorkProcessTest {
         Map<SubjectId, SettlementServiceWork> effectReadyWorks = new LinkedHashMap<>(ready.serviceWorks()); effectReadyWorks.put(effectReady.id(), effectReady);
         ready = ready.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(effectReadyWorks));
         var endpoint = ready.physicalIntents().get(effectReady.endpointIntentId());
-        ready = ready.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
-                FencedRecoveryPhysicalIntentSupport.prepared(ready.fencedRecovery(), endpoint, FencedRecoveryAsset.EFFECT)));
         return new ReadyEndpoint(ready, effectReady, endpoint, item, cell);
     }
 

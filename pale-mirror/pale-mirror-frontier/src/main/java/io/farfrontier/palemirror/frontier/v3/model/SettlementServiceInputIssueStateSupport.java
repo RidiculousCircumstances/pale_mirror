@@ -142,6 +142,17 @@ public final class SettlementServiceInputIssueStateSupport {
         throw new IllegalArgumentException("service input issue requires exact hand-off evidence");
     }
 
+    /** Only the retired owner's inspector can abandon a positively witnessed unperformed take. */
+    public static void validateFatalityAbandonment(FrontierWorldState state, PhysicalIntent intent) {
+        validateRetainedInput(state, intent);
+        var work = state.serviceWorks().get(intent.causeSubjectId());
+        if (work.phase() != SettlementServiceWorkPhase.BLOCKED
+                || state.actorLocations().get(work.workerId()).condition().status() != ActorLifeStatus.DEAD
+                || state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.SETTLEMENT_SERVICE)
+                    .containsKey(work.workerId()))
+            throw new IllegalArgumentException("service take abandonment needs its exact retired dead owner");
+    }
+
     static void validateReceiptForRecovery(PhysicalIntent intent, SettlementServiceInputIssueObservation receipt) {
         if (!owns(intent) || !intent.id().equals(receipt.intentId())
                 || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceInputIssue(receipt.workId(), receipt.workerId(), receipt.itemId()))) {

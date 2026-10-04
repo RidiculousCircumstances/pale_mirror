@@ -226,6 +226,33 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         }
     }
 
+    /** Capture before loot; settlement never retries a take or requires a surviving worker/scene. */
+    static FrontierV3ActorDeathResourceComposition.AfterFatality prepareDeathObservation(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+            SettlementServiceWork work, net.minecraft.world.entity.Mob body) {
+        var intent = state.physicalIntents().get(work.inputIssueIntentId());
+        if (intent.status() == PhysicalIntentStatus.PREPARED) return () -> {
+            // Durable PREPARED never authorized mutation. No corpse/chest absence is needed
+            // to retire an unbegun reservation after its exact activity has died.
+            if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFLICTED, Optional.empty(), "death-unbegun"))
+                throw new IllegalStateException("unbegun service input reservation could not be retired");
+        };
+        if (intent.status() != PhysicalIntentStatus.RUNNING && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+            return () -> { };
+        var target = target(state, intent);
+        if (target == null || !level.hasChunkAt(target.chestPosition())) return () -> { };
+        var chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
+        if (chest == null) return () -> { };
+        boolean source = sourceMatches(chest, target);
+        boolean hand = FrontierV3CargoHandoffExecutor.exactMatch(body.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
+        if (!source && hand) return () -> confirm(runtime, intent, target);
+        if (source && body.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return () -> {
+            if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFLICTED, Optional.empty(), "death-unapplied"))
+                throw new IllegalStateException("positively unperformed service take could not be abandoned");
+        };
+        return () -> { }; // Contradictory source/hand evidence retains its explicit UNKNOWN obligation.
+    }
+
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, String phase) {
         transition(runtime, id, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), phase);
     }

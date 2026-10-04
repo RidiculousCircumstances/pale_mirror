@@ -62,6 +62,8 @@ public final class FrontierV3GameTestSlice {
             case "resource-site-cold" -> batchName.equals("pm-frontier-v3-resource-site-cold");
             case "resource-site-owned" -> batchName.equals("pm-frontier-v3-resource-site-owned");
             case "field-turns" -> batchName.equals("pm-frontier-v3-field-turns");
+            case "service-death" -> batchName.equals("pm-frontier-v3-service-death")
+                    || batchName.equals("pm-frontier-v3-settlement-service-input") || batchName.equals("pm-frontier-v3-equipment-death");
             case "physical-ownership-fences" -> batchName.equals("pm-frontier-v3-object-boards")
                     || batchName.equals("pm-frontier-v3-resource-harvest");
             case ADAPTER_MIRRORS -> batchName.equals("pm-frontier-v3-graybox")

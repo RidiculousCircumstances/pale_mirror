@@ -35,24 +35,56 @@ public final class SettlementServiceDecontaminationStateSupport {
     }
 
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
-        SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
-        boolean readyToExecute = work != null && work.phase() == SettlementServiceWorkPhase.EFFECT_READY
-                && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART;
-        boolean recoveringExactEffect = work != null && work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART
-                && intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART;
-        if (work == null || work.kind() != SettlementServiceWorkKind.DECONTAMINATION || !intent.id().equals(work.endpointIntentId())
-                || (!readyToExecute && !recoveringExactEffect) || !(work.target() instanceof SettlementServiceTarget.Infection target)
-                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceDecontamination(work.id(), work.workerId(), work.inputItemId()))) {
-            throw new IllegalArgumentException("service decontamination must bind one effect-ready or exact-recovery retained work");
+        if (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+            validateRetainedEffect(state, intent);
+            return;
         }
+        validateRetainedSubjects(state, intent);
+        SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+        if (intent.status() != PhysicalIntentStatus.PREPARED || work.phase() != SettlementServiceWorkPhase.EFFECT_READY)
+            throw new IllegalArgumentException("new decontamination needs its prepared effect-ready owner");
+        var execution = SettlementServiceExecutionAuthority.current(state, work);
+        ActorBodyAuthority.requireActuation(state, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                ActorBodyAuthority.current(state, work.workerId()), execution));
+        SceneLease lease = FrontierSettlementServiceWorkSceneSupport.requireHotLease(state, work, findHotLease(state, work));
+        if (!lease.memberBody(state.actorLocations(), work.workerId()).equals(work.workStation().standingBody()))
+            throw new IllegalArgumentException("service decontamination worker is not at its retained work station");
+    }
+
+    /** A started effect can settle from exact resource/target evidence without a scene or live actuator. */
+    public static void validateRetainedEffect(FrontierWorldState state, PhysicalIntent intent) {
+        validateRetainedSubjects(state, intent);
+        var work = state.serviceWorks().get(intent.causeSubjectId());
+        if ((intent.status() != PhysicalIntentStatus.RUNNING && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+                || (work.phase() != SettlementServiceWorkPhase.EFFECT_READY
+                    && work.phase() != SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART
+                    && work.phase() != SettlementServiceWorkPhase.BLOCKED))
+            throw new IllegalArgumentException("retained decontamination has no possibly applied exact effect");
+    }
+
+    public static void validateFatalityAbandonment(FrontierWorldState state, PhysicalIntent intent) {
+        var work = state.serviceWorks().get(intent.causeSubjectId());
+        if (!owns(state, intent) || work == null || work.kind() != SettlementServiceWorkKind.DECONTAMINATION
+                || !intent.id().equals(work.endpointIntentId())
+                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceDecontamination(
+                        work.id(), work.workerId(), work.inputItemId()))
+                || (intent.status() != PhysicalIntentStatus.RUNNING && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+                || work.phase() != SettlementServiceWorkPhase.BLOCKED
+                || state.actorLocations().get(work.workerId()).condition().status() != ActorLifeStatus.DEAD)
+            throw new IllegalArgumentException("service effect abandonment needs its exact retired dead owner");
+    }
+
+    private static void validateRetainedSubjects(FrontierWorldState state, PhysicalIntent intent) {
+        var work = state.serviceWorks().get(intent.causeSubjectId());
+        if (!owns(state, intent) || work == null || work.kind() != SettlementServiceWorkKind.DECONTAMINATION
+                || !intent.id().equals(work.endpointIntentId()) || !(work.target() instanceof SettlementServiceTarget.Infection target)
+                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceDecontamination(
+                        work.id(), work.workerId(), work.inputItemId())))
+            throw new IllegalArgumentException("service decontamination has foreign exact subjects");
         ExactItemStack item = state.inventory().items().get(work.inputItemId());
         if (item == null || !item.itemKind().equals(DecontaminationPolicy.REAGENT)
                 || !item.custody().equals(new InventoryCustody.Actor(work.workerId())) || !state.infection().containsKey(target.cell())) {
             throw new IllegalArgumentException("service decontamination lost its exact held reagent or infection target");
-        }
-        SceneLease lease = FrontierSettlementServiceWorkSceneSupport.requireHotLease(state, work, findHotLease(state, work));
-        if (!lease.memberBody(state.actorLocations(), work.workerId()).equals(work.workStation().standingBody())) {
-            throw new IllegalArgumentException("service decontamination worker is not at its retained work station");
         }
     }
 
@@ -68,9 +100,10 @@ public final class SettlementServiceDecontaminationStateSupport {
                 || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceDecontamination(work.id(), work.workerId(), work.inputItemId()))) {
             return ExecutionEligibility.INVALID;
         }
-        boolean ready = work.phase() == SettlementServiceWorkPhase.EFFECT_READY && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART;
-        boolean recovering = work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART
-                && intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART;
+        boolean ready = work.phase() == SettlementServiceWorkPhase.EFFECT_READY && intent.status() == PhysicalIntentStatus.PREPARED;
+        boolean recovering = (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+                && (work.phase() == SettlementServiceWorkPhase.EFFECT_READY || work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART
+                    || work.phase() == SettlementServiceWorkPhase.BLOCKED);
         if (!ready && !recovering) return ExecutionEligibility.DEFERRED;
         try {
             validateIntent(state, intent);
@@ -98,13 +131,17 @@ public final class SettlementServiceDecontaminationStateSupport {
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>(state.infection());
         if (remaining == 0L) infection.remove(cell); else infection.put(cell, new FixedRatio(new FixedScalar(remaining)));
         Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, SettlementServiceWork> works = new LinkedHashMap<>(state.serviceWorks());
-        works.put(work.id(), work.withPhase(SettlementServiceWorkPhase.COMPLETED, 0));
+        // A positive late effect settles resources/target, never revives an abandoned activity.
+        boolean retired = work.phase() == SettlementServiceWorkPhase.BLOCKED;
+        works.put(work.id(), retired ? work : work.withPhase(SettlementServiceWorkPhase.COMPLETED, 0));
         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
-        io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId leaseId = findHotLease(state, work);
-        leases.put(leaseId, leases.get(leaseId).withStatus(SceneLeaseStatus.DRAINING));
+        leases.replaceAll((id, lease) -> FrontierSceneBehaviors.isServiceWork(lease)
+                && FrontierSceneBehaviors.serviceWork(lease).workId().equals(work.id())
+                && (lease.status() == SceneLeaseStatus.HOT || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
+                ? lease.withStatus(SceneLeaseStatus.DRAINING) : lease);
         return state.withChanges(FrontierWorldStateUpdate.begin().infection(infection).inventory(state.inventory().consume(work.inputItemId(), 1))
                 .serviceWorks(works).physicalIntents(intents).physicalObservations(observations).sceneLeases(leases)
-                .actorExecutions(SettlementServiceExecutionAuthority.retired(state, work)));
+                .actorExecutions(retired ? state.actorExecutions() : SettlementServiceExecutionAuthority.retired(state, work)));
     }
 
     public static FrontierWorldState unknown(FrontierWorldState state, PhysicalIntent intent, Map<PhysicalIntentId, PhysicalIntent> intents) {
@@ -114,7 +151,7 @@ public final class SettlementServiceDecontaminationStateSupport {
         }
         intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_SERVICE_DECONTAMINATION.stamp(intent)));
         Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, SettlementServiceWork> works = new LinkedHashMap<>(state.serviceWorks());
-        works.put(work.id(), work.withPhase(SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART, 0));
+        if (work.phase().active()) works.put(work.id(), work.withPhase(SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART, 0));
         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         leases.replaceAll((id, lease) -> FrontierSceneBehaviors.isServiceWork(lease)
                 && FrontierSceneBehaviors.serviceWork(lease).workId().equals(work.id()) && lease.status() == SceneLeaseStatus.HOT

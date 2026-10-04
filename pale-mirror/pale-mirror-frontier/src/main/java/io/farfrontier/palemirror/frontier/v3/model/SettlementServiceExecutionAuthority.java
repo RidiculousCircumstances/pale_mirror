@@ -53,6 +53,29 @@ public final class SettlementServiceExecutionAuthority {
         @Override public ActorActivityKind kind() { return ActorActivityKind.SETTLEMENT_SERVICE; }
         @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
         @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return SettlementServiceJourneyKnowledge::acknowledge; }
+        @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
+            return Optional.of((state, execution, tick) -> {
+                var work = require(state.serviceWorks(), execution);
+                var works = new java.util.LinkedHashMap<>(state.serviceWorks());
+                works.put(work.id(), work.withPhase(SettlementServiceWorkPhase.BLOCKED, 0));
+                var intents = new java.util.LinkedHashMap<>(state.physicalIntents());
+                for (var intentId : java.util.List.of(work.inputIssueIntentId(), work.endpointIntentId())) {
+                    var intent = intents.get(intentId);
+                    if (intent == null) throw new IllegalArgumentException("service death lost its exact physical obligation");
+                    if (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING) {
+                        var producer = switch (intent.lifecycleOwner()) {
+                            case SETTLEMENT_SERVICE_WORK -> PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_SERVICE_WORK;
+                            case SETTLEMENT_SERVICE_DECONTAMINATION -> PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_SERVICE_DECONTAMINATION;
+                            default -> throw new IllegalArgumentException("service death has a foreign physical owner");
+                        };
+                        intents.put(intent.id(), intent.withRecoveryUnknown(producer.stamp(intent)));
+                    }
+                }
+                return new ActorActivityDeath.Acknowledgement(state, execution,
+                        FrontierWorldStateUpdate.begin().serviceWorks(works).physicalIntents(intents),
+                        ActorActivityDeath.Disposition.RETIRE_EXACT_EXECUTION);
+            });
+        }
         @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
         @Override public void validateReference(FrontierWorldState state, ActorExecutionId id) { require(state.serviceWorks(), id); }
         @Override public ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId id) {

@@ -71,7 +71,12 @@ final class FrontierV3SettlementServiceDecontaminationExecutor {
         if (!beforeMatches(level, target) || !FrontierV3CargoHandoffExecutor.exactMatch(target.worker().getItemBySlot(EquipmentSlot.MAINHAND), target.material())) {
             unknown(runtime, intent.id(), "precondition-conflict"); return;
         }
+        var actuation = FrontierV3ActorActuation.capture(state, target.worker(),
+                SettlementServiceExecutionAuthority.current(state, target.work()),
+                () -> runtime.decodedState().filter(now -> target.work().equals(now.serviceWorks().get(target.work().id()))));
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, target.worker()) || !actuation.current(target.worker())) return;
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
+        if (!actuation.current(target.worker())) return;
         if (!applyOne(level, target)) { unknown(runtime, intent.id(), "effect-conflict"); return; }
         confirm(runtime, intent, target);
     }
@@ -83,15 +88,14 @@ final class FrontierV3SettlementServiceDecontaminationExecutor {
         ExactItemStack material = state.inventory().items().get(work.inputItemId());
         InfectionCell cell = ((SettlementServiceTarget.Infection) work.target()).cell();
         FrontierV3InfectionOverlayLedger.Claim claim = FrontierV3InfectionOverlayLedger.get(level).claim(cell);
-        if (material == null || claim == null || !claim.active()) return null;
-        SceneLease lease = state.sceneLeases().values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT)
-                .filter(FrontierSceneBehaviors::isServiceWork).filter(value -> FrontierSceneBehaviors.serviceWork(value).workId().equals(work.id()))
-                .findFirst().orElse(null);
-        if (lease == null) return null;
-        SceneMember member = lease.members().stream().filter(value -> value.actorId().equals(work.workerId())).findFirst().orElse(null);
-        if (member == null || !(level.getEntity(member.entityId()) instanceof Villager worker) || !worker.isAlive()
-                || !FrontierV3SceneExecutor.owned(worker, state, lease, member)
-                || !worker.blockPosition().equals(new BlockPos(work.workStation().x(), work.workStation().y() + 1, work.workStation().z()))) return null;
+        if (material == null || claim == null || (!claim.active() && !claim.cleared())) return null;
+        if (!(level.getEntity(SceneLease.deterministicEntityId(state.bootstrap().worldId(), work.workerId())) instanceof Villager worker)) return null;
+        boolean retained = intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART;
+        if (retained) {
+            if (!FrontierV3ActorBodyController.recognizesRecordedBody(level, state, worker)
+                    && !FrontierV3ActorBodyController.recognizesRetiredDeadBody(level, state, worker)) return null;
+        } else if (!worker.isAlive() || !FrontierV3ActorBodyController.recognizesRecordedBody(level, state, worker)
+                || !FrontierV3SemanticMovement.arrived(level, worker, work.workStation())) return null;
         long prior = state.infection().get(cell).value().raw(); long remaining = Math.max(0L, prior - state.bootstrap().ruleset().rates().decontaminationReduction().raw());
         return new Target(work, cell, claim.blockPositions(), material, worker, prior, remaining, InfectionOverlayStage.fromRaw(prior),
                 remaining == 0L ? Optional.empty() : Optional.of(InfectionOverlayStage.fromRaw(remaining)));
@@ -118,6 +122,29 @@ final class FrontierV3SettlementServiceDecontaminationExecutor {
 
     private static void inspectRecovered(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target) {
         if (consumed(target.worker().getItemBySlot(EquipmentSlot.MAINHAND), target.material()) && afterMatches(level, target)) confirm(runtime, intent, target);
+    }
+
+    /** Positive pre-loot endpoint evidence; never execute/replay an effect on a dying worker. */
+    static FrontierV3ActorDeathResourceComposition.AfterFatality prepareDeathObservation(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SettlementServiceWork work) {
+        var intent = state.physicalIntents().get(work.endpointIntentId());
+        if (!SettlementServiceDecontaminationStateSupport.owns(state, intent)) return () -> { };
+        if (intent.status() == PhysicalIntentStatus.PREPARED) return () -> {
+            if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFLICTED, Optional.empty(), "death-unbegun"))
+                throw new IllegalStateException("unbegun service endpoint reservation could not be retired");
+        };
+        if (intent.status() != PhysicalIntentStatus.RUNNING && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+            return () -> { };
+        var target = target(level, state, intent);
+        if (target == null || target.markers().stream().anyMatch(position -> !level.hasChunkAt(position))) return () -> { };
+        if (consumed(target.worker().getMainHandItem(), target.material()) && afterMatches(level, target))
+            return () -> confirm(runtime, intent, target);
+        if (FrontierV3CargoHandoffExecutor.exactMatch(target.worker().getMainHandItem(), target.material()) && beforeMatches(level, target))
+            return () -> {
+                if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFLICTED, Optional.empty(), "death-unapplied"))
+                    throw new IllegalStateException("positively unperformed service endpoint could not be abandoned");
+            };
+        return () -> { };
     }
 
     private static boolean afterMatches(ServerLevel level, Target target) {

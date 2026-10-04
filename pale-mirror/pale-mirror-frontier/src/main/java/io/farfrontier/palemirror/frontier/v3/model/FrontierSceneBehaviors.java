@@ -812,24 +812,10 @@ public final class FrontierSceneBehaviors {
         }
         @Override public SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
             SettlementServiceWork work = FrontierSettlementServiceWorkSceneSupport.require(state, cause(lease));
-            if (!work.workerId().equals(actorId) || !work.phase().active()) return SceneDeathOutcome.unchanged(state);
-            Map<SubjectId, SettlementServiceWork> works = new LinkedHashMap<>(state.serviceWorks());
-            works.put(work.id(), work.withPhase(SettlementServiceWorkPhase.BLOCKED, 0));
-            Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
-            for (io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intentId : java.util.List.of(work.inputIssueIntentId(), work.endpointIntentId())) {
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent = intents.get(intentId);
-                if (intent != null && (intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
-                        || intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)) {
-                    PhysicalIntentRecoveryDiagnosticProducer producer = switch (intent.lifecycleOwner()) {
-                        case SETTLEMENT_SERVICE_WORK -> PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_SERVICE_WORK;
-                        case SETTLEMENT_SERVICE_DECONTAMINATION -> PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_SERVICE_DECONTAMINATION;
-                        default -> throw new IllegalArgumentException("service-work scene has a foreign lifecycle owner");
-                    };
-                    intents.put(intent.id(), intent.withRecoveryUnknown(producer.stamp(intent)));
-                }
-            }
-            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), state.strategicPlans(), Map.copyOf(intents), Map.copyOf(works),
-                    SettlementServiceExecutionAuthority.retired(state, work));
+            if (!work.workerId().equals(actorId)) throw new IllegalArgumentException("service death scope has a foreign worker");
+            // Common scope quiescence does not own work/resource retirement. The registered
+            // activity acknowledges death even without a retained presentation scope.
+            return SceneDeathOutcome.unchanged(state);
         }
     }
 

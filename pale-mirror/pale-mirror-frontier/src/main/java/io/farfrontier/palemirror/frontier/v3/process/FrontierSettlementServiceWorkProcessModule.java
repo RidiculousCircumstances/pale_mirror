@@ -63,6 +63,8 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                         }
                         if (owner == PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION
                                 && (retained.phase() != SettlementServiceWorkPhase.COMPLETED
+                                    && !(retained.phase() == SettlementServiceWorkPhase.BLOCKED
+                                        && after.actorLocations().get(work.workerId()).condition().status() == ActorLifeStatus.DEAD)
                                 || after.inventory().items().containsKey(work.inputItemId()))) {
                             throw new IllegalArgumentException("service retirement account did not prove its exact endpoint outcome");
                         }
@@ -118,6 +120,8 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                                                                      PhysicalIntentTransition transition) {
         SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
         if (work == null) return FrontierWorldCommandPlanner.rejected("service decontamination has no exact retained work");
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFLICTED)
+            SettlementServiceDecontaminationStateSupport.validateFatalityAbandonment(state, intent);
         if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING
                 || transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) {
             SettlementServiceDecontaminationStateSupport.validateIntent(state, intent);
@@ -148,13 +152,18 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                                                                               PhysicalIntentTransition transition) {
         SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
         if (work == null || !subject.equals(work.settlementId())) throw new IllegalArgumentException("service decontamination transition lacks its retained settlement owner");
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFLICTED)
+            SettlementServiceDecontaminationStateSupport.validateFatalityAbandonment(state, intent);
         if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING
                 || transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) {
             SettlementServiceDecontaminationStateSupport.validateIntent(state, intent);
         }
         return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
                 (currentState, current, evidence, intents) -> SettlementServiceDecontaminationStateSupport.complete(currentState, current, evidence, new java.util.LinkedHashMap<>(intents)),
-                (currentState, current, intents) -> SettlementServiceDecontaminationStateSupport.unknown(currentState, current, new java.util.LinkedHashMap<>(intents)));
+                (currentState, current, intents) -> SettlementServiceDecontaminationStateSupport.unknown(currentState, current, new java.util.LinkedHashMap<>(intents)),
+                transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFLICTED
+                        ? PhysicalIntentTransitionStorage.RecoveryEdges.INSPECT_AND_ABANDON
+                        : PhysicalIntentTransitionStorage.RecoveryEdges.CONFIRM_ONLY);
     }
 
     private static CommandPlan planPhysicalTransition(FrontierWorldState state, FrontierCommand command,
@@ -164,6 +173,8 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
         if (work == null) return FrontierWorldCommandPlanner.rejected("service physical intent has no exact retained work");
         if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)
             SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+        else if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFLICTED)
+            SettlementServiceInputIssueStateSupport.validateFatalityAbandonment(state, intent);
         else SettlementServiceInputIssueStateSupport.validateRetainedInput(state, intent);
         return new CommandPlan.Accepted(List.of(new ProposedEvent(work.settlementId(), transition)));
     }
@@ -185,11 +196,16 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
         if (work == null || !subject.equals(work.settlementId())) throw new IllegalArgumentException("service work transition lacks its retained settlement owner");
         if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)
             SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+        else if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFLICTED)
+            SettlementServiceInputIssueStateSupport.validateFatalityAbandonment(state, intent);
         else SettlementServiceInputIssueStateSupport.validateRetainedInput(state, intent);
         return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
                 (currentState, current, evidence, intents) -> SettlementServiceInputIssueStateSupport.complete(currentState, current,
                         SettlementServiceInputIssueStateSupport.requireReceipt(evidence), new java.util.LinkedHashMap<>(intents)),
-                SettlementServiceInputIssueStateSupport::unknown);
+                SettlementServiceInputIssueStateSupport::unknown,
+                transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFLICTED
+                        ? PhysicalIntentTransitionStorage.RecoveryEdges.INSPECT_AND_ABANDON
+                        : PhysicalIntentTransitionStorage.RecoveryEdges.CONFIRM_ONLY);
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof SettlementServiceWorkSceneLeasePrepared prepared) {

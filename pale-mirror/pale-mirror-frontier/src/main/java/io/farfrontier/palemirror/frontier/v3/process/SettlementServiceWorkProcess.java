@@ -83,8 +83,11 @@ public final class SettlementServiceWorkProcess {
         LinkedHashMap<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
         intents.put(work.inputIssueIntentId(), started.inputIssueIntent());
         intents.put(work.endpointIntentId(), started.endpointIntent());
+        var recovery = FencedRecoveryPhysicalIntentSupport.prepared(state.fencedRecovery(),
+                started.inputIssueIntent(), FencedRecoveryAsset.EFFECT);
+        recovery = FencedRecoveryPhysicalIntentSupport.prepared(recovery, started.endpointIntent(), FencedRecoveryAsset.EFFECT);
         return io.farfrontier.palemirror.frontier.v3.model.ActorExecutionComposition.LIFECYCLE.prepareVacant(state, started.execution())
-                .commit(state, FrontierWorldStateUpdate.begin().serviceWorks(works).physicalIntents(intents));
+                .commit(state, FrontierWorldStateUpdate.begin().serviceWorks(works).physicalIntents(intents).fencedRecovery(recovery));
     }
 
     /** Commits only a loaded observation of the next edge on the current retained service leg. */
