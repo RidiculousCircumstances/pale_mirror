@@ -165,9 +165,20 @@ nine service/two production checks plus five automatic architecture checks,
 guardrails and native/pilot/test compilation; final compile recovered from
 daemon2522515 passed7s. This is not native graphical acceptance. Unknown-geometry
 HOT re-wake and service input settlement after death remain explicit open edges.
-The full real consumer inventory, integrated UAE graphical acceptance and
-deployment remain OPEN; logistics HOT formation pose writes are the next
-source-proven adoption contradiction, not a new product feature.
+Checkpointd3884758 (schema246) closes logistics HOT formation pose writing.
+The native arrival captures exact full crew/body/scope and travel predecessor;
+common inspection alone installs HOT positions. Original formation/cargo goals
+remain stable through saved member approaches and scope re-admission. COLD
+explicit provider receipts exclude physical custody, fence physical history and
+check shared known geometry. Saved member approach does not credit route/cargo
+progress. Delivered cargo cannot start return before custody/scope/approach holds;
+terminal segment completion requires actual member formation. One codec retains
+snapshot/WAL current bytes. Run75564 PASS61s covers four transition/nine supply/
+five architecture checks, guardrails and native/pilot/test compilation. Existing
+codec/repair checks remain reusable; recovered71901 passed21s. These are modeled/
+adapter facts, not graphical acceptance. Real remaining consumer inventory,
+unknown-geometry wake, retired service input, integrated UAE and deployment
+remain OPEN under the same goal.
 
 1. **Assignment is not current execution.** A paused job retains its exact
    worker relation without permission to act. Execution holds a typed reference

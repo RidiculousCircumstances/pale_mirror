@@ -856,8 +856,21 @@ the exact departure origin as a visible non-advancing owner obligation, never
 reset work or teleport to the old cursor. COLD checks current execution/body and
 spatial predecessor, excludes physical custody and grants no processing credit
 for returning to a work station. HOT uses the common navigator under the retained
-approach's hard latitude. The equivalent service departure/re-admission adoption
-remains implementation debt; receipt-only adoption does not close it.
+approach's hard latitude. Service retains the same owner-local station approach
+and exact spatial predecessor; scope reopening preserves actual position even
+before physical unload. Service presentation may drain without completing work,
+and a resource receipt cannot install a pose or restart a retired execution.
+
+Logistics retains its original formation/cargo checkpoint and a bounded
+versioned approach per displaced member to the same unfinished formation goal.
+HOT progress captures the complete execution/body/scope cohort and exact travel
+predecessor and requires independent common inspection; it writes no pose.
+COLD explicitly declares segment or approach evidence with physical-history
+fences, excludes all physical custody/active scope and checks shared known
+geometry. An approach awards no route or cargo progress. A delivered cargo
+receipt is not permission to start a physically held crew's return journey.
+Unknown-geometry HOT re-wake and retired service-input settlement remain
+implementation obligations until their actual producer/consumer paths close.
 
 Process families consume one closed provider-neutral movement/result contract.
 They may own different routes, formations and station semantics, but may not

@@ -13,7 +13,7 @@ do not finish it. The user's current assignment and
 
 Implementation Git root: /home/rd/proj/pm-f06r3-facility-lane-recovery,
 branch feat/baker-carry-orders-20260926; Gradle root is its pale-mirror/.
-Source HEAD 6def4df8, fresh-world schema245. Canonical governance is this
+Source HEAD d3884758, fresh-world schema246. Canonical governance is this
 checkout, /home/rd/proj/pm-governance/pale-mirror. One active ledger only.
 Origin: git@github.com:RidiculousCircumstances/pale_mirror.git.
 
@@ -127,15 +127,35 @@ repaired missing prepared-effect fixture); input test passed in82967.
 Final compile result recovered from daemon2522515: SUCCESS7s at13:58:27+05,
 no confidence rerun. These are modeled/adapter facts, not graphical acceptance.
 
-No task-owned Gradle/client/server process remains. No packaging, push, live
-operation or new deployment occurred. Next actual source cut: logistics
-OperationActorStateSupport.start/advanceOperationTravel writes formation into
-ActorLocation even for HOT participants, before the scene branch. Trace its
-actual SupplyOperationProcess and native SceneExecutor callers, then replace
-HOT pose writes with fenced independently inspected participant observations.
-Retain COLD geometry/custody and cargo/process semantics.
-Still OPEN: HOT approach unavailable-knowledge re-wake; service possibly-applied
-input settlement after death/BLOCKED (must not revive the execution/job).
+Logistics checkpointd3884758 (schema246) removes start/advance HOT formation
+pose writes. Explicit HOT/COLD provider evidence retains full travel predecessor,
+exact cohort and body/scope or physical-history fences. Departure and scope
+reopening retain bounded member approaches to unchanged formation goals, never
+move cargo or credit route progress. COLD checks every known member step; scope/
+custody holds and saved approaches precede delivered-cargo return. Terminal
+segment completion needs actual member formation and completed approaches.
+Native consumers use common inspection/navigation; arrived plain caravans no
+longer fall through to ambient circling. Snapshot/WAL use one explicit codec.
+Run75564 PASS61s: four transition and nine supply checks plus five architecture
+checks, guardrails/native/pilot/test compile. Reused schema/rejoin/repair evidence;
+run71901 terminal output recovered from daemon2561478 SUCCESS21s (one exact HOT
+scope/receipt check plus architecture, guardrails/native/test compile).
+Both maps validate. Modeled/adapter evidence only, no graphical acceptance.
+
+Current uncommitted cut: service input possibly-applied receipt/unknown handling.
+Source contradiction: death retires work to BLOCKED, but retained input validation
+requires INPUT_ISSUE_PENDING and complete() unconditionally resumes work; input
+UNKNOWN previously used generic intent-only storage despite the aggregate
+requiring its owner phase to become UNKNOWN atomically. Repair separates new
+take/live exact execution from retained effect settlement, keeps BLOCKED retired,
+and admits read-only exact retired-body evidence through the common controller.
+No native/death-recovery acceptance claim yet.
+Still OPEN: HOT approach unavailable-knowledge re-wake. Medical source inspection
+also found readiness checked near the selected ingress node, not the final
+clinical station, with patient role assigned from sorted scene ordinal rather
+than declared patient identity. Resolve actual effect and recovery callers as
+one connected cut, not another feature. No task-owned process currently live.
+No packaging, push, live operation or new deployment occurred.
 
 Then close the real production caller inventory: creation/adoption/removal,
 navigation/stop, position, death/unload/recovery across all UAE rows, including
