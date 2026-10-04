@@ -97,6 +97,24 @@ and replaces neither a current purpose nor a retained suspended continuation.
 The ordinary scout/operation policy may subsequently replace presence through
 the exact shared lifecycle; passive execution cannot authorize its successor.
 
+Scout patrol retains one `ScoutPatrolJourney` semantic destination and monotonic
+goal revision under its exact actor-owned execution in `StrategicPlanState`.
+Independent HOT body observations never recompute that destination. Motion and
+arrival capture its original goal revision, execution, physical epoch and HOT
+scope; common inspection must establish actual arrival before the scout owner
+advances the goal, without writing HOT `ActorLocation`. Repeated coordinates
+cannot revive an earlier goal's actuator. Departure retains the goal and common
+actual position, not a separate scout pose/cursor. Once common physical custody
+is positively released and presentation is closed, the existing COLD patrol
+cadence validates a bounded legal leg from that actual support to the same goal
+through shared hive ground knowledge. A blocked or unknown leg retains its goal
+and waits on that existing schedule, never manufactures a traversable edge.
+Shared knowledge supplies surveyed terrain and any explicitly retained home
+tray; absence of a home supplies no tray. An inactive scout generation grants
+no authority; one last journey per declared scout is retained and replaced on
+the next exact admission, bounded by the aggregate cap. Snapshot and WAL use
+the fresh current schema; there is no legacy position-only receipt decoder.
+
 First physical creation is not necessarily canonical body epoch 1. Cancelling
 a positively never-inserted PREPARED incarnation retires that exact epoch while
 preserving the unused first-creation permission. Later ordinary demand allocates

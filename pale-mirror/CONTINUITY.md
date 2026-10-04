@@ -13,9 +13,11 @@ branch feat/baker-carry-orders-20260926. The large physical-lifetime WIP was
 preserved in private checkpoint 6f065966; development-blocker cleanup is
 53014ac7, hive spatial continuation is e7610bf1 and engineering journey
 continuation is 6a734828; engineering observed work admission is 3bcac252;
-patrol spatial continuation is local HEAD ca7f3ed0. These are not
+patrol spatial continuation is ca7f3ed0 and expedition continuation is local
+9b0fbc50; scout continuation is local HEADa66b233f. These are not
 UAE completion or deployment readiness.
-Current fresh-world schema is 239; bd595b53 is 227 and live R18 is 226.
+Current fresh-world schema is 241 at HEADa66b233f; 9b0fbc50 is 240,
+bd595b53 is 227 and live R18 is 226.
 Origin git@github.com:RidiculousCircumstances/pale_mirror.git.
 Governance: this checkout; UAE normative/document WIP is preserved in local
 checkpoints, not published. Source adoption is not governance publication. Original
@@ -26,59 +28,69 @@ the last publication facts.
 
 ## Current implementation and next action
 
-Patrol spatial continuation is now saved in ca7f3ed0. Both ingress and inspection
-retain original topologies/cursors plus bounded versioned rejoin from the actual
-common departure pose. Rejoining travel requires the whole unfinished column;
-an early-arrived leader waits rather than receiving another inspection edge.
-Scene closure is independent of saved-body departure. HOT arrivals retain exact
-body epochs, executions, scope revision and spatial predecessor, require common
-independent inspection and never write HOT ActorLocation. COLD rejects held
-bodies, stale/duplicate predecessors and known physical closure; the planner
-uses the existing typed NO_OPEN_RETAINED_EDGE outcome rather than silent retries.
-Snapshot/WAL include approaches/versions; fresh schema239 rejects prior layouts.
-Diagnostics separately expose actual pose, original checkpoint and approach cursor.
-Source/canonical architecture flow and responsibility descriptions align.
-74 distinct Java checks pass by composition: 31 patrol/persistence checks in
-3941; changed recovery/closure check plus guardrails in29196; 40 existing adapter/
-diagnostic checks in2037; its two old HOT-without-body fixtures corrected and
-passing in33665; new diagnostic JSON/purity check passing in25546. The new test's
-initial package/prefix setup errors were corrected, not production defects.
-Final six affected patrol-process checks and style PASS29s/1638. Production,
-pilot/test compilation and both architecture maps pass. Source tree is clean.
-No native/client/matrix, push, packaging, R18 operation or deployment claim.
-Next: assault spatial continuation, then scout HOT pose/arrival ownership and
-the remaining inventory/integrated acceptance. All remain under the same goal.
+Engineering crews: 3bcac252, journeys6a734828; retained evidence below unchanged.
+User reiterates engineering work; no new deployment/push or subagent authority.
 
-Latest user assignment: implement engineering crews under UAE, including
-construction and maintenance muster, worksite approach and depot return.
-Main alone. Local checkpoints are authorized; no new push/deploy authority.
-Engineering source cut is now preserved in 3bcac252 after the journey checkpoint.
-The work order owns retained stations, not the current observed positions.
-Scene execution independently inspects common bodies and directs the exact
-current work execution to those stations. Unbegun physical construction/repair
-requires the full living, tooled crew, exact HOT scope and RUNNING common body
-authority; a shared read-only worksite port also rechecks actual indexed bodies
-and supported positions immediately before physical mutation. An already RUNNING
-effect only inspects/settles its retained postcondition, without replay or
-waiting for the crew to return. Construction now uses the existing bounded
-actionable-intent selector, like maintenance; unavailable endpoints do not
-head-of-line block other crews, invalid canonical targets remain visible.
-Candidate search normally waits between cell settlement and the next assembly,
-rather than throwing on that valid execution transition. The worksite fixture
-now uses the real assembly-to-work handoff instead of forging a completed crew
-under an assembly execution. Source/canonical engineering flow descriptions align.
-Schema238 is unchanged. 39 distinct Java checks are green across 94057/54015/35273:
-94057 selected 29, passed 26 and exposed three failures from that stale fixture;
-54015 passed 12 after its correction; 35273 passed 10 construction/adapter checks.
-Final native-boundary compilation plus five architecture checks, style and
-updated source architecture validation PASS10s/29795. No native/client/matrix,
-packaging, push, R18 operation or deployment claim. Integrated epic acceptance
-remains open. Canonical architecture validation also passes after restoring a
-pre-existing missing YAML field-lifecycle header, preserving its requirements.
-Patrol continuation is now checkpointed above. Continue assault spatial continuation, then remaining
-inventory/integration; retained scout inspection also found an active HOT pose
-writer and an uncaptured arrival that must be removed under the existing UAE
-inventory, not declared adopted merely from strategy registration.
+Patrol is saved in ca7f3ed0: original topology/cursor, bounded actual-pose rejoin,
+captured HOT body/execution/scope/predecessor, independent common inspection and
+COLD held-body/stale/known-closure rejection. 74 distinct modeled checks pass by
+composition; production/pilot/test compilation and both maps pass. No native or
+deployment acceptance.
+
+Assault checkpoint9b0fbc50 preserves the original formation,
+adds bounded versioned rejoin/ExpeditionMarchStep and common body checkpoint,
+removes HOT formation ActorLocation writes and captures actual body epochs,
+execution cohort, scope revision and spatial predecessor before inspection/
+movement/issue callbacks. Snapshot/WAL share ExpeditionMarchCodec; candidate
+schema240 intentionally rejects239; no native acceptance is claimed.
+The connected route-producer defects are repaired, not hidden by flat fixtures:
+HiveGroundNavigation owns shared declared ground/tray clearance and bounded
+legal search for assembly, return and assault. ExpeditionMarchCompiler reserves
+formation positions by step, not entire pedestrian trails as permanent walls.
+The west solid tray support is accepted with clear body cells; the east approach
+now avoids HIVE_TISSUE. Admission uses the compiler, not legacy interpolation.
+The real saved-partial-formation test covers observed HOT departure, held-body
+COLD exclusion, release, snapshot/WAL recovery, stale receipts, blocked next
+support and early-leader waiting until peers reach the original checkpoint.
+Run25111 PASS93s: assault7, hive mobilization20, persistence4 and architecture5;
+production/pilot/test compilation passes. NeoForge actuation/patrol checks pass
+in18173; changed assault diagnostic and guardrails PASS12s/37215. All evidence
+is modeled/source-boundary, not native acceptance. Schema240 rejects older saves.
+No task-owned tests/JVMs remain; no push/package/deploy, R18/original repos unchanged.
+Scout adoption is the current connected cut below; full UAE remains OPEN.
+No confidence-only reruns.
+
+Scout checkpointa66b233f retains ScoutPatrolJourney in StrategicPlanState: exact execution,
+goal revision and typed destination, no second pose or per-block cursor. Every
+owned plan update preserves it; hydration validates matching current execution.
+Native motion captures that goal generation, body epoch and scope; independent
+common inspection precedes its captured arrival. HOT reducer writes only goal
+progress; COLD validates a legal leg from the actual saved body to the retained
+destination. Held bodies, stale/duplicate receipts and known closure refuse.
+One inactive last journey per scout grants no authority and is replaced on new
+admission. Source/canonical maps, execution semantics and relation contract align.
+Source review plus first focused run exposed a real free-bootstrap-slot defect:
+FrontierHiveActorSlots used the raised organ datum as support over natural ground
+(-423,64,414 versus ground63). It now consumes actual surveyed terrain; cocoon
+placement remains separately owned. Shared hive ground search is reused, including
+explicit optional home-tray support, without a permissive unknown-geometry edge.
+Current schema241 rejects prior disposable layouts. Run86295 frontier50 checks
+PASS (scout11, mobilization20, bootstrap5, presence5, persistence4, architecture5);
+aggregate FAILED only on a diagnostic test's missing import, fixed with typed
+lambda. NeoForge actuation6 plus diagnostic1 PASS14s/81575 after correction.
+Source guardrails pass; final style/size PASS4s/14989; production/pilot/test Java
+compiles. Modeled evidence only:
+partial graded HOT departure -> custody hold -> unload/release -> snapshot/WAL
+recovery, blocked goal, current-only arrival, stale body/scope and ABA goal guard.
+No native/client, R18 operation, package, push or deployment. Full UAE OPEN.
+Next connected source gap: field arriveGoal/observeTransit, production/service
+advanceWorker and HOT meal callbacks still write ActorLocation independently.
+Remove those reachable pose writers and capture exact body/goal/scope witnesses
+before observations, then close the remaining consumer inventory and integrated
+multiworker/restart/native acceptance. Registration is not adoption completion.
+
+Engineering admission/journey evidence is retained in PM-UAE001 and below;
+39 modeled admission checks passed, not native engineering acceptance.
 The prerequisite block is implemented: removed-test filters require actual
 class existence under the inspected checkout (CLI/MCP); test-only changes select
 inventory compilation, keywords no longer infer native campaigns, and unknown

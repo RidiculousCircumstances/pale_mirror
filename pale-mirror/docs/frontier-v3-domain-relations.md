@@ -48,6 +48,14 @@ participant relations confer process/effect participation, not another body or
 position owner. Resource operation references survive activity replacement
 under their existing operation owner's reconciliation contract.
 
+`StrategicPlanState` retains scout actor -> `ScoutPatrolJourney`, including the
+full SCOUT_PATROL execution declaration, goal revision and typed destination.
+Every current scout execution requires its matching journey on admission and
+hydration. A retained inactive generation is bounded last-owner evidence, never
+authority to move, select a successor or create a body; a new scout admission
+replaces it. The journey contains no copied current position or physiology.
+`ActorLocation` and the common body lifecycle remain their respective owners.
+
 The common body lifetime also owns a bounded actor -> loaded-residency generation
 high-water mark in physical recovery evidence. It is neither a job generation
 nor a new UUID/physical incarnation. Exact insertion/return is its producer;
