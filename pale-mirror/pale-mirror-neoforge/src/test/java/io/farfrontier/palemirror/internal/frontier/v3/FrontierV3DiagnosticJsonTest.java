@@ -849,6 +849,16 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(scene.contains("\"status\":\"ok\"") && scene.contains("\"sceneKind\":\"SETTLEMENT_ASSAULT\""));
         assertTrue(scene.contains("\"operation\":\"\"") && scene.contains("\"assault\":\"" + candidate.assaultId().value() + "\""));
+        var spatial = com.google.gson.JsonParser.parseString(scene.substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        var retainedAssault = hot.strategicPlans().settlementAssaults().get(candidate.assaultId());
+        assertEquals(retainedAssault.march().spatialRevision(), spatial.get("marchSpatialRevision").getAsLong());
+        assertEquals(retainedAssault.attackerIds().size(), spatial.getAsJsonArray("marchMembers").size());
+        for (var row : spatial.getAsJsonArray("marchMembers")) {
+            var member = row.getAsJsonObject(); var actor = new SubjectId(member.get("actor").getAsString());
+            assertEquals(com.google.gson.JsonParser.parseString(FrontierV3DiagnosticJson.position(hot.actorLocations().get(actor).body())), member.get("actualBody"));
+            assertEquals(com.google.gson.JsonParser.parseString(FrontierV3DiagnosticJson.position(retainedAssault.march().checkpoint(actor).support())), member.get("checkpoint"));
+            assertEquals(-1, member.get("approachCursor").getAsInt());
+        }
         assertTrue(scene.contains("\"strikeStatus\":\"NONE\"") && scene.contains("\"strikeCause\":\"\"")
                         && scene.contains("\"strikeAttacker\":\"\"") && scene.contains("\"strikeTarget\":\"\"")
                         && scene.contains("\"carrier\":\"NOT_APPLICABLE\"") == false,

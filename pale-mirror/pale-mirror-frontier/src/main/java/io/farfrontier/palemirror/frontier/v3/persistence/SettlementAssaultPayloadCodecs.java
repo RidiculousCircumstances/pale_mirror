@@ -35,12 +35,13 @@ final class SettlementAssaultPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) {
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 SettlementAssaultAttackerAdvanced value = (SettlementAssaultAttackerAdvanced) payload;
-                subject(output, value.assaultId()); subject(output, value.attackerId()); output.writeByte(value.routeIndex()); ActorExecutionStateCodec.writeGroup(output, value.executions());
+                subject(output, value.assaultId()); subject(output, value.attackerId());
+                ExpeditionMarchCodec.writeStep(output, value.predecessor()); ActorExecutionStateCodec.writeGroup(output, value.executions());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes,
-                    input -> new SettlementAssaultAttackerAdvanced(subject(input), subject(input), input.readUnsignedByte(), ActorExecutionStateCodec.readGroup(input)));
+                    input -> new SettlementAssaultAttackerAdvanced(subject(input), subject(input), ExpeditionMarchCodec.readStep(input), ActorExecutionStateCodec.readGroup(input)));
         }
     }; }
 
@@ -69,6 +70,8 @@ final class SettlementAssaultPayloadCodecs {
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 SettlementAssaultFormationObserved value = (SettlementAssaultFormationObserved) payload;
                 subject(output, value.assaultId()); FrontierWorldPayloadCodecs.writeString(output, value.leaseId().value());
+                output.writeLong(value.leaseRevision()); ExpeditionMarchCodec.writeStep(output, value.predecessor());
+                ActorExecutionStateCodec.writeActuations(output, value.actuations());
                 output.writeByte(value.bodies().size());
                 for (var entry : value.bodies().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
                     subject(output, entry.getKey()); position(output, entry.getValue().supportingSurface().support());
@@ -79,9 +82,16 @@ final class SettlementAssaultPayloadCodecs {
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId assault = subject(input); io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId lease = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(FrontierWorldPayloadCodecs.readString(input));
+                long revision = input.readLong(); var predecessor = ExpeditionMarchCodec.readStep(input);
+                var actuations = ActorExecutionStateCodec.readActuations(input);
+                int count = input.readUnsignedByte();
+                if (count < 2 || count > ExpeditionMarch.MAX_MEMBERS) throw new IOException("invalid expedition body count");
                 java.util.Map<SubjectId, BodyPosition> bodies = new java.util.LinkedHashMap<>();
-                for (int index = 0, count = input.readUnsignedByte(); index < count; index++) bodies.put(subject(input), BodyPosition.above(new SurfaceAnchor(position(input))));
-                return new SettlementAssaultFormationObserved(assault, lease, bodies, ActorExecutionStateCodec.readGroup(input));
+                for (int index = 0; index < count; index++) {
+                    if (bodies.put(subject(input), BodyPosition.above(new SurfaceAnchor(position(input)))) != null)
+                        throw new IOException("duplicate expedition body");
+                }
+                return new SettlementAssaultFormationObserved(assault, lease, revision, predecessor, actuations, bodies, ActorExecutionStateCodec.readGroup(input));
             });
         }
     }; }
@@ -92,6 +102,8 @@ final class SettlementAssaultPayloadCodecs {
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 SettlementAssaultMarchIssueObserved value = (SettlementAssaultMarchIssueObserved) payload;
                 subject(output, value.assaultId()); FrontierWorldPayloadCodecs.writeString(output, value.leaseId().value());
+                output.writeLong(value.leaseRevision()); ExpeditionMarchCodec.writeStep(output, value.predecessor());
+                ActorExecutionStateCodec.writeActuations(output, value.actuations());
                 output.writeByte(FrontierWireTags.tag(value.issue().kind())); subject(output, value.issue().memberId());
                 FrontierWorldPayloadCodecs.writeString(output, value.issue().edgeId().value()); output.writeShort(value.issue().expectedCursor()); ActorExecutionStateCodec.writeGroup(output, value.executions());
             });
@@ -99,9 +111,11 @@ final class SettlementAssaultPayloadCodecs {
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId assault = subject(input); var lease = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(FrontierWorldPayloadCodecs.readString(input));
+                long revision = input.readLong(); var predecessor = ExpeditionMarchCodec.readStep(input);
+                var actuations = ActorExecutionStateCodec.readActuations(input);
                 ExpeditionMarchIssue issue = new ExpeditionMarchIssue(FrontierWireTags.require(ExpeditionMarchIssueKind.class, input.readUnsignedByte()), subject(input),
                         new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
-                return new SettlementAssaultMarchIssueObserved(assault, lease, issue, ActorExecutionStateCodec.readGroup(input));
+                return new SettlementAssaultMarchIssueObserved(assault, lease, revision, predecessor, actuations, issue, ActorExecutionStateCodec.readGroup(input));
             });
         }
     }; }
@@ -180,24 +194,10 @@ final class SettlementAssaultPayloadCodecs {
     }
 
     private static void writeMarch(DataOutputStream output, ExpeditionMarch march) throws IOException {
-        subject(output, march.overseerId()); output.writeShort(march.cursor()); output.writeByte(march.memberTopologies().size());
-        for (var entry : march.memberTopologies().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
-            subject(output, entry.getKey()); TraversalTopologyStateCodec.write(output, entry.getValue());
-        }
-        output.writeBoolean(march.issue().isPresent());
-        if (march.issue().isPresent()) writeIssue(output, march.issue().orElseThrow());
+        ExpeditionMarchCodec.write(output, march);
     }
     private static ExpeditionMarch readMarch(DataInputStream input) throws IOException {
-        SubjectId overseer = subject(input); int cursor = input.readUnsignedShort(); java.util.Map<SubjectId, TraversalTopology> paths = new java.util.LinkedHashMap<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) paths.put(subject(input), TraversalTopologyStateCodec.read(input));
-        Optional<ExpeditionMarchIssue> issue = input.readBoolean() ? Optional.of(readIssue(input)) : Optional.empty();
-        return new ExpeditionMarch(overseer, cursor, paths, issue);
-    }
-    private static void writeIssue(DataOutputStream output, ExpeditionMarchIssue issue) throws IOException {
-        output.writeByte(FrontierWireTags.tag(issue.kind())); subject(output, issue.memberId()); FrontierWorldPayloadCodecs.writeString(output, issue.edgeId().value()); output.writeShort(issue.expectedCursor());
-    }
-    private static ExpeditionMarchIssue readIssue(DataInputStream input) throws IOException {
-        return new ExpeditionMarchIssue(FrontierWireTags.require(ExpeditionMarchIssueKind.class, input.readUnsignedByte()), subject(input), new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
+        return ExpeditionMarchCodec.read(input);
     }
 
     private static void subject(DataOutputStream output, SubjectId value) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, value); }

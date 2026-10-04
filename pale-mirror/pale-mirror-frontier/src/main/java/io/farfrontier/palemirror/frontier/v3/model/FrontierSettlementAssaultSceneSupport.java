@@ -103,16 +103,20 @@ public final class FrontierSettlementAssaultSceneSupport {
         }
         SceneLease lease = state.sceneLeases().get(observed.leaseId());
         if (lease == null || !FrontierSceneBehaviors.isSettlementAssault(lease)
+                || lease.status() != SceneLeaseStatus.HOT || lease.revision() != observed.leaseRevision()
                 || !FrontierSceneBehaviors.settlementAssault(lease).assaultId().equals(assault.id())
-                || !lease.memberBodies(state.actorLocations()).equals(assault.formationBodies())) {
+                || !lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).equals(assault.march().memberIds())) {
             throw new IllegalArgumentException("expedition formation observation has no matching lease/cursor");
         }
+        observed.predecessor().requireCurrent(assault.march());
+        if (!assault.tacticalPlan().currentFor(state.strategicPlans()) || assault.tacticalPlan().phase() != TacticalPlanPhase.TRAVEL)
+            throw new IllegalArgumentException("expedition arrival lost its current travel purpose");
         SettlementAssault next = assault.advanceFormation();
         if (!next.formationBodies().equals(observed.bodies())) throw new IllegalArgumentException("expedition formation did not reach its retained next edge");
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        observed.bodies().forEach((actor, body) -> actors.put(actor, actors.get(actor).withBody(body)));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
-                .strategicPlans(state.strategicPlans().replaceSettlementAssault(next)));
+        for (var actuation : observed.actuations().members()) ActorBodyAuthority.requireActuation(state, actuation);
+        for (var entry : observed.bodies().entrySet()) if (!state.actorLocations().get(entry.getKey()).body().equals(entry.getValue()))
+            throw new IllegalArgumentException("expedition arrival lacks independent common body inspection");
+        return state.withStrategicPlans(state.strategicPlans().replaceSettlementAssault(next));
     }
 
     /** Closes the exact loaded march lease with durable, member/edge-specific evidence. */
@@ -126,10 +130,14 @@ public final class FrontierSettlementAssaultSceneSupport {
         }
         SceneLease lease = state.sceneLeases().get(observed.leaseId());
         if (lease == null || lease.status() != SceneLeaseStatus.HOT || !FrontierSceneBehaviors.isSettlementAssault(lease)
+                || lease.revision() != observed.leaseRevision()
                 || !FrontierSceneBehaviors.settlementAssault(lease).assaultId().equals(assault.id())
-                || !lease.memberBodies(state.actorLocations()).equals(assault.formationBodies())) {
+                || !lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).equals(assault.march().memberIds())) {
             throw new IllegalArgumentException("expedition march issue has no matching current lease/cursor");
         }
+        observed.predecessor().requireCurrent(assault.march());
+        if (!assault.tacticalPlan().currentFor(state.strategicPlans())) throw new IllegalArgumentException("expedition issue lost current tactical authority");
+        for (var actuation : observed.actuations().members()) ActorBodyAuthority.require(state, actuation.body());
         SettlementAssault blocked = assault.recordMarchIssue(observed.issue()).withStatus(SettlementAssaultStatus.CONFLICT);
         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.CONFLICT));

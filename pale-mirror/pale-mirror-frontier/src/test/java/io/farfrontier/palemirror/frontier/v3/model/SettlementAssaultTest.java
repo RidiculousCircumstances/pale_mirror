@@ -330,23 +330,8 @@ class SettlementAssaultTest {
                 new WorldId("frontier:graybox"), 41L);
         FrontierWorldState state = fixture.state();
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(fixture.assaultId());
-        // This pure codec carrier owns a surveyed one-cell rise as an explicit retained input;
-        // the production fixture remains free to use its exact graybox floor rather than a
-        // test-only heightmap.  The initial bodies remain unchanged, so the following COLD/HOT
-        // hand-off still verifies the same expedition rather than a substituted formation.
-        java.util.Map<SubjectId, TraversalTopology> steppedTopologies = new java.util.LinkedHashMap<>();
-        for (var entry : assault.march().memberTopologies().entrySet()) {
-            TraversalTopology topology = entry.getValue();
-            java.util.List<SurfaceAnchor> surfaces = new java.util.ArrayList<>(topology.linearCorridorSurfaces());
-            SurfaceAnchor first = surfaces.getFirst(), next = surfaces.get(1);
-            surfaces.set(1, new SurfaceAnchor(new BlockPosition(next.x(), first.y() + 1, next.z())));
-            steppedTopologies.put(entry.getKey(), TraversalTopology.corridor(topology.id(), topology.revision(), topology.provenance(),
-                    TraversalKind.GROUND_BIOFORM, java.util.Set.of(TraversalCapability.GROUND_BIOFORM), surfaces));
-        }
-        assault = new SettlementAssault(assault.id(), assault.taskId(), assault.hiveId(), assault.sighting(), assault.overseerId(),
-                assault.attackers(), new ExpeditionMarch(assault.overseerId(), assault.march().cursor(), steppedTopologies),
-                assault.defenderUnit(), assault.tacticalPlan(), assault.status(), assault.nextStrikeEpoch(), assault.outcome());
-        state = state.withStrategicPlans(state.strategicPlans().replaceSettlementAssault(assault));
+        // The real admission compiler now retains surveyed tray-to-ground grades and legal
+        // obstacle detours. Do not inject an unsupported one-cell rise as physical evidence.
         assertFalse(assault.march().complete());
         assertTrue(assault.march().memberTopologies().values().stream().anyMatch(path -> java.util.stream.IntStream
                         .range(1, path.linearCorridorSurfaces().size()).anyMatch(index -> path.linearCorridorSurfaces().get(index - 1).y()
@@ -354,7 +339,7 @@ class SettlementAssaultTest {
                 "the retained approach carries non-flat GROUND_BIOFORM topology rather than an endpoint shortcut");
 
         state = HiveSettlementAssaultProcess.reduceAdvanced(state, state.bootstrap().hive().id(),
-                new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(), assault.march().cursor() + 1, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
+                new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(), ExpeditionMarchStep.capture(assault.march()), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
         assault = state.strategicPlans().settlementAssaults().get(assault.id());
         assertEquals(1, assault.march().cursor());
         FrontierWorldState cold = state;
@@ -378,14 +363,19 @@ class SettlementAssaultTest {
         Map<SubjectId, BodyPosition> forged = new java.util.LinkedHashMap<>(hotAssault.nextFormationBodies());
         forged.put(hotAssault.overseerId(), hotAssault.formationBodies().get(hotAssault.overseerId()));
         assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceFormationObserved(hot, hotAssault.hiveId(),
-                new SettlementAssaultFormationObserved(hotAssault.id(), leaseId, forged, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(hot, hotAssault))),
+                formationObserved(hot, hotAssault, hot.sceneLeases().get(leaseId), forged)),
                 "one missing retained arrival cannot advance a complete formation");
-        FrontierWorldState advanced = HiveSettlementAssaultProcess.reduceFormationObserved(hot, hotAssault.hiveId(),
-                new SettlementAssaultFormationObserved(hotAssault.id(), leaseId, hotAssault.nextFormationBodies(), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(hot, hotAssault)));
+        var arrival = formationObserved(hot, hotAssault, hot.sceneLeases().get(leaseId), hotAssault.nextFormationBodies());
+        assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceFormationObserved(hot, hotAssault.hiveId(), arrival),
+                "semantic arrival cannot manufacture the physical pose");
+        FrontierWorldState inspected = hot;
+        for (var body : arrival.bodies().entrySet()) inspected = ModeledActorBodyFacts.inspected(inspected, body.getKey(), body.getValue());
+        FrontierWorldState advanced = HiveSettlementAssaultProcess.reduceFormationObserved(inspected, hotAssault.hiveId(), arrival);
+        assertEquals(inspected.actorLocations(), advanced.actorLocations(), "only independent common inspection writes HOT pose");
         assertEquals(hotAssault.march().cursor() + 1, advanced.strategicPlans().settlementAssaults().get(hotAssault.id()).march().cursor());
         assertEquals(hotAssault.nextFormationBodies(), hotAssault.attackerIds().stream().collect(java.util.stream.Collectors.toMap(
                 id -> id, id -> advanced.actorLocations().get(id).body())),
-                "the observed HOT formation advances canonical actor positions, not only scene checkpoints");
+                "the semantic HOT formation agrees with independently inspected canonical actor positions");
     }
 
     @Test void retainsTypedMarchObstructionAndControllerLossOnTheSameHotExpedition() {
@@ -395,7 +385,33 @@ class SettlementAssaultTest {
             SettlementAssault assault = hot.assault();
             ExpeditionMarchIssue issue = new ExpeditionMarchIssue(kind, assault.overseerId(),
                     assault.march().memberTopologies().get(assault.overseerId()).edgeAfterCursor(assault.march().cursor()).id(), assault.march().cursor());
-            SettlementAssaultMarchIssueObserved observed = new SettlementAssaultMarchIssueObserved(assault.id(), hot.lease().id(), issue, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(hot.state(), assault));
+            SettlementAssaultMarchIssueObserved observed = new SettlementAssaultMarchIssueObserved(assault.id(), hot.lease().id(), hot.lease().revision(),
+                    ExpeditionMarchStep.capture(assault.march()), actuations(hot.state(), assault), issue,
+                    SettlementAssaultExecutionAuthority.current(hot.state(), assault));
+            var payloads = FrontierWorldRuntimeDefinition.payloadCodecs();
+            assertEquals(observed, payloads.decode(observed.type(), payloads.encode(observed)),
+                    "WAL retains the captured body, scope and spatial declarations");
+            var staleBodies = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationGroup(
+                    observed.actuations().members().stream().map(member ->
+                            new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                                    new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(
+                                            member.body().actorId(), member.body().physicalEpoch() + 1), member.execution())).toList());
+            for (var stale : List.of(
+                    new SettlementAssaultMarchIssueObserved(assault.id(), hot.lease().id(), hot.lease().revision() + 1,
+                            observed.predecessor(), observed.actuations(), issue, observed.executions()),
+                    new SettlementAssaultMarchIssueObserved(assault.id(), hot.lease().id(), hot.lease().revision(),
+                            new ExpeditionMarchStep(observed.predecessor().cursor(), observed.predecessor().spatialRevision() + 1,
+                                    observed.predecessor().members()), observed.actuations(), issue, observed.executions()),
+                    new SettlementAssaultMarchIssueObserved(assault.id(), hot.lease().id(), hot.lease().revision(),
+                            observed.predecessor(), staleBodies, issue, observed.executions()))) {
+                CommandId staleId = new CommandId("command:stale-march-" + kind.name().toLowerCase());
+                assertFalse(FrontierWorldProcessCatalog.planCommand("hive", hot.state(), new FrontierCommand(1, staleId,
+                        hot.state().bootstrap().worldId(), new Revision(1L), new SimInstant(19L),
+                        FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(staleId), stale)) instanceof CommandPlan.Accepted,
+                        "an obsolete body, scope or spatial receipt must fail before WAL admission");
+                assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceMarchIssueObserved(
+                        hot.state(), assault.hiveId(), stale));
+            }
             CommandId commandId = new CommandId("command:typed-march-" + kind.name().toLowerCase());
             assertTrue(FrontierWorldProcessCatalog.planCommand("hive", hot.state(), new FrontierCommand(1, commandId,
                     hot.state().bootstrap().worldId(), new Revision(1L), new SimInstant(19L),
@@ -421,6 +437,80 @@ class SettlementAssaultTest {
         assertEquals(ExpeditionMarchIssueKind.CONTROLLER_LOST, controllerRetreat.march().issue().orElseThrow().kind());
         assertEquals(TacticalPlanPhase.RETREAT, controllerRetreat.tacticalPlan().phase());
         assertEquals(controllerAssault.expeditionId(), controllerRetreat.expeditionId());
+    }
+
+    @Test void savedPartialFormationRetainsActualBodiesAndOriginalCheckpointThroughColdRecovery() {
+        var hot = hotMarch("expedition-actual-rejoin", 94L);
+        var state = hot.state(); var original = hot.assault();
+        var originalGroup = SettlementAssaultExecutionAuthority.current(state, original);
+        var stale = new SettlementAssaultAttackerAdvanced(original.id(), original.overseerId(),
+                ExpeditionMarchStep.capture(original.march()), originalGroup);
+        var arrivedBody = original.nextFormationBodies().get(original.overseerId());
+        state = ModeledActorBodyFacts.inspected(state, original.overseerId(), arrivedBody);
+        var inventory = state.inventory(); var executions = state.actorExecutions();
+        state = ModeledActorBodyFacts.unloaded(state, original.overseerId());
+        var retained = state.strategicPlans().settlementAssaults().get(original.id());
+        assertEquals(original.march().cursor(), retained.march().cursor(), "departure is not formation arrival");
+        assertEquals(original.march().memberTopologies(), retained.march().memberTopologies());
+        assertEquals(original.tacticalPlan(), retained.tacticalPlan());
+        assertEquals(originalGroup, SettlementAssaultExecutionAuthority.current(state, retained));
+        assertEquals(executions, state.actorExecutions()); assertEquals(inventory, state.inventory());
+        assertEquals(arrivedBody, state.actorLocations().get(original.overseerId()).body());
+        assertEquals(retained.march().memberIds(), retained.march().rejoins().keySet());
+        var held = state;
+        var receipt = new SettlementAssaultAttackerAdvanced(retained.id(), retained.overseerId(),
+                ExpeditionMarchStep.capture(retained.march()), originalGroup);
+        assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceAdvanced(held, retained.hiveId(), receipt),
+                "remaining physically held peers prohibit COLD movement");
+        for (var actor : original.attackerIds()) if (!actor.equals(original.overseerId())) state = ModeledActorBodyFacts.unloaded(state, actor);
+        state = state.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.DRAINING);
+        var saved = state;
+        state = state.releaseSceneLease(hot.lease().id(), original.attackerIds().stream().map(actor ->
+                new SceneMemberPosition(actor, saved.actorLocations().get(actor).body(), saved.actorLocations().get(actor).condition().health())).toList());
+        var codec = new FrontierWorldStateCodec(state.bootstrap());
+        state = codec.decode(codec.encode(state));
+        assertEquals(retained.march(), state.strategicPlans().settlementAssaults().get(original.id()).march());
+        var recovered = state;
+        assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceAdvanced(recovered, original.hiveId(), stale));
+        var payloads = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(receipt, payloads.decode(receipt.type(), payloads.encode(receipt)));
+        var before = state.strategicPlans().settlementAssaults().get(original.id());
+        var next = before.advanceFormation();
+        var beforeSelection = before;
+        var movingPeer = before.attackerIds().stream().filter(actor -> !beforeSelection.formationBodies().get(actor).equals(next.formationBodies().get(actor)))
+                .findFirst().orElseThrow();
+        var blocked = state.recordPhysicalDelta(new PhysicalDelta(next.formationBodies().get(movingPeer).supportingSurface().support().offset(0, 1, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "player:expedition-approach-block"));
+        assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceAdvanced(blocked, original.hiveId(), receipt));
+        int remaining = before.march().rejoins().values().stream().mapToInt(path -> path.path().size() - path.cursor()).sum();
+        for (int step = 0; step < remaining && before.march().cursor() == original.march().cursor(); step++) {
+            var event = new SettlementAssaultAttackerAdvanced(before.id(), before.overseerId(), ExpeditionMarchStep.capture(before.march()), originalGroup);
+            var previous = state;
+            state = HiveSettlementAssaultProcess.reduceAdvanced(state, before.hiveId(), event);
+            var progressed = state;
+            assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceAdvanced(progressed, original.hiveId(), event));
+            assertEquals(arrivedBody, state.actorLocations().get(original.overseerId()).body(), "early leader waits at its original next checkpoint");
+            assertEquals(previous.inventory(), state.inventory()); assertEquals(previous.actorExecutions(), state.actorExecutions());
+            before = state.strategicPlans().settlementAssaults().get(before.id());
+        }
+        assertEquals(original.march().cursor() + 1, before.march().cursor());
+        assertTrue(before.march().rejoins().isEmpty());
+        assertEquals(original.march().memberTopologies(), before.march().memberTopologies());
+    }
+
+    private static io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationGroup actuations(
+            FrontierWorldState state, SettlementAssault assault) {
+        var executions = SettlementAssaultExecutionAuthority.current(state, assault);
+        return new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationGroup(
+                assault.march().memberIds().stream().sorted().map(actor ->
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                                ActorBodyAuthority.current(state, actor), executions.requireMember(actor))).toList());
+    }
+    private static SettlementAssaultFormationObserved formationObserved(FrontierWorldState state,
+            SettlementAssault assault, SceneLease lease, Map<SubjectId, BodyPosition> bodies) {
+        return new SettlementAssaultFormationObserved(assault.id(), lease.id(), lease.revision(),
+                ExpeditionMarchStep.capture(assault.march()), actuations(state, assault), bodies,
+                SettlementAssaultExecutionAuthority.current(state, assault));
     }
 
     private static HotMarch hotMarch(String suffix, long seed) {

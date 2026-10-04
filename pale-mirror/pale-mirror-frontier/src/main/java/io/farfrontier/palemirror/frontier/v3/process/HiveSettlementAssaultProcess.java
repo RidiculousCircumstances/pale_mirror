@@ -123,8 +123,16 @@ public final class HiveSettlementAssaultProcess {
         // cursors.  This gives the same one-edge causality as HOT observations and makes a
         // demand return/restart resume from an unambiguous formation cursor.
         SettlementAssaultAttackerAdvanced advance = new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(),
-                assault.march().cursor() + 1, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault));
-        return List.of(new ProposedEvent(assault.hiveId(), advance), schedule(progress(assault.advanceFormation(),
+                ExpeditionMarchStep.capture(assault.march()), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault));
+        SettlementAssault next;
+        try { next = assault.advanceFormation(); }
+        catch (IllegalArgumentException blockedFormation) {
+            return List.of(new ProposedEvent(assault.hiveId(), TerminalDiagnosticProducer.assaultConflict(
+                    assault.id(), SettlementAssaultExecutionAuthority.current(state, assault))));
+        }
+        if (!ExpeditionBodyCheckpoint.openFormation(state, assault, next)) return List.of(new ProposedEvent(assault.hiveId(),
+                TerminalDiagnosticProducer.assaultConflict(assault.id(), SettlementAssaultExecutionAuthority.current(state, assault))));
+        return List.of(new ProposedEvent(assault.hiveId(), advance), schedule(progress(next,
                 action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
     }
 
@@ -184,13 +192,19 @@ public final class HiveSettlementAssaultProcess {
         if (!subject.equals(assault.hiveId()) || !assault.tacticalPlan().currentFor(state.strategicPlans()) || !coldAvailable(state, assault)) {
             throw new IllegalArgumentException("COLD assault advance has a foreign owner or leased actor");
         }
-        if (advanced.routeIndex() != assault.march().cursor() + 1 || !assault.attackerIds().contains(advanced.attackerId())) {
+        advanced.predecessor().requireCurrent(assault.march());
+        if (!advanced.attackerId().equals(assault.overseerId()) || assault.status() != SettlementAssaultStatus.APPROACHING) {
             throw new IllegalArgumentException("COLD assault advance must name the current retained formation edge");
         }
         SettlementAssault next = assault.advanceFormation();
+        if (!ExpeditionBodyCheckpoint.openFormation(state, assault, next))
+            throw new IllegalArgumentException("COLD expedition cannot cross unknown or closed physical geometry: "
+                    + assault.formationBodies() + " -> " + next.formationBodies());
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         for (Map.Entry<SubjectId, BodyPosition> body : next.formationBodies().entrySet()) {
             ActorLocation current = actors.get(body.getKey());
+            if (!current.body().equals(assault.formationBodies().get(body.getKey())))
+                throw new IllegalArgumentException("COLD expedition body diverges from its retained continuation");
             actors.put(body.getKey(), new ActorLocation(body.getValue(), current.condition(), current.kind()));
         }
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
@@ -310,7 +324,12 @@ public final class HiveSettlementAssaultProcess {
         SubjectId assaultId = new SubjectId("assault:" + task.id().value().substring("task:".length()));
         List<SettlementAssaultAttacker> selectedAttackers = java.util.stream.IntStream.range(0, attackers.size()).mapToObj(index ->
                 new SettlementAssaultAttacker(attackers.get(index), approach(state, starts.get(attackers.get(index)).support(), floors.get(index)), 0)).toList();
-        return new SettlementAssault(assaultId, task.id(), task.ownerId(), sighting, overseerId, selectedAttackers,
+        var destinations = java.util.stream.IntStream.range(0, attackers.size()).boxed().collect(java.util.stream.Collectors.toMap(
+                attackers::get, index -> new SurfaceAnchor(floors.get(index))));
+        ExpeditionMarch march;
+        try { march = ExpeditionMarchCompiler.compile(state, assaultId, overseerId, starts, destinations); }
+        catch (HiveGroundNavigation.RouteUnavailable unavailable) { return null; }
+        return new SettlementAssault(assaultId, task.id(), task.ownerId(), sighting, overseerId, selectedAttackers, march,
                 SettlementDefenderUnit.forAssault(assaultId, sighting.settlementId(), defenders),
                 TacticalPlan.hiveExpedition(task, assaultId, overseerId, attackers, defenders, sighting.settlementAnchor()),
                 SettlementAssaultStatus.APPROACHING, 0, Optional.empty());

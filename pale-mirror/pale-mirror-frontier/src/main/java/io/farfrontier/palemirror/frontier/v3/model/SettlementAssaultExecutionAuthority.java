@@ -66,10 +66,7 @@ public final class SettlementAssaultExecutionAuthority {
         @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
             return request -> {
                 var owner = require(request.expectedState().strategicPlans().settlementAssaults(), request.execution());
-                var checkpoint = owner.formationBodies().get(request.execution().actorId());
-                if (checkpoint != null && !checkpoint.equals(request.observedPosition()))
-                    throw new IllegalArgumentException("assault march requires its observed formation rejoin before COLD");
-                return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+                return ExpeditionBodyCheckpoint.acknowledge(request, owner);
             };
         }
         @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }

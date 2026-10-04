@@ -199,15 +199,15 @@ class HiveMobilizationProcessTest {
         var partialCombatGroup = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(List.of(firstCombatExecution));
         assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceAdvanced(admittedBattle, hive,
                 new SettlementAssaultAttackerAdvanced(admittedAssault.id(), admittedAssault.overseerId(),
-                        admittedAssault.march().cursor() + 1, partialCombatGroup)),
+                        ExpeditionMarchStep.capture(admittedAssault.march()), partialCombatGroup)),
                 "a single participant cannot grant motion to the whole combat formation");
         assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceAdvanced(admittedBattle, hive,
                 new SettlementAssaultAttackerAdvanced(admittedAssault.id(), admittedAssault.overseerId(),
-                        admittedAssault.march().cursor() + 1, staleCombatGroup)));
+                        ExpeditionMarchStep.capture(admittedAssault.march()), staleCombatGroup)));
 
         while (!assault.allAttackersAtBattlefield()) {
             state = HiveSettlementAssaultProcess.reduceAdvanced(state, hive,
-                    new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(), assault.march().cursor() + 1, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
+                    new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(), ExpeditionMarchStep.capture(assault.march()), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
             assault = state.strategicPlans().settlementAssaults().get(assault.id());
         }
         state = HiveSettlementAssaultProcess.reduceTransition(state, hive,

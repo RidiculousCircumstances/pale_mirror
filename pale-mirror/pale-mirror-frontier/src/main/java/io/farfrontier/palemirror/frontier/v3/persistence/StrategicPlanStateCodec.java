@@ -401,24 +401,10 @@ public final class StrategicPlanStateCodec {
         return FrontierWireTags.require(SettlementAssaultOutcome.class, input.readUnsignedByte());
     }
     private static void writeMarch(DataOutputStream output, ExpeditionMarch march) throws IOException {
-        writeSubject(output, march.overseerId()); output.writeShort(march.cursor()); writeCount(output, march.memberTopologies().size());
-        for (var entry : march.memberTopologies().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-            writeSubject(output, entry.getKey()); TraversalTopologyStateCodec.write(output, entry.getValue());
-        }
-        output.writeBoolean(march.issue().isPresent());
-        if (march.issue().isPresent()) writeMarchIssue(output, march.issue().orElseThrow());
+        ExpeditionMarchCodec.write(output, march);
     }
     private static ExpeditionMarch readMarch(DataInputStream input) throws IOException {
-        SubjectId overseer = readSubject(input); int cursor = input.readUnsignedShort(); Map<SubjectId, TraversalTopology> paths = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) paths.put(readSubject(input), TraversalTopologyStateCodec.read(input));
-        Optional<ExpeditionMarchIssue> issue = input.readBoolean() ? Optional.of(readMarchIssue(input)) : Optional.empty();
-        return new ExpeditionMarch(overseer, cursor, paths, issue);
-    }
-    private static void writeMarchIssue(DataOutputStream output, ExpeditionMarchIssue issue) throws IOException {
-        output.writeByte(FrontierWireTags.tag(issue.kind())); writeSubject(output, issue.memberId()); FrontierWorldPayloadCodecs.writeString(output, issue.edgeId().value()); output.writeShort(issue.expectedCursor());
-    }
-    private static ExpeditionMarchIssue readMarchIssue(DataInputStream input) throws IOException {
-        return new ExpeditionMarchIssue(FrontierWireTags.require(ExpeditionMarchIssueKind.class, input.readUnsignedByte()), readSubject(input), new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
+        return ExpeditionMarchCodec.read(input);
     }
     private static RoutePatrolBlockReason readPatrolBlockReason(DataInputStream input) throws IOException {
         return FrontierWireTags.require(RoutePatrolBlockReason.class, input.readUnsignedByte());

@@ -99,6 +99,13 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         ExpeditionMarch next = march.advanceFormation();
         return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, next, defenderUnit, tacticalPlan, status, nextStrikeEpoch, outcome);
     }
+    public SettlementAssault withSpatialContinuation(ExpeditionMarch next) {
+        if (!next.memberTopologies().equals(march.memberTopologies()) || next.cursor() != march.cursor() || !next.issue().equals(march.issue())
+                || next.spatialRevision() != Math.incrementExact(march.spatialRevision()) || next.rejoins().isEmpty())
+            throw new IllegalArgumentException("assault spatial continuation cannot replace its semantic route or checkpoint");
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, next, defenderUnit,
+                tacticalPlan, status, nextStrikeEpoch, outcome);
+    }
     public SettlementAssault recordMarchIssue(ExpeditionMarchIssue issue) {
         return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, march.recordIssue(issue), defenderUnit,
                 tacticalPlan, status, nextStrikeEpoch, outcome);

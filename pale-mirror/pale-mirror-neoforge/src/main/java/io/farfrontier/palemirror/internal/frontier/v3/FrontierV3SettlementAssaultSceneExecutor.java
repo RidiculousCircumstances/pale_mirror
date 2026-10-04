@@ -320,33 +320,43 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                         io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.GROUND_BIOFORM))
                 .findFirst();
         if (blocked.isPresent()) {
-            marchIssue(level, runtime, lease, assault, blocked.orElseThrow().getKey(), ExpeditionMarchIssueKind.BLOCKED_EDGE);
+            marchIssue(level, runtime, state, lease, assault, blocked.orElseThrow().getKey(), ExpeditionMarchIssueKind.BLOCKED_EDGE);
             return;
         }
         Map<SubjectId, BodyPosition> targets;
-        try { targets = assault.nextFormationBodies(); } catch (IllegalArgumentException invalid) { marchIssue(level, runtime, lease, assault,
+        try { targets = assault.nextFormationBodies(); } catch (IllegalArgumentException invalid) { marchIssue(level, runtime, state, lease, assault,
                 assault.overseerId(), ExpeditionMarchIssueKind.BLOCKED_EDGE); return; }
         boolean arrived = true;
         Set<java.util.UUID> members = lease.members().stream().map(SceneMember::entityId).collect(java.util.stream.Collectors.toSet());
         var executions = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault);
+        var captured = new java.util.LinkedHashMap<SubjectId, FrontierV3ActorActuation>();
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId()); BodyPosition target = targets.get(member.actorId());
-            if (!(entity instanceof Mob mob) || !mob.isAlive() || target == null) { marchIssue(level, runtime, lease, assault,
+            if (!(entity instanceof Mob mob) || !mob.isAlive() || target == null) { marchIssue(level, runtime, state, lease, assault,
                     member.actorId(), ExpeditionMarchIssueKind.MISSING_OWNED_BODY); return; }
+            captured.put(member.actorId(), FrontierV3ActorActuation.capture(state, mob,
+                    executions.requireMember(member.actorId()), runtime::decodedState));
             if (!FrontierV3SurfaceObservation.at(mob, target.supportingSurface())) {
                 arrived = false;
                 var bounds = mob.getBoundingBox().move(FrontierV3SurfaceObservation.point(target.supportingSurface()).subtract(mob.position()));
                 if (level.getBlockCollisions(mob, bounds).iterator().hasNext() || !level.getEntities(mob, bounds, value -> !members.contains(value.getUUID())).isEmpty()) {
-                    marchIssue(level, runtime, lease, assault, member.actorId(), ExpeditionMarchIssueKind.OCCUPIED_NEXT_BODY); return;
+                    marchIssue(level, runtime, state, lease, assault, member.actorId(), ExpeditionMarchIssueKind.OCCUPIED_NEXT_BODY); return;
                 }
                 FrontierV3GoalNavigation.pursue(level, mob, FrontierV3GoalNavigation.Goal.station(target.supportingSurface(),
                         new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())),
-                        FrontierV3ActorActuation.capture(state, mob, executions.requireMember(member.actorId()), runtime::decodedState));
+                        captured.get(member.actorId()));
             }
         }
         if (arrived) {
-            CommandResult result = submit(runtime, "expedition-march-observed", new SettlementAssaultFormationObserved(assault.id(), lease.id(), targets,
-                    io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));
+            var receipt = new SettlementAssaultFormationObserved(assault.id(), lease.id(), lease.revision(),
+                    io.farfrontier.palemirror.frontier.v3.model.ExpeditionMarchStep.capture(assault.march()),
+                    new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationGroup(
+                            captured.values().stream().map(FrontierV3ActorActuation::id).toList()), targets, executions);
+            for (SceneMember member : lease.members()) {
+                if (!(level.getEntity(member.entityId()) instanceof Mob body)
+                        || !FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
+            }
+            CommandResult result = submit(runtime, "expedition-march-observed", receipt);
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "expedition_march_formation", lease, result);
         }
 
@@ -495,11 +505,18 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 submit(runtime, "settlement-assault-conflict", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));
     }
 
-    private static void marchIssue(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
+    private static void marchIssue(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease,
                                    SettlementAssault assault, SubjectId member, ExpeditionMarchIssueKind kind) {
+        var executions = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault);
+        var actuations = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationGroup(
+                assault.march().memberIds().stream().sorted().map(actor ->
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                                io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actor),
+                                executions.requireMember(actor))).toList());
         ExpeditionMarchIssue issue = new ExpeditionMarchIssue(kind, member, edgeAtCursor(assault, member), assault.march().cursor());
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "expedition_march_" + kind.name().toLowerCase(java.util.Locale.ROOT), lease,
-                submit(runtime, "expedition-march-issue", new SettlementAssaultMarchIssueObserved(assault.id(), lease.id(), issue, io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state(runtime), assault))));
+                submit(runtime, "expedition-march-issue", new SettlementAssaultMarchIssueObserved(assault.id(), lease.id(), lease.revision(),
+                        io.farfrontier.palemirror.frontier.v3.model.ExpeditionMarchStep.capture(assault.march()), actuations, issue, executions)));
     }
 
     private static io.farfrontier.palemirror.frontier.v3.model.TraversalEdgeId edgeAtCursor(SettlementAssault assault, SubjectId member) {

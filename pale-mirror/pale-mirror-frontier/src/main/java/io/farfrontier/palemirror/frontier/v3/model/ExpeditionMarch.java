@@ -18,7 +18,8 @@ import java.util.Set;
  * per-member surveyed corridors are geometry, not independent strategic progress.</p>
  */
 public record ExpeditionMarch(SubjectId overseerId, int cursor, Map<SubjectId, TraversalTopology> memberTopologies,
-                              Optional<ExpeditionMarchIssue> issue) {
+                              Optional<ExpeditionMarchIssue> issue, long spatialRevision,
+                              Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin> rejoins) {
     public static final int MAX_MEMBERS = SettlementAssault.MAX_ATTACKERS;
 
     public ExpeditionMarch {
@@ -38,8 +39,17 @@ public record ExpeditionMarch(SubjectId overseerId, int cursor, Map<SubjectId, T
         if (cursor < 0 || cursor > edges) {
             throw new IllegalArgumentException("expedition cursor must address one complete formation edge");
         }
-        if (bodiesAt(copy, cursor).size() != copy.size()) {
+        if (bodiesAt(copy, cursor).values().stream().distinct().count() != copy.size()) {
             throw new IllegalArgumentException("expedition formation bodies must remain distinct");
+        }
+        if (spatialRevision < 1L) throw new IllegalArgumentException("expedition spatial revision must be positive");
+        rejoins = Map.copyOf(Objects.requireNonNull(rejoins, "expedition rejoin"));
+        if (!rejoins.isEmpty() && (!rejoins.keySet().equals(copy.keySet()) || cursor == edges))
+            throw new IllegalArgumentException("advancing expedition rejoin requires its complete exact roster");
+        for (var entry : rejoins.entrySet()) {
+            var path = copy.get(entry.getKey());
+            var target = path.linearCorridorSurfaces().get(Math.min(cursor + 1, path.edges().size()));
+            if (!entry.getValue().target().equals(target)) throw new IllegalArgumentException("expedition rejoin changes its semantic checkpoint");
         }
         issue.ifPresent(value -> validateIssue(copy, cursor, value));
         memberTopologies = Map.copyOf(copy);
@@ -48,14 +58,31 @@ public record ExpeditionMarch(SubjectId overseerId, int cursor, Map<SubjectId, T
     public ExpeditionMarch(SubjectId overseerId, int cursor, Map<SubjectId, TraversalTopology> memberTopologies) {
         this(overseerId, cursor, memberTopologies, Optional.empty());
     }
+    public ExpeditionMarch(SubjectId overseerId, int cursor, Map<SubjectId, TraversalTopology> memberTopologies,
+                           Optional<ExpeditionMarchIssue> issue) {
+        this(overseerId, cursor, memberTopologies, issue, 1L, Map.of());
+    }
 
     public Set<SubjectId> memberIds() { return Set.copyOf(memberTopologies.keySet()); }
     public boolean complete() { return cursor == edgeCount(); }
     public int edgeCount() { return memberTopologies.values().stream().mapToInt(topology -> topology.edges().size()).max().orElseThrow(); }
-    public Map<SubjectId, BodyPosition> bodies() { return bodiesAt(memberTopologies, cursor); }
+    public Map<SubjectId, BodyPosition> bodies() {
+        if (rejoins.isEmpty()) return bodiesAt(memberTopologies, cursor);
+        var bodies = new LinkedHashMap<SubjectId, BodyPosition>();
+        rejoins.forEach((actor, rejoin) -> bodies.put(actor, rejoin.current().standingBody()));
+        return Map.copyOf(bodies);
+    }
     public Map<SubjectId, BodyPosition> nextBodies() {
-        if (complete()) throw new IllegalStateException("completed expedition has no next retained formation edge");
-        return bodiesAt(memberTopologies, cursor + 1);
+        return advanceFormation().bodies();
+    }
+    public SurfaceAnchor checkpoint(SubjectId actor) {
+        var topology = memberTopologies.get(Objects.requireNonNull(actor, "expedition member"));
+        if (topology == null) throw new IllegalArgumentException("expedition checkpoint has a foreign member");
+        return topology.linearCorridorSurfaces().get(Math.min(cursor + 1, topology.edges().size()));
+    }
+    public ExpeditionMarch withRejoins(Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin> approaches) {
+        if (complete() || issue.isPresent()) throw new IllegalArgumentException("frozen expedition has no advancing rejoin");
+        return new ExpeditionMarch(overseerId, cursor, memberTopologies, issue, Math.incrementExact(spatialRevision), approaches);
     }
     public ExpeditionMarch advanceFormation() {
         if (complete() || issue.isPresent()) throw new IllegalArgumentException("completed or blocked expedition cannot advance");
@@ -64,11 +91,26 @@ public record ExpeditionMarch(SubjectId overseerId, int cursor, Map<SubjectId, T
                 throw new IllegalArgumentException("expedition next retained edge is not open for ground bioforms");
             }
         }
-        return new ExpeditionMarch(overseerId, cursor + 1, memberTopologies);
+        if (!rejoins.isEmpty()) {
+            var next = new LinkedHashMap<>(rejoins);
+            if (!rejoins.values().stream().allMatch(io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin::arrived)) {
+                var selected = memberIds().stream().sorted(java.util.Comparator.comparingInt((SubjectId actor) -> actor.equals(overseerId) ? 0 : 1)
+                        .thenComparing(actor -> actor)).filter(actor -> {
+                    var approach = rejoins.get(actor);
+                    return !approach.arrived() && rejoins.entrySet().stream().noneMatch(other -> !other.getKey().equals(actor)
+                            && other.getValue().current().equals(approach.path().get(approach.nextCursor(1))));
+                }).findFirst().orElseThrow(() -> new IllegalArgumentException("expedition rejoin has no clear approach edge"));
+                var approach = rejoins.get(selected);
+                next.put(selected, approach.advance(approach.nextCursor(1), 1));
+            }
+            if (!next.values().stream().allMatch(io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin::arrived))
+                return new ExpeditionMarch(overseerId, cursor, memberTopologies, issue, spatialRevision, next);
+        }
+        return new ExpeditionMarch(overseerId, cursor + 1, memberTopologies, Optional.empty(), spatialRevision, Map.of());
     }
     public ExpeditionMarch recordIssue(ExpeditionMarchIssue observed) {
         if (issue.isPresent()) throw new IllegalArgumentException("expedition already retains one unresolved issue");
-        return new ExpeditionMarch(overseerId, cursor, memberTopologies, Optional.of(observed));
+        return new ExpeditionMarch(overseerId, cursor, memberTopologies, Optional.of(observed), spatialRevision, rejoins);
     }
 
     private static Map<SubjectId, BodyPosition> bodiesAt(Map<SubjectId, TraversalTopology> topologies, int cursor) {
