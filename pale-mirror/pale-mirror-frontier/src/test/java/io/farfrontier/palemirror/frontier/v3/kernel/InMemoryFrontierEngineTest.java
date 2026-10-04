@@ -246,7 +246,7 @@ class InMemoryFrontierEngineTest {
     }
 
     @Test
-    void ownerHeldHeadDoesNotSpendIndependentWorkBudgetAndReleaseReplaysInOrder() {
+    void ownerHeldHeadDoesNotSpendIndependentBudgetAndCommittedReplayNeedsNoHistoricalPolicy() {
         ScheduledAction held = scheduled("schedule:held-first", "settlement:a", 5L, 1);
         ScheduledAction independent = scheduled("schedule:independent", "settlement:b", 6L, 1);
         ScheduledActionPlanner<Counter> planner = new ScheduledActionPlanner<>() {
@@ -277,13 +277,33 @@ class InMemoryFrontierEngineTest {
                 engine.transactions().stream().map(TransactionRecord::instant).toList());
         var replay = TransactionReplayer.replayFrom(WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO,
                 List.of(held, independent), engine.transactions(), (state, event) -> reduce(state, event, false),
-                state -> ByteBuffer.allocate(4).putInt(state.value()).array(), StateValidator.none(), planner::held);
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(), StateValidator.none());
         assertEquals(2, replay.state().value());
         assertTrue(replay.schedules().isEmpty());
-        assertThrows(IllegalStateException.class, () -> TransactionReplayer.replayFrom(
-                WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO, List.of(held, independent), engine.transactions(),
+        var firstOnly = TransactionReplayer.replayFrom(
+                WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO, List.of(held, independent), List.of(engine.transactions().getFirst()),
                 (state, event) -> reduce(state, event, false), state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
-                StateValidator.none()), "without an owner-declared hold, skipping a runnable head is still invalid");
+                StateValidator.none());
+        assertEquals(List.of(held), firstOnly.schedules(), "historical consumption must retain the other exact action");
+        assertEquals(1, firstOnly.state().value());
+        assertThrows(IllegalStateException.class, () -> TransactionReplayer.replayFrom(
+                WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO, List.of(held), List.of(engine.transactions().getFirst()),
+                (state, event) -> reduce(state, event, false), state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                StateValidator.none()), "missing committed schedule is still corrupt history");
+    }
+
+    @Test
+    void committedConsumptionRejectsDuplicateAndPrematureFactsWithoutChangingTheQueue() {
+        ScheduledAction action = scheduled("schedule:committed", "settlement:a", 10L, 1);
+        ScheduledActionQueue queue = new ScheduledActionQueue();
+        queue.schedule(action);
+        var pending = queue.beginMutation();
+        var consumption = new ScheduleEffect.Consumed(action.id());
+        assertThrows(IllegalStateException.class, () -> ScheduleEffectApplier.applyCommitted(pending, consumption, new SimInstant(9L)));
+        assertEquals(List.of(action), pending.snapshot());
+        ScheduleEffectApplier.applyCommitted(pending, consumption, new SimInstant(10L));
+        assertThrows(IllegalStateException.class, () -> ScheduleEffectApplier.applyCommitted(pending, consumption, new SimInstant(10L)));
+        assertEquals(List.of(action), queue.snapshot(), "failed/uncommitted overlay cannot alter canonical state");
     }
 
     @Test

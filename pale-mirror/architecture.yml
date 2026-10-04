@@ -392,7 +392,7 @@ critical_flows:
     verification: "critical-code"
   - id: "frontier-v3-scheduled-world"
     lifecycle: "active-development"
-    path: "server tick or explicit sleep/fast-forward command -> monotonic SimInstant -> ordered due-action queue -> bounded deterministic execution or visible ordered deferral -> next scheduled transitions"
+    path: "server tick or explicit sleep/fast-forward command -> monotonic SimInstant -> ordered due-action queue -> owner-declared canonical holds excluded before bounded live admission; live consumption cannot bypass an earlier runnable action -> WAL records accepted effects -> recovery applies exact existing due schedule identities without consulting current hold policy; world/revision/time/envelope and canonical validators remain fail-closed -> next scheduled transitions"
     owner: "Frontier v3 kernel and future subsystem processes"
     verification: "critical-code"
   - id: "frontier-v3-replica-custody-handoff"

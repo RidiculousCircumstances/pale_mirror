@@ -338,7 +338,8 @@ public final class ScheduledActionQueue {
             committed = true;
         }
 
-        private ScheduledAction find(ScheduleId id) {
+        ScheduledAction find(ScheduleId id) {
+            requireOpen(); Objects.requireNonNull(id, "schedule id");
             ScheduledAction added = created.get(id);
             if (added != null) return added;
             if (removed.contains(id)) return null;
