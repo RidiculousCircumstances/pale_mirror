@@ -118,7 +118,8 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
         if (work.spatial().pending()) {
             SurfaceAnchor target = SettlementServiceJourneyKnowledge.target(work);
             if (!FrontierV3SemanticMovement.arrived(level, worker, target)) {
-                var retained = work.spatial().approach().map(value -> value.path().subList(value.cursor(), value.path().size()));
+                var retained = work.spatial().knownApproach(origin -> SettlementServiceJourneyKnowledge.checkpoint(state, work, origin).approach())
+                        .map(value -> value.path().subList(value.cursor(), value.path().size()));
                 if (retained.isPresent()) {
                     var hint = retained.orElseThrow();
                     FrontierV3GoalNavigation.pursue(level, worker, new FrontierV3GoalNavigation.Goal(List.of(target),

@@ -176,7 +176,8 @@ final class FrontierV3ProductionWorkSceneExecutor {
         if (job.spatial().pending()) {
             SurfaceAnchor target = ProductionJourneyKnowledge.target(job);
             if (!FrontierV3SemanticMovement.arrived(level, worker, target)) {
-                var retained = job.spatial().approach().map(value -> value.path().subList(value.cursor(), value.path().size()));
+                var retained = job.spatial().knownApproach(origin -> ProductionJourneyKnowledge.checkpoint(state, job, origin).approach())
+                        .map(value -> value.path().subList(value.cursor(), value.path().size()));
                 if (retained.isPresent()) {
                     var hint = retained.orElseThrow();
                     FrontierV3GoalNavigation.pursue(level, worker, new FrontierV3GoalNavigation.Goal(List.of(target),

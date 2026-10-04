@@ -67,6 +67,16 @@ class ProductionBodyContinuationTest {
         assertTrue(ProductionColdJourney.next(departed, retained).isEmpty());
         assertEquals(job.workProgress(), retained.workProgress());
         assertEquals(job.consumedItemId(), retained.consumedItemId());
+        assertTrue(retained.spatial().knownApproach(origin -> ProductionJourneyKnowledge.checkpoint(
+                departed, retained, origin).approach()).isEmpty(), "missing support cannot manufacture a HOT hint");
+        var repaired = departed.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(java.util.Map.of()));
+        var hint = retained.spatial().knownApproach(origin -> ProductionJourneyKnowledge.checkpoint(
+                repaired, retained, origin).approach()).orElseThrow();
+        assertEquals(fixture.port().inputStation(), hint.current());
+        assertEquals(fixture.port().workStation(), hint.target());
+        assertEquals(retained, repaired.productionJobs().get(job.id()), "read-only re-wake cannot replace the saved job or approach");
+        assertEquals(departed.actorLocations(), repaired.actorLocations());
+        assertEquals(departed.inventory(), repaired.inventory());
     }
     private static ProductionColdWorkAdvanced coldEvent(FrontierWorldState state, ProductionJob job, long tick) {
         return ProductionProcess.planCompletion(state, ProductionProcess.complete(job, tick)).stream()

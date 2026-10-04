@@ -486,8 +486,10 @@ final class FrontierV3SceneExecutor {
                 if (approach == null && (travel.arrived() || !travel.canAdvanceNextEdge())) continue;
                 if (approach != null) {
                     var target = travel.nextFormationBody(actor.member().actorId()).supportingSurface();
-                    if (approach.approach().isPresent()) {
-                        var path = approach.approach().orElseThrow(); var hint = path.path().subList(path.cursor(), path.path().size());
+                    var known = approach.knownApproach(origin -> io.farfrontier.palemirror.frontier.v3.model.OperationTravelContinuation.checkpoint(
+                            state, operation, actor.member().actorId(), origin).approach());
+                    if (known.isPresent()) {
+                        var path = known.orElseThrow(); var hint = path.path().subList(path.cursor(), path.path().size());
                         FrontierV3GoalNavigation.pursue(level, actor.entity(), new FrontierV3GoalNavigation.Goal(List.of(target),
                                 TraversalCapability.PEDESTRIAN, new FrontierV3NavigationScope.RetainedApproach(hint), Optional.empty(), hint), actuation);
                     }

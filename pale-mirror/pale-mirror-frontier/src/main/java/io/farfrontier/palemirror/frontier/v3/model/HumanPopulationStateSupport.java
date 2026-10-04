@@ -33,9 +33,8 @@ public final class HumanPopulationStateSupport {
         if (!current.settlementId().equals(migration.destinationSettlementId()) && !hasReservedHousing(state, migration.destinationSettlementId())) {
             throw new IllegalArgumentException("resident migration lost its reserved operational housing");
         }
-        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(migration.residentId(), actor.withBody(BodyPosition.above(new SurfaceAnchor(migration.destination()))));
         var permissions = SettlementWorkPolicy.permissions(state, current.settlementId()).withoutResident(migration.residentId());
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+        return state.withChanges(FrontierWorldStateUpdate.begin()
                 .humanPopulation(state.humanPopulation().completeMigration(migration.residentId(),
                         migration.destinationHouseholdId(), migration.destinationSettlementId()))
                 .actorExecutions(state.actorExecutions().finish(journey.executionId()))

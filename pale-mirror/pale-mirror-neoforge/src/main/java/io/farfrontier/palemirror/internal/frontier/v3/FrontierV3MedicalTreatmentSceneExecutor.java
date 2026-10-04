@@ -97,6 +97,9 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
             return;
         }
         if (!demand.active()) return;
+        // A pre-effect clinical participant displaced after HOT admission returns through
+        // the same final-goal navigator; old readiness never authorizes a remote remedy.
+        if (operation.status() == MedicalEvacuationStatus.PREPARED && !atInfirmary(level, runtime, state, lease)) return;
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob body) || !FrontierV3SceneExecutor.recognizes(runtime, body) || !body.isAlive()) {

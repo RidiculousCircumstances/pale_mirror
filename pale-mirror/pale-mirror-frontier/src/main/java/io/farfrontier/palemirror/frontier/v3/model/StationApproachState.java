@@ -16,6 +16,12 @@ public record StationApproachState(long revision, Optional<TraversalRejoin> appr
         return new StationApproachState(1L, Optional.empty(), Optional.empty());
     }
     public boolean pending() { return approach.isPresent() || waitingOrigin.isPresent(); }
+    /** Read-only HOT hint refresh from the retained origin; never adopts a new canonical revision or credits work. */
+    public Optional<TraversalRejoin> knownApproach(
+            java.util.function.Function<SurfaceAnchor, Optional<TraversalRejoin>> knowledge) {
+        Objects.requireNonNull(knowledge, "station approach knowledge");
+        return approach.or(() -> waitingOrigin.flatMap(knowledge));
+    }
     public SurfaceAnchor current(SurfaceAnchor semanticCheckpoint) {
         return approach.map(TraversalRejoin::current).orElseGet(() -> waitingOrigin.orElse(semanticCheckpoint));
     }
