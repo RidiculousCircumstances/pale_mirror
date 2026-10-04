@@ -76,29 +76,29 @@ final class SettlementServiceWorkPayloadCodecs {
         @Override public String type() { return "frontier.settlement_service_work_traversal_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { SettlementServiceWorkTraversalAdvanced advanced = (SettlementServiceWorkTraversalAdvanced) payload;
             return FrontierWorldPayloadCodecs.encodeProduction(output -> { writeIdLeaseBody(output, advanced.workId(), advanced.leaseId(), advanced.observedWorker()); output.writeShort(advanced.nextCursor());
-                    ActorExecutionStateCodec.writeId(output, advanced.execution()); }); }
+                    WorkObservationCodecs.writeService(output, advanced.observation()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
-            IdLeaseBody value = readIdLeaseBody(input); return new SettlementServiceWorkTraversalAdvanced(value.workId(), value.leaseId(), value.body(), input.readUnsignedShort(), ActorExecutionStateCodec.readId(input)); }); }
+            IdLeaseBody value = readIdLeaseBody(input); return new SettlementServiceWorkTraversalAdvanced(value.workId(), value.leaseId(), value.body(), input.readUnsignedShort(), WorkObservationCodecs.readService(input)); }); }
     }
 
     private static final class TraversalBlocked implements PayloadCodec {
         @Override public String type() { return "frontier.settlement_service_work_traversal_blocked"; }
         @Override public byte[] encode(FrontierPayload payload) { SettlementServiceWorkTraversalBlocked blocked = (SettlementServiceWorkTraversalBlocked) payload;
             return FrontierWorldPayloadCodecs.encodeProduction(output -> { writeIdLeaseBody(output, blocked.workId(), blocked.leaseId(), blocked.observedWorker()); output.writeShort(blocked.blockedNextCursor());
-                    ActorExecutionStateCodec.writeId(output, blocked.execution()); }); }
+                    WorkObservationCodecs.writeService(output, blocked.observation()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
-            IdLeaseBody value = readIdLeaseBody(input); return new SettlementServiceWorkTraversalBlocked(value.workId(), value.leaseId(), value.body(), input.readUnsignedShort(), ActorExecutionStateCodec.readId(input)); }); }
+            IdLeaseBody value = readIdLeaseBody(input); return new SettlementServiceWorkTraversalBlocked(value.workId(), value.leaseId(), value.body(), input.readUnsignedShort(), WorkObservationCodecs.readService(input)); }); }
     }
 
     private static final class Progressed implements PayloadCodec {
         @Override public String type() { return "frontier.settlement_service_work_progressed"; }
         @Override public byte[] encode(FrontierPayload payload) { SettlementServiceWorkProgressed progressed = (SettlementServiceWorkProgressed) payload;
             return FrontierWorldPayloadCodecs.encodeProduction(output -> { writeIdLeaseBody(output, progressed.workId(), progressed.leaseId(), progressed.observedWorker());
-                output.writeByte(progressed.nextPhase().wireTag()); output.writeByte(progressed.completedWorkTicks()); ActorExecutionStateCodec.writeId(output, progressed.execution()); }); }
+                output.writeByte(progressed.nextPhase().wireTag()); output.writeByte(progressed.completedWorkTicks()); WorkObservationCodecs.writeService(output, progressed.observation()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             IdLeaseBody value = readIdLeaseBody(input);
             return new SettlementServiceWorkProgressed(value.workId(), value.leaseId(), value.body(),
-                    SettlementServiceWorkPhase.fromWireTag(input.readUnsignedByte()), input.readUnsignedByte(), ActorExecutionStateCodec.readId(input)); }); }
+                    SettlementServiceWorkPhase.fromWireTag(input.readUnsignedByte()), input.readUnsignedByte(), WorkObservationCodecs.readService(input)); }); }
     }
 
     private static void writeIdLeaseBody(DataOutputStream output, SubjectId work, SceneLeaseId lease, BodyPosition body) throws IOException {

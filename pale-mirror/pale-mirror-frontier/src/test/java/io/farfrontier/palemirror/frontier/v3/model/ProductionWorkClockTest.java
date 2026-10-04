@@ -26,7 +26,7 @@ class ProductionWorkClockTest {
         var lease = SceneLease.forCause(new SceneLeaseId("lease:production-clock"), world, new ProductionWorkSceneCause(job.id()),
                 body.supportingSurface().support(), SimInstant.ZERO, 1L, SceneLeaseStatus.PREPARED,
                 List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(world, job.workerId()))), Set.of(), Optional.empty());
-        var hot = cold.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        var hot = ModeledActorBodyFacts.present(cold.prepareSceneLease(lease), job.workerId()).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
@@ -34,7 +34,9 @@ class ProductionWorkClockTest {
         var coldAction = ProductionProcess.complete(job, 20);
         for (int unit = 1; unit <= ProductionWorkProgress.REQUIRED_PROCESSING_TICKS; unit++) {
             var next = unit == ProductionWorkProgress.REQUIRED_PROCESSING_TICKS ? ProductionWorkProgress.outputReady() : ProductionWorkProgress.processing(unit);
-            var payload = new ProductionWorkProgressed(job.id(), lease.id(), body, next);
+            var current = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+            var payload = new ProductionWorkProgressed(job.id(), lease.id(), body, next,
+                    ModeledActorBodyFacts.productionObservation(current, current.productionJobs().get(job.id()), lease.id()));
             var early = engine.checkpoint();
             var earlyId = new CommandId("command:production-early-" + unit);
             assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(2, earlyId, world,

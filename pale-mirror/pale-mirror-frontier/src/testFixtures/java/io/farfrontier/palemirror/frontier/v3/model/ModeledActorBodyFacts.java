@@ -16,6 +16,29 @@ public final class ModeledActorBodyFacts {
         ActorBodyAuthority.requireActuation(state, id);
         return new ActorHotObservation(id, scopeRevision);
     }
+    public static ProductionWorkObservation productionObservation(FrontierWorldState state, ProductionJob job,
+                                                                 io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId scope) {
+        var execution = state.actorExecutions().current(ActorActivityKind.PRODUCTION).get(job.workerId());
+        return productionObservation(state, job, scope, execution);
+    }
+    public static ProductionWorkObservation productionObservation(FrontierWorldState state, ProductionJob job,
+                                                                 io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId scope,
+                                                                 ActorExecutionId declaredExecution) {
+        var id = new ActorActuationId(ActorBodyAuthority.current(state, job.workerId()), declaredExecution);
+        return new ProductionWorkObservation(new ActorHotObservation(id, state.sceneLeases().get(scope).revision()),
+                job.workTraversal().id(), job.workTraversal().revision(), job.traversalCursor(), job.workProgress(), job.spatial().revision());
+    }
+    public static SettlementServiceWorkObservation serviceObservation(FrontierWorldState state, SettlementServiceWork work,
+                                                                      io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId scope) {
+        return serviceObservation(state, work, scope, SettlementServiceExecutionAuthority.current(state, work));
+    }
+    public static SettlementServiceWorkObservation serviceObservation(FrontierWorldState state, SettlementServiceWork work,
+                                                                      io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId scope,
+                                                                      ActorExecutionId declaredExecution) {
+        var id = new ActorActuationId(ActorBodyAuthority.current(state, work.workerId()), declaredExecution);
+        return new SettlementServiceWorkObservation(new ActorHotObservation(id, state.sceneLeases().get(scope).revision()),
+                work.phase(), work.inputTraversalCursor(), work.workTraversalCursor(), work.completedWorkTicks());
+    }
     public static FrontierWorldState present(FrontierWorldState state, SubjectId actor) {
         state = ActorBodyAuthority.demand(state, actor);
         var id = ActorBodyAuthority.current(state, actor);

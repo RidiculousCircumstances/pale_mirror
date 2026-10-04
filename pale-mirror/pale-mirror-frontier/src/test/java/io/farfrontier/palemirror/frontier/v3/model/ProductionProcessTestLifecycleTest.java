@@ -434,13 +434,21 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         int nextCursor = 1;
         BodyPosition nextStation = workJob.workTraversal().linearCorridorSurfaces().get(nextCursor).standingBody();
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceWorkTraversalAdvanced(hot, settlementId,
-                new ProductionWorkTraversalAdvanced(workJob.id(), leaseId, worker.body(), nextCursor)));
-        FrontierWorldState advanced = ProductionProcess.reduceWorkTraversalAdvanced(hot, prepared.settlementId(),
-                new ProductionWorkTraversalAdvanced(workJob.id(), leaseId, nextStation, nextCursor));
+                new ProductionWorkTraversalAdvanced(workJob.id(), leaseId, worker.body(), nextCursor,
+                        ModeledActorBodyFacts.productionObservation(hot, workJob, leaseId))));
+        var capturedArrival = new ProductionWorkTraversalAdvanced(workJob.id(), leaseId, nextStation, nextCursor,
+                ModeledActorBodyFacts.productionObservation(hot, workJob, leaseId));
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceWorkTraversalAdvanced(hot, settlementId, capturedArrival),
+                "a family cursor event cannot install the worker's position");
+        var inspected = ModeledActorBodyFacts.inspected(hot, workJob.workerId(), nextStation);
+        FrontierWorldState advanced = ProductionProcess.reduceWorkTraversalAdvanced(inspected, prepared.settlementId(), capturedArrival);
+        assertEquals(inspected.actorLocations(), advanced.actorLocations());
+        assertEquals(capturedArrival, FrontierWorldRuntimeDefinition.payloadCodecs().decode(capturedArrival.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(capturedArrival)));
         assertEquals(nextCursor, advanced.productionJobs().get(workJob.id()).traversalCursor());
         assertEquals(hot.sceneLeases(), advanced.sceneLeases(), "observed movement must not mutate a second scene position store");
         assertEquals(nextStation, advanced.sceneLeases().get(leaseId).memberBody(advanced.actorLocations(), workJob.workerId()),
-                "one observed arrival must atomically advance both the work cursor and persisted HOT-body position");
+                "the common observation retains position before the semantic work cursor advances");
         FrontierWorldState recoveredAdvance = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(advanced));
         assertEquals(nextStation, recoveredAdvance.sceneLeases().get(leaseId).memberBody(recoveredAdvance.actorLocations(), workJob.workerId()),
                 "restart recovery must retain the current work station rather than the initial workshop approach");
@@ -453,7 +461,8 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         int cursorAfterNext = nextCursor + 1;
         BodyPosition stationAfterNext = workJob.workTraversal().linearCorridorSurfaces().get(cursorAfterNext).standingBody();
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceWorkTraversalAdvanced(staleCursor, settlementId,
-                        new ProductionWorkTraversalAdvanced(workJob.id(), leaseId, stationAfterNext, cursorAfterNext)),
+                        new ProductionWorkTraversalAdvanced(workJob.id(), leaseId, stationAfterNext, cursorAfterNext,
+                                ModeledActorBodyFacts.productionObservation(staleCursor, staleCursor.productionJobs().get(workJob.id()), leaseId))),
                 "a malformed recovered HOT lease must fail closed rather than advance a split worker cursor");
         FrontierWorldState blocked = hot.withStrategicPlans(hot.strategicPlans().transitionTask(prepared.taskId(), StrategicTaskStatus.BLOCKED))
                 .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
@@ -533,7 +542,11 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         var mismatchCheckpoint = mismatch.checkpoint(); CommandId mismatchId = new CommandId("command:production-route-mismatch");
         CommandResult mismatchResult = mismatch.submit(new FrontierCommand(1, mismatchId, world, mismatchCheckpoint.revision(),
                 mismatchCheckpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(mismatchId),
-                new ProductionWorkTraversalBlocked(new SubjectId("job:asserted-foreign"), leaseId, worker.body(), 1)));
+                new ProductionWorkTraversalBlocked(new SubjectId("job:asserted-foreign"), leaseId, worker.body(), 1,
+                        ModeledActorBodyFacts.productionObservation(hot, job, leaseId,
+                                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(job.workerId(),
+                                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION,
+                                        new SubjectId("job:asserted-foreign"), 1L)))));
         assertInstanceOf(CommandResult.Accepted.class, mismatchResult, mismatchResult.toString());
         FrontierWorldState conflicted = new FrontierWorldStateCodec().decode(mismatch.checkpoint().canonicalState());
         MarketWorkOrder conflictOrder = conflicted.companies().market().workOrders().get(prepared.order().id());
@@ -578,7 +591,8 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertEquals(SceneLeaseStatus.CLOSED, finalizedConflict.sceneLeases().get(leaseId).status());
         assertEquals(worker.body(), finalizedConflict.actorLocations().get(job.workerId()).body());
         assertTrue(finalizedConflict.productionJobs().values().stream().noneMatch(value -> value.workerId().equals(job.workerId())));
-        ProductionWorkTraversalBlocked blocked = new ProductionWorkTraversalBlocked(job.id(), leaseId, worker.body(), 1);
+        ProductionWorkTraversalBlocked blocked = new ProductionWorkTraversalBlocked(job.id(), leaseId, worker.body(), 1,
+                ModeledActorBodyFacts.productionObservation(hot, job, leaseId));
         var checkpoint = engine.checkpoint(); CommandId command = new CommandId("command:production-route-blocked");
 
         CommandResult result = engine.submit(new FrontierCommand(1, command, world, checkpoint.revision(), checkpoint.instant(),
@@ -596,7 +610,8 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertEquals(MarketWorkOrderStatus.CANCELLED, cancelled.companies().market().workOrders().get(prepared.order().id()).status());
 
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceWorkTraversalBlocked(hot, prepared.settlementId(),
-                new ProductionWorkTraversalBlocked(job.id(), leaseId, worker.body(), 2)), "an executor cannot skip an immutable edge when reporting a block");
+                new ProductionWorkTraversalBlocked(job.id(), leaseId, worker.body(), 2,
+                        ModeledActorBodyFacts.productionObservation(hot, job, leaseId))), "an executor cannot skip an immutable edge when reporting a block");
     }
 
     @Test

@@ -30,6 +30,11 @@ import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority;
+import io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.ContractStatus;
@@ -649,29 +654,40 @@ class FrontierV3ServerRuntimeTest {
                 candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED,
                 List.of(new io.farfrontier.palemirror.frontier.v3.model.SceneMember(job.workerId(), SceneLease.deterministicEntityId(world, job.workerId()))), Set.of(), java.util.Optional.empty());
         submitWorld(runtime, "production-restart-prepare", new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneLeasePrepared(lease));
+        var preparedState = worldState(runtime); var location = preparedState.actorLocations().get(job.workerId());
+        submitWorld(runtime, "production-restart-modeled-presence", new ActorBodyPresent(
+                ActorBodyAuthority.current(preparedState, job.workerId()), location.body(), location.condition().health(),
+                location.body(), location.condition().health()));
         submitWorld(runtime, "production-restart-hot", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         int inputCursor = job.workTraversal().linearCorridorSurfaces().size() - 2;
         while (job.traversalCursor() < inputCursor) {
             int cursor = job.traversalCursor() + 1;
             var body = job.workTraversal().linearCorridorSurfaces().get(cursor).standingBody();
+            var observation = ModeledActorBodyFacts.productionObservation(worldState(runtime), job, leaseId);
+            inspectModeledBody(runtime, job.workerId(), body, "production-restart-inspected-" + cursor);
             submitWorld(runtime, "production-restart-advance-" + cursor,
-                    new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkTraversalAdvanced(job.id(), leaseId, body, cursor));
+                    new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkTraversalAdvanced(job.id(), leaseId, body, cursor, observation));
             job = worldState(runtime).productionJobs().get(job.id());
         }
         var inputBody = job.workTraversal().linearCorridorSurfaces().get(inputCursor).standingBody();
         submitWorld(runtime, "production-restart-input", new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgressed(
-                job.id(), leaseId, inputBody, io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress.inputReady()));
+                job.id(), leaseId, inputBody, io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress.inputReady(),
+                ModeledActorBodyFacts.productionObservation(worldState(runtime), job, leaseId)));
         job = worldState(runtime).productionJobs().get(job.id());
         int workCursor = inputCursor + 1;
         var workBody = job.workTraversal().linearCorridorSurfaces().get(workCursor).standingBody();
+        var arrival = ModeledActorBodyFacts.productionObservation(worldState(runtime), job, leaseId);
+        inspectModeledBody(runtime, job.workerId(), workBody, "production-restart-work-inspected");
         submitWorld(runtime, "production-restart-work-arrival", new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkTraversalAdvanced(
-                job.id(), leaseId, workBody, workCursor));
+                job.id(), leaseId, workBody, workCursor, arrival));
         job = worldState(runtime).productionJobs().get(job.id());
         for (int completed = 0; completed <= 17; completed++) {
             if (completed > 0) runtime.advance(20, new WorkBudget(64, 512));
+            job = worldState(runtime).productionJobs().get(job.id());
             FrontierV3CommandSubmission.submitBound(runtime, "production-restart-processing-" + completed, job.id().value(),
                     new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgressed(job.id(), leaseId, workBody,
-                            io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress.processing(completed)),
+                            io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress.processing(completed),
+                            ModeledActorBodyFacts.productionObservation(worldState(runtime), job, leaseId)),
                     FrontierV3ContinuationBinding.require(runtime.checkpointImage().orElseThrow(), job.id(), "frontier.settlement.production.task.complete"));
         }
         var retainedWorkAction = FrontierV3ContinuationBinding.require(runtime.checkpointImage().orElseThrow(), job.id(),
@@ -855,6 +871,15 @@ class FrontierV3ServerRuntimeTest {
                 .filter(operation -> operation.activeTravel().isPresent() && operation.activeTravel().orElseThrow().cursor() == 0)
                 .reduce((left, right) -> { throw new AssertionError("ambiguous initial Northwatch route operations"); })
                 .orElseThrow(() -> new AssertionError("initial Northwatch route operation is absent"));
+    }
+
+    /** Explicit modeled body event for filesystem recovery coverage, not a native movement claim. */
+    private static void inspectModeledBody(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                         SubjectId actor, BodyPosition observed, String phase) {
+        var state = worldState(runtime); var location = state.actorLocations().get(actor);
+        submitWorld(runtime, phase, new ActorBodyInspected(ActorBodyAuthority.current(state, actor),
+                ActorBodyInspected.Source.INDEXED_LIVING, location.body(), location.condition().health(),
+                observed, location.condition().health(), state.actorExecutions().actors().get(actor).current()));
     }
 
     private static void submitWorld(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, FrontierPayload payload) {

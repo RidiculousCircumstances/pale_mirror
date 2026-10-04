@@ -7,8 +7,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Observed durable stage transition for one exact workshop job. */
-public record ProductionWorkProgressed(SubjectId jobId, SceneLeaseId leaseId, BodyPosition observedWorker, ProductionWorkProgress next) implements FrontierPayload {
+public record ProductionWorkProgressed(SubjectId jobId, SceneLeaseId leaseId, BodyPosition observedWorker, ProductionWorkProgress next, ProductionWorkObservation observation) implements FrontierPayload {
     public ProductionWorkProgressed {
+        Objects.requireNonNull(observation, "captured production observation").requireOwner(jobId);
         Objects.requireNonNull(jobId, "production work job"); Objects.requireNonNull(leaseId, "production work lease");
         Objects.requireNonNull(observedWorker, "production work observed worker"); Objects.requireNonNull(next, "production work progress");
     }

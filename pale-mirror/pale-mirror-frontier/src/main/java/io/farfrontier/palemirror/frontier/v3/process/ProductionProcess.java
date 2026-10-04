@@ -71,12 +71,12 @@ public final class ProductionProcess {
             throw new IllegalArgumentException("production-work hand-off has no living worker");
         }
         if (job.bakeryWork().isPresent()) return state;
-        if (job.traversalCursor() != 0 || !job.workProgress().equals(ProductionWorkProgress.notStarted())) {
-            BodyPosition retained = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
-            if (!retained.equals(current.body()) || !retained.equals(capture.body())) {
-                throw new IllegalArgumentException("production-work hand-off must retain its exact COLD/HOT cursor station");
-            }
-            return state;
+        if (job.traversalCursor() != 0 || !job.workProgress().equals(ProductionWorkProgress.notStarted()) || job.spatial().pending()) {
+            if (!capture.body().equals(current.body()))
+                throw new IllegalArgumentException("production hand-off requires independent current body inspection");
+            SurfaceAnchor retained = job.spatial().current(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()));
+            return retained.equals(capture.body().supportingSurface()) ? state : replaceJob(state,
+                    job.withSpatial(ProductionJourneyKnowledge.checkpoint(state, job, capture.body().supportingSurface())));
         }
         TraversalTopology rebased = ProductionWorkTraversal.compile(state, workshop, job.workerId(),
                 new ActorLocation(capture.body(), current.condition(), current.kind()), job.id());
@@ -414,6 +414,7 @@ public final class ProductionProcess {
         int workCursor = job.workTraversal().linearCorridorSurfaces().size() - 1;
         SurfaceAnchor observedStation = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor());
         SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, progressed.leaseId());
+        progressed.observation().require(state, job, lease, progressed.observedWorker());
         if (!progressed.observedWorker().equals(observedStation.standingBody())) {
             throw new IllegalArgumentException("production work progress must name the observed retained worker station");
         }
@@ -445,7 +446,7 @@ public final class ProductionProcess {
             throw new IllegalArgumentException("production work traversal must name its observed next retained station");
         }
         return FrontierProductionWorkSceneSupport.advanceWorker(state, job, job.withWorkTraversal(job.workTraversal(), advanced.nextCursor()),
-                advanced.leaseId(), advanced.observedWorker());
+                advanced.leaseId(), advanced.observedWorker(), advanced.observation());
     }
 
     /**
@@ -458,30 +459,19 @@ public final class ProductionProcess {
         ProductionJob job = state.productionJobs().get(advanced.jobId());
         if (job == null || !subject.equals(job.settlementId()) || !ActorExecutionCoordinator.coldAvailable(state, job.workerId())
                 || hasOpenWorkScene(state, job.id())) throw new IllegalArgumentException("production cold work has a physical owner");
-        int last = job.workTraversal().linearCorridorSurfaces().size() - 1;
-        if (advanced.nextCursor() < job.traversalCursor() || advanced.nextCursor() > last) {
-            throw new IllegalArgumentException("production cold work cursor is not retained");
-        }
-        ProductionWorkProgress expected;
-        if (job.workProgress().stage() == ProductionWorkProgress.Stage.APPROACH && job.traversalCursor() == last - 1) {
-            expected = ProductionWorkProgress.inputReady();
-            if (advanced.nextCursor() != job.traversalCursor() || !advanced.next().equals(expected))
-                throw new IllegalArgumentException("production cold input handoff must use its retained input station");
-        } else if (job.traversalCursor() < last) {
-            if (advanced.nextCursor() != job.traversalCursor() + 1 || !advanced.next().equals(job.workProgress())) {
-                throw new IllegalArgumentException("production cold work must advance one retained edge");
-            }
-            expected = job.workProgress();
-        } else {
-            if (advanced.nextCursor() != last) throw new IllegalArgumentException("production cold work may not move beyond its terminal station");
-            expected = coldNext(job.workProgress(), 1);
-            if (!advanced.next().equals(expected)) throw new IllegalArgumentException("production cold work phase is not the retained successor");
-        }
-        ProductionJob replacement = job.withWorkTraversal(job.workTraversal(), advanced.nextCursor()).withWorkProgress(expected);
         var actor = state.actorLocations().get(job.workerId());
-        if (actor == null || !actor.body().equals(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody())) {
-            throw new IllegalArgumentException("production cold worker diverges from its retained cursor");
-        }
+        state.actorExecutions().requireCurrent(advanced.execution());
+        if (!advanced.execution().actorId().equals(job.workerId()) || actor == null
+                || !advanced.expectedBody().equals(actor.body()) || advanced.expectedCursor() != job.traversalCursor()
+                || !advanced.expectedProgress().equals(job.workProgress()) || advanced.spatialRevision() != job.spatial().revision())
+            throw new IllegalArgumentException("production COLD receipt has stale execution, body or owner predecessor");
+        var step = ProductionColdJourney.next(state, job).orElseThrow(
+                () -> new IllegalArgumentException("production COLD approach is not known traversable"));
+        if (advanced.nextCursor() != step.cursor() || !advanced.next().equals(step.progress()))
+            throw new IllegalArgumentException("production COLD receipt is not its exact retained successor");
+        ProductionJob replacement = step.cursor() == job.traversalCursor() && step.progress().equals(job.workProgress())
+                ? job.withSpatial(step.spatial()) : job.withWorkTraversal(job.workTraversal(), step.cursor())
+                    .withWorkProgress(step.progress()).withSpatial(step.spatial());
         ExactInventory inventory = state.inventory();
         java.util.Map<PhysicalIntentId, PhysicalIntent> intents = state.physicalIntents();
         if (job.inputHold() instanceof ProductionInputHold.Materialized) {
@@ -505,7 +495,7 @@ public final class ProductionProcess {
             replacement = replacement.withInputHold(new ProductionInputHold.Cold(input));
         }
         java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(job.workerId(), actor.withBody(replacement.workTraversal().linearCorridorSurfaces().get(replacement.traversalCursor()).standingBody()));
+        actors.put(job.workerId(), actor.withBody(step.body()));
         java.util.Map<SubjectId, ProductionJob> jobs = new java.util.LinkedHashMap<>(state.productionJobs()); jobs.put(replacement.id(), replacement);
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).physicalIntents(intents)
                 .productionJobs(jobs).actorLocations(actors));
@@ -515,25 +505,17 @@ public final class ProductionProcess {
         if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId()) || hasOpenWorkScene(state, job.id())) {
             return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
         }
-        int last = job.workTraversal().linearCorridorSurfaces().size() - 1;
-        boolean inputHandoff = job.workProgress().stage() == ProductionWorkProgress.Stage.APPROACH && job.traversalCursor() == last - 1;
-        int nextCursor = inputHandoff ? job.traversalCursor() : job.traversalCursor() < last ? job.traversalCursor() + 1 : last;
-        ProductionWorkProgress next = inputHandoff ? ProductionWorkProgress.inputReady()
-                : job.traversalCursor() < last ? job.workProgress() : coldNext(job.workProgress(), 1);
+        var execution = state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION)
+                .get(job.workerId());
         long nextDue = Math.addExact(action.dueAt().ticks(), ProductionWorkProgress.SIMULATION_TICKS_PER_WORK_UNIT);
-        return List.of(new ProposedEvent(job.settlementId(), new ProductionColdWorkAdvanced(job.id(), nextCursor, next)),
+        if (execution == null || !execution.activityOwnerId().equals(job.id()))
+            return List.of(reschedule(action, complete(job, nextDue)));
+        var step = ProductionColdJourney.next(state, job);
+        if (step.isEmpty()) return List.of(reschedule(action, complete(job, nextDue)));
+        var next = step.orElseThrow();
+        return List.of(new ProposedEvent(job.settlementId(), new ProductionColdWorkAdvanced(job.id(), next.cursor(), next.progress(),
+                execution, state.actorLocations().get(job.workerId()).body(), job.traversalCursor(), job.workProgress(), job.spatial().revision())),
                 reschedule(action, complete(job, nextDue)));
-    }
-
-    private static ProductionWorkProgress coldNext(ProductionWorkProgress current, int workTicks) {
-        if (workTicks < 1) throw new IllegalArgumentException("production cold work must retain positive elapsed ticks");
-        return switch (current.stage()) {
-            case APPROACH -> { if (workTicks != 1) throw new IllegalArgumentException("production approach has one retained transition"); yield ProductionWorkProgress.inputReady(); }
-            case INPUT_READY -> { if (workTicks != 1) throw new IllegalArgumentException("production input hand-off has one retained transition"); yield ProductionWorkProgress.processing(0); }
-            case PROCESSING -> current.completedTicks() + workTicks == ProductionWorkProgress.REQUIRED_PROCESSING_TICKS
-                    ? ProductionWorkProgress.outputReady() : ProductionWorkProgress.processing(current.completedTicks() + workTicks);
-            case OUTPUT_READY -> throw new IllegalArgumentException("production cold work is already terminal");
-        };
     }
 
     /**
@@ -565,6 +547,7 @@ public final class ProductionProcess {
             throw new IllegalArgumentException("production work traversal block is not one retained next edge");
         }
         SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, blocked.leaseId());
+        blocked.observation().require(state, job, lease, blocked.observedWorker());
         BodyPosition current = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
         if (!blocked.observedWorker().equals(current) || !lease.memberBody(state.actorLocations(), job.workerId()).equals(current)) {
             throw new IllegalArgumentException("production work traversal block must retain its worker at the current cursor");

@@ -7,8 +7,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Observed one-edge advance of the immutable workshop work corridor. */
-public record ProductionWorkTraversalAdvanced(SubjectId jobId, SceneLeaseId leaseId, BodyPosition observedWorker, int nextCursor) implements FrontierPayload {
+public record ProductionWorkTraversalAdvanced(SubjectId jobId, SceneLeaseId leaseId, BodyPosition observedWorker, int nextCursor, ProductionWorkObservation observation) implements FrontierPayload {
     public ProductionWorkTraversalAdvanced {
+        Objects.requireNonNull(observation, "captured production observation").requireOwner(jobId);
         Objects.requireNonNull(jobId, "production work traversal job"); Objects.requireNonNull(leaseId, "production work lease");
         Objects.requireNonNull(observedWorker, "production work observed worker");
         if (nextCursor < 1) throw new IllegalArgumentException("production work traversal cursor must advance");

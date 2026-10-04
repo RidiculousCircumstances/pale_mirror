@@ -33,42 +33,47 @@ final class ProductionWorkScenePayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { ProductionColdWorkAdvanced advanced = (ProductionColdWorkAdvanced) payload;
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 FrontierWorldPayloadCodecs.writeSubject(output, advanced.jobId()); output.writeShort(advanced.nextCursor());
-                ProductionWorkProgressStateCodec.write(output, advanced.next());
+                ProductionWorkProgressStateCodec.write(output, advanced.next()); ActorExecutionStateCodec.writeId(output, advanced.execution());
+                FrontierWorldPayloadCodecs.writeBody(output, advanced.expectedBody()); output.writeShort(advanced.expectedCursor());
+                ProductionWorkProgressStateCodec.write(output, advanced.expectedProgress()); output.writeLong(advanced.spatialRevision());
             }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
-                new ProductionColdWorkAdvanced(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedShort(), ProductionWorkProgressStateCodec.read(input))); }
+                new ProductionColdWorkAdvanced(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedShort(),
+                        ProductionWorkProgressStateCodec.read(input), ActorExecutionStateCodec.readId(input), FrontierWorldPayloadCodecs.readBody(input),
+                        input.readUnsignedShort(), ProductionWorkProgressStateCodec.read(input), input.readLong())); }
     }
     private static final class Progressed implements PayloadCodec {
         @Override public String type() { return "frontier.production_work_progressed"; }
         @Override public byte[] encode(FrontierPayload payload) { ProductionWorkProgressed progressed = (ProductionWorkProgressed) payload;
             return FrontierWorldPayloadCodecs.encodeProduction(output -> { FrontierWorldPayloadCodecs.writeSubject(output, progressed.jobId()); FrontierWorldPayloadCodecs.writeString(output, progressed.leaseId().value());
-                FrontierWorldPayloadCodecs.writeBody(output, progressed.observedWorker()); ProductionWorkProgressStateCodec.write(output, progressed.next()); }); }
+                FrontierWorldPayloadCodecs.writeBody(output, progressed.observedWorker()); ProductionWorkProgressStateCodec.write(output, progressed.next());
+                WorkObservationCodecs.writeProduction(output, progressed.observation()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             SubjectId job = FrontierWorldPayloadCodecs.readSubject(input).value();
             SceneLeaseId lease = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input));
-            return new ProductionWorkProgressed(job, lease, FrontierWorldPayloadCodecs.readBody(input), ProductionWorkProgressStateCodec.read(input));
+            return new ProductionWorkProgressed(job, lease, FrontierWorldPayloadCodecs.readBody(input), ProductionWorkProgressStateCodec.read(input), WorkObservationCodecs.readProduction(input));
         }); }
     }
     private static final class TraversalAdvanced implements PayloadCodec {
         @Override public String type() { return "frontier.production_work_traversal_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { ProductionWorkTraversalAdvanced advanced = (ProductionWorkTraversalAdvanced) payload;
             return FrontierWorldPayloadCodecs.encodeProduction(output -> { FrontierWorldPayloadCodecs.writeSubject(output, advanced.jobId()); FrontierWorldPayloadCodecs.writeString(output, advanced.leaseId().value());
-                FrontierWorldPayloadCodecs.writeBody(output, advanced.observedWorker()); output.writeShort(advanced.nextCursor()); }); }
+                FrontierWorldPayloadCodecs.writeBody(output, advanced.observedWorker()); output.writeShort(advanced.nextCursor()); WorkObservationCodecs.writeProduction(output, advanced.observation()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             SubjectId job = FrontierWorldPayloadCodecs.readSubject(input).value();
             SceneLeaseId lease = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input));
-            return new ProductionWorkTraversalAdvanced(job, lease, FrontierWorldPayloadCodecs.readBody(input), input.readUnsignedShort());
+            return new ProductionWorkTraversalAdvanced(job, lease, FrontierWorldPayloadCodecs.readBody(input), input.readUnsignedShort(), WorkObservationCodecs.readProduction(input));
         }); }
     }
     private static final class TraversalBlocked implements PayloadCodec {
         @Override public String type() { return "frontier.production_work_traversal_blocked"; }
         @Override public byte[] encode(FrontierPayload payload) { ProductionWorkTraversalBlocked blocked = (ProductionWorkTraversalBlocked) payload;
             return FrontierWorldPayloadCodecs.encodeProduction(output -> { FrontierWorldPayloadCodecs.writeSubject(output, blocked.jobId()); FrontierWorldPayloadCodecs.writeString(output, blocked.leaseId().value());
-                FrontierWorldPayloadCodecs.writeBody(output, blocked.observedWorker()); output.writeShort(blocked.blockedNextCursor()); }); }
+                FrontierWorldPayloadCodecs.writeBody(output, blocked.observedWorker()); output.writeShort(blocked.blockedNextCursor()); WorkObservationCodecs.writeProduction(output, blocked.observation()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             SubjectId job = FrontierWorldPayloadCodecs.readSubject(input).value();
             SceneLeaseId lease = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input));
-            return new ProductionWorkTraversalBlocked(job, lease, FrontierWorldPayloadCodecs.readBody(input), input.readUnsignedShort());
+            return new ProductionWorkTraversalBlocked(job, lease, FrontierWorldPayloadCodecs.readBody(input), input.readUnsignedShort(), WorkObservationCodecs.readProduction(input));
         }); }
     }
     private static final class Finalized implements PayloadCodec {

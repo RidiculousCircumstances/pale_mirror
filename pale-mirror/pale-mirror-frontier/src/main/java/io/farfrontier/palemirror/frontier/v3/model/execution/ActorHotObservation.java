@@ -9,7 +9,8 @@ import java.util.Objects;
 public record ActorHotObservation(ActorActuationId actuation, long scopeRevision) {
     public ActorHotObservation {
         Objects.requireNonNull(actuation, "HOT observation actuation");
-        if (scopeRevision < 1) throw new IllegalArgumentException("HOT observation needs an exact scope version");
+        // Scene scopes can be admitted at canonical revision zero; absence is never encoded as zero.
+        if (scopeRevision < 0) throw new IllegalArgumentException("HOT observation needs an exact non-negative scope version");
     }
 
     /** The owning family supplies its declared execution and scope, not a guessed dispatch key. */

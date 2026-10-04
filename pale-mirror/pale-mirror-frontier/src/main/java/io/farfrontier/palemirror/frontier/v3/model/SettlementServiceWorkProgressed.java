@@ -9,17 +9,17 @@ import java.util.Objects;
 /** Observed bounded work progress at the retained service-work station. */
 public record SettlementServiceWorkProgressed(SubjectId workId, SceneLeaseId leaseId, BodyPosition observedWorker,
                                               SettlementServiceWorkPhase nextPhase, int completedWorkTicks,
-                                              io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution) implements FrontierPayload {
+                                              SettlementServiceWorkObservation observation) implements FrontierPayload {
     public SettlementServiceWorkProgressed {
         Objects.requireNonNull(workId, "service-work progress work");
         Objects.requireNonNull(leaseId, "service-work progress lease");
         Objects.requireNonNull(observedWorker, "service-work observed worker");
         Objects.requireNonNull(nextPhase, "service-work next phase");
-        Objects.requireNonNull(execution, "service progress execution");
-        SettlementServiceExecutionAuthority.requireDeclaration(execution, workId);
+        Objects.requireNonNull(observation, "captured service observation").requireOwner(workId);
         if (completedWorkTicks < 0 || completedWorkTicks > SettlementServiceWork.REQUIRED_WORK_TICKS) {
             throw new IllegalArgumentException("service-work progress is outside its retained bound");
         }
     }
+    public io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution() { return observation.authority().actuation().execution(); }
     @Override public String type() { return "frontier.settlement_service_work_progressed"; }
 }

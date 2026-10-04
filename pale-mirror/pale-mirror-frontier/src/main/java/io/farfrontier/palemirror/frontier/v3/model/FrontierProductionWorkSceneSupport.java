@@ -56,7 +56,7 @@ public final class FrontierProductionWorkSceneSupport {
             return Optional.of(new Candidate(job.id(), job.settlementId(), job.workerId(), workshop.id(), demand,
                     retained.support(), Map.of(job.workerId(), retained.support())));
         }
-        SurfaceAnchor retained = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor());
+        SurfaceAnchor retained = job.spatial().current(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()));
         if (!worker.supportingSurface().equals(retained)) return Optional.empty();
         return Optional.of(new Candidate(job.id(), job.settlementId(), job.workerId(), workshop.id(), workshop.anchor(), retained.support(), Map.of(job.workerId(), retained.support())));
     }
@@ -73,11 +73,6 @@ public final class FrontierProductionWorkSceneSupport {
                 || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id()) || lease.members().size() != 1
                 || !lease.members().getFirst().actorId().equals(job.workerId())) {
             throw new IllegalArgumentException("production work observation has no matching HOT worker lease");
-        }
-        if (job.bakeryWork().isPresent()) return lease;
-        BodyPosition retainedStation = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
-        if (!retainedStation.equals(lease.memberBody(state.actorLocations(), job.workerId()))) {
-            throw new IllegalArgumentException("production work HOT lease diverges from its retained worker cursor");
         }
         return lease;
     }
@@ -107,13 +102,12 @@ public final class FrontierProductionWorkSceneSupport {
         return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs));
     }
     /**
-     * Commits one observed worker arrival as one causal fact: the work cursor and the
-     * canonical actor position may never diverge. The scene retains participant identity
-     * only, not a second position to be synchronized at release.
+     * Commits a semantic cursor arrival after independent common body inspection.
+     * Physical position and the last completed semantic checkpoint are distinct facts.
      */
     public static FrontierWorldState advanceWorker(FrontierWorldState state, ProductionJob current, ProductionJob replacement,
                                                    io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId leaseId,
-                                                   BodyPosition observedWorker) {
+                                                   BodyPosition observedWorker, ProductionWorkObservation observation) {
         java.util.Objects.requireNonNull(current, "current production job");
         java.util.Objects.requireNonNull(replacement, "replacement production job");
         java.util.Objects.requireNonNull(observedWorker, "observed production worker");
@@ -123,15 +117,13 @@ public final class FrontierProductionWorkSceneSupport {
             throw new IllegalArgumentException("production worker advance must retain one job and advance exactly one cursor");
         }
         SceneLease lease = requireHotLease(state, current, leaseId);
-        BodyPosition expectedCurrent = current.workTraversal().linearCorridorSurfaces().get(current.traversalCursor()).standingBody();
         BodyPosition expectedNext = replacement.workTraversal().linearCorridorSurfaces().get(replacement.traversalCursor()).standingBody();
-        if (!lease.memberBody(state.actorLocations(), current.workerId()).equals(expectedCurrent) || !observedWorker.equals(expectedNext)) {
-            throw new IllegalArgumentException("production worker advance must retain its prior and observed next lease positions");
+        observation.require(state, current, lease, observedWorker);
+        if (!observedWorker.equals(expectedNext)) {
+            throw new IllegalArgumentException("production worker advance must acknowledge its exact next semantic station");
         }
         Map<SubjectId, ProductionJob> jobs = new java.util.LinkedHashMap<>(state.productionJobs()); jobs.put(replacement.id(), replacement);
-        Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(current.workerId(), actors.get(current.workerId()).withBody(observedWorker));
-        return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs).actorLocations(actors));
+        return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs));
     }
     /** The worker may not continue a visual cycle after its named player-observable input departed. */
     public static boolean hasPhysicalInput(FrontierWorldState state, ProductionJob job) {

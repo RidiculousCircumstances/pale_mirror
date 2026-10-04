@@ -15,11 +15,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress;
-import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgressed;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneLeaseHandoff;
-import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneLeasePrepared;
-import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkTraversalAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
@@ -49,103 +46,15 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * One loaded-worker proof for production work.  The fixture retains only canonical production
- * facts; the test itself never loads the remote settlement chunk or creates a second route.
+ * Native collision and modeled scope-closure component checks, not movement acceptance.
+ * The removed legacy station/death probe fabricated cursor arrivals before inserting a
+ * body outside the canonical map. Common-body death and production lifecycle coverage
+ * remain required; integrated movement acceptance belongs to an ordinary client scenario.
  */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3ProductionWorkGameTests {
     private FrontierV3ProductionWorkGameTests() { }
-
-    @GameTest(batch = "pm-frontier-v3-scene-production-work", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
-    public static void exactWorkerRetainsStationsThenDeathDrainsAndFinalizesWork(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos bodyPosition = helper.absolutePos(new BlockPos(0, 8, 0));
-        String suffix = bodyPosition.getX() + "-" + bodyPosition.getZ();
-        WorldId world = new WorldId("frontier:production-work-game-test-" + suffix);
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierV3FixtureCatalog.productionWorkConfiguration(world, 41L), new EphemeralStore(), 20_000);
-        try {
-            FrontierWorldState initial = state(runtime);
-            ProductionJob initialJob = initial.productionJobs().get(new SubjectId("job:production-development-input-theft"));
-            helper.assertTrue(initialJob != null, "the fixture must retain one exact materialized production job");
-            SubjectId jobId = initialJob.id();
-            FrontierProductionWorkSceneSupport.Candidate candidate = FrontierProductionWorkSceneSupport.candidates(initial).stream().findFirst().orElseThrow();
-            SceneLeaseId leaseId = new SceneLeaseId("lease:production-work-game-test-" + suffix);
-            SceneMember member = new SceneMember(initialJob.workerId(), SceneLease.deterministicEntityId(world, initialJob.workerId()));
-            SceneLease lease = SceneLease.forCause(leaseId, world, new ProductionWorkSceneCause(initialJob.id()), candidate.handoffPosition(),
-                    runtime.canonicalState().orElseThrow().instant(), runtime.canonicalState().orElseThrow().revision().value(), SceneLeaseStatus.PREPARED,
-                    List.of(member), java.util.Set.of(), Optional.empty());
-            FrontierV3CommandSubmission.submit(runtime, "production-work-game-test-prepare", suffix, new ProductionWorkSceneLeasePrepared(lease));
-            FrontierV3CommandSubmission.submit(runtime, "production-work-game-test-hot", suffix, new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-
-            ProductionJob job = state(runtime).productionJobs().get(jobId);
-            int inputCursor = job.workTraversal().linearCorridorSurfaces().size() - 2;
-            while (job.traversalCursor() < inputCursor) {
-                int next = job.traversalCursor() + 1;
-                BodyPosition observed = job.workTraversal().linearCorridorSurfaces().get(next).standingBody();
-                FrontierV3CommandSubmission.submit(runtime, "production-work-game-test-approach", suffix + "-" + next,
-                        new ProductionWorkTraversalAdvanced(job.id(), leaseId, observed, next));
-                job = state(runtime).productionJobs().get(job.id());
-                helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).memberBody(state(runtime).actorLocations(), job.workerId()), observed,
-                        "each observed approach arrival must persist the same worker position as its retained cursor");
-            }
-            BodyPosition input = job.workTraversal().linearCorridorSurfaces().get(inputCursor).standingBody();
-            FrontierV3CommandSubmission.submit(runtime, "production-work-game-test-input", suffix,
-                    new ProductionWorkProgressed(job.id(), leaseId, input, ProductionWorkProgress.inputReady()));
-            int workCursor = inputCursor + 1;
-            BodyPosition work = job.workTraversal().linearCorridorSurfaces().get(workCursor).standingBody();
-            FrontierV3CommandSubmission.submit(runtime, "production-work-game-test-work-arrival", suffix,
-                    new ProductionWorkTraversalAdvanced(job.id(), leaseId, work, workCursor));
-            FrontierV3CommandSubmission.submitBound(runtime, "production-work-game-test-processing", suffix,
-                    new ProductionWorkProgressed(job.id(), leaseId, work, ProductionWorkProgress.processing(0)),
-                    FrontierV3ContinuationBinding.require(runtime.checkpointImage().orElseThrow(), job.id(), "frontier.settlement.production.task.complete"));
-            helper.assertValueEqual(state(runtime).productionJobs().get(job.id()).workProgress(), ProductionWorkProgress.processing(0),
-                    "the exact HOT worker must reach the declared work station before processing starts");
-            helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).memberBody(state(runtime).actorLocations(), job.workerId()), work,
-                    "the persisted HOT lease must retain the processing station for restart/reclaim");
-
-            level.setBlock(bodyPosition.below(), Blocks.STONE.defaultBlockState(), 3);
-            Villager body = EntityType.VILLAGER.create(level);
-            helper.assertTrue(body != null, "the exact production worker body must be constructible");
-            body.setUUID(member.entityId()); body.setNoAi(true); body.setPos(bodyPosition.getX() + 0.5D, bodyPosition.getY(), bodyPosition.getZ() + 0.5D);
-            body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, leaseId.value());
-            body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, job.workerId().value());
-            body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
-            body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
-            FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), job.workerId(), member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L));
-            helper.assertTrue(level.addFreshEntity(body), "the exact worker body must enter the already-loaded GameTest cell");
-            helper.runAfterDelay(2L, () -> {
-                try {
-                    // The GameTest template deliberately lives outside the bounded Frontier map.
-                    // Keep body admission local, then present its already-retained canonical work
-                    // position to the observer; setPos has no chunk-loading or world-write authority.
-                    body.setPos(work.x() + 0.5D, work.y(), work.z() + 0.5D);
-                    body.setHealth(0.0F);
-                    helper.assertTrue(FrontierV3ActorBodyController.observeDeath(level, runtime, body, null),
-                            "the common physical observer must accept only the exact production worker incarnation");
-                    FrontierWorldState afterDeath = state(runtime);
-                    helper.assertValueEqual(afterDeath.sceneLeases().get(leaseId).status(), SceneLeaseStatus.DRAINING,
-                            "worker death must drain its same production scene rather than starting a replacement worker");
-                    helper.assertTrue(afterDeath.productionJobs().containsKey(jobId),
-                            "the blocked job remains owned until the physical worker release is durable");
-                    FrontierV3CommandSubmission.submit(runtime, "production-work-game-test-release", suffix,
-                            new SceneLeaseReleased(leaseId, List.of()));
-                    FrontierWorldState finalized = state(runtime);
-                    helper.assertFalse(finalized.productionJobs().containsKey(jobId),
-                            "release must run the typed production finalizer and free no zombie job or reservation");
-                    helper.assertTrue(runtime.checkpointImage().orElseThrow().schedules().stream()
-                                    .noneMatch(action -> action.subject().equals(jobId)),
-                            "job retirement and cancellation of its held continuation must be atomic");
-                    body.discard(); runtime.shutdown(); helper.succeed();
-                } catch (RuntimeException failure) {
-                    body.discard(); runtime.shutdown(); throw failure;
-                }
-            });
-        } catch (RuntimeException failure) {
-            runtime.shutdown(); throw failure;
-        }
-    }
 
     @GameTest(batch = "pm-frontier-v3-scene-production-work", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void loadedFullBlockRejectsOnlyTheExactNextWorkerBody(GameTestHelper helper) {

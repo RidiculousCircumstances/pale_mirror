@@ -107,7 +107,8 @@ final class FrontierV3ProductionWorkSceneExecutor {
         // in-flight ambient pose into a false exact surface.  Keep ambient custody until this
         // same body is actually at, and collision-clear on, the one inferred support—no reset,
         // replacement, alternate floor, or desired-state repair is permitted here.
-        if (!observedHandoffSurfaceIsCurrent(level, body, capture.body())) return;
+        if (!observedHandoffSurfaceIsCurrent(level, body, capture.body())
+                || !FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
         // `handoffPosition` is the durable first route surface used by prepared-scene
         // validation.  The reducer rebases the unstarted traversal from this same observation,
         // so retain the support beneath the captured body as well as the captured body itself.
@@ -164,9 +165,34 @@ final class FrontierV3ProductionWorkSceneExecutor {
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
         if (execution == null || !execution.activityOwnerId().equals(job.id()))
             throw new IllegalArgumentException("production command lost its exact admitted execution");
-        var actuation = FrontierV3ActorActuation.capture(state, worker, execution, runtime::decodedState);
+        var actuation = FrontierV3ActorActuation.capture(state, worker, execution, () -> runtime.decodedState().filter(
+                now -> job.equals(now.productionJobs().get(job.id())) && lease.equals(now.sceneLeases().get(lease.id()))));
+        var observation = new ProductionWorkObservation(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
+                actuation.id(), lease.revision()), job.workTraversal().id(), job.workTraversal().revision(), job.traversalCursor(),
+                job.workProgress(), job.spatial().revision());
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker) || !actuation.current(worker)) return;
         List<SurfaceAnchor> route = job.workTraversal().linearCorridorSurfaces(); SurfaceAnchor current = route.get(job.traversalCursor());
         int inputCursor = route.size() - 2;
+        if (job.spatial().pending()) {
+            SurfaceAnchor target = ProductionJourneyKnowledge.target(job);
+            if (!FrontierV3SemanticMovement.arrived(level, worker, target)) {
+                var retained = job.spatial().approach().map(value -> value.path().subList(value.cursor(), value.path().size()));
+                if (retained.isPresent()) {
+                    var hint = retained.orElseThrow();
+                    FrontierV3GoalNavigation.pursue(level, worker, new FrontierV3GoalNavigation.Goal(List.of(target),
+                            TraversalCapability.PEDESTRIAN, new FrontierV3NavigationScope.RetainedApproach(hint),
+                            Optional.empty(), hint), actuation);
+                }
+                // Missing known geometry retains the same owner obligation; it never resets work or body.
+                return;
+            }
+            if (!target.equals(current)) {
+                submit(runtime, "production-work-traversal", lease.id().value(), new ProductionWorkTraversalAdvanced(
+                        job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, target), job.traversalCursor() + 1, observation));
+                return;
+            }
+            // At the retained input/work station, the ordinary stage receipt also clears the approach.
+        }
         // Entity motion runs at the normal entity boundary, while a canonical command is
         // committed afterwards.  The exact body may therefore already be on the one retained
         // next surface when this tick reads the still-old cursor.  That is observed arrival,
@@ -175,7 +201,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
         if (!FrontierV3SemanticMovement.arrived(level, worker, current)) {
             if (job.traversalCursor() < route.size() - 1 && FrontierV3SemanticMovement.arrived(level, worker, route.get(job.traversalCursor() + 1))) {
                 submit(runtime, "production-work-traversal", lease.id().value(),
-                        new ProductionWorkTraversalAdvanced(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, route.get(job.traversalCursor() + 1)), job.traversalCursor() + 1));
+                        new ProductionWorkTraversalAdvanced(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, route.get(job.traversalCursor() + 1)), job.traversalCursor() + 1, observation));
             } else if (job.traversalCursor() < route.size() - 1
                     && FrontierV3SemanticMovement.withinRetainedEdgeEnvelope(level, worker, current, route.get(job.traversalCursor() + 1))) {
                 // Canonical cursor ownership changes only at an exact next-surface arrival.
@@ -191,14 +217,14 @@ final class FrontierV3ProductionWorkSceneExecutor {
         }
         if (job.workProgress().stage() == ProductionWorkProgress.Stage.APPROACH && job.traversalCursor() == inputCursor) {
             worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-            submit(runtime, "production-work-input-ready", lease.id().value(), new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), ProductionWorkProgress.inputReady()));
+            submit(runtime, "production-work-input-ready", lease.id().value(), new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), ProductionWorkProgress.inputReady(), observation));
             return;
         }
         if (job.traversalCursor() < route.size() - 1) {
             SurfaceAnchor next = route.get(job.traversalCursor() + 1);
             if (FrontierV3SemanticMovement.arrived(level, worker, next)) submit(runtime, "production-work-traversal", lease.id().value(), new ProductionWorkTraversalAdvanced(job.id(), lease.id(),
-                    FrontierV3SurfaceObservation.observedAt(worker, next), job.traversalCursor() + 1));
-            else if (!FrontierV3SemanticMovement.targetIsNavigable(level, worker, next)) blocked(level, runtime, lease, job, worker, current, next);
+                    FrontierV3SurfaceObservation.observedAt(worker, next), job.traversalCursor() + 1, observation));
+            else if (!FrontierV3SemanticMovement.targetIsNavigable(level, worker, next)) blocked(level, runtime, lease, job, worker, current, next, observation);
             else FrontierV3GoalNavigation.pursueRetainedEdge(level, worker, current, next, actuation);
             return;
         }
@@ -215,7 +241,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
         };
         worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         FrontierV3CommandSubmission.submitBound(runtime, "production-work-progress", lease.id().value(),
-                new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next), binding);
+                new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next, observation), binding);
     }
     /** Close a physically carried item and its scene in one turn before chunk expiry hides the body. */
     private static void releaseBakeryBeforeBodyUnloads(ServerLevel level,
@@ -285,12 +311,12 @@ final class FrontierV3ProductionWorkSceneExecutor {
      * that asks the pure owner to block and drain this exact job.
      */
     private static void blocked(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
-                                ProductionJob job, Mob worker, SurfaceAnchor current, SurfaceAnchor next) {
+                                ProductionJob job, Mob worker, SurfaceAnchor current, SurfaceAnchor next, ProductionWorkObservation observation) {
         String expected = "next-support-unavailable:" + next.x() + "," + next.y() + "," + next.z();
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "production_work_blocked:" + expected, lease,
                 submit(runtime, "production-work-route-blocked", lease.id().value(),
                         new ProductionWorkTraversalBlocked(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current),
-                                job.traversalCursor() + 1)));
+                                job.traversalCursor() + 1, observation)));
     }
 
     private enum DrainReason {

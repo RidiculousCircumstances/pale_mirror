@@ -97,7 +97,7 @@ public final class SettlementServiceWorkProcess {
             case APPROACH_WORK -> work.withWorkTraversalCursor(advanced.nextCursor());
             default -> throw new IllegalArgumentException("service-work traversal is not currently eligible to advance");
         };
-        return FrontierSettlementServiceWorkSceneSupport.advanceWorker(state, work, replacement, advanced.leaseId(), advanced.observedWorker());
+        return FrontierSettlementServiceWorkSceneSupport.advanceWorker(state, work, replacement, advanced.leaseId(), advanced.observedWorker(), advanced.observation());
     }
 
     /** Progress is legal only at the retained work station and only by one durable bounded tick. */
@@ -108,7 +108,8 @@ public final class SettlementServiceWorkProcess {
         if (work.phase() != SettlementServiceWorkPhase.WORKING || !progressed.observedWorker().equals(work.workStation().standingBody())) {
             throw new IllegalArgumentException("service-work progress must be observed at its retained work station");
         }
-        FrontierSettlementServiceWorkSceneSupport.requireHotLease(state, work, progressed.leaseId());
+        SceneLease lease = FrontierSettlementServiceWorkSceneSupport.requireHotLease(state, work, progressed.leaseId());
+        progressed.observation().require(state, work, lease, progressed.observedWorker());
         boolean legal = progressed.nextPhase() == SettlementServiceWorkPhase.WORKING
                 && progressed.completedWorkTicks() == work.completedWorkTicks() + 1
                 || progressed.nextPhase() == SettlementServiceWorkPhase.EFFECT_READY
@@ -148,7 +149,8 @@ public final class SettlementServiceWorkProcess {
                 || !blocked.observedWorker().equals(FrontierSettlementServiceWorkSceneSupport.currentSurface(work).standingBody())) {
             throw new IllegalArgumentException("service-work block does not name one retained next edge");
         }
-        FrontierSettlementServiceWorkSceneSupport.requireHotLease(state, work, blocked.leaseId());
+        SceneLease lease = FrontierSettlementServiceWorkSceneSupport.requireHotLease(state, work, blocked.leaseId());
+        blocked.observation().require(state, work, lease, blocked.observedWorker());
         return replace(state, work, work.withPhase(SettlementServiceWorkPhase.BLOCKED, 0));
     }
 

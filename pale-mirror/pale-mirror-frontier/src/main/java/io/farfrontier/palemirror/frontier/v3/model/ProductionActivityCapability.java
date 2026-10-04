@@ -7,7 +7,7 @@ import java.util.Optional;
 final class ProductionActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.PRODUCTION; }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
-    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return ActorActivityBodyCheckpoint.usesActorLocation(); }
+    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return ProductionJourneyKnowledge::acknowledge; }
     @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
     @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
         return Optional.of((state, execution, tick) -> {

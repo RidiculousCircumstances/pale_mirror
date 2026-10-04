@@ -12,8 +12,9 @@ import java.util.Objects;
  * from the job, so a physical executor cannot nominate a different route or entrance.
  */
 public record ProductionWorkTraversalBlocked(SubjectId jobId, SceneLeaseId leaseId, BodyPosition observedWorker,
-                                             int blockedNextCursor) implements FrontierPayload {
+                                             int blockedNextCursor, ProductionWorkObservation observation) implements FrontierPayload {
     public ProductionWorkTraversalBlocked {
+        Objects.requireNonNull(observation, "captured production observation").requireOwner(jobId);
         Objects.requireNonNull(jobId, "production work traversal job"); Objects.requireNonNull(leaseId, "production work lease");
         Objects.requireNonNull(observedWorker, "production work observed worker");
         if (blockedNextCursor < 1) throw new IllegalArgumentException("production work blocked cursor must be a next edge");

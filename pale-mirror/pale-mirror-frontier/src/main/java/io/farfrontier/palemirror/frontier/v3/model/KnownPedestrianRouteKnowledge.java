@@ -25,7 +25,7 @@ public final class KnownPedestrianRouteKnowledge {
 
     /** A task declares a real facility passage, never an arbitrary list of cells to clear. */
     public record Passage(SettlementStructure facility, Reach reach) {
-        public enum Reach { EXTERIOR, PUBLIC_ACCESS }
+        public enum Reach { EXTERIOR, PUBLIC_ACCESS, STATIONS }
 
         public Passage {
             Objects.requireNonNull(facility, "pedestrian passage facility");
@@ -106,9 +106,13 @@ public final class KnownPedestrianRouteKnowledge {
             FacilityTraversalPort port = FrontierTraversalPlan.facilityPort(structure)
                     .orElseThrow(() -> new IllegalArgumentException("pedestrian passage has no declared traversal port"));
             clear(hard, port.exteriorApproach().getFirst());
-            if (passage.reach() == Passage.Reach.PUBLIC_ACCESS) {
+            if (passage.reach() == Passage.Reach.PUBLIC_ACCESS || passage.reach() == Passage.Reach.STATIONS) {
                 port.exteriorApproach().forEach(surface -> clear(hard, surface));
                 FrontierGrayboxPlan.publicAccessSurfaces(structure).forEach(surface -> clear(hard, surface));
+            }
+            if (passage.reach() == Passage.Reach.STATIONS) {
+                port.ingressSurfaces().forEach(surface -> clear(hard, surface));
+                port.stations().forEach(surface -> clear(hard, surface));
             }
         }
         // A witnessed physical change can close even an authored passage. Never clear it
