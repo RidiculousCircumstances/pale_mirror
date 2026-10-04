@@ -124,8 +124,17 @@ Initial failures were stale closed-event inventories, an incorrectly positive
 plant-generation lower bound (generation0 is valid), and an obsolete sequential
 cell-choice test. The latter now asserts executable outstanding work instead
 of prescribing list order. This is not integrated native acceptance.
-Remaining HOT position writers: ordinary production/service traversal,
-personal movement and feeding callbacks; full UAE/deployment remain OPEN.
+Checkpoint9eca26cb subsequently removes meal and personal movement HOT pose
+writers. Arrival/access/goal events retain captured body/execution/scope evidence
+and require common inspection; resource acknowledgements never install pose.
+The legacy post-consumption RETURN phase and its event/reducer/codec/catalog are
+removed, with tag3 reserved and fresh schema243 rejecting older saves. Confirmed
+consumption completes feeding; activity selection owns subsequent travel.
+Focused run45037 PASS36s (67 frontier checks plus one native-adapter navigation
+check), guardrails/native/pilot/test compilation run51799 PASS10s. These are
+modeled/adapter-boundary facts, not native graphical acceptance.
+Remaining known HOT position writers: ordinary production/service traversal;
+the full consumer inventory, integrated UAE acceptance and deployment remain OPEN.
 
 1. **Assignment is not current execution.** A paused job retains its exact
    worker relation without permission to act. Execution holds a typed reference

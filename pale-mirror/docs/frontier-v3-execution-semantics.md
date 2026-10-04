@@ -127,6 +127,20 @@ its callbacks; changing either invalidates the old actuator. Common inspection
 does not settle a prepared resource operation. Its exact effect owner remains
 responsible for irreversible-effect confirmation/reconciliation after interruption.
 
+Meal station arrival and supported service exit, and personal movement goal
+arrival, follow that same common inspection boundary. Their family receipts carry
+captured execution, physical body epoch and presentation scope revision; they
+require the independently retained pose and change only semantic activity state.
+An intermediate personal service exit is common body evidence, not a second
+movement progress event or semantic goal completion. Meal resource confirmation
+changes custody/claims and nutrition, never ActorLocation. Prepared or possibly
+applied effects keep their separate exact reconciliation owner after retirement.
+Confirmed consumption completes the meal immediately; the former post-consumption
+RETURN phase and event are absent from the current format and their wire tag is
+reserved. Clearance precedes consumption; later travel belongs to activity
+selection. The fresh-only schema rejects older bytes rather than restoring that
+retired activity path.
+
 First physical creation is not necessarily canonical body epoch 1. Cancelling
 a positively never-inserted PREPARED incarnation retires that exact epoch while
 preserving the unused first-creation permission. Later ordinary demand allocates
