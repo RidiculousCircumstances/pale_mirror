@@ -84,6 +84,9 @@ final class FrontierV3BakeryWorkSceneExecutor {
         }
         if ((goal.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || goal.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
+                // A durable prepared transfer settles under its original witness;
+                // only a new transfer can yield to a later service contender.
+                && job.bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty()
                 && !ServiceAccessCoordinator.depotAvailableForWork(state,
                         FrontierWorldState.depotId(job.settlementId()), job.id(), job.workerId())) {
             FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "depot-service-unavailable");
