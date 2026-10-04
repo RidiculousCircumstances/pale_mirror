@@ -80,17 +80,20 @@ final class FrontierV3RouteMaintenanceExecutor {
 
     private static FrontierV3PhysicalIntentScheduling.Readiness workReadiness(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
         BlockPosition origin = wholeBlock(intent);
-        if (origin == null || target(state, intent) == null) return FrontierV3PhysicalIntentScheduling.Readiness.INVALID;
+        Target target = target(state, intent);
+        if (origin == null || target == null) return FrontierV3PhysicalIntentScheduling.Readiness.INVALID;
         BlockPos position = new BlockPos(origin.x(), origin.y(), origin.z());
         if (naturalDemandReadiness(level, position) == FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
-        if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) {
+        if (intent.status() == PhysicalIntentStatus.PREPARED && (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)
+                || !FrontierV3EngineeringWorksitePort.ready(level, state, target.maintenance()))) {
             return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
         }
         FrontierV3GrayboxLedger.Claim claim = FrontierV3GrayboxLedger.get(level).claim(position);
         // A COLD loss can predate the first ordinary visit. Its provenance tombstone is written
         // by the independent projector on that visit; empty air before that write is a bounded
         // projection delay, not a failed repair.
-        if (claim == null && level.getBlockState(position).isAir()) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
+        if (intent.status() == PhysicalIntentStatus.PREPARED && claim == null && level.getBlockState(position).isAir())
+            return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
         return FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE;
     }
 
@@ -102,16 +105,17 @@ final class FrontierV3RouteMaintenanceExecutor {
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
-        // Admission only proves that this work intent was prepared while the exact crew owned a
-        // HOT worksite.  A graceful restart can retain that unstarted intent while the scene is
-        // UNKNOWN_AFTER_RESTART.  Do not let a newly loaded target spend the cargo before the
-        // same lease/body set has reclaimed HOT authority.
-        if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) return;
+        // Unbegun work must reacquire exact observed crew presence after restart. A RUNNING
+        // effect has a separate obligation: inspect and settle its retained postcondition,
+        // without replaying the repair or waiting for people to return to the worksite.
         BlockPosition raw = wholeBlock(intent);
         if (raw == null) { unknown(runtime, intent.id(), "canonical-origin-conflict"); return; }
-        if (!FrontierV3PhysicalDemand.exists(level, new BlockPos(raw.x(), raw.y(), raw.z()))) return;
         Target target = target(state, intent);
         if (target == null) { unknown(runtime, intent.id(), "canonical-target-conflict"); return; }
+        if (!FrontierV3PhysicalDemand.exists(level, new BlockPos(raw.x(), raw.y(), raw.z()))) return;
+        if (intent.status() == PhysicalIntentStatus.PREPARED
+                && (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)
+                || !FrontierV3EngineeringWorksitePort.ready(level, state, target.maintenance()))) return;
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target); return; }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
         if (!repairOne(level, FrontierV3GrayboxLedger.get(level), target.position(), target.cell())) {

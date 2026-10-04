@@ -502,9 +502,19 @@ class RouteMaintenanceProcessTest {
                 candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(), java.util.Set.of(), Optional.empty());
 
         FrontierWorldState prepared = assembled.prepareSceneLease(lease);
+        assertFalse(FrontierEngineeringWorkSceneSupport.crewReadyForPhysicalWork(prepared,
+                prepared.routeMaintenances().get(maintenance.id())), "prepared representation is not observed work presence");
         for (SubjectId actor : candidate.memberPositions().keySet()) prepared = ModeledActorBodyFacts.present(prepared, actor);
-        assertEquals(SceneLeaseStatus.HOT, prepared.transitionSceneLease(leaseId, SceneLeaseStatus.HOT).sceneLeases().get(leaseId).status(),
+        var hot = prepared.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        assertEquals(SceneLeaseStatus.HOT, hot.sceneLeases().get(leaseId).status(),
                 "a current BUILDING maintenance owner and its exact completed COLD crew must admit the matching HOT lease");
+        var assigned = FrontierEngineeringWorkSceneSupport.workStation(hot.routeMaintenances().get(maintenance.id()), engineer);
+        assertTrue(FrontierEngineeringWorkSceneSupport.crewReadyForPhysicalWork(hot, hot.routeMaintenances().get(maintenance.id())));
+        var displaced = ModeledActorBodyFacts.inspected(hot, engineer,
+                new SurfaceAnchor(assigned.support().offset(1, 0, 0)).standingBody());
+        assertFalse(FrontierEngineeringWorkSceneSupport.crewReadyForPhysicalWork(displaced, displaced.routeMaintenances().get(maintenance.id())));
+        assertEquals(assigned, FrontierEngineeringWorkSceneSupport.workStation(displaced.routeMaintenances().get(maintenance.id()), engineer),
+                "physical drift cannot redefine the owner's work station");
     }
 
     @Test

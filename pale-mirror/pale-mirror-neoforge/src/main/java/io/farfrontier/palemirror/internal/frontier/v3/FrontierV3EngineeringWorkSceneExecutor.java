@@ -19,9 +19,10 @@ import java.util.Set;
 /**
  * Naturally loaded HOT projection of the exact COLD-ready engineering crew.
  *
- * <p>This executor cannot select people, choose cells, or place blocks directly. It has only two
- * authorities: maintain the exact scene bodies, then durably request the one physical intent for
- * its active cell. The physical executor remains the sole Minecraft block writer.</p>
+ * <p>This executor cannot select people, choose cells, or place blocks directly. Its
+ * responsibilities: adopt the common bodies, direct its current execution to the retained
+ * stations, then request its cell effect. It owns neither body lifetime nor physical positions.
+ * The physical executor remains the sole Minecraft block writer.</p>
  */
 final class FrontierV3EngineeringWorkSceneExecutor {
     private FrontierV3EngineeringWorkSceneExecutor() { }
@@ -106,12 +107,19 @@ final class FrontierV3EngineeringWorkSceneExecutor {
             if (!(entity instanceof Mob mob) || !FrontierV3SceneExecutor.recognizes(runtime, entity)) {
                 conflict(level, runtime, lease, "hot-body-unavailable"); return;
             }
-            BodyPosition slot = lease.memberBody(state.actorLocations(), member.actorId());
-            FrontierV3GoalNavigation.pursue(level, mob, FrontierV3GoalNavigation.Goal.station(slot.supportingSurface(),
+            if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, mob)) return;
+            SurfaceAnchor slot = FrontierEngineeringWorkSceneSupport.workStation(projectOwner, member.actorId());
+            FrontierV3GoalNavigation.pursue(level, mob, FrontierV3GoalNavigation.Goal.station(slot,
                     new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())),
                     FrontierV3ActorActuation.capture(state, mob, executions.requireMember(member.actorId()), runtime::decodedState));
-            if (level.getGameTime() % 12L == 0L) mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            if (FrontierV3SupportedBodyCapture.observe(level, mob).filter(slot.standingBody()::equals).isPresent()
+                    && level.getGameTime() % 12L == 0L) mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         }
+
+        // Inspection changes the common position owner. Never prepare against the old snapshot.
+        state = runtime.decodedState().orElseThrow();
+        projectOwner = EngineeringWorkOrderSupport.require(state, FrontierSceneBehaviors.engineeringWorksite(lease).projectId());
+        if (!FrontierEngineeringWorkSceneSupport.crewReadyForPhysicalWork(state, projectOwner)) return;
 
         if (state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
                 && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT).equals(FrontierSceneBehaviors.engineeringWorksite(lease).projectId())

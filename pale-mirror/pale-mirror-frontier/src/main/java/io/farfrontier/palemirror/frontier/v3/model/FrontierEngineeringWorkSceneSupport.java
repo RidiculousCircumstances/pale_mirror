@@ -25,7 +25,7 @@ public final class FrontierEngineeringWorkSceneSupport {
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
         if (assembly.purpose() != EngineeringJourneyPurpose.WORKSITE || !assembly.complete() || !EngineeringToolCustody.ready(state, team)
                 || project.confirmedCells() >= project.workCells().size()) return Optional.empty();
-        EngineeringExecutionAuthority.requireWork(state, project);
+        if (!EngineeringExecutionAuthority.crewOwnsWork(state, project)) return Optional.empty();
         Map<SubjectId, BlockPosition> positions = assembly.positions();
         if (!positions.keySet().equals(Set.copyOf(team.memberIds())) || positions.entrySet().stream()
                 .anyMatch(entry -> !state.actorLocations().get(entry.getKey()).supportingSurface().support().equals(entry.getValue()))) return Optional.empty();
@@ -72,20 +72,50 @@ public final class FrontierEngineeringWorkSceneSupport {
         return FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(subjectId);
     }
 
-    /** A retained crew may open only its current-cell work intent while its exact lease is HOT. */
+    /** The work order retains a station; physical observation cannot retarget it. */
+    public static SurfaceAnchor workStation(EngineeringWorkOrder project, SubjectId actor) {
+        EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
+        if (assembly.purpose() != EngineeringJourneyPurpose.WORKSITE || !assembly.complete())
+            throw new IllegalArgumentException("engineering work needs a completed worksite approach");
+        var member = assembly.members().get(actor);
+        if (member == null) throw new IllegalArgumentException("engineering station names a foreign worker");
+        return new SurfaceAnchor(member.destination());
+    }
+
+    /** A HOT effect scope is not proof that its independently held people are at work. */
+    public static boolean crewReadyForPhysicalWork(FrontierWorldState state, EngineeringWorkOrder project) {
+        if (!project.building() || project.engineeringTeam().isEmpty() || project.assembly().isEmpty()) return false;
+        var assembly = project.assembly().orElseThrow();
+        if (assembly.purpose() != EngineeringJourneyPurpose.WORKSITE || !assembly.complete()
+                || !EngineeringToolCustody.ready(state, project.engineeringTeam().orElseThrow())) return false;
+        if (!EngineeringExecutionAuthority.crewOwnsWork(state, project)) return false;
+        return project.engineeringTeam().orElseThrow().memberIds().stream().allMatch(actor -> {
+            var location = state.actorLocations().get(actor);
+            var binding = state.fencedRecovery().current().get(
+                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(actor));
+            return location != null && location.condition().status() == ActorLifeStatus.ALIVE
+                    && location.supportingSurface().equals(workStation(project, actor))
+                    && binding != null && ActorBodyAuthority.require(state, ActorBodyAuthority.current(state, actor))
+                    .phase() == FencedRecoveryPhase.RUNNING;
+        });
+    }
+
+    /** Admission of an unbegun effect; already RUNNING effects reconcile without this predicate. */
     public static boolean permitsCurrentWorkIntent(FrontierWorldState state, PhysicalIntent intent) {
-        SubjectId projectId = switch (intent.kind()) {
-            case ROUTE_CONSTRUCTION, ROUTE_CONSTRUCTION_MATERIAL_LOADING -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT);
-            case ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE);
+        EngineeringWorkOrder project = switch (intent.kind()) {
+            case ROUTE_CONSTRUCTION -> state.routeConstructions().get(intent.roles().require(
+                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT));
+            case ROUTE_MAINTENANCE -> state.routeMaintenances().get(intent.roles().require(
+                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE));
             default -> null;
         };
-        EngineeringWorkOrder project = projectId == null ? null : state.routeConstructions().containsKey(projectId)
-                ? state.routeConstructions().get(projectId) : state.routeMaintenances().get(projectId);
-        if (project == null || project.engineeringTeam().isEmpty() || project.cargoId().isEmpty()) return false;
+        if (project == null || project.cargoId().isEmpty() || !crewReadyForPhysicalWork(state, project)) return false;
         return state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
                 .filter(lease -> lease.status() == SceneLeaseStatus.HOT).anyMatch(lease -> {
                     EngineeringWorkSceneCause cause = FrontierSceneBehaviors.engineeringWorksite(lease);
                     return cause.projectId().equals(project.id()) && cause.workCellIndex() == project.confirmedCells()
+                            && lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet())
+                            .equals(Set.copyOf(project.engineeringTeam().orElseThrow().memberIds()))
                             && lease.handoffPosition().equals(EngineeringWorksite.workCell(state.bootstrap(), state.routeTopology(), project));
                 });
     }

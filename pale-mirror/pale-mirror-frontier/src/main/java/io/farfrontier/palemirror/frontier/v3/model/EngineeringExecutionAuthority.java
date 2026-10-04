@@ -36,6 +36,10 @@ public final class EngineeringExecutionAuthority {
         if (owner.engineeringTeam().isPresent()) current(state, owner).requireDeclaration(
                 ActorActivityKind.ENGINEERING_WORK, owner.id(), owner.engineeringTeam().orElseThrow().memberIds());
     }
+    public static boolean crewOwnsWork(FrontierWorldState state, EngineeringWorkOrder owner) {
+        return owner.engineeringTeam().isPresent() && owner.engineeringTeam().orElseThrow().memberIds().stream()
+                .allMatch(actor -> state.actorExecutions().owns(actor, ActorActivityKind.ENGINEERING_WORK, owner.id()));
+    }
     public static ActorExecutionGroup assemblyCurrent(FrontierWorldState state, EngineeringWorkOrder owner) {
         var group = current(state, owner);
         group.requireDeclaration(ActorActivityKind.ENGINEERING_ASSEMBLY, owner.id(), owner.engineeringTeam().orElseThrow().memberIds());

@@ -436,11 +436,12 @@ class FrontierV3FixtureCatalogTest {
         FrontierWorldState prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertTrue(!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(prepared, workIntent),
                 "PREPARED is not physical-work authority");
+        for (SubjectId actor : candidate.memberPositions().keySet()) ModeledActorBodyFacts.present(engine, actor);
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 submit(engine, world, "engineering-worksite-hot", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT)));
         FrontierWorldState hot = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertTrue(FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(hot, workIntent),
-                "the exact current HOT lease is the only work authorization");
+                "the exact HOT lease and independently present crew authorize current work");
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 submit(engine, world, "engineering-worksite-restart", new SceneLeaseTransition(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART)));
         FrontierWorldState recovering = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());

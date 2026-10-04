@@ -13,6 +13,79 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Connected owner/body/recovery checks, not native Minecraft acceptance. */
 class EngineeringSpatialContinuationTest {
+    @Test void workScopeCannotSubstituteForTheExactCrewAtItsRetainedStations() {
+        var state = worksite();
+        var owner = owner(state, false);
+        var candidate = FrontierEngineeringWorkSceneSupport.candidate(state, owner).orElseThrow();
+        var lease = workLease(state, candidate);
+        state = state.prepareSceneLease(lease);
+        var intent = RouteConstructionProcess.workIntent((RouteConstruction) owner, owner.cargoId().orElseThrow(),
+                state.inventory().cargo().get(owner.cargoId().orElseThrow()).itemIds().getFirst());
+        assertFalse(FrontierEngineeringWorkSceneSupport.crewReadyForPhysicalWork(state, owner));
+        var actors = owner.engineeringTeam().orElseThrow().memberIds();
+        for (var actor : actors) {
+            assertFalse(FrontierEngineeringWorkSceneSupport.crewReadyForPhysicalWork(state, owner), "partial presence cannot admit crew work");
+            state = ModeledActorBodyFacts.present(state, actor);
+        }
+        assertFalse(FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent), "PREPARED scope cannot authorize work");
+        state = state.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        assertTrue(FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent));
+        var actor = actors.getFirst();
+        var station = FrontierEngineeringWorkSceneSupport.workStation(owner, actor);
+        var displaced = ModeledActorBodyFacts.inspected(state, actor, new SurfaceAnchor(station.support().offset(1, 0, 0)).standingBody());
+        assertFalse(FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(displaced, intent));
+        assertEquals(station, FrontierEngineeringWorkSceneSupport.workStation(owner(displaced, false), actor));
+        assertEquals(state.routeConstructions(), displaced.routeConstructions(), "body observation cannot rewrite semantic stations");
+        var returned = ModeledActorBodyFacts.inspected(displaced, actor, station.standingBody());
+        assertTrue(FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(returned, intent));
+        var departed = ModeledActorBodyFacts.unloaded(returned, actor);
+        assertFalse(FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(departed, intent),
+                "even a still-HOT scope and correct saved position cannot substitute for physical custody");
+        assertEquals(departed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(departed)));
+    }
+
+    @Test void alreadyBegunCellSettlementDoesNotDependOnTheCrewsContinuedPhysicalPresence() {
+        var state = worksite();
+        var project = (RouteConstruction) owner(state, false);
+        var lease = workLease(state, FrontierEngineeringWorkSceneSupport.candidate(state, project).orElseThrow());
+        state = state.prepareSceneLease(lease);
+        for (var actor : project.engineeringTeam().orElseThrow().memberIds()) state = ModeledActorBodyFacts.present(state, actor);
+        state = state.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        var item = state.inventory().cargo().get(project.cargoId().orElseThrow()).itemIds().getFirst();
+        var intent = RouteConstructionProcess.workIntent(project, project.cargoId().orElseThrow(), item)
+                .withStatus(PhysicalIntentStatus.RUNNING, Optional.empty());
+        state = state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(java.util.Map.of(intent.id(), intent)));
+        state = state.transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        for (var actor : project.engineeringTeam().orElseThrow().memberIds()) state = ModeledActorBodyFacts.unloaded(state, actor);
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertFalse(FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent));
+        var observation = new RouteConstructionObservation(new PhysicalObservationId("observation:engineering-retained-effect"),
+                intent.id(), project.id(), item, project.workCells().get(project.confirmedCells()));
+        var settled = RouteConstructionStateSupport.complete(state, intent, observation, new LinkedHashMap<>(state.physicalIntents()));
+        assertEquals(project.confirmedCells() + 1, settled.routeConstructions().get(project.id()).confirmedCells());
+        assertFalse(settled.inventory().items().containsKey(item));
+        assertEquals(state.actorLocations(), settled.actorLocations(), "effect settlement cannot move absent bodies");
+        assertEquals(PhysicalIntentStatus.CONFIRMED, settled.physicalIntents().get(intent.id()).status());
+        assertFalse(FrontierEngineeringWorkSceneSupport.crewReadyForPhysicalWork(settled, settled.routeConstructions().get(project.id())),
+                "the next assembly execution is not permission to continue the old cell's work");
+        assertTrue(FrontierEngineeringWorkSceneSupport.candidate(settled, settled.routeConstructions().get(project.id())).isEmpty(),
+                "scene search waits normally between effect settlement and the next approach");
+        var once = settled;
+        assertThrows(IllegalArgumentException.class, () -> RouteConstructionStateSupport.complete(once, intent, observation,
+                new LinkedHashMap<>(once.physicalIntents())), "an old cell receipt cannot spend cargo twice");
+    }
+
+    private static FrontierWorldState worksite() {
+        return FrontierV3FixtureCatalog.engineeringWorksiteConfiguration(new WorldId("frontier:engineering-work-presence"), 41L).initialState();
+    }
+    private static SceneLease workLease(FrontierWorldState state, EngineeringWorkSceneCandidate candidate) {
+        var id = new SceneLeaseId("lease:engineering-work-presence");
+        return SceneLease.forCause(id, state.bootstrap().worldId(), new EngineeringWorkSceneCause(candidate.projectId(), candidate.workCellIndex()),
+                candidate.workCell(), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, candidate.memberPositions().keySet().stream().sorted()
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), id, actor))).toList(),
+                java.util.Set.of(), Optional.empty());
+    }
+
     @Test void bothOwnersRetainEveryJourneyPurposeAcrossMidLegDepartureAndRecovery() {
         for (boolean repair : List.of(false, true)) for (var purpose : EngineeringJourneyPurpose.values()) {
             var state = journey(repair, purpose);
