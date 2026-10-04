@@ -14,9 +14,9 @@ preserved in private checkpoint 6f065966; development-blocker cleanup is
 53014ac7, hive spatial continuation is e7610bf1 and engineering journey
 continuation is 6a734828; engineering observed work admission is 3bcac252;
 patrol spatial continuation is ca7f3ed0 and expedition continuation is local
-9b0fbc50; scout continuation is local HEADa66b233f. These are not
-UAE completion or deployment readiness.
-Current fresh-world schema is 241 at HEADa66b233f; 9b0fbc50 is 240,
+9b0fbc50; scout continuation is a66b233f; field/bakery HOT pose retirement is
+local HEADf58e0a75. These are not UAE completion or deployment readiness.
+Current fresh-world schema is 242 at HEADf58e0a75; a66b233f is241, 9b0fbc50 is240,
 bd595b53 is 227 and live R18 is 226.
 Origin git@github.com:RidiculousCircumstances/pale_mirror.git.
 Governance: this checkout; UAE normative/document WIP is preserved in local
@@ -57,36 +57,35 @@ production/pilot/test compilation passes. NeoForge actuation/patrol checks pass
 in18173; changed assault diagnostic and guardrails PASS12s/37215. All evidence
 is modeled/source-boundary, not native acceptance. Schema240 rejects older saves.
 No task-owned tests/JVMs remain; no push/package/deploy, R18/original repos unchanged.
-Scout adoption is the current connected cut below; full UAE remains OPEN.
+Field/bakery HOT position adoption is the latest connected cut below; full UAE remains OPEN.
 No confidence-only reruns.
 
-Scout checkpointa66b233f retains ScoutPatrolJourney in StrategicPlanState: exact execution,
-goal revision and typed destination, no second pose or per-block cursor. Every
-owned plan update preserves it; hydration validates matching current execution.
-Native motion captures that goal generation, body epoch and scope; independent
-common inspection precedes its captured arrival. HOT reducer writes only goal
-progress; COLD validates a legal leg from the actual saved body to the retained
-destination. Held bodies, stale/duplicate receipts and known closure refuse.
-One inactive last journey per scout grants no authority and is replaced on new
-admission. Source/canonical maps, execution semantics and relation contract align.
-Source review plus first focused run exposed a real free-bootstrap-slot defect:
-FrontierHiveActorSlots used the raised organ datum as support over natural ground
-(-423,64,414 versus ground63). It now consumes actual surveyed terrain; cocoon
-placement remains separately owned. Shared hive ground search is reused, including
-explicit optional home-tray support, without a permissive unknown-geometry edge.
-Current schema241 rejects prior disposable layouts. Run86295 frontier50 checks
-PASS (scout11, mobilization20, bootstrap5, presence5, persistence4, architecture5);
-aggregate FAILED only on a diagnostic test's missing import, fixed with typed
-lambda. NeoForge actuation6 plus diagnostic1 PASS14s/81575 after correction.
-Source guardrails pass; final style/size PASS4s/14989; production/pilot/test Java
-compiles. Modeled evidence only:
-partial graded HOT departure -> custody hold -> unload/release -> snapshot/WAL
-recovery, blocked goal, current-only arrival, stale body/scope and ABA goal guard.
-No native/client, R18 operation, package, push or deployment. Full UAE OPEN.
-Next connected source gap: field arriveGoal/observeTransit, production/service
-advanceWorker and HOT meal callbacks still write ActorLocation independently.
-Remove those reachable pose writers and capture exact body/goal/scope witnesses
-before observations, then close the remaining consumer inventory and integrated
+Scout checkpointa66b233f retains exact execution/goal revision/target, not pose.
+Common inspection precedes captured HOT arrival; COLD validates actual-pose
+legal travel, holds custody and known closures; all owned plan copies/hydration
+preserve the bounded journey. Raised bootstrap organ datum over real ground
+(-423,64,414 versus ground63) is repaired with surveyed support, not a flat fixture.
+Run86295 frontier50 checks and NeoForge7/81575 PASS after a test import fix;
+guardrails/style pass. Evidence is modeled, not native/client/deployment.
+
+Field/bakery checkpointf58e0a75 removes three pose-only event/reducer/codec
+families plus process/diagnostic declarations: bakery goal/exit, field transit.
+Common inspection now retains these physical facts. Field goal progress clears
+only a held block under ActorHotObservation: exact execution/body/scope and
+layout/slot/plant generation; it never writes pose or resources. Native movement
+captures semantic goal/scope; changed goals invalidate old permission. Ordinary
+arrival consumes no extra no-op family event. Effect preparation/settlement
+owners remain unchanged. Schema242 rejects older disposable worlds.
+Compilation PASS14s/71894; modeled67 distinct checks PASS by composition:
+47 initial passes/90514 plus20 corrected failures in45-check run64183 PASS31s.
+The repairs removed stale closed-event declarations, admitted legitimate plant
+generation0 and replaced an obsolete sequential target assertion with executable
+outstanding-cell checks. Final guardrails + NeoForge/pilot/test compile PASS12s/98156.
+Source/canonical maps and execution contract align; no owned tasks remain.
+No native/client, package, push, R18 operation or deployment; full UAE OPEN.
+Next: ordinary production/service advanceWorker, personal ActorMovement and HOT
+feeding callbacks still independently write ActorLocation. Close their connected
+receipt/actuation paths, then the remaining consumer inventory and integrated
 multiworker/restart/native acceptance. Registration is not adoption completion.
 
 Engineering admission/journey evidence is retained in PM-UAE001 and below;

@@ -115,6 +115,18 @@ no authority; one last journey per declared scout is retained and replaced on
 the next exact admission, bounded by the aggregate cap. Snapshot and WAL use
 the fresh current schema; there is no legacy position-only receipt decoder.
 
+For field/bakery movement, arrival and service exit, the common physical observer
+alone retains supported HOT position. A pose-only family event is not a second
+checkpoint or progress owner: bakery goal/exit and field interrupted-transit
+receipts are removed from the active format. An unblocked field station requires
+only independent body inspection; a held field goal clears under its exact
+captured execution, body epoch, HOT scope revision, layout/slot and plant
+generation. That receipt changes only the field gate, never pose, yield or
+inventory. Navigation retains captured semantic target/scope permission across
+its callbacks; changing either invalidates the old actuator. Common inspection
+does not settle a prepared resource operation. Its exact effect owner remains
+responsible for irreversible-effect confirmation/reconciliation after interruption.
+
 First physical creation is not necessarily canonical body epoch 1. Cancelling
 a positively never-inserted PREPARED incarnation retires that exact epoch while
 preserving the unused first-creation permission. Later ordinary demand allocates

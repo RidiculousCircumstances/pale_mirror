@@ -110,6 +110,23 @@ engine, behavior-tree framework or mutable message bus.
 
 ## Required contracts
 
+2026-10-04 field/bakery HOT-position adoption: common body inspection replaces
+the pose-only bakery goal/exit and field interrupted-transit events, including
+their command/reducer/codec and diagnostic/process catalog declarations.
+Field blocked-goal clearance captures full execution/body/scope and plant
+generation and cannot install pose or yield. The native field and bakery
+navigators retain semantic-target/scope guards; actual physical inspection
+precedes family progress. Prepared resource owners/receipts remain separate.
+Fresh schema242 rejects older disposable worlds; no historical fallback.
+Compilation passed; selected67 distinct modeled checks pass by composition
+(47 from run90514, the20 initial failures corrected in run64183).
+Initial failures were stale closed-event inventories, an incorrectly positive
+plant-generation lower bound (generation0 is valid), and an obsolete sequential
+cell-choice test. The latter now asserts executable outstanding work instead
+of prescribing list order. This is not integrated native acceptance.
+Remaining HOT position writers: ordinary production/service traversal,
+personal movement and feeding callbacks; full UAE/deployment remain OPEN.
+
 1. **Assignment is not current execution.** A paused job retains its exact
    worker relation without permission to act. Execution holds a typed reference
    to its activity owner, never a copied job/progress/resource ledger. Derived
