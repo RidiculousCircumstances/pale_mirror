@@ -24,7 +24,6 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementServiceInputIssueObservation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementServiceInputIssueStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementServiceWork;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementServiceWorkSceneCause;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -32,7 +31,6 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -69,7 +67,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         if (!level.hasChunkAt(target.chestPosition())) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
         if (chest == null) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
-        return resident(level, state, target) == null ? FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED
+        return resident(level, state, target, intent.status() == PhysicalIntentStatus.PREPARED) == null ? FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED
                 : FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE;
     }
 
@@ -86,7 +84,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         if (!level.hasChunkAt(target.chestPosition())) return "CHEST_UNLOADED";
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
         if (chest == null) return "CHEST_NOT_ACTIVE";
-        return resident(level, state, target) == null ? "WORKER_NOT_AT_INPUT" : "RUNNABLE";
+        return resident(level, state, target, intent.status() == PhysicalIntentStatus.PREPARED) == null ? "WORKER_NOT_AT_INPUT" : "RUNNABLE";
     }
 
     /**
@@ -118,47 +116,63 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         }
         if (!level.hasChunkAt(target.chestPosition())) return;
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
-        Villager worker = resident(level, state, target);
+        Villager worker = resident(level, state, target, intent.status() == PhysicalIntentStatus.PREPARED);
         if (chest == null || worker == null) return;
-        if (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) { inspectRecovered(runtime, intent, target, chest, worker); return; }
-        if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(runtime, intent, target, chest, worker); return; }
+        if (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) { inspectRecovered(level, runtime, intent, target, chest, worker); return; }
+        if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target, chest, worker); return; }
         if (!sourceMatches(chest, target) || !worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
             unknown(runtime, intent.id(), "precondition-conflict"); return;
         }
-        if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
+        var actuation = takeAuthority(level, runtime, target, worker);
+        if (actuation == null || !transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
+        if (!actuation.current(worker)) return;
         if (!handOff(chest, worker, target)) { unknown(runtime, intent.id(), "effect-conflict"); return; }
         confirm(runtime, intent, target);
     }
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
-        try { SettlementServiceInputIssueStateSupport.validateIntent(state, intent); }
+        try {
+            if (intent.status() == PhysicalIntentStatus.PREPARED) SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+            else SettlementServiceInputIssueStateSupport.validateRetainedInput(state, intent);
+        }
         catch (IllegalArgumentException invalid) { return null; }
         SubjectId workId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SETTLEMENT_SERVICE_WORK);
         SettlementServiceWork work = state.serviceWorks().get(workId);
         ExactItemStack item = state.inventory().items().get(work.inputItemId());
         ContainerSurface surface = state.inventory().surfaces().get(work.inputSource().containerId());
-        SceneLease lease = state.sceneLeases().values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT)
-                .filter(FrontierSceneBehaviors::isServiceWork)
-                .filter(value -> FrontierSceneBehaviors.serviceWork(value).equals(new SettlementServiceWorkSceneCause(work.id())))
-                .filter(value -> value.members().stream().anyMatch(member -> member.actorId().equals(work.workerId())))
-                .min(Comparator.comparing(SceneLease::id)).orElse(null);
-        if (item == null || surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE || lease == null) return null;
+        if (intent.status() == PhysicalIntentStatus.PREPARED && !hasHotScope(state, work)) return null;
+        if (item == null || surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) return null;
         ActorContainerItemOrder order = new ActorContainerItemOrder(work.id(), work.workerId(), ActorContainerItemOrder.Direction.TAKE,
                 new ActorContainerItemOrder.Portion.Exact(item), new ActorContainerItemOrder.ContainerEndpoint.ExactSlot(work.inputSource()), work.inputStation(),
                 ActorContainerItemOrder.Hand.MAIN, 0L, Math.addExact(work.inputTraversal().revision(), 1L));
-        return new Target(work, item, work.inputSource(), new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()), lease, order);
+        return new Target(work, item, work.inputSource(), new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()), order);
     }
 
-    private static Villager resident(ServerLevel level, FrontierWorldState state, Target target) {
-        java.util.UUID entityId = target.lease().members().stream().filter(member -> member.actorId().equals(target.work().workerId()))
-                .findFirst().orElseThrow().entityId();
-        var entity = level.getEntity(entityId);
-        var member = target.lease().members().stream().filter(value -> value.actorId().equals(target.work().workerId())).findFirst().orElseThrow();
-        if (!(entity instanceof Villager villager) || !villager.isAlive()
-                || !FrontierV3SceneExecutor.owned(villager, state, target.lease(), member)) return null;
-        var body = target.order().station().standingBody();
-        BlockPos station = new BlockPos(body.x(), body.y(), body.z());
-        return villager.blockPosition().equals(station) ? villager : null;
+    private static boolean hasHotScope(FrontierWorldState state, SettlementServiceWork work) {
+        return state.sceneLeases().values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT)
+                .filter(FrontierSceneBehaviors::isServiceWork)
+                .anyMatch(value -> FrontierSceneBehaviors.serviceWork(value).workId().equals(work.id()));
+    }
+
+    private static Villager resident(ServerLevel level, FrontierWorldState state, Target target, boolean requireStation) {
+        var entity = level.getEntity(SceneLease.deterministicEntityId(state.bootstrap().worldId(), target.work().workerId()));
+        if (!(entity instanceof Villager worker) || !worker.isAlive()
+                || !FrontierV3ActorBodyController.recognizesRecordedBody(level, state, worker)) return null;
+        return !requireStation || FrontierV3SemanticMovement.arrived(level, worker, target.work().inputStation()) ? worker : null;
+    }
+
+    /** New mutation uses current UAE authority; observing a possibly applied effect does not. */
+    private static FrontierV3ActorActuation takeAuthority(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Target target, Villager worker) {
+        var state = runtime.decodedState().orElse(null);
+        if (state == null || !target.work().equals(state.serviceWorks().get(target.work().id()))
+                || !hasHotScope(state, target.work())
+                || !FrontierV3SemanticMovement.arrived(level, worker, target.work().inputStation())) return null;
+        var actuation = FrontierV3ActorActuation.capture(state, worker,
+                io.farfrontier.palemirror.frontier.v3.model.SettlementServiceExecutionAuthority.current(state, target.work()),
+                () -> runtime.decodedState().filter(now -> target.work().equals(now.serviceWorks().get(target.work().id()))));
+        return FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker) && actuation.current(worker)
+                ? actuation : null;
     }
 
     private static boolean sourceMatches(ChestBlockEntity chest, Target target) {
@@ -174,19 +188,26 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         return FrontierV3ActorItemTransfer.take(chest, worker, item, sourceSlot, EquipmentSlot.MAINHAND);
     }
 
-    private static void inspectRunning(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
+    private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
                                        ChestBlockEntity chest, Villager worker) {
         boolean source = sourceMatches(chest, target), hand = FrontierV3CargoHandoffExecutor.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
         if (!source && hand) { confirm(runtime, intent, target); return; }
-        if (source && worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty() && handOff(chest, worker, target)) { confirm(runtime, intent, target); return; }
+        if (source && worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
+            var permission = takeAuthority(level, runtime, target, worker);
+            if (permission == null) return; // A lawful off-station body is not a resource conflict.
+            if (permission.current(worker) && handOff(chest, worker, target)) { confirm(runtime, intent, target); return; }
+        }
         unknown(runtime, intent.id(), "restart-postcondition-conflict");
     }
 
-    private static void inspectRecovered(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
+    private static void inspectRecovered(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
                                          ChestBlockEntity chest, Villager worker) {
         boolean source = sourceMatches(chest, target), hand = FrontierV3CargoHandoffExecutor.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
         if (!source && hand) confirm(runtime, intent, target);
-        else if (source && worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty() && handOff(chest, worker, target)) confirm(runtime, intent, target);
+        else if (source && worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
+            var permission = takeAuthority(level, runtime, target, worker);
+            if (permission != null && permission.current(worker) && handOff(chest, worker, target)) confirm(runtime, intent, target);
+        }
     }
 
     private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target) {
@@ -217,5 +238,5 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
     }
 
     record Target(SettlementServiceWork work, ExactItemStack item, InventoryCustody.ContainerSlot sourceSlot, BlockPos chestPosition,
-                  SceneLease lease, ActorContainerItemOrder order) { }
+                  ActorContainerItemOrder order) { }
 }

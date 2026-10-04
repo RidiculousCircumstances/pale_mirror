@@ -192,8 +192,8 @@ public final class SettlementServiceWorkProcess {
         SubjectId workId = new SubjectId("service:decontamination-" + ordinal);
         SettlementServiceWorkTraversal.Plan traversal;
         try {
-            traversal = SettlementServiceWorkTraversal.compileDecontamination(state.bootstrap(), settlement,
-                    state.actorLocations().get(worker.orElseThrow().id()), cell, workId);
+            traversal = SettlementServiceWorkTraversal.compileDecontamination(state, settlement,
+                    worker.orElseThrow().id(), state.actorLocations().get(worker.orElseThrow().id()), cell, workId);
         } catch (IllegalArgumentException unavailable) { return Optional.empty(); }
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) material.orElseThrow().custody();
         PhysicalIntentId inputIssueId = new PhysicalIntentId("intent:service-input-issue-" + ordinal);

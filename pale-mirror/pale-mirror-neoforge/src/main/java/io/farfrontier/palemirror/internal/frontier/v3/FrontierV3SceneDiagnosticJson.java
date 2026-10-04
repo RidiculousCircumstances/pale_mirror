@@ -120,7 +120,9 @@ final class FrontierV3SceneDiagnosticJson {
         String futureBody = job.traversalCursor() + 2 >= corridor.size() ? "null" : FrontierV3DiagnosticJson.position(corridor.get(job.traversalCursor() + 2).standingBody());
         return ",\"productionStage\":\"" + job.workProgress().stage() + "\",\"productionCursor\":" + job.traversalCursor()
                 + ",\"productionCurrent\":" + FrontierV3DiagnosticJson.position(corridor.get(job.traversalCursor()).support()) + ",\"productionNext\":" + next
-                + ",\"productionNextBody\":" + nextBody + ",\"productionFutureBody\":" + futureBody;
+                + ",\"productionNextBody\":" + nextBody + ",\"productionFutureBody\":" + futureBody
+                + ",\"productionApproach\":" + FrontierV3StationApproachDiagnosticJson.write(job.spatial(),
+                        corridor.get(job.traversalCursor()), io.farfrontier.palemirror.frontier.v3.model.ProductionJourneyKnowledge.target(job));
     }
 
     private static String serviceTraversal(io.farfrontier.palemirror.frontier.v3.model.SettlementServiceWork work) {
@@ -136,7 +138,10 @@ final class FrontierV3SceneDiagnosticJson {
                 + "\",\"serviceCurrent\":" + FrontierV3DiagnosticJson.position(current.support()) + ",\"serviceNext\":" + next
                 + ",\"serviceInputCursor\":" + work.inputTraversalCursor() + ",\"serviceInputNodes\":" + work.inputTraversal().linearCorridorSurfaces().size()
                 + ",\"serviceWorkCursor\":" + work.workTraversalCursor() + ",\"serviceWorkNodes\":" + work.workTraversal().linearCorridorSurfaces().size()
-                + ",\"serviceTarget\":\"" + FrontierV3DiagnosticJson.quote(work.target().toString()) + "\"";
+                + ",\"serviceTarget\":\"" + FrontierV3DiagnosticJson.quote(work.target().toString()) + "\""
+                + ",\"serviceApproach\":" + FrontierV3StationApproachDiagnosticJson.write(work.spatial(),
+                        FrontierSettlementServiceWorkSceneSupport.semanticSurface(work),
+                        io.farfrontier.palemirror.frontier.v3.model.SettlementServiceJourneyKnowledge.target(work));
     }
 
     private static String patrolTraversal(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.RoutePatrol patrol) {

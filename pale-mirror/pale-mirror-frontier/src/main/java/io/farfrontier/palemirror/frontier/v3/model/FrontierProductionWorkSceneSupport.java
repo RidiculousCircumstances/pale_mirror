@@ -56,8 +56,7 @@ public final class FrontierProductionWorkSceneSupport {
             return Optional.of(new Candidate(job.id(), job.settlementId(), job.workerId(), workshop.id(), demand,
                     retained.support(), Map.of(job.workerId(), retained.support())));
         }
-        SurfaceAnchor retained = job.spatial().current(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()));
-        if (!worker.supportingSurface().equals(retained)) return Optional.empty();
+        SurfaceAnchor retained = worker.supportingSurface();
         return Optional.of(new Candidate(job.id(), job.settlementId(), job.workerId(), workshop.id(), workshop.anchor(), retained.support(), Map.of(job.workerId(), retained.support())));
     }
     public static ProductionJob require(FrontierWorldState state, ProductionWorkSceneCause cause) {
@@ -148,7 +147,9 @@ public final class FrontierProductionWorkSceneSupport {
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
         ProductionWorkSceneCause cause = FrontierSceneBehaviors.productionWork(lease); ProductionJob job = require(state, cause);
         Candidate candidate = candidate(state, job).orElseThrow(() -> new IllegalArgumentException("production-work scene has no exact ready worker"));
-        if (!lease.handoffPosition().equals(candidate.handoffPosition()) || !lease.memberBodies(state.actorLocations()).equals(SceneLease.bodiesAboveSupportCells(candidate.memberPositions()))
+        if ((job.bakeryWork().isEmpty() && !state.actorLocations().get(job.workerId()).supportingSurface()
+                .equals(job.spatial().current(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()))))
+                || !lease.handoffPosition().equals(candidate.handoffPosition()) || !lease.memberBodies(state.actorLocations()).equals(SceneLease.bodiesAboveSupportCells(candidate.memberPositions()))
                 || !lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).equals(Set.of(job.workerId()))) {
             throw new IllegalArgumentException("production-work scene must retain its exact worker and cursor surface");
         }

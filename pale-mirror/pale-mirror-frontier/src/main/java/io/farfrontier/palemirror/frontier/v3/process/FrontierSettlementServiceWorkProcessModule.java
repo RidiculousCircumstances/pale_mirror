@@ -162,7 +162,9 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                                                        PhysicalIntentTransition transition) {
         SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
         if (work == null) return FrontierWorldCommandPlanner.rejected("service physical intent has no exact retained work");
-        SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)
+            SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+        else SettlementServiceInputIssueStateSupport.validateRetainedInput(state, intent);
         return new CommandPlan.Accepted(List.of(new ProposedEvent(work.settlementId(), transition)));
     }
 
@@ -181,7 +183,9 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                                                                PhysicalIntentTransition transition) {
         SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
         if (work == null || !subject.equals(work.settlementId())) throw new IllegalArgumentException("service work transition lacks its retained settlement owner");
-        SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)
+            SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+        else SettlementServiceInputIssueStateSupport.validateRetainedInput(state, intent);
         return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
                 (currentState, current, evidence, intents) -> SettlementServiceInputIssueStateSupport.complete(currentState, current,
                         SettlementServiceInputIssueStateSupport.requireReceipt(evidence), new java.util.LinkedHashMap<>(intents)),
@@ -227,13 +231,16 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
         if (event.payload() instanceof SettlementServiceWorkSceneLeasePrepared prepared) {
             if (!event.subject().equals(FrontierSettlementServiceWorkSceneSupport.owner(state, FrontierSceneBehaviors.serviceWork(prepared.lease())))
                     || !prepared.lease().handoffInstant().equals(event.instant())) throw new IllegalArgumentException("service-work prepared lease has foreign owner or instant");
-            return state.prepareSceneLease(prepared.lease());
+            var work = FrontierSettlementServiceWorkSceneSupport.require(state, FrontierSceneBehaviors.serviceWork(prepared.lease()));
+            return SettlementServiceJourneyKnowledge.atScopeAdmission(state, work).prepareSceneLease(prepared.lease());
         }
         if (event.payload() instanceof SettlementServiceWorkSceneLeaseHandoff handoff) {
             if (!event.subject().equals(FrontierSettlementServiceWorkSceneSupport.owner(state, FrontierSceneBehaviors.serviceWork(handoff.lease())))
                     || !handoff.lease().handoffInstant().equals(event.instant())) throw new IllegalArgumentException("service-work hand-off has foreign owner or instant");
-            FrontierSettlementServiceWorkSceneSupport.validatePrepared(state, handoff.lease());
-            return state.handoffAmbientScene(new SceneLeaseHandoff(handoff.lease(), handoff.ambientMembers()));
+            var work = FrontierSettlementServiceWorkSceneSupport.require(state, FrontierSceneBehaviors.serviceWork(handoff.lease()));
+            var admitted = SettlementServiceJourneyKnowledge.atScopeAdmission(state, work);
+            FrontierSettlementServiceWorkSceneSupport.validatePrepared(admitted, handoff.lease());
+            return admitted.handoffAmbientScene(new SceneLeaseHandoff(handoff.lease(), handoff.ambientMembers()));
         }
         if (event.payload() instanceof SettlementServiceWorkTraversalAdvanced advanced) {
             return SettlementServiceWorkProcess.reduceHotTraversalAdvanced(state, event.subject(), advanced);

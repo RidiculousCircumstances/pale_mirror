@@ -37,7 +37,7 @@ public final class ModeledActorBodyFacts {
                                                                       ActorExecutionId declaredExecution) {
         var id = new ActorActuationId(ActorBodyAuthority.current(state, work.workerId()), declaredExecution);
         return new SettlementServiceWorkObservation(new ActorHotObservation(id, state.sceneLeases().get(scope).revision()),
-                work.phase(), work.inputTraversalCursor(), work.workTraversalCursor(), work.completedWorkTicks());
+                work.phase(), work.inputTraversalCursor(), work.workTraversalCursor(), work.completedWorkTicks(), work.spatial().revision());
     }
     public static FrontierWorldState present(FrontierWorldState state, SubjectId actor) {
         state = ActorBodyAuthority.demand(state, actor);

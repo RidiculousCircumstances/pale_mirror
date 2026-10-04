@@ -22,10 +22,11 @@ final class WorkObservationCodecs {
     static void writeService(DataOutputStream out, SettlementServiceWorkObservation value) throws IOException {
         ActorHotObservationCodec.write(out, value.authority()); out.writeByte(value.phase().wireTag());
         out.writeShort(value.inputCursor()); out.writeShort(value.workCursor()); out.writeByte(value.completedWorkTicks());
+        out.writeLong(value.spatialRevision());
     }
     static SettlementServiceWorkObservation readService(DataInputStream in) throws IOException {
         return new SettlementServiceWorkObservation(ActorHotObservationCodec.read(in),
                 SettlementServiceWorkPhase.fromWireTag(in.readUnsignedByte()), in.readUnsignedShort(),
-                in.readUnsignedShort(), in.readUnsignedByte());
+                in.readUnsignedShort(), in.readUnsignedByte(), in.readLong());
     }
 }

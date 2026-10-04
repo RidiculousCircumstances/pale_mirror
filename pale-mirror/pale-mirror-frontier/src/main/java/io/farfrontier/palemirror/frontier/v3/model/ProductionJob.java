@@ -23,7 +23,7 @@ public record ProductionJob(
         TraversalTopology workTraversal,
         int traversalCursor,
         java.util.Optional<BakeryWorkState> bakeryWork,
-        ProductionSpatialState spatial
+        StationApproachState spatial
 ) {
     public ProductionJob {
         Objects.requireNonNull(id, "production job id");
@@ -63,7 +63,7 @@ public record ProductionJob(
                          String outputItemKind, int outputCount, ProductionWorkProgress workProgress,
                          TraversalTopology workTraversal, int traversalCursor, java.util.Optional<BakeryWorkState> bakeryWork) {
         this(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId,
-                outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, bakeryWork, ProductionSpatialState.initial());
+                outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, bakeryWork, StationApproachState.initial());
     }
 
     /** Existing test fixtures and the retiring route constructor have no bakery phase. */
@@ -163,7 +163,7 @@ public record ProductionJob(
                 workProgress, Objects.requireNonNull(next, "rebased production-work traversal"), 0, bakeryWork, spatial.cleared());
     }
 
-    public ProductionJob withSpatial(ProductionSpatialState next) {
+    public ProductionJob withSpatial(StationApproachState next) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold,
                 outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, bakeryWork, next);
     }

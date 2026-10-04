@@ -26,17 +26,33 @@ public final class ProductionJourneyKnowledge {
         return KnownPedestrianRouteKnowledge.forSettlement(state, job.settlementId(), List.of(
                 new KnownPedestrianRouteKnowledge.Passage(workshop, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
     }
-    public static ProductionSpatialState checkpoint(FrontierWorldState state, ProductionJob job, SurfaceAnchor observed) {
+    public static StationApproachState checkpoint(FrontierWorldState state, ProductionJob job, SurfaceAnchor observed) {
         var order = new MovementOrder(job.id(), job.workerId(), 1L, Math.incrementExact(job.spatial().revision()),
                 List.of(target(job)), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         try {
             var path = view(state, job).path(observed, order);
-            return new ProductionSpatialState(order.goalRevision(), Optional.of(new TraversalRejoin(path, 0)), Optional.empty());
+            return new StationApproachState(order.goalRevision(), Optional.of(new TraversalRejoin(path, 0)), Optional.empty());
         } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
             // Unknown/damaged support is a retained non-advancing owner obligation, not body corruption.
-            return new ProductionSpatialState(order.goalRevision(), Optional.empty(), Optional.of(observed));
+            return new StationApproachState(order.goalRevision(), Optional.empty(), Optional.of(observed));
         }
     }
+    /** Scope is presentation only: its return may occur while the same physical body is still held. */
+    public static FrontierWorldState atScopeAdmission(FrontierWorldState state, ProductionJob job) {
+        var execution = state.actorExecutions().current(ActorActivityKind.PRODUCTION).get(job.workerId());
+        if (execution == null || !execution.activityOwnerId().equals(job.id()))
+            throw new IllegalArgumentException("production scope admission lost its exact worker execution");
+        if (job.bakeryWork().isPresent()) return state;
+        var actor = state.actorLocations().get(job.workerId());
+        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
+            throw new IllegalArgumentException("production scope admission lost its living worker");
+        var retained = job.spatial().current(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()));
+        if (retained.equals(actor.supportingSurface())) return state;
+        var jobs = new LinkedHashMap<>(state.productionJobs());
+        jobs.put(job.id(), job.withSpatial(checkpoint(state, job, actor.supportingSurface())));
+        return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs));
+    }
+
     static ActorActivityBodyCheckpoint.Acknowledgement acknowledge(ActorActivityBodyCheckpoint.Request request) {
         var state = request.expectedState();
         var job = state.productionJobs().get(request.execution().activityOwnerId());

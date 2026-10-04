@@ -6,12 +6,12 @@ import java.util.Objects;
 
 /** Captured service predecessor fences receipts from another leg of the same execution. */
 public record SettlementServiceWorkObservation(ActorHotObservation authority, SettlementServiceWorkPhase phase,
-                                                int inputCursor, int workCursor, int completedWorkTicks) {
+                                                int inputCursor, int workCursor, int completedWorkTicks, long spatialRevision) {
     public SettlementServiceWorkObservation {
         Objects.requireNonNull(authority, "service physical authority");
         Objects.requireNonNull(phase, "service observed phase");
         if (authority.actuation().execution().activityKind() != ActorActivityKind.SETTLEMENT_SERVICE
-                || inputCursor < 0 || workCursor < 0 || completedWorkTicks < 0
+                || spatialRevision < 1 || inputCursor < 0 || workCursor < 0 || completedWorkTicks < 0
                 || completedWorkTicks > SettlementServiceWork.REQUIRED_WORK_TICKS)
             throw new IllegalArgumentException("service observation has foreign kind or invalid predecessor");
     }
@@ -22,7 +22,8 @@ public record SettlementServiceWorkObservation(ActorHotObservation authority, Se
         requireOwner(work.id());
         SettlementServiceExecutionAuthority.requireCurrent(state, work, authority.actuation().execution());
         if (phase != work.phase() || inputCursor != work.inputTraversalCursor()
-                || workCursor != work.workTraversalCursor() || completedWorkTicks != work.completedWorkTicks())
+                || workCursor != work.workTraversalCursor() || completedWorkTicks != work.completedWorkTicks()
+                || spatialRevision != work.spatial().revision())
             throw new IllegalArgumentException("service observation has stale leg, cursor or labour predecessor");
         authority.require(state, authority.actuation().execution(), lease.revision(), observed);
     }

@@ -21,11 +21,12 @@ public final class InfectionTreatmentWorksite {
         Objects.requireNonNull(bootstrap, "infection treatment bootstrap");
         Objects.requireNonNull(cell, "infection treatment cell");
         Set<BlockPosition> occupied = immutableOccupancy(bootstrap);
+        var ground = KnownPedestrianGround.forBootstrap(bootstrap);
         BlockPosition origin = cell.originAtY(0);
         List<SurfaceAnchor> values = new ArrayList<>();
         for (int[] offset : List.of(new int[] { 1, 1 }, new int[] { 2, 1 }, new int[] { 1, 2 }, new int[] { 2, 2 })) {
             int x = Math.addExact(origin.x(), offset[0]), z = Math.addExact(origin.z(), offset[1]);
-            SurfaceAnchor station = SurfaceAnchor.at(x, Math.addExact(bootstrap.terrain().supportYAt(x, z), 1), z);
+            SurfaceAnchor station = ground.at(x, z);
             if (bootstrap.bounds().contains(station.support()) && clear(station, occupied)) values.add(station);
         }
         if (values.isEmpty()) throw new IllegalArgumentException("infection cell has no immutable treatment worksite: " + cell);

@@ -64,7 +64,10 @@ final class FrontierV3ProductionProcessDiagnosticJson {
                     + ",\"actorBody\":" + (actor == null ? "null" : FrontierV3DiagnosticJson.position(actor.body()));
         }).orElseGet(() -> ",\"cursor\":{\"index\":" + job.traversalCursor() + ",\"length\":" + cursorLength + ",\"retainedBody\":"
                 + FrontierV3DiagnosticJson.position(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody())
-                + ",\"actorBody\":" + (actor == null ? "null" : FrontierV3DiagnosticJson.position(actor.body())) + "}"
+                + ",\"actorBody\":" + (actor == null ? "null" : FrontierV3DiagnosticJson.position(actor.body()))
+                + ",\"approach\":" + FrontierV3StationApproachDiagnosticJson.write(job.spatial(),
+                        job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()),
+                        io.farfrontier.palemirror.frontier.v3.model.ProductionJourneyKnowledge.target(job)) + "}"
                 + ",\"result\":{\"workStage\":\"" + job.workProgress().stage() + "\",\"completedTicks\":" + job.workProgress().completedTicks()
                 + ",\"terminalEffectEligible\":" + job.workProgress().terminalEffectEligible());
         return FrontierV3DiagnosticJson.base("process", job.id().value(), checkpoint) + ",\"status\":\"ok\",\"family\":\"frontier.production-work\""

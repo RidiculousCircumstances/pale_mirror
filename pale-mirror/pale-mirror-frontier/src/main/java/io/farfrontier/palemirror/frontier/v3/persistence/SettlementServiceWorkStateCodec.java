@@ -57,6 +57,7 @@ final class SettlementServiceWorkStateCodec {
         output.writeShort(work.workTraversalCursor());
         output.writeByte(work.phase().wireTag());
         output.writeByte(work.completedWorkTicks());
+        StationApproachStateCodec.write(output, work.spatial());
     }
 
     static SettlementServiceWork readOne(DataInputStream input) throws IOException {
@@ -80,7 +81,8 @@ final class SettlementServiceWorkStateCodec {
         int workCursor = input.readUnsignedShort();
         SettlementServiceWorkPhase phase = SettlementServiceWorkPhase.fromWireTag(input.readUnsignedByte());
         return new SettlementServiceWork(id, task, kind, settlement, worker, facility, source, inputStation, workStation,
-                item, target, inputIssueIntent, endpointIntent, inputTraversal, inputCursor, workTraversal, workCursor, phase, input.readUnsignedByte());
+                item, target, inputIssueIntent, endpointIntent, inputTraversal, inputCursor, workTraversal, workCursor, phase,
+                input.readUnsignedByte(), StationApproachStateCodec.read(input));
     }
 
     private static void writeTarget(DataOutputStream output, SettlementServiceTarget target) throws IOException {

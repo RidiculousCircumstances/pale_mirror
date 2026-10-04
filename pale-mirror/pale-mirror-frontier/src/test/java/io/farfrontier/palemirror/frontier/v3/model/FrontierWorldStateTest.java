@@ -80,8 +80,8 @@ class FrontierWorldStateTest {
         SettlementStructure infirmary = FrontierWorldStateSupport.structure(FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), facility);
         for (int[] offset : List.of(new int[] { 12, 0 }, new int[] { -12, 0 }, new int[] { 0, 12 }, new int[] { 0, -12 })) {
             InfectionCell candidate = InfectionCell.at(infirmary.anchor().offset(offset[0], 0, offset[1]));
-            try { plan = SettlementServiceWorkTraversal.compileDecontamination(baseline.bootstrap(),
-                    FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medicLocation, candidate, workId); cell = candidate; break; }
+            try { plan = SettlementServiceWorkTraversal.compileDecontamination(baseline,
+                    FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medic.id(), medicLocation, candidate, workId); cell = candidate; break; }
             catch (IllegalArgumentException unavailable) { /* Try the next finite test fixture candidate. */ }
         }
         if (cell == null || plan == null) throw new AssertionError("test fixture has no bounded service-work corridor");
@@ -103,8 +103,10 @@ class FrontierWorldStateTest {
                         new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 1)))
                 .withSurfaceStatus(new SubjectId("container:1-depot"), ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(new SubjectId("container:1-depot"), ContainerSurfaceStatus.ACTIVE);
-        FrontierWorldState state = baseline.withChanges(FrontierWorldStateUpdate.begin().infection(withInfection(baseline.infection(), selectedCell)).inventory(inventory)
-                .serviceWorks(Map.of(work.id(), work)).physicalIntents(Map.of(inputIssue.id(), inputIssue, endpoint.id(), endpoint)));
+        var declaration = SettlementServiceExecutionAuthority.admission(baseline, work);
+        FrontierWorldState state = ActorExecutionComposition.LIFECYCLE.prepareVacant(baseline, declaration)
+                .commit(baseline, FrontierWorldStateUpdate.begin().infection(withInfection(baseline.infection(), selectedCell)).inventory(inventory)
+                        .serviceWorks(Map.of(work.id(), work)).physicalIntents(Map.of(inputIssue.id(), inputIssue, endpoint.id(), endpoint)));
 
         assertEquals(work, state.serviceWorks().get(work.id()));
         assertEquals(HumanAssignmentKind.SETTLEMENT_SERVICE, HumanAssignmentProjection.compile(state).assignment(medic.id()).kind());
@@ -149,9 +151,9 @@ class FrontierWorldStateTest {
         SettlementServiceWork duplicateWorker = new SettlementServiceWork(new SubjectId("service:decontamination-2"), new SubjectId("task:service-work-2"), SettlementServiceWorkKind.DECONTAMINATION,
                 new SubjectId("settlement:1"), medic.id(), facility, work.inputSource(), plan.inputStation(), plan.workStation(), new SubjectId("item:service-reagent-2"),
                 new SettlementServiceTarget.Infection(selectedCell), new PhysicalIntentId("intent:service-input-issue-2"), new PhysicalIntentId("intent:service-decontamination-2"),
-                SettlementServiceWorkTraversal.compileDecontamination(baseline.bootstrap(), FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medicLocation, selectedCell,
+                SettlementServiceWorkTraversal.compileDecontamination(baseline, FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medic.id(), medicLocation, selectedCell,
                         new SubjectId("service:decontamination-2")).inputTraversal(), 0,
-                SettlementServiceWorkTraversal.compileDecontamination(baseline.bootstrap(), FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medicLocation, selectedCell,
+                SettlementServiceWorkTraversal.compileDecontamination(baseline, FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medic.id(), medicLocation, selectedCell,
                         new SubjectId("service:decontamination-2")).workTraversal(), 0,
                 SettlementServiceWorkPhase.PREPARED, 0);
         assertThrows(IllegalArgumentException.class, () -> state.withChanges(FrontierWorldStateUpdate.begin()
@@ -254,10 +256,11 @@ class FrontierWorldStateTest {
         SubjectId hauler = operation.participantIds().getFirst(); OperationAssembly initial = operation.activeAssembly().orElseThrow();
         AmbientActorLease prepared = AmbientActorProcess.nextLease(state, hauler, engine.checkpoint().instant());
         assertEquals(AmbientGoalKind.OPERATION_ASSEMBLY, prepared.goal());
-        state = AmbientLeaseStateProcess.prepare(state, prepared);
+        state = ModeledActorBodyFacts.present(AmbientLeaseStateProcess.prepare(state, prepared), hauler);
         state = AmbientLeaseStateProcess.transition(state, hauler, AmbientLeaseStatus.HOT);
         Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(initial.members());
         OperationAssembly.Member current = members.get(hauler); members.put(hauler, new OperationAssembly.Member(current.topology(), current.cursor() + 1));
+        state = ModeledActorBodyFacts.inspected(state, hauler, current.nextSurface().standingBody());
 
         FrontierWorldState advanced = state.advanceOperationAssembly(operation.id(), new OperationAssembly(members, initial.cargoCarrierId()),
                 OperationExecutionAuthority.assemblyCurrent(state, operation));

@@ -30,6 +30,10 @@ class ProductionBodyContinuationTest {
         var observed = ModeledActorBodyFacts.inspected(fixture.state(), job.workerId(), fixture.port().inputStation().standingBody());
         assertThrows(IllegalArgumentException.class, () -> ProductionColdJourney.next(observed, job),
                 "inspection alone does not fabricate the owner's departure acknowledgement");
+        var scopeOrigin = ProductionJourneyKnowledge.atScopeAdmission(observed, job);
+        assertEquals(observed.actorLocations(), scopeOrigin.actorLocations());
+        assertEquals(observed.fencedRecovery(), scopeOrigin.fencedRecovery());
+        assertEquals(fixture.port().workStation(), scopeOrigin.productionJobs().get(job.id()).spatial().approach().orElseThrow().target());
         var departed = ModeledActorBodyFacts.unloaded(observed, job.workerId());
         var retained = departed.productionJobs().get(job.id());
         assertEquals(job.workTraversal(), retained.workTraversal());

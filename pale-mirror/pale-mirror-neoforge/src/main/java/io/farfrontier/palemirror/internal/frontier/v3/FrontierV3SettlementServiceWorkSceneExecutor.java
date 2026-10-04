@@ -15,7 +15,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Registered physical owner for the service-work scene family.
+ * Registered semantic service-scene consumer of the common physical body controller.
  *
  * <p>The executor admits only its retained service candidate and never borrows production or
  * medical scene behavior. Input issue and decontamination remain separate typed effect owners.</p>
@@ -80,10 +80,10 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
                 || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)
                 || !FrontierV3SemanticMovement.arrived(level, body, lease.memberBody(state.actorLocations(), member.actorId()).supportingSurface())) return;
         BodyPosition observed = FrontierV3SurfaceObservation.observedAt(body, lease.memberBody(state.actorLocations(), member.actorId()).supportingSurface());
-        // A scene cursor is not a broad encounter radius.  Ambient motion may only hand this
-        // exact body over at the retained canonical cell; it may not rebase a service route to
-        // an incidental neighbouring Minecraft position.
+        // Admission uses the owner-retained actual departure origin, not an old semantic cursor.
+        // Independent common inspection establishes the physical pose before process handoff.
         if (!observed.equals(lease.memberBody(state.actorLocations(), member.actorId()))) return;
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
         SceneMemberPosition capture = new SceneMemberPosition(member.actorId(), observed,
                 new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth() * io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE)));
         SceneLease captured = lease.withAmbientHandoff(Set.of(member.actorId()));
@@ -99,7 +99,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
     private static void work(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         SettlementServiceWork work = FrontierSettlementServiceWorkSceneSupport.require(state, FrontierSceneBehaviors.serviceWork(lease));
         var execution = io.farfrontier.palemirror.frontier.v3.model.SettlementServiceExecutionAuthority.current(state, work);
-        if (work.phase() == SettlementServiceWorkPhase.EFFECT_READY) { drain(runtime, lease); return; }
+        // An unconfirmed endpoint still needs its exact HOT participant, not premature scope drain.
         if (state.structureConditions().get(work.facilityId()) != StructureCondition.INTACT) { drain(runtime, lease); return; }
         FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, FrontierSettlementServiceWorkSceneSupport.currentSurface(work).support());
         if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand,
@@ -112,9 +112,29 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
         var actuation = FrontierV3ActorActuation.capture(state, worker, execution, () -> runtime.decodedState().filter(
                 now -> work.equals(now.serviceWorks().get(work.id())) && lease.equals(now.sceneLeases().get(lease.id()))));
         var observation = new SettlementServiceWorkObservation(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
-                actuation.id(), lease.revision()), work.phase(), work.inputTraversalCursor(), work.workTraversalCursor(), work.completedWorkTicks());
+                actuation.id(), lease.revision()), work.phase(), work.inputTraversalCursor(), work.workTraversalCursor(), work.completedWorkTicks(), work.spatial().revision());
         if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker) || !actuation.current(worker)) return;
-        SurfaceAnchor current = FrontierSettlementServiceWorkSceneSupport.currentSurface(work);
+        SurfaceAnchor current = FrontierSettlementServiceWorkSceneSupport.semanticSurface(work);
+        if (work.spatial().pending()) {
+            SurfaceAnchor target = SettlementServiceJourneyKnowledge.target(work);
+            if (!FrontierV3SemanticMovement.arrived(level, worker, target)) {
+                var retained = work.spatial().approach().map(value -> value.path().subList(value.cursor(), value.path().size()));
+                if (retained.isPresent()) {
+                    var hint = retained.orElseThrow();
+                    FrontierV3GoalNavigation.pursue(level, worker, new FrontierV3GoalNavigation.Goal(List.of(target),
+                            TraversalCapability.PEDESTRIAN, new FrontierV3NavigationScope.RetainedApproach(hint),
+                            Optional.empty(), hint), actuation);
+                }
+                return; // Unknown geometry retains the same exact input/target, without fabricated progress.
+            }
+            if (isTraversalPhase(work.phase())) {
+                submit(runtime, "settlement-service-work-traversal", lease.id().value(),
+                        new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(),
+                                FrontierV3SurfaceObservation.observedAt(worker, target), traversalCursor(work) + 1, observation));
+                return;
+            }
+            // At input/work station, the resource or labour owner clears the approach in its receipt.
+        }
         if (!FrontierV3SemanticMovement.arrived(level, worker, current)) {
             // The server can stop after the normal entity pre-tick has physically completed one
             // retained edge but before the executor's next canonical turn writes its cursor.
@@ -137,7 +157,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
             } else conflict(level, runtime, lease, "cursor-" + FrontierV3SemanticMovement.detail(FrontierV3SemanticMovement.at(level, worker, current)));
             return;
         }
-        if (work.phase() == SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) return;
+        if (work.phase() == SettlementServiceWorkPhase.INPUT_ISSUE_PENDING || work.phase() == SettlementServiceWorkPhase.EFFECT_READY) return;
         if (isTraversalPhase(work.phase())) {
             List<SurfaceAnchor> corridor = traversal(work);
             int cursor = traversalCursor(work);

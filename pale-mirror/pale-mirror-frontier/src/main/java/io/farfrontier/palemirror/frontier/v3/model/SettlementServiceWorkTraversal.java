@@ -9,39 +9,42 @@ import java.util.Set;
 /** Compiles one resident-owned service corridor without consulting loaded Minecraft blocks. */
 public final class SettlementServiceWorkTraversal {
     private SettlementServiceWorkTraversal() { }
-
-    public static Plan compileDecontamination(FrontierBootstrap bootstrap, Settlement settlement, ActorLocation worker,
+    public static Plan compileDecontamination(FrontierWorldState state, Settlement settlement, SubjectId workerId, ActorLocation worker,
                                               InfectionCell target, SubjectId workId) {
-        Objects.requireNonNull(bootstrap, "service traversal bootstrap");
+        Objects.requireNonNull(state, "service traversal state");
         Objects.requireNonNull(worker, "service traversal worker");
+        Objects.requireNonNull(workerId, "service traversal worker id");
+        if (!worker.equals(state.actorLocations().get(workerId)))
+            throw new IllegalArgumentException("service traversal worker differs from its declared identity");
         Objects.requireNonNull(target, "service traversal infection target");
         Objects.requireNonNull(workId, "service traversal work id");
         Objects.requireNonNull(settlement, "service traversal settlement");
+        if (!settlement.equals(FrontierWorldStateSupport.settlement(state.bootstrap(), settlement.id())))
+            throw new IllegalArgumentException("service traversal requires its exact settlement");
         SurfaceAnchor start = worker.supportingSurface();
-        Set<BlockPosition> occupied = new java.util.LinkedHashSet<>(InfectionTreatmentWorksite.immutableOccupancy(bootstrap));
         SettlementStructure depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("service settlement has no depot"));
         SettlementDepotServicePort depotPort = SettlementDepotServicePort.forDepot(depot);
-        // A declared depot port is the sole exception to its building's otherwise solid
-        // immutable occupancy.  Do not infer this from a chest location: the immutable port
-        // explicitly owns these walkable hand-off surfaces.
-        depotPort.ownedAccessSurfaces().forEach(surface -> {
-            occupied.remove(surface.support()); occupied.remove(surface.support().offset(0, 1, 0)); occupied.remove(surface.support().offset(0, 2, 0));
-        });
-        for (SurfaceAnchor inputStation : depotPort.stations()) for (SurfaceAnchor workStation : InfectionTreatmentWorksite.candidates(bootstrap, target)) {
-            try {
-                List<SurfaceAnchor> input = BoundedPedestrianApproach.compile(bootstrap, start, inputStation, occupied,
-                        (x, z) -> SurfaceAnchor.at(x, Math.addExact(bootstrap.terrain().supportYAt(x, z), 1), z), "service-work");
-                List<SurfaceAnchor> work = BoundedPedestrianApproach.compile(bootstrap, inputStation, workStation, occupied,
-                        (x, z) -> SurfaceAnchor.at(x, Math.addExact(bootstrap.terrain().supportYAt(x, z), 1), z), "service-work");
-                return new Plan(inputStation, workStation,
-                        topology("input", workId, input), topology("work", workId, work));
-            } catch (IllegalArgumentException unavailable) {
-                // The finite candidate order is the immutable admission policy.  A later HOT
-                // collision records a conflict; it is never an excuse to re-enter this compiler.
+        var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(),
+                List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
+                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+        for (SurfaceAnchor inputStation : depotPort.stations())
+            for (SurfaceAnchor workStation : InfectionTreatmentWorksite.candidates(state.bootstrap(), target)) {
+                try {
+                    var inputOrder = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
+                            workId, workerId, 1L, 1L, List.of(inputStation), TraversalCapability.PEDESTRIAN,
+                            io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+                    var workOrder = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
+                            workId, workerId, 2L, 1L, List.of(workStation), TraversalCapability.PEDESTRIAN,
+                            io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+                    return new Plan(inputStation, workStation, topology("input", workId, knowledge.path(start, inputOrder)),
+                            topology("work", workId, knowledge.path(inputStation, workOrder)));
+                } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                    // Only an ordinary bounded route miss selects the next declared station.
+                }
             }
-        }
-        throw new IllegalArgumentException("service work has no bounded immutable route to infection treatment station: " + target);
+
+        throw new IllegalArgumentException("service work has no bounded known route to infection station: " + target);
     }
 
     private static TraversalTopology topology(String leg, SubjectId workId, List<SurfaceAnchor> corridor) {

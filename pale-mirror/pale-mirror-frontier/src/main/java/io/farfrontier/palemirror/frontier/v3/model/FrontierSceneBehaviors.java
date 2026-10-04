@@ -762,7 +762,7 @@ public final class FrontierSceneBehaviors {
                 return lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toUnmodifiableSet());
             }
             boolean lifecycleMatches = switch (lease.status()) {
-                case PREPARED -> work.phase() == SettlementServiceWorkPhase.PREPARED || work.phase() == SettlementServiceWorkPhase.APPROACH_INPUT;
+                case PREPARED -> FrontierSettlementServiceWorkSceneSupport.sceneEligible(work.phase());
                 // The exact worker remains HOT for the bounded terminal adapter.  Draining at
                 // EFFECT_READY would erase the actor/body precondition before the observed
                 // decontamination effect can be made durable and reconciled.
@@ -771,8 +771,9 @@ public final class FrontierSceneBehaviors {
                         // A reclaimed exact body resumes the same uncertain physical effect;
                         // only its observed postcondition may complete it.
                         || work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART;
-                case DRAINING -> work.phase() == SettlementServiceWorkPhase.EFFECT_READY || work.phase() == SettlementServiceWorkPhase.COMPLETED
-                        || work.phase() == SettlementServiceWorkPhase.BLOCKED;
+                // Presentation may drain/close at any unfinished checkpoint; common physical
+                // departure separately retains the actual approach and does not finish the work.
+                case DRAINING, CLOSED -> true;
                 // Losing custody of a HOT body at server stop is not evidence that an
                 // unstarted input/work/effect changed.  Preserve its retained cursor and
                 // stage while the lease is UNKNOWN; a physical-intent inspector separately
@@ -780,8 +781,6 @@ public final class FrontierSceneBehaviors {
                 case UNKNOWN_AFTER_RESTART -> work.phase().active() || work.phase() == SettlementServiceWorkPhase.COMPLETED
                         || work.phase() == SettlementServiceWorkPhase.BLOCKED;
                 case CONFLICT -> work.phase().active();
-                case CLOSED -> work.phase() == SettlementServiceWorkPhase.COMPLETED || work.phase() == SettlementServiceWorkPhase.BLOCKED
-                        || work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART;
             };
             if (!lifecycleMatches) throw new IllegalArgumentException("service-work scene and aggregate lifecycle disagree");
             return Set.of(work.workerId());

@@ -31,10 +31,25 @@ public record SettlementServiceWork(
         TraversalTopology workTraversal,
         int workTraversalCursor,
         SettlementServiceWorkPhase phase,
-        int completedWorkTicks
+        int completedWorkTicks,
+        StationApproachState spatial
 ) {
     public static final int REQUIRED_WORK_TICKS = 80;
     public static final int MAX_RETAINED = 1_024;
+
+    /** Fresh admission only; hydration supplies its explicit saved spatial continuation. */
+    public SettlementServiceWork(SubjectId id, SubjectId taskId, SettlementServiceWorkKind kind,
+                                 SubjectId settlementId, SubjectId workerId, SubjectId facilityId,
+                                 InventoryCustody.ContainerSlot inputSource, SurfaceAnchor inputStation,
+                                 SurfaceAnchor workStation, SubjectId inputItemId, SettlementServiceTarget target,
+                                 PhysicalIntentId inputIssueIntentId, PhysicalIntentId endpointIntentId,
+                                 TraversalTopology inputTraversal, int inputTraversalCursor,
+                                 TraversalTopology workTraversal, int workTraversalCursor,
+                                 SettlementServiceWorkPhase phase, int completedWorkTicks) {
+        this(id, taskId, kind, settlementId, workerId, facilityId, inputSource, inputStation, workStation,
+                inputItemId, target, inputIssueIntentId, endpointIntentId, inputTraversal, inputTraversalCursor,
+                workTraversal, workTraversalCursor, phase, completedWorkTicks, StationApproachState.initial());
+    }
 
     public SettlementServiceWork {
         id = Objects.requireNonNull(id, "service work id");
@@ -53,6 +68,7 @@ public record SettlementServiceWork(
         inputTraversal = Objects.requireNonNull(inputTraversal, "service work input traversal");
         workTraversal = Objects.requireNonNull(workTraversal, "service work work traversal");
         phase = Objects.requireNonNull(phase, "service work phase");
+        spatial = Objects.requireNonNull(spatial, "service spatial continuation");
         if (!id.value().startsWith("service:") || !taskId.value().startsWith("task:") || !settlementId.value().startsWith("settlement:")
                 || !workerId.value().startsWith("resident:") || !facilityId.value().startsWith("structure:")
                 || inputIssueIntentId.equals(endpointIntentId)
@@ -65,6 +81,10 @@ public record SettlementServiceWork(
                 || !workTraversal.linearCorridorSurfaces().getLast().equals(workStation)) {
             throw new IllegalArgumentException("service work corridors must join the exact source and work stations");
         }
+        SurfaceAnchor nextStation = SettlementServiceJourneyKnowledge.target(phase, inputTraversal,
+                inputTraversalCursor, workTraversal, workTraversalCursor);
+        if (spatial.approach().isPresent() && !spatial.approach().orElseThrow().target().equals(nextStation))
+            throw new IllegalArgumentException("service approach must retain the same unfinished station");
         if (completedWorkTicks < 0 || completedWorkTicks > REQUIRED_WORK_TICKS
                 || (phase != SettlementServiceWorkPhase.WORKING && completedWorkTicks != 0)
                 || (phase == SettlementServiceWorkPhase.WORKING && completedWorkTicks >= REQUIRED_WORK_TICKS)) {
@@ -85,30 +105,39 @@ public record SettlementServiceWork(
         if (nextCursor != inputTraversalCursor + 1) throw new IllegalArgumentException("service work input cursor must advance one retained edge");
         SettlementServiceWorkPhase next = nextCursor == inputTraversal.linearCorridorSurfaces().size() - 1
                 ? SettlementServiceWorkPhase.INPUT_ISSUE_PENDING : SettlementServiceWorkPhase.APPROACH_INPUT;
-        return copy(next, nextCursor, workTraversalCursor, 0);
+        return copy(next, nextCursor, workTraversalCursor, 0, spatial.cleared());
     }
 
     public SettlementServiceWork withWorkTraversalCursor(int nextCursor) {
         if (nextCursor != workTraversalCursor + 1) throw new IllegalArgumentException("service work work cursor must advance one retained edge");
         SettlementServiceWorkPhase next = nextCursor == workTraversal.linearCorridorSurfaces().size() - 1
                 ? SettlementServiceWorkPhase.WORKING : SettlementServiceWorkPhase.APPROACH_WORK;
-        return copy(next, inputTraversalCursor, nextCursor, 0);
+        return copy(next, inputTraversalCursor, nextCursor, 0, spatial.cleared());
     }
 
     public SettlementServiceWork withInputIssued() {
         if (phase != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) throw new IllegalArgumentException("service input may issue only at its retained source station");
         SettlementServiceWorkPhase next = workTraversal.linearCorridorSurfaces().size() == 1
                 ? SettlementServiceWorkPhase.WORKING : SettlementServiceWorkPhase.APPROACH_WORK;
-        return copy(next, inputTraversalCursor, 0, 0);
+        return copy(next, inputTraversalCursor, 0, 0, spatial.cleared());
     }
 
     public SettlementServiceWork withPhase(SettlementServiceWorkPhase next, int nextCompletedWorkTicks) {
-        return copy(next, inputTraversalCursor, workTraversalCursor, nextCompletedWorkTicks);
+        StationApproachState nextSpatial = next == SettlementServiceWorkPhase.WORKING
+                || next == SettlementServiceWorkPhase.EFFECT_READY || next == SettlementServiceWorkPhase.COMPLETED
+                || next == SettlementServiceWorkPhase.BLOCKED
+                ? spatial.cleared() : spatial;
+        return copy(next, inputTraversalCursor, workTraversalCursor, nextCompletedWorkTicks, nextSpatial);
     }
 
-    private SettlementServiceWork copy(SettlementServiceWorkPhase next, int nextInputCursor, int nextWorkCursor, int nextCompletedWorkTicks) {
+    public SettlementServiceWork withSpatial(StationApproachState next) {
+        return copy(phase, inputTraversalCursor, workTraversalCursor, completedWorkTicks, next);
+    }
+
+    private SettlementServiceWork copy(SettlementServiceWorkPhase next, int nextInputCursor, int nextWorkCursor,
+                                       int nextCompletedWorkTicks, StationApproachState nextSpatial) {
         return new SettlementServiceWork(id, taskId, kind, settlementId, workerId, facilityId, inputSource, inputStation, workStation,
                 inputItemId, target, inputIssueIntentId, endpointIntentId, inputTraversal, nextInputCursor, workTraversal,
-                nextWorkCursor, next, nextCompletedWorkTicks);
+                nextWorkCursor, next, nextCompletedWorkTicks, nextSpatial);
     }
 }

@@ -256,7 +256,119 @@ class SettlementServiceWorkProcessTest {
         assertFalse(complete.inventory().items().containsKey(ready.item()));
     }
 
-    private static ReadyEndpoint readyEndpoint(long seed) {
+    @Test
+    void offStationDepartureRetainsWorkAndRejoinsAfterSnapshotWithoutRestoringOldPose() {
+        ReadyEndpoint fixture = readyEndpoint(217L);
+        var work = fixture.work().withPhase(SettlementServiceWorkPhase.WORKING, 7);
+        var state = fixture.state().withChanges(FrontierWorldStateUpdate.begin().serviceWorks(Map.of(work.id(), work)));
+        var knowledge = SettlementServiceJourneyKnowledge.view(state, work);
+        var origin = knowledge.supportAt(work.workStation().x() + 3, work.workStation().z());
+        var away = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(work.id(), work.workerId(),
+                1L, 1L, List.of(origin), TraversalCapability.PEDESTRIAN,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var path = knowledge.path(work.workStation(), away);
+        assertTrue(path.size() > 1, "departure fixture must leave the exact station");
+        origin = path.get(1);
+        var lease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isServiceWork).findFirst().orElseThrow();
+        var oldObservation = ModeledActorBodyFacts.serviceObservation(state, work, lease.id());
+        state = ModeledActorBodyFacts.inspected(state, work.workerId(), origin.standingBody());
+        state = state.transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
+        var location = state.actorLocations().get(work.workerId());
+        state = state.releaseSceneLease(lease.id(), List.of(new SceneMemberPosition(work.workerId(), location.body(), location.condition().health())));
+        assertEquals(origin.support(), FrontierSettlementServiceWorkSceneSupport.candidate(state, work).orElseThrow().handoffPosition(),
+                "scope return cannot require physical absence or a fabricated old cursor pose");
+        var reopened = SettlementServiceJourneyKnowledge.atScopeAdmission(state, work);
+        assertEquals(state.actorLocations(), reopened.actorLocations());
+        assertEquals(state.fencedRecovery(), reopened.fencedRecovery());
+        assertEquals(work.workStation(), reopened.serviceWorks().get(work.id()).spatial().approach().orElseThrow().target());
+        var departed = ModeledActorBodyFacts.unloaded(state, work.workerId());
+        var retained = departed.serviceWorks().get(work.id());
+        assertEquals(work.inputTraversal(), retained.inputTraversal());
+        assertEquals(work.workTraversal(), retained.workTraversal());
+        assertEquals(7, retained.completedWorkTicks());
+        assertEquals(fixture.state().inventory(), departed.inventory());
+        assertEquals(fixture.state().physicalIntents(), departed.physicalIntents());
+        assertEquals(origin, retained.spatial().approach().orElseThrow().current());
+        assertEquals(work.workStation(), retained.spatial().approach().orElseThrow().target());
+
+        var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(departed));
+        assertEquals(departed, restored);
+        var candidate = FrontierSettlementServiceWorkSceneSupport.candidate(restored, retained).orElseThrow();
+        assertEquals(origin.support(), candidate.handoffPosition());
+        var scope = SceneLease.forCause(new SceneLeaseId("lease:service-rejoin"), restored.bootstrap().worldId(),
+                new SettlementServiceWorkSceneCause(work.id()), candidate.handoffPosition(), new SimInstant(2_000L), 2L,
+                SceneLeaseStatus.PREPARED, List.of(new SceneMember(work.workerId(),
+                        SceneLease.deterministicEntityId(restored.bootstrap().worldId(), work.workerId()))), java.util.Set.of(), Optional.empty());
+        var hot = ModeledActorBodyFacts.present(restored.prepareSceneLease(scope), work.workerId())
+                .transitionSceneLease(scope.id(), SceneLeaseStatus.HOT);
+        var currentObservation = ModeledActorBodyFacts.serviceObservation(hot, retained, scope.id());
+        var arrived = ModeledActorBodyFacts.inspected(hot, work.workerId(), work.workStation().standingBody());
+        var progress = new SettlementServiceWorkProgressed(work.id(), scope.id(), work.workStation().standingBody(),
+                SettlementServiceWorkPhase.WORKING, 8, currentObservation);
+        assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceHotProgressed(arrived,
+                work.settlementId(), new SettlementServiceWorkProgressed(work.id(), scope.id(), work.workStation().standingBody(),
+                        SettlementServiceWorkPhase.WORKING, 8, oldObservation)));
+        var staleSpatial = new SettlementServiceWorkObservation(currentObservation.authority(), retained.phase(),
+                retained.inputTraversalCursor(), retained.workTraversalCursor(), retained.completedWorkTicks(),
+                retained.spatial().revision() - 1);
+        assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceHotProgressed(arrived,
+                work.settlementId(), new SettlementServiceWorkProgressed(work.id(), scope.id(), work.workStation().standingBody(),
+                        SettlementServiceWorkPhase.WORKING, 8, staleSpatial)));
+        var continued = SettlementServiceWorkProcess.reduceHotProgressed(arrived, work.settlementId(), progress);
+        assertEquals(arrived.actorLocations(), continued.actorLocations());
+        assertFalse(continued.serviceWorks().get(work.id()).spatial().pending());
+        assertEquals(8, continued.serviceWorks().get(work.id()).completedWorkTicks());
+        assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceHotProgressed(continued, work.settlementId(), progress));
+    }
+
+    @Test
+    void pendingInputDefersDuringDepartureButAppliedReceiptKeepsItsExactResourceOwner() {
+        var input = readyInput(219L); var work = input.work();
+        var intent = input.state().physicalIntents().get(work.inputIssueIntentId());
+        var prepared = input.state().withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                FencedRecoveryPhysicalIntentSupport.prepared(input.state().fencedRecovery(), intent, FencedRecoveryAsset.EFFECT)));
+        var running = transition(prepared, work.settlementId(), intent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
+        var path = work.workTraversal().linearCorridorSurfaces();
+        assertTrue(path.size() > 1, "fixture must depart the input station");
+        var observed = ModeledActorBodyFacts.inspected(running, work.workerId(), path.get(1).standingBody());
+        var departed = ModeledActorBodyFacts.unloaded(observed, work.workerId());
+        assertEquals(SettlementServiceInputIssueStateSupport.ExecutionEligibility.READY,
+                SettlementServiceInputIssueStateSupport.executionEligibility(departed, departed.physicalIntents().get(intent.id())),
+                "a started effect stays inspectable independently of the worker's position");
+        assertEquals(SettlementServiceInputIssueStateSupport.ExecutionEligibility.DEFERRED,
+                SettlementServiceInputIssueStateSupport.executionEligibility(departed, intent),
+                "an unstarted take must wait for its retained source station");
+        assertThrows(IllegalArgumentException.class, () -> SettlementServiceInputIssueStateSupport.validateIntent(departed, intent),
+                "saved departure cannot authorize a remote new take");
+        assertEquals(input.state().inventory(), departed.inventory());
+        var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(departed));
+        var receipt = new SettlementServiceInputIssueObservation(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-departed-input"),
+                intent.id(), work.id(), work.workerId(), work.inputItemId(), work.inputSource());
+        var confirmed = transition(restored, work.settlementId(), intent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        assertEquals(restored.actorLocations(), confirmed.actorLocations(), "resource settlement cannot restore station pose");
+        assertEquals(new InventoryCustody.Actor(work.workerId()), confirmed.inventory().items().get(work.inputItemId()).custody());
+        assertEquals(SettlementServiceWorkPhase.APPROACH_WORK, confirmed.serviceWorks().get(work.id()).phase());
+        assertEquals(path.get(1), confirmed.serviceWorks().get(work.id()).spatial().approach().orElseThrow().current());
+        assertEquals(path.get(1), confirmed.serviceWorks().get(work.id()).spatial().approach().orElseThrow().target());
+        assertEquals(confirmed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(confirmed)));
+        assertThrows(IllegalArgumentException.class, () -> transition(confirmed, work.settlementId(), intent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
+    }
+
+    @Test
+    void treatmentStationsUseActualKnownSupportNotFeetAir() {
+        var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:service-support"), 218L);
+        var settlement = settlement(bootstrap, "settlement:9");
+        var cell = treatmentCell(bootstrap, settlement);
+        var known = KnownPedestrianGround.forBootstrap(bootstrap);
+        for (var station : InfectionTreatmentWorksite.candidates(bootstrap, cell))
+            assertEquals(known.at(station.x(), station.z()), station);
+    }
+
+    private static ReadyInput readyInput(long seed) {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:service-ready-" + seed), seed);
         Settlement settlement = settlement(bootstrap, "settlement:9"); InfectionCell cell = treatmentCell(bootstrap, settlement);
         SubjectId depot = FrontierWorldState.depotId(settlement.id()), item = new SubjectId("item:service-ready-" + seed);
@@ -283,6 +395,14 @@ class SettlementServiceWorkProcessTest {
                             ModeledActorBodyFacts.serviceObservation(ready, work, leaseId)));
             work = ready.serviceWorks().get(work.id());
         }
+        return new ReadyInput(ready, work, leaseId, item, cell);
+    }
+
+    private static ReadyEndpoint readyEndpoint(long seed) {
+        var input = readyInput(seed);
+        var ready = input.state(); var work = input.work(); var item = input.item(); var cell = input.cell();
+        var leaseId = input.leaseId();
+        var settlement = settlement(ready.bootstrap(), work.settlementId().value());
         SettlementServiceInputIssueObservation inputReceipt = new SettlementServiceInputIssueObservation(
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-input-" + seed), work.inputIssueIntentId(),
                 work.id(), work.workerId(), item, work.inputSource());
@@ -319,6 +439,9 @@ class SettlementServiceWorkProcessTest {
                                                  Optional<PhysicalEffectObservation> observation) {
         return PhysicalIntentLifecycleFixture.transition(state, settlement, intent, status, observation);
     }
+
+    private record ReadyInput(FrontierWorldState state, SettlementServiceWork work, SceneLeaseId leaseId,
+                              SubjectId item, InfectionCell cell) { }
 
     private record ReadyEndpoint(FrontierWorldState state, SettlementServiceWork work,
                                  io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent, SubjectId item, InfectionCell cell) { }

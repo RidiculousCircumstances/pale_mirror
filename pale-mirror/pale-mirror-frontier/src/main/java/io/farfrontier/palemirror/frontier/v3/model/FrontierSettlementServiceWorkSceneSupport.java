@@ -18,21 +18,20 @@ public final class FrontierSettlementServiceWorkSceneSupport {
     }
 
     /**
-     * A scene may only take the resident from the retained service-work cursor.  This is a
+     * A scene admits the saved actual origin/approach, not a restored old cursor. This is a
      * candidate boundary, not a planner: it neither selects a facility/target nor compiles a
      * route from loaded Minecraft data.
      */
     public static Optional<Candidate> candidate(FrontierWorldState state, SettlementServiceWork work) {
         if (hasScene(state, work.id()) || !sceneEligible(work.phase())) return Optional.empty();
         ActorLocation worker = state.actorLocations().get(work.workerId());
-        if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE
-                || !worker.supportingSurface().equals(currentSurface(work))) {
+        if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) {
             return Optional.empty();
         }
         if (state.structureConditions().get(work.facilityId()) != StructureCondition.INTACT) return Optional.empty();
         SettlementServiceExecutionAuthority.current(state, work);
         return Optional.of(new Candidate(work.id(), work.settlementId(), work.workerId(), work.facilityId(),
-                currentSurface(work).support()));
+                worker.supportingSurface().support()));
     }
 
     public static SettlementServiceWork require(FrontierWorldState state, SettlementServiceWorkSceneCause cause) {
@@ -68,7 +67,7 @@ public final class FrontierSettlementServiceWorkSceneSupport {
             throw new IllegalArgumentException("service-work worker advance may not change durable ownership");
         }
         SceneLease lease = requireHotLease(state, current, leaseId);
-        BodyPosition expectedNext = currentSurface(replacement).standingBody();
+        BodyPosition expectedNext = semanticSurface(replacement).standingBody();
         observation.require(state, current, lease, observedWorker);
         if (!observedWorker.equals(expectedNext)) {
             throw new IllegalArgumentException("service-work worker advance must acknowledge its exact next semantic station");
@@ -81,7 +80,8 @@ public final class FrontierSettlementServiceWorkSceneSupport {
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
         SettlementServiceWork work = require(state, FrontierSceneBehaviors.serviceWork(lease));
         Candidate candidate = candidate(state, work).orElseThrow(() -> new IllegalArgumentException("service-work scene has no exact ready worker"));
-        if (!lease.handoffPosition().equals(candidate.handoffPosition())
+        if (!state.actorLocations().get(work.workerId()).supportingSurface().equals(currentSurface(work))
+                || !lease.handoffPosition().equals(candidate.handoffPosition())
                 || !lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).equals(Set.of(work.workerId()))
                 || !lease.memberBodies(state.actorLocations()).equals(SceneLease.bodiesAboveSupportCells(Map.of(work.workerId(), candidate.handoffPosition())))) {
             throw new IllegalArgumentException("service-work scene must retain its exact worker and cursor surface");
@@ -91,11 +91,15 @@ public final class FrontierSettlementServiceWorkSceneSupport {
     static boolean sceneEligible(SettlementServiceWorkPhase phase) {
         return phase == SettlementServiceWorkPhase.PREPARED || phase == SettlementServiceWorkPhase.APPROACH_INPUT
                 || phase == SettlementServiceWorkPhase.INPUT_ISSUE_PENDING || phase == SettlementServiceWorkPhase.APPROACH_WORK
-                || phase == SettlementServiceWorkPhase.WORKING;
+                || phase == SettlementServiceWorkPhase.WORKING || phase == SettlementServiceWorkPhase.EFFECT_READY;
     }
 
-    /** The immutable current support selected solely by the persisted phase and cursor. */
+    /** Owner-retained continuation origin; physical HOT position belongs to common inspection. */
     public static SurfaceAnchor currentSurface(SettlementServiceWork work) {
+        return work.spatial().current(semanticSurface(work));
+    }
+
+    public static SurfaceAnchor semanticSurface(SettlementServiceWork work) {
         return switch (work.phase()) {
             case PREPARED, APPROACH_INPUT, INPUT_ISSUE_PENDING -> work.inputTraversal().linearCorridorSurfaces().get(work.inputTraversalCursor());
             case APPROACH_WORK, WORKING, EFFECT_READY, BLOCKED, UNKNOWN_AFTER_RESTART, COMPLETED -> work.workTraversal().linearCorridorSurfaces().get(work.workTraversalCursor());

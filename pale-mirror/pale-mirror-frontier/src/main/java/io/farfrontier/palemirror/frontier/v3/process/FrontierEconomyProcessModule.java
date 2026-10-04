@@ -303,7 +303,8 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                                                                FrontierEvent event, ProductionWorkSceneLeasePrepared prepared) {
         if (!subject.equals(FrontierProductionWorkSceneSupport.owner(state, FrontierSceneBehaviors.productionWork(prepared.lease()))) || !prepared.lease().handoffInstant().equals(event.instant()))
             throw new IllegalArgumentException("production-work scene preparation does not match its retained hand-off");
-        return state.prepareSceneLease(prepared.lease());
+        var job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(prepared.lease()));
+        return ProductionJourneyKnowledge.atScopeAdmission(state, job).prepareSceneLease(prepared.lease());
     }
     private static FrontierWorldState reduceWorkSceneHandoff(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
                                                               FrontierEvent event, ProductionWorkSceneLeaseHandoff handoff) {

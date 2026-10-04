@@ -23,7 +23,7 @@ final class ProductionJobStateCodec {
             writeString(output, job.workerId().value()); writeString(output, job.consumedItemId().value()); writeHold(output, job.inputHold()); writeString(output, job.outputItemId().value());
             writeString(output, job.outputItemKind()); output.writeByte(job.outputCount()); ProductionWorkProgressStateCodec.write(output, job.workProgress());
             TraversalTopologyStateCodec.write(output, job.workTraversal()); output.writeShort(job.traversalCursor());
-            BakeryWorkStateCodec.write(output, job.bakeryWork()); ProductionSpatialStateCodec.write(output, job.spatial());
+            BakeryWorkStateCodec.write(output, job.bakeryWork()); StationApproachStateCodec.write(output, job.spatial());
         }
     }
 
@@ -37,7 +37,7 @@ final class ProductionJobStateCodec {
             ProductionWorkProgress progress = ProductionWorkProgressStateCodec.read(input); TraversalTopology traversal = TraversalTopologyStateCodec.read(input);
             int cursor = input.readUnsignedShort();
             ProductionJob job = new ProductionJob(id, task, settlement, facility, worker, consumed, hold, output, outputKind, outputCount,
-                    progress, traversal, cursor, BakeryWorkStateCodec.read(input), ProductionSpatialStateCodec.read(input));
+                    progress, traversal, cursor, BakeryWorkStateCodec.read(input), StationApproachStateCodec.read(input));
             if (jobs.put(id, job) != null) throw new IllegalArgumentException("duplicate production job id");
         }
         return jobs;

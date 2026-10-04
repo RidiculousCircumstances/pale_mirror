@@ -5,7 +5,7 @@ import java.util.Optional;
 
 /** Same unfinished station in COLD; rejoining never credits work performed elsewhere. */
 public final class ProductionColdJourney {
-    public record Step(int cursor, ProductionWorkProgress progress, ProductionSpatialState spatial, BodyPosition body) { }
+    public record Step(int cursor, ProductionWorkProgress progress, StationApproachState spatial, BodyPosition body) { }
     private ProductionColdJourney() { }
     public static Optional<Step> next(FrontierWorldState state, ProductionJob job) {
         if (job.bakeryWork().isPresent()) throw new IllegalArgumentException("bakery does not use production station cursors");
@@ -25,7 +25,7 @@ public final class ProductionColdJourney {
             if (!knowledge.traversable(approach.path().subList(approach.cursor(), advanced.cursor() + 1)))
                 return Optional.empty();
             if (!advanced.arrived()) return Optional.of(new Step(job.traversalCursor(), job.workProgress(),
-                    new ProductionSpatialState(Math.incrementExact(spatial.revision()), Optional.of(advanced), Optional.empty()),
+                    new StationApproachState(Math.incrementExact(spatial.revision()), Optional.of(advanced), Optional.empty()),
                     advanced.current().standingBody()));
             spatial = spatial.cleared();
             // Returning to the current work station is travel only; no processing credit yet.
