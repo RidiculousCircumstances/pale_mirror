@@ -52,6 +52,12 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-scene-strikes")
                     || batchName.equals("pm-frontier-v3-scene-observer-combat-calibration");
             case "first-admission" -> batchName.equals("pm-frontier-v3-scene-first-admission");
+            case "body-recovery-corrections" -> batchName.equals("pm-frontier-v3-scene-explosion")
+                    || batchName.equals("pm-frontier-v3-scene-explosion-live")
+                    || batchName.equals("pm-frontier-v3-ambient-physics")
+                    || batchName.equals("pm-frontier-v3-scout-patrol-cursor")
+                    || batchName.equals("pm-frontier-v3-ambient-restart-reclaim")
+                    || batchName.equals("pm-frontier-v3-ambient-restart-absence");
             case "harvest-support" -> batchName.equals("pm-frontier-v3-scene-harvest-support")
                     || batchName.equals("pm-frontier-v3-resource-site-harvest-standing");
             case "calendar" -> batchName.equals("pm-frontier-v3-calendar");

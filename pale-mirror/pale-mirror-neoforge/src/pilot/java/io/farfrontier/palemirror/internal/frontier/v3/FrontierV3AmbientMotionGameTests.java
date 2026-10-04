@@ -297,11 +297,9 @@ public final class FrontierV3AmbientMotionGameTests {
         helper.assertTrue(FrontierV3AmbientActorExecutor.restartAbsenceIsObserved(level, unknown, resident, unknown.ambientLeases().get(resident)),
                 "an unattempted before-effect permission proves absence without inventing a prior running body");
         var ledger = FrontierV3AmbientCarrierLedger.get(level, unknown.bootstrap().worldId());
-        var inactive = FrontierV3AmbientActorExecutor.carrierDeclaration(unknown, resident, FrontierV3AmbientActorExecutor.entityId(unknown, resident), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 1L);
-        helper.assertTrue(ledger.fence(inactive, lease.revision(), lease.revision()),
-                "fixture supplies an explicit retained release fence, not inferred absence");
         helper.assertTrue(FrontierV3AmbientActorExecutor.restartCustodyIsRetained(unknown, resident,
-                unknown.ambientLeases().get(resident), ledger), "same-generation retained custody allows cancellation");
+                unknown.ambientLeases().get(resident), ledger),
+                "the explicit unused first-admission permission proves this incarnation was never attempted");
         FrontierV3CommandSubmission.submit(runtime, "ambient-restart-absence-observed", resident.value(),
                 new AmbientLeaseRestartAbsenceObserved(resident, anchor));
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.CLOSED,

@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
@@ -185,7 +186,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
      * the ambient executor owns PREPARED -> HOT admission, the retained UUID bodies, and every
      * subsequent ordinary-physics turn.
      */
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 300)
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 400)
     public static void demandedManagedResidentAndBioformFallThroughExecutorCadence(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // Keep the complete local fall surface inside this test's structure. The admitted
@@ -193,22 +194,23 @@ public final class FrontierV3AmbientPhysicsGameTests {
         // single launch column would test the template floor rather than the actor's actual
         // physical collision path.
         BlockPos residentSupport = helper.absolutePos(new BlockPos(12, 8, 12));
-        BlockPos bioformSupport = helper.absolutePos(new BlockPos(22, 8, 12));
+        BlockPos bioformSupport = residentSupport.offset(0, 0, 10);
         Fixture fixture = fixture(residentSupport, bioformSupport);
-        // The exact agricultural resident begins at its final field station and follows the
-        // plan-owned return surface.  Give that declared, four-cell local departure its real
-        // collision floor; a three-by-three square at the old generic-home fixture is not a
-        // physical test of the corrected post-harvest body.
+        // Both launch columns use the translated world's uniform ground datum. The scout's
+        // real goal must have that same support height; a floor one block lower would never
+        // satisfy exact target admission and would test an impossible fixture, not physics.
         prepareFallCorridor(level, residentSupport, fixture.residentWorkTarget());
-        prepareFallArena(level, bioformSupport);
+        prepareFallCorridor(level, bioformSupport, AmbientActorProcess.nextLease(fixture.state(), fixture.bioform(),
+                io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO).goalBody().supportingSurface().support());
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level, fixture.state());
         ServerPlayer observer = helper.makeMockServerPlayerInLevel();
         observer.setPos(residentSupport.getX() + 6.5D, residentSupport.getY() + 1.0D, residentSupport.getZ() + 6.5D);
         double[] initialY = { Double.NaN, Double.NaN };
         boolean[] exactHotBodies = { false }, movingBeforeLoss = { false }, idleBeforeLoss = { false };
+        int[] lossTurn = { -1 };
         BodyPosition[] landed = new BodyPosition[2]; BlockPos[] supportsAtLoss = new BlockPos[2];
 
-        for (int tick = 1; tick <= 285; tick++) {
+        for (int tick = 1; tick <= 365; tick++) {
             int turn = tick;
             helper.runAtTickTime(tick, () -> {
                 drive(level, runtime);
@@ -220,9 +222,12 @@ public final class FrontierV3AmbientPhysicsGameTests {
                             && runtime.decodedState().orElseThrow().ambientLeases().get(fixture.bioform()).status()
                             == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT;
                     if (Double.isNaN(initialY[0])) { initialY[0] = resident.getY(); initialY[1] = bioform.getY(); }
-                    if (turn < 24) movingBeforeLoss[0] |= bioform.getDeltaMovement().horizontalDistanceSqr() > 0.0D;
+                    if (lossTurn[0] < 0) movingBeforeLoss[0] |= bioform.getDeltaMovement().horizontalDistanceSqr() > 0.0D;
                 }
-                if (turn == 24) {
+                // Begin the intervention only after real common-body admission and
+                // native motion. A bounded probe may admit this exact pair later
+                // than a fixture's arbitrary twenty-fourth callback.
+                if (lossTurn[0] < 0 && exactHotBodies[0] && movingBeforeLoss[0]) {
                     helper.assertTrue(exactHotBodies[0], "ordinary player demand must admit the canonical resident and active bioform through their exact HOT leases");
                     // Freeze the real admitted resident at the normal retained-body authority
                     // boundary while the separately admitted bioform remains the observed moving
@@ -235,7 +240,10 @@ public final class FrontierV3AmbientPhysicsGameTests {
                     helper.assertTrue(idleBeforeLoss[0] && movingBeforeLoss[0]
                                     && FrontierV3ControlledMobMotion.ordinaryPhysicsRegistered(resident)
                                     && FrontierV3ControlledMobMotion.ordinaryPhysicsRegistered(bioform),
-                            "support loss must cover both an idle managed resident and a moving managed bioform through the ordinary executor cadence");
+                            "support loss must cover both an idle managed resident and a moving managed bioform through the ordinary executor cadence: idle="
+                                    + idleBeforeLoss[0] + " moving=" + movingBeforeLoss[0]
+                                    + " residentPhysics=" + FrontierV3ControlledMobMotion.ordinaryPhysicsRegistered(resident)
+                                    + " bioformPhysics=" + FrontierV3ControlledMobMotion.ordinaryPhysicsRegistered(bioform));
                     // This is the ordinary player input boundary, not a fixture world edit:
                     // vanilla's server game mode performs both breaks while the executor owns
                     // the two retained HOT UUIDs.
@@ -248,8 +256,9 @@ public final class FrontierV3AmbientPhysicsGameTests {
                     helper.assertTrue(residentFootprint.stream().allMatch(position -> level.getBlockState(position).isAir())
                                     && bioformFootprint.stream().allMatch(position -> level.getBlockState(position).isAir()),
                             "the ordinary player break must clear each exact physical footprint before HOT physics continues");
+                    lossTurn[0] = turn;
                 }
-                if (turn == 65) {
+                if (lossTurn[0] >= 0 && landed[0] == null && turn >= lossTurn[0] + 40) {
                     helper.assertTrue(resident != null && bioform != null, "the exact HOT bodies must remain observable through their fall and landing");
                     landed[0] = FrontierV3AmbientActorExecutor.observedBody(resident);
                     landed[1] = FrontierV3AmbientActorExecutor.observedBody(bioform);
@@ -270,7 +279,9 @@ public final class FrontierV3AmbientPhysicsGameTests {
                 }
             });
         }
-        helper.runAtTickTime(286, () -> {
+        helper.runAtTickTime(366, () -> {
+            helper.assertTrue(lossTurn[0] >= 0 && landed[0] != null,
+                    "the actual pair must reach admitted movement, support removal and landing within the finite fixture bound");
             FrontierWorldState state = runtime.decodedState().orElseThrow();
             helper.assertTrue(state.ambientLeases().get(fixture.resident()).status() == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED,
                     "the disconnected exact observer must type the resident's collision-observed HOT lease through one bounded release");
@@ -292,9 +303,17 @@ public final class FrontierV3AmbientPhysicsGameTests {
                                 && retainedBioform.getY() <= landed[1].y(),
                         "a concurrently demanded bioform must retain the exact ordinary-physics body below its removed support; HOT motion is not a canonical release observation");
             }
-            helper.assertTrue(managed(level, runtime, fixture.resident()) == null,
-                    "the released resident body must be discarded once, leaving no second route or duplicate HOT body");
-            runtime.shutdown(); helper.succeed();
+            Mob retainedResident = managed(level, runtime, fixture.resident());
+            helper.assertTrue(retainedResident != null
+                            && FrontierV3AmbientActorExecutor.observedBody(retainedResident).equals(landed[0])
+                            && ActorBodyAuthority.retainsPhysicalCustody(state, fixture.resident())
+                            && !ActorExecutionCoordinator.coldAvailable(state, fixture.resident()),
+                    "closing presentation must retain the exact loaded body and exclude a competing COLD writer; only natural body unload releases physical custody");
+            Mob retainedBioform = managed(level, runtime, fixture.bioform());
+            runtime.shutdown();
+            retainedResident.discard();
+            if (retainedBioform != null) retainedBioform.discard();
+            helper.succeed();
         });
     }
 
@@ -311,6 +330,10 @@ public final class FrontierV3AmbientPhysicsGameTests {
     }
 
     private static void prepareFallCorridor(ServerLevel level, BlockPos start, BlockPosition target) {
+        if (start.getY() != target.y()) {
+            throw new IllegalArgumentException("flat support-loss fixture disagrees with its declared ground: "
+                    + start + " -> " + target);
+        }
         int minX = Math.min(start.getX(), target.x()) - 1, maxX = Math.max(start.getX(), target.x()) + 1;
         int minZ = Math.min(start.getZ(), target.z()) - 1, maxZ = Math.max(start.getZ(), target.z()) + 1;
         for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++) {
@@ -347,7 +370,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
         FrontierV3AmbientActorExecutor.tick(level, runtime);
         runtime.decodedState().orElseThrow().ambientLeases().keySet().stream()
                 .map(actor -> level.getEntity(FrontierV3AmbientActorExecutor.entityId(runtime.decodedState().orElseThrow(), actor)))
-                .filter(Mob.class::isInstance).map(Mob.class::cast).forEach(FrontierV3ControlledMobMotion::advanceAtEntityBoundary);
+                .filter(Mob.class::isInstance).map(Mob.class::cast).forEach(FrontierV3MobMotionLifecycle::advanceAtEntityBoundary);
     }
 
     private static Mob managed(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId actor) {
@@ -373,7 +396,8 @@ public final class FrontierV3AmbientPhysicsGameTests {
         FrontierWorldState initial = FrontierWorldState.initial(translatedBootstrap(source.bootstrap(),
                 residentSupport.getX() - sourceFloor.x(), residentSupport.getY() - sourceFloor.y(), residentSupport.getZ() - sourceFloor.z()));
         SubjectId resident = initial.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
-        SubjectId bioform = initial.bootstrap().hive().bioforms().stream().map(form -> form.id()).sorted().findFirst().orElseThrow();
+        SubjectId bioform = initial.bootstrap().hive().bioforms().stream().filter(Bioform::isScout)
+                .map(Bioform::id).sorted().findFirst().orElseThrow();
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(initial.actorLocations());
         actors.put(resident, new ActorLocation(BodyPosition.above(new SurfaceAnchor(block(residentSupport))), actors.get(resident).condition(), actors.get(resident).kind()));
         actors.put(bioform, new ActorLocation(BodyPosition.above(new SurfaceAnchor(block(bioformSupport))), actors.get(bioform).condition(), actors.get(bioform).kind()));

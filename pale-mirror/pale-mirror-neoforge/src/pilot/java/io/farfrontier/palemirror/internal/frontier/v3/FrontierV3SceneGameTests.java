@@ -572,7 +572,7 @@ public final class FrontierV3SceneGameTests {
         referenced.discard(); helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-ambient-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-ambient-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void restoredOwnedBodyReclaimsUnknownAmbientLeaseWithoutDuplication(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos origin = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, origin);
@@ -630,16 +630,20 @@ public final class FrontierV3SceneGameTests {
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.UNKNOWN_AFTER_RESTART,
                 "indexed body confirmation cannot restore an activity scope");
         FrontierV3AftermathOwnerComposition.projection(level, runtime);
-        FrontierV3AmbientActorExecutor.tick(level, runtime);
-        helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
-                "the next compatible projection must permit exactly the ordinary reclaim handoff");
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
-                        new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
-                "reclaim must retain the existing body instead of creating another one");
-        helper.assertTrue(level.getEntity(restored.getUUID()) == restored, "the observed restored body remains the sole UUID owner");
-        FrontierV3ServerLifecycle.releaseRuntime(runtime);
-        restored.discard();
-        helper.succeed();
+        // The bounded round-robin probe need not select this resident on its first
+        // turn (the complete roster contains hundreds of other actors). Observe
+        // the actual owner transition, not a one-callback scheduling coincidence.
+        helper.succeedWhen(() -> {
+            FrontierV3AmbientActorExecutor.tick(level, runtime);
+            helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
+                    "the next compatible projection must permit exactly the ordinary reclaim handoff");
+            helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
+                            new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
+                    "reclaim must retain the existing body instead of creating another one");
+            helper.assertTrue(level.getEntity(restored.getUUID()) == restored, "the observed restored body remains the sole UUID owner");
+            FrontierV3ServerLifecycle.releaseRuntime(runtime);
+            restored.discard();
+        });
         });
     }
 
