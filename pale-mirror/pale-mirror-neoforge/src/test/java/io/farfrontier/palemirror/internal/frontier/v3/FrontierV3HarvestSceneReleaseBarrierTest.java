@@ -10,6 +10,31 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3HarvestSceneReleaseBarrierTest {
+    @Test void storedRecoveryCannotReleaseAPreparedCropAsAnOrdinarySavedHand() {
+        var base = FrontierV3FixtureCatalog.resourceSiteHarvestConfiguration(new WorldId("frontier:crop-release"), 421L);
+        var state = base.initialState();
+        var site = new SubjectId("site:1-wheat-field");
+        var lifecycle = state.resourceSites().site(site);
+        var job = lifecycle.harvestJobs().values().iterator().next();
+        var goal = ResourceSiteHarvestGoal.current(state, job);
+        var lease = SceneLease.forCause(new SceneLeaseId("lease:crop-release"), base.worldId(),
+                new ResourceSiteHarvestSceneCause(site, job.id()), goal.representative().support(),
+                base.initialInstant(), 17L, SceneLeaseStatus.UNKNOWN_AFTER_RESTART,
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(base.worldId(), job.workerId()))),
+                Set.of(), Optional.empty());
+        var ledger = FrontierV3ResourceSiteLedger.fixture();
+        assertTrue(FrontierV3HarvestSceneReleaseBarrier.ready(ledger, state, lease));
+        var prepared = state.withResourceSites(state.resourceSites().replace(lifecycle.prepareHarvestCrop(
+                job, goal.nextWorkSlot(), goal, goal.representative())));
+        assertTrue(FrontierV3HarvestSceneReleaseBarrier.ready(ledger, lease),
+                "there need not be a physical witness yet: the canonical preparation already owns the effect");
+        assertFalse(FrontierV3HarvestSceneReleaseBarrier.ready(ledger, prepared, lease));
+        assertFalse(FrontierV3HarvestSceneReleaseBarrier.ready(ledger, prepared, lease.withStatus(SceneLeaseStatus.DRAINING)),
+                "ordinary release and disk recovery must respect the same prepared-cell boundary");
+        assertEquals(state.inventory(), prepared.inventory());
+        assertEquals(state.actorLocations(), prepared.actorLocations());
+    }
+
     @Test void savedUnconfirmedDeliveryBlocksOnlyItsSceneUntilTheOwnerRetiresItsWitness() {
         var base = FrontierV3FixtureCatalog.resourceSiteHarvestConfiguration(new WorldId("frontier:delivery-release"), 421L);
         var site = new SubjectId("site:1-wheat-field");
