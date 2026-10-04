@@ -21,6 +21,9 @@ final class FrontierV3ServiceClearanceNavigation {
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, FrontierWorldState state,
             SubjectId settlementId, SubjectId depotId, SubjectId ownerId, SubjectId actorId,
             int phase, long generation, FrontierV3ActorActuation actuation) {
+        if (!actuation.current(body))
+            return new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.AMBIGUOUS,
+                    "stale-body-or-execution-authority", java.util.Optional.empty(), java.util.Optional.empty());
         var boundary = ServiceAccessCoordinator.boundary(state, depotId);
         var supported = FrontierV3SupportedBodyCapture.observe(level, body);
         if (supported.isPresent() && boundary.cleared(supported.orElseThrow())) {
@@ -28,7 +31,8 @@ final class FrontierV3ServiceClearanceNavigation {
             if (boundary.occupied(state.actorLocations().get(actorId).body()))
                 FrontierV3ActorBodyController.inspectCurrent(level, runtime, body);
             FrontierV3GoalNavigation.stop(body, actuation);
-            return new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.ARRIVED,
+            // Still waiting for service, not arrived at the retained work goal.
+            return new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.IN_PROGRESS,
                     "service-access:waiting-outside", java.util.Optional.empty(), java.util.Optional.empty());
         }
         return pursue(level, body, state, settlementId, depotId, ownerId, actorId, phase, generation, actuation);
