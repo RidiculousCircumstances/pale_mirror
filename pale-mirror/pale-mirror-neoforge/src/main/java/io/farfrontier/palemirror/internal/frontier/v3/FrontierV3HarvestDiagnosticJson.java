@@ -172,6 +172,7 @@ final class FrontierV3HarvestDiagnosticJson {
             String successor = harvestSuccessor(state, lineage);
             boolean physicalReceiptConfirmed = intent != null && intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED;
             return "{\"job\":\"" + quote(lineage.predecessorJobId().value()) + "\",\"worker\":\"" + quote(lineage.workerId().value())
+                    + "\",\"intent\":\"" + quote(lineage.predecessorIntentId().value())
                     + "\",\"outputItem\":\"" + quote(lineage.outputItemId().value()) + "\",\"outputSlot\":" + lineage.outputSlot().slot()
                     // `outputOwned` deliberately means the original exact wheat still occupies its
                     // depot slot.  A completed COLD conversion removes that stack once; the retained

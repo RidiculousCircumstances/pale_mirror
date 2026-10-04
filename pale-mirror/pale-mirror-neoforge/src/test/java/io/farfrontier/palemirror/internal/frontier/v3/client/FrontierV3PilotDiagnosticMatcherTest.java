@@ -12,16 +12,27 @@ class FrontierV3PilotDiagnosticMatcherTest {
 
     @Test void exactConfirmedHarvestDoesNotDependOnWholeFieldEpochOrAnotherWorker() {
         JsonObject site = json("""
-                {"status":"ok","phase":"HARVESTING","growthEpoch":1,"terminalHarvest":[
-                 {"outputItem":"item:wheat","intentStatus":"CONFIRMED", "physicalReceiptResolved":true,
+                {"id":"site:field","status":"ok","phase":"HARVESTING","growthEpoch":1,"terminalHarvest":[
+                 {"job":"job:harvest","worker":"resident:farmer","intent":"intent:harvest",
+                  "outputItem":"item:wheat","intentStatus":"CONFIRMED", "physicalReceiptResolved":true,
                   "physicalReceiptConfirmed":true}]}
                 """);
         JsonObject intent = json("""
-                {"status":"ok","intentStatus":"CONFIRMED","intentKind":"RESOURCE_SITE_HARVEST",
-                 "receiptId":"receipt:harvest","subjects":["item:wheat"]}
+                {"id":"intent:harvest","causeSubject":"site:field","status":"ok",
+                 "intentStatus":"CONFIRMED","intentKind":"RESOURCE_SITE_HARVEST",
+                 "receiptId":"receipt:harvest","subjects":["job:harvest","resident:farmer","site:field"]}
                 """);
         assertTrue(FrontierV3PilotDiagnosticMatcher.harvestComplete(site, intent, "item:wheat"));
         assertFalse(FrontierV3PilotDiagnosticMatcher.harvestComplete(site, intent, "item:other"));
+        intent.addProperty("id", "intent:other");
+        assertFalse(FrontierV3PilotDiagnosticMatcher.harvestComplete(site, intent, "item:wheat"));
+        intent.addProperty("id", "intent:harvest");
+        intent.addProperty("causeSubject", "site:other");
+        assertFalse(FrontierV3PilotDiagnosticMatcher.harvestComplete(site, intent, "item:wheat"));
+        intent.addProperty("causeSubject", "site:field");
+        intent.add("subjects", json("{\"subjects\":[\"job:harvest\",\"resident:other\"]}").get("subjects"));
+        assertFalse(FrontierV3PilotDiagnosticMatcher.harvestComplete(site, intent, "item:wheat"));
+        intent.add("subjects", json("{\"subjects\":[\"job:harvest\",\"resident:farmer\",\"site:field\"]}").get("subjects"));
         site.getAsJsonArray("terminalHarvest").get(0).getAsJsonObject().addProperty("physicalReceiptConfirmed", false);
         assertFalse(FrontierV3PilotDiagnosticMatcher.harvestComplete(site, intent, "item:wheat"));
         site.getAsJsonArray("terminalHarvest").get(0).getAsJsonObject().addProperty("physicalReceiptConfirmed", true);

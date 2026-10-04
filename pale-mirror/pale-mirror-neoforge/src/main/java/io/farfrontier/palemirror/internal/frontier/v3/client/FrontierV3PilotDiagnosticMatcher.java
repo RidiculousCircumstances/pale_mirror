@@ -45,17 +45,24 @@ final class FrontierV3PilotDiagnosticMatcher {
         if (!"ok".equals(string(site, "status"))
                 || !"ok".equals(string(intent, "status")) || !"CONFIRMED".equals(string(intent, "intentStatus"))
                 || !"RESOURCE_SITE_HARVEST".equals(string(intent, "intentKind")) || string(intent, "receiptId").isBlank()
+                || string(intent, "id").isBlank() || !string(site, "id").equals(string(intent, "causeSubject"))
                 || !intent.has("subjects") || !intent.get("subjects").isJsonArray()
                 || !site.has("terminalHarvest") || !site.get("terminalHarvest").isJsonArray()) return false;
         boolean terminal = java.util.stream.StreamSupport.stream(site.getAsJsonArray("terminalHarvest").spliterator(), false)
                 .filter(JsonElement::isJsonObject).map(JsonElement::getAsJsonObject)
                 .anyMatch(value -> itemId.equals(string(value, "outputItem"))
+                        && string(intent, "id").equals(string(value, "intent"))
+                        && containsSubject(intent, string(value, "job"))
+                        && containsSubject(intent, string(value, "worker"))
                         && "CONFIRMED".equals(string(value, "intentStatus"))
                         && value.has("physicalReceiptResolved") && value.get("physicalReceiptResolved").getAsBoolean()
                         && value.has("physicalReceiptConfirmed") && value.get("physicalReceiptConfirmed").getAsBoolean());
-        if (!terminal) return false;
-        return java.util.stream.StreamSupport.stream(intent.getAsJsonArray("subjects").spliterator(), false)
-                .anyMatch(value -> value.isJsonPrimitive() && itemId.equals(value.getAsString()));
+        return terminal;
+    }
+
+    private static boolean containsSubject(JsonObject intent, String subject) {
+        return !subject.isBlank() && java.util.stream.StreamSupport.stream(intent.getAsJsonArray("subjects").spliterator(), false)
+                .anyMatch(value -> value.isJsonPrimitive() && subject.equals(value.getAsString()));
     }
 
     static boolean containerContains(JsonObject container, JsonObject action) {
