@@ -106,6 +106,10 @@ runtime_transitions:
       - V2 runtime removal requires the automated, performance, restart, physical-world and player-product gates in the Frontier v3 implementation plan.
 
 invariants:
+  - id: "frontier-v3-admitted-current-purpose"
+    statement: "Physical ambient admission and restart-to-HOT orchestration resolve purpose from the current retained domain activity at the event instant; a historical presentation goal cannot override an already-retained meal or movement. Body confirmation owns custody, not activity choice. Purpose refresh preserves identity, physical epoch, lease revision, position and resources."
+  - id: "frontier-v3-delivered-clearance-ownership"
+    statement: "Confirmed bakery delivery retains only service-access clearance, never a mandatory return to the workshop. The production owner finalizes once independently inspected access is clear and its scene is closed, without moving the actor. COLD clearance movement excludes every retained physical custodian. A delivered actor still inside access may re-enter the sole registered production scene for clearance; later travel belongs to activity selection."
   - id: "frontier-v3-service-egress-capacity"
     statement: "Shared service geometry separates access, immediate egress and waiting/rest destinations. Known support includes declared facility ingress floors; passage legality remains independent. Waiting applicants and deferred preferred eating targets cannot reserve the usable egress perimeter. Actual bodies and committed destinations remain exclusive. A short committed COLD entrance and its arrival checkpoint retain one service turn; distant waiting approaches do not. Interior occupants precede entrance applicants. Confirmed physical exit releases access before eating, and idle turnover also clears the temporary egress area through the sole navigator, never teleportation or a new pose writer. HOT and COLD use the same declared geometry and allocation rules."
   # Compatibility wording enforced by the repository architecture gate.

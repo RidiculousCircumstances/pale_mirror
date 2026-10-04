@@ -35,6 +35,8 @@ public final class BakeryKnownNavigation {
                 || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY;
         SurfaceAnchor goal = BakeryWorkGoal.current(state, job).station();
         if (start.equals(goal)) return List.of(start);
+        if (clearing) return KnownServiceExitNavigation.pathFrom(state, job.settlementId(),
+                FrontierWorldState.depotId(job.settlementId()), BakeryWorkGoal.current(state, job).movementOrder(), start);
         boolean atWorkshop = start.equals(workshopPort.workStation()) || start.equals(workshopPort.inputStation())
                 || start.equals(workshopPort.interiorSurface()) || start.equals(workshopPort.throatSurface())
                 || start.equals(workshopPort.approachSurface());

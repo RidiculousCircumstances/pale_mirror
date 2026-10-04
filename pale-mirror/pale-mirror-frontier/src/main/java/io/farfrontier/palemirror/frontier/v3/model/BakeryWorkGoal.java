@@ -21,10 +21,12 @@ public record BakeryWorkGoal(SubjectId jobId, SubjectId workerId, BakeryWorkStat
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
         SurfaceAnchor target;
         if (work.phase() == BakeryWorkState.Phase.DELIVERED) {
-            SettlementStructure workshop = settlement.structures().stream()
-                    .filter(structure -> structure.id().equals(job.facilityId()))
-                    .findFirst().orElseThrow();
-            target = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach();
+            SettlementStructure depot = settlement.structures().stream()
+                    .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+            var port = SettlementDepotServicePort.forDepot(depot);
+            var outside = port.facing().step(port.exteriorApproach(), 1);
+            target = SettlementPedestrianGround.surveyedSupport(state.bootstrap(),
+                    SettlementPedestrianGround.localSupports(state.bootstrap(), job.settlementId()), outside.x(), outside.z());
         } else if (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY) {
             SettlementStructure depot = settlement.structures().stream()
@@ -39,6 +41,12 @@ public record BakeryWorkGoal(SubjectId jobId, SubjectId workerId, BakeryWorkStat
             target = machine.workerStation();
         }
         return new BakeryWorkGoal(job.id(), job.workerId(), work.phase(), target);
+    }
+
+    /** Delivery is complete at the depot; later travel is not a production obligation. */
+    public static boolean deliveryAccessCleared(FrontierWorldState state, ProductionJob job, BodyPosition body) {
+        return job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED
+                && ServiceAccessCoordinator.boundary(state, FrontierWorldState.depotId(job.settlementId())).cleared(body);
     }
 
     public MovementOrder movementOrder() {

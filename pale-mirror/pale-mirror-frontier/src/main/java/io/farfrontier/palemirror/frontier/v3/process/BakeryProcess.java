@@ -163,6 +163,12 @@ public final class BakeryProcess {
             if (openScene) return Optional.empty();
             ActorLocation worker = state.actorLocations().get(job.workerId());
             if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
+            if (BakeryWorkGoal.deliveryAccessCleared(state, job, worker.body()))
+                return Optional.of(new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.FINALIZE,
+                        worker.supportingSurface()));
+            // Finalization changes job ownership, not pose. Every movement, including
+            // post-delivery clearance, still excludes retained physical authority.
+            if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())) return Optional.empty();
             try {
                 List<SurfaceAnchor> clearingRoute = BakeryKnownNavigation.path(state, job);
                 if (clearingRoute.size() > 1) return Optional.of(new BakeryColdStep(job.id(), work.phase(),

@@ -52,6 +52,14 @@ final class FrontierV3BakeryWorkSceneExecutor {
         }));
         if (!actuation.current(worker)) return;
         var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
+        if (supportedExit.isPresent() && BakeryWorkGoal.deliveryAccessCleared(state, job, supportedExit.orElseThrow())) {
+            FrontierV3GoalNavigation.stop(worker, actuation);
+            if (!state.actorLocations().get(job.workerId()).body().equals(supportedExit.orElseThrow()))
+                FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);
+            else FrontierV3CommandSubmission.submit(runtime, "bakery-delivered-draining", lease.id().value(),
+                    new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+            return;
+        }
         if (supportedExit.isPresent() && ServiceAccessCoordinator.witnessedBakeryExit(
                 state, job, supportedExit.orElseThrow())) {
             FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);

@@ -519,6 +519,18 @@ class BakeryHotVerticalTest {
                 departedDepot, exitObserved), "one physical exit cannot be applied twice");
         state = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
                 .releaseSceneLease(leaseId, List.of(new SceneMemberPosition(job.workerId(), actor.body(), actor.condition().health())));
+        assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 900L)).stream()
+                .noneMatch(event -> event.payload() instanceof BakeryColdStep),
+                "closing presentation cannot grant COLD movement over a retained physical body");
+        assertTrue(FrontierProductionWorkSceneSupport.candidate(state, state.productionJobs().get(job.id())).isPresent(),
+                "an inside delivered worker can reopen its exact scene to clear service access");
+        var recoveredClearance = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertTrue(ProductionProcess.planCompletion(recoveredClearance, ProductionProcess.complete(job, 900L)).stream()
+                .noneMatch(event -> event.payload() instanceof BakeryColdStep));
+        state = departedDepot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
+                .releaseSceneLease(leaseId, List.of(new SceneMemberPosition(job.workerId(), exit.standingBody(),
+                        departedDepot.actorLocations().get(job.workerId()).condition().health())));
+        var actualBodies = state.actorLocations();
         BakeryColdStep finalization = null;
         for (int step = 0; state.productionJobs().containsKey(job.id()) && step < 300; step++) {
             BakeryColdStep clearing = ProductionProcess.planCompletion(state,
@@ -529,6 +541,7 @@ class BakeryHotVerticalTest {
             finalization = clearing;
         }
         assertEquals(BakeryColdStep.Action.FINALIZE, finalization.action());
+        assertEquals(actualBodies, state.actorLocations(), "job finalization never sends the baker back to the workshop");
         assertFalse(state.productionJobs().containsKey(job.id()));
         assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
         assertEquals(123, state.inventory().fungibleResources().totalQuantity(task.ownerId(), "minecraft:bread"),

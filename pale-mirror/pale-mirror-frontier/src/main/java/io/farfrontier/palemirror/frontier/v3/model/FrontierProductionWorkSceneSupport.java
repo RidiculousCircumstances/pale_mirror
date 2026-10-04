@@ -41,7 +41,6 @@ public final class FrontierProductionWorkSceneSupport {
         if (hasScene(state, job.id()) || !hasPhysicalInput(state, job)
                 || state.humanPopulation().meals().containsKey(job.workerId())
                 || state.actorMovements().containsKey(job.workerId())
-                || job.bakeryWork().isPresent() && job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED
                 || job.bakeryWork().isEmpty() && job.workProgress().terminalEffectEligible()) return Optional.empty();
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
         if (ReferenceContainerCustody.hasLiveCustody(state, depot) && !ReferenceContainerCustody.hasOperationalCustody(state, depot)) return Optional.empty();
@@ -50,6 +49,8 @@ public final class FrontierProductionWorkSceneSupport {
         ActorLocation worker = state.actorLocations().get(job.workerId());
         if (workshop == null || workshop.kind() != StructureKind.WORKSHOP || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
                 || worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
+        if (job.bakeryWork().isPresent() && BakeryWorkGoal.deliveryAccessCleared(state, job, worker.body()))
+            return Optional.empty();
         if (job.bakeryWork().isPresent()) {
             SurfaceAnchor retained = worker.supportingSurface();
             BlockPosition demand = BakeryWorkGoal.current(state, job).station().support();

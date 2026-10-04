@@ -105,7 +105,10 @@ class AmbientActorProcessTest {
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,
                 engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-bad-observation"),
                         new AmbientActorObserved(resident, lease.handoffBody(), FixedScalar.whole(8)))));
-        AmbientLeaseReleased release = new AmbientLeaseReleased(resident, new BodyPosition(65, 64, 64), FixedScalar.whole(8));
+        ModeledActorBodyFacts.inspected(engine, resident, new BodyPosition(65, 64, 64));
+        var inspected = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        AmbientLeaseReleased release = new AmbientLeaseReleased(resident, new BodyPosition(65, 64, 64),
+                inspected.actorLocations().get(resident).condition().health());
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-draining"), new AmbientLeaseTransition(resident, AmbientLeaseStatus.DRAINING))));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,

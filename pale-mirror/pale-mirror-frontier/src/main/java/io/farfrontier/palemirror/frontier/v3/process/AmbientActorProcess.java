@@ -133,14 +133,27 @@ public final class AmbientActorProcess {
         return switch (payload) {
             case AmbientBodyConfirmed confirmed -> {
                 if (!subject.equals(owner(state, confirmed.actorId()))) throw new IllegalArgumentException("body confirmation lacks its canonical owner");
-                yield AmbientBodyConfirmationProcess.reduce(state, confirmed);
+                FrontierWorldState admitted = AmbientBodyConfirmationProcess.reduce(state, confirmed);
+                yield confirmed.boundary() == AmbientBodyConfirmed.Boundary.ADMISSION
+                        ? refreshHotPurpose(admitted, confirmed.actorId(), instant.ticks()) : admitted;
             }
             case AmbientLeasePrepared prepared -> reduce(state, subject, instant, prepared);
-            case AmbientLeaseTransition transition -> reduce(state, subject, transition);
+            case AmbientLeaseTransition transition -> {
+                FrontierWorldState transitioned = reduce(state, subject, transition);
+                yield transition.status() == AmbientLeaseStatus.HOT
+                        ? refreshHotPurpose(transitioned, transition.actorId(), instant.ticks()) : transitioned;
+            }
             case AmbientLeaseReleased release -> reduce(state, subject, release);
             case AmbientLeaseRestartAbsenceObserved absence -> reduce(state, subject, absence);
             default -> throw new IllegalArgumentException("payload is not an ambient lease transition");
         };
+    }
+
+    /** Admission/recovery confirms custody, not the continued validity of an old purpose. */
+    private static FrontierWorldState refreshHotPurpose(FrontierWorldState state, SubjectId actorId, long atTick) {
+        AmbientGoal goal = goalFor(state, actorId, atTick);
+        return AmbientLeaseStateProcess.retarget(state, actorId, goal.kind(),
+                new SurfaceAnchor(goal.position()).standingBody());
     }
     public static CommandPlan plan(FrontierWorldState state, AmbientBodyConfirmed confirmed) {
         try { AmbientBodyConfirmationProcess.reduce(state, confirmed); }

@@ -9,6 +9,33 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AmbientBodyConfirmationProcessTest {
+    @Test void admissionAndRestartResolvePurposeFromTheRetainedActivityNotHistoricalLease() {
+        Fixture f = fixture();
+        var lease = f.state().ambientLeases().get(f.medic());
+        var oldPurpose = new AmbientActorLease(lease.actorId(), lease.handoffBody(), lease.handoffInstant(),
+                lease.revision(), lease.status(), AmbientGoalKind.PATROL, lease.handoffBody());
+        var leases = new java.util.LinkedHashMap<>(f.state().ambientLeases());
+        leases.put(f.medic(), oldPurpose);
+        var prepared = f.state().withChanges(FrontierWorldStateUpdate.begin().ambientLeases(leases));
+        var evidence = confirmation(prepared, f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody());
+        var inspected = ModeledActorBodyFacts.inspected(prepared, f.medic(), evidence.observedBody());
+        var hot = AmbientActorProcess.reduceLease(inspected, f.port().settlementId(), new SimInstant(27_001L), evidence);
+        assertEquals(AmbientGoalKind.MEAL, hot.ambientLeases().get(f.medic()).goal());
+        assertEquals(inspected.actorLocations(), hot.actorLocations(), "scope admission never rewrites the body");
+        assertEquals(prepared.inventory(), hot.inventory());
+        assertEquals(prepared.humanPopulation().meals(), hot.humanPopulation().meals());
+        var historical = new java.util.LinkedHashMap<>(hot.ambientLeases());
+        historical.put(f.medic(), oldPurpose.withStatus(AmbientLeaseStatus.UNKNOWN_AFTER_RESTART));
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(
+                hot.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(historical))));
+        var resumed = AmbientActorProcess.reduceLease(recovered, f.port().settlementId(), new SimInstant(27_002L),
+                new AmbientLeaseTransition(f.medic(), AmbientLeaseStatus.HOT));
+        assertEquals(AmbientGoalKind.MEAL, resumed.ambientLeases().get(f.medic()).goal());
+        assertEquals(lease.revision(), resumed.ambientLeases().get(f.medic()).revision());
+        assertEquals(recovered.actorLocations(), resumed.actorLocations());
+        assertEquals(recovered.humanPopulation().meals(), resumed.humanPopulation().meals());
+        assertEquals(recovered.inventory(), resumed.inventory());
+    }
     private record Fixture(FrontierWorldState state, SubjectId security, SubjectId medic, SettlementDepotServicePort port) { }
     private Fixture fixture() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:body-admission"), 20260918065L));
