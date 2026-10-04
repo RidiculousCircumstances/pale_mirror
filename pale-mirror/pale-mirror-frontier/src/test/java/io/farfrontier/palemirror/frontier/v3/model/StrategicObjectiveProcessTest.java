@@ -196,7 +196,11 @@ class StrategicObjectiveProcessTest {
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(hive, 1, 60L));
 
-        assertEquals(9, planned.size(), "one bounded perception batch and its doctrine accompany the durable plan");
+        List<ProposedEvent> presence = HivePresenceProcess.planFree(state, hive, 60L);
+        assertEquals(4, presence.size(), "the initial free hive actors receive their registered presence activities");
+        assertTrue(planned.containsAll(presence));
+        assertEquals(9 + presence.size(), planned.size(),
+                "bounded perception, doctrine and independent actor execution accompany the durable plan");
         StrategicObjectiveSelected selected = assertInstanceOf(StrategicObjectiveSelected.class, planned.getFirst().payload());
         StrategicTaskPlanned task = assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload());
         assertEquals(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, selected.objective().kind());

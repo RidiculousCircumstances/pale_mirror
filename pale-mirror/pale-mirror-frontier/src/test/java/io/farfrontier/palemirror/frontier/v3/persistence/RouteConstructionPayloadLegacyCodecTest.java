@@ -1,19 +1,17 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
-import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStarted;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStatus;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Golden historical WAL shape before construction work acquired an exact crew. */
+/** Obsolete autonomous WAL cannot bypass the current exact-crew admission contract. */
 class RouteConstructionPayloadLegacyCodecTest {
     @Test
-    void recoversHistoricalAutonomousConstructionWalWithoutInventingPeople() throws Exception {
+    void rejectsHistoricalAutonomousConstructionWalWithoutInventingPeople() throws Exception {
         byte[] historical = FrontierWorldPayloadCodecs.encodeProduction(output -> {
             output.writeUTF("construction:route-reroute-settlement-1--380-64--304");
             output.writeUTF("settlement:1");
@@ -24,10 +22,8 @@ class RouteConstructionPayloadLegacyCodecTest {
             }
         });
 
-        RouteConstructionStarted restored = (RouteConstructionStarted) FrontierWorldRuntimeDefinition.payloadCodecs()
-                .decode("frontier.route_construction_started", historical);
-
-        assertEquals(new SubjectId("construction:route-reroute-settlement-1--380-64--304"), restored.project().id());
-        assertTrue(restored.project().team().isEmpty(), "historical work stays explicitly autonomous; recovery never manufactures a crew");
+        var rejected = assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.payloadCodecs()
+                .decode("frontier.route_construction_started", historical));
+        assertTrue(rejected.getMessage().contains("obsolete construction admission schema"));
     }
 }

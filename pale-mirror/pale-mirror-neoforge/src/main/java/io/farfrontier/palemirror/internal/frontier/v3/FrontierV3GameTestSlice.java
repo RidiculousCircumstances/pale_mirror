@@ -34,7 +34,8 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-reference-projection");
             case AMBIENT_PHYSICS -> batchName.equals("pm-frontier-v3-ambient-physics");
             case "cargo" -> batchName.equals("pm-frontier-v3-scene-cargo") || batchName.equals("pm-frontier-v3-scene-cargo-authority")
-                    || batchName.equals("pm-frontier-v3-scene-cargo-interaction");
+                    || batchName.equals("pm-frontier-v3-scene-cargo-interaction")
+                    || batchName.equals("pm-frontier-v3-scene-cargo-impact-reload");
             case "cargo-authority" -> batchName.equals("pm-frontier-v3-scene-cargo-authority");
             case "cargo-interaction" -> batchName.equals("pm-frontier-v3-scene-cargo-interaction");
             case "scene-departure" -> batchName.equals("pm-frontier-v3-scene-departure") || batchName.equals("pm-frontier-v3-scene-deaths")
@@ -62,6 +63,7 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-resource-site-harvest-standing");
             case "calendar" -> batchName.equals("pm-frontier-v3-calendar");
             case "ambient-restart-absence" -> batchName.equals("pm-frontier-v3-ambient-restart-absence");
+            case "ambient-restart-reclaim" -> batchName.equals("pm-frontier-v3-ambient-restart-reclaim");
             case "ambient-prepared-recovery" -> batchName.equals("pm-frontier-v3-ambient-prepared-recovery");
             case "village-observer" -> batchName.equals("pm-village-observer");
             case "graybox-projection" -> batchName.equals("pm-frontier-v3-graybox-projection");

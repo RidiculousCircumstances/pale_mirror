@@ -352,10 +352,12 @@ public final class FrontierV3CargoCarrierGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-cargo", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
+    @GameTest(batch = "pm-frontier-v3-scene-cargo-impact-reload", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
     public static void externalImpactReloadTransfersDestroyedCargoCartToFungibleDrop(GameTestHelper helper) {
-        // Stay inside this test's template footprint. A relative x=64 overlaps a concurrently
-        // running fixture, which can legitimately remove its own nearby item entities.
+        // Reconciliation deliberately rejects equal neighbouring drops. Keep this
+        // single-successor recovery fixture in its own batch: the observation AABB
+        // extends past the tiny template and parallel cargo tests release equal stacks.
+        // Do not filter those stacks out of the production observation or assertion.
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 4));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime(helper, "frontier:scene-cargo-external-impact");
         FrontierWorldState initial = state(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst();

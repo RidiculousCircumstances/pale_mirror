@@ -170,11 +170,10 @@ final class FrontierV3AmbientActorExecutor {
             // owner first, then let the next ordinary turn prepare/adopt the same farmer.
             if (lease != null && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
                 Entity body = level.getEntity(entityId(state, actorId));
-                if (body instanceof Mob mob && release(runtime, mob).isPresent()) {
-                    // A pre-release fence survives independently of the entity
-                    // region. Finish that exact transfer rather than reactivating it.
-                    admitted++;
-                } else if (body != null && FrontierV3ActorBodyController.readyForExecution(level, state, List.of(
+                // Recovery is recognition, not an instruction to end this scope.
+                // Saved departures have their independent body-owner protocol above;
+                // an indexed survivor must not be drained merely because it returned.
+                if (body != null && FrontierV3ActorBodyController.readyForExecution(level, state, List.of(
                         io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId)))
                         && FrontierV3AmbientCarrierRecognition.recoverableOwnership(state,
                         FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(body),
