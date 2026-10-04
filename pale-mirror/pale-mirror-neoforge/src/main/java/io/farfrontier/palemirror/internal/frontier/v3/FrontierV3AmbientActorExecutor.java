@@ -175,7 +175,9 @@ final class FrontierV3AmbientActorExecutor {
                     // A pre-release fence survives independently of the entity
                     // region. Finish that exact transfer rather than reactivating it.
                     admitted++;
-                } else if (body != null && FrontierV3AmbientCarrierRecognition.recoverableOwnership(state,
+                } else if (body != null && FrontierV3ActorBodyController.readyForExecution(level, state, List.of(
+                        io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId)))
+                        && FrontierV3AmbientCarrierRecognition.recoverableOwnership(state,
                         FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(body),
                         FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()))) {
                     submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
@@ -513,10 +515,8 @@ final class FrontierV3AmbientActorExecutor {
             FrontierV3GoalNavigation.quiesceStaleActuation(body);
             body.setNoAi(true);
         }
-        if (FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity)
-                && state.ambientLeases().get(actorId) != null && state.ambientLeases().get(actorId).status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
-            submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
-        }
+        // Joining retains the exact object only. Common indexed body confirmation
+        // precedes scope recovery in the pending-admission drain, never the reverse.
         return JoinDisposition.RETAINED;
     }
     static boolean retainsPendingJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {

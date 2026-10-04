@@ -41,6 +41,52 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3AmbientAc
 public final class FrontierV3AmbientMotionGameTests {
     private FrontierV3AmbientMotionGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-scene-harvest-support", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 30)
+    public static void indexedCommonBodyConfirmationPrecedesAnyActivityReadiness(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos feet = helper.absolutePos(new BlockPos(2, 8, 2));
+        var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:common-indexed-admission"), 91L);
+        var actor = new SubjectId("resident:1-1");
+        var origin = base.initialState().actorLocations().get(actor).body();
+        var bootstrap = FrontierV3CargoLoadingGameTests.translatedBootstrap(base.initialState().bootstrap(),
+                feet.getX() - origin.x(), feet.getY() - origin.y(), feet.getZ() - origin.z());
+        var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(bootstrap), new EphemeralStore(), 10_000);
+        var initial = state(runtime);
+        var lease = AmbientActorProcess.nextLease(initial, actor, runtime.checkpointImage().orElseThrow().instant());
+        FrontierV3CommandSubmission.submit(runtime, "common-admission-prepare", actor.value(), new AmbientLeasePrepared(lease));
+        var prepared = state(runtime);
+        var id = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(prepared, actor);
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, bootstrap.worldId());
+        FrontierV3ActorFirstAdmissionBootstrap.initialize(ledger, initial,
+                new io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage(bootstrap.worldId(), java.util.Optional.empty(), java.util.List.of()),
+                () -> ledger.persist(level, bootstrap.worldId()));
+        prepareFloor(level, feet);
+        helper.assertFalse(FrontierV3ActorBodyController.readyForExecution(level, prepared, java.util.List.of(id)),
+                "prepared demand cannot grant activity readiness before its body exists");
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, prepared, actor, lease.handoffBody()),
+                FrontierV3AmbientActorExecutor.Result.APPLIED, "the common body producer must insert its exact declared incarnation");
+        helper.assertFalse(FrontierV3ActorBodyController.readyForExecution(level, state(runtime), java.util.List.of(id)),
+                "insertion alone does not confirm a body in an isolated runtime");
+        helper.runAfterDelay(2, () -> {
+            var body = level.getEntity(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(bootstrap.worldId(), actor));
+            helper.assertTrue(body instanceof Villager, "the real object must be indexed before common observation");
+            var proof = FrontierV3ServerLifecycle.observeSourceJoin(level, runtime, body);
+            helper.assertTrue(proof.verifiedV3Carrier(), "the actual common join firewall must accept exact provenance");
+            FrontierV3AmbientPendingAdmissions.reclaimProjected(runtime, state(runtime));
+            helper.assertTrue(FrontierV3ActorBodyController.readyForExecution(level, state(runtime), java.util.List.of(id)),
+                    "only the common observation makes the indexed same-incarnation body ready");
+            helper.assertTrue(FrontierV3AmbientPendingAdmissions.get(runtime, body.getUUID()) == null,
+                    "durable body confirmation releases the join bridge without an activity transfer");
+            helper.assertValueEqual(state(runtime).ambientLeases().get(actor).status(), AmbientLeaseStatus.PREPARED,
+                    "physical confirmation must not activate a presentation scope");
+            var stale = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(actor, id.physicalEpoch() + 1L);
+            helper.assertFalse(FrontierV3ActorBodyController.readyForExecution(level, state(runtime), java.util.List.of(stale)),
+                    "an older/newer incarnation cannot borrow readiness from this indexed body");
+            body.discard(); FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-ambient-local-brain", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 1)
     public static void semanticArrivalRequiresExactSupportAndDeclaredGroundMedium(GameTestHelper helper) {
         SurfaceAnchor surface = SurfaceAnchor.at(0, 8, 0);

@@ -73,7 +73,7 @@ final class FrontierV3EngineeringWorkSceneExecutor {
 
     private static void materialize(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                     FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.ENGINEERING_WORK);
+        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, runtime, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.ENGINEERING_WORK);
         if (result == FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) {
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "engineering_worksite_hot", lease,
                     submit(runtime, "engineering-scene-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));

@@ -11,7 +11,9 @@ class FrontierV3AmbientPendingAdmissionsTest {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:join-bridge"), 41L));
         var actor = initial.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
         var state = ActorBodyAuthority.demand(initial, actor);
-        var body = ActorBodyAuthority.current(state, actor); state = ActorBodyAuthority.running(state, body);
+        var body = ActorBodyAuthority.current(state, actor);
+        var prepared = state;
+        state = ActorBodyAuthority.running(state, body);
         var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actor,
                 FrontierV3AmbientActorExecutor.entityId(state, actor),
                 FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, body.physicalEpoch());
@@ -20,6 +22,8 @@ class FrontierV3AmbientPendingAdmissionsTest {
         assertFalse(FrontierV3AmbientPendingAdmissions.recordedBodyOwns(state, binding, ledger),
                 "missing lifetime history never produces join permission");
         FrontierV3ActorAdoptionFixture.establishPhysicalHistory(ledger, declaration);
+        assertFalse(FrontierV3AmbientPendingAdmissions.recordedBodyOwns(prepared, binding, ledger),
+                "durable insertion history cannot replace independent confirmation of the indexed body");
         assertTrue(FrontierV3AmbientPendingAdmissions.recordedBodyOwns(state, binding, ledger),
                 "a body is not required to belong to an activity scene");
         assertFalse(FrontierV3AmbientPendingAdmissions.recordedBodyOwns(initial, binding, ledger));

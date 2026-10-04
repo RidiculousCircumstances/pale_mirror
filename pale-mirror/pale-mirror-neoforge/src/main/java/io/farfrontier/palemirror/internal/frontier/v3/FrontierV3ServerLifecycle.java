@@ -715,6 +715,13 @@ public final class FrontierV3ServerLifecycle {
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
             return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
         }
+        return observeSourceJoin(level, runtime, entity);
+    } // Both the host and isolated native runtimes use the same real join boundary.
+    static JoinFirewallProof observeSourceJoin(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                               Entity entity) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity");
+        if (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE)
+            return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
         FrontierV3ActorBodyController.observeJoin(level, runtime, entity);
         JoinFirewallProof proof = observeSourceJoin(runtime, entity);
         if (proof.verifiedV3Carrier() && proof.lifecycleAdmission() != EntityJoinAdmission.DUPLICATE_UNINDEXED)

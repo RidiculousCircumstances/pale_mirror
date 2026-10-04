@@ -259,9 +259,13 @@ final class FrontierV3ActorBodyController {
     static void confirmPresent(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                net.minecraft.world.entity.Entity entity) {
         var state = runtime.decodedState().orElse(null);
-        if (state == null || !(entity instanceof Mob body) || !body.isAlive()
+        if (state == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE
+                || !(entity instanceof Mob body) || !body.isAlive()
+                || level.getEntity(body.getUUID()) != body
                 || !recognizesRecordedBody(level, state, entity)) return;
         var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow();
+        if (!FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).currentBodyResidence(
+                declaration.actorId(), body.getPersistentData().getLong(RESIDENCE_KEY))) return;
         var id = ActorBodyAuthority.current(state, declaration.actorId());
         if (ActorBodyAuthority.require(state, id).phase() == FencedRecoveryPhase.RUNNING) return;
         var observed = FrontierV3SupportedBodyCapture.observe(level, body);
@@ -272,6 +276,22 @@ final class FrontierV3ActorBodyController {
         FrontierV3CommandSubmission.submit(runtime, "actor-body-present", declaration.actorId().value(),
                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(id,
                         location.body(), location.condition().health(), observed.orElseThrow(), health));
+    }
+
+    /** A physical insertion is not execution readiness until the common observation is durable. */
+    static boolean readyForExecution(ServerLevel level, FrontierWorldState state,
+                                     java.util.Collection<ActorBodyId> expectedBodies) {
+        for (ActorBodyId expected : expectedBodies) {
+            if (!expected.equals(ActorBodyAuthority.current(state, expected.actorId()))
+                    || ActorBodyAuthority.require(state, expected).phase() != FencedRecoveryPhase.RUNNING)
+                return false;
+            var entity = level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(), expected.actorId()));
+            if (!(entity instanceof Mob body) || !body.isAlive()
+                    || !recognizesRecordedBody(level, state, body)) return false;
+            if (!FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).currentBodyResidence(
+                    expected.actorId(), body.getPersistentData().getLong(RESIDENCE_KEY))) return false;
+        }
+        return true;
     }
 
     /** Common inspection of one indexed resident object; family receipts cannot confer body permission. */

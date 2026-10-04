@@ -22,6 +22,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ActorCarrierCompositionTest {
     @Test
+    void commonReadinessCannotPromoteAnUnobservedOrStaleBody() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:body-readiness"), 91L));
+        var actor = new SubjectId("resident:1-1");
+        var lease = io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess.nextLease(initial, actor,
+                io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO);
+        var prepared = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.prepare(initial, lease);
+        var expected = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(prepared, actor);
+        assertFalse(FrontierV3ActorBodyController.readyForExecution(null, prepared, java.util.List.of(expected)),
+                "construction demand is not independent physical body confirmation");
+        var stale = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(actor, expected.physicalEpoch() + 1L);
+        assertFalse(FrontierV3ActorBodyController.readyForExecution(null, prepared, java.util.List.of(stale)),
+                "a different incarnation cannot become ready through the current scope");
+    }
+
+    @Test
     void closedInventoryUsesTheCompiledFactoryBoundaryWithoutProducerOrAdopterBypass() throws Exception {
         Set<Class<?>> boundaries = FrontierV3ActorCarrierComposition.inventory().stream()
                 .map(FrontierV3ActorCarrierComposition.InventoryEntry::boundaryType).collect(Collectors.toUnmodifiableSet());
@@ -118,7 +133,7 @@ class FrontierV3ActorCarrierCompositionTest {
                 FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY, null, null, null));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorCarrierFactory.create(
                 FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY, null, null, null));
-        assertThrows(IllegalArgumentException.class, () -> FrontierV3SceneExecutor.materializeBodies(null, null, null, null),
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3SceneExecutor.materializeBodies(null, null, null, null, null),
                 "an unregistered helper cannot adopt an actor carrier through another boundary");
     }
     @Test

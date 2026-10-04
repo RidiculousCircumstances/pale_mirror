@@ -2,8 +2,6 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
-import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.world.entity.Entity;
 
@@ -15,8 +13,8 @@ import java.util.UUID;
 
 /**
  * Sole temporary authority for an exact managed entity joining before the UUID index and a
- * compatible projection are both ready. It is noncanonical, bounded, and releases only after
- * strict provider-backed recognition or ordinary entity removal.
+ * durable common body confirmation are both ready. It is noncanonical and bounded;
+ * it neither restores a presentation scope nor grants activity execution.
  */
 final class FrontierV3AmbientPendingAdmissions {
     static final int MAX_ENTRIES = 4_096;
@@ -45,12 +43,12 @@ final class FrontierV3AmbientPendingAdmissions {
     static void clean(FrontierV3ServerRuntime<?, ?> runtime) {
         Map<UUID, Entity> admissions = ADMISSIONS.get(runtime);
         if (admissions == null) return;
-        // UUID indexing is not a hand-off: strict projection recognition remains mandatory.
+        // Indexing alone is not confirmation of this physical incarnation.
         admissions.entrySet().removeIf(entry -> entry.getValue().isRemoved());
         if (admissions.isEmpty()) ADMISSIONS.remove(runtime);
     }
 
-    /** Completes only strict post-projection restart recovery; stale snapshots remain inert. */
+    /** Completes only common indexed body admission; activity recovery belongs to its owner. */
     static void reclaimProjected(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Map<UUID, Entity> admissions = ADMISSIONS.get(runtime);
         if (admissions == null) return;
@@ -60,35 +58,19 @@ final class FrontierV3AmbientPendingAdmissions {
             // activity. Releasing this join bridge grants no execution authority.
             if (!entity.isRemoved() && entity.level() instanceof net.minecraft.server.level.ServerLevel level
                     && level.getEntity(entry.getKey()) == entity) {
+                FrontierV3ActorBodyController.observeJoin(level, runtime, entity);
+                FrontierV3ActorBodyController.confirmPresent(level, runtime, entity);
+                state = runtime.decodedState().orElse(null);
+                if (state == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
                 var binding = FrontierV3ActorOwnerBinding.from(entity);
                 var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-                if (binding.isPresent() && recordedBodyOwns(state, binding.orElseThrow(), ledger)) {
-                    var ambient = state.ambientLeases().get(binding.orElseThrow().declaration().actorId());
-                    if (ambient == null || ambient.status() != AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
-                        admissions.remove(entry.getKey(), entity);
-                        continue;
-                    }
+                if (binding.isPresent() && recordedBodyOwns(state, binding.orElseThrow(), ledger)
+                        && FrontierV3ActorBodyController.readyForExecution(level, state, List.of(
+                            new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(
+                                binding.orElseThrow().declaration().actorId(), binding.orElseThrow().declaration().epoch())))) {
+                    admissions.remove(entry.getKey(), entity);
                 }
             }
-            if (entity.isRemoved() || !FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity)) continue;
-            SubjectId actorId;
-            try {
-                actorId = new SubjectId(entity.getPersistentData().getString(FrontierV3AmbientActorExecutor.ACTOR_KEY));
-            } catch (IllegalArgumentException invalid) {
-                continue;
-            }
-            if (state.ambientLeases().get(actorId) != null
-                    && state.ambientLeases().get(actorId).status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
-                if (!(FrontierV3AmbientActorExecutor.submit(runtime, "ambient-recovered", actorId.value(),
-                        new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT))
-                        instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) continue;
-                state = runtime.decodedState().orElse(null);
-                if (state == null) return;
-                if (state.ambientLeases().get(actorId) == null
-                        || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) continue;
-            }
-            // Strict recognition plus accepted recovery is the sole hand-off from this bridge.
-            admissions.remove(entry.getKey(), entity);
         }
         if (admissions.isEmpty()) ADMISSIONS.remove(runtime);
     }
@@ -98,6 +80,9 @@ final class FrontierV3AmbientPendingAdmissions {
                                      FrontierV3AmbientCarrierLedger ledger) {
         var declaration = binding.declaration();
         return FrontierV3ActorBodyController.recognizesDeclaration(state, declaration)
+                && io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.require(state,
+                    io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, declaration.actorId())).phase()
+                    == io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhase.RUNNING
                 && !ledger.hasCarrier(declaration.actorId()) && !ledger.hasDepartureConflict(declaration.actorId())
                 && !ledger.hasBodyDeparture(declaration.actorId())
                 && ledger.permitsRecordedOwner(binding);

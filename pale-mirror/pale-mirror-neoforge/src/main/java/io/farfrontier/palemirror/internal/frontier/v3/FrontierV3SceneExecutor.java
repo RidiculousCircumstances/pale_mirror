@@ -246,7 +246,7 @@ final class FrontierV3SceneExecutor {
         }
     }
     private static void materializePrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
-        BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY);
+        BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, runtime, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY);
         BodyMaterialization carrier = result == BodyMaterialization.COMPLETE
                 ? FrontierV3CargoCarrierExecutor.materialize(level, state, lease) : BodyMaterialization.DEFERRED;
         if (result == BodyMaterialization.COMPLETE && carrier == BodyMaterialization.COMPLETE) {
@@ -290,7 +290,7 @@ final class FrontierV3SceneExecutor {
         if (FrontierSceneBehaviors.recoveredStatus(state, lease) != SceneLeaseStatus.DRAINING
                 && canResumeUnstartedBodyAdmissions(level, state, lease)) {
             FrontierV3SceneExecutor.materializeBodies(
-                    level, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY);
+                    level, runtime, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY);
         }
         java.util.Set<SubjectId> missing = lease.members().stream()
                 .filter(member -> state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE)
@@ -389,7 +389,8 @@ final class FrontierV3SceneExecutor {
                 lease.id().value(), new SceneLeaseTransition(lease.id(), recoveredStatus))
                 instanceof CommandResult.Accepted;
     }
-    static BodyMaterialization materializeBodies(ServerLevel level, FrontierWorldState state, SceneLease lease,
+    static BodyMaterialization materializeBodies(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                 FrontierWorldState state, SceneLease lease,
                                                  FrontierV3ActorCarrierComposition.InventoryEntry adopter) {
         FrontierV3ActorCarrierComposition.requireRole(adopter, FrontierV3ActorCarrierComposition.Role.ADOPTER);
         // Blocks become available before Minecraft has necessarily restored the saved entity
@@ -400,8 +401,16 @@ final class FrontierV3SceneExecutor {
                 .anyMatch(body -> !entityStorageReady(level, new BlockPos(body.x(), body.y() - 1, body.z())))) {
             return BodyMaterialization.DEFERRED;
         }
-        return materializeBodiesInReadyColumns(level, state, lease,
+        var expected = lease.members().stream().map(member ->
+                io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, member.actorId())).toList();
+        var result = materializeBodiesInReadyColumns(level, state, lease,
                 FrontierV3SceneBehaviorRegistry.standingPositionProvider(lease), lease.memberBodies(state.actorLocations()));
+        if (result != BodyMaterialization.COMPLETE) return result;
+        // Join observation can commit during insertion; inspect the current canonical state,
+        // not the older placement snapshot. Missing confirmation is still PREPARED, not HOT.
+        return runtime.decodedState().filter(current ->
+                FrontierV3ActorBodyController.readyForExecution(level, current, expected)).isPresent()
+                ? BodyMaterialization.COMPLETE : BodyMaterialization.DEFERRED;
     }
     /** Isolated GameTest fixture entry point; production code must use the inventory-bound overload. */
     static BodyMaterialization materializeBodiesForFixture(ServerLevel level, FrontierWorldState state, SceneLease lease) {
