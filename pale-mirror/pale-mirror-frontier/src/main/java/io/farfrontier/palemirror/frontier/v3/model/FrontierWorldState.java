@@ -669,7 +669,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(slot, "container slot");
         return resourceSites.sites().values().stream()
                 .flatMap(site -> site.harvestJobs().values().stream())
-                .anyMatch(job -> job.outputSlot().equals(slot) || job.batchSuccessorSlot().filter(slot::equals).isPresent());
+                .anyMatch(job -> job.reservesOutputCapacity() && job.outputSlot().equals(slot)
+                        || job.batchSuccessorSlot().filter(slot::equals).isPresent());
     }
     /** Derived from durable jobs: no parallel storage ledger can drift from its owner. */
     public Set<Integer> reservedContainerSlots(SubjectId containerId) {

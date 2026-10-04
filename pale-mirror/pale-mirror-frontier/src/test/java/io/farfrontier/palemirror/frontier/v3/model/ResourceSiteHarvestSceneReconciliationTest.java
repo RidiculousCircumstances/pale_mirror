@@ -11,6 +11,73 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceSiteHarvestSceneReconciliationTest {
+    @Test void hotFullPartAtCapacitySettlesExactlyOnceAndRetainsTerminalRecoveryWithoutReplayingCells() {
+        var fixture = ResourceSiteHarvestProcessTest.fullBatchAtDepotWithoutFutureCapacity();
+        var job = fixture.job();
+        var approaching = fixture.state().withActorBody(job.workerId(), fixture.state().resourceSites().cycle(job.siteId())
+                .layout().cells().get(job.progress().lastCompletedCropSlotIndex()).workstation().standingBody());
+        var candidate = FrontierResourceSiteHarvestSceneSupport.candidate(approaching, job).orElseThrow();
+        var lease = SceneLease.forCause(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:capacity-delivery"),
+                approaching.bootstrap().worldId(), new ResourceSiteHarvestSceneCause(job.siteId(), job.id()), candidate.cropSlot(),
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(27_000L), 1L, SceneLeaseStatus.PREPARED,
+                java.util.List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(approaching.bootstrap().worldId(), job.workerId()))),
+                java.util.Set.of(job.workerId()), java.util.Optional.empty());
+        var state = ResourceSiteHarvestProcessTest.confirmedPhysicalParticipants(approaching.prepareSceneLease(lease), lease)
+                .transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        state = ResourceSiteHarvestProcessTest.inspectGoal(state, job.siteId(), job, lease.id());
+        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
+                lease.members().getFirst().entityId()), "minecraft:wheat", 64);
+        state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHandProjected(state, fixture.site(),
+                new ResourceSiteHarvestHandProjected(fixture.site(), job.id(), job.actorAccountId(), lease.id(), lease.revision(), hand));
+        state = state.transitionPhysicalIntent(job.intentId(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING,
+                java.util.Optional.empty());
+        var depot = job.outputSlot().containerId();
+        var stacks = new java.util.ArrayList<FungiblePhysicalObservation.Stack>();
+        ReferenceContainerCustody.expectedFungibleSlots(state, depot).forEach((slot, stack) -> stacks.add(
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(depot, slot)), stack.itemKind(), stack.quantity())));
+        var resources = state.inventory().fungibleResources();
+        resources = resources.rebind(job.depotAccountId(), 1L,
+                FungiblePhysicalObservation.bind(resources, job.depotAccountId(), 1L, stacks));
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        var replica = PhysicalReplicaRecord.expected(depot, ReferenceContainerCustody.semanticKind(state, depot), 7L,
+                ReferenceContainerCustody.canonicalFingerprint(state, depot), ReferenceContainerCustody.provenance(depot));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(state.replicaCustody().declare(replica)
+                .observe(depot, 7L, 1L, replica.fingerprint(), replica.provenance(), 7L)
+                .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(depot), depot, ReferenceContainerCustody.PROVIDER_ID,
+                        1L, 7L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null))));
+        stacks.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(job.outputSlot()), "minecraft:wheat", 64));
+        var deliveredResources = ResourceSiteHarvestCargo.deliverObserved(state, job,
+                lease.members().getFirst().entityId(), lease.revision(), 1L, stacks);
+        var field = state.resourceSites().cycle(job.siteId());
+        var expected = state.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(state.inventory().withFungibleResources(deliveredResources))
+                .resourceSites(state.resourceSites().replace(state.resourceSites().site(job.siteId()).deliverFullHarvestBatch(job,
+                        java.util.Optional.empty(), java.util.Optional.empty(), field,
+                        state.actorLocations().get(job.workerId()).supportingSurface()))));
+        var receipt = new ResourceSiteHarvestDeliveryObservation(ResourceSiteHarvestBatchDelivered.observationId(job.id(), 0),
+                job.intentId(), job.siteId(), job.id(), job.workerId(), job.actorAccountId(), job.depotAccountId(), lease.id(),
+                lease.members().getFirst().entityId(), lease.revision(), 64, 1L, stacks,
+                ReferenceContainerCustody.canonicalFingerprint(expected, depot), 8L, "witness:capacity-delivery");
+        var batch = new ResourceSiteHarvestBatchDelivered(receipt, 0);
+        var after = ResourceSitePhysicalIntentStateSupport.deliverHarvestBatch(state, batch);
+        assertEquals(field, after.resourceSites().cycle(job.siteId()));
+        assertEquals(state.actorLocations(), after.actorLocations(), "resource settlement never moves the resident");
+        assertEquals(64, after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow().deliveredYieldQuantity());
+        assertFalse(after.harvestOutputReserves(job.outputSlot()));
+        assertFalse(after.inventory().fungibleResources().accounts().containsKey(job.actorAccountId()));
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after));
+        assertEquals(after, recovered);
+        assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport.deliverHarvestBatch(recovered, batch));
+        var before = state;
+        var stale = new ResourceSiteHarvestDeliveryObservation(receipt.id(), receipt.intentId(), receipt.siteId(), receipt.jobId(),
+                receipt.workerId(), receipt.actorAccountId(), receipt.depotAccountId(), receipt.leaseId(), receipt.entityId(),
+                receipt.actorEpoch() + 1, 64, receipt.depotEpoch(), receipt.depotStacks(), receipt.depotFingerprint(),
+                receipt.emittedCanonicalRevision(), receipt.witnessId());
+        assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport.deliverHarvestBatch(before,
+                new ResourceSiteHarvestBatchDelivered(stale, 0)));
+    }
+
     @Test void retainedUnboundCargoIsBoundAndResumedAtomicallyWithoutReissuingYield() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         var accepted = oneObservedCrop(hot);

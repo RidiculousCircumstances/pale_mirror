@@ -28,7 +28,7 @@ final class HarvestContainerReservations {
         Set<Integer> reserved = new HashSet<>();
         for (ResourceSiteHarvestJob job : sites.sites().values().stream()
                 .flatMap(site -> site.harvestJobs().values().stream()).toList()) {
-            if (job.outputSlot().containerId().equals(containerId)) reserved.add(job.outputSlot().slot());
+            if (job.reservesOutputCapacity() && job.outputSlot().containerId().equals(containerId)) reserved.add(job.outputSlot().slot());
             job.batchSuccessorSlot().filter(slot -> slot.containerId().equals(containerId))
                     .ifPresent(slot -> reserved.add(slot.slot()));
         }
@@ -39,7 +39,7 @@ final class HarvestContainerReservations {
         Set<InventoryCustody.ContainerSlot> reserved = new HashSet<>();
         for (ResourceSiteHarvestJob job : sites.sites().values().stream()
                 .flatMap(site -> site.harvestJobs().values().stream()).toList()) {
-            if (!reserved.add(job.outputSlot()) || job.batchSuccessorSlot().isPresent()
+            if (job.reservesOutputCapacity() && !reserved.add(job.outputSlot()) || job.batchSuccessorSlot().isPresent()
                     && !reserved.add(job.batchSuccessorSlot().orElseThrow()))
                 throw new IllegalArgumentException("active harvest output slot lacks exclusive container capacity");
         }

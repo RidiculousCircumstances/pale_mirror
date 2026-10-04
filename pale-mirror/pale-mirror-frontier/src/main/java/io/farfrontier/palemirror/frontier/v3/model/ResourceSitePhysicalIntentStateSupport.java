@@ -230,7 +230,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
                 || !receipt.jobId().equals(job.id()) || !receipt.workerId().equals(job.workerId())
                 || !receipt.actorAccountId().equals(job.actorAccountId())
                 || !receipt.depotAccountId().equals(job.depotAccountId())
-                || receipt.harvestedQuantity() != 64 || job.batchSuccessorSlot().isEmpty()
+                || receipt.harvestedQuantity() != 64
                 || state.physicalObservations().containsKey(receipt.id()))
             throw new IllegalArgumentException("field batch delivery lacks its exact pending full hand and intent");
         validateHarvestDeliveryReceipt(state.bootstrap(), intent, receipt);
@@ -241,7 +241,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
         ActorLocation actor = state.actorLocations().get(job.workerId());
         if (actor == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job))
             throw new IllegalArgumentException("field batch delivery lacks its retained depot station");
-        InventoryCustody.ContainerSlot nextSlot = job.batchSuccessorSlot().orElseThrow();
+        java.util.Optional<InventoryCustody.ContainerSlot> nextSlot = job.batchSuccessorSlot();
         FungibleResourceLedger resources = ResourceSiteHarvestCargo.deliverObserved(state, job,
                 receipt.entityId(), receipt.actorEpoch(), receipt.depotEpoch(), receipt.depotStacks());
         FrontierWorldState published = state.withChanges(FrontierWorldStateUpdate.begin()

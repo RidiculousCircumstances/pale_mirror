@@ -144,7 +144,7 @@ class ResourceSiteHarvestProcessTest {
         }
         return new ColdHarvest(state, site, (ResourceSiteHarvestJob) state.resourceSites().site(site).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow());
     }
-    @Test void capacityBlockedBatchRelinquishesServiceWithoutLosingItsCargoOrJob() {
+    static ColdHarvest fullBatchAtDepotWithoutFutureCapacity() {
         var start = coldHarvestAfterSteps(125L, 0, false);
         FrontierWorldState state = start.state();
         ScheduledAction due = ResourceSiteHarvestProcess.coldProgress(start.job(), 22_301L);
@@ -171,25 +171,35 @@ class ResourceSiteHarvestProcessTest {
                     lots, resources.claims(), accounts, resources.bindings())));
         }
         assertTrue(state.firstFreeContainerSlot(depot).isEmpty());
-        state = state.withHumanPopulation(state.humanPopulation().consumeResidentFood(job.workerId(),
-                27_000L, 1000, state.bootstrap().ruleset().residentLife()));
-        var originalCargo = state.inventory().fungibleResources().accounts().get(job.actorAccountId());
-        assertTrue(ActivityExecutionCapabilities.waitingForServiceResource(state,
+        return new ColdHarvest(state, start.site(), job);
+    }
+
+    @Test void currentBatchDeliveryDoesNotRequireFutureCapacityOrCreditUnworkedCells() {
+        var fixture = fullBatchAtDepotWithoutFutureCapacity();
+        var state = fixture.state();
+        var job = fixture.job();
+        var field = state.resourceSites().cycle(job.siteId());
+        var depot = job.outputSlot().containerId();
+        assertTrue(ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job));
+        assertFalse(ActivityExecutionCapabilities.waitingForServiceResource(state,
                 HumanAssignmentProjection.compile(state).assignment(job.workerId())));
-        assertTrue(ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(), 27_000L),
-                "a HOT owner must relinquish the same capacity-blocked service turn before turnover admission");
-        var events = io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.plan(state,
-                io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(job.workerId(), 27_000L));
-        var movement = events.stream().map(ProposedEvent::payload)
-                .filter(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::isInstance)
-                .map(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::cast)
-                .findFirst().orElseThrow();
-        var after = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.reduceStarted(state,
-                job.workerId(), movement);
-        assertEquals(job, after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow());
-        assertEquals(originalCargo, after.inventory().fungibleResources().accounts().get(job.actorAccountId()));
-        assertTrue(ServiceAccessCoordinator.boundary(after, depot).cleared(
-                movement.movement().order().legalStations().getFirst().standingBody()));
+        var due = ResourceSiteHarvestProcess.coldProgress(job, 27_000L);
+        var returned = new ResourceSiteHarvestReturned(job.id(), job.workerId(), due.id(), due.dueAt().ticks());
+        var after = ResourceSiteHarvestProcess.reduceReturned(state, job.siteId(), returned);
+        var settled = after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
+        assertEquals(64, settled.deliveredYieldQuantity());
+        assertEquals(64, settled.progress().completedCropSlots());
+        assertTrue(settled.progress().complete(), "only this offer ends when future capacity is unavailable");
+        assertEquals(field, after.resourceSites().cycle(job.siteId()), "remaining plants are not marked harvested");
+        assertFalse(after.inventory().fungibleResources().accounts().containsKey(job.actorAccountId()));
+        assertFalse(after.harvestOutputReserves(job.outputSlot()));
+        assertFalse(after.reservedContainerSlots(depot).contains(job.outputSlot().slot()));
+        assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceReturned(after, job.siteId(),
+                new ResourceSiteHarvestReturned(job.id(), new SubjectId("resident:1-999"), due.id(), due.dueAt().ticks())));
+        var retired = ResourceSiteHarvestProcess.reduceReturned(after, job.siteId(), returned);
+        assertTrue(retired.resourceSites().site(job.siteId()).harvestJob(job.id()).isEmpty());
+        assertEquals(field, retired.resourceSites().cycle(job.siteId()));
     }
     static HotHarvest hotHarvestAfterColdSteps(int coldSteps) { return hotHarvestAfterColdSteps(125L, coldSteps); }
     static ColdHarvest coldHarvestWithCargo(long seed) {

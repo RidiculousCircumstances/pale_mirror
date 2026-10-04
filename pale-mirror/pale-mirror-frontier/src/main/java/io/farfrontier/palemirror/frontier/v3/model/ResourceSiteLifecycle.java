@@ -182,7 +182,13 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
     public ResourceSiteLifecycle deliverFullHarvestBatch(ResourceSiteHarvestJob job, InventoryCustody.ContainerSlot slot,
                                                          Optional<ResourceSiteHarvestBatchDelivered> receipt, ResourceFieldCycle cycle,
                                                          SurfaceAnchor worker) {
+        return deliverFullHarvestBatch(job, Optional.of(slot), receipt, cycle, worker);
+    }
+    public ResourceSiteLifecycle deliverFullHarvestBatch(ResourceSiteHarvestJob job, Optional<InventoryCustody.ContainerSlot> slot,
+                                                         Optional<ResourceSiteHarvestBatchDelivered> receipt, ResourceFieldCycle cycle,
+                                                         SurfaceAnchor worker) {
         ResourceSiteHarvestJob delivered = require(job).afterFullBatchDelivery(slot, receipt);
+        if (delivered.progress().complete()) return replace(delivered);
         int next = delivered.progress().completedCropSlots() == delivered.progress().totalCropSlots() ? -1
                 : selectHarvestTarget(job, cycle, worker, index -> true).orElse(-1);
         return replace(delivered.withProgress(delivered.progress().afterDeliverySelection(next)).bindTarget(cycle));

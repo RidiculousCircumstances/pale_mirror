@@ -40,6 +40,17 @@ class ResourceSiteHarvestProgressTest {
         ResourceSiteHarvestStarted started = new ResourceSiteHarvestStarted(continued);
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
+        var capacityFinished = returning.afterFullBatchDelivery(Optional.empty(), Optional.empty());
+        assertTrue(capacityFinished.progress().complete());
+        assertEquals(64, capacityFinished.progress().completedCropSlots());
+        assertEquals(64, capacityFinished.deliveredYieldQuantity());
+        assertEquals(0, capacityFinished.undeliveredYieldQuantity());
+        assertFalse(capacityFinished.reservesOutputCapacity());
+        assertThrows(IllegalArgumentException.class, () -> reserved.afterFullBatchDelivery(Optional.empty(), Optional.empty()),
+                "a pinned continuation cannot be silently abandoned");
+        var ended = new ResourceSiteHarvestStarted(capacityFinished);
+        assertEquals(ended, FrontierWorldRuntimeDefinition.payloadCodecs().decode(ended.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(ended)));
     }
 
     @Test void cropReceiptRequiresObservedSemanticStationNotAPathIndex() {

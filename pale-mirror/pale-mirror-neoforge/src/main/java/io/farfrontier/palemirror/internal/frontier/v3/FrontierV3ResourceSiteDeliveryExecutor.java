@@ -96,13 +96,14 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 if (actor == null) continue;
                 if (job.batchSuccessorSlot().isEmpty()) {
                     var nextSlot = state.firstFreeContainerSlot(depot);
-                    if (nextSlot.isEmpty()) continue;
-                    var prepared = new ResourceSiteHarvestBatchPrepared(job.siteId(), job.id(), scene.id(),
-                            job.deliveredYieldQuantity(), new InventoryCustody.ContainerSlot(depot, nextSlot.orElseThrow()));
-                    CommandResult result = FrontierV3CommandSubmission.submit(runtime, "field-batch-capacity", job.id().value(), prepared);
-                    if (!(result instanceof CommandResult.Accepted))
-                        FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-batch-next-route-unavailable");
-                    return;
+                    if (nextSlot.isPresent()) {
+                        var prepared = new ResourceSiteHarvestBatchPrepared(job.siteId(), job.id(), scene.id(),
+                                job.deliveredYieldQuantity(), new InventoryCustody.ContainerSlot(depot, nextSlot.orElseThrow()));
+                        CommandResult result = FrontierV3CommandSubmission.submit(runtime, "field-batch-capacity", job.id().value(), prepared);
+                        if (!(result instanceof CommandResult.Accepted))
+                            FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-batch-next-route-unavailable");
+                        return;
+                    }
                 }
             }
             if (ledger.hasPendingFieldDelivery(depot)) continue;
@@ -125,7 +126,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                     job.outputSlot().slot(), quantity, custody.authorityEpoch(), replica.fingerprint(), after,
                     "witness:field-delivery-" + job.id().value().substring("job:".length()) + "-part-" + job.deliveredYieldQuantity(),
                     job.deliveredYieldQuantity(), intermediate,
-                    intermediate ? job.batchSuccessorSlot().orElseThrow().slot() : -1);
+                    intermediate ? job.batchSuccessorSlot().map(InventoryCustody.ContainerSlot::slot).orElse(-1) : -1);
             ledger.beginFieldDelivery(witness);
             ledger.persist(level);
             return;
@@ -203,7 +204,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 || job.returningForBatch() != witness.intermediate()
                 || job.deliveredYieldQuantity() != witness.deliveredYieldBefore()
                 || witness.intermediate() && job.batchSuccessorSlot().map(InventoryCustody.ContainerSlot::slot)
-                .filter(slot -> slot == witness.successorSlot()).isEmpty()
+                .orElse(-1) != witness.successorSlot()
                 || !job.outputSlot().containerId().equals(witness.containerId())
                 || job.outputSlot().slot() != witness.slot()) return false;
         ResourceFieldCycle cycle = state.resourceSites().cycle(witness.siteId());

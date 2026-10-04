@@ -96,10 +96,17 @@ class ResourceSiteColdHarvestReceiptTest {
             mealTick = due + 1L;
         }
         assertFalse(state.actorMovements().containsKey(job.workerId()));
+        var review = io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.plan(state,
+                io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(job.workerId(), mealTick));
+        var resumed = review.stream().map(ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed.class::cast).findFirst().orElseThrow();
+        state = ActorExecutionComposition.LIFECYCLE.prepareResume(state, resumed.suspended(), resumed.successor(),
+                resumed.releasing(), resumed.atTick()).commit(state, FrontierWorldStateUpdate.begin());
         assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(state, continuation));
         assertTrue(ResourceSiteHarvestProcess.planColdProgress(state, continuation).stream()
                 .anyMatch(event -> event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced),
-                "the same farmer must resume by walking from the depot, not teleporting to a crop");
+                "the activity owner resumes work; the same farmer then walks from the depot, without teleporting");
     }
 
     @Test

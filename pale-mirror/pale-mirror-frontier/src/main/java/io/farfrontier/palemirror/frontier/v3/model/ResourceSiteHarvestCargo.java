@@ -11,6 +11,14 @@ import java.security.NoSuchAlgorithmException;
 public final class ResourceSiteHarvestCargo {
     private ResourceSiteHarvestCargo() { }
 
+    /** The already-owned current output reservation, never a second slot for a future part. */
+    public static boolean deliveryCapacityAvailable(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        var slot = job.outputSlot();
+        return job.reservesOutputCapacity() && state.inventory().itemAt(slot.containerId(), slot.slot()).isEmpty()
+                && ReferenceContainerCustody.expectedFungibleSlot(state, slot.containerId(), slot.slot()).isEmpty()
+                && state.inventory().canReserveSlots(slot.containerId(), state.reservedContainerSlots(slot.containerId()));
+    }
+
     public static int quantity(FrontierWorldState state, ResourceSiteHarvestJob job) {
         return part(state, job).map(ResourceLot::quantity).orElse(0);
     }

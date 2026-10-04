@@ -322,14 +322,18 @@ public final class ResourceSiteHarvestProcess {
         ActorLocation actor = state.actorLocations().get(job.workerId());
         if (actor == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job))
             throw new IllegalArgumentException("COLD field batch lacks its retained depot station");
-        InventoryCustody.ContainerSlot nextSlot = job.batchSuccessorSlot().orElseGet(() ->
-                new InventoryCustody.ContainerSlot(job.outputSlot().containerId(),
-                        state.firstFreeContainerSlot(job.outputSlot().containerId()).orElseThrow()));
+        java.util.Optional<InventoryCustody.ContainerSlot> nextSlot = job.batchSuccessorSlot();
+        if (nextSlot.isEmpty()) {
+            var free = state.firstFreeContainerSlot(job.outputSlot().containerId());
+            if (free.isPresent()) nextSlot = java.util.Optional.of(
+                    new InventoryCustody.ContainerSlot(job.outputSlot().containerId(), free.getAsInt()));
+        }
         FungibleResourceLedger resources = state.inventory().fungibleResources()
                 .transferActorOrderCold(ResourceSiteHarvestCargo.deliveryOrder(state, job));
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         return state.withChanges(FrontierWorldStateUpdate.begin()
-                .resourceSites(state.resourceSites().replace(lifecycle.deliverFullHarvestBatch(job, nextSlot, cycle, actor.supportingSurface())))
+                .resourceSites(state.resourceSites().replace(lifecycle.deliverFullHarvestBatch(job, nextSlot,
+                        java.util.Optional.empty(), cycle, actor.supportingSurface())))
                 .inventory(state.inventory().withFungibleResources(resources)));
     }
 

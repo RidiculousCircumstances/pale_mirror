@@ -422,8 +422,7 @@ final class ResourceSiteHarvestPlanning {
     }
 
     static boolean batchDeliveryCapacityAvailable(FrontierWorldState state, ResourceSiteHarvestJob job) {
-        return job.batchSuccessorSlot().isPresent()
-                || state.firstFreeContainerSlot(job.outputSlot().containerId()).isPresent();
+        return ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job);
     }
 
     private static boolean pendingPlayerBreakAtNextCell(FrontierWorldState state, ResourceSiteHarvestJob job) {

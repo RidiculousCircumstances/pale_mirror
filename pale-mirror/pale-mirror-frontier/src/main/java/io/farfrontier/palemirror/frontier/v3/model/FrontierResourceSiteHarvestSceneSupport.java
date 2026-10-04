@@ -18,8 +18,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
                 .flatMap(site -> site.harvestJobs().values().stream())
                 .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
-        return job.returningForBatch() && job.batchSuccessorSlot().isEmpty()
-                && state.firstFreeContainerSlot(job.outputSlot().containerId()).isEmpty();
+        return job.returningForBatch() && !ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job);
     }
 
     /** Field owner proves its own safe stop; generic execution never reads crop stages. */

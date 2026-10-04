@@ -169,17 +169,27 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
     /** The reducer first proves the physical/canonical depot handoff and current worker body. */
     public ResourceSiteHarvestJob afterFullBatchDelivery(InventoryCustody.ContainerSlot nextSlot,
                                                           Optional<ResourceSiteHarvestBatchDelivered> confirmedBatch) {
-        Objects.requireNonNull(nextSlot, "next field depot slot");
+        return afterFullBatchDelivery(Optional.of(nextSlot), confirmedBatch);
+    }
+
+    /** Current delivery is independent of future capacity. No continuation ends only this work offer. */
+    public ResourceSiteHarvestJob afterFullBatchDelivery(Optional<InventoryCustody.ContainerSlot> nextSlot,
+                                                          Optional<ResourceSiteHarvestBatchDelivered> confirmedBatch) {
+        Objects.requireNonNull(nextSlot, "optional next field depot slot");
         Objects.requireNonNull(confirmedBatch, "confirmed field batch receipt");
         if (!returningForBatch || progress.complete() || navigationBlock.isPresent()
                 || undeliveredYieldQuantity() != 64
-                || !nextSlot.containerId().equals(outputSlot.containerId()) || nextSlot.equals(outputSlot)
-                || batchSuccessorSlot.isPresent() && !batchSuccessorSlot.orElseThrow().equals(nextSlot))
+                || nextSlot.filter(slot -> !slot.containerId().equals(outputSlot.containerId()) || slot.equals(outputSlot)).isPresent()
+                || batchSuccessorSlot.isPresent() && !batchSuccessorSlot.equals(nextSlot))
             throw new IllegalArgumentException("field batch delivery has no exact depot continuation");
         return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId, depotAccountId,
-                outputItemId, nextSlot, intentId, progress, deliveredYieldQuantity + 64,
+                outputItemId, nextSlot.orElse(outputSlot), intentId,
+                nextSlot.isPresent() ? progress : progress.afterDeliverySelection(-1), deliveredYieldQuantity + 64,
                 false, Optional.empty(), confirmedBatch, Optional.empty(), harvestedYieldQuantity, target);
     }
+
+    /** A settled, finished offer retains its output address as history, not an empty-slot reservation. */
+    public boolean reservesOutputCapacity() { return !progress.complete() || undeliveredYieldQuantity() > 0; }
 
     public boolean matchesWorkGoal(ResourceSiteHarvestGoal goal, SurfaceAnchor observedStation) {
         Objects.requireNonNull(goal, "current field work goal");
