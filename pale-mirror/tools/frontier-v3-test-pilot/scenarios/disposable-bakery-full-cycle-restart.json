@@ -101,7 +101,7 @@
       "offset": {
         "x": 1,
         "y": 0,
-        "z": 1
+        "z": -2
       },
       "settleMs": 0,
       "causalMilestone": "ordinary_player_bakery_ingress"
