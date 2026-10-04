@@ -12,10 +12,10 @@ Implementation: /home/rd/proj/pm-f06r3-facility-lane-recovery,
 branch feat/baker-carry-orders-20260926. The large physical-lifetime WIP was
 preserved in private checkpoint 6f065966; development-blocker cleanup is
 53014ac7, hive spatial continuation is e7610bf1 and engineering journey
-continuation is 6a734828; engineering observed work admission is local HEAD
-3bcac252. These are not
+continuation is 6a734828; engineering observed work admission is 3bcac252;
+patrol spatial continuation is local HEAD ca7f3ed0. These are not
 UAE completion or deployment readiness.
-Current fresh-world schema is 238; bd595b53 is 227 and live R18 is 226.
+Current fresh-world schema is 239; bd595b53 is 227 and live R18 is 226.
 Origin git@github.com:RidiculousCircumstances/pale_mirror.git.
 Governance: this checkout; UAE normative/document WIP is preserved in local
 checkpoints, not published. Source adoption is not governance publication. Original
@@ -25,6 +25,29 @@ ancestor fbe8cbdd and governance branch docs/governance-checkpoint-20261003 rema
 the last publication facts.
 
 ## Current implementation and next action
+
+Patrol spatial continuation is now saved in ca7f3ed0. Both ingress and inspection
+retain original topologies/cursors plus bounded versioned rejoin from the actual
+common departure pose. Rejoining travel requires the whole unfinished column;
+an early-arrived leader waits rather than receiving another inspection edge.
+Scene closure is independent of saved-body departure. HOT arrivals retain exact
+body epochs, executions, scope revision and spatial predecessor, require common
+independent inspection and never write HOT ActorLocation. COLD rejects held
+bodies, stale/duplicate predecessors and known physical closure; the planner
+uses the existing typed NO_OPEN_RETAINED_EDGE outcome rather than silent retries.
+Snapshot/WAL include approaches/versions; fresh schema239 rejects prior layouts.
+Diagnostics separately expose actual pose, original checkpoint and approach cursor.
+Source/canonical architecture flow and responsibility descriptions align.
+74 distinct Java checks pass by composition: 31 patrol/persistence checks in
+3941; changed recovery/closure check plus guardrails in29196; 40 existing adapter/
+diagnostic checks in2037; its two old HOT-without-body fixtures corrected and
+passing in33665; new diagnostic JSON/purity check passing in25546. The new test's
+initial package/prefix setup errors were corrected, not production defects.
+Final six affected patrol-process checks and style PASS29s/1638. Production,
+pilot/test compilation and both architecture maps pass. Source tree is clean.
+No native/client/matrix, push, packaging, R18 operation or deployment claim.
+Next: assault spatial continuation, then scout HOT pose/arrival ownership and
+the remaining inventory/integrated acceptance. All remain under the same goal.
 
 Latest user assignment: implement engineering crews under UAE, including
 construction and maintenance muster, worksite approach and depot return.
@@ -52,7 +75,7 @@ updated source architecture validation PASS10s/29795. No native/client/matrix,
 packaging, push, R18 operation or deployment claim. Integrated epic acceptance
 remains open. Canonical architecture validation also passes after restoring a
 pre-existing missing YAML field-lifecycle header, preserving its requirements.
-Continue patrol/assault spatial continuation, then remaining
+Patrol continuation is now checkpointed above. Continue assault spatial continuation, then remaining
 inventory/integration; retained scout inspection also found an active HOT pose
 writer and an uncaptured arrival that must be removed under the existing UAE
 inventory, not declared adopted merely from strategy registration.
@@ -826,14 +849,13 @@ unchanged cargo/resources/execution, codec recovery and exclusion of collective
 COLD until the last crew body releases. Goal-based work/food/service/presence/
 scout owners explicitly retain ActorLocation rather than another current pose.
 
-Topology-owned migration, operation/hive/engineering assembly, hive return,
-patrol and assault currently explicitly require their observed retained
-checkpoint before COLD; off-checkpoint saved departures remain LOCAL HOLDS,
-not full adoption. Do not describe these defensive holds as solved background
-continuation or teleport/reset cursors to unblock them. Next source work is their
-owner-local legal rejoin/continuation from actual pose, using bounded known
-geometry without fake semantic arrival; audit cold progression from these
-origins (including logistics) before claiming final transition coverage.
+Before the later spatial cuts, topology-owned migration, operation/hive/engineering
+assembly, hive return, patrol and assault required their observed retained
+checkpoint before COLD; off-checkpoint saved departures were LOCAL HOLDS, not
+full adoption. The completed owner-local continuation cuts are recorded above;
+assault remains open. Never describe a defensive hold as solved background
+continuation or teleport/reset cursors to unblock it. Audit actual COLD progression
+from retained origins (including logistics) before claiming final transition coverage.
 
 Compilation/pilot/test and architecture ceilings PASS16s/run15268. Focused
 body/lifecycle/route checks PASS23 cases,37s/run90560. Last changed phase/declaration
