@@ -869,8 +869,27 @@ COLD explicitly declares segment or approach evidence with physical-history
 fences, excludes all physical custody/active scope and checks shared known
 geometry. An approach awards no route or cargo progress. A delivered cargo
 receipt is not permission to start a physically held crew's return journey.
-Unknown-geometry HOT re-wake and retired service-input settlement remain
-implementation obligations until their actual producer/consumer paths close.
+Service input UNKNOWN changes its owning work phase atomically with the effect.
+A possibly applied input receipt settles exact custody after death without
+reviving BLOCKED work or a retired execution; new takes/retries need the current
+living worker at the declared source station. Native retired-body recognition
+is read-only evidence, never locomotion authority. Pre-loot capture/disposition
+of service-held input is still open; modeled late confirmation is not evidence
+that Vanilla retained the item after body removal.
+
+Medical admission assigns the patient and each medic to the owning infirmary's
+declared final clinical stations, independent of sorted scene ordinal. A team
+must fit those stations before admission; an ingress waypoint is not readiness.
+Common inspection owns position and shared navigation pursues the final goal.
+Starting a remedy requires the own HOT scope, full current execution/body cohort
+and physical final stations, rechecked after the durable-before-effect boundary.
+An exact RUNNING/UNKNOWN receipt can settle the retained resource effect after
+scope/body retirement without recreating either; a BLOCKED operation cannot
+award treatment. A closed registered family strategy supplies participant
+permission to the shared exact-consumption algorithm, which does not inspect
+medical phases or infer an owner. Retired settlement-wide ration consumption
+remains explicitly ineligible. This source adoption is not medical native
+acceptance. Unknown-geometry HOT re-wake remains an implementation obligation.
 
 Process families consume one closed provider-neutral movement/result contract.
 They may own different routes, formations and station semantics, but may not

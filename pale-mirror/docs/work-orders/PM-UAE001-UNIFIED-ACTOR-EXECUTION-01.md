@@ -180,6 +180,19 @@ adapter facts, not graphical acceptance. Real remaining consumer inventory,
 unknown-geometry wake, retired service input, integrated UAE and deployment
 remain OPEN under the same goal.
 
+Checkpoint8b249f68 separates service input retained settlement from new takes:
+UNKNOWN updates its owner atomically; a late exact receipt cannot revive BLOCKED
+work or retired execution/pose. Native retired-body recognition is read-only.
+Medical readiness now requires role-assigned final clinical stations within the
+planned port capacity, not sorted-member ingress proximity. A registered family
+strategy captures/rechecks full live participant authority before remedy mutation;
+retained RUNNING/UNKNOWN confirmation needs no reopened HOT scope and cannot
+replay consumption. Run27407 PASS28s covers nine service/five architecture checks;
+run13932 PASS17s covers eleven medical/five architecture checks. Guardrails and
+native/pilot/test compile passed. Service pre-loot resource disposition, remaining
+caller inventory, unknown-geometry wake and integrated/native/deployment exit
+conditions remain OPEN. This checkpoint is not epic completion.
+
 1. **Assignment is not current execution.** A paused job retains its exact
    worker relation without permission to act. Execution holds a typed reference
    to its activity owner, never a copied job/progress/resource ledger. Derived

@@ -13,7 +13,7 @@ do not finish it. The user's current assignment and
 
 Implementation Git root: /home/rd/proj/pm-f06r3-facility-lane-recovery,
 branch feat/baker-carry-orders-20260926; Gradle root is its pale-mirror/.
-Source HEAD d3884758, fresh-world schema246. Canonical governance is this
+Source HEAD 8b249f68, fresh-world schema246. Canonical governance is this
 checkout, /home/rd/proj/pm-governance/pale-mirror. One active ledger only.
 Origin: git@github.com:RidiculousCircumstances/pale_mirror.git.
 
@@ -142,19 +142,29 @@ run71901 terminal output recovered from daemon2561478 SUCCESS21s (one exact HOT
 scope/receipt check plus architecture, guardrails/native/test compile).
 Both maps validate. Modeled/adapter evidence only, no graphical acceptance.
 
-Current uncommitted cut: service input possibly-applied receipt/unknown handling.
-Source contradiction: death retires work to BLOCKED, but retained input validation
-requires INPUT_ISSUE_PENDING and complete() unconditionally resumes work; input
-UNKNOWN previously used generic intent-only storage despite the aggregate
-requiring its owner phase to become UNKNOWN atomically. Repair separates new
-take/live exact execution from retained effect settlement, keeps BLOCKED retired,
-and admits read-only exact retired-body evidence through the common controller.
-No native/death-recovery acceptance claim yet.
-Still OPEN: HOT approach unavailable-knowledge re-wake. Medical source inspection
-also found readiness checked near the selected ingress node, not the final
-clinical station, with patient role assigned from sorted scene ordinal rather
-than declared patient identity. Resolve actual effect and recovery callers as
-one connected cut, not another feature. No task-owned process currently live.
+Checkpoint8b249f68 separates service input new-take permission from possibly
+applied settlement. UNKNOWN updates owner phase atomically; late exact input
+confirmation keeps BLOCKED work/executions/pose retired. Common retired-body
+recognition supplies read-only evidence, never actuation. Run27407 PASS28s:
+nine service/five architecture checks, guardrails/native/pilot/test compile.
+Native service input pre-loot capture and disposition after death remains OPEN;
+modeled late confirmation does not prove the physical item survives removal.
+
+The same checkpoint assigns medical final stations by patient/medic roles, not
+sorted scene ordinal, and checks actual station capacity before admission.
+Shared navigation targets final stations; common inspection owns HOT positions.
+New remedy consumption captures/rechecks the full clinical cohort across the
+durable effect boundary via a closed registered family strategy. RUNNING/UNKNOWN
+settlement survives draining/retirement without replay or actor revival.
+Run13932 PASS17s: eleven medical/five architecture checks, guardrails and native/
+pilot/test compile. Prior62168 failed one obsolete HOT-required late-receipt
+assertion; decoded drain settlement now explicitly checks no pose/execution/
+scope mutation. Its nine native body/selection checks passed and remain reusable.
+Run30128 failed at task selection (wrong pilot compile name), not code/test;
+13932 uses actual compileTestJava dependency on compilePilotJava. Both maps validate.
+No medical graphical acceptance claim. Next: real remaining physical caller
+inventory and unknown-geometry HOT re-wake, prioritizing integrated main loop
+once coherent rather than more isolated confirmation. No task-owned process live.
 No packaging, push, live operation or new deployment occurred.
 
 Then close the real production caller inventory: creation/adoption/removal,
