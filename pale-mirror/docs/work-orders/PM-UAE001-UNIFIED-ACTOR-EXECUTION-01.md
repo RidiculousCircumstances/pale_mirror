@@ -155,8 +155,19 @@ without awarding semantic arrival. Retired the old pilot
 method that fabricated production arrivals and later teleported an unowned body;
 retained native collision/modeled scope component checks are not a substitute
 for integrated lifecycle/death acceptance.
-Service off-cursor departure/re-admission and the full real consumer inventory
-remain OPEN, as do integrated UAE graphical acceptance and deployment.
+Checkpoint6def4df8 (schema245) subsequently closes service off-cursor departure
+and actual-origin re-admission, including scope reopening before body unload.
+Service owns the versioned StationApproachState and exact spatial predecessor;
+shared geometry owns paths/supports. Input effect settlement is separate from
+travel/new-take permission. Presentation can drain without completing work.
+Service admission's terrain+1 support mistake is removed. Focused run59386 passed
+nine service/two production checks plus five automatic architecture checks,
+guardrails and native/pilot/test compilation; final compile recovered from
+daemon2522515 passed7s. This is not native graphical acceptance. Unknown-geometry
+HOT re-wake and service input settlement after death remain explicit open edges.
+The full real consumer inventory, integrated UAE graphical acceptance and
+deployment remain OPEN; logistics HOT formation pose writes are the next
+source-proven adoption contradiction, not a new product feature.
 
 1. **Assignment is not current execution.** A paused job retains its exact
    worker relation without permission to act. Execution holds a typed reference

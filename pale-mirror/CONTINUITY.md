@@ -13,7 +13,7 @@ do not finish it. The user's current assignment and
 
 Implementation Git root: /home/rd/proj/pm-f06r3-facility-lane-recovery,
 branch feat/baker-carry-orders-20260926; Gradle root is its pale-mirror/.
-Source HEAD 2e86479e, fresh-world schema244. Canonical governance is this
+Source HEAD 6def4df8, fresh-world schema245. Canonical governance is this
 checkout, /home/rd/proj/pm-governance/pale-mirror. One active ledger only.
 Origin: git@github.com:RidiculousCircumstances/pale_mirror.git.
 
@@ -111,13 +111,31 @@ teleported a legacy-owned body outside the canonical map. Native collision and
 modeled scope component checks remain; full lifecycle/death native acceptance
 is still owed. Schema244 bytes reject old disposable worlds.
 
-No task-owned Gradle/client/server process remains from these completed runs.
-No packaging, push, live operation or new deployment occurred.
-Next connected source cut: service still requires its old cursor at candidate
-admission after off-cursor unload/re-entry. Its HOT intermediate-edge motion
-and receipt adoption are done; departure/re-admission continuation is not.
-Complete that lifecycle
-and expose retained approach/wait diagnostics, then finish the full caller inventory.
+Checkpoint6def4df8 closes service off-cursor departure/re-admission. The shared
+StationApproachState is owner-local continuation, not another physical pose.
+Service and ordinary production scope reopening also retain actual origin before
+body unload. Service receipts fence spatial revision; snapshot/payload schema245
+requires saved bytes. Service input settlement survives lawful departure; new
+physical takes still require exact station/current body authority. Service
+presentation drain/close no longer requires completing the job. Admission now
+uses shared actual support/geometry rather than terrain+1 feet-air. Read-only
+diagnostics expose approach origin, goal and unavailable-knowledge hold.
+Run59386 PASS22s: nine service and two production continuation checks plus five
+automatic architecture checks; guardrails/native/pilot/test compile passed.
+Four codec checks passed in95931 (that earlier combined run failed a subsequently
+repaired missing prepared-effect fixture); input test passed in82967.
+Final compile result recovered from daemon2522515: SUCCESS7s at13:58:27+05,
+no confidence rerun. These are modeled/adapter facts, not graphical acceptance.
+
+No task-owned Gradle/client/server process remains. No packaging, push, live
+operation or new deployment occurred. Next actual source cut: logistics
+OperationActorStateSupport.start/advanceOperationTravel writes formation into
+ActorLocation even for HOT participants, before the scene branch. Trace its
+actual SupplyOperationProcess and native SceneExecutor callers, then replace
+HOT pose writes with fenced independently inspected participant observations.
+Retain COLD geometry/custody and cargo/process semantics.
+Still OPEN: HOT approach unavailable-knowledge re-wake; service possibly-applied
+input settlement after death/BLOCKED (must not revive the execution/job).
 
 Then close the real production caller inventory: creation/adoption/removal,
 navigation/stop, position, death/unload/recovery across all UAE rows, including
