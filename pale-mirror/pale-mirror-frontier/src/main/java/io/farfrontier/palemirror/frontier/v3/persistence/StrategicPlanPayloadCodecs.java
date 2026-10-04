@@ -102,12 +102,9 @@ final class StrategicPlanPayloadCodecs {
     static PayloadCodec scoutPatrolAdvanced() { return new PayloadCodec() {
         @Override public String type() { return "frontier.scout_patrol_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            ScoutPatrolAdvanced advanced = (ScoutPatrolAdvanced) payload; ActorExecutionStateCodec.writeId(output, advanced.executionId()); output.writeLong(advanced.phase());
-            output.writeInt(advanced.position().x()); output.writeInt(advanced.position().y()); output.writeInt(advanced.position().z());
-            position(output, advanced.priorPosition());
+            ScoutPatrolCodec.writeAdvance(output, (ScoutPatrolAdvanced) payload);
         }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ScoutPatrolAdvanced(
-                ActorExecutionStateCodec.readId(input), input.readLong(), position(input), position(input))); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, ScoutPatrolCodec::readAdvance); }
     }; }
     static PayloadCodec scoutPatrolStarted() { return new PayloadCodec() {
         @Override public String type() { return "frontier.scout_patrol_started"; }

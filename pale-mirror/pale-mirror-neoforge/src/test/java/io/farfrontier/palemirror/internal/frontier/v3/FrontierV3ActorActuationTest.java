@@ -13,6 +13,29 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3ActorActuationTest {
+    @Test void scoutPermissionRetainsItsSemanticGoalVersionAcrossPhysicalMovementAndRejectsAbaTargetReuse() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-motion-goal"), 71L));
+        var scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
+        state = io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess.reduceStarted(state, state.bootstrap().hive().id(),
+                io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess.start(state, scout.id()));
+        var scope = io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess.nextLease(state, scout.id(),
+                io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO);
+        state = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.prepare(state, scope);
+        state = ModeledActorBodyFacts.present(state, scout.id());
+        state = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.transition(state, scout.id(), AmbientLeaseStatus.HOT);
+        scope = state.ambientLeases().get(scout.id());
+        var journey = io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess.journey(state, scout.id());
+        assertTrue(FrontierV3ScoutPatrolMotion.current(state, journey, scope));
+        var goal = FrontierV3GoalNavigation.Goal.routed(journey.order(), java.util.List.of(), state.bootstrap().bounds());
+        assertEquals(TraversalCapability.PEDESTRIAN, goal.capability(), "the scout uses the existing registered ground provider");
+        assertEquals(Optional.of(journey.order()), goal.order());
+        state = ModeledActorBodyFacts.inspected(state, scout.id(), journey.target().standingBody());
+        assertTrue(FrontierV3ScoutPatrolMotion.current(state, journey, scope), "observed movement preserves the goal authority");
+        var newGoal = journey.next(journey.target()); // Same coordinates and scope are not the same semantic command.
+        state = state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().withScoutPatrol(newGoal)));
+        assertFalse(FrontierV3ScoutPatrolMotion.current(state, journey, scope));
+        assertTrue(FrontierV3ScoutPatrolMotion.current(state, newGoal, scope));
+    }
     @Test void canonicalOrIncompleteBodyMetadataCannotUseUnversionedNavigationBeforeItsFirstCapturedCommand() {
         var empty = new net.minecraft.nbt.CompoundTag();
         assertTrue(FrontierV3GoalNavigation.permitsUnmodeledNavigation(empty, false));

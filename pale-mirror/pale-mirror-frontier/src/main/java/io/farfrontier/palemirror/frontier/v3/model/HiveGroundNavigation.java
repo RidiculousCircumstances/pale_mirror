@@ -55,6 +55,19 @@ public final class HiveGroundNavigation {
         return route(state, homeHibernaculum(state, actor), start, destination, Set.copyOf(excluded), view.organs(), view.blocked());
     }
 
+    /** Scout policy supplies the exact organism; an explicitly absent home adds no tray support. */
+    public static List<SurfaceAnchor> scoutRoute(FrontierWorldState state, Bioform scout,
+                                                SurfaceAnchor start, SurfaceAnchor destination) {
+        if (!scout.isScout() || !FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), scout.id()).equals(scout))
+            throw new IllegalArgumentException("scout navigation requires its exact declared organism");
+        var lifecycle = state.hiveColony().bioformLifecycles().get(scout.id());
+        if (lifecycle == null || !lifecycle.phase().permitsAmbientBody())
+            throw new IllegalArgumentException("scout ground profile has no active declared physiology");
+        var home = lifecycle.homeSlot().map(slot -> homeHibernaculum(state, scout.id()));
+        var view = ground(state);
+        return route(state, home, start, destination, Set.of(), view.organs(), view.blocked(), 0, (from, to, step) -> true);
+    }
+
     @FunctionalInterface
     public interface StepAdmission { boolean permits(SurfaceAnchor from, SurfaceAnchor to, int nextStep); }
 
@@ -64,7 +77,7 @@ public final class HiveGroundNavigation {
         if (reservationHorizon < 0 || reservationHorizon > TraversalTopology.MAX_NODES)
             throw new IllegalArgumentException("ground reservation horizon exceeds retained route bounds");
         var view = ground(state);
-        return route(state, homeHibernaculum(state, actor), start, destination, Set.copyOf(excluded),
+        return route(state, java.util.Optional.of(homeHibernaculum(state, actor)), start, destination, Set.copyOf(excluded),
                 view.organs(), view.blocked(), reservationHorizon, Objects.requireNonNull(admission));
     }
 
@@ -78,9 +91,9 @@ public final class HiveGroundNavigation {
 
     static List<SurfaceAnchor> route(FrontierWorldState state, HiveOrgan home, SurfaceAnchor start,
             SurfaceAnchor destination, Set<SurfaceAnchor> excluded, Set<BlockPosition> intact, Set<SurfaceAnchor> blocked) {
-        return route(state, home, start, destination, excluded, intact, blocked, 0, (from, to, step) -> true);
+        return route(state, java.util.Optional.of(home), start, destination, excluded, intact, blocked, 0, (from, to, step) -> true);
     }
-    private static List<SurfaceAnchor> route(FrontierWorldState state, HiveOrgan home, SurfaceAnchor start,
+    private static List<SurfaceAnchor> route(FrontierWorldState state, java.util.Optional<HiveOrgan> home, SurfaceAnchor start,
             SurfaceAnchor destination, Set<SurfaceAnchor> excluded, Set<BlockPosition> intact,
             Set<SurfaceAnchor> blocked, int reservationHorizon, StepAdmission admission) {
         if (!traversable(state, home, start, intact, blocked) || !traversable(state, home, destination, intact, blocked))
@@ -115,9 +128,14 @@ public final class HiveGroundNavigation {
 
     static boolean traversable(FrontierWorldState state, HiveOrgan home, SurfaceAnchor surface,
                                        Set<BlockPosition> intactOrgans, Set<SurfaceAnchor> blockedBodySurfaces) {
+        return traversable(state, java.util.Optional.of(home), surface, intactOrgans, blockedBodySurfaces);
+    }
+    private static boolean traversable(FrontierWorldState state, java.util.Optional<HiveOrgan> home, SurfaceAnchor surface,
+                                       Set<BlockPosition> intactOrgans, Set<SurfaceAnchor> blockedBodySurfaces) {
         if (!state.bootstrap().bounds().contains(surface.support())) return false;
+        if (state.physicalDeltas().containsKey(surface.support())) return false;
         if (blockedBodySurfaces.contains(surface)) return false;
-        if (insideTray(home, surface)) return true;
+        if (home.filter(tray -> insideTray(tray, surface)).isPresent()) return true;
         return !intactOrgans.contains(surface.support()) && surface.equals(surfaceAt(state, home, surface.x(), surface.z()));
     }
 
@@ -152,8 +170,13 @@ public final class HiveGroundNavigation {
     }
 
     static SurfaceAnchor surfaceAt(FrontierWorldState state, HiveOrgan home, int x, int z) {
-        if (x >= home.anchor().x() - 2 && x <= home.anchor().x() + 2 && z >= home.anchor().z() - 2 && z <= home.anchor().z() + 2) {
-            return SurfaceAnchor.at(x, home.anchor().y(), z);
+        return surfaceAt(state, java.util.Optional.of(home), x, z);
+    }
+    private static SurfaceAnchor surfaceAt(FrontierWorldState state, java.util.Optional<HiveOrgan> home, int x, int z) {
+        var tray = home.filter(value -> x >= value.anchor().x() - 2 && x <= value.anchor().x() + 2
+                && z >= value.anchor().z() - 2 && z <= value.anchor().z() + 2);
+        if (tray.isPresent()) {
+            return SurfaceAnchor.at(x, tray.orElseThrow().anchor().y(), z);
         }
         return KnownPedestrianGround.forFrontier(state).at(x, z);
     }

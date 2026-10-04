@@ -51,7 +51,11 @@ class FrontierBootstrapperTest {
             assertEquals(bootstrap.hive().id(), organ.hiveId());
             assertTrue(ids.add(organ.id()));
         });
-        bootstrap.hive().bioforms().forEach(bioform -> assertEquals(bootstrap.hive().id(), bioform.hiveId()));
+        bootstrap.hive().bioforms().forEach(bioform -> {
+            assertEquals(bootstrap.hive().id(), bioform.hiveId());
+            assertEquals(bootstrap.terrain().supportYAt(bioform.position().x(), bioform.position().z()), bioform.position().y(),
+                    "a free organism's slot is supported by terrain, not the elevated organ datum");
+        });
     }
 
     @Test

@@ -407,6 +407,13 @@ class FrontierV3DiagnosticJsonTest {
         String siteJson = FrontierV3DiagnosticJson.render("site", site.value(), checkpoint, state, Optional.empty());
         String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty());
         String dormantBioformJson = FrontierV3DiagnosticJson.render("actor", dormantBioform.value(), checkpoint, state, Optional.empty());
+        var scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.isScout()).findFirst().orElseThrow().id();
+        var scouting = io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess.reduceStarted(state, hive,
+                io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess.start(state, scout));
+        String scoutJson = FrontierV3DiagnosticJson.render("actor", scout.value(), checkpoint, scouting, Optional.empty());
+        var scoutFields = com.google.gson.JsonParser.parseString(scoutJson.substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals(1L, scoutFields.get("retainedScoutGoalRevision").getAsLong());
+        assertTrue(scoutFields.has("retainedScoutGoalPosition") && scoutFields.has("retainedScoutExecutionGeneration"));
         String itemJson = FrontierV3DiagnosticJson.render("item", item.value(), checkpoint, state, Optional.empty());
         String settlementJson = FrontierV3DiagnosticJson.render("settlement", settlement.value(), checkpoint, state, Optional.empty());
         String hiveJson = FrontierV3DiagnosticJson.render("hive", hive.value(), checkpoint, state, Optional.empty());

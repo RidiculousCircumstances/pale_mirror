@@ -16,6 +16,7 @@ components:
     path: "pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3"
     owns:
       - Frontier v3 canonical world, typed commands and events, deterministic schedules, exact actors/resources, autonomous human and hive processes, immutable projections and pure persistence codecs
+      - ScoutPatrolJourney owns one versioned semantic destination per exact scout execution, never a current pose or per-block cursor. Shared hive ground knowledge validates COLD legs from ActorLocation; captured goal/body/execution/scope authority and common inspection validate HOT arrival. Free bootstrap bioforms stand on surveyed terrain, not the raised organ datum.
       - Meal consumption after service clearance is independent of an exact eating waypoint; the physical receipt checkpoints the supported observed body
       - Resident activity admission owns explicit source, access, clearance and work-checkpoint waits; the generic queue parks the unchanged exact action by causal owner keys with a bounded audit, without retry WAL writes or food-specific scheduling logic
       - Service access derives temporary-buffer turnover requests; geometry chooses reachable unoccupied resting destinations outside every buffer, activity admits optional relocation, and the shared interruptible HOT/COLD movement owner executes it independently of food consumption

@@ -161,10 +161,34 @@ class HiveScoutPatrolProcessTest {
         state = HiveScoutPatrolProcess.reduceStarted(state, state.bootstrap().hive().id(), HiveScoutPatrolProcess.start(state, scout.id()));
         var captured = HiveScoutPatrolProcess.requireExecution(state, scout.id());
         ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(state, captured, state.ambientLeases().get(scout.id()));
-        ScoutPatrolAdvanced advanced = new ScoutPatrolAdvanced(HiveScoutPatrolProcess.requireExecution(state, scout.id()),
-                1L, lease.goalBody().supportingSurface().support(), prior);
-
-        FrontierWorldState moved = HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), advanced);
+        var journey = HiveScoutPatrolProcess.journey(state, scout.id());
+        var actuation = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                ActorBodyAuthority.current(state, scout.id()), captured);
+        ScoutPatrolAdvanced advanced = new ScoutPatrolAdvanced(captured, journey.goalRevision(), 1L,
+                journey.target(), new SurfaceAnchor(prior), java.util.Optional.of(new ScoutPatrolAdvanced.HotArrival(actuation, lease.revision())));
+        var beforeInspection = state;
+        assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduce(beforeInspection,
+                beforeInspection.bootstrap().hive().id(), advanced), "family receipt cannot fabricate HOT arrival");
+        var path = HiveGroundNavigation.scoutRoute(state, scout, new SurfaceAnchor(prior), journey.target());
+        state = ModeledActorBodyFacts.inspected(state, scout.id(), path.get(Math.min(1, path.size() - 1)).standingBody());
+        assertEquals(journey, HiveScoutPatrolProcess.journey(state, scout.id()), "physical movement cannot retarget a scout goal");
+        ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(state, captured, state.ambientLeases().get(scout.id()));
+        state = ModeledActorBodyFacts.inspected(state, scout.id(), journey.target().standingBody());
+        var observed = state;
+        var staleScope = new ScoutPatrolAdvanced(captured, journey.goalRevision(), 1L, journey.target(), advanced.priorSurface(),
+                java.util.Optional.of(new ScoutPatrolAdvanced.HotArrival(actuation, lease.revision() + 1L)));
+        var staleBody = new ScoutPatrolAdvanced(captured, journey.goalRevision(), 1L, journey.target(), advanced.priorSurface(),
+                java.util.Optional.of(new ScoutPatrolAdvanced.HotArrival(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(scout.id(), actuation.body().physicalEpoch() + 1L), captured), lease.revision())));
+        assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduce(observed, observed.bootstrap().hive().id(), staleScope));
+        assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduce(observed, observed.bootstrap().hive().id(), staleBody));
+        assertEquals(advanced, FrontierWorldRuntimeDefinition.payloadCodecs().decode(advanced.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(advanced)));
+        FrontierWorldState moved = HiveScoutPatrolProcess.reduce(observed, observed.bootstrap().hive().id(), advanced);
+        assertEquals(observed.actorLocations(), moved.actorLocations(), "HOT family owns progress, not positions");
+        assertEquals(journey.goalRevision() + 1L, HiveScoutPatrolProcess.journey(moved, scout.id()).goalRevision());
+        assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduce(moved, moved.bootstrap().hive().id(), advanced));
+        assertEquals(moved, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(moved)));
         ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(moved, captured, moved.ambientLeases().get(scout.id()));
         var capturedPresentation = state.ambientLeases().get(scout.id());
         assertThrows(IllegalArgumentException.class, () -> ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(
@@ -179,8 +203,9 @@ class HiveScoutPatrolProcessTest {
         var scout = scout(initial);
         var running = HiveScoutPatrolProcess.reduceStarted(initial, initial.bootstrap().hive().id(), HiveScoutPatrolProcess.start(initial, scout.id()));
         var key = HiveScoutPatrolProcess.requireExecution(running, scout.id());
-        var oldAdvance = new ScoutPatrolAdvanced(key, 1L, HiveScoutPatrolProcess.nextPosition(running, scout),
-                running.actorLocations().get(scout.id()).supportingSurface().support());
+        var journey = HiveScoutPatrolProcess.journey(running, scout.id());
+        var oldAdvance = new ScoutPatrolAdvanced(key, journey.goalRevision(), 1L, journey.target(),
+                running.actorLocations().get(scout.id()).supportingSurface(), java.util.Optional.empty());
         var presence = running.actorExecutions().next(scout.id(),
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, scout.id());
         var released = ActorExecutionComposition.LIFECYCLE.prepareVacant(running, presence)
@@ -190,6 +215,57 @@ class HiveScoutPatrolProcessTest {
         assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduce(successor, successor.bootstrap().hive().id(), oldAdvance));
         assertEquals(running.actorLocations(), successor.actorLocations());
         assertTrue(HiveScoutPatrolProcess.requireExecution(successor, scout.id()).generation() > key.generation());
+    }
+
+    @Test void partialHotDepartureKeepsTheGoalThroughColdRecoveryAndRejectsKnownBlockage() {
+        var world = new WorldId("frontier:scout-partial-departure");
+        var baseline = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        var firstTarget = HiveScoutPatrolProcess.nextPosition(baseline, scout(baseline));
+        var terrain = baseline.bootstrap().terrain().withSurveyedSupport(firstTarget.x(), firstTarget.z(), firstTarget.y() + 1);
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L, baseline.bootstrap().ruleset(), terrain));
+        var scout = scout(state);
+        state = HiveScoutPatrolProcess.reduceStarted(state, state.bootstrap().hive().id(), HiveScoutPatrolProcess.start(state, scout.id()));
+        var journey = HiveScoutPatrolProcess.journey(state, scout.id());
+        var lease = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
+        state = AmbientLeaseStateProcess.prepare(state, lease);
+        state = confirmFixturePhysicalBody(state, scout.id());
+        state = AmbientLeaseStateProcess.transition(state, scout.id(), AmbientLeaseStatus.HOT);
+        var path = HiveGroundNavigation.scoutRoute(state, scout, state.actorLocations().get(scout.id()).supportingSurface(), journey.target());
+        assertEquals(firstTarget.y() + 1, journey.target().y(), "the declared goal follows surveyed support, not nest datum");
+        assertTrue(path.stream().map(SurfaceAnchor::y).distinct().count() > 1L);
+        assertTrue(path.size() > 2, "production scout leg supplies a genuine partial departure");
+        var partial = path.get(1).standingBody();
+        state = ModeledActorBodyFacts.inspected(state, scout.id(), partial);
+        state = AmbientLeaseStateProcess.transition(state, scout.id(), AmbientLeaseStatus.DRAINING);
+        var held = state;
+        var action = HiveScoutPatrolProcess.patrol(scout.id(), 1, 2_400L);
+        assertTrue(HiveScoutPatrolProcess.plan(held, action).stream().noneMatch(event -> event.payload() instanceof ScoutPatrolAdvanced));
+        state = ModeledActorBodyFacts.unloaded(state, scout.id());
+        state = AmbientLeaseStateProcess.release(state, new AmbientLeaseReleased(scout.id(), partial,
+                state.actorLocations().get(scout.id()).condition().health()));
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(journey, HiveScoutPatrolProcess.journey(state, scout.id()));
+        assertEquals(partial, state.actorLocations().get(scout.id()).body());
+        var recovered = state;
+        var advance = (ScoutPatrolAdvanced) HiveScoutPatrolProcess.plan(recovered, action).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ScoutPatrolAdvanced.class::isInstance).findFirst().orElseThrow();
+        assertEquals(partial.supportingSurface(), advance.priorSurface());
+        assertEquals(journey.target(), advance.target());
+        var deltas = new java.util.LinkedHashMap<>(recovered.physicalDeltas());
+        var feet = journey.target().support().offset(0, 1, 0);
+        deltas.put(feet, new PhysicalDelta(feet, PhysicalDeltaKind.UNKNOWN_SCAR,
+                java.util.Optional.empty(), java.util.Optional.empty(), "player:scout-destination-block"));
+        var blocked = recovered.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(deltas));
+        assertTrue(HiveScoutPatrolProcess.plan(blocked, action).stream().noneMatch(event -> event.payload() instanceof ScoutPatrolAdvanced));
+        assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduce(blocked, blocked.bootstrap().hive().id(), advance));
+        assertEquals(journey, HiveScoutPatrolProcess.journey(blocked, scout.id()));
+        var moved = HiveScoutPatrolProcess.reduce(recovered, recovered.bootstrap().hive().id(), advance);
+        assertEquals(journey.target().standingBody(), moved.actorLocations().get(scout.id()).body());
+        assertEquals(recovered.actorExecutions(), moved.actorExecutions());
+        assertEquals(recovered.inventory(), moved.inventory());
+        assertEquals(journey.goalRevision() + 1L, HiveScoutPatrolProcess.journey(moved, scout.id()).goalRevision());
+        assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduce(moved, moved.bootstrap().hive().id(), advance));
     }
 
     @Test void predecessorLessHistoricalPatrolPayloadIsExplicitlyRejected() {

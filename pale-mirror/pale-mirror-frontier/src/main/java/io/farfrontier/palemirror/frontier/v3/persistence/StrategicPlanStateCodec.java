@@ -120,6 +120,7 @@ public final class StrategicPlanStateCodec {
             output.writeLong(sighting.observedAt());
         }
         output.writeByte(plans.hiveDoctrine().doctrine().wireTag()); output.writeLong(plans.hiveDoctrine().selectedAt());
+        ScoutPatrolCodec.write(output, plans);
     }
 
     public static StrategicPlanState read(DataInputStream input) throws IOException {
@@ -307,7 +308,7 @@ public final class StrategicPlanStateCodec {
             doctrine = new HiveDoctrineState(FrontierWireTags.require(HiveDoctrine.class, kind), input.readLong()); }
         return new StrategicPlanState(objectives, tasks, patrols, engagements, new SettlementInfectionKnowledge(knowledge), new HiveOperationKnowledge(hiveKnowledge),
                 new HiveTerritoryKnowledge(territory), new HiveSettlementKnowledge(settlementSightings), doctrine, assaults,
-                new DecisionAuthorityState(authorities), new OperationFrontEffectCoordinator(frontEffects));
+                new DecisionAuthorityState(authorities), new OperationFrontEffectCoordinator(frontEffects), ScoutPatrolCodec.read(input));
     }
 
     /**

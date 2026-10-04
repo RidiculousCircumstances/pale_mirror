@@ -519,6 +519,10 @@ final class FrontierV3DiagnosticJson {
                 + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""
                 + quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + quote(ambientGoal)
                 + "\",\"goalPosition\":" + goalPosition
+                + Optional.ofNullable(state.strategicPlans().scoutPatrols().get(subject))
+                    .map(journey -> ",\"retainedScoutGoalRevision\":" + journey.goalRevision()
+                            + ",\"retainedScoutGoalPosition\":" + position(journey.target().support())
+                            + ",\"retainedScoutExecutionGeneration\":" + journey.executionId().generation()).orElse("")
                 + ",\"assignment\":\"" + (assignment == null ? "NONE" : assignment.kind().name())
                 + "\",\"assignmentOwner\":\"" + quote(assignment == null ? "" : assignment.ownerId().map(SubjectId::value).orElse("")) + "\""
                 + ",\"dutyPhase\":\"" + quote(dutyPhase) + "\""

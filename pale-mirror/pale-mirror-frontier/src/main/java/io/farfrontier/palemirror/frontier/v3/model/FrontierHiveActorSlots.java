@@ -20,8 +20,9 @@ final class FrontierHiveActorSlots {
 
     private FrontierHiveActorSlots() { }
 
-    static List<BlockPosition> slots(WorldBounds bounds, HiveNest nest, List<HiveOrgan> organs, int count) {
+    static List<BlockPosition> slots(WorldBounds bounds, TerrainSurfacePlan terrain, HiveNest nest, List<HiveOrgan> organs, int count) {
         Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(nest, "nest"); Objects.requireNonNull(organs, "organs");
+        Objects.requireNonNull(terrain, "bioform placement terrain");
         if (count < 0) throw new IllegalArgumentException("bioform placement count must not be negative");
         Set<BlockPosition> occupancy = FrontierGrayboxPlan.intactOrganOccupancy(organs.stream()
                 .filter(organ -> organ.nestId().equals(nest.id())).toList());
@@ -29,23 +30,24 @@ final class FrontierHiveActorSlots {
         if (count == 0) return List.of();
         for (int radius = FIRST_RING_RADIUS; radius <= MAX_RING_RADIUS; radius += RING_INCREMENT) {
             for (int x = -radius; x <= radius; x += RING_INCREMENT) {
-                if (accept(bounds, occupancy, nest.anchor().offset(x, 0, -radius), accepted, count)) return List.copyOf(accepted);
+                if (accept(bounds, terrain, occupancy, nest.anchor().offset(x, 0, -radius), accepted, count)) return List.copyOf(accepted);
             }
             for (int z = -radius + RING_INCREMENT; z <= radius; z += RING_INCREMENT) {
-                if (accept(bounds, occupancy, nest.anchor().offset(radius, 0, z), accepted, count)) return List.copyOf(accepted);
+                if (accept(bounds, terrain, occupancy, nest.anchor().offset(radius, 0, z), accepted, count)) return List.copyOf(accepted);
             }
             for (int x = radius - RING_INCREMENT; x >= -radius; x -= RING_INCREMENT) {
-                if (accept(bounds, occupancy, nest.anchor().offset(x, 0, radius), accepted, count)) return List.copyOf(accepted);
+                if (accept(bounds, terrain, occupancy, nest.anchor().offset(x, 0, radius), accepted, count)) return List.copyOf(accepted);
             }
             for (int z = radius - RING_INCREMENT; z > -radius; z -= RING_INCREMENT) {
-                if (accept(bounds, occupancy, nest.anchor().offset(-radius, 0, z), accepted, count)) return List.copyOf(accepted);
+                if (accept(bounds, terrain, occupancy, nest.anchor().offset(-radius, 0, z), accepted, count)) return List.copyOf(accepted);
             }
         }
         throw new IllegalStateException("frontier hive nest has no bounded free bioform placement slots for count " + count);
     }
 
-    private static boolean accept(WorldBounds bounds, Set<BlockPosition> occupancy, BlockPosition candidate,
+    private static boolean accept(WorldBounds bounds, TerrainSurfacePlan terrain, Set<BlockPosition> occupancy, BlockPosition candidate,
                                   List<BlockPosition> accepted, int count) {
+        candidate = new BlockPosition(candidate.x(), terrain.supportYAt(candidate.x(), candidate.z()), candidate.z());
         // Candidate is the support cell. A standing Zombie's collision volume reaches almost
         // two full cells above its feet, so reserve support + feet + both head-overlap cells.
         // Treating only the first two cells as clear produced a physically embedded top ring

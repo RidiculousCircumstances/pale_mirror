@@ -74,7 +74,7 @@ public final class FrontierBootstrapper {
         List<Bioform> bioforms = new ArrayList<>();
         for (int nestIndex = 0; nestIndex < nests.size(); nestIndex++) {
             HiveNest nest = nests.get(nestIndex);
-            List<BlockPosition> placements = FrontierHiveActorSlots.slots(BOUNDS, nest, organs, 24);
+            List<BlockPosition> placements = FrontierHiveActorSlots.slots(BOUNDS, terrain, nest, organs, 24);
             for (int ordinal = 0; ordinal < 24; ordinal++) {
                 bioforms.add(new Bioform(new SubjectId("bioform:" + (nestIndex == 0 ? "west-" : "east-") + ordinal), hiveId,
                         nest.id(), chassis(ordinal), mutations(ordinal), assignment(ordinal), placements.get(ordinal)));

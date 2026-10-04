@@ -116,7 +116,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(actorExecutions, "actor executions");
         ActorExecutionComposition.CAPABILITIES.validateKinds(actorExecutions);
         PresenceActivityCapability.validateReferences(actorLocations, actorExecutions);
-        ScoutPatrolActivityCapability.validateReferences(bootstrap, hiveColony, actorExecutions);
+        ScoutPatrolActivityCapability.validateReferences(bootstrap, hiveColony, strategicPlans, actorExecutions);
         OperationExecutionAuthority.validateReferences(operations, actorExecutions);
         RouteEngagementExecutionAuthority.validateReferences(strategicPlans.routeEngagements(), actorExecutions);
         RoutePatrolExecutionAuthority.validateReferences(strategicPlans.routePatrols(), actorExecutions);
