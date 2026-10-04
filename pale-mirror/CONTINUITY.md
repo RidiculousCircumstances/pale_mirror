@@ -11,9 +11,10 @@ own workflow. No extra publication, reset or unrelated service authority.
 Implementation: /home/rd/proj/pm-f06r3-facility-lane-recovery,
 branch feat/baker-carry-orders-20260926. The large physical-lifetime WIP was
 preserved in private checkpoint 6f065966; development-blocker cleanup is
-53014ac7 and hive spatial continuation is local HEAD e7610bf1. These are not
+53014ac7, hive spatial continuation is e7610bf1 and engineering journey
+continuation is local HEAD 6a734828. These are not
 UAE completion or deployment readiness.
-Current fresh-world schema is 237; bd595b53 is 227 and live R18 is 226.
+Current fresh-world schema is 238; bd595b53 is 227 and live R18 is 226.
 Origin git@github.com:RidiculousCircumstances/pale_mirror.git.
 Governance: this checkout; UAE normative/document WIP is preserved in local
 checkpoints, not published. Source adoption is not governance publication. Original
@@ -24,8 +25,9 @@ the last publication facts.
 
 ## Current implementation and next action
 
-Latest user assignment: implement blocker fixes 2–5, then continue completing
-UAE. Main alone. Local checkpoints are authorized; no new push/deploy authority.
+Latest user assignment: implement engineering crews under UAE, including
+construction and maintenance muster, worksite approach and depot return.
+Main alone. Local checkpoints are authorized; no new push/deploy authority.
 The prerequisite block is implemented: removed-test filters require actual
 class existence under the inspected checkout (CLI/MCP); test-only changes select
 inventory compilation, keywords no longer infer native campaigns, and unknown
@@ -38,8 +40,8 @@ without raising limits. The same shared gate found existing long Java lines;
 only whitespace was normalized. Guardrails, all Java/pilot/test compilation and
 28 resource/fixture tests PASS51s/session27202; 11 agent-assist tests PASS0.05s.
 The gate dry-run contains no visual experiment tasks. No native/client matrix.
-Continue owner-local spatial continuation for remaining engineering/patrol/
-assault families; preserve original semantic checkpoints/resources and actual
+Continue owner-local spatial continuation for remaining patrol/assault
+families; preserve original semantic checkpoints/resources and actual
 departure poses. Tool governance drift/ledger compaction (audit item6) is deferred.
 
 Hive spatial continuation is saved in e7610bf1: assembly and survivor return
@@ -61,9 +63,35 @@ return fixture follows collision-free candidates, like the production planner.
 catalog coverage), all production/test/pilot compilation and guardrails PASS66s/
 session85151. No native/client/matrix run; no live R18 change, push or deployment.
 This closes the connected hive spatial cut, not all hive physical effects or
-full UAE acceptance. Next is the engineering/patrol/assault owner continuation
+full UAE acceptance. Next is the patrol/assault owner continuation
 cut, then remaining production inventory and integrated multiworker/restart
 acceptance; do not rerun unchanged green hive checks for confidence.
+
+Engineering journey continuation is saved in 6a734828. Construction and
+maintenance share one step validator and registered owner checkpoint for all
+three purposes (MUSTER_DEPOT, WORKSITE, RETURN_DEPOT). Original corridors,
+semantic cursors, crew, tools/materials and effect ownership remain retained.
+Body departure atomically records a versioned bounded TraversalRejoin from the
+actual saved support; it is not semantic arrival or presentation-scope closure.
+HOT events retain captured actuation (body epoch + exact execution) and scope
+revision, require independent common body inspection, and never write HOT
+ActorLocation. COLD checks its predecessor, custody and shared known geometry;
+blocked edges wait through the existing bounded cadence, not invalid events.
+Removed global cursor=physical-pose and old-goal=current-goal equality demands;
+exact route/goal/version checks remain at motion/arrival admission. Diagnostics
+distinguish actual pose, retained checkpoint, route revision and approach cursor.
+Snapshot/WAL share the assembly codec; schema238 rejects old disposable layouts.
+Source review and focused checks cover all six owner/purpose departure paths,
+recovery, stale route/body/execution/scope, inspected HOT pose, blocked COLD
+edge and non-flat rejoin. 42 distinct Java checks are green across sessions
+72537/33822/45238: the first selected41 run had five fixture failures (new
+uppercase world IDs and two old ownerless HOT setups), corrected locally;
+only affected checks were repeated. Final9 checks + guardrails PASS22s/session
+45238; all production/pilot/test compilation PASS in72537, final production
+compile PASS11s/session45911. This is a spatial cut, not engineering native
+materialization acceptance or full UAE. No native/client/matrix, R18 change,
+push or deployment. Live work effects and integrated epic acceptance are not
+claimed complete by these model checks.
 
 Previous sanitation:
 Removed 29 source-proven obsolete tests: 6 scene-owned batch body fence/death

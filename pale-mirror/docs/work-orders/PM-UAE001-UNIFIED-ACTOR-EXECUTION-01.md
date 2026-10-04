@@ -232,6 +232,33 @@ amend this contract explicitly rather than silently expanding the controller.
 
 ## Acceptance and verification economy
 
+2026-10-04 private checkpoint6a734828 closes the connected engineering journey
+spatial cut for construction and maintenance: MUSTER_DEPOT, WORKSITE and
+RETURN_DEPOT retain their exact semantic routes and crew while the registered
+family checkpoint saves a bounded versioned rejoin from the actual departure
+pose. Shared body authority remains the sole HOT position writer. Captured
+body/execution/scope evidence and exact predecessor validation fence arrivals;
+COLD checks shared known geometry and waits on blocked edges through its
+existing cadence. Snapshot and event assemblies use one codec, schema238.
+Diagnostics expose actual pose separately from retained route/rejoin progress.
+Ordinary tool, cargo, physical-cell and terminal semantics remain unchanged.
+
+Verification is composed, not a repeated full campaign: selected41 Java checks
+in72537 passed36 and identified five fixture setup failures; affected25 checks
+in33822 PASS20s after those fixes, and final9 (four engineering continuation
+checks plus five required architecture checks) with guardrails in45238 PASS22s.
+The union is42 distinct checks; unchanged green construction/persistence checks
+were reused, not rerun or labelled fresh. Production/pilot/test Java compiled
+in72537; final production compile in45911 PASS11s after equivalent formatting/
+typed-target cleanup. The engineering checks exercise both owners and all
+three journey purposes, HOT departure/scope closure/COLD rejoin across hydration,
+stale route/body/scope/execution rejection, blocked-edge waiting and a graded
+rejoin. Independent physical presence was added to two old maintenance HOT
+fixtures rather than relaxing common body authority. No native/client/matrix
+or deployment claim. Registered family spatial continuation for patrol/assault,
+remaining physical-effect adoption and integrated multiworker/restart/player
+acceptance remain OPEN under the existing order.
+
 | Exit condition | Decisive evidence |
 | --- | --- |
 | All production control consumers use UAE; no second body/locomotion owner | Source inventory closure plus mechanical architecture checks on real callers/registry; no active legacy switch or fallback |
