@@ -38,6 +38,17 @@ public final class FrontierV3BodyObservationGameTests {
                     "navigation observations share the same body conversion");
             helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, expected.supportingSurface()),
                     "supported farmland feet satisfy the common semantic arrival contract");
+            Villager neighbour = helper.spawnWithNoFreeWill(EntityType.VILLAGER,
+                    new Vec3(2.5D, 0.9375D, 2.5D));
+            helper.assertTrue(!FrontierV3SemanticMovement.targetIsNavigable(helper.getLevel(), worker, expected.supportingSurface()),
+                    "another living body still blocks prospective admission to the station");
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, expected.supportingSurface()),
+                    "a neighbour cannot revoke the current worker's observed support or prepared effect station");
+            neighbour.discard();
+            helper.getLevel().setBlock(support.above(), Blocks.STONE.defaultBlockState(), 3);
+            helper.assertTrue(!FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, expected.supportingSurface()),
+                    "real block intrusion still invalidates actual station clearance");
+            helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
             helper.assertValueEqual(FrontierV3SupportedBodyCapture.observeDeparting(helper.getLevel(), worker),
                     java.util.Optional.of(expected), "departure uses the same supported body");
             worker.getPersistentData().putString(FrontierV3ActorCarrierComposition.ACTOR_KEY, "resident:body-observation");

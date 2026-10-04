@@ -100,7 +100,7 @@ public final class FrontierV3ResourceSiteGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-resource-site-harvest-standing", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
-    public static void harvestStandingAdmitsOnlyItsOwnPassThroughCropCell(GameTestHelper helper) {
+    public static void sharedStandingAdmitsPassThroughCropsButNeverUsesThemAsSupport(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos floor = fixtureOrigin(helper);
         BlockPosition anchor = new BlockPosition(floor.getX(), floor.getY(), floor.getZ());
@@ -108,8 +108,8 @@ public final class FrontierV3ResourceSiteGameTests {
         level.setBlock(floor, Blocks.FARMLAND.defaultBlockState(), 3);
         level.setBlock(floor.above(), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7), 3);
         level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
-        helper.assertTrue(FrontierV3StandingPosition.aboveExactFloor(level, anchor) == null,
-                "ordinary exact standing keeps a mature crop out of a generic feet column");
+        helper.assertValueEqual(FrontierV3StandingPosition.aboveExactFloor(level, anchor), floor.above(),
+                "collision-free crops permit the same supported body when its activity changes");
         helper.assertTrue(FrontierV3StandingPosition.aboveExactFloor(level, floor.above()) == null,
                 "a pass-through crop is never reclassified as a supporting floor one cell above its farmland");
         helper.assertFalse(FrontierV3StandingPosition.hasExactStandingColumn(level,
@@ -118,9 +118,9 @@ public final class FrontierV3ResourceSiteGameTests {
         helper.assertTrue(FrontierV3StandingPosition.hasExactHarvestFieldStandingColumn(level, anchor),
                 "the registered field-worker rule retains the exact farmland support and clear headroom");
         helper.assertValueEqual(FrontierV3StandingPosition.aboveExactHarvestFieldFloor(level, floor), floor.above(),
-                "only harvest resolves the real pass-through crop cell above its retained farmland floor");
+                "harvest uses the same pass-through crop clearance above the retained farmland floor");
         helper.assertValueEqual(FrontierV3ResourceSiteHarvestSceneExecutor.harvestStandingPosition(level, floor), floor.above(),
-                "the registered harvest provider admits its exact crop-foot station without changing generic standing");
+                "the registered harvest provider agrees with shared standing at the exact crop-foot station");
         java.util.UUID absentFarmer = new java.util.UUID(0L, 781L);
         helper.assertTrue(FrontierV3HarvestSceneStandingAdmission.obstructedBodyFreeColumn(level,
                         absentFarmer, new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(

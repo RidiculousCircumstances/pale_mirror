@@ -81,8 +81,16 @@ final class FrontierV3SemanticMovement {
         // `getOnPos` is Minecraft's collision-authoritative named support.  The volatile
         // onGround flag is reset during ordinary entity/restart hand-off ordering, so treating
         // that flag as a second arrival datum would reject an already exact support fact.
+        // Arrival is an observation of this already-supported body, not admission of
+        // a hypothetical body at the centre of the block. A passing neighbour cannot
+        // undo arrival or turn a prepared station effect into a new movement order.
+        // Actual displacement still fails exactSupport; real block/fluid changes still
+        // fail clearance. Prospective target occupancy remains checked separately below.
+        boolean actualClearance = exactSupport && hasSupport(level, block(expected))
+                && level.getFluidState(block(expected).above()).isEmpty()
+                && !level.getBlockCollisions(worker, worker.getBoundingBox()).iterator().hasNext();
         return new SemanticTraversalArrival.Observation(actual, medium(level, worker.blockPosition()),
-                exactSupport, exactSupport && clear(level, worker, expected));
+                exactSupport, actualClearance);
     }
 
     private static SemanticTraversalArrival.Observation targetObservation(ServerLevel level, Mob worker, SurfaceAnchor surface) {
@@ -102,13 +110,9 @@ final class FrontierV3SemanticMovement {
         if (!hasSupport(level, support) || !level.getFluidState(support.above()).isEmpty()) return false;
         Vec3 point = point(level, surface);
         AABB target = worker.getBoundingBox().move(point.subtract(worker.position()));
-        // The shared arrival provider must describe the same body volume that the actuator is
-        // permitted to enter.  Previously `Entity.move` correctly refused a foreign living
-        // body, while this provider declared that very cell IN_PROGRESS because it sampled
-        // blocks only.  The scene then refreshed the same retained edge forever and presented
-        // a running harvest with no physical progress.  A loaded body is ordinary physical
-        // evidence, not a route alternative: report it as blocked clearance so the owning
-        // resource-site disposition can name the exact retained cell rather than hide a stall.
+        // Prospective admission checks the body volume the actuator would enter, including
+        // living occupants. This is distinct from observing an already-arrived body's actual
+        // block clearance: a neighbour can prevent entry without revoking existing arrival.
         return level.noCollision(worker, target) && level.getEntities(worker, target.inflate(0.001D),
                 entity -> entity instanceof LivingEntity living && living.isAlive() && !living.isSpectator()).isEmpty();
     }

@@ -545,6 +545,57 @@ class ResourceSiteHarvestProcessTest {
             assertTrue(resumedJob.navigationBlock().isEmpty());
         }
     }
+    @Test void displacedPreparedCropRetainsItsEffectThroughRouteHoldAndObservedReturn() {
+        HotHarvest hot = hotHarvestAfterColdSteps(0);
+        var job = hot.job();
+        var state = inspectGoal(hot.state(), hot.site(), job, hot.lease().id());
+        state = completeLabourHot(state, hot.site(), hot.lease().id());
+        state = ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
+                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));
+        var prepared = state.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow();
+        var goal = ResourceSiteHarvestGoal.current(state, prepared);
+        state = ModeledActorBodyFacts.inspected(state, job.workerId(),
+                new SurfaceAnchor(goal.representative().support().offset(1, 0, 0)).standingBody());
+        var due = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
+        var block = new ResourceSiteHarvestNavigationBlock(goal.representative(), goal.layoutRevision(),
+                ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE);
+        var blocked = new ResourceSiteHarvestRouteBlocked(hot.site(), job.id(), job.workerId(), block,
+                hot.lease().id(), due.id(), due.dueAt().ticks());
+        var held = ResourceSiteHarvestProcess.reduceRouteBlocked(state, hot.site(), blocked);
+        var retained = held.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow();
+        assertEquals(prepared.progress(), retained.progress());
+        assertEquals(prepared.target(), retained.target());
+        assertTrue(retained.progress().hasPendingCrop());
+        assertEquals(state.inventory(), held.inventory());
+        assertEquals(state.actorLocations(), held.actorLocations());
+        assertFalse(ResourceSiteHarvestGoal.actorAtWorkCell(held, retained));
+        assertEquals(held, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(held)));
+        assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(held, due));
+        assertThrows(IllegalArgumentException.class, () -> retained.retargetTo(goal.nextWorkSlot() + 1));
+        assertThrows(IllegalArgumentException.class, retained::withFullBatchReturn);
+        assertThrows(IllegalArgumentException.class, () -> retained.withNavigationBlock(block));
+
+        var resumed = inspectGoal(held, hot.site(), retained, hot.lease().id());
+        var returned = resumed.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow();
+        assertTrue(returned.navigationBlock().isEmpty());
+        assertEquals(prepared.progress(), returned.progress());
+        assertEquals(prepared.target(), returned.target());
+        assertEquals(held.inventory(), resumed.inventory());
+        assertTrue(ResourceSiteHarvestGoal.actorAtWorkCell(resumed, returned));
+        var field = resumed.resourceSites().cycle(hot.site());
+        var receipt = new ResourceSiteHarvestProgressed(hot.site(), field.epoch(), job.id(), 1,
+                field.layout().revision(), job.target().cellId(), job.target().generation(),
+                ResourceFieldCycle.WorkOutcome.HARVESTED, due.id(), due.dueAt().ticks(), Optional.of(
+                    new ResourceSiteHarvestProgressed.HandObservation(new PhysicalStackAddress.ActorHand(job.workerId(),
+                            hot.lease().members().getFirst().entityId()), hot.lease().revision(), 1)));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceProgressed(held, hot.site(), receipt));
+        var finished = ResourceSiteHarvestProcess.reduceProgressed(resumed, hot.site(), receipt);
+        assertEquals(1, finished.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow().harvestedYieldQuantity());
+        assertFalse(finished.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow().progress().hasPendingCrop());
+        assertEquals(resumed.actorLocations(), finished.actorLocations());
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceProgressed(finished, hot.site(), receipt));
+    }
+
     @Test void hotFieldReceiptsCoverEveryCellWithoutMovingTheWorkGoalByWaypoints() {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         ResourceSiteHarvestJob start = hot.job();
