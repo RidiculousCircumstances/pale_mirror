@@ -77,10 +77,15 @@ public final class PopulationMigrationProcess {
         }
         if (journey.arriving()) return List.of(new ProposedEvent(journey.destinationSettlementId(), new ResidentMigrated(journey.residentId(),
                 journey.destinationHouseholdId(), journey.destinationSettlementId(), journey.currentPosition(), journey.executionId())));
-        if (journey.rejoin().isPresent()) return List.of(new ProposedEvent(journey.originSettlementId(),
+        if (journey.spatial().pending()) {
+            var approach = ResidentMigrationJourneyKnowledge.approach(state, journey);
+            if (approach.isEmpty()) return List.of(schedule(progress(journey,
+                    Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
+            return List.of(new ProposedEvent(journey.originSettlementId(),
                 new ResidentMigrationRejoinAdvanced(journey.residentId(), journey.routeRevision(),
-                        journey.rejoin().orElseThrow().nextCursor(ResidentMigrationJourney.MAX_COLD_ADVANCE_BLOCKS), journey.executionId())),
+                        approach.orElseThrow().nextCursor(ResidentMigrationJourney.MAX_COLD_ADVANCE_BLOCKS), journey.executionId())),
                 schedule(progress(journey, Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
+        }
         return List.of(new ProposedEvent(journey.originSettlementId(), new ResidentMigrationAdvanced(journey.residentId(), journey.nextRouteIndex(), journey.routeRevision(), journey.executionId())),
                 schedule(progress(journey, Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
     }
@@ -137,7 +142,7 @@ public final class PopulationMigrationProcess {
         }
         return new ResidentMigrationJourney(resident.id(), source.id(), household.id(), destination.id(), route, 0,
                 ResidentMigrationStatus.EN_ROUTE, Optional.empty(), state.actorExecutions().next(resident.id(),
-                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.TRANSIT, resident.id()), 1L, Optional.empty());
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.TRANSIT, resident.id()), StationApproachState.initial());
     }
 
     private static boolean displaced(FrontierWorldState state, Settlement settlement) { return overflow(state, settlement) > 0; }

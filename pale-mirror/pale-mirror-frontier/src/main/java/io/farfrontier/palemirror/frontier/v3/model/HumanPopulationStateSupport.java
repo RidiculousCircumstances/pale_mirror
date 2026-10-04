@@ -44,7 +44,7 @@ public final class HumanPopulationStateSupport {
     public static FrontierWorldState startMigration(FrontierWorldState state, ResidentMigrationJourney journey) {
         Objects.requireNonNull(journey, "migration journey");
         ActorLocation actor = state.actorLocations().get(journey.residentId()); ResidentProfile resident = state.humanPopulation().resident(journey.residentId());
-        if (journey.routeRevision() != 1 || journey.rejoin().isPresent()
+        if (journey.routeRevision() != 1 || journey.spatial().pending()
                 || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || resident == null || !resident.settlementId().equals(journey.originSettlementId())
                 || !actor.supportingSurface().support().equals(journey.currentPosition()) || !coldAvailable(state, journey.residentId())) {
             throw new IllegalArgumentException("migration journey must start from one available living COLD resident");
@@ -59,11 +59,13 @@ public final class HumanPopulationStateSupport {
 
     public static FrontierWorldState advanceMigration(FrontierWorldState state, ResidentMigrationAdvanced advanced) {
         ResidentMigrationJourney journey = requireJourney(state, advanced.residentId(), advanced.executionId()); ActorLocation actor = state.actorLocations().get(advanced.residentId());
-        if (journey.routeRevision() != advanced.routeRevision() || journey.rejoin().isPresent()
+        if (journey.routeRevision() != advanced.routeRevision() || journey.spatial().pending()
                 || journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving() || advanced.nextRouteIndex() <= journey.routeIndex()
                 || advanced.nextRouteIndex() > journey.routeIndex() + ResidentMigrationJourney.MAX_COLD_ADVANCE_BLOCKS
                 || advanced.nextRouteIndex() >= journey.route().size()
-                || actor == null || !actor.supportingSurface().support().equals(journey.currentPosition()) || !coldAvailable(state, advanced.residentId())) {
+                || actor == null || !actor.supportingSurface().support().equals(journey.currentPosition()) || !coldAvailable(state, advanced.residentId())
+                || !KnownPedestrianRouteKnowledge.forFrontier(state).traversable(journey.route()
+                    .subList(journey.routeIndex(), advanced.nextRouteIndex() + 1).stream().map(SurfaceAnchor::new).toList())) {
             throw new IllegalArgumentException("migration advancement lacks its exact COLD hand-off");
         }
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
@@ -74,11 +76,16 @@ public final class HumanPopulationStateSupport {
     public static FrontierWorldState advanceMigrationRejoin(FrontierWorldState state, ResidentMigrationRejoinAdvanced advanced) {
         var journey = requireJourney(state, advanced.residentId(), advanced.executionId());
         var actor = state.actorLocations().get(advanced.residentId());
-        if (journey.routeRevision() != advanced.routeRevision() || journey.rejoin().isEmpty()
+        if (journey.routeRevision() != advanced.routeRevision() || !journey.spatial().pending()
                 || journey.status() != ResidentMigrationStatus.EN_ROUTE || !coldAvailable(state, advanced.residentId())
                 || actor == null || !actor.supportingSurface().support().equals(journey.currentPosition()))
             throw new IllegalArgumentException("migration rejoin lacks its exact COLD pose, revision or ownership");
-        var replacement = journey.advanceRejoin(advanced.nextRejoinCursor());
+        var approach = ResidentMigrationJourneyKnowledge.approach(state, journey).orElseThrow(
+                () -> new IllegalArgumentException("migration rejoin still lacks known geometry"));
+        if (!KnownPedestrianRouteKnowledge.forFrontier(state).traversable(
+                approach.path().subList(approach.cursor(), approach.path().size())))
+            throw new IllegalArgumentException("migration rejoin has a known blocked edge");
+        var replacement = journey.advanceRejoin(approach, advanced.nextRejoinCursor());
         var actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(advanced.residentId(), actor.withBody(BodyPosition.aboveSupportCell(replacement.currentPosition())));
         return copy(state, actors, state.humanPopulation().replaceMigration(journey, replacement));
@@ -159,6 +166,8 @@ public final class HumanPopulationStateSupport {
         journey.route().forEach(position -> FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), position));
         journey.rejoin().ifPresent(approach -> approach.path().forEach(surface ->
                 FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), surface.support())));
+        journey.spatial().waitingOrigin().ifPresent(surface ->
+                FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), surface.support()));
     }
 
     private static boolean coldAvailable(FrontierWorldState state, SubjectId residentId) {
@@ -180,8 +189,10 @@ public final class HumanPopulationStateSupport {
     }
 
     private static boolean routePassable(FrontierWorldState state, ResidentMigrationJourney journey) {
-        int remaining = journey.rejoin().isPresent() ? journey.nextRouteIndex() : journey.routeIndex();
+        int remaining = journey.spatial().pending() ? journey.nextRouteIndex() : journey.routeIndex();
         if (!FrontierRouteNetwork.isPassable(state.bootstrap(), journey.route().subList(remaining, journey.route().size()), state.physicalDeltas())) return false;
+        if (!KnownPedestrianRouteKnowledge.forFrontier(state).traversable(journey.route()
+                .subList(remaining, journey.route().size()).stream().map(SurfaceAnchor::new).toList())) return false;
         return journey.rejoin().map(approach -> KnownPedestrianRouteKnowledge.forFrontier(state)
                 .traversable(approach.path().subList(approach.cursor(), approach.path().size()))).orElse(true);
     }

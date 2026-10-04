@@ -529,7 +529,7 @@ final class HumanPopulationPayloadCodecs {
         FrontierWorldStateCodec.writeCount(output, journey.routeIndex()); output.writeByte(journey.status().wireTag()); output.writeBoolean(journey.blockReason().isPresent());
         if (journey.blockReason().isPresent()) output.writeByte(journey.blockReason().orElseThrow().wireTag());
         ActorExecutionStateCodec.writeId(output, journey.executionId());
-        output.writeLong(journey.routeRevision()); TraversalRejoinCodec.write(output, journey.rejoin());
+        StationApproachStateCodec.write(output, journey.spatial());
     }
 
     private static ResidentMigrationJourney readJourney(DataInputStream input) throws IOException {
@@ -547,6 +547,6 @@ final class HumanPopulationPayloadCodecs {
         }
         return new ResidentMigrationJourney(resident.value(), origin.value(), household.value(), destination.value(), route, routeIndex,
                 FrontierWireTags.require(ResidentMigrationStatus.class, status), reason, ActorExecutionStateCodec.readId(input),
-                input.readLong(), TraversalRejoinCodec.read(input));
+                StationApproachStateCodec.read(input));
     }
 }

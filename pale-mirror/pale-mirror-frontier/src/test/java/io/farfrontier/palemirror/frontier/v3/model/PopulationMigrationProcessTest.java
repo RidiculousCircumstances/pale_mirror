@@ -147,6 +147,31 @@ class PopulationMigrationProcessTest {
                 scheduled(coldEvents, "frontier.population.migration.progress")), ResidentMigrationAdvanced.class);
         var progressed = HumanPopulationStateSupport.advanceMigration(continued, next);
         assertTrue(progressed.humanPopulation().migration(actor).routeIndex() > journey.nextRouteIndex());
+
+        // Same real common-departure boundary, now with the unfinished target physically lost.
+        var damaged = closed.recordPhysicalDelta(new PhysicalDelta(journey.nextColdPosition().offset(0, 1, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:migration-blocked-checkpoint"));
+        var held = ModeledActorBodyFacts.unloaded(damaged, actor);
+        var heldJourney = held.humanPopulation().migration(actor);
+        assertEquals(observed.supportingSurface(), heldJourney.spatial().waitingOrigin().orElseThrow());
+        assertEquals(journey.routeIndex(), heldJourney.routeIndex());
+        assertEquals(journey.route(), heldJourney.route());
+        assertEquals(observed, held.actorLocations().get(actor).body());
+        assertEquals(held, codec.decode(codec.encode(held)));
+        assertTrue(ResidentMigrationJourneyKnowledge.approach(held, heldJourney).isEmpty());
+        assertEquals(ResidentMigrationBlockReason.ROUTE_OBSTRUCTED,
+                payload(PopulationMigrationProcess.planProgress(held, due), ResidentMigrationBlocked.class).reason());
+        var repaired = held.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(java.util.Map.of()));
+        var refreshed = ResidentMigrationJourneyKnowledge.approach(repaired, heldJourney).orElseThrow();
+        assertEquals(observed.supportingSurface(), refreshed.current());
+        assertEquals(new SurfaceAnchor(journey.nextColdPosition()), refreshed.target());
+        assertSame(held.humanPopulation(), repaired.humanPopulation(), "reading a HOT hint cannot replay/adopt canonical work");
+        var resumed = payload(PopulationMigrationProcess.planProgress(repaired, due), ResidentMigrationRejoinAdvanced.class);
+        assertEquals(resumed, roundTrip(resumed));
+        var reached = HumanPopulationStateSupport.advanceMigrationRejoin(repaired, resumed);
+        assertEquals(journey.nextRouteIndex(), reached.humanPopulation().migration(actor).routeIndex());
+        assertFalse(reached.humanPopulation().migration(actor).spatial().pending());
+        assertEquals(reached, codec.decode(codec.encode(reached)));
     }
 
     @Test

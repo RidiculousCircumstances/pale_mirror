@@ -55,7 +55,7 @@ final class HumanPopulationStateCodec {
             FrontierWorldStateCodec.writeCount(output, journey.routeIndex()); output.writeByte(journey.status().wireTag()); output.writeBoolean(journey.blockReason().isPresent());
             if (journey.blockReason().isPresent()) output.writeByte(journey.blockReason().orElseThrow().wireTag());
             ActorExecutionStateCodec.writeId(output, journey.executionId());
-            output.writeLong(journey.routeRevision()); TraversalRejoinCodec.write(output, journey.rejoin());
+            StationApproachStateCodec.write(output, journey.spatial());
         }
         FrontierWorldStateCodec.writeCount(output, population.provisions().size());
         for (SettlementProvision provision : population.provisions().values().stream().sorted(Comparator.comparing(SettlementProvision::settlementId)).toList()) {
@@ -180,7 +180,7 @@ final class HumanPopulationStateCodec {
                     ? java.util.Optional.of(readBlockReason(input)) : java.util.Optional.empty();
             ResidentMigrationJourney journey = new ResidentMigrationJourney(resident, origin, household, destination, route, routeIndex,
                     FrontierWireTags.require(ResidentMigrationStatus.class, status), reason, ActorExecutionStateCodec.readId(input),
-                    input.readLong(), TraversalRejoinCodec.read(input));
+                    StationApproachStateCodec.read(input));
             if (migrations.put(resident, journey) != null) throw new IllegalArgumentException("duplicate resident migration journey");
         }
         if (!hasProvisions) return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations);

@@ -19,12 +19,7 @@ final class TransitActivityCapability implements ActorActivityCapability {
             var start = request.observedPosition().supportingSurface();
             if (journey.currentPosition().equals(start.support()))
                 return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
-            var order = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
-                    journey.residentId(), journey.residentId(), journey.routeIndex(), Math.incrementExact(journey.routeRevision()),
-                    java.util.List.of(new SurfaceAnchor(journey.nextColdPosition())), TraversalCapability.PEDESTRIAN,
-                    io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
-            var path = KnownPedestrianRouteKnowledge.forFrontier(request.expectedState()).path(start, order);
-            var replacement = journey.withRejoin(new io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin(path, 0));
+            var replacement = journey.withSpatial(ResidentMigrationJourneyKnowledge.checkpoint(request.expectedState(), journey, start));
             return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin()
                     .humanPopulation(request.expectedState().humanPopulation().replaceMigration(journey, replacement)));
         };

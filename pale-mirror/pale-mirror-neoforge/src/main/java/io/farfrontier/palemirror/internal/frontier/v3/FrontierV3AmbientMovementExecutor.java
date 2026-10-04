@@ -126,6 +126,18 @@ final class FrontierV3AmbientMovementExecutor {
                 FrontierV3GoalNavigation.stop(body, actuation);
                 return false;
             }
+            var approach = io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourneyKnowledge.approach(state, journey);
+            if (journey.spatial().pending() && approach.isEmpty()) {
+                FrontierV3GoalNavigation.stop(body, actuation);
+                return false;
+            }
+            var hint = approach.map(value -> value.path().subList(value.cursor(), value.path().size()))
+                    .orElseGet(() -> journey.route().subList(journey.routeIndex(), journey.nextRouteIndex() + 1)
+                            .stream().map(io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor::new).toList());
+            FrontierV3GoalNavigation.pursue(level, body, FrontierV3GoalNavigation.Goal.routed(
+                    io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourneyKnowledge.order(journey, journey.routeRevision()),
+                    hint, state.bootstrap().bounds()), actuation);
+            return false;
         }
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL && !lease.goalBody().equals(state.actorLocations().get(actorId).body())) {
             BlockPos physicalTarget = minecraftBody(lease.goalBody());

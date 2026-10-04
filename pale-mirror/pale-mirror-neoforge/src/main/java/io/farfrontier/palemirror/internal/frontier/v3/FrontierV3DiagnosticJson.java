@@ -568,6 +568,8 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"origin\":\"" + quote(journey.originSettlementId().value()) + "\",\"destination\":\""
                 + quote(journey.destinationSettlementId().value()) + "\",\"routeIndex\":" + journey.routeIndex()
                 + ",\"routeLength\":" + journey.route().size() + ",\"current\":" + position(journey.currentPosition())
+                + ",\"spatialRevision\":" + journey.routeRevision() + ",\"approachCursor\":" + journey.rejoin().map(value -> value.cursor()).orElse(-1)
+                + ",\"waitingOrigin\":" + journey.spatial().waitingOrigin().map(value -> position(value.support())).orElse("null")
                 + ",\"next\":" + next + ",\"ambientLease\":\"" + quote(lease == null ? "NONE" : lease.status().name())
                 + "\",\"ambientGoal\":\"" + quote(goal) + "\",\"goalPosition\":" + goalPosition + "}";
     }
