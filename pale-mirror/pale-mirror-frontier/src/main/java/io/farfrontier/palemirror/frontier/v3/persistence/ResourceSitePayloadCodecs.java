@@ -531,6 +531,8 @@ final class ResourceSitePayloadCodecs {
                     output.writeInt(arrived.nextWorkSlot());
                     output.writeByte(arrived.kind().wireTag());
                     FrontierWorldPayloadCodecs.writeBody(output, arrived.observedWorker());
+                    output.writeLong(arrived.targetGeneration());
+                    ActorHotObservationCodec.write(output, arrived.observation());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
@@ -542,35 +544,7 @@ final class ResourceSitePayloadCodecs {
                                 FrontierWorldPayloadCodecs.readSubject(input).value(),
                                 input.readLong(), input.readInt(),
                                 ResourceSiteHarvestGoal.Kind.requireWireTag(input.readUnsignedByte()),
-                                FrontierWorldPayloadCodecs.readBody(input)));
-            }
-        };
-    }
-    static PayloadCodec harvestHotTransitObserved() {
-        return new PayloadCodec() {
-            @Override public String type() { return "frontier.resource_site_harvest_hot_transit_observed"; }
-            @Override public byte[] encode(FrontierPayload payload) {
-                ResourceSiteHarvestHotTransitObserved observed = (ResourceSiteHarvestHotTransitObserved) payload;
-                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-                    FrontierWorldPayloadCodecs.writeSubject(output, observed.jobId());
-                    FrontierWorldPayloadCodecs.writeString(output, observed.leaseId().value());
-                    FrontierWorldPayloadCodecs.writeSubject(output, observed.workerId());
-                    output.writeLong(observed.layoutRevision());
-                    output.writeInt(observed.nextWorkSlot());
-                    output.writeByte(observed.kind().wireTag());
-                    FrontierWorldPayloadCodecs.writeBody(output, observed.observedWorker());
-                });
-            }
-            @Override public FrontierPayload decode(byte[] bytes) {
-                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
-                        new ResourceSiteHarvestHotTransitObserved(
-                                FrontierWorldPayloadCodecs.readSubject(input).value(),
-                                new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(
-                                        FrontierWorldPayloadCodecs.readString(input)),
-                                FrontierWorldPayloadCodecs.readSubject(input).value(),
-                                input.readLong(), input.readInt(),
-                                ResourceSiteHarvestGoal.Kind.requireWireTag(input.readUnsignedByte()),
-                                FrontierWorldPayloadCodecs.readBody(input)));
+                                FrontierWorldPayloadCodecs.readBody(input), input.readLong(), ActorHotObservationCodec.read(input)));
             }
         };
     }

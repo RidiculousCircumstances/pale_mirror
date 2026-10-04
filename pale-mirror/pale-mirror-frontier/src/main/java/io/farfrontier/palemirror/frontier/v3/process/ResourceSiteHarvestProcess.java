@@ -567,17 +567,13 @@ public final class ResourceSiteHarvestProcess {
                 : finishAfterColdReturn(state, job, action);
     }
 
-    /**
-     * Commits a loaded checkpoint from one exact HOT lease.  The same semantic job transition as
-     * COLD is applied, but its observed body is additionally the lease recovery checkpoint and
-     * the only canonical actor position.  No partial job/lease/actor state can be installed.
-     */
+    /** Retired historical cursor command; current field work has only semantic goal navigation. */
     public static FrontierWorldState reduceHotTraversalAdvanced(FrontierWorldState state, SubjectId subject,
                                                                  ResourceSiteHarvestHotTraversalAdvanced advanced) {
         throw new IllegalArgumentException("field cursor traversal is retired by goal navigation");
     }
 
-    /** A goal arrival changes only the worker's location/work gate, never CellId output. */
+    /** A captured arrival clears the family gate only; common inspection already owns the body. */
     public static FrontierWorldState reduceHotGoalArrived(FrontierWorldState state, SubjectId subject,
                                                           ResourceSiteHarvestHotGoalArrived arrived) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
@@ -588,24 +584,19 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("field HOT goal arrival has a foreign job owner");
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         if (arrived.layoutRevision() != goal.layoutRevision()
-                || arrived.nextWorkSlot() != goal.nextWorkSlot() || arrived.kind() != goal.kind())
+                || arrived.nextWorkSlot() != goal.nextWorkSlot() || arrived.kind() != goal.kind()
+                || arrived.targetGeneration() != job.target().generation())
             throw new IllegalArgumentException("field HOT goal arrival has a stale semantic target");
+        SceneLease lease = FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, arrived.leaseId());
+        var execution = state.actorExecutions().current(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId());
+        if (execution == null || !execution.activityOwnerId().equals(job.id()))
+            throw new IllegalArgumentException("field HOT arrival lacks its exact admitted execution");
+        arrived.observation().require(state, execution, lease.revision(), arrived.observedWorker());
         return FrontierResourceSiteHarvestSceneSupport.arriveGoal(state, lifecycle, job, goal,
                 arrived.leaseId(), arrived.observedWorker());
     }
 
-    public static FrontierWorldState reduceHotTransitObserved(FrontierWorldState state, SubjectId subject,
-                                                               ResourceSiteHarvestHotTransitObserved observed) {
-        ResourceSiteHarvestJob job = activeJobAtSite(state, subject, observed.jobId());
-        if (job == null || !job.id().equals(observed.jobId()) || !job.workerId().equals(observed.workerId())
-                || state.resourceSites().site(subject).phase() != ResourceSitePhase.HARVESTING)
-            throw new IllegalArgumentException("interrupted HOT field goal has no current farmer");
-        ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
-        if (observed.layoutRevision() != goal.layoutRevision() || observed.nextWorkSlot() != goal.nextWorkSlot()
-                || observed.kind() != goal.kind() || goal.arrivedAt(observed.observedWorker().supportingSurface()))
-            throw new IllegalArgumentException("interrupted HOT field goal has a stale or arrived target");
-        return FrontierResourceSiteHarvestSceneSupport.observeTransit(state, job, observed.leaseId(), observed.observedWorker());
-    }
     /** Retains actual COLD travel without promoting an intermediate support into a work cursor. */
     public static FrontierWorldState reduceColdGoalAdvanced(FrontierWorldState state, SubjectId subject,
                                                              ResourceSiteHarvestColdGoalAdvanced advanced) {

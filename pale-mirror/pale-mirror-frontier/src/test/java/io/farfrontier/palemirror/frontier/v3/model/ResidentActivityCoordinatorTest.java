@@ -17,9 +17,7 @@ class ResidentActivityCoordinatorTest {
         var job = fixture.job();
         var state = fixture.state();
         var goal = ResourceSiteHarvestGoal.current(state, job);
-        state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHotGoalArrived(state,
-                fixture.site(), new ResourceSiteHarvestHotGoalArrived(job.id(), fixture.lease().id(), job.workerId(),
-                        goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+        state = ResourceSiteHarvestProcessTest.inspectGoal(state, fixture.site(), job, fixture.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, fixture.site(), fixture.lease().id());
         long hungryAt = 27_000;
         assertTrue(state.humanPopulation().nutrition(job.workerId()).accrueThrough(hungryAt,

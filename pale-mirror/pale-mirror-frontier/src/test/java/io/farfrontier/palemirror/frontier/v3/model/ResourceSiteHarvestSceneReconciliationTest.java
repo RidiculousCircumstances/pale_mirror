@@ -46,9 +46,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
         var state = oneObservedCrop(hot);
         var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         var goal = ResourceSiteHarvestGoal.current(state, job);
-        state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHotGoalArrived(state, hot.site(),
-                new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(), goal.layoutRevision(),
-                        goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+        state = ResourceSiteHarvestProcessTest.inspectGoal(state, hot.site(), job, hot.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
                 new ResourceSiteHarvestCropPrepared(job.id(), goal.nextWorkSlot(), job.target().generation()));
@@ -126,9 +124,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
         var state = hot.state();
         var goal = ResourceSiteHarvestGoal.current(state, job);
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
-            state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHotGoalArrived(state, hot.site(),
-                    new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(),
-                            goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+            state = ResourceSiteHarvestProcessTest.inspectGoal(state, hot.site(), job, hot.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));

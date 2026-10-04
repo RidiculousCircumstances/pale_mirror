@@ -246,34 +246,6 @@ public final class BakeryProcess {
         return replace(state, job.withBakeryWork(work.advance(next)), inventory);
     }
 
-    static FrontierWorldState hotGoalArrived(FrontierWorldState state, SubjectId subject, BakeryHotGoalArrived arrived) {
-        ProductionJob job = state.productionJobs().get(arrived.jobId());
-        if (job == null || !job.settlementId().equals(subject) || job.bakeryWork().isEmpty()
-                || job.bakeryWork().orElseThrow().phase() != arrived.phase())
-            throw new IllegalArgumentException("bakery HOT arrival has no current owner phase");
-        SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, arrived.leaseId());
-        BodyPosition expected = BakeryWorkGoal.current(state, job).station().standingBody();
-        if (!arrived.observedWorker().equals(expected))
-            throw new IllegalArgumentException("bakery HOT arrival differs from the semantic station");
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(job.workerId(), actors.get(job.workerId()).withBody(expected));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
-    }
-
-    static FrontierWorldState hotAccessCleared(FrontierWorldState state, SubjectId subject,
-                                               BakeryHotAccessCleared cleared) {
-        ProductionJob job = state.productionJobs().get(cleared.jobId());
-        if (job == null || !job.settlementId().equals(subject) || job.bakeryWork().isEmpty()
-                || job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DELIVERED)
-            throw new IllegalArgumentException("bakery access exit has no delivered owner");
-        SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, cleared.leaseId());
-        if (!ServiceAccessCoordinator.witnessedBakeryExit(state, job, cleared.observedWorker()))
-            throw new IllegalArgumentException("bakery access exit lacks its physical boundary witness");
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(job.workerId(), actors.get(job.workerId()).withBody(cleared.observedWorker()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
-    }
-
     static FrontierWorldState hotBlockChanged(FrontierWorldState state, SubjectId subject, BakeryHotBlockChanged changed) {
         ProductionJob job = state.productionJobs().get(changed.jobId());
         if (job == null || !job.settlementId().equals(subject) || job.bakeryWork().isEmpty()

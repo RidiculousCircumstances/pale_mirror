@@ -97,7 +97,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.market_work_order_cancelled", "frontier.market_relationship_incident_recorded", "frontier.market_demand_expired", "frontier.market_demand_cancelled",
             "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
-            "frontier.production_cold_work_advanced", "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_goal_arrived", "frontier.bakery_hot_access_cleared",
+            "frontier.production_cold_work_advanced", "frontier.bakery_cold_step", "frontier.bakery_input_reallocated",
             "frontier.bakery_hot_effect_prepared", "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick",
             "frontier.bakery_hot_hand_release", "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff", "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized",
@@ -114,7 +114,6 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resource_site_harvest_segment_renewed", "frontier.resource_site_harvest_blocked_cell_skipped", "frontier.resource_site_harvest_immature_cell_skipped", "frontier.resource_site_harvest_work_changed",
             "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_route_blocked",
             "frontier.resource_site_harvest_route_cleared", "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived",
-                    "frontier.resource_site_harvest_hot_transit_observed",
             "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
             "frontier.resource_site_harvest_scene_lease_prepared",
             "frontier.resource_site_harvest_scene_preparation_aborted",
@@ -625,7 +624,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
     private static Set<String> economyCommands() { return types(
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
-            "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_goal_arrived", "frontier.bakery_hot_access_cleared", "frontier.bakery_hot_effect_prepared",
+            "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_effect_prepared",
             "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
             "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff"); }
@@ -644,7 +643,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resource_site_harvest_segment_renewed", "frontier.resource_site_harvest_blocked_cell_skipped", "frontier.resource_site_harvest_immature_cell_skipped", "frontier.resource_site_harvest_work_changed",
             "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_route_blocked", "frontier.resource_site_harvest_route_cleared",
             "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
-            "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived", "frontier.resource_site_harvest_hot_transit_observed",
+            "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived",
             "frontier.resource_site_harvest_scene_lease_prepared",
             "frontier.resource_site_harvest_scene_preparation_aborted",
             "frontier.resource_site_harvest_scene_lease_handoff"); }
@@ -799,7 +798,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_relationship_incident_recorded", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",
                     "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
                     "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
-                    "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_goal_arrived", "frontier.bakery_hot_access_cleared", "frontier.bakery_hot_effect_prepared",
+                    "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_effect_prepared",
                     "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
                     "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled", "frontier.production_work_traversal_blocked",
                     "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff",
@@ -821,7 +820,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resource_site_harvest_scene_reconciled",
                     "frontier.resource_site_harvest_hand_projected",
                     "frontier.resource_site_harvest_hand_release",
-                    "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived", "frontier.resource_site_harvest_hot_transit_observed", "frontier.resource_site_harvest_scene_lease_prepared",
+                    "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived", "frontier.resource_site_harvest_scene_lease_prepared",
                     "frontier.resource_site_harvest_scene_preparation_aborted",
                     "frontier.resource_site_harvest_scene_lease_handoff",
                     "frontier.resource_site_conflict_observed", "frontier.resource_field_cell_observed", "frontier.resource_field_work_access_observed",

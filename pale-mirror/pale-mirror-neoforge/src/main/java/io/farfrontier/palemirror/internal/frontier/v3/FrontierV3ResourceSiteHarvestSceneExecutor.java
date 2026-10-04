@@ -19,7 +19,6 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestRouteBlock
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestTargetRetargeted;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestRouteCleared;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHotGoalArrived;
-import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHotTransitObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestGoal;
 import io.farfrontier.palemirror.frontier.v3.model.ServiceAccessCoordinator;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentActivityCoordinator;
@@ -280,18 +279,12 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) {
             conflict(level, runtime, lease, "hot-worker-unavailable"); return;
         }
-        var actuation = workActuation(state, runtime, job, worker);
+        var actuation = workActuation(state, runtime, lease, job, worker);
         if (!actuation.current(worker)) return;
         var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
         if (supportedExit.isPresent() && ServiceAccessCoordinator.witnessedHarvestExit(
                 state, job, lease.id(), supportedExit.orElseThrow())) {
-            var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
-            if (binding.isEmpty()) return;
-            ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
-            var exit = new ResourceSiteHarvestHotTransitObserved(job.id(), lease.id(), job.workerId(),
-                    goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), supportedExit.orElseThrow());
-            ResourceSiteHarvestProcess.reduceHotTransitObserved(state, job.siteId(), exit);
-            submitBound(runtime, "resource-site-harvest-access-cleared", lease.id().value(), exit, binding.orElseThrow());
+            FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);
             return;
         }
         // The work owner fences unfinished physical effects, not personal cargo.
@@ -527,23 +520,34 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         List<io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor> observed = goal.legalStations().stream()
                 .filter(station -> FrontierV3SemanticMovement.arrived(level, worker, station)).toList();
         if (observed.isEmpty()) return false;
-        var actuation = workActuation(state, runtime, job, worker);
+        var actuation = workActuation(state, runtime, lease, job, worker);
         if (!FrontierV3GoalNavigation.stop(worker, actuation)) return false;
         if (observed.size() != 1) {
             conflict(level, runtime, lease, "field-work-goal-arrival-ambiguous");
             return true;
         }
-        boolean gateAlreadyRetained = goal.kind() == ResourceSiteHarvestGoal.Kind.WORK_CELL
-                ? ResourceSiteHarvestGoal.actorAtWorkCell(state, job) : ResourceSiteHarvestGoal.actorAtDepot(state, job);
-        if (gateAlreadyRetained && job.navigationBlock().isEmpty() && observed.getFirst().standingBody().equals(
-                state.actorLocations().get(job.workerId()).body())) return false;
+        var witness = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
+                actuation.id(), lease.revision());
+        boolean bodyAlreadyInspected = observed.getFirst().standingBody().equals(
+                state.actorLocations().get(job.workerId()).body());
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker)) return true;
+        state = runtime.decodedState().orElseThrow();
+        if (!actuation.current(worker)) return true;
+        var currentJob = state.resourceSites().site(job.siteId()).harvestJob(job.id()).orElse(null);
+        var currentLease = state.sceneLeases().get(lease.id());
+        if (currentJob == null || currentLease == null || currentLease.status() != SceneLeaseStatus.HOT
+                || currentLease.revision() != witness.scopeRevision()
+                || !ResourceSiteHarvestGoal.current(state, currentJob).equals(goal)) return true;
+        job = currentJob;
+        if (job.navigationBlock().isEmpty()) return !bodyAlreadyInspected;
         var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
         if (binding.isEmpty()) {
             // No route or synthetic crop pose: wait at the actual observed station.
             return true;
         }
         var arrived = new ResourceSiteHarvestHotGoalArrived(job.id(), lease.id(), job.workerId(),
-                goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), observed.getFirst().standingBody());
+                goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), observed.getFirst().standingBody(),
+                job.target().generation(), witness);
         submitBound(runtime, "resource-site-harvest-goal-arrived", lease.id().value(), arrived, binding.orElseThrow());
         return true;
     }
@@ -627,14 +631,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (supported.isEmpty()) return true;
         var body = supported.orElseThrow();
         if (body.equals(state.actorLocations().get(job.workerId()).body())) return false;
-        var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
-        if (binding.isEmpty()) return true;
-        ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
-        var observed = new ResourceSiteHarvestHotTransitObserved(job.id(), lease.id(), job.workerId(),
-                goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), body);
-        ResourceSiteHarvestProcess.reduceHotTransitObserved(state, job.siteId(), observed);
-        submitBound(runtime, "resource-site-harvest-transit-interrupted", lease.id().value(), observed,
-                binding.orElseThrow());
+        FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);
         return true;
     }
 
@@ -783,12 +780,19 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     }
 
     private static FrontierV3ActorActuation workActuation(FrontierWorldState state,
-            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ResourceSiteHarvestJob job, Mob worker) {
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, ResourceSiteHarvestJob job, Mob worker) {
         var execution = state.actorExecutions().current(
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId());
         if (execution == null || !execution.activityOwnerId().equals(job.id()))
             throw new IllegalArgumentException("field command lost its exact admitted execution");
-        return FrontierV3ActorActuation.capture(state, worker, execution, runtime::decodedState);
+        var goal = ResourceSiteHarvestGoal.current(state, job);
+        return FrontierV3ActorActuation.capture(state, worker, execution, () -> runtime.decodedState().filter(current -> {
+            var retained = current.resourceSites().site(job.siteId()).harvestJob(job.id()).orElse(null);
+            var scope = current.sceneLeases().get(lease.id());
+            return retained != null && scope != null && scope.status() == SceneLeaseStatus.HOT
+                    && scope.revision() == lease.revision() && retained.target().equals(job.target())
+                    && ResourceSiteHarvestGoal.current(current, retained).equals(goal);
+        }));
     }
 
 

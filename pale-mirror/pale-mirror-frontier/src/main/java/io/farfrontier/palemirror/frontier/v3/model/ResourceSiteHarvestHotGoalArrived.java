@@ -10,14 +10,18 @@ import java.util.Objects;
 public record ResourceSiteHarvestHotGoalArrived(SubjectId jobId, SceneLeaseId leaseId,
                                                 SubjectId workerId, long layoutRevision,
                                                 int nextWorkSlot, ResourceSiteHarvestGoal.Kind kind,
-                                                BodyPosition observedWorker) implements FrontierPayload {
+                                                BodyPosition observedWorker, long targetGeneration,
+                                                io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation observation) implements FrontierPayload {
     public ResourceSiteHarvestHotGoalArrived {
         Objects.requireNonNull(jobId, "field goal arrival job");
         Objects.requireNonNull(leaseId, "field goal arrival lease");
         Objects.requireNonNull(workerId, "field goal arrival worker");
         Objects.requireNonNull(kind, "field goal arrival kind");
         Objects.requireNonNull(observedWorker, "field goal arrival body");
-        if (layoutRevision < 1 || nextWorkSlot < 0)
+        Objects.requireNonNull(observation, "captured field arrival authority");
+        if (!workerId.equals(observation.actuation().body().actorId()))
+            throw new IllegalArgumentException("field goal arrival has a foreign body witness");
+        if (layoutRevision < 1 || nextWorkSlot < 0 || targetGeneration < 0)
             throw new IllegalArgumentException("field goal arrival has invalid layout or work slot");
     }
 

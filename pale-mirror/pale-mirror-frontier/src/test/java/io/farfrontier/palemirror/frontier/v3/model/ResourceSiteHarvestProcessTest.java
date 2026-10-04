@@ -239,9 +239,7 @@ class ResourceSiteHarvestProcessTest {
             ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, current);
             BodyPosition station = goal.representative().standingBody();
             if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, current))
-                state = ResourceSiteHarvestProcess.reduceHotGoalArrived(state, site,
-                        new ResourceSiteHarvestHotGoalArrived(current.id(), leaseId, current.workerId(),
-                                goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), station));
+                state = inspectGoal(state, site, current, leaseId);
             state = completeLabourHot(state, site, leaseId);
             current = (ResourceSiteHarvestJob) state.resourceSites().site(site).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
             int selected = current.progress().nextCropSlotIndex();
@@ -589,9 +587,7 @@ class ResourceSiteHarvestProcessTest {
         ResourceSiteHarvestJob job = hot.job();
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(hot.state(), job);
         BodyPosition next = ResourceSiteHarvestKnownNavigation.path(hot.state(), job).get(1).standingBody();
-        FrontierWorldState observed = ResourceSiteHarvestProcess.reduceHotTransitObserved(hot.state(), hot.site(),
-                new ResourceSiteHarvestHotTransitObserved(job.id(), hot.lease().id(), job.workerId(),
-                        goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), next));
+        FrontierWorldState observed = ModeledActorBodyFacts.inspected(hot.state(), job.workerId(), next);
         assertEquals(job.progress(), ((ResourceSiteHarvestJob) observed.resourceSites().site(hot.site())
                 .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow()).progress());
         FrontierWorldState draining = observed.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.DRAINING);
@@ -601,6 +597,20 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(next, released.actorLocations().get(job.workerId()).body());
         assertEquals(next.supportingSurface(), ResourceSiteHarvestKnownNavigation.path(released, job).getFirst());
         assertEquals(released, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released)));
+    }
+    /** Independent modeled physical fact; the field receipt only clears its own blocked goal. */
+    static FrontierWorldState inspectGoal(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job,
+                                          SceneLeaseId leaseId) {
+        ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
+        var execution = state.actorExecutions().current(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId());
+        var witness = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                        ActorBodyAuthority.current(state, job.workerId()), execution), state.sceneLeases().get(leaseId).revision());
+        state = ModeledActorBodyFacts.inspected(state, job.workerId(), goal.representative().standingBody());
+        return job.navigationBlock().isEmpty() ? state : ResourceSiteHarvestProcess.reduceHotGoalArrived(state, site,
+                new ResourceSiteHarvestHotGoalArrived(job.id(), leaseId, job.workerId(), goal.layoutRevision(),
+                        goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody(), job.target().generation(), witness));
     }
     record HotHarvest(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job, SceneLease lease) { }
     record ColdHarvest(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job) { }

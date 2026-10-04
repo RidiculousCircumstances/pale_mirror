@@ -321,20 +321,6 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(job.siteId(), arrived)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
-        if (command.payload() instanceof ResourceSiteHarvestHotTransitObserved observed) {
-            try {
-                ScheduledAction binding = command.scheduleBinding().map(
-                        io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding::action).orElseThrow(
-                        () -> new IllegalArgumentException("interrupted HOT field goal has no engine schedule binding"));
-                if (!binding.kind().equals(ResourceSiteHarvestProcess.COLD_PROGRESS_KIND))
-                    throw new IllegalArgumentException("interrupted HOT field goal has a foreign continuation kind");
-                ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state,
-                        new ResourceSiteHarvestSceneCause(binding.subject(), observed.jobId()));
-                ResourceSiteHarvestProcess.requireContinuationBinding(job, binding);
-                ResourceSiteHarvestProcess.reduceHotTransitObserved(state, job.siteId(), observed);
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.siteId(), observed)));
-            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-        }
         if (command.payload() instanceof ResourceSiteHarvestSegmentRenewed renewed) {
             try {
                 ScheduledAction binding = command.scheduleBinding().map(
@@ -504,7 +490,6 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestColdTraversalAdvanced advanced -> ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, event.subject(), advanced);
             case ResourceSiteHarvestColdGoalAdvanced advanced -> ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, event.subject(), advanced);
             case ResourceSiteHarvestColdGoalHeld held -> ResourceSiteHarvestProcess.reduceColdGoalHeld(state, event.subject(), held);
-            case ResourceSiteHarvestHotTransitObserved observed -> ResourceSiteHarvestProcess.reduceHotTransitObserved(state, event.subject(), observed);
             case ResourceSiteHarvestReturned returned -> ResourceSiteHarvestProcess.reduceReturned(state, event.subject(), returned);
             case ResourceSiteHarvestSegmentRenewed renewed -> ResourceSiteHarvestProcess.reduceSegmentRenewed(state, event.subject(), renewed);
             case ResourceSiteHarvestBlockedCellSkipped skipped -> ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, event.subject(), skipped);

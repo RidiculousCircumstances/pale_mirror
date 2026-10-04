@@ -312,9 +312,7 @@ class FrontierProcessSceneSdkTest {
             SceneLease lease = activeHarvestLease(state(engine), job);
             ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state(engine), job);
             List<SurfaceAnchor> path = ResourceSiteHarvestKnownNavigation.path(state(engine), job);
-            return context.with(submitBound(engine, new ResourceSiteHarvestHotTransitObserved(job.id(), lease.id(), job.workerId(),
-                    goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), path.get(1).standingBody()),
-                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId())));
+            return context.with(bodyInspected(engine, job.workerId(), path.get(1).standingBody()));
         }
         @Override public HarvestContext releaseToCold(HarvestContext context) {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site()); SceneLease lease = activeHarvestLease(state(engine), job);
@@ -335,17 +333,29 @@ class FrontierProcessSceneSdkTest {
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectStaleObservation(HarvestContext context) {
             ResourceSiteHarvestJob job = harvest(context); SceneLease lease = activeHarvestLease(state(context.engine()), job);
             ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state(context.engine()), job);
-            assertRejectedBound(context.engine(), new ResourceSiteHarvestHotTransitObserved(job.id(), lease.id(), job.workerId(),
-                            goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(),
-                            state(context.engine()).actorLocations().get(job.workerId()).body()),
-                    scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId()));
+            var state = state(context.engine());
+            var actor = state.actorLocations().get(job.workerId());
+            assertRejected(context.engine(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(
+                    ActorBodyAuthority.current(state, job.workerId()),
+                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING,
+                    new BodyPosition(actor.body().x() + 1, actor.body().y(), actor.body().z()),
+                    actor.condition().health(), actor.body(), actor.condition().health(),
+                    state.actorExecutions().actors().get(job.workerId()).current()));
             return rejected(context, "stale harvest checkpoint");
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectSecondCursor(HarvestContext context) {
             ResourceSiteHarvestJob job = harvest(context); SceneLease lease = activeHarvestLease(state(context.engine()), job);
             ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state(context.engine()), job);
-            assertRejectedBound(context.engine(), new ResourceSiteHarvestHotTransitObserved(job.id(), lease.id(), job.workerId(),
-                            goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()),
+            var state = state(context.engine());
+            var witness = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
+                    new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                            ActorBodyAuthority.current(state, job.workerId()),
+                            state.actorExecutions().current(
+                                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId())),
+                    lease.revision());
+            assertRejectedBound(context.engine(), new ResourceSiteHarvestHotGoalArrived(job.id(), lease.id(), job.workerId(),
+                            goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody(),
+                            job.target().generation(), witness),
                     scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId()));
             return rejected(context, "goal arrival cannot masquerade as an intermediate transit checkpoint");
         }
@@ -539,6 +549,15 @@ class FrontierProcessSceneSdkTest {
         return submit(context, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(
                 ActorBodyAuthority.current(state, actor), location.body(), location.condition().health(),
                 location.body(), location.condition().health()));
+    }
+    private static EngineContext bodyInspected(EngineContext context, SubjectId actorId, BodyPosition observed) {
+        var current = state(context);
+        var actor = current.actorLocations().get(actorId);
+        return submit(context, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(
+                ActorBodyAuthority.current(current, actorId),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING,
+                actor.body(), actor.condition().health(), observed, actor.condition().health(),
+                current.actorExecutions().actors().get(actorId).current()));
     }
     private static EngineContext bodyUnloaded(EngineContext context, SubjectId actor) {
         var state = state(context);

@@ -190,7 +190,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
                 && goal.nextWorkSlot() == progress.nextCropSlotIndex() && goal.arrivedAt(observedStation);
     }
 
-    /** Arrival changes only an exact goal block; the actor body is retained by the owner reducer. */
+    /** Arrival changes only an exact goal block; common inspection already retained the actor body. */
     public ResourceSiteHarvestJob arriveAtSemanticGoal(ResourceSiteHarvestGoal goal) {
         Objects.requireNonNull(goal, "arrived field goal");
         if (!goal.jobId().equals(id) || !goal.siteId().equals(siteId) || !goal.workerId().equals(workerId)

@@ -318,12 +318,9 @@ public final class ProductionProcess {
     public static FrontierWorldState reduceBakeryColdStep(FrontierWorldState state, SubjectId subject, BakeryColdStep step) {
         return BakeryProcess.reduceColdStep(state, subject, step);
     }
-    public static FrontierWorldState reduceBakeryHotGoalArrived(FrontierWorldState state, SubjectId subject, BakeryHotGoalArrived arrived) {
-        return BakeryProcess.hotGoalArrived(state, subject, arrived);
-    }
-    public static FrontierWorldState reduceBakeryHotAccessCleared(FrontierWorldState state, SubjectId subject,
-                                                                   BakeryHotAccessCleared cleared) {
-        return BakeryProcess.hotAccessCleared(state, subject, cleared);
+    public static FrontierWorldState reduceBakeryHotBlockChanged(FrontierWorldState state, SubjectId subject,
+                                                                   BakeryHotBlockChanged changed) {
+        return BakeryProcess.hotBlockChanged(state, subject, changed);
     }
     public static FrontierWorldState reduceBakeryHotEffectPrepared(FrontierWorldState state, SubjectId subject, BakeryHotEffectPrepared prepared) {
         return BakeryProcess.prepareHotEffect(state, subject, prepared);
@@ -340,10 +337,6 @@ public final class ProductionProcess {
     public static FrontierWorldState reduceBakeryHotHandMaterialized(FrontierWorldState state, SubjectId subject,
                                                                       BakeryHotHandMaterialized observed) {
         return BakeryProcess.materializeHotHand(state, subject, observed);
-    }
-    public static FrontierWorldState reduceBakeryHotBlockChanged(FrontierWorldState state, SubjectId subject,
-                                                                   BakeryHotBlockChanged changed) {
-        return BakeryProcess.hotBlockChanged(state, subject, changed);
     }
     public static FrontierWorldState reduceBakeryInputReallocated(FrontierWorldState state, SubjectId subject,
                                                                    BakeryInputReallocated reallocated) {

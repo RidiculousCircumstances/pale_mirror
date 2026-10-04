@@ -79,9 +79,7 @@ class ResourceFieldCellObservedTest {
         var goal = ResourceSiteHarvestGoal.current(hot.state(), job);
         var state = hot.state();
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
-            state = ResourceSiteHarvestProcess.reduceHotGoalArrived(state, hot.site(),
-                    new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(),
-                            goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+            state = ResourceSiteHarvestProcessTest.inspectGoal(state, hot.site(), job, hot.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));
@@ -168,9 +166,7 @@ class ResourceFieldCellObservedTest {
         ResourceSiteHarvestJob job = hot.job();
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
-            state = ResourceSiteHarvestProcess.reduceHotGoalArrived(state, site,
-                    new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(),
-                            goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+            state = ResourceSiteHarvestProcessTest.inspectGoal(state, site, job, hot.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, site, hot.lease().id());
         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site,
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));
@@ -225,11 +221,14 @@ class ResourceFieldCellObservedTest {
         ResourceSiteHarvestJob rebound = withObstruction.resourceSites().site(site).harvestJob(retained.id()).orElseThrow();
         var blocked = ResourceSiteHarvestProcess.blockedPrefix(obstructed, retained.progress().nextCropSlotIndex());
         assertEquals(1, blocked.size());
-        int expectedNext = obstructed.skipBlocked(blocked.getFirst())
-                .nextWorkSlotAfter(retained.progress().nextCropSlotIndex()).orElse(-1);
-        assertEquals(expectedNext, ResourceSiteHarvestProcess.blockedPrefixContinuationGoal(
-                withObstruction, rebound, blocked).nextWorkSlot(),
-                "a noncontiguous completed cell is not the next positional route target");
+        var nextGoal = ResourceSiteHarvestProcess.blockedPrefixContinuationGoal(withObstruction, rebound, blocked);
+        assertTrue(nextGoal.nextWorkSlot() < obstructed.layout().cells().size());
+        var nextCell = obstructed.layout().cells().get(nextGoal.nextWorkSlot()).id();
+        assertFalse(blocked.contains(nextCell), "an unavailable selected cell must not hold the area task");
+        assertFalse(obstructed.cell(nextCell).accounted(), "the next target must retain real unfinished work");
+        assertFalse(obstructed.cell(nextCell).workAccessBlocked());
+        assertFalse(obstructed.expectedWorkOutcome(nextCell) == ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE
+                || obstructed.expectedWorkOutcome(nextCell) == ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED);
     }
 
     @Test void lossOfLastCellAfterEarlierBatchClosesWorkWithoutAnotherCropVisit() {

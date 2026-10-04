@@ -42,12 +42,17 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
         if (execution == null || !execution.activityOwnerId().equals(job.id()))
             throw new IllegalArgumentException("bakery command lost its exact admitted execution");
-        var actuation = FrontierV3ActorActuation.capture(state, worker, execution, runtime::decodedState);
-        if (!actuation.current(worker)) return;
         BakeryWorkGoal goal = BakeryWorkGoal.current(state, job);
+        var actuation = FrontierV3ActorActuation.capture(state, worker, execution, () -> runtime.decodedState().filter(current -> {
+            var retained = current.productionJobs().get(job.id());
+            var scope = current.sceneLeases().get(lease.id());
+            return retained != null && retained.bakeryWork().isPresent()
+                    && scope != null && scope.status() == SceneLeaseStatus.HOT && scope.revision() == lease.revision()
+                    && BakeryWorkGoal.current(current, retained).equals(goal);
+        }));
+        if (!actuation.current(worker)) return;
         if (ServiceAccessCoordinator.witnessedBakeryExit(state, job, FrontierV3SurfaceObservation.observedBody(worker))) {
-            FrontierV3CommandSubmission.submit(runtime, "bakery-access-cleared", lease.id().value(),
-                    new BakeryHotAccessCleared(job.id(), lease.id(), FrontierV3SurfaceObservation.observedBody(worker)));
+            FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);
             return;
         }
         if (ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(),
@@ -75,9 +80,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 return;
             }
             if (!lease.memberBody(state.actorLocations(), job.workerId()).equals(goal.station().standingBody())) {
-                FrontierV3CommandSubmission.submit(runtime, "bakery-goal-arrived", lease.id().value(),
-                        new BakeryHotGoalArrived(job.id(), lease.id(), goal.phase(),
-                                FrontierV3SurfaceObservation.observedAt(worker, goal.station())));
+                FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);
                 return;
             }
             if (job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED) {

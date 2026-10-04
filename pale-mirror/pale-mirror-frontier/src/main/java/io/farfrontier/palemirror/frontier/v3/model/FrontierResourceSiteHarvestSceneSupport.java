@@ -174,7 +174,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         return lease;
     }
 
-    /** Atomically retains one observed semantic arrival and its sole canonical actor body. */
+    /** Retains the family gate only after the common body owner independently inspected arrival. */
     public static FrontierWorldState arriveGoal(FrontierWorldState state, ResourceSiteLifecycle lifecycle,
                                                  ResourceSiteHarvestJob job, ResourceSiteHarvestGoal goal,
                                                  SceneLeaseId leaseId, BodyPosition observedWorker) {
@@ -185,30 +185,13 @@ public final class FrontierResourceSiteHarvestSceneSupport {
             throw new IllegalArgumentException("field HOT arrival is not at a declared semantic station");
         requireHotLease(state, job, leaseId);
         ActorLocation actor = state.actorLocations().get(job.workerId());
-        if (job.arriveAtSemanticGoal(goal).equals(job) && actor.body().equals(observedWorker))
+        if (!actor.body().equals(observedWorker))
+            throw new IllegalArgumentException("field HOT goal body must be independently inspected");
+        if (job.arriveAtSemanticGoal(goal).equals(job))
             throw new IllegalArgumentException("field HOT goal arrival is already retained");
         ResourceSiteLifecycle arrived = lifecycle.arriveHarvestGoal(job, goal);
-        java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(job.workerId(), actor.withBody(observedWorker));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+        return state.withChanges(FrontierWorldStateUpdate.begin()
                 .resourceSites(state.resourceSites().replace(arrived)));
-    }
-
-    /** Retains an actual support at an interrupted HOT goal without advancing CellId work. */
-    public static FrontierWorldState observeTransit(FrontierWorldState state, ResourceSiteHarvestJob job,
-                                                     SceneLeaseId leaseId, BodyPosition observedWorker) {
-        requireHotLease(state, job, leaseId);
-        ActorLocation actor = state.actorLocations().get(job.workerId());
-        if (actor == null || actor.body().equals(observedWorker))
-            throw new IllegalArgumentException("interrupted field worker has no new observed support");
-        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observedWorker.supportingSurface().support());
-        long distance = Math.abs((long) actor.body().x() - observedWorker.x())
-                + Math.abs((long) actor.body().y() - observedWorker.y())
-                + Math.abs((long) actor.body().z() - observedWorker.z());
-        if (distance > 54L) throw new IllegalArgumentException("interrupted field worker moved beyond one bounded HOT goal");
-        java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(job.workerId(), actor.withBody(observedWorker));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
     }
 
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
