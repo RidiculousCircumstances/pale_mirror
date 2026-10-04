@@ -29,8 +29,14 @@ public final class SettlementPedestrianGround {
         // Service stations are materialized support floors, not the natural terrain beneath
         // them. A route through the lower terrain datum would put the worker's feet inside
         // the depot/workshop sill even though its endpoint is the correct elevated station.
-        settlement.structures().forEach(structure ->
-                FrontierGrayboxPlan.publicAccessSurfaces(structure).forEach(surface -> add(surfaces, surface)));
+        settlement.structures().forEach(structure -> {
+            FrontierGrayboxPlan.publicAccessSurfaces(structure).forEach(surface -> add(surfaces, surface));
+            // A declared threshold/connector rests on the authored floor, not on
+            // natural terrain beneath it. Knowledge of support does not grant
+            // permission to enter: the passage view still owns headroom/access.
+            FrontierTraversalPlan.facilityPort(structure).ifPresent(port ->
+                    port.ingressSurfaces().forEach(surface -> add(surfaces, surface)));
+        });
         SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
                 bootstrap.ruleset().facilityCapacity().intactHousingBeds()).ownedSurfaces().forEach(surface -> add(surfaces, surface));
         return Collections.unmodifiableMap(new LinkedHashMap<>(surfaces));

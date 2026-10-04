@@ -13,7 +13,8 @@ public final class ServiceAreaDestinations {
     private ServiceAreaDestinations() { }
 
     public static boolean temporary(ServiceAccessPoint point, SurfaceAnchor surface) {
-        return point.boundary().occupied(surface.standingBody()) || point.waitingSurfaces().contains(surface);
+        return point.boundary().occupied(surface.standingBody()) || point.waitingSurfaces().contains(surface)
+                || point.egressSurfaces().contains(surface);
     }
 
     public static Optional<SurfaceAnchor> select(List<ServiceAccessPoint> points, SubjectId actorId,

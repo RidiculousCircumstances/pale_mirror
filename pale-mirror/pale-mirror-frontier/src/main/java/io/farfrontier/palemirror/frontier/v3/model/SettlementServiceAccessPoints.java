@@ -30,8 +30,7 @@ public final class SettlementServiceAccessPoints {
     public static java.util.Optional<ServiceAccessPoint> placementPoint(FrontierWorldState state,
             SubjectId settlementId, BodyPosition body) {
         return forSettlement(state, settlementId).stream()
-                .filter(point -> point.boundary().occupied(body)
-                        || point.waitingSurfaces().contains(body.supportingSurface()))
+                .filter(point -> ServiceAreaDestinations.temporary(point, body.supportingSurface()))
                 .findFirst();
     }
     public static List<ServiceAccessPoint> forSettlement(FrontierWorldState state, SubjectId settlementId) {
@@ -71,6 +70,10 @@ public final class SettlementServiceAccessPoints {
                 }
             }
         }
-        return new ServiceAccessPoint(port.depotId(), settlement.id(), port.serviceSurface(), port.accessBoundary(), waiting);
+        // Applicants must never park on the current user's escape perimeter.
+        // The same geometry policy governs clearance and both HOT/COLD waiting.
+        var egress = ServiceClearanceTargets.egressRegion(port.accessBoundary(), knowledge);
+        waiting.removeIf(surface -> egress.contains(surface) || !knowledge.traversable(List.of(surface)));
+        return new ServiceAccessPoint(port.depotId(), settlement.id(), port.serviceSurface(), port.accessBoundary(), waiting, egress);
     }
 }

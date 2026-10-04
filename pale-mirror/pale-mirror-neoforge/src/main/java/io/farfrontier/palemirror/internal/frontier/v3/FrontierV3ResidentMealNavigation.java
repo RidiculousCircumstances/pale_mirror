@@ -42,11 +42,15 @@ final class FrontierV3ResidentMealNavigation {
         }
         if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS) {
             ROUTES.remove(body);
-            var stations = KnownServiceExitNavigation.exitStations(state, meal.settlementId(), meal.depotId(),
-                    meal.residentId(), FrontierV3SurfaceObservation.observedBody(body).supportingSurface()).stream()
-                    .filter(station -> available(level, body, station)).toList();
+            var knownStations = KnownServiceExitNavigation.exitStations(state, meal.settlementId(), meal.depotId(),
+                    meal.residentId(), FrontierV3SurfaceObservation.observedBody(body).supportingSurface());
+            var stations = knownStations.stream().filter(station -> available(level, body, station)).toList();
             if (stations.isEmpty()) {
-                blocked(body, meal, "service_exit:no-available-supported-exit");
+                blocked(body, meal, "service_exit:no-available-supported-exit candidates=" + knownStations.stream()
+                        .map(station -> station.support() + ":" + (level.hasChunkAt(new net.minecraft.core.BlockPos(
+                                station.x(), station.y(), station.z()))
+                                ? FrontierV3SemanticMovement.detail(FrontierV3SemanticMovement.target(level, body, station))
+                                : "unloaded")).toList());
                 FrontierV3GoalNavigation.stop(body, actuation);
                 return;
             }

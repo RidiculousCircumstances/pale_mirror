@@ -108,7 +108,7 @@ public final class ResidentMealKnownNavigation {
         // blocks from the exterior station on irregular terrain.
         boolean directService = admitted && (Math.abs(start.x() - port.exteriorApproach().x())
                 + Math.abs(start.z() - port.exteriorApproach().z()) <= 3
-                || waitingSurfaces(state, meal, port, routeKnowledge).contains(start));
+                || SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces().contains(start));
         List<SurfaceAnchor> destinations = directService ? List.of(port.exteriorApproach())
                 : waitingSurfaces(state, meal, port, routeKnowledge).stream()
                     .filter(availableWaitingStation).toList();
@@ -141,17 +141,8 @@ public final class ResidentMealKnownNavigation {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
         SettlementStructure depot = settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
-        SurfaceAnchor apron = port.facing().step(port.exteriorApproach(), -1);
-        SurfaceAnchor current = actor.supportingSurface();
-        if (port.accessBoundary().occupied(actor.body())) return false;
-        for (int distance = 1; distance <= Math.max(4, (settlement.residents().size() + 1) / 2); distance++) {
-            for (SurfaceAnchor side : List.of(port.facing().stepLeft(apron, distance),
-                    port.facing().stepRight(apron, distance))) {
-                if (current.x() == side.x() && current.z() == side.z()) return true;
-            }
-        }
-        return false;
+        return SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces()
+                .contains(actor.supportingSurface());
     }
 
     private static List<SurfaceAnchor> waitingSurfaces(FrontierWorldState state, ResidentMeal meal,
@@ -178,7 +169,17 @@ public final class ResidentMealKnownNavigation {
 
     /** A retained approach cannot park on another owner's current or reserved exit. */
     public static boolean waitingStationAvailable(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor surface) {
-        return !ServiceDestinationClaims.excludedFor(state, meal.residentId()).contains(surface);
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
+        SettlementStructure depot = settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        var point = SettlementServiceAccessPoints.forDepot(state, settlement, depot);
+        // COLD stops its admitted entrance leg just before crossing the shared
+        // boundary. That transient approach is not a waiting/parking claim.
+        if ((point.egressSurfaces().contains(surface) || point.boundary().occupied(surface.standingBody()))
+                && ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId()))
+            return !ServiceDestinationClaims.forImmediateExit(state, meal.residentId()).contains(surface);
+        return point.waitingSurfaces().contains(surface)
+                && !ServiceDestinationClaims.excludedFor(state, meal.residentId()).contains(surface);
     }
 
     private static List<SurfaceAnchor> workshopExit(Settlement settlement, SurfaceAnchor start) {

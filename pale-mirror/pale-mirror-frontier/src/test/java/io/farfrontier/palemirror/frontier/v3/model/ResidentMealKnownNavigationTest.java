@@ -12,6 +12,81 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void concurrentFutureMealReservationsCannotHoldTheServiceExitHostage() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:concurrent-meal-exit"), 20260918065L));
+        var settlement = initial.bootstrap().settlements().get(6);
+        var depot = FrontierWorldState.depotId(settlement.id());
+        var port = SettlementServiceAccessPoints.depotPort(initial, settlement.id());
+        var actor = new SubjectId("resident:7-13");
+        var state = initial.withActorBody(actor, port.serviceSurface().standingBody());
+        var clearing = testMeal(state, settlement, actor, depot, SurfaceAnchor.at(135, 63, 11))
+                .advance(ResidentMeal.Phase.TAKE).advance(ResidentMeal.Phase.CLEAR_ACCESS);
+        state = withMeal(state, clearing);
+        var actualExits = KnownServiceExitNavigation.exitStations(state, settlement.id(), depot, actor, port.serviceSurface());
+        assertTrue(!actualExits.isEmpty());
+        int index = 0;
+        for (var exit : actualExits) {
+            SubjectId waiter = settlement.residents().stream().map(Resident::id)
+                    .filter(id -> !id.equals(actor)).toList().get(index++);
+            var meal = testMeal(state, settlement, waiter, depot, exit);
+            state = withMeal(state, meal);
+        }
+        assertTrue(!KnownServiceExitNavigation.exitStations(state, settlement.id(), depot, actor, port.serviceSurface()).isEmpty(),
+                "future eating targets are not committed passage permits");
+        var route = ResidentMealKnownNavigation.returnPath(state, clearing);
+        assertTrue(port.accessBoundary().cleared(route.getLast().standingBody()));
+        var point = SettlementServiceAccessPoints.forSettlement(state, settlement.id()).getFirst();
+        assertTrue(point.egressSurfaces().contains(route.getLast()));
+        assertTrue(ServiceAreaDestinations.temporary(point, route.getLast()),
+                "a resident must clear the escape perimeter after eating");
+        assertTrue(point.waitingSurfaces().stream().noneMatch(point.egressSurfaces()::contains));
+        assertTrue(!ServiceAccessCoordinator.depotAvailableForMeal(state, depot, settlement.residents().getFirst().id()));
+        state = state.withActorBody(actor, route.getLast().standingBody());
+        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, settlement.residents().getFirst().id()),
+                "a witnessed exit, not home arrival, releases the turn");
+        // Actual bodies remain exclusive even though deferred preferred targets do not.
+        var blocked = state.withActorBody(actor, port.serviceSurface().standingBody());
+        for (int i = 0; i < actualExits.size(); i++) {
+            var waiter = settlement.residents().stream().map(Resident::id).filter(id -> !id.equals(actor)).toList().get(i);
+            blocked = blocked.withActorBody(waiter, actualExits.get(i).standingBody());
+        }
+        assertTrue(KnownServiceExitNavigation.exitStations(blocked, settlement.id(), depot, actor, port.serviceSurface()).isEmpty());
+    }
+
+    @Test void authoredThresholdAndProtectedExitReplaceStaleWaitingPocketInBothModes() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:meal-egress-geometry"), 20260918065L));
+        var settlement = state.bootstrap().settlements().get(6);
+        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        var port = SettlementDepotServicePort.forDepot(depot);
+        var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
+                new KnownPedestrianRouteKnowledge.Passage(depot, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+        assertEquals(port.thresholdSurface(), knowledge.supportAt(port.thresholdSurface().x(), port.thresholdSurface().z()));
+        var exits = ServiceClearanceTargets.egressRegion(port.accessBoundary(), knowledge);
+        assertTrue(exits.stream().allMatch(surface -> knowledge.traversable(List.of(surface))));
+        assertTrue(exits.stream().noneMatch(surface -> surface.x() == 136 && surface.y() == 63),
+                "terrain beneath the floor/wall cannot be an exit station");
+        var actor = new SubjectId("resident:7-1");
+        var stalePocket = SurfaceAnchor.at(135, 63, 16);
+        assertTrue(exits.contains(stalePocket));
+        state = state.withActorBody(actor, stalePocket.standingBody());
+        var meal = testMeal(state, settlement, actor, FrontierWorldState.depotId(settlement.id()), stalePocket);
+        assertTrue(!ResidentMealKnownNavigation.atWaitingPocket(state, meal), "COLD must not hold an obsolete escape-blocking pocket");
+        assertTrue(ResidentMealKnownNavigation.waitingStationAvailable(state, meal, port.stations().getFirst()),
+                "an authorized entrance may use intermediate boundary stations without parking there");
+        var occupant = new SubjectId("resident:7-13");
+        var first = testMeal(state, settlement, occupant, meal.depotId(), stalePocket);
+        state = withMeal(state.withActorBody(occupant, port.serviceSurface().standingBody()), first);
+        assertTrue(!ResidentMealKnownNavigation.waitingStationAvailable(state, meal, stalePocket), "HOT must invalidate its cached pocket without an entrance turn");
+        var route = ResidentMealKnownNavigation.path(state, meal);
+        assertTrue(!route.getLast().equals(stalePocket));
+        assertTrue(!exits.contains(route.getLast()));
+        var point = SettlementServiceAccessPoints.forSettlement(state, settlement.id()).getFirst();
+        var rest = ServiceAreaDestinations.select(List.of(point), actor, stalePocket, knowledge, java.util.Set.of()).orElseThrow();
+        assertTrue(!ServiceAreaDestinations.temporary(point, rest));
+    }
+
     @Test void occupiedExitIsNotTheOnlyGoalAndParkingDoesNotOwnClearance() {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:exit-region"), 20260918065L));
@@ -89,6 +164,12 @@ class ResidentMealKnownNavigationTest {
                 ResidentMeal.Phase.MOVE, 24_000L, Optional.empty(),
                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL,
                         new SubjectId("claim:meal-waiting-" + resident.value().replace(':', '-')), 1L));
+    }
+
+    private static FrontierWorldState withMeal(FrontierWorldState state, ResidentMeal meal) {
+        return state.withChanges(FrontierWorldStateUpdate.begin()
+                .humanPopulation(state.humanPopulation().withMeal(meal))
+                .actorExecutions(state.actorExecutions().begin(meal.executionId(), meal.executionId().generation() - 1L)));
     }
 
     @Test void admittedShortEntranceStillRespectsAChangedPhysicalServiceCell() {

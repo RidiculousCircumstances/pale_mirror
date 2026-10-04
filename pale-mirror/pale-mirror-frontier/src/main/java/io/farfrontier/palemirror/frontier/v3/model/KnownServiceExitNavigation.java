@@ -21,7 +21,7 @@ public final class KnownServiceExitNavigation {
                 List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
                         KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
         return ServiceClearanceTargets.exits(SettlementDepotServicePort.forDepot(depot).accessBoundary(),
-                start, knowledge, ServiceDestinationClaims.excludedFor(state, actorId));
+                start, knowledge, ServiceDestinationClaims.forImmediateExit(state, actorId));
     }
 
     public static List<SurfaceAnchor> path(FrontierWorldState state, SubjectId settlementId,

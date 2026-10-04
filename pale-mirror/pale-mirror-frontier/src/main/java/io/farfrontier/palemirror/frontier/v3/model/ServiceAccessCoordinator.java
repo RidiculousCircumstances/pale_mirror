@@ -49,9 +49,12 @@ public final class ServiceAccessCoordinator {
         Objects.requireNonNull(residentId, "service access resident");
         SettlementDepotServicePort servicePort = port(state, depotId);
         ServiceAccessBoundary access = servicePort.accessBoundary();
+        var egress = SettlementServiceAccessPoints.forSettlement(state, servicePort.settlementId()).stream()
+                .filter(point -> point.facilityId().equals(servicePort.depotId())).findFirst().orElseThrow().egressSurfaces();
         var first = state.humanPopulation().meals().values().stream()
-                .filter(meal -> meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal, access))
-                .min(Comparator.<ResidentMeal, Boolean>comparing(meal -> physicallyAdmitted(state, meal.residentId())).reversed()
+                .filter(meal -> meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal, access, egress))
+                .min(Comparator.<ResidentMeal, Boolean>comparing(meal -> !access.occupied(currentBody(state, meal.residentId())))
+                        .thenComparing(meal -> !physicallyAdmitted(state, meal.residentId()))
                         .thenComparingLong(ResidentMeal::startedAtTick).thenComparing(ResidentMeal::residentId));
         boolean departing = state.actorMovements().values().stream().anyMatch(movement ->
                 movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit exit
@@ -64,10 +67,7 @@ public final class ServiceAccessCoordinator {
         // Long approaches to independent side pockets retain no permit.
         var entering = first.isPresent() ? Optional.<ResidentMeal>empty()
                 : state.humanPopulation().meals().values().stream()
-                    .filter(meal -> meal.depotId().equals(depotId)
-                            && meal.phase() == ResidentMeal.Phase.MOVE
-                            && meal.coldTravel().map(travel -> travel.route().getLast()
-                                .equals(servicePort.serviceSurface())).orElse(false))
+                    .filter(meal -> meal.depotId().equals(depotId) && committedEntrance(meal, access, egress))
                     .min(Comparator.comparingLong(ResidentMeal::startedAtTick)
                             .thenComparing(ResidentMeal::residentId));
         boolean residentOwnsOccupiedTurn = first.isPresent() && first.orElseThrow().residentId().equals(residentId);
@@ -89,15 +89,13 @@ public final class ServiceAccessCoordinator {
         Objects.requireNonNull(workerId, "service access worker");
         SettlementDepotServicePort servicePort = port(state, depotId);
         ServiceAccessBoundary access = servicePort.accessBoundary();
+        var egress = SettlementServiceAccessPoints.forSettlement(state, servicePort.settlementId()).stream()
+                .filter(point -> point.facilityId().equals(servicePort.depotId())).findFirst().orElseThrow().egressSurfaces();
         var applicant = workApplicants(state, depotId).stream().findFirst();
         boolean mealAtPort = state.humanPopulation().meals().values().stream().anyMatch(meal ->
-                meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal, access)
-                    && access.occupied(
-                        state.actorLocations().get(meal.residentId()).body()));
+                meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal, access, egress));
         boolean mealEnteringPort = state.humanPopulation().meals().values().stream().anyMatch(meal ->
-                meal.depotId().equals(depotId) && meal.phase() == ResidentMeal.Phase.MOVE
-                    && meal.coldTravel().map(travel -> travel.route().getLast()
-                        .equals(servicePort.serviceSurface())).orElse(false));
+                meal.depotId().equals(depotId) && committedEntrance(meal, access, egress));
         boolean workerEating = state.humanPopulation().meals().containsKey(workerId);
         boolean departing = state.actorMovements().values().stream().anyMatch(movement ->
                 movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit exit
@@ -114,7 +112,19 @@ public final class ServiceAccessCoordinator {
         return depotAvailableForWork(state, FrontierWorldState.depotId(settlementId), job.id(), job.workerId());
     }
 
-    private static boolean mealOccupiesAccess(FrontierWorldState state, ResidentMeal meal, ServiceAccessBoundary access) {
+    private static boolean committedEntrance(ResidentMeal meal, ServiceAccessBoundary boundary,
+                                             java.util.Set<SurfaceAnchor> egress) {
+        return meal.phase() == ResidentMeal.Phase.MOVE && meal.coldTravel().map(travel -> {
+            SurfaceAnchor destination = travel.route().getLast();
+            // Sparse COLD travel stops before the physical boundary, or at an
+            // intermediate entry station. Both are a short committed entrance,
+            // not an independent distant approach to a waiting pocket.
+            return boundary.occupied(destination.standingBody()) || egress.contains(destination);
+        }).orElse(false);
+    }
+
+    private static boolean mealOccupiesAccess(FrontierWorldState state, ResidentMeal meal, ServiceAccessBoundary access,
+                                              java.util.Set<SurfaceAnchor> egress) {
         AmbientActorLease lease = state.ambientLeases().get(meal.residentId());
         // A frozen handoff location is not a live socket occupant. Admission confirms
         // its actual body first; a blocked creation cannot hold a phantom service turn.
@@ -122,7 +132,11 @@ public final class ServiceAccessCoordinator {
         ActorLocation actor = state.actorLocations().get(meal.residentId());
         // Starting a meal reserves bread, not the depot's sole service socket.
         // Otherwise the entire approach and return journey serializes all meals.
-        return actor == null || !access.cleared(actor.body());
+        return actor == null || !access.cleared(actor.body())
+                // Arrival at the sparse entrance checkpoint must retain its
+                // turn until the short service leg, not surrender it to the
+                // next contender and turn an entrant into a stranded waiter.
+                || meal.phase() == ResidentMeal.Phase.MOVE && egress.contains(actor.supportingSurface());
     }
     private static boolean physicallyAdmitted(FrontierWorldState state, SubjectId actorId) {
         AmbientActorLease lease = state.ambientLeases().get(actorId);
