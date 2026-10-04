@@ -12,7 +12,8 @@ Implementation: /home/rd/proj/pm-f06r3-facility-lane-recovery,
 branch feat/baker-carry-orders-20260926. The large physical-lifetime WIP was
 preserved in private checkpoint 6f065966; development-blocker cleanup is
 53014ac7, hive spatial continuation is e7610bf1 and engineering journey
-continuation is local HEAD 6a734828. These are not
+continuation is 6a734828; engineering observed work admission is local HEAD
+3bcac252. These are not
 UAE completion or deployment readiness.
 Current fresh-world schema is 238; bd595b53 is 227 and live R18 is 226.
 Origin git@github.com:RidiculousCircumstances/pale_mirror.git.
@@ -28,6 +29,33 @@ the last publication facts.
 Latest user assignment: implement engineering crews under UAE, including
 construction and maintenance muster, worksite approach and depot return.
 Main alone. Local checkpoints are authorized; no new push/deploy authority.
+Engineering source cut is now preserved in 3bcac252 after the journey checkpoint.
+The work order owns retained stations, not the current observed positions.
+Scene execution independently inspects common bodies and directs the exact
+current work execution to those stations. Unbegun physical construction/repair
+requires the full living, tooled crew, exact HOT scope and RUNNING common body
+authority; a shared read-only worksite port also rechecks actual indexed bodies
+and supported positions immediately before physical mutation. An already RUNNING
+effect only inspects/settles its retained postcondition, without replay or
+waiting for the crew to return. Construction now uses the existing bounded
+actionable-intent selector, like maintenance; unavailable endpoints do not
+head-of-line block other crews, invalid canonical targets remain visible.
+Candidate search normally waits between cell settlement and the next assembly,
+rather than throwing on that valid execution transition. The worksite fixture
+now uses the real assembly-to-work handoff instead of forging a completed crew
+under an assembly execution. Source/canonical engineering flow descriptions align.
+Schema238 is unchanged. 39 distinct Java checks are green across 94057/54015/35273:
+94057 selected 29, passed 26 and exposed three failures from that stale fixture;
+54015 passed 12 after its correction; 35273 passed 10 construction/adapter checks.
+Final native-boundary compilation plus five architecture checks, style and
+updated source architecture validation PASS10s/29795. No native/client/matrix,
+packaging, push, R18 operation or deployment claim. Integrated epic acceptance
+remains open. Canonical architecture validation also passes after restoring a
+pre-existing missing YAML field-lifecycle header, preserving its requirements.
+Continue patrol/assault spatial continuation, then remaining
+inventory/integration; retained scout inspection also found an active HOT pose
+writer and an uncaptured arrival that must be removed under the existing UAE
+inventory, not declared adopted merely from strategy registration.
 The prerequisite block is implemented: removed-test filters require actual
 class existence under the inspected checkout (CLI/MCP); test-only changes select
 inventory compilation, keywords no longer infer native campaigns, and unknown

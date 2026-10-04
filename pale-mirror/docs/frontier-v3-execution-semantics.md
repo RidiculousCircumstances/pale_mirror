@@ -27,6 +27,14 @@ obligations. This amendment supersedes earlier activity-dependent body ownership
 clauses only; process/effect custody and player-action safeguards remain binding.
 Full adoption is an exit condition, not claimed by the amendment itself.
 
+Engineering work stations remain owner-issued targets, not projections of a
+worker's latest observed position. Unbegun construction/repair requires the
+exact living, equipped current work crew at its retained stations, an exact HOT
+process scope and independently confirmed common body authority; the physical
+adapter also checks actual indexed supported bodies before mutation. An already
+RUNNING cell effect separately inspects and settles its retained postcondition:
+crew departure/recovery cannot authorize replay or postpone that reconciliation.
+
 Compacting a closed process scope cannot restore a route/formation checkpoint
 as the position of an independently held physical actor. Position eligibility
 uses the exact common body authority, never the existence of historical scene

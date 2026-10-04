@@ -232,6 +232,31 @@ amend this contract explicitly rather than silently expanding the controller.
 
 ## Acceptance and verification economy
 
+2026-10-04 private checkpoint 3bcac252 closes the connected engineering observed
+work-admission cut after the journey checkpoint. Construction and maintenance
+retain owner-issued work stations; independent common body observations cannot
+retarget those stations. Unbegun effects require the exact current work crew,
+tools, HOT process scope and RUNNING common physical authority at those stations.
+The shared read-only worksite port rechecks exact actual indexed bodies and
+supported positions immediately before mutation. Already RUNNING effects only
+inspect and settle their retained postcondition, without replay or waiting for
+crew recovery. Construction reuses the existing bounded actionable-intent
+selector so a naturally unavailable endpoint cannot block another crew;
+malformed canonical targets remain visible owner conflicts. Candidate search
+waits normally between cell settlement and its next assembly execution. The
+worksite fixture now uses the real assembly-to-work transition. Schema238 is
+unchanged; source and canonical architecture flow descriptions are aligned.
+
+39 distinct Java checks are green by composition: 94057 selected 29, passed 26 and
+identified three failures from a stale worksite fixture which retained assembly
+execution after representing completed approach; 54015 passed the affected 12
+after correction, and 35273 passed 10 construction/adapter checks. Final five
+native-boundary architecture checks, production compilation, Java style and
+updated source architecture validation PASS10s/29795. No native/client/matrix,
+packaging, publication or deployment claim. This is not full engineering native
+acceptance or UAE completion; remaining inventory and integrated exit conditions
+below remain mandatory.
+
 2026-10-04 private checkpoint6a734828 closes the connected engineering journey
 spatial cut for construction and maintenance: MUSTER_DEPOT, WORKSITE and
 RETURN_DEPOT retain their exact semantic routes and crew while the registered
