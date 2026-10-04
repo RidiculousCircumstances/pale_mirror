@@ -10,9 +10,10 @@ own workflow. No extra publication, reset or unrelated service authority.
 
 Implementation: /home/rd/proj/pm-f06r3-facility-lane-recovery,
 branch feat/baker-carry-orders-20260926. The large physical-lifetime WIP was
-preserved in private checkpoint 6f065966; development-blocker cleanup is local
-HEAD 53014ac7. Neither is UAE completion or deployment readiness.
-Current WIP fresh-world schema is 236; bd595b53 is 227 and live R18 is 226.
+preserved in private checkpoint 6f065966; development-blocker cleanup is
+53014ac7 and hive spatial continuation is local HEAD e7610bf1. These are not
+UAE completion or deployment readiness.
+Current fresh-world schema is 237; bd595b53 is 227 and live R18 is 226.
 Origin git@github.com:RidiculousCircumstances/pale_mirror.git.
 Governance: this checkout; UAE normative/document WIP is preserved in local
 checkpoints, not published. Source adoption is not governance publication. Original
@@ -37,9 +38,32 @@ without raising limits. The same shared gate found existing long Java lines;
 only whitespace was normalized. Guardrails, all Java/pilot/test compilation and
 28 resource/fixture tests PASS51s/session27202; 11 agent-assist tests PASS0.05s.
 The gate dry-run contains no visual experiment tasks. No native/client matrix.
-Continue owner-local spatial continuation for remaining hive/engineering/patrol/
+Continue owner-local spatial continuation for remaining engineering/patrol/
 assault families; preserve original semantic checkpoints/resources and actual
 departure poses. Tool governance drift/ledger compaction (audit item6) is deferred.
+
+Hive spatial continuation is saved in e7610bf1: assembly and survivor return
+retain original topology/cursor plus versioned bounded TraversalRejoin from
+the independently recorded departure pose. Common body departure and the
+owner checkpoint commit together. HOT arrivals carry captured body/execution/
+scope and predecessor versions, require common inspection, and do not rewrite
+ActorLocation. COLD validates its retained predecessor and known obstacle edge;
+stale route/approach receipts and blockages fail. Snapshot/WAL hydration includes
+these fields; schema237 rejects prior disposable layouts.
+The connected review found an additional real return defect: straight expansion
+of reversed coarse assault waypoints crossed hive tissue at (410,63,409).
+Return admission now uses those retained waypoints as guides for bounded legal
+segment searches over shared authored ground plus hive/tray clearance, rather
+than manufacturing unit edges. Search limits remain unchanged. Existing HOT
+fixtures now model independent physical presence/inspection; the integrated
+return fixture follows collision-free candidates, like the production planner.
+29 Java checks (hive transitions/recovery and snapshot rejection plus required
+catalog coverage), all production/test/pilot compilation and guardrails PASS66s/
+session85151. No native/client/matrix run; no live R18 change, push or deployment.
+This closes the connected hive spatial cut, not all hive physical effects or
+full UAE acceptance. Next is the engineering/patrol/assault owner continuation
+cut, then remaining production inventory and integrated multiworker/restart
+acceptance; do not rerun unchanged green hive checks for confidence.
 
 Previous sanitation:
 Removed 29 source-proven obsolete tests: 6 scene-owned batch body fence/death
