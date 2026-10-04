@@ -143,6 +143,12 @@ public final class FrontierV3FixtureCatalog {
         return FrontierDevelopmentScenarios.routeCustodyConfiguration(uncontestedSupplyConfiguration(level));
     }
 
+    /** Same level-apron custody fixture, frozen after real assembly for scene/restart boundary checks. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> coldSupplySceneReturnConfiguration(WorldId worldId, long seed) {
+        var fixture = FrontierDevelopmentScenarios.routeSceneReturnFixture(coldSupplyDeliveryConfiguration(worldId, seed));
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousSupplyInterceptionConfiguration(WorldId worldId, long seed) {
         // This profile exercises autonomous perception, including ordinary birth schedules.
         // One admission before departure consumes a ration and adds two reserve rations.
@@ -165,6 +171,11 @@ public final class FrontierV3FixtureCatalog {
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> settlementAssaultConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+    }
+
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> settlementAssaultConfiguration(FrontierBootstrap bootstrap) {
+        var fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(bootstrap);
+        return configured(bootstrap.worldId(), fixture.state(), fixture.instant(), fixture.schedules(), true);
     }
 
     /** Candidate-bound approach fixture: mobilisation has departed, but no COLD edge is pre-run. */

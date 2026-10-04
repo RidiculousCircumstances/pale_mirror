@@ -57,7 +57,7 @@ class ResourceSiteStateTest {
                 ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(new SubjectId("settlement:1"))),
                 new SubjectId("item:site-harvest-1-wheat-field-1"),
                 new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(new SubjectId("settlement:1")), 1),
-                new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"), completeProgress(),
+                new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"), completeProgress(site.layout().cells().size()),
                 ResourceFieldCycle.seeded(siteId, site.layout(), 1).target(site.layout().cells().getFirst().id()));
         ResourceFieldCycle unworked = ResourceFieldCycle.seeded(siteId, site.layout(), 1);
         ResourceSiteLifecycle ready = growing;
@@ -79,31 +79,9 @@ class ResourceSiteStateTest {
         assertTrue(harvested.harvestJobs().isEmpty());
     }
 
-    @Test
-    void nextGrowthEpochKeepsTheSameFarmerAtItsCollisionClearTerminalStationWithoutCollapsingTheNextSlotVisit() {
-        FrontierWorldState baseline = initial();
-        SubjectId siteId = new SubjectId("site:1-wheat-field");
-        ResourceSite site = FrontierResourceSitePlan.compile(baseline.bootstrap()).get(siteId);
-        SubjectId workerId = new SubjectId("resident:1-1");
-        SurfaceAnchor terminal = ResourceSiteHarvestTraversal.workReturnSurface(baseline.bootstrap(), site);
-        ActorLocation retained = new ActorLocation(terminal.standingBody(), baseline.actorLocations().get(workerId).condition(), baseline.actorLocations().get(workerId).kind());
-
-        ResourceSiteHarvestTraversal.Plan nextEpoch = ResourceSiteHarvestTraversal.compilePlan(baseline.bootstrap(), site, retained,
-                new SubjectId("job:site-harvest-1-wheat-field-2"));
-
-        assertEquals(terminal, nextEpoch.topology().linearCorridorSurfaces().getFirst(), "the successor begins from the exact retained body support");
-        int firstCropCursor = nextEpoch.firstCropCursor();
-        assertEquals(site.cropSlots().stream().map(crop -> new SurfaceAnchor(crop.offset(0, -1, 0))).toList(),
-                nextEpoch.topology().linearCorridorSurfaces().subList(firstCropCursor, firstCropCursor + site.cropSlots().size()),
-                "the immutable per-slot plan remains complete, including its later terminal-slot visit");
-        assertEquals(terminal, nextEpoch.topology().linearCorridorSurfaces().get(
-                        firstCropCursor + site.cropSlots().size() - 1 + ResourceSiteHarvestTraversal.workReturnStationCount()),
-                "the local field-edge station remains a collision-clear post-harvest corridor point");
-    }
-
-    private static ResourceSiteHarvestProgress completeProgress() {
-        ResourceSiteHarvestProgress progress = ResourceSiteHarvestProgress.notStarted(ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS);
-        for (int index = 0; index < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS; index++) {
+    private static ResourceSiteHarvestProgress completeProgress(int slots) {
+        ResourceSiteHarvestProgress progress = ResourceSiteHarvestProgress.notStarted(slots);
+        for (int index = 0; index < slots; index++) {
             progress = progress.prepareNextCrop().confirmPreparedCrop();
         }
         return progress;

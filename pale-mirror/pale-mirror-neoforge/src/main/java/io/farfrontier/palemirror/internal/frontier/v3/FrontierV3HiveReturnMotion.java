@@ -51,7 +51,7 @@ final class FrontierV3HiveReturnMotion {
         HiveMobilization mobilization = mobilization(state, actorId);
         HiveTaskAssembly.Member member = member(mobilization, actorId, lease);
         if (mobilization == null || member == null || member.arrived()
-                || !FrontierV3SurfaceObservation.at(body, lease.goalBody().supportingSurface())
+                || !FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())
                 || !mobilization.returnAssembly().orElseThrow().safeAdvances().contains(actorId)) {
             // A non-arrival observation must not cancel the path it is observing.
             return false;

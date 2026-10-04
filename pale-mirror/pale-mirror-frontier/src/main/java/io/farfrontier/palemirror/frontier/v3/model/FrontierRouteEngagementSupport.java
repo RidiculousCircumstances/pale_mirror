@@ -11,7 +11,8 @@ final class FrontierRouteEngagementSupport {
     private FrontierRouteEngagementSupport() { }
 
     static void validate(FrontierBootstrap bootstrap, HiveColony hiveColony, Map<SubjectId, ActorLocation> actorLocations,
-                         Map<SubjectId, RouteOperation> operations, StrategicPlanState strategicPlans) {
+                         Map<SubjectId, RouteOperation> operations, StrategicPlanState strategicPlans,
+                         FencedRecoveryState bodyRecovery) {
         for (StrategicTask task : strategicPlans.tasks().values()) {
             if (task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION && (!bootstrap.hive().id().equals(task.ownerId())
                     || task.operationTarget().isEmpty() || !operations.containsKey(task.operationTarget().orElseThrow()))) {
@@ -41,17 +42,16 @@ final class FrontierRouteEngagementSupport {
                 if (!hiveBioforms.contains(attackerId) || location == null) {
                     throw new IllegalArgumentException("route engagement attacker must be one canonical hive bioform");
                 }
-                // The approach cursor owns an attacker's canonical position only until the scene
-                // reaches its intercept. A HOT scene then owns real movement; its durable release
-                // captures exact survivor positions before COLD combat resumes. Requiring the old
-                // approach endpoint after that hand-off would discard physical causality or reject
-                // a valid scene release. An unknown recovery has no such capture, so it retains
-                // the last deterministic approach position until observed loaded-world evidence.
+                // An approach owns only COLD position. Scene recovery is not body
+                // absence: the independent body authority retains the actual observed
+                // position through scope drain/unknown/conflict. Without that custody,
+                // the retained deterministic approach checkpoint remains mandatory.
                 boolean approachOwnsPosition = engagement.status() == RouteEngagementStatus.APPROACHING
                         || engagement.status() == RouteEngagementStatus.WAITING_FOR_INTERCEPT
                         || engagement.status() == RouteEngagementStatus.UNKNOWN_AFTER_RESTART
                         || engagement.status() == RouteEngagementStatus.CONFLICT;
                 if (approachOwnsPosition && location.condition().status() == ActorLifeStatus.ALIVE
+                        && !ActorBodyAuthority.retainsPhysicalCustody(bodyRecovery, attackerId)
                         && !location.supportingSurface().support().equals(attacker.position())) {
                     throw new IllegalArgumentException("COLD engagement attacker must retain its exact route position");
                 }

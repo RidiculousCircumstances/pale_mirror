@@ -266,7 +266,8 @@ final class FrontierV3AmbientMovementExecutor {
             var movement = state.actorMovements().get(actorId);
             if (movement == null) return false;
             BodyPosition observed = observedBody(body);
-            boolean arrived = movement.order().arrivedAt(observed.supportingSurface());
+            boolean arrived = movement.order().arrivedAt(observed.supportingSurface())
+                    && FrontierV3SemanticMovement.arrived(level, body, observed.supportingSurface());
             boolean exited = ServiceAccessCoordinator.witnessedActorMovementExit(state, movement, observed);
             if (!arrived && !exited) return false;
             var witness = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
@@ -284,7 +285,8 @@ final class FrontierV3AmbientMovementExecutor {
         if (lease.goal() == AmbientGoalKind.MEAL) {
             ResidentMeal meal = state.humanPopulation().meals().get(actorId);
             if (meal == null) return false;
-            if (meal.phase() == ResidentMeal.Phase.MOVE && observedBody(body).equals(lease.goalBody())) {
+            if (meal.phase() == ResidentMeal.Phase.MOVE
+                    && FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())) {
                 var witness = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
                         actuation.id(), lease.revision());
                 ResidentMealHotArrived arrival = new ResidentMealHotArrived(actorId, lease.revision(), observedBody(body), witness);
@@ -320,14 +322,14 @@ final class FrontierV3AmbientMovementExecutor {
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN) return FrontierV3HiveReturnMotion.observeArrival(level, runtime, state, actorId, body, lease, actuation);
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL) return observeScoutPatrolArrival(level, runtime, state, actorId, body, lease, actuation);
         if (lease.goal() == AmbientGoalKind.WORK) {
-            return FrontierV3SurfaceObservation.at(body, lease.goalBody().supportingSurface())
+            return FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())
                     && drainAfterDemandHysteresis(level, runtime, actorId, body);
         }
         if (lease.goal() != AmbientGoalKind.TRANSIT) return false;
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
         if (journey == null || journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving()
                 || !lease.goalBody().equals(BodyPosition.above(new SurfaceAnchor(journey.nextColdPosition())))) return false;
-        if (!observedBody(body).equals(lease.goalBody())) return false;
+        if (!FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())) return false;
         // Body owner records actual arrival; this family receipt only advances the journey.
         if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-transit", actorId.value(),
@@ -339,7 +341,8 @@ final class FrontierV3AmbientMovementExecutor {
     private static boolean observeAssemblyArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                    SubjectId actorId, Mob body, AmbientActorLease lease, FrontierV3ActorActuation actuation) {
         OperationAssembly.Member member = assemblyMember(state, actorId, lease);
-        if (member == null || member.arrived() || !observedBody(body).equals(lease.goalBody())) return false;
+        if (member == null || member.arrived()
+                || !FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())) return false;
         RouteOperation operation = assemblingOperation(state, actorId); OperationAssembly assembly = operation.activeAssembly().orElseThrow();
         if (!assembly.safeAdvances().contains(actorId)) {
             FrontierV3GoalNavigation.stop(body, actuation);
@@ -358,7 +361,7 @@ final class FrontierV3AmbientMovementExecutor {
         EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, lease);
         EngineeringWorkOrder project = engineeringProject(state, actorId);
         if (project == null || member == null || member.arrived()
-                || !observedBody(body).equals(lease.goalBody())) return false;
+                || !FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())) return false;
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
         if (!assembly.safeAdvances().contains(actorId)) return false;
         if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return false;
@@ -374,7 +377,8 @@ final class FrontierV3AmbientMovementExecutor {
                                                        FrontierV3ActorActuation actuation) {
         HiveMobilization mobilization = assemblingMobilization(state, actorId);
         HiveTaskAssembly.Member member = hiveAssemblyMember(state, actorId, lease);
-        if (mobilization == null || member == null || member.arrived() || !observedBody(body).equals(lease.goalBody())) return false;
+        if (mobilization == null || member == null || member.arrived()
+                || !FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())) return false;
         HiveTaskAssembly assembly = mobilization.assembly().orElseThrow();
         if (!assembly.safeAdvances().contains(actorId)) {
             FrontierV3GoalNavigation.stop(body, actuation);
@@ -391,7 +395,7 @@ final class FrontierV3AmbientMovementExecutor {
     }
     private static boolean observeScoutPatrolArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                       SubjectId actorId, Mob body, AmbientActorLease lease, FrontierV3ActorActuation actuation) {
-        if (!observedBody(body).equals(lease.goalBody())) return false;
+        if (!FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())) return false;
         var journey = HiveScoutPatrolProcess.journey(state, actorId);
         if (!lease.goalBody().equals(journey.target().standingBody())) return false;
         var receipt = new ScoutPatrolAdvanced(actuation.id().execution(), journey.goalRevision(),

@@ -96,16 +96,18 @@ class HumanRoleAssignmentTest {
     void bornHaulerAndTwoGuardsReplaceDeadBootstrapRolesForAnExactCargoOperation() {
         FrontierWorldState state = initial("frontier:human-route");
         Settlement settlement = state.bootstrap().settlements().getFirst();
+        var access = SettlementAccessPort.forHall(settlement.structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.HALL).findFirst().orElseThrow());
         state = killRole(state, ResidentRole.GUARD);
         state = killRole(state, ResidentRole.HAULER);
         ResidentProfile guard = born(state, "resident:1-guard-born", ResidentRole.GUARD);
-        SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream()
-                .filter(structure -> structure.kind() == StructureKind.HALL).findFirst().orElseThrow());
+        // This role-selection fixture starts its new crew at the producer's declared assembly slots.
+        // Joint approach/collision behavior has its own OperationAssemblyCorridorTest coverage.
         state = HumanPopulationTestFixtures.withResident(state, guard, access.routeFloor());
         ResidentProfile secondGuard = born(state, "resident:1-guard-second-born", ResidentRole.GUARD);
         state = HumanPopulationTestFixtures.withResident(state, secondGuard, access.assemblyFloor().offset(0, 0, 1));
         ResidentProfile hauler = born(state, "resident:1-hauler-born", ResidentRole.HAULER);
-        state = HumanPopulationTestFixtures.withResident(state, hauler, access.interiorFloor());
+        state = HumanPopulationTestFixtures.withResident(state, hauler, access.assemblyFloor());
         assertEquals(FixedScalar.whole(3), RouteEngagementCombatRules.damage(state, guard.id()));
         state = state.withInventory(withBread(state.inventory(), settlement.id()));
 

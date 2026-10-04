@@ -336,7 +336,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                     member.actorId(), ExpeditionMarchIssueKind.MISSING_OWNED_BODY); return; }
             captured.put(member.actorId(), FrontierV3ActorActuation.capture(state, mob,
                     executions.requireMember(member.actorId()), runtime::decodedState));
-            if (!FrontierV3SurfaceObservation.at(mob, target.supportingSurface())) {
+            if (!FrontierV3SemanticMovement.arrived(level, mob, target.supportingSurface())) {
                 arrived = false;
                 var bounds = mob.getBoundingBox().move(FrontierV3SurfaceObservation.point(target.supportingSurface()).subtract(mob.position()));
                 if (level.getBlockCollisions(mob, bounds).iterator().hasNext() || !level.getEntities(mob, bounds, value -> !members.contains(value.getUUID())).isEmpty()) {

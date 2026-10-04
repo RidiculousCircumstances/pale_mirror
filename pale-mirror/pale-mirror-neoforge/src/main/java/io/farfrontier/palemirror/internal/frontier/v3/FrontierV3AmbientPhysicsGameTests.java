@@ -56,7 +56,9 @@ public final class FrontierV3AmbientPhysicsGameTests {
         prepareFallArena(helper.getLevel(), support);
         prepareFallArena(helper.getLevel(), otherSupport);
         Fixture fixture = fixture(support, otherSupport);
-        BodyPosition expected = fixture.state().actorLocations().get(fixture.resident()).body();
+        var runtime = runtime(helper.getLevel(), ActorBodyAuthority.demand(fixture.state(), fixture.resident()));
+        var prepared = runtime.decodedState().orElseThrow();
+        BodyPosition expected = prepared.actorLocations().get(fixture.resident()).body();
         Villager occupant = EntityType.VILLAGER.create(helper.getLevel());
         if (occupant == null) throw new IllegalStateException("test body column occupant could not be created");
         occupant.setNoAi(true);
@@ -68,19 +70,20 @@ public final class FrontierV3AmbientPhysicsGameTests {
         helper.runAfterDelay(1, () -> {
             helper.assertTrue(occupant.isAlive() && helper.getLevel().getEntity(occupant.getUUID()) == occupant,
                     "the ordinary physical occupant must be visible before admission is evaluated");
-            helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(helper.getLevel(), fixture.state(), fixture.resident(), expected),
+            helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(helper.getLevel(), prepared, fixture.resident(), expected),
                     FrontierV3AmbientActorExecutor.Result.DEFERRED,
                     "a live body occupying the canonical column must defer exact admission rather than create an overlapping managed actor");
-            helper.assertTrue(helper.getLevel().getEntity(FrontierV3AmbientActorExecutor.entityId(fixture.state(), fixture.resident())) == null,
+            helper.assertTrue(helper.getLevel().getEntity(FrontierV3AmbientActorExecutor.entityId(prepared, fixture.resident())) == null,
                     "a deferred exact admission must leave no replacement or duplicate UUID body");
             occupant.discard();
-            helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(helper.getLevel(), fixture.state(), fixture.resident(), expected),
+            helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(helper.getLevel(), prepared, fixture.resident(), expected),
                     FrontierV3AmbientActorExecutor.Result.APPLIED,
                     "the unchanged canonical body must materialize once the observed local obstruction clears");
-            Mob admitted = (Mob) helper.getLevel().getEntity(FrontierV3AmbientActorExecutor.entityId(fixture.state(), fixture.resident()));
+            Mob admitted = (Mob) helper.getLevel().getEntity(FrontierV3AmbientActorExecutor.entityId(prepared, fixture.resident()));
             helper.assertTrue(admitted != null && admitted.blockPosition().equals(support.above()),
                     "the admitted body must retain its exact canonical column rather than an alternate physical placement");
             admitted.discard();
+            runtime.shutdown();
             helper.succeed();
         });
     }
@@ -217,15 +220,17 @@ public final class FrontierV3AmbientPhysicsGameTests {
                             && runtime.decodedState().orElseThrow().ambientLeases().get(fixture.bioform()).status()
                             == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT;
                     if (Double.isNaN(initialY[0])) { initialY[0] = resident.getY(); initialY[1] = bioform.getY(); }
-                    if (turn < 24) movingBeforeLoss[0] |= FrontierV3ControlledMobMotion.trace(bioform).stream()
-                            .anyMatch(sample -> sample.horizontalVelocity() > 0.0D);
+                    if (turn < 24) movingBeforeLoss[0] |= bioform.getDeltaMovement().horizontalDistanceSqr() > 0.0D;
                 }
                 if (turn == 24) {
                     helper.assertTrue(exactHotBodies[0], "ordinary player demand must admit the canonical resident and active bioform through their exact HOT leases");
                     // Freeze the real admitted resident at the normal retained-body authority
                     // boundary while the separately admitted bioform remains the observed moving
                     // case.  No fixture entity is substituted or manually repositioned.
-                    FrontierV3ControlledMobMotion.stop(resident);
+                    var current = runtime.decodedState().orElseThrow();
+                    FrontierV3AmbientActuation.capture(current, runtime, resident,
+                            current.ambientLeases().get(fixture.resident()))
+                            .ifPresent(actuation -> FrontierV3GoalNavigation.stop(resident, actuation));
                     idleBeforeLoss[0] = resident.getDeltaMovement().horizontalDistanceSqr() == 0.0D;
                     helper.assertTrue(idleBeforeLoss[0] && movingBeforeLoss[0]
                                     && FrontierV3ControlledMobMotion.ordinaryPhysicsRegistered(resident)
@@ -330,6 +335,15 @@ public final class FrontierV3AmbientPhysicsGameTests {
     }
 
     private static void drive(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        var before = runtime.decodedState().orElseThrow();
+        for (var actor : before.ambientLeases().keySet()) {
+            var body = managed(level, runtime, actor);
+            if (body != null && !FrontierV3ActorBodyController.readyForExecution(level, before,
+                    List.of(ActorBodyAuthority.current(before, actor)))) {
+                FrontierV3ServerLifecycle.observeSourceJoin(level, runtime, body);
+            }
+        }
+        FrontierV3AmbientPendingAdmissions.reclaimProjected(runtime, runtime.decodedState().orElseThrow());
         FrontierV3AmbientActorExecutor.tick(level, runtime);
         runtime.decodedState().orElseThrow().ambientLeases().keySet().stream()
                 .map(actor -> level.getEntity(FrontierV3AmbientActorExecutor.entityId(runtime.decodedState().orElseThrow(), actor)))
@@ -343,7 +357,8 @@ public final class FrontierV3AmbientPhysicsGameTests {
 
     private static Fixture fixture(BlockPos residentSupport, BlockPos bioformSupport) {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base =
-                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ambient-executor-support-loss"), 97L);
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ambient-executor-support-loss-"
+                        + residentSupport.getX() + "-" + residentSupport.getZ()), 97L);
         FrontierWorldState source = base.initialState();
         SubjectId sourceResident = source.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
         SubjectId sourceSettlement = source.humanPopulation().resident(sourceResident).settlementId();

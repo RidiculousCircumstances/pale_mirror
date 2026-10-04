@@ -54,7 +54,8 @@ public final class FrontierV3RoutePatrolGameTests {
             helper.assertTrue(observation.hotExactRoster(),
                     "ordinary demand must materialize one HOT ROUTE_PATROL lease with its exact patrol roster, never a generic guard fallback");
             helper.assertTrue(observation.observedFormationAdvance(),
-                    "the canonical patrol cursor must advance while that exact HOT formation is observed at its retained next bodies");
+                    "the canonical patrol cursor must advance while that exact HOT formation is observed at its retained next bodies: "
+                            + physicalDetail(level, current, patrol));
             helper.assertTrue(patrol.status() == RoutePatrolStatus.EN_ROUTE && patrol.travel().routeCursor() >= 1,
                     "the retained COLD patrol cursor must continue from the observed physical edge without a generic replacement: " + patrol.status()
                             + " cursor=" + patrol.travel().routeCursor());
@@ -100,8 +101,12 @@ public final class FrontierV3RoutePatrolGameTests {
                     "ordinary no-demand hysteresis must release the existing route-patrol lease to COLD");
             helper.assertTrue(hotCheckpoint[0].patrol().equals(patrol),
                     "ordinary demand loss must preserve the same patrol formation and cursor, not admit a replacement");
-            helper.assertTrue(FrontierRoutePatrolSceneSupport.bodies(patrol).equals(memberLocations(returned, patrol)),
-                    "released patrol member locations must equal the retained exact formation");
+            helper.assertTrue(patrol.memberIds().stream().allMatch(actor -> {
+                var body = level.getEntity(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(returned.bootstrap().worldId(), actor));
+                return body instanceof Mob mob && FrontierV3BodyObservation.capture(mob).supportedBody()
+                        .filter(returned.actorLocations().get(actor).body()::equals).isPresent();
+            }), "scope release retains actual independently observed positions, never snaps unfinished movement to a formation checkpoint: "
+                    + physicalDetail(level, returned, patrol));
             runtime.shutdown(); releaseDemand(observer); helper.succeed();
         });
     }
@@ -131,17 +136,19 @@ public final class FrontierV3RoutePatrolGameTests {
     public static void missingOwnedHotBodyBlocksTheSameDemandedPatrol(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "body-loss"); prepareRouteFloor(level, fixture);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state()); ServerPlayer observer = demand(helper, fixture);
+        boolean[] removedHotBody = {false};
         for (int turn = 1; turn <= 20; turn++) {
-            int current = turn;
             helper.runAtTickTime(turn, () -> {
-                if (current == 3) runtime.decodedState().orElseThrow().sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol)
+                if (!removedHotBody[0]) runtime.decodedState().orElseThrow().sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol)
+                        .filter(lease -> lease.status() == SceneLeaseStatus.HOT)
                         .findFirst().flatMap(lease -> lease.members().stream().map(member -> level.getEntity(member.entityId())).filter(Mob.class::isInstance).findFirst())
-                        .ifPresent(Entity::discard);
+                        .ifPresent(body -> { removedHotBody[0] = true; body.discard(); });
                 drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation());
             });
         }
         helper.runAtTickTime(21, () -> {
             RoutePatrol patrol = runtime.decodedState().orElseThrow().strategicPlans().routePatrols().get(fixture.taskId());
+            helper.assertTrue(removedHotBody[0], "the intervention must remove an actually HOT body, not a pending insertion");
             helper.assertTrue(patrol.status() == RoutePatrolStatus.BLOCKED
                             && patrol.blockReason().orElseThrow() == RoutePatrolBlockReason.MISSING_OWNED_BODY,
                     "loss of a HOT exact body must block the same retained patrol with typed ownership");
@@ -181,6 +188,18 @@ public final class FrontierV3RoutePatrolGameTests {
 
     private static void drive(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime,
                               SubjectId taskId, RoutePatrolSceneObservation observation) {
+        // This isolated runtime is not the live host singleton. Feed its actual indexed
+        // objects through the same source join boundary, never synthesize body readiness.
+        runtime.decodedState().orElseThrow().sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol)
+                .flatMap(lease -> lease.members().stream()).map(member -> level.getEntity(member.entityId()))
+                .filter(java.util.Objects::nonNull).forEach(body -> {
+                    var current = runtime.decodedState().orElseThrow();
+                    var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow();
+                    var id = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(declaration.actorId(), declaration.epoch());
+                    if (!FrontierV3ActorBodyController.readyForExecution(level, current, List.of(id)))
+                        FrontierV3ServerLifecycle.observeSourceJoin(level, runtime, body);
+                });
+        FrontierV3AmbientPendingAdmissions.reclaimProjected(runtime, runtime.decodedState().orElseThrow());
         FrontierV3RoutePatrolSceneExecutor.tick(level, runtime);
         FrontierWorldState current = runtime.decodedState().orElseThrow(); observation.observe(level, current, taskId);
         current.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol)
@@ -262,6 +281,17 @@ public final class FrontierV3RoutePatrolGameTests {
     }
 
     private record RoutePatrolCheckpoint(RoutePatrol patrol) { }
+
+    private static String physicalDetail(ServerLevel level, FrontierWorldState state, RoutePatrol patrol) {
+        return patrol.memberIds().stream().map(actor -> {
+            var entity = level.getEntity(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), actor));
+            if (!(entity instanceof Mob body)) return actor + " missing";
+            return actor + " physical=" + body.position() + " canonical=" + state.actorLocations().get(actor).body()
+                    + " checkpoint=" + FrontierRoutePatrolSceneSupport.bodies(patrol).get(actor)
+                    + " controls=" + FrontierV3GoalNavigation.controls(body) + " path=" + body.getNavigation().getPath()
+                    + " delta=" + body.getDeltaMovement() + " onGround=" + body.onGround();
+        }).toList().toString();
+    }
 
     /** Captures the transient physical proof before a finite patrol safely returns to COLD. */
     private static final class RoutePatrolSceneObservation {

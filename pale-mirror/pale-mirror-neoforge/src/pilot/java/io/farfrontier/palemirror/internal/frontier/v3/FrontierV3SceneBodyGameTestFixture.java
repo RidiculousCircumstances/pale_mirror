@@ -44,8 +44,32 @@ final class FrontierV3SceneBodyGameTestFixture {
             FrontierV3AmbientActorGameTests.prepareFloor(helper.getLevel(), feet);
             positions.put(lease.members().get(index).actorId(), new BodyPosition(feet.getX(), feet.getY(), feet.getZ()));
         }
+        return materializeAndObserve(helper, runtime, lease, positions);
+    }
+
+    static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> assaultConfiguration(
+            GameTestHelper helper, WorldId world, long seed) {
+        var source = FrontierV3FixtureCatalog.settlementAssaultConfiguration(world, seed);
+        var handoff = source.initialState().coldSettlementAssaultSceneCandidates().getFirst().handoffPosition();
+        var support = helper.absolutePos(BlockPos.ZERO);
+        return FrontierV3FixtureCatalog.settlementAssaultConfiguration(FrontierV3CargoLoadingGameTests.translatedBootstrap(
+                source.initialState().bootstrap(), support.getX() - handoff.x(),
+                support.getY() - handoff.y(), support.getZ() - handoff.z()));
+    }
+
+    static void initializeAdmission(GameTestHelper helper,
+            FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration, FrontierStore store) {
+        var world = configuration.worldId();
+        var ledger = FrontierV3AmbientCarrierLedger.get(helper.getLevel(), world);
+        FrontierV3ActorFirstAdmissionBootstrap.initialize(ledger, configuration.initialState(), store.recover(world),
+                () -> ledger.persist(helper.getLevel(), world));
+    }
+
+    static List<Entity> materializeAndObserve(GameTestHelper helper,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
+            java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BodyPosition> positions) {
         helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(helper.getLevel(),
-                        runtime.decodedState().orElseThrow(), lease, positions),
+                runtime.decodedState().orElseThrow(), lease, positions),
                 FrontierV3SceneExecutor.BodyMaterialization.COMPLETE, "common controller admits every exact scene body");
         List<Entity> bodies = lease.members().stream().map(member -> helper.getLevel().getEntity(member.entityId())).toList();
         for (Entity body : bodies) {

@@ -171,26 +171,15 @@ public final class FrontierV3SceneGameTests {
         first.setPos(anchor.getX() + 0.5D, anchor.getY(), anchor.getZ() + 0.5D);
         second.setPos(anchor.getX() + 1.5D, anchor.getY(), anchor.getZ() + 0.5D);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId("frontier:two-observer-demand"), 91L), new EphemeralStore(), 20_000);
+                FrontierV3SceneBodyGameTestFixture.start(helper, new WorldId("frontier:two-observer-demand"), 91L, new EphemeralStore());
         SceneLeaseId leaseId = new SceneLeaseId("lease:two-observer-demand");
         try {
             SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
             var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("two-observer fixture runtime must be active"));
             SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
             FrontierV3CommandSubmission.submit(runtime, "two-observer-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+            FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease);
             FrontierV3CommandSubmission.submit(runtime, "two-observer-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-            var fixtureProjection = FrontierV3GameTestSceneLeases.projectedIntoFixture(state(runtime), lease,
-                    new BodyPosition(anchor.getX() + 4, anchor.getY(), anchor.getZ()));
-            bootstrapFirstAdmissions(level, state(runtime));
-            for (BodyPosition body : fixtureProjection.values()) {
-                BlockPos floor = new BlockPos(body.x(), body.y() - 1, body.z());
-                level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
-                level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3);
-                level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
-            }
-            helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state(runtime), lease, fixtureProjection),
-                    FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
-                    "one canonical HOT lease must materialize one exact test-cell projection before observer aggregation is assessed");
             var beforeObservers = runtime.checkpointImage().orElseThrow();
             var both = FrontierV3SceneExecutor.demandSnapshot(helper.getLevel(), new BlockPosition(anchor.getX(), anchor.getY(), anchor.getZ()));
             helper.assertValueEqual(both.observerIds(), Set.of(first.getUUID(), second.getUUID()),
@@ -230,9 +219,10 @@ public final class FrontierV3SceneGameTests {
             helper.assertValueEqual(runtime.canonicalState().orElseThrow().revision().value(), revisionBeforeRelease + 1L,
                     "one and only one canonical transition records the final physical release");
         } finally {
-            for (Entity entity : level.getEntities().getAll()) {
-                if (entity != null && entity.getPersistentData().getString(FrontierV3SceneExecutor.LEASE_KEY).equals(leaseId.value())) entity.discard();
-            }
+            var scope = state(runtime).sceneLeases().get(leaseId);
+            if (scope != null) scope.members().forEach(member -> {
+                Entity entity = level.getEntity(member.entityId()); if (entity != null) entity.discard();
+            });
             FrontierV3SceneExecutor.forget(runtime);
             runtime.shutdown();
             helper.getLevel().getServer().getPlayerList().remove(first);
@@ -284,6 +274,7 @@ public final class FrontierV3SceneGameTests {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
         List<SceneMember> members = state.humanPopulation().residents().keySet().stream().sorted().limit(2)
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();
+        state = demandFixtureBodies(state, members);
         SceneLease lease = SceneLease.atExactPositions(new SceneLeaseId("lease:frontier-v3-game-test"), world,
                 new SubjectId("operation:frontier-v3-game-test"), new SubjectId("cargo:frontier-v3-game-test"),
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), new BlockPosition(origin.getX() + 3, origin.getY() - 1, origin.getZ()),
@@ -292,18 +283,22 @@ public final class FrontierV3SceneGameTests {
         helper.assertFalse(FrontierV3SceneExecutor.entityStorageReady(true, false),
                 "a production scene must wait for saved entity storage before admitting deterministic body UUIDs");
         bootstrapFirstAdmissions(level, state);
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+        var fixtureBodies = new java.util.LinkedHashMap<>(localFixtureBodies(lease, origin));
+        // The carpet is the actual upper collision support, not the stone beneath it.
+        fixtureBodies.put(members.getFirst().actorId(), new BodyPosition(origin.getX(), origin.getY() + 1, origin.getZ()));
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease, fixtureBodies), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a loaded thin route surface must materialize each deterministic Villager body exactly once");
         for (SceneMember member : lease.members()) {
             Villager body = (Villager) level.getEntity(member.entityId());
             helper.assertTrue(body != null, "each leased actor must have its deterministic Villager body");
-            helper.assertValueEqual(body.getPersistentData().getString(FrontierV3SceneExecutor.LEASE_KEY), lease.id().value(),
-                    "materialized body must carry its scene lease ownership");
+            helper.assertValueEqual(FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow().owner(),
+                    FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                    "a scene participant retains independent body ownership");
             helper.assertValueEqual(body.getPersistentData().getString(FrontierV3SceneExecutor.ACTOR_KEY), member.actorId().value(),
                     "materialized body must carry its canonical actor identity");
             helper.assertTrue(body.isNoAi(), "a HOT body must not retain uncontrolled vanilla AI or combat authority");
             if (member.equals(lease.members().getFirst())) {
-                helper.assertTrue(!body.blockPosition().equals(origin), "a scene body must stand above a loaded route deck, never inside it");
+                helper.assertTrue(body.getY() > origin.getY(), "a scene body must stand on the actual carpet collision top, never inside it");
             }
             body.discard();
         }
@@ -312,34 +307,28 @@ public final class FrontierV3SceneGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-bodies", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 60)
     public static void activeSceneBodiesCarryStrictGrayboxAdmissionProof(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(2, 8, 2));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId("frontier:scene-admission-proof"), 91L), new EphemeralStore(), 20_000);
+                FrontierV3SceneBodyGameTestFixture.start(helper, new WorldId("frontier:scene-admission-proof"), 91L, new EphemeralStore());
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
         SceneLeaseId leaseId = new SceneLeaseId("lease:scene-admission-proof");
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the admission fixture runtime must remain active"));
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
         FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-prepare", leaseId.value(), new SceneLeasePrepared(lease));
-        List<net.minecraft.world.entity.Mob> admittedBodies = new java.util.ArrayList<>();
-        for (int index = 0; index < lease.members().size(); index++) {
-            BlockPos position = origin.offset((index % 2) * 2, 0, (index / 2) * 2);
-            prepareFloor(level, position);
-            admittedBodies.add(addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position));
-        }
-        // addFreshEntity is accepted on this server tick, but under the parallel GameTest
-        // runner its UUID index may settle one more tick later.  Retain the exact references
-        // and assert both their continued liveness and their indexed identities; the wait does
-        // not create/repair a body or affect canonical state.
+        var admittedBodies = FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease);
+        // An isolated runtime receives the same actual source joins after UUID indexing;
+        // insertion and scope preparation alone never synthesize physical acknowledgement.
         helper.runAfterDelay(2L, () -> {
             try {
                 for (int index = 0; index < lease.members().size(); index++) {
                     SceneMember member = lease.members().get(index);
-                    Entity created = admittedBodies.get(index);
                     Entity body = level.getEntity(member.entityId());
-                    helper.assertTrue(!created.isRemoved() && body == created && FrontierV3SceneExecutor.recognizes(runtime, body),
-                            "only a body whose UUID, kind, actor, lease and revision match an active canonical scene may pass Graybox admission: "
+                    helper.assertTrue(body == admittedBodies.get(index) && FrontierV3ServerLifecycle.observeSourceJoin(level, runtime, body).verifiedV3Carrier()
+                                    && FrontierV3SceneExecutor.recognizes(runtime, body),
+                            "only indexed bodies with actual common admission provenance may participate: "
                                     + admissionDetail(runtime, member, body));
                 }
+                FrontierV3AmbientPendingAdmissions.reclaimProjected(runtime, state(runtime));
                 Zombie foreign = EntityType.ZOMBIE.create(level);
                 helper.assertTrue(foreign != null && !FrontierV3SceneExecutor.recognizes(runtime, foreign),
                         "an untagged native mob must not acquire a scene admission proof");
@@ -350,18 +339,17 @@ public final class FrontierV3SceneGameTests {
                 Entity formerBody = level.getEntity(lease.members().getFirst().entityId());
                 helper.assertTrue(formerBody != null && !FrontierV3SceneExecutor.recognizes(runtime, formerBody),
                         "a stale body from a closed scene must be denied rather than retained as a permanent exception");
-                var staleMember = lease.members().getFirst();
+                var retainedMember = lease.members().getFirst();
                 var tombstone = state(runtime).fencedRecovery().tombstones().get(
-                        ActorBodyId.recoveryBindingId(staleMember.actorId()));
-                helper.assertTrue(tombstone != null && state(runtime).fencedRecovery().lateLoad(tombstone.bindingId(),
-                                io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset.BODY,
-                                io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.recoveryOwner(lease),
-                                tombstone.retiredEpoch()) == io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryDisposition.REJECT_STALE,
-                        "the same physical stale-body lifecycle must retain an exact tombstone before it discards the old projection");
+                        ActorBodyId.recoveryBindingId(retainedMember.actorId()));
+                helper.assertTrue(tombstone == null && FrontierV3ActorBodyController.readyForExecution(level, state(runtime),
+                                List.of(io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), retainedMember.actorId()))),
+                        "closing an activity scope must not tombstone or retire its independently confirmed living body");
                 FrontierV3SceneExecutor.cleanClosedBodies(level, state(runtime));
                 helper.assertTrue(level.getEntity(lease.members().getFirst().entityId()) == formerBody
-                                && !FrontierV3SceneExecutor.recognizes(runtime, formerBody),
-                        "an unfenced historical body must remain visible but denied; cleanup cannot erase missing custody evidence");
+                                && !FrontierV3SceneExecutor.recognizes(runtime, formerBody)
+                                && FrontierV3ActorBodyController.recognizes(state(runtime), formerBody),
+                        "scope cleanup retains the same physical object under its common owner without retaining scene authority");
                 helper.succeed();
             } finally {
                 lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
@@ -439,9 +427,10 @@ public final class FrontierV3SceneGameTests {
         prepareFloor(level, feet);
         var world = new WorldId((bioform ? "frontier:first-scene-bioform" : "frontier:first-scene-resident")
                 + (recovered ? "-recovered" : ""));
-        var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
         var actor = new SubjectId(bioform ? "bioform:west-1" : "resident:1-1");
         var member = new SceneMember(actor, SceneLease.deterministicEntityId(world, actor));
+        var state = demandFixtureBodies(initial, List.of(member));
         var lease = fixtureLease(new SceneLeaseId("lease:first-scene"), world,
                 new SubjectId("operation:first-scene"), new SubjectId("cargo:first-scene"),
                 new BlockPosition(feet.getX(), feet.getY(), feet.getZ()), SimInstant.ZERO, 1L,
@@ -449,13 +438,14 @@ public final class FrontierV3SceneGameTests {
         var ledger = FrontierV3AmbientCarrierLedger.get(level, world);
         helper.assertTrue(!FrontierV3SceneExecutor.canResumeUnstartedBodyAdmissions(level, state, lease),
                 "missing physical history cannot authorize restart creation");
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease),
+        var fixtureBodies = localFixtureBodies(lease, feet);
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease, fixtureBodies),
                 FrontierV3SceneExecutor.BodyMaterialization.CONFLICT, "empty column without history is not creation permission");
         FrontierV3ActorFirstAdmissionBootstrap.initialize(ledger, state,
                 new RecoveryImage(world, Optional.empty(), List.of()), () -> ledger.persist(level, world));
         helper.assertValueEqual(FrontierV3SceneExecutor.canResumeUnstartedBodyAdmissions(level, state, lease), recovered,
                 "only an unknown scene with explicit unused permission can resume initial admission");
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease),
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease, fixtureBodies),
                 FrontierV3SceneExecutor.BodyMaterialization.COMPLETE, "issued first permit must admit the exact scene member");
         helper.assertValueEqual(ledger.firstAdmission(actor).orElseThrow().phase(),
                 FrontierV3ActorFirstAdmission.Phase.PENDING, "insertion alone is not a saved-body acknowledgement");
@@ -463,7 +453,7 @@ public final class FrontierV3SceneGameTests {
             var body = level.getEntity(member.entityId());
             helper.assertTrue(bioform ? body instanceof Zombie : body instanceof Villager, "canonical actor kind must be retained");
             ((Mob) body).setHealth(9.0F);
-            helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease),
+            helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease, fixtureBodies),
                     FrontierV3SceneExecutor.BodyMaterialization.COMPLETE, "repeat must reuse the same scene body");
             helper.assertTrue(level.getEntity(member.entityId()) == body, "repeat cannot replace the indexed body");
             helper.assertValueEqual(((Mob) body).getHealth(), 9.0F, "existing body must not be rehydrated from stale canonical health");
@@ -479,7 +469,7 @@ public final class FrontierV3SceneGameTests {
     @GameTest(batch = "pm-frontier-v3-scene-bodies", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void preparedSceneUsesCanonicalBioformIdentityForZombieBodies(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos origin = helper.absolutePos(new BlockPos(16, 8, 0)); prepareFloor(level, origin);
+        BlockPos origin = helper.absolutePos(new BlockPos(2, 8, 2)); prepareFloor(level, origin);
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-bioform-test"), 91L));
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-bioform-test");
         SubjectId bioform = new SubjectId("bioform:west-0");
@@ -487,8 +477,9 @@ public final class FrontierV3SceneGameTests {
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(),
                 List.of(new SceneMember(bioform, SceneLease.deterministicEntityId(state.bootstrap().worldId(), bioform))));
 
+        state = demandFixtureBodies(state, lease.members());
         bootstrapFirstAdmissions(level, state);
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease, localFixtureBodies(lease, origin)), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a canonical hive participant must materialize as its graybox Zombie, never as a Villager");
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         helper.assertTrue(entity instanceof Zombie, "the scene body must retain the canonical bioform kind");
@@ -503,15 +494,16 @@ public final class FrontierV3SceneGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-bodies", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void preparedEngagementSceneKeepsBothSidesAsExactBodies(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(24, 8, 0)); prepareFloor(level, origin); prepareFloor(level, origin.east(2));
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(2, 8, 2)); prepareFloor(level, origin); prepareFloor(level, origin.east(2));
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:engagement-scene-bodies"), 91L));
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-engagement-bodies"); SubjectId resident = new SubjectId("resident:1-1"), bioform = new SubjectId("bioform:west-0");
         SceneLease lease = fixtureLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-engagement-bodies"), new SubjectId("cargo:frontier-v3-engagement-bodies"),
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
                 Optional.of(new SubjectId("engagement:frontier-v3-game-test")), List.of(new SceneMember(resident, SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident)),
                         new SceneMember(bioform, SceneLease.deterministicEntityId(state.bootstrap().worldId(), bioform))));
+        state = demandFixtureBodies(state, lease.members());
         bootstrapFirstAdmissions(level, state);
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease, localFixtureBodies(lease, origin)), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a loaded engagement scene must materialize both exact human and hive members without a second actor set");
         helper.assertTrue(level.getEntity(lease.members().getFirst().entityId()) instanceof Villager, "engagement resident remains one Villager");
         helper.assertTrue(level.getEntity(lease.members().getLast().entityId()) instanceof Zombie, "engagement bioform remains one Zombie");
@@ -523,7 +515,10 @@ public final class FrontierV3SceneGameTests {
         ServerLevel level = helper.getLevel();
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:ambient-test"), 91L));
         SubjectId resident = new SubjectId("resident:1-1"); SubjectId bioform = new SubjectId("bioform:west-0");
-        BlockPos residentSpot = helper.absolutePos(new BlockPos(4, 8, 0)); BlockPos bioformSpot = helper.absolutePos(new BlockPos(8, 8, 0));
+        state = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.demand(state, resident);
+        state = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.demand(state, bioform);
+        bootstrapFirstAdmissions(level, state);
+        BlockPos residentSpot = helper.absolutePos(new BlockPos(2, 8, 2)); BlockPos bioformSpot = helper.absolutePos(new BlockPos(4, 8, 2));
         prepareFloor(level, residentSpot); prepareFloor(level, bioformSpot);
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, resident,
                         new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
@@ -549,64 +544,71 @@ public final class FrontierV3SceneGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-handoff", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void ambientBodyTransfersIntoSceneWithoutCloneOrReplacement(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(20, 8, 0)); prepareFloor(level, origin);
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-handoff-body-test"), 91L));
+    public static void sceneScopeReusesTheSameIndependentlyOwnedBody(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(2, 8, 2)); prepareFloor(level, origin);
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-common-body-test"), 91L));
         SubjectId resident = new SubjectId("resident:1-1");
-        BodyPosition canonical = state.actorLocations().get(resident).body();
-        state = state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(java.util.Map.of(resident,
-                new AmbientActorLease(resident, canonical, SimInstant.ZERO, 1L, AmbientLeaseStatus.HOT,
-                        io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind.WORK, canonical))));
+        state = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.demand(state, resident);
+        bootstrapFirstAdmissions(level, state);
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, resident,
-                        new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
-                "the HOT ambient resident must be present before transfer");
+                        new BodyPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                "the common producer inserts the exact physical incarnation before any scene adopts it");
         Entity original = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, resident));
-        var ambient = state.ambientLeases().get(resident);
-        var closedAmbient = new java.util.LinkedHashMap<>(state.ambientLeases());
-        closedAmbient.put(resident, ambient.withStatus(AmbientLeaseStatus.CLOSED));
-        state = state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(closedAmbient));
-        SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-ambient-transfer");
-        SceneLease lease = fixtureLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-ambient-transfer"), new SubjectId("cargo:frontier-v3-ambient-transfer"),
-                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, ambient.revision() + 1L, SceneLeaseStatus.PREPARED, Optional.empty(),
+        var declaration = FrontierV3ActorCarrierComposition.declaredBy(original).orElseThrow();
+        SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-common-body");
+        SceneLease lease = fixtureLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-common-body"),
+                new SubjectId("cargo:frontier-v3-common-body"), new BlockPosition(origin.getX(), origin.getY(), origin.getZ()),
+                SimInstant.ZERO, 2L, SceneLeaseStatus.PREPARED, Optional.empty(),
                 List.of(new SceneMember(resident, SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident))));
-
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
-                "a prepared scene must adopt its exact ambient body rather than recreate it");
-        Entity transferred = level.getEntity(lease.members().getFirst().entityId());
-        helper.assertTrue(transferred == original, "the transferred Villager must keep its exact Minecraft entity instance and UUID");
-        helper.assertValueEqual(transferred.getPersistentData().getString(FrontierV3SceneExecutor.LEASE_KEY), lease.id().value(),
-                "the same body must now carry scene authority");
-        helper.assertTrue(!FrontierV3AmbientActorExecutor.owned(transferred, resident, false), "ambient ownership markers must not survive the transfer");
-        helper.assertTrue(((Villager) transferred).isNoAi(), "the transferred body must enter controlled scene execution");
-        transferred.discard(); helper.succeed();
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease),
+                FrontierV3SceneExecutor.BodyMaterialization.COMPLETE, "a scene references the already owned body without a transfer");
+        Entity referenced = level.getEntity(declaration.entityId());
+        helper.assertTrue(referenced == original, "the scene keeps the exact indexed Java object and UUID");
+        helper.assertValueEqual(FrontierV3ActorCarrierComposition.declaredBy(referenced).orElseThrow(), declaration,
+                "activity scope cannot restamp the physical owner, epoch or identity");
+        helper.assertValueEqual(declaration.owner(), FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                "only the activity-independent body lifecycle owns the entity");
+        helper.assertTrue(((Villager) referenced).isNoAi(), "the retained body remains under common controlled execution");
+        referenced.discard(); helper.succeed();
     }
 
     @GameTest(batch = "pm-frontier-v3-ambient-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void restoredOwnedBodyReclaimsUnknownAmbientLeaseWithoutDuplication(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos origin = helper.absolutePos(new BlockPos(12, 8, 0)); prepareFloor(level, origin);
+        BlockPos origin = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, origin);
         WorldId world = new WorldId("frontier:ambient-reclaim-game-test");
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
         SubjectId resident = new SubjectId("resident:1-1");
+        var config = FrontierV3AmbientActorGameTests.configurationAt(helper, world, 91L, resident);
+        var store = new EphemeralStore();
+        FrontierV3AmbientActorGameTests.initializeAdmission(level, config, store);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(config, store, 10_000);
         FrontierWorldState initial = state(runtime);
         AmbientActorLease lease = AmbientActorProcess.nextLease(initial, resident, runtime.checkpointImage().orElseThrow().instant());
         FrontierV3CommandSubmission.submit(runtime, "ambient-game-test-prepare", resident.value(), new AmbientLeasePrepared(lease));
-        FrontierV3CommandSubmission.submit(runtime, "ambient-game-test-hot", resident.value(), new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT));
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident, lease.handoffBody()),
+                FrontierV3AmbientActorExecutor.Result.APPLIED, "common producer admits the original body before recovery input");
+        Entity original = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), resident));
+        helper.assertTrue(original instanceof Villager, "the original common body must be indexed");
+        FrontierV3ActorBodyController.confirmPresent(level, runtime, original);
+        FrontierV3CommandSubmission.submit(runtime, "ambient-game-test-hot", resident.value(),
+                new io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed(resident, lease.revision(),
+                        io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed.Boundary.ADMISSION,
+                        lease.handoffBody(), lease.handoffBody(),
+                        io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), resident)));
         helper.assertValueEqual(FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
                 "restart recovery must make an active ambient lease UNKNOWN before any body is accepted");
 
-        Villager restored = EntityType.VILLAGER.create(level);
-        helper.assertTrue(restored != null, "the restored owned-body fixture must be constructible");
-        restored.setUUID(FrontierV3AmbientActorExecutor.entityId(initial, resident));
-        restored.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
-        restored.setNoAi(true);
-        restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
-        restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
-        restored.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
-        FrontierV3ActorCarrierComposition.stamp(restored, FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), resident, restored.getUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L));
+        // Actual vanilla serialization supplies declaration/residence/equipment.
+        // This component test is not a region-file crash/restart acceptance claim.
+        var saved = new net.minecraft.nbt.CompoundTag();
+        helper.assertTrue(original.save(saved), "the real common body must serialize");
+        original.discard();
+        Entity restored = EntityType.loadEntityRecursive(saved, level, entity -> entity);
+        helper.assertTrue(restored instanceof Villager && restored.getUUID().equals(original.getUUID()),
+                "vanilla NBT restores the same declared body identity");
 
-        FrontierV3ServerLifecycle.JoinFirewallProof restoredProof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, restored);
+        FrontierV3ServerLifecycle.JoinFirewallProof restoredProof = FrontierV3ServerLifecycle.observeSourceJoin(level, runtime, restored);
         helper.assertValueEqual(restoredProof.lifecycleAdmission(), FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED,
                 "the exact restored body must enter lifecycle admission before Minecraft publishes its UUID index");
         helper.assertTrue(restoredProof.verifiedV3Carrier()
@@ -619,28 +621,18 @@ public final class FrontierV3SceneGameTests {
         helper.assertTrue(level.addFreshEntity(restored),
                 "only the accepted ordinary lifecycle/firewall result may let the restored body enter the loaded world");
 
-        FrontierV3AftermathOwnerComposition.projection(level, runtime);
-        var structuralOwner = state(runtime).bootstrap().settlements().getFirst().structures().getFirst();
-        var projectedCell = FrontierV3GrayboxExecutor.admissionProvider(runtime, runtime.decodedState().orElseThrow())
-                .orElseThrow().cellAt(structuralOwner.anchor()).orElseThrow();
-        helper.assertValueEqual(projectedCell.ownerId(), structuralOwner.id(),
-                "the installed projection must identify the exact structural replacement source");
-        FrontierV3CommandSubmission.submit(runtime, "recovery-pending-structural-fence", structuralOwner.id().value(),
-                new io.farfrontier.palemirror.frontier.v3.model.StructureDamaged(structuralOwner.id(), projectedCell.position(),
-                        projectedCell.semanticPart(), "player:recovery-pending-structural-fence"));
-        FrontierV3AmbientActorExecutor.tick(level, runtime);
+        helper.runAfterDelay(2L, () -> {
+        FrontierV3ServerLifecycle.observeSourceJoin(level, runtime, restored);
+        FrontierV3AmbientPendingAdmissions.reclaimProjected(runtime, state(runtime));
+        helper.assertTrue(FrontierV3ActorBodyController.readyForExecution(level, state(runtime), List.of(
+                        io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), resident))),
+                "the common owner confirms indexed same-incarnation presence before activity recovery");
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.UNKNOWN_AFTER_RESTART,
-                "a structural replacement between projection and actor must keep the sole pending body inert");
-        helper.assertTrue(FrontierV3AmbientActorExecutor.retainsPendingJoin(runtime, restored),
-                "UUID indexing must not erase the sole pending authority before strict provider recognition");
-
-        long revisionBeforeCompatibleHandoff = runtime.canonicalState().orElseThrow().revision().value();
+                "indexed body confirmation cannot restore an activity scope");
         FrontierV3AftermathOwnerComposition.projection(level, runtime);
         FrontierV3AmbientActorExecutor.tick(level, runtime);
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
                 "the next compatible projection must permit exactly the ordinary reclaim handoff");
-        helper.assertValueEqual(runtime.canonicalState().orElseThrow().revision().value(), revisionBeforeCompatibleHandoff + 1L,
-                "one compatible projection may submit exactly one UNKNOWN-to-HOT reclaim transition");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
                         new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
                 "reclaim must retain the existing body instead of creating another one");
@@ -648,6 +640,7 @@ public final class FrontierV3SceneGameTests {
         FrontierV3ServerLifecycle.releaseRuntime(runtime);
         restored.discard();
         helper.succeed();
+        });
     }
 
     @GameTest(batch = "pm-frontier-v3-ambient-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
@@ -668,17 +661,15 @@ public final class FrontierV3SceneGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void completeOwnedSceneReclaimsAfterRestartAndMissingBodyStaysUnknown(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(20, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(3, 1, 3));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId("frontier:scene-reclaim-game-test"), 91L), new EphemeralStore(), 20_000);
+                FrontierV3SceneBodyGameTestFixture.start(helper, new WorldId("frontier:scene-reclaim-game-test"), 91L, new EphemeralStore());
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:scene-reclaim-game-test");
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the scene reclaim fixture runtime must remain active"));
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
         FrontierV3CommandSubmission.submit(runtime, "scene-reclaim-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease);
         FrontierV3CommandSubmission.submit(runtime, "scene-reclaim-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-        for (int index = 0; index < lease.members().size(); index++) {
-            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position);
-        }
         BlockPos cargo = cargoPosition(origin, lease); prepareFloor(level, cargo);
         MinecartChest carrier = addOwnedCarrier(helper, level, state(runtime), lease, cargo);
         helper.runAfterDelay(1L, () -> {
@@ -720,15 +711,13 @@ public final class FrontierV3SceneGameTests {
         // bomber before the durable-effect assertion ran.
         String fixture = "scene-explosion-game-test-" + origin.getX() + "-" + origin.getZ();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId("frontier:" + fixture), 91L), new EphemeralStore(), 20_000);
+                FrontierV3SceneBodyGameTestFixture.start(helper, new WorldId("frontier:" + fixture), 91L, new EphemeralStore());
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:" + fixture);
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the explosion fixture runtime must remain active"));
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
         FrontierV3CommandSubmission.submit(runtime, "scene-explosion-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease);
         FrontierV3CommandSubmission.submit(runtime, "scene-explosion-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-        for (int index = 0; index < lease.members().size(); index++) {
-            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position);
-        }
         SubjectId bomber = lease.members().stream().map(SceneMember::actorId).filter(actor -> state(runtime).bootstrap().hive().bioforms().stream()
                 .anyMatch(bioform -> bioform.id().equals(actor) && bioform.isExplosiveAssaulter())).findFirst().orElseThrow();
         // Entity indexing can trail the first GameTest callback when the core suite starts
@@ -770,28 +759,24 @@ public final class FrontierV3SceneGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-explosion-live", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void hotBomberBlastUsesRealTntEventAndRetainsPostImpactInspection(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(2, 8, 2));
         // The dedicated server runs fixture cells in parallel.  Scene-body UUIDs deliberately
         // derive from WorldId + actor, so a fixed fixture WorldId would collide with another
         // concurrent test using the same bootstrap actors.  The physical cell is stable for
         // this run and makes the fixture identity isolated without changing production IDs.
         String fixture = "scene-real-explosion-game-test-" + origin.getX() + "-" + origin.getZ();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId("frontier:" + fixture), 91L), new EphemeralStore(), 20_000);
+                FrontierV3SceneBodyGameTestFixture.start(helper, new WorldId("frontier:" + fixture), 91L, new EphemeralStore());
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:" + fixture);
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the real-blast fixture runtime must remain active"));
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
         FrontierV3CommandSubmission.submit(runtime, "scene-real-explosion-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease);
         FrontierV3CommandSubmission.submit(runtime, "scene-real-explosion-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         // The regular graybox is flat; the bare GameTest template is not.  Give the ballistic
         // vanilla TNT the same supported ground instead of allowing it to fall out of the fixture.
-        for (int x = -2; x <= 8; x++) for (int z = -2; z <= 4; z++) prepareFloor(level, origin.offset(x, 0, z));
-        for (int index = 0; index < lease.members().size(); index++) {
-            BlockPos position = origin.offset(index & 1, 0, index / 2);
-            prepareFloor(level, position);
-            addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position);
-        }
-        BlockPos blastTarget = origin.east(3); prepareFloor(level, blastTarget); level.setBlock(blastTarget, Blocks.STONE.defaultBlockState(), 3);
+        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) prepareFloor(level, origin.offset(x, 0, z));
+        BlockPos blastTarget = origin.east(); prepareFloor(level, blastTarget); level.setBlock(blastTarget, Blocks.STONE.defaultBlockState(), 3);
         AtomicBoolean active = new AtomicBoolean(true), captured = new AtomicBoolean();
         java.util.concurrent.atomic.AtomicReference<String> detonationSource = new java.util.concurrent.atomic.AtomicReference<>("no detonation event");
         Consumer<ExplosionEvent.Detonate> listener = event -> {
@@ -864,11 +849,19 @@ public final class FrontierV3SceneGameTests {
     private static SceneLease fixtureLease(SceneLeaseId id, WorldId world, SubjectId operation, SubjectId cargo, BlockPosition handoff,
                                            SimInstant instant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagement,
                                            List<SceneMember> members) {
-        java.util.Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.BodyPosition> bodies = new java.util.LinkedHashMap<>();
-        for (int index = 0; index < members.size(); index++) {
-            bodies.put(members.get(index).actorId(), new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(handoff.x() + index * 2, handoff.y(), handoff.z()));
-        }
         return SceneLease.atExactPositions(id, world, operation, cargo, handoff, handoff, instant, revision, status, engagement, members);
+    }
+    /** Constructor fixture only: demand is not an acknowledgement of insertion or HOT readiness. */
+    private static FrontierWorldState demandFixtureBodies(FrontierWorldState state, List<SceneMember> members) {
+        for (var member : members) state = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.demand(state, member.actorId());
+        return state;
+    }
+    /** Explicit test-cell projection; never submitted as a canonical physical observation. */
+    private static java.util.Map<SubjectId, BodyPosition> localFixtureBodies(SceneLease lease, BlockPos origin) {
+        var bodies = new java.util.LinkedHashMap<SubjectId, BodyPosition>();
+        for (int index = 0; index < lease.members().size(); index++)
+            bodies.put(lease.members().get(index).actorId(), new BodyPosition(origin.getX() + index * 2, origin.getY(), origin.getZ()));
+        return java.util.Map.copyOf(bodies);
     }
     private static SceneMember member(WorldId world, String actorId) {
         SubjectId actor = new SubjectId(actorId);
@@ -894,25 +887,7 @@ public final class FrontierV3SceneGameTests {
                         && templateBounds.contains(new Vec3(body.maxX, body.maxY, body.maxZ)), message);
     }
     private static BlockPos cargoPosition(BlockPos anchor, SceneLease lease) {
-        int ordinal = lease.members().size();
-        return anchor.offset((ordinal % 2) * 2 + 1, 0, (ordinal / 2) * 2);
-    }
-    static net.minecraft.world.entity.Mob addOwnedBody(GameTestHelper helper, ServerLevel level, FrontierWorldState state,
-                                                                SceneLease lease, SceneMember member, BlockPos position) {
-        boolean bioform = state.bootstrap().hive().bioforms().stream().anyMatch(candidate -> candidate.id().equals(member.actorId()))
-                || state.hiveColony().spawnedBioforms().containsKey(member.actorId());
-        net.minecraft.world.entity.Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
-        helper.assertTrue(body != null, "the exact HOT body fixture must be constructible");
-        body.setUUID(member.entityId()); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired(); body.setNoAi(true);
-        if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
-                FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
-        body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, lease.id().value());
-        body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
-        body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
-        body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
-        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(), member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L));
-        helper.assertTrue(level.addFreshEntity(body), "the exact HOT body fixture must enter the loaded world");
-        return body;
+        return anchor;
     }
     /** Local GameTest representation of the one already-canonical bounded cargo stack. */
     private static MinecartChest addOwnedCarrier(GameTestHelper helper, ServerLevel level, FrontierWorldState state,
@@ -943,9 +918,8 @@ public final class FrontierV3SceneGameTests {
                 .orElseThrow(() -> new IllegalStateException("the HOT scene did not prepare its exact next strike"));
     }
     static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        return new FrontierWorldStateCodec().decode(runtime.checkpointImage()
-                .orElseThrow(() -> new IllegalStateException("the v3 GameTest runtime must remain active: "
-                        + runtime.status().detail().orElse(runtime.status().kind().name()))).canonicalState());
+        return runtime.decodedState().orElseThrow(() -> new IllegalStateException("the v3 GameTest runtime must remain active: "
+                + runtime.status().detail().orElse(runtime.status().kind().name())));
     }
     private static String admissionDetail(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneMember member, Entity body) {
         if (body == null) return "missing body for " + member.actorId() + " expectedUuid=" + member.entityId();

@@ -88,6 +88,19 @@ class FrontierV3GameTestSliceTest {
     }
 
     @Test
+    void bodyRecoveryAdoptionUsesExistingBoundariesWithoutRepeatingCargoOrConstruction() {
+        for (String batch : java.util.List.of("pm-frontier-v3-scene-handoff", "pm-frontier-v3-scene-restart-reclaim",
+                "pm-frontier-v3-ambient-restart-reclaim", "pm-frontier-v3-ambient-restart-absence",
+                "pm-frontier-v3-ambient-physics", "pm-frontier-v3-scout-patrol-cursor", "pm-frontier-v3-scene-explosion",
+                "pm-frontier-v3-scene-explosion-live", "pm-frontier-v3-scene-strikes",
+                "pm-frontier-v3-scene-observer-combat-calibration")) {
+            assertTrue(FrontierV3GameTestSlice.includes("body-recovery-adoption", batch));
+        }
+        assertFalse(FrontierV3GameTestSlice.includes("body-recovery-adoption", "pm-frontier-v3-scene-cargo"));
+        assertFalse(FrontierV3GameTestSlice.includes("body-recovery-adoption", "pm-frontier-v3-scene-route-construction"));
+    }
+
+    @Test
     void emptySliceCannotAccidentallyFilterTheFullGateAndUnknownSlicesFailClosed() {
         assertTrue(FrontierV3GameTestSlice.includes("", "core-integration"));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3GameTestSlice.includes("all", "pm-frontier-v3-scene-handoff"));

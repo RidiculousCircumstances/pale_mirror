@@ -207,7 +207,9 @@ final class FrontierV3RoutePatrolSceneExecutor {
                 io.farfrontier.palemirror.frontier.v3.model.RoutePatrolExecutionAuthority.current(state, patrol)));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_blocked", lease, result);
     }
-    private static boolean at(Mob body, SurfaceAnchor surface) { return FrontierV3SurfaceObservation.at(body, surface); }
+    private static boolean at(Mob body, SurfaceAnchor surface) {
+        return body.level() instanceof ServerLevel level && FrontierV3SemanticMovement.arrived(level, body, surface);
+    }
     private static Vec3 point(SurfaceAnchor surface) { return FrontierV3SurfaceObservation.point(surface); }
     /**
      * A formation edge moves the complete retained roster together.  A scout may therefore

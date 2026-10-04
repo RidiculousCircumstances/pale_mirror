@@ -107,23 +107,28 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
     }
 
     private static Session startHotSample(GameTestHelper helper, BlockPos origin, long seed) {
+        var configuration = FrontierV3SceneBodyGameTestFixture.assaultConfiguration(helper, world(seed), seed);
+        var store = new EphemeralStore();
+        FrontierV3SceneBodyGameTestFixture.initializeAdmission(helper, configuration, store);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.settlementAssaultConfiguration(world(seed), seed),
-                        new EphemeralStore(), 20_000);
+                FrontierV3ServerRuntime.start(configuration, store, 20_000);
         FrontierWorldState state = state(runtime);
         SettlementAssaultSceneCandidate candidate = state.coldSettlementAssaultSceneCandidates().getFirst();
         SceneLease lease = lease(runtime, state, candidate, new SceneLeaseId("lease:observer-combat-" + seed));
         FrontierV3CommandSubmission.submit(runtime, "observer-combat-prepare", lease.id().value(),
                 new SettlementAssaultSceneLeasePrepared(lease));
-        FrontierV3CommandSubmission.submit(runtime, "observer-combat-hot", lease.id().value(),
-                new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
-        List<Entity> bodies = new ArrayList<>();
+        var positions = new LinkedHashMap<SubjectId, BodyPosition>();
         for (int index = 0; index < lease.members().size(); index++) {
             BlockPos position = origin.offset(index % 3, 0, index / 3);
             prepareFloor(helper.getLevel(), position);
-            Entity body = addOwnedBody(helper, helper.getLevel(), state(runtime), lease, lease.members().get(index), position);
+            positions.put(lease.members().get(index).actorId(), new BodyPosition(position.getX(), position.getY(), position.getZ()));
+        }
+        List<Entity> bodies = FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease, positions);
+        FrontierV3CommandSubmission.submit(runtime, "observer-combat-hot", lease.id().value(),
+                new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
+        for (int index = 0; index < bodies.size(); index++) {
+            Entity body = bodies.get(index);
             body.setPos(origin.getX() + .25D + (index % 3) * .4D, origin.getY(), origin.getZ() + .25D + (index / 3) * .4D);
-            bodies.add(body);
         }
         return new Session(seed, runtime, lease, bodies);
     }
@@ -234,25 +239,6 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
                 SceneLeaseStatus.PREPARED, members, java.util.Set.of(), Optional.empty());
     }
 
-    private static Entity addOwnedBody(GameTestHelper helper, ServerLevel level, FrontierWorldState state, SceneLease lease,
-                                       SceneMember member, BlockPos position) {
-        boolean bioform = state.bootstrap().hive().bioforms().stream().anyMatch(candidate -> candidate.id().equals(member.actorId()))
-                || state.hiveColony().spawnedBioforms().containsKey(member.actorId());
-        net.minecraft.world.entity.Mob body = bioform ? net.minecraft.world.entity.EntityType.ZOMBIE.create(level)
-                : net.minecraft.world.entity.EntityType.VILLAGER.create(level);
-        helper.assertTrue(body != null, "the exact HOT calibration body must be constructible");
-        body.setUUID(member.entityId()); body.setPos(position.getX() + .5D, position.getY(), position.getZ() + .5D); body.setNoAi(true);
-        if (body instanceof net.minecraft.world.entity.monster.Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
-                FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
-        body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, lease.id().value());
-        body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
-        body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
-        body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
-        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(), member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L));
-        helper.assertTrue(level.addFreshEntity(body), "the exact HOT calibration body must enter the physical level");
-        return body;
-    }
-
     private static void prepareFloor(ServerLevel level, BlockPos position) {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(position, Blocks.AIR.defaultBlockState(), 3);
@@ -265,7 +251,7 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
     }
 
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+        return runtime.decodedState().orElseThrow();
     }
 
     private static void close(Session session) {

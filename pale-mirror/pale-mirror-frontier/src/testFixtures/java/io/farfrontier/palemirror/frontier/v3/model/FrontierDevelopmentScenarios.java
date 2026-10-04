@@ -120,7 +120,11 @@ final class FrontierDevelopmentScenarios {
      * nor a Minecraft body: a naturally visiting player must admit the typed HOT scene.
      */
     static SettlementAssaultFixture settlementAssaultFixture(WorldId worldId, long seed) {
-        SettlementAssaultFixture started = startedSettlementAssaultFixture(worldId, seed);
+        return settlementAssaultFixture(FrontierBootstrapper.create(worldId, seed));
+    }
+
+    static SettlementAssaultFixture settlementAssaultFixture(FrontierBootstrap bootstrap) {
+        SettlementAssaultFixture started = startedSettlementAssaultFixture(bootstrap);
         FrontierWorldState state = started.state();
         ScheduledAction next = started.schedules().stream().filter(action -> action.kind().equals("frontier.settlement_assault.progress")).findFirst()
                 .orElseThrow(() -> new IllegalStateException("development assault fixture did not schedule approach"));
@@ -257,7 +261,11 @@ final class FrontierDevelopmentScenarios {
     }
 
     static SettlementAssaultFixture startedSettlementAssaultFixture(WorldId worldId, long seed) {
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        return startedSettlementAssaultFixture(FrontierBootstrapper.create(worldId, seed));
+    }
+
+    private static SettlementAssaultFixture startedSettlementAssaultFixture(FrontierBootstrap bootstrap) {
+        FrontierWorldState state = FrontierWorldState.initial(bootstrap);
         Settlement settlement = state.bootstrap().settlements().getFirst();
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst()
                 .orElseThrow(() -> new IllegalStateException("development assault fixture needs one Scout"));
@@ -337,7 +345,7 @@ final class FrontierDevelopmentScenarios {
         return routeSceneReturnFixture(routeCustodyConfiguration(worldId, seed));
     }
 
-    private static RouteSceneReturnFixture routeSceneReturnFixture(
+    static RouteSceneReturnFixture routeSceneReturnFixture(
             io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
         var engine = FrontierEngines.create(configuration);
         var codec = new FrontierWorldStateCodec(configuration.initialState().bootstrap());

@@ -99,7 +99,9 @@ class ExplosionObservationTest {
         SceneLease lease = FrontierTestSceneLeases.exact(state, leaseId, candidate.operationId(), candidate.cargoId(),
                 candidate.handoffPosition(), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(2_601L),
                 1L, java.util.Optional.of(candidate.engagementId()), candidate.actorIds());
-        return state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        state = state.prepareSceneLease(lease);
+        for (var member : lease.members()) state = ModeledActorBodyFacts.present(state, member.actorId());
+        return state.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
     }
 
     private static Bioform bomber(FrontierWorldState state, SubjectId engagementId) {

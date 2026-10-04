@@ -188,7 +188,8 @@ class HumanTacticalFunctionProjectionTest {
         state = FrontierTestPositions.deployBioform(state, scout.id(), FrontierTestPositions.bodyAboveSupport(settlement.anchor()));
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
                 .filter(value -> value.isDefender() || value.isExplosiveAssaulter() || value.isOverseer()).toList()) {
-            state = FrontierTestPositions.deployBioform(state, bioform.id(), state.actorLocations().get(bioform.id()).body());
+            state = FrontierTestPositions.deployBioform(state, bioform.id(),
+                    state.actorLocations().get(bioform.id()).body().offset(0, -1, 0));
         }
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
         InfectionCell cell = InfectionCell.at(settlement.anchor());

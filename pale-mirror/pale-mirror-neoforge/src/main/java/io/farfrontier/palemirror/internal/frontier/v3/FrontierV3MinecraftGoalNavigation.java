@@ -117,6 +117,10 @@ final class FrontierV3MinecraftGoalNavigation {
                 ACTIVE.put(actor, current.refreshed(level.getGameTime(), permission));
                 return new Result(Status.IN_PROGRESS, "minecraft-path-active");
             }
+            if (settleObservedStation(level, actor, current)) {
+                ACTIVE.put(actor, current.refreshed(level.getGameTime(), permission));
+                return new Result(Status.IN_PROGRESS, "minecraft-final-station-settling");
+            }
             stopPath(actor);
         } else if (current != null) {
             stopPath(actor);
@@ -206,7 +210,9 @@ final class FrontierV3MinecraftGoalNavigation {
         }
         if (actor.getNavigation().isDone() || actor.getNavigation().getPath() == null) {
             // Native node tolerance is looser than station arrival. Keep the physical bridge
-            // alive through the final jump/landing; post-tick pursuit may replan the same goal.
+            // alive through final landing and centering, under the same exact permission.
+            // Replanning a one-node path alone never gives MoveControl a final wanted point.
+            settleObservedStation(level, actor, control);
             actor.getMoveControl().tick();
             actor.getJumpControl().tick();
             return true;
@@ -233,8 +239,20 @@ final class FrontierV3MinecraftGoalNavigation {
         // here as well would double-integrate each HOT pedestrian turn.
         FrontierV3BodyObservation.refreshGroundContact(level, actor);
         actor.getNavigation().tick();
+        if (actor.getNavigation().isDone()) settleObservedStation(level, actor, control);
         actor.getMoveControl().tick();
         actor.getJumpControl().tick();
+        return true;
+    }
+
+    /** Native steering inside the already observed station, never another route/arrival writer. */
+    private static boolean settleObservedStation(ServerLevel level, Mob actor, Control control) {
+        if (FrontierV3SemanticMovement.arrived(level, actor, control.target())
+                || FrontierV3SemanticMovement.at(level, actor, control.target())
+                    != io.farfrontier.palemirror.frontier.v3.model.SemanticTraversalArrival.Disposition.ARRIVED
+                || !FrontierV3SemanticMovement.targetIsNavigable(level, actor, control.target())) return false;
+        Vec3 point = FrontierV3SemanticMovement.point(level, control.target());
+        actor.getMoveControl().setWantedPosition(point.x, point.y, point.z, SPEED);
         return true;
     }
 

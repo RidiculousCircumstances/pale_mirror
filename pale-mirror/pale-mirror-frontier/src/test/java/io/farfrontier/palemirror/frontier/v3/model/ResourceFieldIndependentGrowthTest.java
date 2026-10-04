@@ -22,7 +22,7 @@ class ResourceFieldIndependentGrowthTest {
         var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         assertEquals(64, job.undeliveredYieldQuantity());
         var clock = ResourceSiteProcess.nextGrowth(state.resourceSites().site(hot.site()), 22_301L);
-        var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), state.bootstrap().seed());
+        var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
         var journal = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord>();
         var config = new FrontierEngineConfiguration<>(base.worldId(), state, new SimInstant(22_300L),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),

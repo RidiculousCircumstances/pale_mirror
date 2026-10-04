@@ -137,14 +137,16 @@ public final class FrontierV3SceneStrikeGameTests {
     public static void recordedMissingMemberIsReinspectedWithoutDuplicateCommands(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos origin = helper.absolutePos(new BlockPos(1, 2, 1));
-        var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.settlementAssaultConfiguration(
-                new WorldId("frontier:reinspect-" + origin.getX() + "-" + origin.getZ()), 91L), new EphemeralStore(), 20_000);
+        var configuration = FrontierV3SceneBodyGameTestFixture.assaultConfiguration(helper,
+                new WorldId("frontier:reinspect-" + origin.getX() + "-" + origin.getZ()), 91L);
+        var store = new EphemeralStore();
+        FrontierV3SceneBodyGameTestFixture.initializeAdmission(helper, configuration, store);
+        var runtime = FrontierV3ServerRuntime.start(configuration, store, 20_000);
         var initial = state(runtime);
         var candidate = initial.coldSettlementAssaultSceneCandidates().getFirst();
         var canonical = settlementAssaultLease(runtime, initial, candidate, new SceneLeaseId("lease:reinspect"));
         FrontierV3CommandSubmission.submit(runtime, "reinspect-prepare", canonical.id().value(),
                 new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePrepared(canonical));
-        FrontierV3CommandSubmission.submit(runtime, "reinspect-hot", canonical.id().value(), new SceneLeaseTransition(canonical.id(), SceneLeaseStatus.HOT));
         var positions = new java.util.LinkedHashMap<SubjectId, BodyPosition>();
         for (int index = 0; index < canonical.members().size(); index++) {
             BlockPos cell = origin.offset(index % 6, 0, index / 6);
@@ -153,10 +155,8 @@ public final class FrontierV3SceneStrikeGameTests {
         }
         // Component-only coordinate projection; canonical commands still bind the original lease.
         var local = canonical.withHandoffPosition(new BlockPosition(origin.getX(), origin.getY(), origin.getZ()));
-        for (var member : local.members()) {
-            var body = positions.get(member.actorId());
-            addOwnedBody(helper, level, state(runtime), local, member, new BlockPos(body.x(), body.y(), body.z()));
-        }
+        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, canonical, positions);
+        FrontierV3CommandSubmission.submit(runtime, "reinspect-hot", canonical.id().value(), new SceneLeaseTransition(canonical.id(), SceneLeaseStatus.HOT));
         var player = helper.makeMockServerPlayerInLevel();
         player.setPos(origin.getX(), origin.getY(), origin.getZ());
         helper.runAfterDelay(2L, () -> {
@@ -208,22 +208,27 @@ public final class FrontierV3SceneStrikeGameTests {
         BlockPos origin = helper.absolutePos(new BlockPos(1, 2, 1));
         String fixture = "settlement-assault-strike-" + origin.getX() + "-" + origin.getZ();
         var replayStore = new StrikeReplayStore();
-        var configuration = FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:" + fixture), 91L);
+        var configuration = FrontierV3SceneBodyGameTestFixture.assaultConfiguration(helper, new WorldId("frontier:" + fixture), 91L);
+        var store = recoverAfterDamage ? replayStore : new EphemeralStore();
+        FrontierV3SceneBodyGameTestFixture.initializeAdmission(helper, configuration, store);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(configuration, recoverAfterDamage ? replayStore : new EphemeralStore(), 20_000);
+                FrontierV3ServerRuntime.start(configuration, store, 20_000);
         FrontierWorldState initial = state(runtime); SettlementAssaultSceneCandidate candidate = initial.coldSettlementAssaultSceneCandidates().getFirst();
         SceneLease canonical = settlementAssaultLease(runtime, initial, candidate, new SceneLeaseId("lease:" + fixture));
         FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-prepare", canonical.id().value(), new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePrepared(canonical));
-        FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-hot", canonical.id().value(), new SceneLeaseTransition(canonical.id(), SceneLeaseStatus.HOT));
         SceneLease local = canonical;
         int fixtureColumns = 6, fixtureRows = 6;
         helper.assertTrue(local.members().size() <= fixtureColumns * fixtureRows,
                 "the authored template reserves a bounded 6 by 6 local body grid");
+        var positions = new java.util.LinkedHashMap<SubjectId, BodyPosition>();
         for (int index = 0; index < local.members().size(); index++) {
             BlockPos position = origin.offset(index % fixtureColumns, 0, index / fixtureColumns); prepareFloorWithinTemplate(helper, level, templateBounds, position);
-            Entity body = addOwnedBody(helper, level, state(runtime), local, local.members().get(index), position);
-            requireEntityWithinTemplate(helper, templateBounds, body, "every owned fixture body must enter inside the authored envelope");
+            positions.put(local.members().get(index).actorId(), new BodyPosition(position.getX(), position.getY(), position.getZ()));
         }
+        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, canonical, positions)
+                .forEach(body -> requireEntityWithinTemplate(helper, templateBounds, body,
+                        "every owned fixture body must enter inside the authored envelope"));
+        FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-hot", canonical.id().value(), new SceneLeaseTransition(canonical.id(), SceneLeaseStatus.HOT));
         helper.runAfterDelay(2L, () -> {
             try {
                 helper.assertValueEqual(local.members().stream().filter(member -> FrontierV3SceneExecutor.owned(level.getEntity(member.entityId()), state(runtime), local, member)).count(),

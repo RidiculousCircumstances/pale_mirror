@@ -67,7 +67,7 @@ public final class FrontierV3CargoRetirementGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-cargo-interaction", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void successfulSaveWithoutBirthHistoryCannotAcknowledgeRetainedCart(GameTestHelper helper) {
-        var level = helper.getLevel(); var runtime = runtime("frontier:missing-birth-ack");
+        var level = helper.getLevel(); var runtime = runtime(helper, "frontier:missing-birth-ack");
         var initial = state(runtime);
         var lease = FrontierV3GameTestSceneLeases.exact(initial, runtime.checkpointImage().orElseThrow(),
                 initial.coldEngagementSceneCandidates().getFirst(), new SceneLeaseId("lease:missing-birth-ack"));
@@ -76,6 +76,7 @@ public final class FrontierV3CargoRetirementGameTests {
         var cart = addOwnedCarrier(helper, level, state(runtime), lease, position);
         helper.assertTrue(FrontierV3CargoFootprintObserver.prepareBirth(level, lease,
                 FrontierV3CargoCarrierAuthority.currentEpoch(state(runtime).fencedRecovery(), lease).orElseThrow(), cart), "birth is initially durable");
+        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease);
         FrontierV3CommandSubmission.submit(runtime, "missing-birth-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         helper.runAfterDelay(2L, () -> {
             try {
@@ -119,7 +120,7 @@ public final class FrontierV3CargoRetirementGameTests {
     static void footprintAcknowledgement(GameTestHelper helper, boolean destroy, boolean restore, boolean retryRemoval) {
         // Registered canonical commands + real entity/archive, with controlled provider IO
         // futures. This tests composition/failed-write retry, NOT a real region-file crash.
-        var level = helper.getLevel(); var runtime = runtime("frontier:footprint-ack-" + destroy + "-" + restore + "-" + retryRemoval);
+        var level = helper.getLevel(); var runtime = runtime(helper, "frontier:footprint-ack-" + destroy + "-" + restore + "-" + retryRemoval);
         var initial = state(runtime);
         var lease = FrontierV3GameTestSceneLeases.exact(initial, runtime.checkpointImage().orElseThrow(),
                 initial.coldEngagementSceneCandidates().getFirst(), new SceneLeaseId("lease:footprint-ack-" + destroy + "-" + restore + "-" + retryRemoval));
@@ -129,6 +130,7 @@ public final class FrontierV3CargoRetirementGameTests {
         var carrier = new java.util.concurrent.atomic.AtomicReference<MinecartChest>(original);
         helper.assertTrue(FrontierV3CargoFootprintObserver.prepareBirth(level, lease,
                 FrontierV3CargoCarrierAuthority.currentEpoch(state(runtime).fencedRecovery(), lease).orElseThrow(), original), "birth must be durable");
+        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease);
         FrontierV3CommandSubmission.submit(runtime, "footprint-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         Runnable exercise = () -> {
             var cart = carrier.get();

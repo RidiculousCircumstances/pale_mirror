@@ -413,7 +413,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 spatial.waitingOrigin().ifPresent(surface -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), surface.support()));
             }));
         }
-        FrontierRouteEngagementSupport.validate(bootstrap, hiveColony, actorLocations, operations, strategicPlans);
+        FrontierRouteEngagementSupport.validate(bootstrap, hiveColony, actorLocations, operations, strategicPlans, fencedRecovery);
         FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
         if (physicalIntents.size() > MAX_PHYSICAL_INTENTS) throw new IllegalArgumentException("physical intent retention limit exceeded");
         for (Map.Entry<PhysicalIntentId, PhysicalIntent> entry : physicalIntents.entrySet()) {
@@ -506,12 +506,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     void validateTransitionFrom(FrontierWorldState previous) {
         Objects.requireNonNull(previous, "previous state");
         if (onlyInfectionPlannerAndHealthChangedFrom(previous)) {
-            FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, operations, contracts);
+            FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, operations, contracts, fencedRecovery);
             validateInfectionTransition(previous);
             return;
         }
         if (onlyPlannerAndHealthChangedFrom(previous)) {
-            FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, operations, contracts);
+            FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, operations, contracts, fencedRecovery);
             return;
         }
         if (!onlyInfectionChangedFrom(previous)) { validateComplete(); return; }

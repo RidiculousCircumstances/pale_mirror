@@ -920,7 +920,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     private static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
     travelingSupplyConfiguration(WorldId world, long seed) {
-        var base = FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, seed);
+        var base = FrontierV3FixtureCatalog.coldSupplySceneReturnConfiguration(world, seed);
         var operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(base.initialState()).orElseThrow();
         var schedules = new ArrayList<>(base.initialSchedules());
         // The native fixture freezes progress for player connection. This pure runtime

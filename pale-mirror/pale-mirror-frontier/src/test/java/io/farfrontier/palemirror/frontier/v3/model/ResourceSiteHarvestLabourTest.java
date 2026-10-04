@@ -18,12 +18,13 @@ class ResourceSiteHarvestLabourTest {
         var goal = ResourceSiteHarvestGoal.current(fixture.state(), job);
         var cold = fixture.state().withActorBody(job.workerId(), goal.representative().standingBody());
         var lease = ResourceSiteHarvestProcessTest.newHarvestLease(cold, fixture.site(), job, "labour");
-        var hot = cold.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        var prepared = cold.prepareSceneLease(lease);
+        var hot = ModeledActorBodyFacts.present(prepared, job.workerId()).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         var world = hot.bootstrap().worldId();
-        var base = FrontierWorldRuntimeDefinition.configuration(world, 125L);
+        var base = FrontierWorldRuntimeDefinition.configuration(hot.bootstrap());
         var binding = ResourceSiteHarvestProcess.coldProgress(job, 22_301);
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, new SimInstant(22_301),
-                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
                 base.projectionMapper(), base.limits(), List.of(binding), base.transactionCommitter()));
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceCropPrepared(hot,
                 fixture.site(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation())));
@@ -70,7 +71,8 @@ class ResourceSiteHarvestLabourTest {
         assertFalse(job.progress().work().orElseThrow().running());
         var resumed = ResourceSiteHarvestLabour.next(state, job, 22_321, true);
         assertEquals(2 * start.next().ratePermille(), resumed.ratePermille());
-        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        var codec = new FrontierWorldStateCodec(state.bootstrap());
+        assertEquals(state, codec.decode(codec.encode(state)));
     }
 
     @Test void restartTransitionPausesTheExactOwnerBeforeUninspectedTimeCanAccrue() {
@@ -79,14 +81,15 @@ class ResourceSiteHarvestLabourTest {
         var state = fixture.state().withActorBody(job.workerId(), ResourceSiteHarvestGoal.current(fixture.state(), job)
                 .representative().standingBody());
         var lease = ResourceSiteHarvestProcessTest.newHarvestLease(state, fixture.site(), job, "labour-restart");
-        state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        state = ModeledActorBodyFacts.present(state.prepareSceneLease(lease), job.workerId())
+                .transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         var binding = ResourceSiteHarvestProcess.coldProgress(job, 22_301);
         var start = ResourceSiteHarvestWorkProcess.change(state, job, 22_301, true, binding, Optional.of(lease.id()));
         state = ResourceSiteHarvestWorkProcess.reduce(state, fixture.site(), start);
         var world = state.bootstrap().worldId();
-        var base = FrontierWorldRuntimeDefinition.configuration(world, 125L);
+        var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, state, new SimInstant(22_321),
-                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
                 base.projectionMapper(), base.limits(), List.of(binding), base.transactionCommitter()));
         var id = new CommandId("command:labour-restart");
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(2, id, world,

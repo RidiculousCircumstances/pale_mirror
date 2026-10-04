@@ -12,7 +12,8 @@ final class FrontierPlannerHealthValidation {
 
     static void validate(FrontierBootstrap bootstrap, HumanPopulation population, StrategicPlanState plans,
                          RouteTopology topology, HiveColony colony, Map<SubjectId, ActorLocation> actors,
-                         Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts) {
+                         Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts,
+                         FencedRecoveryState bodyRecovery) {
         Set<SubjectId> settlements = bootstrap.settlements().stream().map(Settlement::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         if (!population.quarantines().keySet().equals(settlements)) {
@@ -20,7 +21,7 @@ final class FrontierPlannerHealthValidation {
         }
         plans.validate(bootstrap, topology, population);
         validateActorClaims(population, plans, operations, contracts);
-        FrontierRouteEngagementSupport.validate(bootstrap, colony, actors, operations, plans);
+        FrontierRouteEngagementSupport.validate(bootstrap, colony, actors, operations, plans, bodyRecovery);
         FrontierSettlementAssaultSupport.validate(bootstrap, colony, population, actors, plans);
     }
 

@@ -43,6 +43,7 @@ class HotScoutOperationObservationTest {
         ModeledActorBodyFacts.present(engine, scout);
         submit(engine, world, new AmbientBodyConfirmed(scout, scoutLease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, scoutLease.handoffBody(), scoutLease.handoffBody(), ActorBodyAuthority.current(state(engine), scout)));
         submit(engine, world, new SceneLeasePrepared(lease));
+        for (var member : lease.members()) ModeledActorBodyFacts.present(engine, member.actorId());
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
 
         HotScoutOperationObserved forged = new HotScoutOperationObserved(lease.id(), operation.id(), scout,
@@ -132,6 +133,7 @@ class HotScoutOperationObservationTest {
         ModeledActorBodyFacts.present(engine, scout);
         submit(engine, world, new AmbientBodyConfirmed(scout, scoutLease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, scoutLease.handoffBody(), scoutLease.handoffBody(), ActorBodyAuthority.current(state(engine), scout)));
         submit(engine, world, new SceneLeasePrepared(lease));
+        for (var member : lease.members()) ModeledActorBodyFacts.present(engine, member.actorId());
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         return new Fixture(world, engine, scout, new HotScoutOperationObserved(lease.id(), operation.id(), scout, FrontierSceneBehaviors.logistics(lease).cargoPosition(), engine.checkpoint().instant().ticks()));
     }

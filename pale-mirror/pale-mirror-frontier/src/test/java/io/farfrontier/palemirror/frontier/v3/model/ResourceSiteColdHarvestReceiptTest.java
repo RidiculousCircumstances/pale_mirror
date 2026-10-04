@@ -249,8 +249,10 @@ class ResourceSiteColdHarvestReceiptTest {
         assertTrue(pendingReceipt.resourceSites().site(site).harvestLineages().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow().receiptPending(),
                 "a started physical effect retains exactly one deferred receipt while canonical work finishes");
         assertEquals(PhysicalIntentStatus.RUNNING, pendingReceipt.physicalIntents().get(beforeReturn.intentId()).status());
-        assertTrue(FrontierResourceSiteHarvestSceneSupport.candidate(hotReturned, awaitingReceipt).isEmpty(),
-                "the final return station is a receipt boundary, not a new crop or traversal scene");
+        var delivery = FrontierResourceSiteHarvestSceneSupport.candidate(hotReturned, awaitingReceipt).orElseThrow();
+        assertEquals(hotReturned.actorLocations().get(awaitingReceipt.workerId()).supportingSurface().support(),
+                delivery.memberPositions().get(awaitingReceipt.workerId()),
+                "pending COLD cargo remains admissible for HOT delivery at its actual depot station");
 
         var base = FrontierWorldRuntimeDefinition.configuration(pending.state().bootstrap());
         var growingDuringReturn = pending.state();

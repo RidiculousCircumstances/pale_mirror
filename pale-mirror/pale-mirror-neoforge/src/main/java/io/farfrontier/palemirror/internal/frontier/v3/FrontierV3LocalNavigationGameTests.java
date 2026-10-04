@@ -398,7 +398,7 @@ public final class FrontierV3LocalNavigationGameTests {
             // still invokes the production actuator's real gravity/collision path and supplies
             // no body position, target, route, or collision result from the fixture.
             pursueFixtureRetainedEdge(helper.getLevel(), worker, retainedCurrent, retainedNext);
-            for (int turn = 0; turn < 40; turn++) {
+            for (int turn = 0; turn < 100 && !FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, retainedNext); turn++) {
                 FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker);
                 worker.aiStep();
                 pursueFixtureRetainedEdge(helper.getLevel(), worker, retainedCurrent, retainedNext);

@@ -171,6 +171,7 @@ class FrontierReadabilityPlanTest {
         state = state.withResourceSites(matureReadyField(state, site));
         AmbientActorLease lease = AmbientActorProcess.nextLease(state, farmer, new SimInstant(22_000L));
         state = AmbientLeaseStateProcess.prepare(state, lease);
+        state = ModeledActorBodyFacts.present(state, farmer);
         state = AmbientLeaseStateProcess.transition(state, farmer, AmbientLeaseStatus.HOT);
         FrontierWorldState unknown = AmbientLeaseStateProcess.transition(state, farmer, AmbientLeaseStatus.UNKNOWN_AFTER_RESTART);
 

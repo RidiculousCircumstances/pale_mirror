@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.EngineStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
@@ -31,7 +32,7 @@ class HeldHarvestSchedulingCompositionTest {
             assertEquals(complete, job.progress().complete());
             var site = FrontierResourceSitePlan.compile(state.bootstrap()).get(hot.site());
             var witness = complete ? site.cropSlots().getLast() : site.cropSlots().get(job.progress().nextCropSlotIndex());
-            var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), state.bootstrap().seed());
+            var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
             var own = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
             var otherId = new SubjectId("site:2-wheat-field");
             var other = ResourceSiteProcess.preparation(otherId, 22_302L);
@@ -81,7 +82,7 @@ class HeldHarvestSchedulingCompositionTest {
     void fieldConflictCancelsItsContinuationAtomicallyAndRetainsDispositionOnRecovery() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         var state = hot.state();
-        var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), state.bootstrap().seed());
+        var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
         var continuation = ResourceSiteHarvestProcess.coldProgress(hot.job(), 22_301L);
         var durable = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord>();
         var config = new FrontierEngineConfiguration<>(base.worldId(), state, new SimInstant(22_300L),
@@ -122,7 +123,7 @@ class HeldHarvestSchedulingCompositionTest {
     void realHotHarvestDoesNotBlockAnotherFieldsPreparationOrRecoveredGrowth() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(1);
         var state = hot.state();
-        var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), state.bootstrap().seed());
+        var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
         var retained = ResourceSiteHarvestProcess.coldProgress(hot.job(), 22_301L);
         var other = new SubjectId("site:2-wheat-field");
         var preparation = ResourceSiteProcess.preparation(other, 22_302L);
@@ -161,6 +162,19 @@ class HeldHarvestSchedulingCompositionTest {
             assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, result, result.toString());
         }
         assertTrue(recovered.checkpoint().schedules().contains(retained), "release cannot rebase the held deadline");
+        // Scope release is not evidence that Minecraft has relinquished the body.
+        var current = recovered.canonicalState().state();
+        var actor = current.actorLocations().get(hot.job().workerId());
+        var absent = new ActorBodyUnloaded(ActorBodyAuthority.current(current, hot.job().workerId()),
+                actor.body(), actor.condition().health(), actor.body(), actor.condition().health(),
+                current.actorExecutions().actors().get(hot.job().workerId()).current());
+        var absentCheckpoint = recovered.checkpoint();
+        var absentId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:held-harvest-body-unloaded");
+        var absentResult = recovered.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(2,
+                absentId, base.worldId(), absentCheckpoint.revision(), absentCheckpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(absentId), absent));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, absentResult, absentResult.toString());
         var releasedCheckpoint = recovered.checkpoint();
         var resumed = FrontierEngines.recoverCanonicalStateAccess(config,
                 new RecoveryImage(releasedCheckpoint.worldId(), Optional.of(new SnapshotRecord(releasedCheckpoint,

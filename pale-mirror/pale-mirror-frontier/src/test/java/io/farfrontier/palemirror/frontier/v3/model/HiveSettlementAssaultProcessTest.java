@@ -123,10 +123,6 @@ class HiveSettlementAssaultProcessTest {
     @Test void coldApproachAndStrikeRemainExactAndRejectAReplayedStrike() {
         Fixture fixture = fixture(true);
         FrontierWorldState state = fixture.state();
-        for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
-                .filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
-            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(fixture.sighting().settlementAnchor().offset(-1, 0, 0))));
-        }
         List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state, HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
         state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), (SettlementAssaultStarted) start.get(1).payload());
@@ -381,11 +377,6 @@ class HiveSettlementAssaultProcessTest {
     @Test void coldProgressUsesTheBoundedDurableAssaultOwnerSetBeforeTheSelectorCompilesItsProvider() {
         Fixture fixture = fixture(true);
         FrontierWorldState state = fixture.state();
-        for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
-                .filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
-            state = FrontierTestPositions.deployBioform(state, bioform.id(),
-                    BodyPosition.above(new SurfaceAnchor(fixture.sighting().settlementAnchor().offset(-1, 0, 0))));
-        }
         List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state,
                 HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
@@ -430,7 +421,9 @@ class HiveSettlementAssaultProcessTest {
         state = FrontierTestPositions.deployBioform(state, scout.id(), BodyPosition.above(new SurfaceAnchor(settlement.anchor())));
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
             if (bioform.isExplosiveAssaulter() || bioform.isDefender() || bioform.isOverseer()) {
-                state = FrontierTestPositions.deployBioform(state, bioform.id(), state.actorLocations().get(bioform.id()).body());
+                // External mobilisation uses the authored tray floor, not the dormant feet-cell datum.
+                state = FrontierTestPositions.deployBioform(state, bioform.id(),
+                        state.actorLocations().get(bioform.id()).body().offset(0, -1, 0));
             }
         }
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);

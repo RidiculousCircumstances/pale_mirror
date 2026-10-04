@@ -598,7 +598,7 @@ public final class FrontierV3AmbientActorGameTests {
         });
     }
 
-    private static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState,
+    static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState,
             io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> configurationAt(
             GameTestHelper helper, WorldId world, long seed, SubjectId actor) {
         var original = FrontierWorldRuntimeDefinition.configuration(world, seed);
@@ -610,7 +610,7 @@ public final class FrontierV3AmbientActorGameTests {
                 original.initialState().bootstrap(), feet.getX() - canonical.x(), feet.getY() - canonical.y(), feet.getZ() - canonical.z()));
     }
 
-    private static void initializeAdmission(ServerLevel level,
+    static void initializeAdmission(ServerLevel level,
             io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState,
                     io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> config, FrontierStore store) {
         var ledger = FrontierV3AmbientCarrierLedger.get(level, config.worldId());
