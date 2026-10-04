@@ -139,8 +139,12 @@ public final class ServiceAccessCoordinator {
     }
 
     public static boolean witnessedBakeryExit(FrontierWorldState state, ProductionJob job, BodyPosition observedBody) {
-        if (job.bakeryWork().isEmpty() || job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DELIVERED)
-            return false;
+        if (job.bakeryWork().isEmpty()) return false;
+        ServiceAccessBoundary boundary = port(state, FrontierWorldState.depotId(job.settlementId())).accessBoundary();
+        // Access ends on a physical exit toward any non-depot goal, including
+        // carrying picked-up input to the station. Waiting for final delivery
+        // leaves a phantom occupant while the next worker holds the station.
+        if (boundary.occupied(BakeryWorkGoal.current(state, job).station().standingBody())) return false;
         SceneLease lease = state.sceneLeases().values().stream()
                 .filter(candidate -> candidate.status() == SceneLeaseStatus.HOT
                         && FrontierSceneBehaviors.isProductionWork(candidate)
@@ -148,7 +152,6 @@ public final class ServiceAccessCoordinator {
                 .findFirst().orElse(null);
         if (lease == null) return false;
         BodyPosition previous = lease.memberBody(state.actorLocations(), job.workerId());
-        ServiceAccessBoundary boundary = port(state, FrontierWorldState.depotId(job.settlementId())).accessBoundary();
         if (!boundary.occupied(previous) || !boundary.cleared(observedBody)) return false;
         return witnessedExit(boundary, previous, observedBody);
     }

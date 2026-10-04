@@ -51,7 +51,9 @@ final class FrontierV3BakeryWorkSceneExecutor {
                     && BakeryWorkGoal.current(current, retained).equals(goal);
         }));
         if (!actuation.current(worker)) return;
-        if (ServiceAccessCoordinator.witnessedBakeryExit(state, job, FrontierV3SurfaceObservation.observedBody(worker))) {
+        var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
+        if (supportedExit.isPresent() && ServiceAccessCoordinator.witnessedBakeryExit(
+                state, job, supportedExit.orElseThrow())) {
             FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);
             return;
         }

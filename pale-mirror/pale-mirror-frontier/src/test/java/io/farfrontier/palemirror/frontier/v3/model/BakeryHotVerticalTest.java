@@ -309,6 +309,28 @@ class BakeryHotVerticalTest {
                 .map(Resident::id).filter(id -> !id.equals(job.workerId())).findFirst().orElseThrow();
         assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, nextResident),
                 "the HOT worker still owns the depot approach after the pickup phase changes");
+        var accessAfterPickup = ServiceAccessCoordinator.boundary(state, depot);
+        SurfaceAnchor pickupExit = BakeryKnownNavigation.pathFrom(state, state.productionJobs().get(job.id()),
+                        state.actorLocations().get(job.workerId()).supportingSurface()).stream()
+                .filter(surface -> accessAfterPickup.cleared(surface.standingBody())).findFirst().orElseThrow();
+        ProductionJob pickedUp = state.productionJobs().get(job.id());
+        assertFalse(ServiceAccessCoordinator.witnessedBakeryExit(state, pickedUp, actor.body()),
+                "phase change alone cannot release physical access");
+        assertTrue(ServiceAccessCoordinator.witnessedBakeryExit(state, pickedUp, pickupExit.standingBody()),
+                "input departure must be observed before station arrival, not just after final delivery");
+        var inputExit = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(
+                ActorBodyAuthority.current(state, job.workerId()),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING,
+                actor.body(), actor.condition().health(), pickupExit.standingBody(), actor.condition().health(),
+                state.actorExecutions().actors().get(job.workerId()).current());
+        FrontierWorldState inputDeparted = ActorBodyAuthority.inspected(state, inputExit);
+        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(inputDeparted, depot, nextResident),
+                "a baker stalled beyond the access boundary must not block the depot");
+        assertEquals(state.productionJobs(), inputDeparted.productionJobs());
+        assertEquals(state.inventory(), inputDeparted.inventory(), "exit does not consume or abandon carried input");
+        assertEquals(inputDeparted, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(inputDeparted)));
+        assertFalse(ServiceAccessCoordinator.witnessedBakeryExit(inputDeparted, pickedUp, pickupExit.standingBody()),
+                "an already observed exit cannot produce another access transition");
         assertEquals(new ResourceCustody.Actor(job.workerId()), state.inventory().fungibleResources().accounts()
                 .get(work.actorAccountId()).custody());
         FrontierWorldState blockedWithCargo = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
