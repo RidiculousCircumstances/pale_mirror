@@ -87,7 +87,11 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 && !ServiceAccessCoordinator.depotAvailableForWork(state,
                         FrontierWorldState.depotId(job.settlementId()), job.id(), job.workerId())) {
             FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "depot-service-unavailable");
-            FrontierV3GoalNavigation.stop(worker, actuation);
+            var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
+                    job.settlementId(), FrontierWorldState.depotId(job.settlementId()), job.id(), job.workerId(),
+                    goal.phase().wireTag(), 1L, actuation);
+            if (waiting.status() == FrontierV3GoalNavigation.Status.BLOCKED)
+                FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "service-wait-clearance:" + waiting.reason());
             return;
         }
         if (FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {

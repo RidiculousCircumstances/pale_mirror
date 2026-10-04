@@ -69,7 +69,6 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.RESOURCE_SITE_HARVEST, FrontierResourceSiteHarvestSceneSupport.candidates(state).stream()
                         .filter(value -> !ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, value.workerId(),
                                 runtime.canonicalState().orElseThrow().instant().ticks()))
-                        .filter(value -> fieldPresentationCurrent(level, state, value))
                         .filter(value -> !FrontierV3HarvestSceneStandingAdmission.obstructedBodyFreeColumn(level,
                                 FrontierV3AmbientActorExecutor.entityId(state, value.workerId()),
                                 BodyPosition.above(new io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor(
@@ -77,6 +76,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 FrontierResourceSiteHarvestSceneSupport.Candidate::cropSlot, FrontierResourceSiteHarvestSceneSupport.Candidate::jobId);
         if (candidate.isEmpty()) return false;
         FrontierResourceSiteHarvestSceneSupport.Candidate work = candidate.orElseThrow();
+        if (!fieldPresentationCurrent(level, state, work)) {
+            projectAdmissionCell(level, runtime, state, work);
+            return true; // One bounded attempt; the fair cursor still advances on a waiting candidate.
+        }
         SceneLease lease = lease(runtime, work);
         if (FrontierSceneAdmission.available(state, work.memberPositions().keySet())) {
             submitBound(runtime, "resource-site-harvest-scene-prepare", lease.id().value(), new ResourceSiteHarvestSceneLeasePrepared(lease),
@@ -85,6 +88,21 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             handoff(level, runtime, state, lease, binding(runtime, state.resourceSites().site(work.siteId()).harvestJob(work.jobId()).orElseThrow()));
         }
         return true;
+    }
+
+    /** The field owner projects the demanded predecessor; admission itself remains read-only. */
+    private static void projectAdmissionCell(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierWorldState state, FrontierResourceSiteHarvestSceneSupport.Candidate candidate) {
+        var job = state.resourceSites().site(candidate.siteId()).harvestJob(candidate.jobId()).orElseThrow();
+        if (job.navigationBlock().isPresent() || job.progress().complete() || job.returningForBatch()
+                || state.resourceSites().hasPendingWorldChange(job.siteId())) return;
+        var cycle = state.resourceSites().cycle(candidate.siteId());
+        var claim = FrontierV3ResourceSiteLedger.get(level).fieldClaim(candidate.siteId());
+        if (!(claim instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
+                || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
+                || !owner.witness().matchesCycle(cycle)) return;
+        var cellId = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+        FrontierV3ResourceFieldGrowthProjector.projectCurrentOne(level, runtime, candidate.siteId(), cellId);
     }
 
     private static boolean fieldPresentationCurrent(ServerLevel level, FrontierWorldState state,
@@ -249,7 +267,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         if (projectColdCarriedHand(level, runtime, state, lease, job)) return;
         if (job.navigationBlock().isEmpty()
-                && ResourceSiteHarvestGoal.actorAtDepot(state, job)) {
+                && ResourceSiteHarvestGoal.actorAtDepot(state, job)
+                && (ServiceAccessCoordinator.depotAvailableForHarvest(state, job)
+                    || FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()) != null
+                        && FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()).jobId().equals(job.id()))) {
             // The delivery effect owns the returned hand, chest and atomic terminal event.
             // Draining here would strand canonical wheat on a released physical worker.
             return;
@@ -300,7 +321,12 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         ResourceSiteHarvestGoal serviceGoal = ResourceSiteHarvestGoal.current(state, job);
         if (serviceGoal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
                 && !ServiceAccessCoordinator.depotAvailableForHarvest(state, job)) {
-            FrontierV3GoalNavigation.stop(worker, actuation);
+            var settlementId = ResourceSiteHarvestGoal.depotPort(state, job).settlementId();
+            var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
+                    settlementId, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState.depotId(settlementId),
+                    job.id(), job.workerId(), serviceGoal.kind().wireTag(), serviceGoal.layoutRevision(), actuation);
+            if (waiting.status() == FrontierV3GoalNavigation.Status.BLOCKED)
+                FrontierV3PhysicalWaitTrace.actor(worker, state, job.workerId(), "service-wait-clearance:" + waiting.reason());
             return;
         }
         if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()

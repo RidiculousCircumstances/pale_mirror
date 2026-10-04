@@ -65,8 +65,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
     private static Optional<Candidate> candidate(FrontierWorldState state, ResourceSiteHarvestJob job, boolean rejectExistingScene) {
         if ((rejectExistingScene && hasNonClosedScene(state, job))
                 || state.humanPopulation().meals().containsKey(job.workerId())
-                || state.actorMovements().containsKey(job.workerId())
-                || ResourceSiteHarvestGoal.actorAtDepot(state, job)) return Optional.empty();
+                || state.actorMovements().containsKey(job.workerId())) return Optional.empty();
         // An exact physical-effect lifecycle is not a scene-readiness bit.  Before F0.2, the
         // retained traversal may use a PREPARED intent but must leave its non-replayable effect
         // unbegun; after F0.2 the process-owned effect admission supplies RUNNING instead.
@@ -83,7 +82,8 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         if (assignment.kind() != HumanAssignmentKind.FIELD_HARVEST || !assignment.ownerId().equals(Optional.of(job.id()))) return Optional.empty();
         // A completed crop cursor still owns the retained delivery journey. Demand follows
         // that worker's canonical station, not the now-distant last crop. No crop work is
-        // reopened when a player first reaches the worker near the depot.
+        // reopened when a player first reaches the worker near the depot. A worker
+        // already at a delivery station still needs a HOT scope for hand/chest effects.
         boolean workerSide = job.navigationBlock().isPresent() || job.progress().complete() || job.returningForBatch();
         int demandCropIndex = workerSide
                 ? Math.max(0, job.progress().lastCompletedCropSlotIndex()) : job.progress().nextCropSlotIndex();

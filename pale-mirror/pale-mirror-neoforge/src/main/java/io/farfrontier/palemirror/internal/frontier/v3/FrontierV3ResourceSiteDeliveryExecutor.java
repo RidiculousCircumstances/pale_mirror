@@ -48,6 +48,10 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         for (ResourceSiteHarvestJob job : state.resourceSites().sites().values().stream()
                 .flatMap(site -> site.harvestJobs().values().stream()).sorted(Comparator.comparing(ResourceSiteHarvestJob::id)).toList()) {
             if (!ResourceSiteHarvestGoal.actorAtDepot(state, job)) continue;
+            // New hand/chest effects require the same service turn as navigation.
+            // Already prepared deliveries above settle their retained witness,
+            // independently of subsequent admission decisions.
+            if (!ServiceAccessCoordinator.depotAvailableForHarvest(state, job)) continue;
             if (ledger.fieldDelivery(job.siteId()) != null || ledger.fieldHandProjection(job.siteId()) != null) continue;
             var intent = state.physicalIntents().get(job.intentId());
             if (intent == null || intent.status() != PhysicalIntentStatus.PREPARED

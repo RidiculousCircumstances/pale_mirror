@@ -180,6 +180,13 @@ class ResourceSiteHarvestProcessTest {
         var job = fixture.job();
         var field = state.resourceSites().cycle(job.siteId());
         var depot = job.outputSlot().containerId();
+        assertTrue(ResourceSiteHarvestGoal.actorAtDepot(state, job));
+        var candidate = FrontierResourceSiteHarvestSceneSupport.candidate(state, job).orElseThrow();
+        assertEquals(state.actorLocations().get(job.workerId()).supportingSurface().support(),
+                candidate.memberPositions().get(job.workerId()),
+                "a returned COLD worker must be admissible at its actual station for a HOT delivery");
+        assertEquals(state.actorLocations().get(job.workerId()).body().x(), candidate.cropSlot().x(),
+                "delivery demand follows the retained worker, not the distant last harvested crop");
         assertTrue(ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job));
         assertFalse(ActivityExecutionCapabilities.waitingForServiceResource(state,
                 HumanAssignmentProjection.compile(state).assignment(job.workerId())));
