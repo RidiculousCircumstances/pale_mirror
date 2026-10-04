@@ -165,6 +165,10 @@ Understand the affected owner, authoritative state and failure/recovery path,
 reusing retained context. Make a coherent scoped change without speculative
 compatibility paths or unrelated cleanup. No risk label or completed checklist
 is required before editing; verification follows the actual affected risk.
+Follow the execution protocol's end-to-end source-review rule: trace the affected
+lifecycle and repair its connected contradictions before starting fragmentary
+helper-by-helper verification. Tests resolve named uncertainty or check the
+coherent changed path; they must not substitute for reading its real callers.
 
 Changes affecting canonical state, persistence, migrations, simulation,
 materialization, observation, adapters or server lifecycle require verification

@@ -7,6 +7,18 @@ certified by this document. The field worker is the first adoption vertical.
 
 ## Decision
 
+### UAE execution authority (2026-10-03, adoption in progress)
+
+PM-UAE001 separates the current actor execution from movement goal identity and
+physical body epoch. A caller submits a goal under its exact admitted execution
+(actor, activity kind, owner, generation); navigation validates that authority
+before accepting a new actuator command. Observations carry the same identity,
+not merely an actor and route revision. Replacing an activity fences its old
+locomotion results without discarding outstanding possibly applied resource
+operations. The common actor-body lifecycle, not ambient or scene membership,
+owns the physical representation. This does not replace pathfinding, supported
+surface geometry, task scopes or COLD knowledge guarantees below.
+
 ### Single HOT locomotion owner (2026-10-01)
 
 The user requires every target-directed HOT actor movement, including ambient

@@ -19,6 +19,14 @@ boundary; it does not promise bit-identical HOT/COLD physics.
 
 ## Evidence levels
 
+PM-UAE001 amendment (accepted target, adoption in progress): a materialized
+process references the exact current executions of its participants. Scenes
+coordinate effects and presentation, not alternate NPC body ownership. Work,
+food and clearance must preserve the same actor/UUID and supported position;
+HOT/COLD switches provider without replaying historical activity or replacing
+the observed body. Migration closure needs real interruption, successor and
+restart evidence; a new controller API or final stock is not M2/M3 acceptance.
+
 Every implementation and report must use the strongest level actually proved.
 Evidence never promotes itself to the next level.
 

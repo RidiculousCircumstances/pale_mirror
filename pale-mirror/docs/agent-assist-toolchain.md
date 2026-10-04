@@ -76,10 +76,16 @@ repetition before later tasks in the same session.
   coverage. A missing row is not proof that a canonical event did not occur.
 - The runtime index is a consumer of existing evidence. It neither implements
   nor completes the F0.6R3 diagnostic bootstrap or OBS-001 producer contract.
-- The selector is a planning aid. Terra remains responsible for test framing,
+- The selector is a planning aid. The currently assigned executor owns test framing,
   methodology, actual commands and the delivered product result. Unknown paths
   are visible. Milestone and native families are never silently promoted into
   routine edit feedback; a native scenario is always chosen explicitly.
+  Removed Java tests select inventory compilation without a stale class filter.
+  Test-only changes and filename keywords do not infer native scene/economy
+  campaigns; unknown paths require manual selection rather than forced full
+  execution. Documentation feedback is patch hygiene, and visual-generation
+  tool checks are separate from the simulation gate. CLI `--root` and MCP's
+  configured implementation bind class existence to the inspected checkout.
 - Serena complements the accepted repository context graph. No automatic
   onboarding, project memory, source upload or always-on watcher is required.
   Its result is a source-navigation hypothesis, not architecture truth.

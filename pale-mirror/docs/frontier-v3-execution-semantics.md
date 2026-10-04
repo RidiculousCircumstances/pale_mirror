@@ -11,6 +11,273 @@ implementation descriptions are not exceptions to these requirements.
 
 ## Player promise and limits
 
+### UAE actor ownership amendment, 2026-10-03
+
+Accepted target under PM-UAE001, implementation in progress: assignment, current
+execution, body representation and prepared physical operation are separate
+authorities. One actor execution generation authorizes one current activity;
+route revisions and physical epochs do not supply that identity. Family-owned
+capabilities supply interruption safety and continuation. Scene leases retain
+process/effect participation, not actor-body ownership or a parallel mutable
+position. ActorLocation is the canonical supported position. A change of
+activity preserves the same physical actor and UUID; HOT/COLD switches its
+provider rather than its purpose. Late locomotion results cannot mutate a
+successor execution, while possibly applied effects retain exact reconciliation
+obligations. This amendment supersedes earlier activity-dependent body ownership
+clauses only; process/effect custody and player-action safeguards remain binding.
+Full adoption is an exit condition, not claimed by the amendment itself.
+
+Compacting a closed process scope cannot restore a route/formation checkpoint
+as the position of an independently held physical actor. Position eligibility
+uses the exact common body authority, never the existence of historical scene
+records. Conversely, a closed scene is not permission to release a divergent
+process checkpoint to COLD: the owning family must reconcile that checkpoint
+with the observed actor before background advancement is admitted. Compaction
+preserves the actual pose, physical epoch, current execution and pending effects;
+it neither moves an NPC nor fabricates a route arrival.
+
+Common physical departure composes the mandatory registered
+`ActorActivityBodyCheckpoint` ports of the exact current and suspended executions.
+Each acknowledgement names the same immutable state, full execution, physical
+body epoch and observed supported position. Family contributions cannot write
+`ActorLocation`, body recovery or common execution authority; competing component
+writers fail before one atomic checkpoint/pose/absence update. An owner may
+explicitly declare that its semantic goals already use `ActorLocation`; there
+is no missing-provider or inferred permissive default. This spatial checkpoint
+is independent of work interruption: saving a body does not finish a job, settle
+a resource effect or grant route arrival. Logistics may replace a member's
+continuation origin while retaining the exact topology, cursor, cargo anchor,
+operation stage and execution. Topology-owned owners which cannot yet rejoin
+from an intermediate observed position must refuse that handoff explicitly;
+such a retained local hold is incomplete provider adoption, not full HOT/COLD
+acceptance or permission to restore the old pose.
+
+Migration retains a versioned known `TraversalRejoin` approach from the saved
+actual support to its next original journey checkpoint. Its owner uses shared
+frontier pedestrian geometry: all authored floors/roads, structural and witnessed
+physical obstacles; moving actors are not hard walls. Departure preserves the
+original route/cursor, household reservation and execution. COLD consumes bounded
+legal approach edges and credits the journey checkpoint only after reaching it.
+A new physical handoff replaces only the approach and increments its spatial
+revision. Unknown/blocked geometry remains a local hold, not an invented edge.
+HOT semantic completion requires the common independently observed target,
+exact body epoch, presentation revision, execution and spatial revision. The
+migration owner then advances its journey without writing a physical pose.
+Approach/cursor/revisions are current-schema persisted state, not a copied actor
+location or a second activity queue. Other topology families' off-checkpoint
+holds still need adoption; this cut does not certify them or native disk/restart.
+
+Ambient scope closure consults the mandatory registered release policy of exact
+current/suspended executions, not concrete jobs, route cursors or inferred
+purposes. MEAL's owner refuses closure with an unresolved physical effect.
+Closing the scope does not release common body authority or require a historical
+family position; saved physical departure invokes the separate owner spatial
+checkpoint. Transit death cancels its journey through its registered death port,
+not generic roster discovery.
+
+Passive `PRESENCE` is actor-owned execution, not permission inferred from an
+ambient label or chunk loading. A closed `ActorPresencePolicies` composition
+dispatches from the actor's persisted declared kind to its owner-supplied
+eligibility policy. Residents require their living declared population identity;
+the hive separately requires released physiology and no active mobilization.
+Dormant/recovering cocoons and unconfirmed automatic waking are ineligible.
+Common admission and canonical hydration validate this boundary; a direct
+execution-map update cannot bypass it. The hive issues eligible free presence
+in one finite initialization turn and its existing strategic review, never a
+new per-unit retry stream. Issuance creates no body, position, route or resources,
+and replaces neither a current purpose nor a retained suspended continuation.
+The ordinary scout/operation policy may subsequently replace presence through
+the exact shared lifecycle; passive execution cannot authorize its successor.
+
+First physical creation is not necessarily canonical body epoch 1. Cancelling
+a positively never-inserted PREPARED incarnation retires that exact epoch while
+preserving the unused first-creation permission. Later ordinary demand allocates
+its own current epoch; the common controller validates that complete declaration
+before insertion. First-admission history retains the actual attempted epoch and
+its separate attempt generation. Saved or inactive evidence must match that exact
+attempt, not an assumed epoch 1 or another incarnation. Pending/established history
+and empty lookup never issue a new first-creation permission.
+
+Physical unload evidence also declares a body-owned loaded-residency generation,
+distinct from physical incarnation and activity execution. The common controller
+reserves it durably at insertion and advances it on an exact natural return;
+activity changes do not. Its bounded high-water mark survives receipt withdrawal.
+Entity metadata, departure receipt and saved marker carry that same declaration.
+A completed write of an earlier residency cannot acknowledge a later identical
+unload. Beginning a vanilla return read revokes departure eligibility before
+loading; a duplicate old callback cannot clear that fence. Missing generations
+are unsupported evidence, never zero/default permission. Persisted older body
+data may be naturally inspected on restart under the ordinary identity/firewall
+checks, but cannot prove absence of a newer residency for no-load advancement.
+
+Physical death is a common-body observation carrying its exact physical epoch,
+canonical baseline and explicitly captured optional full execution declaration.
+Scene or ambient membership never supplies physical identity or permission to
+record death. The actual listener validates the indexed object, UUID, declared
+kind and current loaded residency against durable common-body history. A
+positively identified fatality may resolve contradictory living departure
+receipts; those same receipts still prohibit ordinary actuation. An airborne
+fatality may explicitly lack an observed supporting surface: retain the last
+known supported pose, never invent a floor or award route arrival.
+
+The body owner atomically records death and retires the physical incarnation.
+Exact employment termination and process-scope quiescence belong to that same
+reference-closed update: an active contract cannot briefly name a dead employee,
+and a prepared/HOT scope cannot briefly contradict its owner's casualty outcome.
+The institution, registered work capability and coordinated scene behavior supply those domain consequences;
+the common body owner does not inspect a job stage. Resource/effect settlement
+follow-ups are planned against the resulting valid state, not a pre-death image.
+Registered domain consequence and process-follow-up ports retain the distinct
+job, employment, cohort and physical-effect semantics; generic body policy
+cannot inspect their concrete stages. A consequence port cannot replace body
+position or physical recovery authority. Death does not fabricate cancellation
+of a possibly applied effect or authorize a substitute body. Coordinated owners
+retain their exact casualty history and acknowledge surviving/terminal outcomes;
+fresh physical admission includes living participants only, without re-admitting
+the original dead roster as a prerequisite for COLD continuation.
+
+A retained work owner's death acknowledgement does not depend on an active
+scene. The common lifecycle dispatches its exact current and suspended execution
+references (at most two), never discovers work from a roster or presentation.
+Every continuation-capable registration must declare its typed death port;
+terminal owners may declare the same port to settle independently of a scene.
+An acknowledgement binds the original immutable state and full execution key
+and explicitly chooses retained causal ownership or exact execution retirement.
+The common lifecycle alone commits that retirement. Missing continuation ports
+reject composition. Scope quiescence and owner
+acknowledgement are prepared against the same valid immutable basis and committed
+together: do not construct a DRAINING scope with an unacknowledged active owner
+as an intermediate aggregate. Duplicate component contributions fail before
+mutation rather than silently selecting the last writer.
+An owner may explicitly acknowledge terminal retirement of its entire current
+cohort when a casualty closes a coordinated purpose. That acknowledgement carries
+the complete original execution group, including the casualty, under the same
+nominal owner and activity kind. Common lifecycle validates every exact current
+generation/reference and retires that declared group atomically with the owner
+outcome; it does not discover participants or retire an unrelated successor.
+For homeward hive movement, casualty removes only its return cursor, retaining
+the original expedition roster and every surviving cursor. The parent completes
+only when all remaining survivors are home (or none remain); no casualty awards
+arrival, replays movement or leaves executable authority under a terminal parent.
+The owner freezes its labour and retains its exact cargo/effect
+obligations; the physical owner alone commits fatality and body retirement.
+Prepared owner updates cannot write actor positions, physical recovery or common
+execution authority. Owner preparation and physical death remain one durable
+transaction, not intermediate WAL events. Production pre-effect refund and
+possibly-applied transformation settlement remain separate process responsibilities.
+Cancelling an unbegun meal releases its exact claim without spending or moving
+the source stock. Its process owner also cancels the original generation-scoped
+due action in the death transaction. The pre-death record supplies only that
+retained ID; consequence decisions read the accepted post-death state. A missing
+meal after cancellation does not license an old timer to discover a successor.
+This unbegun cancellation cannot discard an already carried portion or a prepared
+physical step. The food owner retires that meal execution and moves only its
+resource references and original physical fence into a separate bounded
+`ResidentMealResourceObligation`, one per exact deceased resident in
+`HumanPopulation`. It retains the former execution and physical body identities,
+canonical pre-effect custody, exact portion allocation and retirement tick, but
+no route, assignment, wait loop, nutrition award or permission to act. Ordinary
+population changes and snapshot recovery preserve that obligation independently
+of runnable meals. Fatality itself proves neither consumption nor a drop or
+destruction; only an exact resource-owner reconciliation may settle it. Old
+movement/eating callbacks cannot reuse it as live activity authority.
+The food owner's pending-container port continues to expose a retired prepared
+TAKE until that exact source effect is reconciled; removing a runnable meal
+cannot release its container write/handoff fence. Actor stack bindings validate
+the common admitted body, never scene or ambient membership. For an exact
+deceased actor with retained common body retirement, old bindings remain only
+last resource-layout evidence. They grant no actuation or resource receipt.
+The food owner admits `ResidentMealResourceEffectObserved` only against the
+retained exact body, original execution and original prepared step. A proved
+unapplied TAKE releases the source allocation without moving stock; a proved
+applied TAKE transfers stock and retains a separate carried-portion obligation;
+proved prior consumption retires that portion without feeding a deceased actor.
+No outcome may update routes, actor position, execution authority or resident
+clocks. The physical producer observes the positively identified indexed fatal
+body before Vanilla loot/removal, with the source's original epoch and actual
+before/after layouts. Empty lookup or an empty corpse after loot is not such
+evidence. Missing or ambiguous observations preserve the local obligation.
+Common fatality invokes closed resource-owner hooks, not concrete food phases
+or equipment rules; post-retirement receipts run only after accepted death.
+Carried-resource drop/destruction and restart settlement need their own exact
+evidence; this effect receipt is not permission to invent either outcome.
+
+The separate food-owner `ResidentMealPortionDispositionObserved` addresses an
+actor-held retired portion by its exact body, original execution and pocket
+binding epoch. Positive absence in the indexed dying body BEFORE loot may
+account a missing portion without nutrition; an empty corpse/lookup cannot.
+A positively held matching portion may leave that pocket as one actual world
+drop, retaining its lots and economic owner while releasing the obsolete meal
+allocation. The shared stock ledger validates the exact whole actor account and
+world carrier, not food or death policy. Neither outcome writes actor position,
+execution or nutrition. The already durable retired obligation precedes the
+drop effect. Its physical carrier retains the complete typed receipt so a
+naturally loaded exact saved drop can close a death-before-receipt gap; missing,
+altered, foreign or unsaved evidence retains local reconciliation and never
+replays insertion. Ordinary resource observation handles unresolved portions,
+not a per-resident scheduled retry or reconstruction campaign.
+
+Physical inspection enters the common body controller through
+`ActorBodyInspected`, independently from a field/bakery cargo-reconciliation
+receipt. Its producer explicitly declares INDEXED_LIVING or SAVED_DEPARTURE
+under stable wire tags. Both validate the complete body declaration, current
+residency, canonical baseline and captured optional full execution. Only an
+already admitted RUNNING or AMBIGUOUS incarnation can be inspected; inspection
+cannot create an unstarted body. INDEXED_LIVING additionally validates the exact
+indexed object and may confirm loaded physical eligibility. SAVED_DEPARTURE
+instead requires its exact unload, entity write, storage sync and unrevoked read
+fence with no indexed body or pending insertion. It records supported pose/health
+but grants no loaded actuation and does not clear physical ambiguity. Neither
+changes jobs, nutrition, inventory or semantic arrival. A living family recovery
+requires the independently confirmed RUNNING body and matching observed pose,
+then resumes its own process/effects. It cannot write physical permission or
+actor position as a side effect of a cargo receipt. Rejected or stale common
+inspection never authorizes recovery.
+
+Scene/ambient release references those already canonical supported pose/health
+facts and closes only its process/presentation scope. A registered family can
+validate its legal release checkpoint but cannot substitute a route cursor,
+formation target or historical scene pose for the common observation. Retained
+topology still determines legal semantic progress; observing a body awards none.
+`SceneLease` stores explicit participant identities, semantic process/cargo
+anchors and recovery obligations, never a participant-position map. A bounded
+read view resolves those explicit participants against `ActorLocation`; missing
+actors fail closed. Scene/WAL/snapshot codecs do not serialize a duplicate pose.
+Formation/cursor values are semantic targets/checkpoints, not another physical
+location to prefer over the common observation. Observed bakery/production and
+other family movement records canonical position and its own semantic progress
+atomically, without rewriting the scene to keep two pose stores synchronized.
+Saved physical custody is released separately by the common controller after
+pending hand/effect scopes settle. Exact positive saved-absence evidence may
+resolve an ambiguous body incarnation and retire it in one atomic update without
+publishing a RUNNING intermediate. This does not resolve resource ambiguity.
+Keep common departure evidence until exact adoption retires it; closing a scene
+alone cannot erase the only proof required by a rejected or interrupted unload.
+If the unload callback was lost, synchronized no-load entity census plus its
+current stamped column snapshot may supply that physical evidence. The common
+body controller validates exact UUID/kind/epoch/residency, supported serialized
+pose, hands, admission history and no indexed/pending return before retaining
+the same body-owned receipt. Scene coordination can require a complete group or
+cargo proof but cannot publish a substitute scene-only actor receipt.
+
+Ambient presentation records cannot authorize locomotion by their goal label or
+revision. The common boundary validates the retained full actor execution and
+exact current presentation record, then asks the strategy registered under that
+execution's declared kind whether the semantic goal is executable. Every adopted
+strategy explicitly supplies this policy; scene-only work grants no ambient
+fallback permission. Deferred movement retains the original execution and goal
+witness, never looks up a successor to reauthorize it. Physical join/inspection
+may quiesce obsolete actuation, but cannot cancel a valid current route merely
+because an activity or presentation boundary changed.
+
+Lower physical path providers require an opaque permission minted by the shared
+goal navigator from that original capture. Deferred movement and path retries
+retain it and revalidate before actuation; neither a provider nor an activity
+may mint a replacement from a successor lookup. A newly validated same-leg
+request may refresh its witness without resetting its physical progress clock.
+Absence of a capture is not permission for a declared managed body. Raw
+unmodeled navigation fixtures grant no canonical actor authority.
+
 The world develops without the player. Settlements, the hive, people and
 resources retain their identities and history. On approaching, the player sees
 current activity and can intervene through ordinary Minecraft actions. Leaving,
@@ -495,10 +762,12 @@ checks naturally loaded support, collision volume, foreign living bodies and
 an actual navigable connection; it cannot force-load, choose a remote fallback,
 overlap bodies or relocate a body already executing HOT.
 
-Fresh ambient HOT admission requires a durable `AmbientBodyConfirmed` receipt
-binding actor, current lease revision, exact predecessor body and observed
-supported body. One reduction updates canonical position and the lease handoff
-and activates HOT; forged, stale or out-of-zone evidence fails before mutation.
+Fresh ambient HOT admission requires common body presence/inspection first, then
+a durable `AmbientBodyConfirmed` scope acknowledgement binding actor, physical
+body epoch, current lease revision, retained handoff and the already recorded
+supported body. The scope reduction updates only its lease handoff/activation
+and activity-owned admission policy; it cannot write canonical position or confer
+physical custody. Forged, stale or out-of-zone evidence fails before mutation.
 Placement never awards semantic arrival, consumption or resource transfer.
 Registered activity capabilities alone decide how their retained stage resumes;
 an unbegun meal TAKE admitted outside its socket retains its claim and returns
@@ -506,8 +775,9 @@ to MOVE. A pending physical effect or active consumption cannot be relocated.
 Scene-reserved pre-lease bodies remain held for their declared handoff rather
 than starting ambient locomotion during that transfer.
 
-Physical service-occupancy checkpoints use the same receipt with an explicit
-boundary purpose under the current HOT lease. They wake the existing point's
+Physical service-occupancy changes first use common body inspection, followed by
+the same scope acknowledgement with an explicit boundary purpose and body epoch
+under the current HOT lease. They wake the existing point's
 contenders without completing a meal or creating another queue. A PREPARED
 actor with no admitted body cannot hold a phantom turn ahead of an actual HOT
 occupant. A denied occupant can leave through a legal waiting route, never a

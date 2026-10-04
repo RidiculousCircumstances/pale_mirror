@@ -112,6 +112,14 @@ ceremony. Apply them while choosing and implementing work:
    gate selection does not turn a failed release gate green. Prefer a focused
    repaired case before another full aggregate, and record unrelated debt
    explicitly instead of silently widening the current feature.
+   When an implementation path is retired, remove tests of its private
+   mechanics rather than maintaining a test-only execution path or restoring
+   obsolete production APIs. Establish retirement from real callers, not the
+   test name or a red result. Preserve live semantic invariants and recovery/
+   negative coverage through the current owner; adapt a useful existing test
+   to that owner when needed. Record what became obsolete and what coverage
+   remains. Compiling the retained test inventory and focused affected checks
+   suffice for test sanitation; this alone is not native/product acceptance.
 6. At each coherent increment, ask what now works through the active call graph
    that did not before. If only tools, tests, receipts or inactive APIs advanced,
    report plainly that no product result was delivered. Do not start another
@@ -146,6 +154,22 @@ This is an ordering and ownership rule, not a demand to prove source correctness
 with certainty or a ban on a discriminating runtime probe when code alone cannot
 answer a specific question. Do not delegate routine client debugging to the
 user; ask for human product judgement only where it adds distinct value.
+
+Trace the affected lifecycle end to end before dividing its repair into local
+verification cycles: admission/selection -> physical execution and observation
+-> unload/interruption -> COLD continuation -> HOT return -> terminal/successor,
+including the changed persistence and resource edges. Inspect the real callers
+and authoritative transitions, not only the helper currently being edited.
+Repair the source-proven connected contradictions as one coherent increment;
+do not repeatedly discover the next predictable adjacent mismatch through tests.
+This is a scoped source review, not another repository-wide audit or a demand
+for certainty before editing. During that increment, compile when useful and
+run a focused test only for a named unresolved question or the completed changed
+contract. Do not launch a verification cycle merely because one helper is done.
+Once the path is coherent, prioritize its integrated product check over more
+isolated confirmations; reuse unchanged green evidence. A passing local boundary
+is not an end-to-end result and does not justify postponing the affected product
+loop until every independent family has been exhaustively retested.
 
 Workflow autonomy takes precedence over historical method prescriptions in
 orders and tooling guides: no compulsory all-tools onboarding, context-query
@@ -184,6 +208,13 @@ for each edit or touched file. Existing dependency-valid coverage is reusable;
 neither a documentation edit nor a private checkpoint triggers a new campaign.
 Applicable full gates run at integration milestones/releases, not every edit
 or private checkpoint. Commands and module additions are in release-verification.
+Documentation-only feedback uses patch hygiene and the affected contract check,
+not the entire simulation/tooling gate. Shared `guardrails`/`check` retain source
+safety and architecture checks; independent visual-generation experiments have
+their own scoped gate. Test deletion selects compilation of the retained
+inventory, never a filter for the removed class. A path keyword cannot choose
+a native campaign; unknown ownership requires explicit engineering selection,
+not automatic execution of the complete milestone gate.
 Do not widen a test campaign simply because a helper changed; do not omit an
 affected boundary merely to obtain a green result.
 

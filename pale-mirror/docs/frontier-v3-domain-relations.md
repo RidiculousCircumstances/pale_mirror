@@ -37,6 +37,33 @@ It does not replace the process aggregates that own them.
 
 ## Vocabulary
 
+UAE amendment (PM-UAE001, accepted target, adoption in progress): the actor
+execution aggregate solely owns actor -> current execution and one bounded
+suspended continuation. Each reference declares activity kind, exact activity
+owner and monotonic actor execution generation. Family records retain work
+assignments and progress; body lifecycle retains actor/UUID and physical epoch.
+Neither is copied into the execution aggregate. Finish/cancel retains the last
+generation until actor retirement so a later execution cannot reuse it. Scene
+participant relations confer process/effect participation, not another body or
+position owner. Resource operation references survive activity replacement
+under their existing operation owner's reconciliation contract.
+
+The common body lifetime also owns a bounded actor -> loaded-residency generation
+high-water mark in physical recovery evidence. It is neither a job generation
+nor a new UUID/physical incarnation. Exact insertion/return is its producer;
+scene and ambient departure projections retain that same generation and cannot
+mint it. Withdrawal of an unload receipt retains the high-water mark, preventing
+ABA reuse of an earlier same-position save/acknowledgement. Actor retirement may
+remove it only with the common lifetime's terminal cleanup.
+
+Route interception retains two different declared purposes: transport crew use
+LOGISTICS under their exact RouteOperation; attackers use ROUTE_INTERCEPTION
+under their exact RouteEngagement. A logistics scene references both cohorts;
+membership or combat side cannot supply a missing activity declaration. The
+engagement's start, travel, signal, strike and resolution payloads carry exact
+execution identities. Resolution and cargo interruption retire the appropriate
+cohorts atomically with their owning process changes, not by deleting bodies.
+
 - **Entity identity** is a stable canonical ID plus its declared entity kind.
   The same wire string cannot silently stand for a different kind.
 - **Process generation**, **job/action identity** and **physical authority epoch**
