@@ -15,6 +15,8 @@ components:
     lifecycle: "active-development"
     path: "pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3"
     owns:
+      - Shared pedestrian knowledge distinguishes authored PUBLIC_ACCESS_SURFACE support from structural obstacles for every caller; support floors are not walls, while feet/head solids and witnessed physical changes remain hard barriers. Logistics progress and formation-failure validation use the same bounded proposed segment and geometry policy; a declared failure reason alone cannot retire an unobstructed crew.
+      - Pure pedestrian path composition erases geometric cycles across facility-exit and outdoor legs without creating edges or dropping semantic actions; bakery and meal callers share this normalization so replanning cannot repeatedly send an actor back to the same entrance apron.
       - Medical and route-patrol participant death is acknowledged through the exact registered activity owner even after a scene closes. Medical care blocks its operation and retires the declared cohort; patrol blocks both task and patrol and retires its declared cohort. The common lifecycle commits authority retirement; scene quiescence never owns these business outcomes or removes surviving bodies.
       - Assault command-owner death enters its registered activity capability and retains the exact expedition cohort for terminal settlement; HOT Overseer loss invalidates contact and orders retreat. SceneDeathOutcome and scene-owned death dispatch are removed, not retained as a second business-outcome authority.
       - Frontier v3 canonical world, typed commands and events, deterministic schedules, exact actors/resources, autonomous human and hive processes, immutable projections and pure persistence codecs

@@ -38,6 +38,35 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SupplyOperationProcessTest {
     @Test
+    void formationFailureRequiresTheSameKnownGeometryEvidenceAsItsProducer() {
+        var configuration = FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
+                new WorldId("frontier:formation-failure-evidence"), 91L);
+        var initial = configuration.initialState();
+        var operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(initial).orElseThrow();
+        var travel = operation.activeTravel().orElseThrow();
+        var next = OperationTravelContinuation.nextColdSegment(travel);
+        assertTrue(OperationTravelContinuation.coldSegmentAvailable(initial, travel, next));
+        var failure = TerminalDiagnosticProducer.operationFailed(operation.id(), "formation-route-obstructed");
+        var event = new FrontierEvent(1, new EventId("event:formation-failure"), new TransactionId("transaction:formation-failure"),
+                initial.bootstrap().worldId(), Revision.ZERO, configuration.initialInstant(), operation.settlementId(),
+                CauseChain.root(new CommandId("command:formation-failure")), failure);
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.reduce(initial, event),
+                "a declared reason alone cannot manufacture an obstruction");
+        var from = travel.currentPosition(); var to = travel.corridor().get(travel.nextHotCursor());
+        var blockedFeet = travel.formation().values().iterator().next()
+                .offset(to.x() - from.x(), to.y() - from.y(), to.z() - from.z());
+        var blocked = initial.recordPhysicalDelta(new PhysicalDelta(blockedFeet.supportingSurface().support().offset(0, 1, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:formation-foot-obstruction"));
+        var planned = SupplyOperationProcess.planProgress(blocked, SupplyOperationProcess.operationProgress(operation,
+                Math.addExact(configuration.initialInstant().ticks(), 20L)));
+        assertEquals(failure, planned.getFirst().payload());
+        var failed = FrontierWorldRuntimeDefinition.reduce(blocked, event);
+        assertEquals(OperationStage.FAILED, failed.operations().get(operation.id()).stage());
+        for (var actor : operation.participantIds()) assertTrue(failed.actorExecutions().actors().get(actor).current().isEmpty());
+        assertEquals(blocked.actorLocations(), failed.actorLocations(), "a route failure cannot move or delete a body");
+    }
+
+    @Test
     void missingBreadBlocksThePreparationAndItsDependentDelivery() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:supply-blocked"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();

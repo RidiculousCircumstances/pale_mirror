@@ -15,8 +15,8 @@ public interface ActorActivityCapability {
      * It is not an interruption, body departure or route-checkpoint acknowledgement. */
     void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution);
     default boolean supportsContinuation() { return interruption() == Interruption.RETAIN_CONTINUATION; }
-    /** Mandatory for retained work. Other owners may declare terminal settlement
-     * independently of the existing coordinated scene-death policy. */
+    /** Mandatory for retained work. Other causal owners may retain their exact
+     * execution until their coordinated terminal settlement; scenes never own death outcomes. */
     default java.util.Optional<ActorActivityDeath> deathAcknowledgement() { return java.util.Optional.empty(); }
     void validateReference(FrontierWorldState state, ActorExecutionId execution);
     /** Family-owned semantic permission. Presentation purpose alone never grants actuation. */

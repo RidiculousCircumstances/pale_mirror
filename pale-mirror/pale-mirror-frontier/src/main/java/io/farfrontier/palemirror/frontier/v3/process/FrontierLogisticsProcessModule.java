@@ -581,10 +581,16 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         boolean obstruction = "route-obstructed".equals(failed.reason())
                 && (!state.routeTopology().supplyPassable(state.bootstrap(), operation.settlementId())
                 || operation.activeTravel().map(travel -> !travel.canAdvanceNextEdge()).orElse(false));
+        boolean formationObstruction = "formation-route-obstructed".equals(failed.reason())
+                && operation.activeTravel().filter(travel -> !travel.arrived() && travel.canAdvanceNextEdge())
+                .filter(travel -> travel.approaches().isEmpty() || OperationTravelContinuation.approachesReady(travel))
+                .map(travel -> !OperationTravelContinuation.coldSegmentAvailable(state, travel,
+                        OperationTravelContinuation.nextColdSegment(travel))).orElse(false);
         boolean recoveryUnresolved = "scene-recovery-unresolved".equals(failed.reason()) && state.sceneLeases().values().stream()
                 .filter(FrontierSceneBehaviors::isLogistics).anyMatch(lease -> FrontierSceneBehaviors.logistics(lease).operationId().equals(operation.id())
                         && lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART && lease.recoveryEvidence().isPresent());
-        if (!death && !obstruction && !recoveryUnresolved) throw new IllegalArgumentException("operation failure lacks a dead participant or observed route obstruction");
+        if (!death && !obstruction && !formationObstruction && !recoveryUnresolved)
+            throw new IllegalArgumentException("operation failure lacks a dead participant or observed route obstruction");
         return state.failOperation(failed.operationId());
     }
 

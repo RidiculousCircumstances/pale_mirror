@@ -27,18 +27,19 @@ class FrontierV3SceneReleaseReadinessTest {
     }
 
     @Test
-    void absentBodyWaitsForBothCurrentAndRetainedEntityColumns() {
+    void absentBodyWaitsForTheSingleAuthoritativePositionNotAnOldSceneAnchor() {
         assertTrue(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, LEASE, id -> false, body -> false));
-        assertTrue(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, LEASE, id -> false, CURRENT::equals));
+        assertFalse(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, LEASE, id -> false, CURRENT::equals),
+                "a scene no longer retains an independent old body position to wait for");
         assertTrue(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, LEASE, id -> false, EARLIER::equals));
         assertFalse(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, LEASE, id -> false, body -> true),
                 "readiness permits further inspection; it is not a death observation");
     }
 
     @Test
-    void restartCannotClassifyMissingActorsBeforeBothEntityColumnsAreReady() {
+    void restartCannotClassifyMissingActorsBeforeTheCanonicalEntityColumnIsReady() {
         var recovering = LEASE.withStatus(SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
-        assertTrue(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, recovering, id -> false, CURRENT::equals));
+        assertFalse(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, recovering, id -> false, CURRENT::equals));
         assertTrue(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, recovering, id -> false, EARLIER::equals));
         assertFalse(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, recovering, id -> false, body -> true));
         assertEquals(ActorLifeStatus.ALIVE, STATE.actorLocations().get(ACTOR).condition().status(),

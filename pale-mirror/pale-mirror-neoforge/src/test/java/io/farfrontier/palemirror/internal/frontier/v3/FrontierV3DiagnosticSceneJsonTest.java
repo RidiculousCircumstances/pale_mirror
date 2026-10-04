@@ -77,7 +77,9 @@ class FrontierV3DiagnosticSceneJsonTest {
         var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(leaseId, checkpoint.worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause(candidate.jobId()), candidate.handoffPosition(), checkpoint.instant(),
                 checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED, members, java.util.Set.of(), Optional.empty());
-        FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
+        FrontierWorldState hot = state.prepareSceneLease(lease);
+        for (var member : lease.members()) hot = io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts.present(hot, member.actorId());
+        hot = hot.transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
         var historical = SceneLease.forCause(new SceneLeaseId("lease:diagnostic-production-r-1"), checkpoint.worldId(),
                 lease.cause(), lease.handoffPosition(), new SimInstant(0L), 0L, SceneLeaseStatus.CLOSED, lease.members(), lease.ambientHandoffActorIds(), Optional.empty());
         FrontierWorldState withHistoricalReceipt = hot.withChanges(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate.begin()

@@ -76,6 +76,16 @@ public final class OperationTravelContinuation {
                 && spatial.approach().orElseThrow().arrived());
     }
 
+    /** The same bounded proposed segment is used by the producer and its failure validator. */
+    public static OperationTravel nextColdSegment(OperationTravel travel) {
+        int nextCursor = travel.approaches().isEmpty() ? travel.nextColdCursor() : travel.nextHotCursor();
+        var from = travel.currentPosition(); var to = travel.corridor().get(nextCursor);
+        int dx = to.x() - from.x(), dy = to.y() - from.y(), dz = to.z() - from.z();
+        var formation = new LinkedHashMap<SubjectId, BodyPosition>();
+        travel.formation().forEach((actor, body) -> formation.put(actor, body.offset(dx, dy, dz)));
+        return travel.advance(nextCursor, formation, travel.cargoAnchor().offset(dx, dy, dz));
+    }
+
     /** Validate every intermediate retained member step, not only the final endpoint. */
     public static boolean coldSegmentAvailable(FrontierWorldState state, OperationTravel prior, OperationTravel next) {
         if (!prior.approaches().isEmpty() && (!approachesReady(prior) || !next.isExactHotAdvanceFrom(prior))) return false;

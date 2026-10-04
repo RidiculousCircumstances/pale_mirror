@@ -35,6 +35,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.ContractStatus;
@@ -208,6 +209,7 @@ class FrontierV3ServerRuntimeTest {
         SubjectId participant = operation.participantIds().getFirst();
         submitAmbient(runtime, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(before, participant,
                 runtime.checkpointImage().orElseThrow().instant())), "command:ambient-scene-overlap-prepare");
+        presentModeledBody(runtime, participant, "ambient-overlap-body");
         submitAmbient(runtime, world, admittedAmbientFixture(worldState(runtime), participant), "command:ambient-scene-overlap-hot");
         FrontierWorldState overlapped = worldState(runtime);
 
@@ -226,6 +228,7 @@ class FrontierV3ServerRuntimeTest {
         SubjectId participant = operation.participantIds().getFirst();
         submitAmbient(runtime, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(before, participant,
                 runtime.checkpointImage().orElseThrow().instant())), "command:ambient-scene-transfer-prepare");
+        presentModeledBody(runtime, participant, "ambient-transfer-body");
         submitAmbient(runtime, world, admittedAmbientFixture(worldState(runtime), participant), "command:ambient-scene-transfer-hot");
         FrontierWorldState overlapped = worldState(runtime);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
@@ -241,13 +244,14 @@ class FrontierV3ServerRuntimeTest {
         assertEquals(handoff, FrontierWorldRuntimeDefinition.payloadCodecs().decode(handoff.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(handoff)));
         assertThrows(IllegalArgumentException.class, () -> overlapped.handoffAmbientScene(new SceneLeaseHandoff(handoffLease,
                 List.of(new SceneMemberPosition(operation.participantIds().getLast(), capture.body(), capture.health())))));
+        inspectModeledBody(runtime, participant, capture.body(), "ambient-transfer-captured-body");
         submitAmbient(runtime, world, handoff, "command:ambient-scene-transfer");
 
         FrontierWorldState transferred = worldState(runtime);
         assertEquals(AmbientLeaseStatus.CLOSED, transferred.ambientLeases().get(participant).status());
         assertEquals(capture.body(),
                 transferred.actorLocations().get(participant).body(),
-                "a captured Minecraft feet cell must return to its exact canonical body location");
+                "the scope handoff must preserve the independently inspected common body position");
         assertEquals(lease, transferred.sceneLeases().get(lease.id()));
         assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
     }
@@ -264,6 +268,7 @@ class FrontierV3ServerRuntimeTest {
         SceneLease lease = FrontierV3TestSceneLeases.exact(state, checkpoint, leaseId, operation.id(), operation.cargoId(),
                 operation.currentPosition(), java.util.Optional.empty(), operation.participantIds());
         submitWorld(runtime, "recovery-unresolved-prepare", new SceneLeasePrepared(lease));
+        for (SubjectId actor : operation.participantIds()) presentModeledBody(runtime, actor, "recovery-unresolved-body-" + actor.value().replace(':', '-'));
         transitionScene(runtime, world, leaseId, SceneLeaseStatus.HOT, "command:recovery-unresolved-hot");
         assertEquals(1, FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime));
 
@@ -522,7 +527,8 @@ class FrontierV3ServerRuntimeTest {
         // The ordinary bakery now clears the depot before closing its job; that
         // can admit the route near tick 12,000, before its finite COLD travel.
         for (int tick = 0; tick < 14_000; tick++) {
-            boolean delivered = runtime.decodedState().orElseThrow().contracts().values().stream()
+            boolean delivered = runtime.decodedState().orElseThrow(() -> new AssertionError(
+                    "COLD delivery runtime stopped at tick " + runtime.calendarInstant() + ": " + runtime.status())).contracts().values().stream()
                     .anyMatch(contract -> contract.settlementId().equals(settlementId) && contract.status() == ContractStatus.DELIVERED);
             if (delivered) break;
             runtime.tick(new WorkBudget(64, 512));
@@ -555,7 +561,9 @@ class FrontierV3ServerRuntimeTest {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         SceneLease lease = FrontierV3TestSceneLeases.exact(initial, checkpoint, leaseId, candidate.operationId(), candidate.cargoId(),
                 candidate.handoffPosition(), java.util.Optional.of(candidate.engagementId()), candidate.actorIds());
-        submitWorld(runtime, "prepare-explosion-lease", new SceneLeasePrepared(lease)); submitWorld(runtime, "hot-explosion-lease", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+        submitWorld(runtime, "prepare-explosion-lease", new SceneLeasePrepared(lease));
+        for (SubjectId actor : candidate.actorIds()) presentModeledBody(runtime, actor, "explosion-body-" + actor.value().replace(':', '-'));
+        submitWorld(runtime, "hot-explosion-lease", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         FrontierWorldState hot = worldState(runtime); SubjectId bomber = hot.bootstrap().hive().bioforms().stream().filter(io.farfrontier.palemirror.frontier.v3.model.Bioform::isExplosiveAssaulter)
                 .filter(value -> candidate.actorIds().contains(value.id())).findFirst().orElseThrow().id();
         var point = hot.actorLocations().get(bomber).body(); PhysicalIntentId intentId = new PhysicalIntentId("intent:managed-explosion-restart");
@@ -743,6 +751,7 @@ class FrontierV3ServerRuntimeTest {
         FrontierWorldState afterColdDue = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
         assertEquals(0, afterColdDue.operations().get(operation.id()).routeIndex());
 
+        for (SubjectId actor : operation.participantIds()) presentModeledBody(recovered, actor, "scene-recovery-body-" + actor.value().replace(':', '-'));
         transitionScene(recovered, world, leaseId, SceneLeaseStatus.HOT, "command:scene-recovery-hot");
         transitionScene(recovered, world, leaseId, SceneLeaseStatus.DRAINING, "command:scene-recovery-draining");
         CheckpointImage draining = recovered.checkpointImage().orElseThrow();
@@ -753,6 +762,15 @@ class FrontierV3ServerRuntimeTest {
         CommandId releaseCommand = new CommandId("command:scene-recovery-release");
         assertInstanceOf(CommandResult.Accepted.class, recovered.submit(new FrontierCommand(1, releaseCommand, world, draining.revision(), draining.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(releaseCommand), released)).orElseThrow());
+        recovered.tick(new WorkBudget(8, 64));
+        assertEquals(0, worldState(recovered).operations().get(operation.id()).routeIndex(),
+                "closing presentation cannot start COLD motion while common physical custody is retained");
+        for (SubjectId actor : operation.participantIds()) {
+            var current = worldState(recovered); var location = current.actorLocations().get(actor);
+            submitWorld(recovered, "scene-recovery-unloaded-" + actor.value().replace(':', '-'),
+                    new ActorBodyUnloaded(ActorBodyAuthority.current(current, actor), location.body(), location.condition().health(),
+                            location.body(), location.condition().health(), current.actorExecutions().actors().get(actor).current()));
+        }
         for (int tick = 0; tick < 1_000 && worldState(recovered).operations().get(operation.id()).routeIndex() == 0; tick++) {
             recovered.tick(new WorkBudget(8, 64));
         }
@@ -772,6 +790,7 @@ class FrontierV3ServerRuntimeTest {
         FrontierWorldState state = new FrontierWorldStateCodec().decode(before.canonicalState());
         AmbientActorLease lease = AmbientActorProcess.nextLease(state, resident, before.instant());
         submitAmbient(runtime, world, new AmbientLeasePrepared(lease), "command:ambient-recovery-prepare");
+        presentModeledBody(runtime, resident, "ambient-recovery-body");
         submitAmbient(runtime, world, admittedAmbientFixture(worldState(runtime), resident), "command:ambient-recovery-hot");
         runtime.shutdown();
 
@@ -867,7 +886,8 @@ class FrontierV3ServerRuntimeTest {
     }
 
     private static FrontierWorldState worldState(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+        return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow(() -> new AssertionError(
+                "runtime has no readable active state at " + runtime.calendarInstant() + ": " + runtime.status())).canonicalState());
     }
 
     private static RouteOperation initialNorthwatchOperation(FrontierWorldState state) {
@@ -877,6 +897,14 @@ class FrontierV3ServerRuntimeTest {
                 .filter(operation -> operation.activeTravel().isPresent() && operation.activeTravel().orElseThrow().cursor() == 0)
                 .reduce((left, right) -> { throw new AssertionError("ambiguous initial Northwatch route operations"); })
                 .orElseThrow(() -> new AssertionError("initial Northwatch route operation is absent"));
+    }
+
+    /** Explicit modeled body event for filesystem recovery coverage, not a native movement claim. */
+    private static void presentModeledBody(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                         SubjectId actor, String phase) {
+        var state = worldState(runtime); var location = state.actorLocations().get(actor);
+        submitWorld(runtime, phase, new ActorBodyPresent(ActorBodyAuthority.current(state, actor),
+                location.body(), location.condition().health(), location.body(), location.condition().health()));
     }
 
     /** Explicit modeled body event for filesystem recovery coverage, not a native movement claim. */

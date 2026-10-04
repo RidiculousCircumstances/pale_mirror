@@ -21,6 +21,36 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void composingAnExitWithAnOutdoorRouteCannotRepeatTheEntranceDetour() {
+        var apron = SurfaceAnchor.at(-384, 64, -326);
+        var exterior = SurfaceAnchor.at(-385, 64, -326);
+        var onward = SurfaceAnchor.at(-384, 63, -327);
+        var destination = SurfaceAnchor.at(-384, 63, -328);
+        var path = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathComposition
+                .withoutLoops(List.of(apron, exterior, apron, onward, destination));
+        assertEquals(List.of(apron, onward, destination), path,
+                "the composed next step continues to the destination, not back to the exit anchor");
+    }
+
+    @Test void aPublicAccessFloorIsSupportNotAnObstacleForAnyPedestrianCaller() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:public-floor"), 91L));
+        var surface = SurfaceAnchor.at(-365, 64, -318);
+        var cells = FrontierGrayboxPlan.compile(state).cells();
+        assertEquals(GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE, cells.get(surface.support()).semanticPart());
+        assertTrue(!cells.containsKey(surface.support().offset(0, 1, 0))
+                && !cells.containsKey(surface.support().offset(0, 2, 0)));
+        assertEquals(surface, KnownPedestrianGround.forFrontier(state).at(surface.x(), surface.z()));
+        assertTrue(KnownPedestrianRouteKnowledge.forFrontier(state).traversable(List.of(surface)));
+        assertTrue(KnownPedestrianRouteKnowledge.forSettlement(state, new SubjectId("settlement:1"), List.of())
+                .traversable(List.of(surface)));
+        for (int height : List.of(0, 1, 2)) {
+            var changed = state.recordPhysicalDelta(new PhysicalDelta(surface.support().offset(0, height, 0),
+                    PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:public-floor-obstruction"));
+            assertTrue(!KnownPedestrianRouteKnowledge.forFrontier(changed).traversable(List.of(surface)),
+                    "a witnessed change at support, feet or head remains a hard barrier");
+        }
+    }
+
     @Test void anUnsupportedRaisedSillEdgeIsNotItsOwnServiceExit() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:unsupported-service-exit-edge"), 20260918065L));

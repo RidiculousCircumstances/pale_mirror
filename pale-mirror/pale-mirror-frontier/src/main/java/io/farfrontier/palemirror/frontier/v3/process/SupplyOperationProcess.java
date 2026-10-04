@@ -207,7 +207,7 @@ public final class SupplyOperationProcess {
         OperationTravel travel = operation.activeTravel().orElseThrow();
         if (!travel.arrived()) {
             if (!travel.canAdvanceNextEdge()) return failed(state, operation, "route-obstructed", action.dueAt().ticks());
-            OperationTravel advanced = translateTravel(travel, travel.approaches().isEmpty() ? travel.nextColdCursor() : travel.nextHotCursor());
+            OperationTravel advanced = OperationTravelContinuation.nextColdSegment(travel);
             if (!OperationTravelContinuation.coldSegmentAvailable(state, travel, advanced))
                 return failed(state, operation, "formation-route-obstructed", action.dueAt().ticks());
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelAdvanced(operation.id(), advanced,
@@ -327,12 +327,6 @@ public final class SupplyOperationProcess {
         java.util.Map<SubjectId, BodyPosition> formation = new java.util.LinkedHashMap<>();
         operation.participantIds().forEach(actor -> formation.put(actor, state.actorLocations().get(actor).body()));
         return java.util.Map.copyOf(formation);
-    }
-    private static OperationTravel translateTravel(OperationTravel travel, int nextCursor) {
-        BlockPosition from = travel.currentPosition(), to = travel.corridor().get(nextCursor);
-        int deltaX = to.x() - from.x(), deltaY = to.y() - from.y(), deltaZ = to.z() - from.z(); java.util.Map<SubjectId, BodyPosition> formation = new java.util.LinkedHashMap<>();
-        travel.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, deltaY, deltaZ)));
-        return travel.advance(nextCursor, formation, travel.cargoAnchor().offset(deltaX, deltaY, deltaZ));
     }
     private static List<BlockPosition> adjacentSegment(BlockPosition from, BlockPosition to) {
         if (Math.abs(from.y() - to.y()) > 1 || (from.x() != to.x() && from.z() != to.z())) throw new IllegalArgumentException("operation route segment must be axis aligned with grade at most one");

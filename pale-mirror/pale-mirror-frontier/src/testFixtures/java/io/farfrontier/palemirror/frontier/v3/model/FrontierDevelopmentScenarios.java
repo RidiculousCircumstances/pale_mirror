@@ -316,7 +316,7 @@ final class FrontierDevelopmentScenarios {
         return routeCustodyConfiguration(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed));
     }
 
-    private static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
+    static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
             routeCustodyConfiguration(io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
         // This fixture isolates route custody/recovery, not competition with population
         // growth. With real production labor, Northwatch's birth review can now consume

@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathComposition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -66,7 +67,7 @@ public final class BakeryKnownNavigation {
             result.addAll(List.of(workshopPort.approachSurface(), workshopPort.throatSurface(),
                     workshopPort.interiorSurface(), workshopPort.inputStation(), workshopPort.workStation()));
         }
-        return List.copyOf(result);
+        return PedestrianPathComposition.withoutLoops(result);
     }
 
     private static List<SurfaceAnchor> workshopExit(SettlementWorkshopServicePort port, SurfaceAnchor start) {

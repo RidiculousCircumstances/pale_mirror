@@ -888,12 +888,14 @@ class FrontierV3AmbientAdmissionPolicyTest {
         HiveSettlementKnowledge.Sighting secondSighting = new HiveSettlementKnowledge.Sighting(secondSettlement.id(), scout, secondSettlement.anchor(), 100L);
         StrategicPlanState plans = StrategicPlanState.empty().withHiveSettlementKnowledge(new HiveSettlementKnowledge(Map.of(
                 firstSettlement.id(), firstSighting, secondSettlement.id(), secondSighting))).addObjective(objective).addTask(task);
-        SettlementAssault first = assault(new SubjectId("assault:admission-policy-first"), task, firstSighting, actors.subList(0, 3), firstSettlement);
-        SettlementAssault second = assault(new SubjectId("assault:admission-policy-second"), task, secondSighting, actors.subList(3, 6), secondSettlement);
         Map<io.farfrontier.palemirror.frontier.v3.model.BlockPosition, GrayboxCell> cells = FrontierGrayboxPlan.compile(state).cells();
         Map<SubjectId, ActorLocation> locations = new LinkedHashMap<>(state.actorLocations());
-        place(locations, cells, state, firstSettlement, first);
-        place(locations, cells, state, secondSettlement, second);
+        place(locations, cells, state, firstSettlement, actors.subList(0, 3));
+        place(locations, cells, state, secondSettlement, actors.subList(3, 6));
+        SettlementAssault first = assault(new SubjectId("assault:admission-policy-first"), task, firstSighting,
+                actors.subList(0, 3), firstSettlement, locations);
+        SettlementAssault second = assault(new SubjectId("assault:admission-policy-second"), task, secondSighting,
+                actors.subList(3, 6), secondSettlement, locations);
         state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations).strategicPlans(plans));
         state = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.admit(state, first,
                 io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.admission(state, first), Optional.empty(),
@@ -915,17 +917,17 @@ class FrontierV3AmbientAdmissionPolicyTest {
     }
 
     private static SettlementAssault assault(SubjectId id, StrategicTask task, HiveSettlementKnowledge.Sighting sighting,
-                                             List<SubjectId> attackers, Settlement settlement) {
+                                             List<SubjectId> attackers, Settlement settlement, Map<SubjectId, ActorLocation> locations) {
         List<SubjectId> defenders = settlement.residents().stream().map(resident -> resident.id()).limit(3).toList();
         return new SettlementAssault(id, task.id(), task.ownerId(), sighting, attackers.getFirst(),
-                attackers.stream().map(actor -> new SettlementAssaultAttacker(actor, List.of(settlement.anchor()), 0)).toList(), defenders,
+                attackers.stream().map(actor -> new SettlementAssaultAttacker(actor, List.of(locations.get(actor).supportingSurface().support()), 0)).toList(), defenders,
                 SettlementAssaultStatus.COLD_COMBAT, 0, Optional.empty());
     }
 
     private static void place(Map<SubjectId, ActorLocation> locations, Map<io.farfrontier.palemirror.frontier.v3.model.BlockPosition, GrayboxCell> cells,
-                              FrontierWorldState state, Settlement settlement, SettlementAssault assault) {
-        List<SubjectId> members = new ArrayList<>(assault.attackerIds());
-        members.addAll(assault.defenderIds());
+                              FrontierWorldState state, Settlement settlement, List<SubjectId> attackers) {
+        List<SubjectId> members = new ArrayList<>(attackers);
+        members.addAll(settlement.residents().stream().map(resident -> resident.id()).limit(3).toList());
         List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> floors = cells.entrySet().stream()
                 .filter(entry -> entry.getValue().semanticPart() == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE || entry.getValue().semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE)
                 .map(Map.Entry::getKey).filter(position -> SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,

@@ -120,9 +120,27 @@ public final class FrontierV3FixtureCatalog {
         return withReserve(FrontierWorldRuntimeDefinition.configuration(bootstrap), false);
     }
 
-    /** Test-only COLD supply path without an unrelated initial birth consuming the exact export reserve. */
+    /**
+     * COLD custody/restart fixture with a declared level terminal apron. The ordinary
+     * rigid escort formation extends past the final corner onto terrain; an unequal
+     * support there correctly rejects travel, which is not this fixture's subject.
+     * All production movement, resource and obstruction guards remain unchanged.
+     */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> coldSupplyDeliveryConfiguration(WorldId worldId, long seed) {
-        return FrontierDevelopmentScenarios.routeCustodyConfiguration(worldId, seed);
+        FrontierBootstrap original = FrontierBootstrapper.create(worldId, seed);
+        List<BlockPosition> waypoints = FrontierRouteNetwork.supplyWaypoints(original, original.settlements().getFirst().id());
+        BlockPosition corner = waypoints.get(waypoints.size() - 2), end = waypoints.getLast();
+        var roadColumns = FrontierRouteNetwork.surfaceCells(original).stream()
+                .map(cell -> new TerrainColumn(cell.x(), cell.z())).collect(java.util.stream.Collectors.toSet());
+        TerrainSurfacePlan terrain = original.terrain();
+        for (int x = Math.min(corner.x(), end.x()) - 1; x <= Math.max(corner.x(), end.x()) + 1; x++) {
+            for (int z = Math.min(corner.z(), end.z()) - 1; z <= Math.max(corner.z(), end.z()) + 1; z++) {
+                if (!roadColumns.contains(new TerrainColumn(x, z))) terrain = terrain.withSurveyedSupport(x, z, end.y());
+            }
+        }
+        FrontierBootstrap level = new FrontierBootstrap(original.worldId(), original.seed(), original.bounds(),
+                original.settlements(), original.hive(), original.ruleset(), terrain, original.initialFieldLayouts());
+        return FrontierDevelopmentScenarios.routeCustodyConfiguration(uncontestedSupplyConfiguration(level));
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousSupplyInterceptionConfiguration(WorldId worldId, long seed) {

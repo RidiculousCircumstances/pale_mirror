@@ -113,7 +113,7 @@ public final class ResidentMealKnownNavigation {
                     List<SurfaceAnchor> finalLeg = serviceLeg(state, meal, depot, port.exteriorApproach());
                     result.addAll(finalLeg.subList(1, finalLeg.size()));
                 }
-                return List.copyOf(result);
+                return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathComposition.withoutLoops(result);
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 if (directService) throw unavailable;
             }

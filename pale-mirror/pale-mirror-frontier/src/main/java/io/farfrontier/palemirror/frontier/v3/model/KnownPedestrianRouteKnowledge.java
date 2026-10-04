@@ -202,7 +202,7 @@ public final class KnownPedestrianRouteKnowledge {
     private static Set<BlockPosition> compileStaticOccupancy(FrontierBootstrap bootstrap) {
         Set<BlockPosition> occupied = new HashSet<>();
         for (Settlement settlement : bootstrap.settlements())
-            occupied.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(
+            occupied.addAll(FrontierGrayboxPlan.intactStructurePedestrianObstacles(
                     bootstrap.terrain(), settlement.structures()));
         occupied.addAll(FrontierGrayboxPlan.intactOrganOccupancy(bootstrap.hive().organs()));
         return occupied;

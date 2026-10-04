@@ -431,6 +431,17 @@ public final class FrontierGrayboxPlan {
         return java.util.Set.copyOf(cells.keySet());
     }
 
+    /** Public access floors support feet; they are not obstacles at their own support cell. */
+    static java.util.Set<BlockPosition> intactStructurePedestrianObstacles(TerrainSurfacePlan terrain,
+                                                                          java.util.List<SettlementStructure> structures) {
+        Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(structures, "structures");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        structures.forEach(structure -> addStructure(cells, terrain, structure, StructureCondition.INTACT));
+        return cells.entrySet().stream()
+                .filter(entry -> entry.getValue().semanticPart() != GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)
+                .map(Map.Entry::getKey).collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
     /** Full-intact organ occupancy used by the canonical hive actor slot compiler. */
     static java.util.Set<BlockPosition> intactOrganOccupancy(java.util.List<HiveOrgan> organs) {
         Objects.requireNonNull(organs, "organs");

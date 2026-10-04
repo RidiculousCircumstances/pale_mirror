@@ -30,8 +30,9 @@ class FrontierV3CargoCleanupArchiveTest {
         var initial = config.initialState();
         var lease = FrontierV3GameTestSceneLeases.exact(initial, engine.checkpoint(),
                 initial.coldEngagementSceneCandidates().getFirst(), new SceneLeaseId("lease:prepared-cleanup"));
-        var hot = initial.prepareSceneLease(lease).transitionSceneLease(lease.id(),
-                io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
+        var hot = initial.prepareSceneLease(lease);
+        for (var member : lease.members()) hot = io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts.present(hot, member.actorId());
+        hot = hot.transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
         var state = hot.transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.DRAINING);
         var draining = state.sceneLeases().get(lease.id());
         var cargo = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.logistics(lease).cargoId();
@@ -41,7 +42,8 @@ class FrontierV3CargoCleanupArchiveTest {
         var changed = new FrontierV3CargoDeparture(first.leaseId(), first.cargoId(), first.entityId(), first.sceneRevision(),
                 first.authorityEpoch(), new BodyPosition(4, 64, 4), first.inventory());
         var archive = new FrontierV3CargoCleanupArchive(temporary.resolve("prepared"), WORLD);
-        assertThrows(IOException.class, () -> archive.prepareRelease(hot, hot.sceneLeases().get(lease.id()), first));
+        var active = hot;
+        assertThrows(IOException.class, () -> archive.prepareRelease(active, active.sceneLeases().get(lease.id()), first));
         archive.prepareRelease(state, draining, first);
         archive.prepareRelease(state, draining, changed);
         assertEquals(changed, archive.observation(first.entityId()).orElseThrow());

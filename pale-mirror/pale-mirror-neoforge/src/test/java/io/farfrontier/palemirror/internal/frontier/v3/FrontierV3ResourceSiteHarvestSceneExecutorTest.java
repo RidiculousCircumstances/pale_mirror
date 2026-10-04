@@ -46,6 +46,7 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
                         io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(config.worldId(), job.workerId()))), java.util.Set.of(), java.util.Optional.empty());
         state = state.prepareSceneLease(lease);
         assertTrue(FrontierV3ResourceSiteHarvestReconciliation.recoveryEpoch(state, lease).isEmpty());
+        state = io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts.present(state, job.workerId());
         state = state.transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CONFLICT);
         var conflict = state.sceneLeases().get(lease.id());
         long canonicalEpoch = state.fencedRecovery().current().get(

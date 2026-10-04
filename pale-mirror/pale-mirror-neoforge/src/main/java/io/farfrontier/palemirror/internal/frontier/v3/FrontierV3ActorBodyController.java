@@ -17,8 +17,8 @@ import java.util.function.BiFunction;
  * One construction/placement/admission owner for every exact actor body.
  * Resource and presentation owners initialize only a not-yet-admitted body;
  * they cannot select the admission protocol or insert it into Minecraft.
- * Existing-body handoff/removal is still being migrated, not implemented here
- * by delegating to the old scene/ambient owner transfer.
+ * Existing-body recognition, observation, departure and death also enter this
+ * owner; activity and presentation changes never transfer or replace a body.
  */
 final class FrontierV3ActorBodyController {
     static final String RESIDENCE_KEY = "pm_v3_body_residence_generation";

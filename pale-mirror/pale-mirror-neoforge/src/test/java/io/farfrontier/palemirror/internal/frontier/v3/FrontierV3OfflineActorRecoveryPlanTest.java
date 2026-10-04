@@ -43,11 +43,11 @@ class FrontierV3OfflineActorRecoveryPlanTest {
         assertEquals(3L, next.revision());
         assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.READY,
                 ledger.reconciliation(carrier.identity().liveBody(FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
-                        next.revision(), ledger.reconstructionEpoch(ACTOR))));
+                        0L, ledger.reconstructionEpoch(ACTOR))));
     }
     @Test void hotAuthorityAndForeignAbsenceCannotBeRepaired() {
         var state = prepared(); var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
-        var hot = AmbientLeaseStateProcess.transition(state, ACTOR, AmbientLeaseStatus.HOT);
+        var hot = AmbientLeaseStateProcess.transition(ModeledActorBodyFacts.present(state, ACTOR), ACTOR, AmbientLeaseStatus.HOT);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3OfflineActorRecoveryPlan.create(hot, ACTOR, proof(state), ledger));
         var foreign = new FrontierV3OfflineActorAbsence.Proof(Path.of("/test-only"), UUID.randomUUID(), 1, List.of());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3OfflineActorRecoveryPlan.create(state, ACTOR, foreign, ledger));

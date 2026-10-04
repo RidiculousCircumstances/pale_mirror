@@ -25,6 +25,10 @@ class FrontierV3AmbientDepartureTest {
                 original.canonicalBodyAtCapture(), original.canonicalHealthAtCapture());
         assertTrue(departure.current(state));
         assertNotEquals(lease.handoffBody(), moved);
+        assertFalse(FrontierV3AmbientActorExecutor.unloadedReleaseEligible(state,
+                new AmbientLeaseReleased(ACTOR, moved, departure.observed().health())),
+                "a presentation release cannot install a pose or injury that the body owner has not recorded");
+        state = inspectDeparture(state, departure);
         assertTrue(FrontierV3AmbientActorExecutor.unloadedReleaseEligible(state,
                 new AmbientLeaseReleased(ACTOR, moved, departure.observed().health())));
         var released = AmbientLeaseStateProcess.release(AmbientLeaseStateProcess.transition(
@@ -68,6 +72,16 @@ class FrontierV3AmbientDepartureTest {
                 new SceneMemberPosition(ACTOR, location.body(), FixedScalar.whole(7L)), location.body(), location.condition().health());
     }
 
+    private static FrontierWorldState inspectDeparture(FrontierWorldState state, FrontierV3AmbientDeparture departure) {
+        var location = state.actorLocations().get(ACTOR);
+        var execution = state.actorExecutions().actors().get(ACTOR);
+        return ActorBodyAuthority.inspected(state, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(
+                ActorBodyAuthority.current(state, ACTOR),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.SAVED_DEPARTURE,
+                location.body(), location.condition().health(), departure.observed().body(), departure.observed().health(),
+                execution == null ? java.util.Optional.empty() : execution.current()));
+    }
+
     @Test void finalDamageSurvivesEncodingAndRequiresUnchangedCanonicalBaseline() {
         var state = hot(); var receipt = receipt(state);
         assertTrue(receipt.current(state));
@@ -82,6 +96,7 @@ class FrontierV3AmbientDepartureTest {
         var state = hot(); var receipt = receipt(state);
         state = AmbientLeaseStateProcess.transition(state, ACTOR, AmbientLeaseStatus.DRAINING);
         assertTrue(receipt.current(state));
+        state = inspectDeparture(state, receipt);
         state = AmbientLeaseStateProcess.release(state, new AmbientLeaseReleased(ACTOR, receipt.observed().body(), receipt.observed().health()));
         assertFalse(receipt.current(state));
         state = AmbientLeaseStateProcess.prepare(state, AmbientActorProcess.nextLease(state, ACTOR, new SimInstant(20L)));
