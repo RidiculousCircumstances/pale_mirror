@@ -80,11 +80,20 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 return observeInterruption(level, runtime, job, id, observed, "unprepared-cell-");
             return handResult(level, state, lease, job, outcome, ResourceSiteHarvestCargo.quantity(state, job));
         }
+        // A durable growth projection belongs to the field owner, not to this worker.
+        // Settle it before admitting a paired crop/hand effect; restart may retain it
+        // between its prepare, write and acknowledgement boundaries.
+        if (retained.pending().filter(pending -> pending.canonicalSource().isPresent()).isPresent())
+            return projectPredecessor(level, runtime, job, id);
         if (retained.pending().isEmpty()) {
             var before = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
             if (before.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.pending();
             if (before.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
                 return observeInterruption(level, runtime, job, id, before, "cell-before-");
+            // Physical CURRENT can lag canonical maturity. The existing field projector
+            // owns the catch-up; harvesting an old block must not mint canonical yield.
+            if (!before.matchesWorkPredecessor(witness, transition.orElseThrow()))
+                return projectPredecessor(level, runtime, job, id);
             if (outcome == ResourceFieldCycle.WorkOutcome.HARVESTED) {
                 var handBefore = FrontierV3ActorHandObservation.observe(level, state, lease, job);
                 var effect = new FrontierV3ResourceFieldWitness.HandEffect(job.siteId(), job.id(), job.workerId(),
@@ -227,6 +236,17 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 && FrontierV3ResourceFieldForeignChangeExecutor.observeOne(level, runtime, job.siteId(), id))
             return Result.pending();
         return Result.conflict(prefix + review.disposition().name().toLowerCase(java.util.Locale.ROOT));
+    }
+
+    private static Result projectPredecessor(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                              ResourceSiteHarvestJob job, ResourceFieldLayout.CellId id) {
+        var projection = FrontierV3ResourceFieldGrowthProjector.projectCurrentOne(level, runtime, job.siteId(), id);
+        return switch (projection) {
+            case CURRENT, ADVANCED, UNLOADED, PENDING_WORK, PENDING_PLAYER, STALE_CANONICAL, RETRY -> Result.pending();
+            case NEEDS_WORK, PHYSICAL_CONFLICT -> Result.conflict("work-predecessor-projection-"
+                    + projection.name().toLowerCase(java.util.Locale.ROOT) + ":site=" + job.siteId().value()
+                    + ":job=" + job.id().value() + ":cell=" + id.value());
+        };
     }
 
     private static BlockPos minecraft(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {

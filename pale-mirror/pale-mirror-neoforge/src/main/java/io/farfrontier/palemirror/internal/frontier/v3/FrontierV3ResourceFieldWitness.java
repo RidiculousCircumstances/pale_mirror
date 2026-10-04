@@ -355,11 +355,12 @@ final class FrontierV3ResourceFieldWitness {
             throw new IllegalArgumentException("paired harvest declares another site owner");
         Objects.requireNonNull(fieldBefore, "harvest field predecessor observation");
         Objects.requireNonNull(handBefore, "harvest hand predecessor observation");
-        if (fieldBefore.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT
-                || !fieldBefore.matches(this, transition.cellId())
-                || !(fieldBefore.reading() instanceof FrontierV3ResourceFieldObservation.Owned owned)
-                || !owned.condition().equals(transition.before()) || !handBefore.matchesBefore(handEffect))
-            throw new IllegalArgumentException("paired harvest lacks its exact observed physical predecessors");
+        if (!fieldBefore.matchesWorkPredecessor(this, transition) || !handBefore.matchesBefore(handEffect))
+            throw new IllegalArgumentException("paired harvest lacks its exact observed physical predecessors: site="
+                    + siteId.value() + ";job=" + handEffect.jobId().value() + ";actor=" + handEffect.actorId().value()
+                    + ";cell=" + transition.cellId().value() + ";epoch=" + epoch
+                    + ";expected=" + transition.before() + ";observed=" + fieldBefore.reading()
+                    + ";fieldDisposition=" + fieldBefore.disposition() + ";handDisposition=" + handBefore.disposition());
         FrontierV3ResourceFieldWitness begun = begin(transition, causationId);
         Cell prior = begun.cell(transition.cellId());
         return begun.replace(transition.cellId(), new Cell(prior.committed(),

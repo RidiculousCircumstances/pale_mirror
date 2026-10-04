@@ -40,6 +40,7 @@ components:
     path: "pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror"
     owns:
       - SavedData persistence, Minecraft observation, materialization execution, scheduling, and commands
+      - Field work requires the exact observed canonical cell predecessor, not merely physical CURRENT. The existing cell growth projector settles accepted biological lag and recovered canonical projection before a new paired crop/hand effect; projection never credits harvest or cargo.
       - Reference-container initial writes confirm their actual chest and custody in the same lifecycle turn; naturally loaded current presentation demand may prepare an out-of-date image outside block-ticking range, without ongoing HOT acquisition for unchanged images
       - Reference surface recovery observes the exact owned chest without writing; matching retained replica evidence and the same isolated surface epoch permit a typed lifecycle resume, never a custody grant or stock adoption. Released COLD successors remain owned by the normal fenced projection protocol. Shared container effect fences compose owner-supplied bakery, meal and field-delivery queries before observation or handoff.
       - Field initialization and canonical projection are acknowledged by the field owner, not replayed as physical farmer work; actual physical-first work retains its cause and hand witness

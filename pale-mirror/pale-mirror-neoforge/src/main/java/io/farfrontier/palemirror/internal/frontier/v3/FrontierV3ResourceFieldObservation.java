@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface;
 import net.minecraft.core.BlockPos;
@@ -66,6 +67,13 @@ final class FrontierV3ResourceFieldObservation {
                     && layoutRevision == witness.layoutRevision()
                     && layoutFingerprint.equals(witness.layoutFingerprint())
                     && cellId.equals(id) && predecessor.equals(witness.cell(id));
+        }
+
+        /** CURRENT is relative to the physical claim, not proof that biology has been projected. */
+        boolean matchesWorkPredecessor(FrontierV3ResourceFieldWitness witness,
+                                       ResourceFieldCellTransition transition) {
+            return disposition == Disposition.CURRENT && matches(witness, transition.cellId())
+                    && reading instanceof Owned owned && owned.condition().equals(transition.before());
         }
     }
 

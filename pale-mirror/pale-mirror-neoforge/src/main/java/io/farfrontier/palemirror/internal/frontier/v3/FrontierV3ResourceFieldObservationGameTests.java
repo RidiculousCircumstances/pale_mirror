@@ -206,6 +206,28 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                             cell(1, soil).id()) == FrontierV3ResourceFieldGrowthProjector.Result.PHYSICAL_CONFLICT
                             && level.getBlockState(soil.above()).isAir(),
                     "a missing crop is a local observed loss, not permission to silently regrow it");
+            // The live failure: the block and its physical claim agree at age five,
+            // while canonical biology has already admitted harvest at age seven.
+            level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 5), 3);
+            var mature = fifthGrowth.advanceGrowth(cellId).advanceGrowth(cellId);
+            var acceptedMature = new FrontierCanonicalState<>(accepted.worldId(), new Revision(11), new SimInstant(11), mature);
+            owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId);
+            var harvest = mature.physicalWorkTransition(cellId).orElseThrow();
+            var lagging = FrontierV3ResourceFieldObservation.observe(level, mature, owner.witness(), cellId,
+                    "native:lagging-harvest-predecessor");
+            helper.assertTrue(lagging.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT
+                            && !lagging.matchesWorkPredecessor(owner.witness(), harvest),
+                    "physical CURRENT must not admit harvest before canonical maturity is projected");
+            helper.assertTrue(FrontierV3ResourceFieldGrowthProjector.projectAccepted(level, site, acceptedMature, cellId)
+                            == FrontierV3ResourceFieldGrowthProjector.Result.ADVANCED,
+                    "the field owner projects the accepted maturity before any farmer effect");
+            owner = (FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId);
+            var ready = FrontierV3ResourceFieldObservation.observe(level, mature, owner.witness(), cellId,
+                    "native:projected-harvest-predecessor");
+            helper.assertTrue(ready.matchesWorkPredecessor(owner.witness(), harvest)
+                            && level.getBlockState(soil.above()).getValue(CropBlock.AGE) == 7
+                            && mature.harvestedCount() == 0 && owner.witness().cell(cellId).pending().isEmpty(),
+                    "persisted projection admits the exact harvest predecessor without crediting yield");
             helper.succeed();
         });
     }
