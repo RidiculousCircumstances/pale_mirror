@@ -93,6 +93,8 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
             HiveAssemblyBlockage blockage = assemblyBlockage.orElseThrow();
             HiveTaskAssembly.Member member = assembly.orElseThrow().members().get(blockage.actorId());
             if (member == null || member.arrived() || member.cursor() != blockage.expectedCursor()
+                    || member.routeRevision() != blockage.routeRevision()
+                    || member.rejoin().map(value -> value.cursor()).orElse(-1) != blockage.approachCursor()
                     || !member.nextSurface().equals(blockage.target())) {
                 throw new IllegalArgumentException("hive assembly blockage is not the exact retained next edge");
             }
@@ -142,6 +144,25 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         }
         return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, sighting, overseerId, memberIds, releasedMemberIds,
                 Optional.empty(), Optional.of(assembly.orElseThrow().advance(memberId)), Optional.empty(), status, Optional.empty(), Optional.empty(), startedAt);
+    }
+
+    /** Owner-local body departure preserves the strategic cursor and replaces only its approach. */
+    public HiveMobilization checkpointMember(SubjectId actor, HiveTaskAssembly.Member checkpoint) {
+        if (status != HiveMobilizationStatus.ASSEMBLING && status != HiveMobilizationStatus.RETURNING)
+            throw new IllegalArgumentException("hive spatial checkpoint requires an active retained route");
+        var members = new java.util.LinkedHashMap<>(status == HiveMobilizationStatus.ASSEMBLING
+                ? assembly.orElseThrow().members() : returnAssembly.orElseThrow().members());
+        var prior = members.get(actor);
+        if (prior == null || !prior.topology().equals(checkpoint.topology()) || prior.cursor() != checkpoint.cursor()
+                || checkpoint.routeRevision() != Math.incrementExact(prior.routeRevision()) || checkpoint.rejoin().isEmpty())
+            throw new IllegalArgumentException("hive checkpoint cannot replace its retained roster, topology or semantic cursor");
+        members.put(actor, checkpoint);
+        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, sighting, overseerId, memberIds, releasedMemberIds,
+                releasingMemberId, status == HiveMobilizationStatus.ASSEMBLING
+                ? Optional.of(new HiveTaskAssembly(assembly.orElseThrow().ganglionId(), members)) : assembly,
+                status == HiveMobilizationStatus.RETURNING
+                ? Optional.of(new HiveReturnAssembly(returnAssembly.orElseThrow().nestId(), members)) : returnAssembly,
+                status, conflictReason, assemblyBlockage, startedAt);
     }
 
     /** Transfers only a complete retained group to the operation that selected it. */

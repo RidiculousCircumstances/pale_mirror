@@ -90,13 +90,13 @@ final class HiveMobilizationStateCodec {
         if (blockage.isEmpty()) return;
         HiveAssemblyBlockage value = blockage.orElseThrow();
         FrontierWorldStateCodec.writeString(output, value.actorId().value());
-        output.writeShort(value.expectedCursor());
+        output.writeShort(value.expectedCursor()); output.writeLong(value.routeRevision()); output.writeShort(value.approachCursor());
         output.writeInt(value.target().x()); output.writeInt(value.target().y()); output.writeInt(value.target().z());
     }
 
     private static Optional<HiveAssemblyBlockage> readBlockage(DataInputStream input) throws IOException {
         if (!input.readBoolean()) return Optional.empty();
-        return Optional.of(new HiveAssemblyBlockage(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readUnsignedShort(),
+        return Optional.of(new HiveAssemblyBlockage(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readUnsignedShort(), input.readLong(), input.readShort(),
                 io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(input.readInt(), input.readInt(), input.readInt())));
     }
 
@@ -105,8 +105,7 @@ final class HiveMobilizationStateCodec {
         FrontierWorldStateCodec.writeCount(output, assembly.members().size());
         for (var entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             FrontierWorldStateCodec.writeString(output, entry.getKey().value());
-            TraversalTopologyStateCodec.write(output, entry.getValue().topology());
-            output.writeShort(entry.getValue().cursor());
+            HiveTraversalCodec.writeMember(output, entry.getValue());
         }
     }
 
@@ -115,7 +114,7 @@ final class HiveMobilizationStateCodec {
         Map<SubjectId, HiveTaskAssembly.Member> members = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input));
-            if (members.put(actor, new HiveTaskAssembly.Member(TraversalTopologyStateCodec.read(input), input.readUnsignedShort())) != null) {
+            if (members.put(actor, HiveTraversalCodec.readMember(input)) != null) {
                 throw new IllegalArgumentException("duplicate hive assembly member");
             }
         }
@@ -127,8 +126,7 @@ final class HiveMobilizationStateCodec {
         FrontierWorldStateCodec.writeCount(output, assembly.members().size());
         for (var entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             FrontierWorldStateCodec.writeString(output, entry.getKey().value());
-            TraversalTopologyStateCodec.write(output, entry.getValue().topology());
-            output.writeShort(entry.getValue().cursor());
+            HiveTraversalCodec.writeMember(output, entry.getValue());
         }
     }
 
@@ -137,7 +135,7 @@ final class HiveMobilizationStateCodec {
         Map<SubjectId, HiveTaskAssembly.Member> members = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input));
-            if (members.put(actor, new HiveTaskAssembly.Member(TraversalTopologyStateCodec.read(input), input.readUnsignedShort())) != null) {
+            if (members.put(actor, HiveTraversalCodec.readMember(input)) != null) {
                 throw new IllegalArgumentException("duplicate hive return member");
             }
         }

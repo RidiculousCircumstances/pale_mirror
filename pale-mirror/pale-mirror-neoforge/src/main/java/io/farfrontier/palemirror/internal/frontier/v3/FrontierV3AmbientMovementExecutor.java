@@ -155,8 +155,7 @@ final class FrontierV3AmbientMovementExecutor {
             if (!FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
                 io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-hive-assembly-blocked",
                         actorId.value(), HiveMobilizationDiagnosticProducer.ASSEMBLY_PATH_BLOCKED.create(mobilization.id(),
-                                new io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyBlockage(actorId,
-                                        member.cursor(), member.nextSurface())));
+                                new io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyBlockage(actorId, member)));
                 FrontierV3DiagnosticTrace.record(level.getServer(), "hive-assembly:" + mobilization.id().value(),
                         "hive_assembly_path_blocked", actorId, result);
                 FrontierV3GoalNavigation.stop(body, actuation);
@@ -297,7 +296,7 @@ final class FrontierV3AmbientMovementExecutor {
         if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) return observeAssemblyArrival(level, runtime, state, actorId, body, lease, actuation);
         if (lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) return observeEngineeringAssemblyArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_ASSEMBLY) return observeHiveAssemblyArrival(level, runtime, state, actorId, body, lease, actuation);
-        if (lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN) return FrontierV3HiveReturnMotion.observeArrival(level, runtime, state, actorId, body, lease);
+        if (lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN) return FrontierV3HiveReturnMotion.observeArrival(level, runtime, state, actorId, body, lease, actuation);
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL) return observeScoutPatrolArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() == AmbientGoalKind.WORK) {
             return FrontierV3SurfaceObservation.at(body, lease.goalBody().supportingSurface())
@@ -357,9 +356,11 @@ final class FrontierV3AmbientMovementExecutor {
             FrontierV3GoalNavigation.stop(body, actuation);
             return false;
         }
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-hive-assembly", actorId.value(),
-                new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId, member.cursor(),
-                        io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyExecutionAuthority.current(state, mobilization.id(), actorId)));
+                new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId,
+                        io.farfrontier.palemirror.frontier.v3.model.HiveTraversalStep.hot(member, actuation.id().body(), lease.revision()),
+                        actuation.id().execution()));
         FrontierV3DiagnosticTrace.record(level.getServer(), "hive-assembly:" + mobilization.id().value(),
                 "hive_assembly_advanced", actorId, result);
         return true;

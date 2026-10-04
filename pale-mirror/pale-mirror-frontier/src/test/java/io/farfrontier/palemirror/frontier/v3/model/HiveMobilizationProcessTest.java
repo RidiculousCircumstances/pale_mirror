@@ -38,6 +38,72 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HiveMobilizationProcessTest {
+    @Test void observedMidLegDepartureRetainsHiveRoutesAndRejectsTheirOldReceiptsAcrossRecovery() {
+        for (boolean returning : List.of(false, true)) {
+            var state = returning ? returningState() : assemble(fixture()).state();
+            var owner = state.hiveColony().mobilizations().values().stream().findFirst().orElseThrow();
+            var members = returning ? owner.returnAssembly().orElseThrow().members() : owner.assembly().orElseThrow().members();
+            var actor = (returning ? owner.returnAssembly().orElseThrow().safeAdvances()
+                    : owner.assembly().orElseThrow().safeAdvances()).getFirst();
+            var before = members.get(actor);
+            SurfaceAnchor observed = witnessedDetour(state, actor, before, members);
+            state = ModeledActorBodyFacts.inspected(ModeledActorBodyFacts.present(state, actor), actor, observed.standingBody());
+            state = ModeledActorBodyFacts.unloaded(state, actor);
+            var checkpoint = state.hiveColony().mobilizations().get(owner.id());
+            var after = (returning ? checkpoint.returnAssembly().orElseThrow().members() : checkpoint.assembly().orElseThrow().members()).get(actor);
+            assertEquals(before.topology(), after.topology());
+            assertEquals(before.cursor(), after.cursor(), "departure is not a semantic arrival");
+            assertEquals(before.routeRevision() + 1, after.routeRevision());
+            assertEquals(observed, after.currentSurface());
+            assertEquals(before.corridor().get(Math.min(before.cursor() + 1, before.corridor().size() - 1)), after.rejoin().orElseThrow().target());
+            assertEquals(owner.memberIds(), checkpoint.memberIds());
+            var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+            assertEquals(state, recovered, "body checkpoint and its versioned continuation survive together");
+            var execution = returning ? HiveReturnExecutionAuthority.current(recovered, owner.id(), actor)
+                    : HiveAssemblyExecutionAuthority.current(recovered, owner.id(), actor);
+            io.farfrontier.palemirror.frontier.v3.api.FrontierPayload progress = returning
+                    ? new HiveMobilizationReturnAdvanced(owner.id(), actor, HiveTraversalStep.cold(after), execution)
+                    : new HiveMobilizationAssemblyAdvanced(owner.id(), actor, HiveTraversalStep.cold(after), execution);
+            var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+            assertEquals(progress, codecs.decode(progress.type(), codecs.encode(progress)));
+            assertThrows(IllegalArgumentException.class, () -> HiveTraversalAuthority.validate(recovered, execution, after,
+                    HiveTraversalStep.cold(before), returning ? AmbientGoalKind.HIVE_TASK_RETURN : AmbientGoalKind.HIVE_TASK_ASSEMBLY, members.keySet()));
+            for (int step = 0; step < after.rejoin().orElseThrow().path().size(); step++) {
+                var current = state.hiveColony().mobilizations().get(owner.id());
+                var member = (returning ? current.returnAssembly().orElseThrow().members() : current.assembly().orElseThrow().members()).get(actor);
+                if (member.rejoin().isEmpty()) break;
+                if (returning) state = HiveMobilizationProcess.reduceReturnAdvanced(state, owner.hiveId(),
+                        new HiveMobilizationReturnAdvanced(owner.id(), actor, HiveTraversalStep.cold(member), execution));
+                else state = HiveMobilizationProcess.reduceAssemblyAdvanced(state, owner.hiveId(),
+                        new HiveMobilizationAssemblyAdvanced(owner.id(), actor, HiveTraversalStep.cold(member), execution));
+            }
+            var completed = state.hiveColony().mobilizations().get(owner.id());
+            var member = (returning ? completed.returnAssembly().orElseThrow().members() : completed.assembly().orElseThrow().members()).get(actor);
+            assertTrue(member.rejoin().isEmpty());
+            assertEquals(before.cursor() + 1, member.cursor());
+            assertEquals(member.currentSurface(), state.actorLocations().get(actor).supportingSurface());
+        }
+    }
+
+    private static SurfaceAnchor witnessedDetour(FrontierWorldState state, SubjectId actor, HiveTaskAssembly.Member member,
+                                                java.util.Map<SubjectId, HiveTaskAssembly.Member> members) {
+        var current = member.currentSurface();
+        for (var surface : member.corridor().stream().skip(3).toList()) {
+            if (members.values().stream().anyMatch(other -> other.currentSurface().equals(surface))) continue;
+            try {
+                if (HiveAssemblyCorridor.rejoin(state, actor, surface, member, members).size() > 2) return surface;
+            } catch (IllegalArgumentException unavailable) { /* retain exact modeled route geometry */ }
+        }
+        for (int dx : List.of(-2, 2, -1, 1)) for (int dz : List.of(-2, 2, -1, 1)) {
+            var surface = SurfaceAnchor.at(current.x() + dx, state.bootstrap().terrain().supportYAt(current.x() + dx, current.z() + dz), current.z() + dz);
+            if (members.values().stream().anyMatch(other -> other.currentSurface().equals(surface))) continue;
+            try {
+                if (HiveAssemblyCorridor.rejoin(state, actor, surface, member, members).size() > 2) return surface;
+            } catch (IllegalArgumentException unavailable) { /* choose another modeled, known standing surface */ }
+        }
+        throw new IllegalStateException("hive fixture has no known mid-leg detour");
+    }
+
     @Test void returnCasualtyRetiresOnlyItsExecutionAndRemainingSurvivorsContinueWithoutReplay() {
         var state = returningState();
         var parent = state.hiveColony().mobilizations().values().stream().findFirst().orElseThrow();
@@ -159,7 +225,9 @@ class HiveMobilizationProcessTest {
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(worldId, leaseId, actor))).toList();
         SceneLease lease = SceneLease.forCause(leaseId, worldId, new SettlementAssaultSceneCause(assault.id(), assault.settlementId()),
                 candidate.handoffPosition(), new SimInstant(900L), 9L, SceneLeaseStatus.PREPARED, members, Set.of(), Optional.empty());
-        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        state = state.prepareSceneLease(lease);
+        for (var sceneMember : members) state = ModeledActorBodyFacts.present(state, sceneMember.actorId());
+        state = state.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         SubjectId attacker = assault.combatantAttackerIds().stream().sorted().findFirst().orElseThrow();
         SubjectId defender = assault.defenderIds().stream().sorted().findFirst().orElseThrow();
         SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, assault.nextStrikeEpoch());
@@ -218,10 +286,8 @@ class HiveMobilizationProcessTest {
                 new HiveMobilizationReturnAdvanced(parent.id(), firstExecution.actorId(), retainedCursor, staleExecution)));
         while (state.hiveColony().mobilizations().get(parent.id()).status() == HiveMobilizationStatus.RETURNING) {
             HiveMobilization current = state.hiveColony().mobilizations().get(parent.id());
-            HiveTaskAssembly.Member member = current.returnAssembly().orElseThrow().members().values().stream()
-                    .filter(value -> !value.arrived()).findFirst().orElseThrow();
-            SubjectId actor = current.returnAssembly().orElseThrow().members().entrySet().stream()
-                    .filter(entry -> entry.getValue().equals(member)).map(java.util.Map.Entry::getKey).findFirst().orElseThrow();
+            SubjectId actor = current.returnAssembly().orElseThrow().safeAdvances().getFirst();
+            HiveTaskAssembly.Member member = current.returnAssembly().orElseThrow().members().get(actor);
             state = HiveMobilizationProcess.reduceReturnAdvanced(state, hive, new HiveMobilizationReturnAdvanced(parent.id(), actor, member.cursor(), HiveReturnExecutionAuthority.current(state, parent.id(), actor)));
         }
         assertEquals(HiveMobilizationStatus.COMPLETED, state.hiveColony().mobilizations().get(parent.id()).status());
@@ -257,9 +323,20 @@ class HiveMobilizationProcessTest {
         AmbientActorLease lease = new AmbientActorLease(actorId, assembled.state().actorLocations().get(actorId).body(),
                 new SimInstant(300L), 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.HIVE_TASK_ASSEMBLY,
                 member.nextSurface().standingBody());
-        FrontierWorldState hot = assembled.state().withChanges(FrontierWorldStateUpdate.begin().ambientLeases(java.util.Map.of(actorId, lease)));
+        FrontierWorldState hot = ModeledActorBodyFacts.inspected(ModeledActorBodyFacts.present(assembled.state(), actorId),
+                actorId, member.nextSurface().standingBody()).withChanges(FrontierWorldStateUpdate.begin().ambientLeases(java.util.Map.of(actorId, lease)));
         CommandId commandId = new CommandId("command:hive-mobilization-assembly-arrival");
-        HiveMobilizationAssemblyAdvanced arrival = new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId, member.cursor(), HiveAssemblyExecutionAuthority.current(hot, mobilization.id(), actorId));
+        HiveMobilizationAssemblyAdvanced arrival = new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId,
+                HiveTraversalStep.hot(member, ActorBodyAuthority.current(hot, actorId), lease.revision()),
+                HiveAssemblyExecutionAuthority.current(hot, mobilization.id(), actorId));
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(arrival, codecs.decode(arrival.type(), codecs.encode(arrival)));
+        var body = ActorBodyAuthority.current(hot, actorId);
+        var staleBody = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(actorId, body.physicalEpoch() + 1);
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceAssemblyAdvanced(hot, mobilization.hiveId(),
+                new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId, HiveTraversalStep.hot(member, staleBody, lease.revision()), arrival.execution())));
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceAssemblyAdvanced(hot, mobilization.hiveId(),
+                new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId, HiveTraversalStep.hot(member, body, lease.revision() + 1), arrival.execution())));
 
         CommandPlan accepted = FrontierWorldRuntimeDefinition.planCommand(hot, new FrontierCommand(1, commandId,
                 hot.bootstrap().worldId(), Revision.ZERO, new SimInstant(300L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
@@ -572,13 +649,15 @@ class HiveMobilizationProcessTest {
         AmbientActorLease lease = new AmbientActorLease(preFinal.advancingId(),
                 preFinal.state().actorLocations().get(preFinal.advancingId()).body(), new SimInstant(700L), 1L,
                 AmbientLeaseStatus.HOT, AmbientGoalKind.HIVE_TASK_ASSEMBLY, member.nextSurface().standingBody());
-        FrontierWorldState hot = preFinal.state().withChanges(FrontierWorldStateUpdate.begin()
+        FrontierWorldState hot = ModeledActorBodyFacts.inspected(ModeledActorBodyFacts.present(preFinal.state(), preFinal.advancingId()),
+                preFinal.advancingId(), member.nextSurface().standingBody()).withChanges(FrontierWorldStateUpdate.begin()
                 .ambientLeases(java.util.Map.of(preFinal.advancingId(), lease)));
         CommandId commandId = new CommandId("command:hive-mobilization-final-hot-arrival");
 
         CommandPlan plan = FrontierWorldRuntimeDefinition.planCommand(hot, new FrontierCommand(1, commandId,
                 hot.bootstrap().worldId(), Revision.ZERO, new SimInstant(700L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
-                CauseChain.root(commandId), new HiveMobilizationAssemblyAdvanced(preFinal.mobilization().id(), preFinal.advancingId(), member.cursor(), HiveAssemblyExecutionAuthority.current(hot,
+                CauseChain.root(commandId), new HiveMobilizationAssemblyAdvanced(preFinal.mobilization().id(), preFinal.advancingId(),
+                        HiveTraversalStep.hot(member, ActorBodyAuthority.current(hot, preFinal.advancingId()), lease.revision()), HiveAssemblyExecutionAuthority.current(hot,
                         preFinal.mobilization().id(), preFinal.advancingId()))));
 
         List<ProposedEvent> events = assertInstanceOf(CommandPlan.Accepted.class, plan).events();
@@ -665,14 +744,18 @@ class HiveMobilizationProcessTest {
         HiveTaskAssembly.Member before = mobilization.assembly().orElseThrow().members().get(actorId);
         AmbientActorLease lease = new AmbientActorLease(actorId, assembled.state().actorLocations().get(actorId).body(), new SimInstant(300L), 1L,
                 AmbientLeaseStatus.HOT, AmbientGoalKind.HIVE_TASK_ASSEMBLY, before.nextSurface().standingBody());
-        FrontierWorldState hot = assembled.state().withChanges(FrontierWorldStateUpdate.begin().ambientLeases(java.util.Map.of(actorId, lease)));
+        FrontierWorldState hot = ModeledActorBodyFacts.inspected(ModeledActorBodyFacts.present(assembled.state(), actorId),
+                actorId, before.nextSurface().standingBody()).withChanges(FrontierWorldStateUpdate.begin().ambientLeases(java.util.Map.of(actorId, lease)));
 
         assertEquals(AmbientGoalKind.HIVE_TASK_ASSEMBLY, AmbientActorProcess.nextLease(assembled.state(), actorId, new SimInstant(300L)).goal());
         FrontierWorldState advanced = HiveMobilizationProcess.reduceAssemblyAdvanced(hot, hot.bootstrap().hive().id(),
-                new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId, before.cursor(), HiveAssemblyExecutionAuthority.current(hot, mobilization.id(), actorId)));
+                new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId,
+                        HiveTraversalStep.hot(before, ActorBodyAuthority.current(hot, actorId), lease.revision()),
+                        HiveAssemblyExecutionAuthority.current(hot, mobilization.id(), actorId)));
 
         HiveTaskAssembly.Member after = advanced.hiveColony().mobilizations().get(mobilization.id()).assembly().orElseThrow().members().get(actorId);
         assertEquals(before.cursor() + 1, after.cursor());
+        assertEquals(hot.actorLocations(), advanced.actorLocations(), "HOT arrival does not rewrite common body observations");
         assertEquals(after.currentSurface().standingBody(), advanced.actorLocations().get(actorId).body());
         assertEquals(after.arrived() ? after.currentSurface().standingBody() : after.nextSurface().standingBody(),
                 advanced.ambientLeases().get(actorId).goalBody(), "the HOT body receives only its next retained edge");

@@ -54,8 +54,9 @@ final class HiveMobilizationPayloadCodecs {
     private static final class AssemblyAdvancedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_assembly_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationAssemblyAdvanced advanced = (HiveMobilizationAssemblyAdvanced) payload;
-            writeSubject(output, advanced.mobilizationId()); writeSubject(output, advanced.bioformId()); output.writeShort(advanced.expectedCursor()); ActorExecutionStateCodec.writeId(output, advanced.execution()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationAssemblyAdvanced(readSubject(input), readSubject(input), input.readUnsignedShort(), ActorExecutionStateCodec.readId(input))); }
+            writeSubject(output, advanced.mobilizationId()); writeSubject(output, advanced.bioformId()); HiveTraversalCodec.writeStep(output, advanced.step()); ActorExecutionStateCodec.writeId(output, advanced.execution()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationAssemblyAdvanced(readSubject(input), readSubject(input), HiveTraversalCodec.readStep(input),
+                ActorExecutionStateCodec.readId(input))); }
     }
     private static final class DepartedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_departed"; }
@@ -68,8 +69,9 @@ final class HiveMobilizationPayloadCodecs {
     private static final class ReturnAdvancedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_return_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationReturnAdvanced advanced = (HiveMobilizationReturnAdvanced) payload;
-            writeSubject(output, advanced.mobilizationId()); writeSubject(output, advanced.bioformId()); output.writeShort(advanced.expectedCursor()); ActorExecutionStateCodec.writeId(output, advanced.execution()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationReturnAdvanced(readSubject(input), readSubject(input), input.readUnsignedShort(), ActorExecutionStateCodec.readId(input))); }
+            writeSubject(output, advanced.mobilizationId()); writeSubject(output, advanced.bioformId()); HiveTraversalCodec.writeStep(output, advanced.step()); ActorExecutionStateCodec.writeId(output, advanced.execution()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationReturnAdvanced(readSubject(input), readSubject(input), HiveTraversalCodec.readStep(input),
+                ActorExecutionStateCodec.readId(input))); }
     }
     private static final class ConflictedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_conflicted"; }
@@ -110,27 +112,27 @@ final class HiveMobilizationPayloadCodecs {
         output.writeBoolean(blockage.isPresent());
         if (blockage.isEmpty()) return;
         HiveAssemblyBlockage value = blockage.orElseThrow();
-        writeSubject(output, value.actorId()); output.writeShort(value.expectedCursor());
+        writeSubject(output, value.actorId()); output.writeShort(value.expectedCursor()); output.writeLong(value.routeRevision()); output.writeShort(value.approachCursor());
         output.writeInt(value.target().x()); output.writeInt(value.target().y()); output.writeInt(value.target().z());
     }
 
     private static Optional<HiveAssemblyBlockage> readBlockage(DataInputStream input) throws IOException {
         if (!input.readBoolean()) return Optional.empty();
-        return Optional.of(new HiveAssemblyBlockage(readSubject(input), input.readUnsignedShort(),
+        return Optional.of(new HiveAssemblyBlockage(readSubject(input), input.readUnsignedShort(), input.readLong(), input.readShort(),
                 io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(input.readInt(), input.readInt(), input.readInt())));
     }
 
     private static void writeAssembly(DataOutputStream output, HiveTaskAssembly assembly) throws IOException {
         writeSubject(output, assembly.ganglionId()); output.writeByte(assembly.members().size());
         for (var entry : assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
-            writeSubject(output, entry.getKey()); TraversalTopologyStateCodec.write(output, entry.getValue().topology()); output.writeShort(entry.getValue().cursor());
+            writeSubject(output, entry.getKey()); HiveTraversalCodec.writeMember(output, entry.getValue());
         }
     }
     private static HiveTaskAssembly readAssembly(DataInputStream input) throws IOException {
         SubjectId ganglion = readSubject(input); java.util.Map<SubjectId, HiveTaskAssembly.Member> members = new java.util.LinkedHashMap<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
             SubjectId actor = readSubject(input);
-            if (members.put(actor, new HiveTaskAssembly.Member(TraversalTopologyStateCodec.read(input), input.readUnsignedShort())) != null) {
+            if (members.put(actor, HiveTraversalCodec.readMember(input)) != null) {
                 throw new IllegalArgumentException("duplicate hive assembly member");
             }
         }

@@ -20,6 +20,38 @@ public final class HiveAssemblyCorridor {
 
     private HiveAssemblyCorridor() { }
 
+    /** Rejoin the next retained bioform checkpoint using the same home/tray and obstacle policy. */
+    static List<SurfaceAnchor> rejoin(FrontierWorldState state, SubjectId actor, SurfaceAnchor start,
+                                     HiveTaskAssembly.Member member, Map<SubjectId, HiveTaskAssembly.Member> members) {
+        var home = homeHibernaculum(state, actor);
+        var target = member.corridor().get(Math.min(member.cursor() + 1, member.corridor().size() - 1));
+        var organs = java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(),
+                state.hiveColony().addedOrgans().values().stream()).toList();
+        var intact = FrontierGrayboxPlan.intactOrganOccupancy(organs);
+        var physical = new LinkedHashSet<>(intact);
+        organs.forEach(organ -> physical.addAll(HiveOrganSupportPlan.foundationCells(state.bootstrap().terrain(), organ)));
+        physical.addAll(state.physicalDeltas().keySet());
+        var occupied = new LinkedHashSet<SurfaceAnchor>();
+        members.forEach((id, other) -> { if (!id.equals(actor)) occupied.add(other.currentSurface()); });
+        var blocked = new LinkedHashSet<>(blockedBodySurfaces(state, physical));
+        blocked.addAll(occupied);
+        return route(state, home, start, target, occupied, intact, blocked);
+    }
+
+    /** COLD never traverses a newly witnessed solid block just because the original plan is retained. */
+    public static boolean stepClear(FrontierWorldState state, SubjectId actor, HiveTaskAssembly.Member member) {
+        if (member.arrived()) return false;
+        var organs = java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(),
+                state.hiveColony().addedOrgans().values().stream()).toList();
+        var physical = new LinkedHashSet<>(FrontierGrayboxPlan.intactOrganOccupancy(organs));
+        organs.forEach(organ -> physical.addAll(HiveOrganSupportPlan.foundationCells(state.bootstrap().terrain(), organ)));
+        physical.addAll(state.physicalDeltas().keySet());
+        var blocked = blockedBodySurfaces(state, physical);
+        return !blocked.contains(member.currentSurface()) && !blocked.contains(member.nextSurface())
+                && !state.physicalDeltas().containsKey(member.nextSurface().support())
+                && state.bootstrap().bounds().contains(member.nextSurface().support());
+    }
+
     /**
      * Builds all exact member corridors from the already observed cocoon-release surfaces.
      * It does not consult loaded Minecraft blocks; actual HOT obstruction is a later observed
@@ -62,10 +94,9 @@ public final class HiveAssemblyCorridor {
     }
 
     /**
-     * Compiles the return from canonical survivor bodies to their retained trays.  A settlement
-     * expedition first reverses its own immutable outbound corridor: a battle's public-access
-     * floor is provider geometry, not necessarily a terrain-height cell.  Only once the body is
-     * back at its retained terrain/hive approach do we compile the ordinary homeward corridor.
+     * Compiles one legal return from canonical survivor bodies to their retained trays.
+     * Authored floors and roads come from shared ground knowledge, not an interpolation of
+     * coarse outbound waypoints that may cross solid hive tissue.
      */
     public static HiveReturnAssembly compileReturn(FrontierWorldState state, HiveMobilization mobilization) {
         Objects.requireNonNull(state, "hive return state");
@@ -100,8 +131,8 @@ public final class HiveAssemblyCorridor {
             SurfaceAnchor start = state.actorLocations().get(member).supportingSurface();
             SurfaceAnchor destination = destinations.get(member);
             HiveOrgan home = homes.get(member);
-            List<SurfaceAnchor> surfaces = returnRoute(state, home, start, destination, allHomeSurfaces, intactOrgans,
-                    blockedBodySurfaces, outbound.get(member));
+            List<SurfaceAnchor> surfaces = returnRoute(state, home, start, destination, allHomeSurfaces,
+                    intactOrgans, blockedBodySurfaces, outbound.get(member));
             TraversalTopology topology = TraversalTopology.corridor(new TraversalTopologyId("topology:hive-return:"
                     + mobilization.id().value() + ":" + member.value()), 0L, mobilization.id(), TraversalKind.GROUND_BIOFORM,
                     Set.of(TraversalCapability.GROUND_BIOFORM), surfaces);
@@ -125,51 +156,7 @@ public final class HiveAssemblyCorridor {
                 .map(Map::copyOf).orElseGet(Map::of);
     }
 
-    private static List<SurfaceAnchor> returnRoute(FrontierWorldState state, HiveOrgan home, SurfaceAnchor start,
-                                                    SurfaceAnchor destination, Set<SurfaceAnchor> allHomeSurfaces,
-                                                    Set<BlockPosition> intactOrgans, Set<SurfaceAnchor> blockedBodySurfaces,
-                                                    SettlementAssaultAttacker outbound) {
-        if (outbound == null) return route(state, home, start, destination, allHomeSurfaces, intactOrgans, blockedBodySurfaces);
-        List<SurfaceAnchor> assaultSurfaces = outbound.route().stream().map(SurfaceAnchor::new).toList();
-        if (assaultSurfaces.isEmpty() || !start.equals(assaultSurfaces.getLast())) {
-            // A COLD child may resolve before its first strategic travel edge.  In that case the
-            // actor is still on its ordinary terrain/hive approach and needs no remote leg.
-            return route(state, home, start, destination, allHomeSurfaces, intactOrgans, blockedBodySurfaces);
-        }
-        List<SurfaceAnchor> reverse = expandAssaultWaypoints(assaultSurfaces.reversed());
-        List<SurfaceAnchor> homeward = route(state, home, reverse.getLast(), destination, allHomeSurfaces, intactOrgans, blockedBodySurfaces);
-        java.util.ArrayList<SurfaceAnchor> result = new java.util.ArrayList<>(reverse);
-        result.addAll(homeward.subList(1, homeward.size()));
-        return withoutCycles(result);
-    }
-
-    /**
-     * COLD assault travel retains strategic waypoints at a coarser cadence than HOT body edges.
-     * Reverse them into bounded unit edges without consulting loaded blocks; subsequent HOT
-     * observation remains the sole authority that can report an obstruction or conflict.
-     */
-    private static List<SurfaceAnchor> expandAssaultWaypoints(List<SurfaceAnchor> waypoints) {
-        java.util.ArrayList<SurfaceAnchor> result = new java.util.ArrayList<>();
-        for (SurfaceAnchor waypoint : waypoints) {
-            if (result.isEmpty()) {
-                result.add(waypoint);
-                continue;
-            }
-            SurfaceAnchor prior = result.getLast();
-            int horizontal = Math.abs(waypoint.x() - prior.x()) + Math.abs(waypoint.z() - prior.z());
-            if (horizontal == 0) throw new IllegalArgumentException("retained assault route has a vertical-only edge");
-            int x = prior.x(), z = prior.z();
-            for (int step = 1; step <= horizontal; step++) {
-                if (x != waypoint.x()) x += Integer.signum(waypoint.x() - x);
-                else z += Integer.signum(waypoint.z() - z);
-                int y = prior.y() + Math.toIntExact(Math.floorDiv((long) (waypoint.y() - prior.y()) * step, horizontal));
-                result.add(SurfaceAnchor.at(x, y, z));
-            }
-        }
-        return List.copyOf(result);
-    }
-
-    /** A reverse COLD leg and homeward corridor can meet at an earlier surveyed surface. */
+    /** Adjacent bounded segments can meet at an earlier surveyed surface without retaining a loop. */
     private static List<SurfaceAnchor> withoutCycles(List<SurfaceAnchor> surfaces) {
         java.util.ArrayList<SurfaceAnchor> result = new java.util.ArrayList<>();
         Map<SurfaceAnchor, Integer> indexes = new HashMap<>();
@@ -185,24 +172,48 @@ public final class HiveAssemblyCorridor {
         return List.copyOf(result);
     }
 
+    /** Retained strategic waypoints guide bounded searches, never fabricate physical unit edges. */
+    private static List<SurfaceAnchor> returnRoute(FrontierWorldState state, HiveOrgan home, SurfaceAnchor start,
+                                                  SurfaceAnchor destination, Set<SurfaceAnchor> reservedHomes,
+                                                  Set<BlockPosition> intactOrgans, Set<SurfaceAnchor> blocked,
+                                                  SettlementAssaultAttacker outbound) {
+        var result = new java.util.ArrayList<SurfaceAnchor>();
+        result.add(start);
+        if (outbound != null && !outbound.route().isEmpty() && outbound.route().getLast().equals(start.support())) {
+            for (BlockPosition waypoint : outbound.route().reversed().subList(1, outbound.route().size())) {
+                var target = surfaceAt(state, home, waypoint.x(), waypoint.z());
+                if (target.equals(result.getLast()) || reservedHomes.contains(target)
+                        || !traversable(state, home, target, intactOrgans, blocked)) continue;
+                var segment = route(state, home, result.getLast(), target, reservedHomes, intactOrgans, blocked);
+                result.addAll(segment.subList(1, segment.size()));
+            }
+        }
+        var homeward = route(state, home, result.getLast(), destination, reservedHomes, intactOrgans, blocked);
+        result.addAll(homeward.subList(1, homeward.size()));
+        return withoutCycles(result);
+    }
+
     private static List<SurfaceAnchor> route(FrontierWorldState state, HiveOrgan home, SurfaceAnchor start,
                                              SurfaceAnchor destination, Set<SurfaceAnchor> allStagingSurfaces,
                                              Set<BlockPosition> intactOrgans, Set<SurfaceAnchor> blockedBodySurfaces) {
         if (!traversable(state, home, start, intactOrgans, blockedBodySurfaces)
                 || !traversable(state, home, destination, intactOrgans, blockedBodySurfaces)) {
-            throw new IllegalArgumentException("hive assembly has no valid tray or Ganglion port endpoint");
+            throw new IllegalArgumentException("hive route has no valid endpoint: start=" + start
+                    + " known=" + surfaceAt(state, home, start.x(), start.z()) + " startBlocked=" + blockedBodySurfaces.contains(start)
+                    + " destination=" + destination + " destinationBlocked=" + blockedBodySurfaces.contains(destination));
         }
         Map<SurfaceAnchor, SurfaceAnchor> previous = new HashMap<>();
         Map<SurfaceAnchor, Integer> cost = new HashMap<>();
         PriorityQueue<Candidate> frontier = new PriorityQueue<>(Comparator.comparingInt(Candidate::estimated)
-                .thenComparingInt(Candidate::cost).thenComparingInt(value -> value.surface().x())
+                .thenComparing(Comparator.comparingInt(Candidate::cost).reversed()).thenComparingInt(value -> value.surface().x())
                 .thenComparingInt(value -> value.surface().y()).thenComparingInt(value -> value.surface().z()));
         cost.put(start, 0); frontier.add(new Candidate(start, 0, distance(start, destination)));
         int searched = 0;
         while (!frontier.isEmpty()) {
             Candidate current = frontier.remove();
             if (current.cost() != cost.getOrDefault(current.surface(), Integer.MAX_VALUE)) continue;
-            if (++searched > MAX_SEARCHED_CELLS) throw new IllegalArgumentException("hive assembly corridor search exceeds bounded profile");
+            if (++searched > MAX_SEARCHED_CELLS) throw new IllegalArgumentException("hive corridor search exceeds bounded profile: start="
+                    + start + " destination=" + destination + " last=" + current.surface());
             if (current.surface().equals(destination)) return materialize(start, destination, previous);
             for (Step step : STEPS) {
                 SurfaceAnchor next = surfaceAt(state, home, current.surface().x() + step.x(), current.surface().z() + step.z());
@@ -223,7 +234,7 @@ public final class HiveAssemblyCorridor {
         if (!state.bootstrap().bounds().contains(surface.support())) return false;
         if (blockedBodySurfaces.contains(surface)) return false;
         if (insideTray(home, surface)) return true;
-        return !intactOrgans.contains(surface.support()) && surface.y() == state.bootstrap().terrain().supportYAt(surface.x(), surface.z());
+        return !intactOrgans.contains(surface.support()) && surface.equals(surfaceAt(state, home, surface.x(), surface.z()));
     }
 
     /**
@@ -260,13 +271,14 @@ public final class HiveAssemblyCorridor {
         if (x >= home.anchor().x() - 2 && x <= home.anchor().x() + 2 && z >= home.anchor().z() - 2 && z <= home.anchor().z() + 2) {
             return SurfaceAnchor.at(x, home.anchor().y(), z);
         }
-        return SurfaceAnchor.at(x, state.bootstrap().terrain().supportYAt(x, z), z);
+        return KnownPedestrianGround.forFrontier(state).at(x, z);
     }
 
     private static HiveOrgan homeHibernaculum(FrontierWorldState state, SubjectId member) {
         BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(member);
         if (lifecycle == null || (lifecycle.phase() != BioformLifecyclePhase.ASSEMBLING
-                && lifecycle.phase() != BioformLifecyclePhase.WAKING && lifecycle.phase() != BioformLifecyclePhase.ACTIVE)
+                && lifecycle.phase() != BioformLifecyclePhase.WAKING && lifecycle.phase() != BioformLifecyclePhase.ACTIVE
+                && lifecycle.phase() != BioformLifecyclePhase.RETURNING)
                 || lifecycle.homeSlot().isEmpty()) {
             throw new IllegalArgumentException("hive assembly/return member has no exact retained cocoon home");
         }

@@ -205,6 +205,14 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, bioformLifecycles, next);
     }
 
+    public HiveColony checkpointMobilizationMember(SubjectId mobilizationId, SubjectId actor, HiveTaskAssembly.Member checkpoint) {
+        var current = mobilizations.get(Objects.requireNonNull(mobilizationId));
+        if (current == null) throw new IllegalArgumentException("unknown hive spatial checkpoint owner");
+        var next = new LinkedHashMap<>(mobilizations);
+        next.put(mobilizationId, current.checkpointMember(actor, checkpoint));
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, bioformLifecycles, next);
+    }
+
     /** Retains the one canonical assembly cursor transition for its exact task-owned member. */
     public HiveColony advanceMobilizationAssembly(SubjectId mobilizationId, SubjectId memberId) {
         HiveMobilization current = mobilizations.get(Objects.requireNonNull(mobilizationId, "hive mobilization id"));

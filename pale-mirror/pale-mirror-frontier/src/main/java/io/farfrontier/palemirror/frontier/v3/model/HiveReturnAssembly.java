@@ -60,7 +60,7 @@ public record HiveReturnAssembly(SubjectId nestId, Map<SubjectId, HiveTaskAssemb
         if (!safeAdvances().contains(actor)) throw new IllegalArgumentException("hive return next cursor is occupied");
         Map<SubjectId, HiveTaskAssembly.Member> next = new LinkedHashMap<>(members);
         HiveTaskAssembly.Member current = next.get(actor);
-        next.put(actor, new HiveTaskAssembly.Member(current.topology(), current.cursor() + 1));
+        next.put(actor, current.advanceOne());
         return new HiveReturnAssembly(nestId, next);
     }
 }

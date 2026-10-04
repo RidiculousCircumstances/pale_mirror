@@ -46,7 +46,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 225 retains UAE execution identities separately from movement and physical custody.
     // Disposable old worlds are rejected, never given inferred activity authority.
     // Version 228 requires activity-independent physical body metadata/history.
-    static final int VERSION = 236; private static final int MAX_ENTRIES = 65_535;
+    static final int VERSION = 237; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

@@ -46,7 +46,8 @@ final class FrontierV3HiveReturnMotion {
     }
 
     static boolean observeArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                  FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
+                                  FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease,
+                                  FrontierV3ActorActuation actuation) {
         HiveMobilization mobilization = mobilization(state, actorId);
         HiveTaskAssembly.Member member = member(mobilization, actorId, lease);
         if (mobilization == null || member == null || member.arrived()
@@ -55,9 +56,11 @@ final class FrontierV3HiveReturnMotion {
             // A non-arrival observation must not cancel the path it is observing.
             return false;
         }
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = FrontierV3AmbientActorExecutor.submit(runtime,
-                "ambient-hive-return", actorId.value(), new HiveMobilizationReturnAdvanced(mobilization.id(), actorId, member.cursor(),
-                        io.farfrontier.palemirror.frontier.v3.model.HiveReturnExecutionAuthority.current(state, mobilization.id(), actorId)));
+                "ambient-hive-return", actorId.value(), new HiveMobilizationReturnAdvanced(mobilization.id(), actorId,
+                        io.farfrontier.palemirror.frontier.v3.model.HiveTraversalStep.hot(member, actuation.id().body(), lease.revision()),
+                        actuation.id().execution()));
         FrontierV3DiagnosticTrace.record(level.getServer(), "hive-return:" + mobilization.id().value(),
                 "hive_return_advanced", actorId, result);
         return true;

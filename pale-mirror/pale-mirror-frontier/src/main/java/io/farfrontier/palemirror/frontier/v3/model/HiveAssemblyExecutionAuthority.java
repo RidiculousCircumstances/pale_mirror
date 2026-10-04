@@ -70,10 +70,7 @@ public final class HiveAssemblyExecutionAuthority {
         @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
             return request -> {
                 var owner = require(request.expectedState().hiveColony().mobilizations(), request.execution());
-                if (owner.assembly().isPresent() && !owner.assembly().orElseThrow().members().get(
-                        request.execution().actorId()).currentSurface().equals(request.observedPosition().supportingSurface()))
-                    throw new IllegalArgumentException("hive assembly requires its observed rejoin before COLD");
-                return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+                return HiveBodyCheckpoint.acknowledge(request, owner);
             };
         }
         @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
