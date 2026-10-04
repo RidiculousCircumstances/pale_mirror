@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityCheckpoint;
 
 /** Closed composition root, not a coordinator-side concrete-family dispatch. */
 public final class ActivityExecutionCapabilities {
@@ -16,10 +18,14 @@ public final class ActivityExecutionCapabilities {
             registration(HumanAssignmentKind.FIELD_HARVEST, FrontierResourceSiteHarvestSceneSupport::executionCheckpoint,
                     ResourceSiteHarvestLabour::pause, ResourceSiteHarvestLabour::workStatsChanged,
                     FrontierResourceSiteHarvestSceneSupport::waitingForServiceResource),
-            held(HumanAssignmentKind.CARGO_TRANSPORT), held(HumanAssignmentKind.ESCORT),
-            held(HumanAssignmentKind.ROUTE_PATROL), held(HumanAssignmentKind.SETTLEMENT_DEFENCE),
-            held(HumanAssignmentKind.ENGINEERING_RECOVERY), held(HumanAssignmentKind.SETTLEMENT_SERVICE),
-            held(HumanAssignmentKind.MEDICAL_EVACUATION), held(HumanAssignmentKind.TRANSIT)));
+            delegated(HumanAssignmentKind.CARGO_TRANSPORT, ActorActivityKind.OPERATION_ASSEMBLY, ActorActivityKind.LOGISTICS),
+            delegated(HumanAssignmentKind.ESCORT, ActorActivityKind.OPERATION_ASSEMBLY, ActorActivityKind.LOGISTICS),
+            delegated(HumanAssignmentKind.ROUTE_PATROL, ActorActivityKind.ROUTE_PATROL),
+            delegated(HumanAssignmentKind.SETTLEMENT_DEFENCE, ActorActivityKind.SETTLEMENT_ASSAULT),
+            delegated(HumanAssignmentKind.ENGINEERING_RECOVERY, ActorActivityKind.ENGINEERING_ASSEMBLY, ActorActivityKind.ENGINEERING_WORK),
+            delegated(HumanAssignmentKind.SETTLEMENT_SERVICE, ActorActivityKind.SETTLEMENT_SERVICE),
+            delegated(HumanAssignmentKind.MEDICAL_EVACUATION, ActorActivityKind.MEDICAL_TREATMENT),
+            delegated(HumanAssignmentKind.TRANSIT, ActorActivityKind.TRANSIT)));
 
     private final Map<HumanAssignmentKind, ActivityExecutionCapability> capabilities;
 
@@ -69,10 +75,27 @@ public final class ActivityExecutionCapabilities {
                 "owner checkpoint").validate(state, assignment);
     }
 
-    /** Explicit unadapted-owner declarations retain the existing fail-closed suspension policy. */
-    private static ActivityExecutionCapability held(HumanAssignmentKind kind) {
-        return registration(kind, (state, assignment) -> new ActivityExecutionCheckpoint(
-                state, assignment, ResidentWorkYield.Status.OWNER_SAFETY_HOLD));
+    /** Assignment adapter delegates to the registered UAE owner, not a kind-wide safety hold. */
+    private static ActivityExecutionCapability delegated(HumanAssignmentKind kind, ActorActivityKind... activityKinds) {
+        Set<ActorActivityKind> declared = Set.of(activityKinds);
+        return registration(kind, (state, assignment) -> {
+            var retained = state.actorExecutions().actors().get(assignment.residentId());
+            var current = retained == null ? java.util.Optional.<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId>empty()
+                    : retained.current();
+            if (current.isEmpty() || !current.orElseThrow().activityOwnerId().equals(assignment.ownerId().orElseThrow()))
+                return new ActivityExecutionCheckpoint(state, assignment, ResidentWorkYield.Status.OWNER_NOT_CURRENT);
+            var execution = current.orElseThrow();
+            if (!declared.contains(execution.activityKind()))
+                throw new IllegalArgumentException("assignment checkpoint has a foreign declared execution kind");
+            var owner = ActorExecutionComposition.CAPABILITIES.require(execution.activityKind());
+            owner.validateReference(state, execution);
+            var checkpoint = owner.checkpoint(state, execution);
+            checkpoint.validate(state, execution);
+            var status = checkpoint.waiting().map(wait -> wait.reason() == ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION
+                    ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.OWNER_SAFETY_HOLD)
+                    .orElse(ResidentWorkYield.Status.READY);
+            return new ActivityExecutionCheckpoint(state, assignment, status);
+        });
     }
 
     static ActivityExecutionCapability registration(HumanAssignmentKind kind,

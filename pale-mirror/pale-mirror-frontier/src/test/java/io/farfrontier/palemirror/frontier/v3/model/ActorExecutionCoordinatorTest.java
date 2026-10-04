@@ -100,10 +100,34 @@ class ActorExecutionCoordinatorTest {
         assertEquals(AmbientLeaseStatus.CLOSED, transferred.ambientLeases().get(actor).status());
         assertEquals(SceneLeaseStatus.PREPARED, transferred.sceneLeases().get(incoming.id()).status());
         assertEquals(observed, transferred.actorLocations().get(actor).body());
+        assertSame(state.actorLocations().get(actor), transferred.actorLocations().get(actor),
+                "presentation handoff must not rewrite the independently observed actor");
+        assertTrue(ResidentWorkYield.assess(transferred, HumanAssignmentProjection.compile(transferred)
+                .assignment(actor)).ready(), "the field owner checkpoint, not scene membership, controls interruption");
         assertFalse(ActorExecutionCoordinator.coldAvailable(transferred, actor));
         var codec = new FrontierWorldStateCodec();
         var recovered = codec.decode(codec.encode(transferred));
         assertFalse(ActorExecutionCoordinator.coldAvailable(recovered, actor));
         assertThrows(IllegalArgumentException.class, () -> ActorExecutionCoordinator.transferToScene(recovered, handoff));
+    }
+
+    @Test void presentationHandoffCannotInstallUnobservedPoseOrHealth() {
+        var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
+        SubjectId actor = fixture.job().workerId();
+        ActorLocation observed = fixture.state().actorLocations().get(actor);
+        var ambient = new AmbientActorLease(actor, observed.body(), new SimInstant(22_000L), 1,
+                AmbientLeaseStatus.HOT, AmbientGoalKind.PATROL, observed.body());
+        var state = fixture.state().withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(actor, ambient)));
+        var incoming = ResourceSiteHarvestProcessTest.newHarvestLease(state, fixture.site(), fixture.job(), "unobserved-handoff");
+        var drift = new SceneMemberPosition(actor,
+                new BodyPosition(observed.body().x() + 1, observed.body().y(), observed.body().z()), observed.condition().health());
+        var injury = new SceneMemberPosition(actor, observed.body(), new FixedScalar(observed.condition().health().raw() - 1));
+        for (var capture : java.util.List.of(drift, injury)) {
+            var handoff = new SceneLeaseHandoff(incoming, java.util.List.of(capture));
+            var rejected = assertThrows(IllegalArgumentException.class,
+                    () -> ActorExecutionCoordinator.transferToScene(state, handoff));
+            assertTrue(rejected.getMessage().contains("independently recorded common body observation"));
+        }
+        assertSame(observed, state.actorLocations().get(actor));
     }
 }

@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentActivityCoordinatorTest {
-    @Test void hotOwnerSeesHungerRequestBeforeSceneAuthorityIsReleasedButKeepsPhysicalEffectFence() {
+    @Test void hotOwnerCanYieldBeforePresentationReleaseButKeepsPhysicalEffectFence() {
         var fixture = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         var job = fixture.job();
         var state = fixture.state();
@@ -33,12 +33,24 @@ class ResidentActivityCoordinatorTest {
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
         assertTrue(ResidentMealOpportunity.find(state, job.workerId(), hungryAt).isPresent());
         var waiting = ResidentActivityCoordinator.assess(state, job.workerId(), hungryAt);
-        assertEquals(ResidentActivityChoice.Kind.WORK, waiting.kind());
-        assertEquals(Optional.of(ResidentActivityChoice.Wait.SAFE_CHECKPOINT), waiting.pending());
+        assertEquals(ResidentActivityChoice.Kind.EAT, waiting.kind());
+        assertEquals(Optional.empty(), waiting.pending());
         assertTrue(ResidentActivityCoordinator.requestsYield(state, job.workerId(), hungryAt));
         assertTrue(ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(), hungryAt));
-        assertTrue(io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.selectSourceAtYield(
-                state, job.workerId(), hungryAt).isEmpty(), "request must not authorize concurrent HOT work and eating");
+        var selected = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.selectSourceAtYield(
+                state, job.workerId(), hungryAt).orElseThrow();
+        var yielded = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceStarted(
+                state, job.workerId(), selected);
+        org.junit.jupiter.api.Assertions.assertFalse(yielded.actorExecutions().owns(job.workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id()));
+        assertTrue(yielded.actorExecutions().retainsSuspended(job.workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id()));
+        assertTrue(yielded.actorExecutions().owns(job.workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, selected.meal().claimId()));
+        org.junit.jupiter.api.Assertions.assertSame(state.actorLocations().get(job.workerId()),
+                yielded.actorLocations().get(job.workerId()), "activity switch does not move or recreate its body");
+        assertEquals(SceneLeaseStatus.HOT, yielded.sceneLeases().get(fixture.lease().id()).status(),
+                "old presentation may still drain, but it cannot authorize the suspended work");
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state,
                 fixture.site(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));
         assertTrue(ResidentActivityCoordinator.requestsYield(state, job.workerId(), hungryAt));

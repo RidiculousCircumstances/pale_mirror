@@ -8,23 +8,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 
-/** Canonical admission and reduction for observations from non-leased ambient bodies. */
+/** Canonical admission and reduction of presentation scopes; common body facts have their own owner. */
 public final class AmbientActorProcess {
     private AmbientActorProcess() { }
 
-
-    public static CommandPlan plan(FrontierWorldState state, AmbientActorObserved observation) {
-        try {
-            validate(state, observation.actorId(), observation.body());
-            requireUnleased(state, observation.actorId());
-        } catch (IllegalArgumentException invalid) {
-            return rejected(invalid);
-        }
-        return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, observation.actorId()), observation)));
-    }
 
     public static CommandPlan plan(FrontierWorldState state, AmbientLeasePrepared prepared) {
         try { AmbientLeaseStateProcess.prepare(state, prepared.lease()); } catch (IllegalArgumentException invalid) { return rejected(invalid); }
@@ -103,14 +92,6 @@ public final class AmbientActorProcess {
     }
 
 
-    public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, AmbientActorObserved observation) {
-        validate(state, observation.actorId(), observation.body());
-        requireUnleased(state, observation.actorId());
-        if (!subject.equals(owner(state, observation.actorId()))) throw new IllegalArgumentException("ambient actor observation lacks its canonical owner");
-        var nextActors = new LinkedHashMap<>(state.actorLocations());
-        nextActors.put(observation.actorId(), new ActorLocation(observation.body(), state.actorLocations().get(observation.actorId()).condition().withHealth(observation.health()), state.actorLocations().get(observation.actorId()).kind()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors));
-    }
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, SimInstant instant, AmbientLeasePrepared prepared) {
         if (!subject.equals(owner(state, prepared.lease().actorId())) || !prepared.lease().handoffInstant().equals(instant)) {
             throw new IllegalArgumentException("ambient lease lacks its owner or current handoff instant");
@@ -161,25 +142,6 @@ public final class AmbientActorProcess {
         return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, confirmed.actorId()), confirmed)));
     }
 
-    private static void requireUnleased(FrontierWorldState state, SubjectId actorId) {
-        AmbientActorLease lease = state.ambientLeases().get(actorId);
-        if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED) {
-            throw new IllegalArgumentException("leased ambient actor observation must use its ambient lease evidence");
-        }
-    }
-
-    private static void validate(FrontierWorldState state, SubjectId actorId, BodyPosition body) {
-        ActorLocation current = state.actorLocations().get(actorId);
-        if (current == null || current.condition().status() != ActorLifeStatus.ALIVE) {
-            throw new IllegalArgumentException("ambient actor observation is not evidence for a living canonical actor");
-        }
-        if (state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
-                && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))) {
-            throw new IllegalArgumentException("leased actor observation must use its scene lease evidence");
-        }
-        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), body.supportingSurface().support());
-        if (owner(state, actorId) == null) throw new IllegalArgumentException("ambient actor has no canonical owner");
-    }
 
     public static AmbientGoal goalFor(FrontierWorldState state, SubjectId actorId, long atTick) {
         ActorLocation declaration = state.actorLocations().get(actorId);

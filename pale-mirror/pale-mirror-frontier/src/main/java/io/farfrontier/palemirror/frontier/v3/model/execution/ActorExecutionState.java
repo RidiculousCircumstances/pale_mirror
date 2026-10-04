@@ -36,6 +36,13 @@ public final class ActorExecutionState {
         var id = current(kind).get(Objects.requireNonNull(actor));
         return id != null && id.activityOwnerId().equals(Objects.requireNonNull(owner));
     }
+    /** Retained assignment is explicit, but this predicate grants no movement or work authority. */
+    public boolean retainsSuspended(SubjectId actor, ActorActivityKind kind, SubjectId owner) {
+        var execution = actors.get(Objects.requireNonNull(actor));
+        Objects.requireNonNull(kind); Objects.requireNonNull(owner);
+        return execution != null && execution.suspended().filter(id ->
+                id.activityKind() == kind && id.activityOwnerId().equals(owner)).isPresent();
+    }
     public java.util.List<ActorExecutionId> suspended() { return suspended; }
     @Override public boolean equals(Object other) { return other instanceof ActorExecutionState state && actors.equals(state.actors); }
     @Override public int hashCode() { return actors.hashCode(); }

@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import java.util.List;
 
-/** Exact owner for ambient body observations and leases. */
+/** Exact owner for ambient presentation leases, never physical body observations. */
 final class FrontierAmbientProcessModule implements FrontierWorldProcessModule {
     @Override public List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
             FrontierWorldState previous, FrontierWorldState next,
@@ -20,7 +20,6 @@ final class FrontierAmbientProcessModule implements FrontierWorldProcessModule {
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.AMBIENT_ACTOR_CUSTODY));
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
-        if (command.payload() instanceof AmbientActorObserved observation) return AmbientActorProcess.plan(state, observation);
         if (command.payload() instanceof AmbientBodyConfirmed || command.payload() instanceof AmbientLeasePrepared || command.payload() instanceof AmbientLeaseTransition
                 || command.payload() instanceof AmbientLeaseReleased || command.payload() instanceof AmbientLeaseRestartAbsenceObserved)
             return AmbientActorProcess.planLease(state, command.payload(), command.submittedAt().ticks());
@@ -32,9 +31,6 @@ final class FrontierAmbientProcessModule implements FrontierWorldProcessModule {
                 || event.payload() instanceof AmbientLeaseReleased || event.payload() instanceof AmbientLeaseRestartAbsenceObserved) {
             return AmbientActorProcess.reduceLease(state, event.subject(), event.instant(), event.payload());
         }
-        return switch (event.payload()) {
-            case AmbientActorObserved observation -> AmbientActorProcess.reduce(state, event.subject(), observation);
-            default -> throw new IllegalArgumentException("ambient process does not own event: " + event.payload().type());
-        };
+        throw new IllegalArgumentException("ambient process does not own event: " + event.payload().type());
     }
 }

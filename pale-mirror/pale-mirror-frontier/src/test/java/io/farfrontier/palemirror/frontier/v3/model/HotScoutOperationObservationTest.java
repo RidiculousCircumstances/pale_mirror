@@ -35,13 +35,12 @@ class HotScoutOperationObservationTest {
         SceneLease lease = FrontierTestSceneLeases.exact(state(engine), new SceneLeaseId("lease:hot-scout-observation"), operation.id(), operation.cargoId(),
                 operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(), Optional.empty(), operation.participantIds());
 
-        // A test fixture may only capture the ordinary unleased actor position first; the next
-        // two commands are the production PREPARED -> HOT hand-off, not a test-only lease edit.
-        submit(engine, world, new AmbientActorObserved(scout, FrontierTestPositions.bodyAboveSupport(FrontierSceneBehaviors.logistics(lease).cargoPosition()), state(engine).actorLocations().get(scout).condition().health()));
-        AmbientActorLease scoutLease = AmbientActorProcess.nextLease(state(engine), scout, engine.checkpoint().instant());
-        submit(engine, world, new AmbientLeasePrepared(scoutLease));
+        // Modeled admission/inspection use the same versioned body protocol, not the
+        // retired ownerless pose command. These are not native movement evidence.
         ModeledActorBodyFacts.present(engine, scout);
+        AmbientActorLease scoutLease = state(engine).ambientLeases().get(scout);
         submit(engine, world, new AmbientBodyConfirmed(scout, scoutLease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, scoutLease.handoffBody(), scoutLease.handoffBody(), ActorBodyAuthority.current(state(engine), scout)));
+        ModeledActorBodyFacts.inspected(engine, scout, FrontierTestPositions.bodyAboveSupport(FrontierSceneBehaviors.logistics(lease).cargoPosition()));
         submit(engine, world, new SceneLeasePrepared(lease));
         for (var member : lease.members()) ModeledActorBodyFacts.present(engine, member.actorId());
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
@@ -127,11 +126,10 @@ class HotScoutOperationObservationTest {
         RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state(engine)).orElseThrow();
         SceneLease lease = FrontierTestSceneLeases.exact(state(engine), new SceneLeaseId("lease:hot-scout-observation-negative"), operation.id(), operation.cargoId(),
                 operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(), Optional.empty(), operation.participantIds());
-        submit(engine, world, new AmbientActorObserved(scout, FrontierTestPositions.bodyAboveSupport(FrontierSceneBehaviors.logistics(lease).cargoPosition()), state(engine).actorLocations().get(scout).condition().health()));
-        AmbientActorLease scoutLease = AmbientActorProcess.nextLease(state(engine), scout, engine.checkpoint().instant());
-        submit(engine, world, new AmbientLeasePrepared(scoutLease));
         ModeledActorBodyFacts.present(engine, scout);
+        AmbientActorLease scoutLease = state(engine).ambientLeases().get(scout);
         submit(engine, world, new AmbientBodyConfirmed(scout, scoutLease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, scoutLease.handoffBody(), scoutLease.handoffBody(), ActorBodyAuthority.current(state(engine), scout)));
+        ModeledActorBodyFacts.inspected(engine, scout, FrontierTestPositions.bodyAboveSupport(FrontierSceneBehaviors.logistics(lease).cargoPosition()));
         submit(engine, world, new SceneLeasePrepared(lease));
         for (var member : lease.members()) ModeledActorBodyFacts.present(engine, member.actorId());
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));

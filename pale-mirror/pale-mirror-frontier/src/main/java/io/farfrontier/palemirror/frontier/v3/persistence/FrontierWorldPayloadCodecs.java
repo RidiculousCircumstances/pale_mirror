@@ -14,7 +14,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             new CargoCarrierReleasedPayloadCodec())), FungibleResourcePayloadCodecs.observationCodecs()); }
     static PayloadCodecs replicaCustodyCodecs() { return PayloadCodecs.merge(new PayloadCodecs(PhysicalReplicaCustodyPayloadCodecs.codecs()), new PayloadCodecs(FencedRecoveryPayloadCodecs.codecs())); }
     static PayloadCodecs ambientCodecs() { return new PayloadCodecs(List.of(
-            new AmbientActorObservedCodec(), AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
+            AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
             AmbientLeasePayloadCodecs.restartAbsenceObserved(), AmbientLeasePayloadCodecs.bodyConfirmed())); }
     static PayloadCodecs logisticsCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
             new ContractCreatedCodec(), new ContractAbandonedCodec(), new CargoLoadedCodec(), new CargoDeliveredCodec(), new OperationCreatedCodec(),
@@ -315,15 +315,6 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             }
             return new SceneLeaseReleased(id, members);
         }); }
-    }
-    private static final class AmbientActorObservedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.ambient_actor_observed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
-            AmbientActorObserved observation = (AmbientActorObserved) payload; writeSubject(output, observation.actorId());
-            output.writeInt(observation.body().x()); output.writeInt(observation.body().y()); output.writeInt(observation.body().z()); output.writeLong(observation.health().raw());
-        }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new AmbientActorObserved(
-                readSubject(input).value(), new BodyPosition(input.readInt(), input.readInt(), input.readInt()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()))); }
     }
     private static final class StructureDamagedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.structure_damaged"; }

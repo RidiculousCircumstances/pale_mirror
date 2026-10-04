@@ -38,17 +38,25 @@ class AmbientActorProcessTest {
     }
 
     @Test
-    void liveBodyDepartureCapturesExactPositionAndHealth() {
+    void commonBodyInspectionCapturesExactPositionAndHealth() {
         var worldId = new WorldId("frontier:ambient-observation");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
         SubjectId resident = new SubjectId("resident:1-1");
-        AmbientActorObserved observation = new AmbientActorObserved(resident, new BodyPosition(64, 65, 64), FixedScalar.whole(7));
+        ModeledActorBodyFacts.present(engine, resident);
+        var before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        var observation = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(
+                ActorBodyAuthority.current(before, resident),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING,
+                before.actorLocations().get(resident).body(), before.actorLocations().get(resident).condition().health(),
+                new BodyPosition(64, 65, 64), FixedScalar.whole(7),
+                java.util.Optional.ofNullable(before.actorExecutions().actors().get(resident))
+                        .flatMap(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecution::current));
         var checkpoint = engine.checkpoint();
         var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-observation");
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(command(worldId, checkpoint, commandId, observation)));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertEquals(observation.body(), state.actorLocations().get(resident).body());
-        assertEquals(observation.health(), state.actorLocations().get(resident).condition().health());
+        assertEquals(observation.observedBody(), state.actorLocations().get(resident).body());
+        assertEquals(observation.observedHealth(), state.actorLocations().get(resident).condition().health());
         assertEquals(observation, FrontierWorldRuntimeDefinition.payloadCodecs().decode(observation.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(observation)));
     }
 
@@ -102,9 +110,6 @@ class AmbientActorProcessTest {
                 engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-hot"),
                         new AmbientBodyConfirmed(resident, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION,
                                 lease.handoffBody(), lease.handoffBody(), ActorBodyAuthority.current(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()), resident)))));
-        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,
-                engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-bad-observation"),
-                        new AmbientActorObserved(resident, lease.handoffBody(), FixedScalar.whole(8)))));
         ModeledActorBodyFacts.inspected(engine, resident, new BodyPosition(65, 64, 64));
         var inspected = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         AmbientLeaseReleased release = new AmbientLeaseReleased(resident, new BodyPosition(65, 64, 64),

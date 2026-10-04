@@ -7,7 +7,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
-import io.farfrontier.palemirror.frontier.v3.model.AmbientActorObserved;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;

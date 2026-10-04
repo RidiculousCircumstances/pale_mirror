@@ -80,6 +80,7 @@ final class FrontierV3RoutePatrolSceneExecutor {
             if (ambient.status() != AmbientLeaseStatus.HOT || !(entity instanceof Mob body) || !body.isAlive()
                     || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)
                     || !at(body, lease.memberBody(state.actorLocations(), member.actorId()).supportingSurface())) return;
+            if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
             captures.add(new SceneMemberPosition(member.actorId(), FrontierV3SurfaceObservation.observedAt(body,
                     lease.memberBody(state.actorLocations(), member.actorId()).supportingSurface()), fixed(body.getHealth())));
         }

@@ -52,7 +52,7 @@ public final class DiagnosticProducerContract {
 
     private static final Set<String> ORDINARY = Set.of(
         "frontier.cargo_cleanup_saved",
-        "frontier.ambient_actor_observed", "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared",
+        "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared",
         "frontier.ambient_lease_released", "frontier.ambient_lease_transition",
         "frontier.cargo_carrier_released", "frontier.cargo_delivered", "frontier.cargo_loaded", "frontier.company_registered",
         "frontier.container_surface_transition", "frontier.deferred_aftermath_prepared", "frontier.deferred_aftermath_resolved",

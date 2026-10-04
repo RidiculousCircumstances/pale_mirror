@@ -58,7 +58,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.cargo_cleanup_saved");
     private static final Set<String> AMBIENT = types(
             "frontier.ambient_body_confirmed",
-            "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
+            "frontier.ambient_lease_prepared",
             "frontier.ambient_lease_released", "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed");
     private static final Set<String> LOGISTICS = types(
             "frontier.supply_contract_created", "frontier.supply_contract_abandoned", "frontier.cargo_loaded",
@@ -604,7 +604,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.cargo_carrier_released"); }
     private static Set<String> replicaCustodyCommands() { return REPLICA_CUSTODY; }
     private static Set<String> ambientCommands() { return types(
-            "frontier.ambient_actor_observed", "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared",
+            "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared",
             "frontier.ambient_lease_released", "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed"); }
     private static Set<String> logisticsCommands() { return types(
             "frontier.operation_assembly_advanced", "frontier.operation_assembly_deferred",
@@ -737,7 +737,7 @@ public final class FrontierWorldProcessCatalog {
             case "replica-custody" -> union(REPLICA_CUSTODY, types("kernel.schedule_created"));
             case "ambient-actors" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
-                    "frontier.ambient_actor_observed", "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared", "frontier.ambient_lease_released",
+                    "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared", "frontier.ambient_lease_released",
                     "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed", "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
                     "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled",
                     "frontier.market_demand_expired", "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.production_blocked");

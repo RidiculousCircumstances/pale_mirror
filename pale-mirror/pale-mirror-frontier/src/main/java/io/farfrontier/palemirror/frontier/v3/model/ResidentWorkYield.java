@@ -7,8 +7,8 @@ import java.util.Objects;
 /** Read-only safe-point assessment. The owning process still performs the actual pause. */
 public record ResidentWorkYield(SubjectId residentId, HumanAssignment assignment, Status status) {
     public enum Status {
-        READY, SCENE_OR_AMBIENT_AUTHORITY, CARRYING_RESOURCE, PENDING_PHYSICAL_EFFECT,
-        OWNER_SAFETY_HOLD
+        READY, PENDING_PHYSICAL_EFFECT,
+        OWNER_SAFETY_HOLD, OWNER_NOT_CURRENT
     }
 
     public ResidentWorkYield {
@@ -21,7 +21,7 @@ public record ResidentWorkYield(SubjectId residentId, HumanAssignment assignment
 
     public boolean ready() { return status == Status.READY; }
 
-    /** Every current work kind is deliberate; an unadapted family cannot accidentally yield. */
+    /** Every current work kind delegates to a deliberate owner checkpoint, not presentation membership. */
     public static ResidentWorkYield assess(FrontierWorldState state, HumanAssignment assignment) {
         return ActorExecutionCoordinator.workYield(state, assignment);
     }

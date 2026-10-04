@@ -37,6 +37,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierWorldProcessCatalogTest {
+    @Test void retiredOwnerlessObservationHasNoCommandEventOrCodecOwner() {
+        var registry = FrontierWorldRuntimeDefinition.processRegistry();
+        String retired = "frontier.ambient_actor_observed";
+        assertThrows(IllegalArgumentException.class, () -> registry.requireCommandOwner(retired));
+        assertThrows(IllegalArgumentException.class, () -> registry.requireReducedEventOwner(retired));
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierWorldRuntimeDefinition.payloadCodecs().decode(retired, new byte[0]));
+    }
     @Test
     void residentLifePhysicalObservationsHaveOneCommandOwner() {
         DeterministicProcessRegistry registry = FrontierWorldRuntimeDefinition.processRegistry();
@@ -263,7 +271,7 @@ class FrontierWorldProcessCatalogTest {
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty())),
                 Map.entry("replica-custody", new PhysicalReplicaCustodyPayloads.ReplicaDeclared(PhysicalReplicaRecord.expected(
                         new SubjectId("object:representative"), "crate", 1L, "fingerprint:representative", "provenance:representative"))),
-                Map.entry("ambient-actors", new AmbientActorObserved(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE)),
+                Map.entry("ambient-actors", new AmbientLeaseReleased(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE)),
                 Map.entry("actor-body", new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyReleased(
                         new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(new SubjectId("actor:representative"), 1L))),
                 Map.entry("logistics-scenes", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT)),

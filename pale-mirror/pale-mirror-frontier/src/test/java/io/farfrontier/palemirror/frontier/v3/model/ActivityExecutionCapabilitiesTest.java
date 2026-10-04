@@ -9,6 +9,27 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActivityExecutionCapabilitiesTest {
+    @Test void coordinatedAssignmentUsesItsExactRegisteredExecutionCheckpoint() {
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(
+                FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
+                    new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:assignment-owner-checkpoint"), 91L));
+        var state = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
+                .decode(engine.checkpoint().canonicalState());
+        var operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state).orElseThrow();
+        for (var actor : operation.participantIds()) {
+            var assignment = HumanAssignmentProjection.compile(state).assignment(actor);
+            var execution = state.actorExecutions().actors().get(actor).current().orElseThrow();
+            assertEquals(operation.id(), execution.activityOwnerId());
+            var ownerCheckpoint = ActorExecutionComposition.CAPABILITIES.require(execution.activityKind())
+                    .checkpoint(state, execution);
+            ownerCheckpoint.validate(state, execution);
+            var assessment = ActivityExecutionCapabilities.assess(state, assignment);
+            assertEquals(ownerCheckpoint.ready(), assessment.ready());
+            assertEquals(ResidentWorkYield.Status.OWNER_SAFETY_HOLD, assessment.status(),
+                    "this coordinated owner deliberately retains the crew until its terminal boundary");
+        }
+    }
+
     private static List<ActivityExecutionCapability> declarations() {
         return java.util.Arrays.stream(HumanAssignmentKind.values()).map(kind ->
                 ActivityExecutionCapabilities.registration(kind, (state, assignment) ->

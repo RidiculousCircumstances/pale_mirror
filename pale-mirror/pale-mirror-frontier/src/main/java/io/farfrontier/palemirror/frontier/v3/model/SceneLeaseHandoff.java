@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import java.util.List;
 import java.util.Objects;
 
-/** Durable atomic transfer of exact HOT ambient bodies into one prepared scene lease. */
+/** Durable presentation-scope transition; captured poses must already belong to the common body observation. */
 public record SceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload, SceneLeaseAdmission {
     public SceneLeaseHandoff {
         Objects.requireNonNull(lease, "scene lease");

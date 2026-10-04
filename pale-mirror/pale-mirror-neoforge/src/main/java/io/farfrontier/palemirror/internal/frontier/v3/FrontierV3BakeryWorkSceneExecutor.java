@@ -26,6 +26,14 @@ final class FrontierV3BakeryWorkSceneExecutor {
 
     static void work(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                      FrontierWorldState state, SceneLease lease, ProductionJob job) {
+        if (state.actorExecutions().retainsSuspended(job.workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id())) {
+            // The old scope cannot drive or stop the new activity. Resource settlement
+            // remains in its owning release path; closing this scope does not remove the body.
+            FrontierV3CommandSubmission.submit(runtime, "bakery-suspended-draining", lease.id().value(),
+                    new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+            return;
+        }
         if (job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 && job.bakeryWork().orElseThrow().block()
                     .map(value -> value.reason() == BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(false)

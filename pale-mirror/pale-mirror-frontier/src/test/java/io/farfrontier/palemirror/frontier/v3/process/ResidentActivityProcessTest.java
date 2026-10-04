@@ -98,14 +98,20 @@ class ResidentActivityProcessTest {
         assertEquals(List.of(action), queue.snapshot(), "waiting retains the original durable action");
 
         var departing = blockers.getFirst().id();
-        var restored = blocked.withActorBody(departing, available.actorLocations().get(departing).body());
+        var admitted = ModeledActorBodyFacts.present(blocked, departing);
+        var restored = ModeledActorBodyFacts.inspected(admitted, departing, available.actorLocations().get(departing).body());
         FrontierEvent event = new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
                 new EventId("event:clearance-restored"), new TransactionId("transaction:clearance-restored"),
                 initial.bootstrap().worldId(), new Revision(1L), new SimInstant(25_000L),
                 departing,
                 CauseChain.root(new CommandId("command:clearance-restored")),
-                new AmbientActorObserved(departing, restored.actorLocations().get(departing).body(),
-                        io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ONE));
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(
+                        ActorBodyAuthority.current(admitted, departing),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING,
+                        admitted.actorLocations().get(departing).body(), admitted.actorLocations().get(departing).condition().health(),
+                        restored.actorLocations().get(departing).body(), restored.actorLocations().get(departing).condition().health(),
+                        java.util.Optional.ofNullable(admitted.actorExecutions().actors().get(departing))
+                                .flatMap(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecution::current)));
         queue.wake(FrontierWorldRuntimeDefinition.wakeKeys(blocked, restored, event));
         assertEquals(List.of(action), queue.selectDue(new SimInstant(25_000L),
                 new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(1, 1),

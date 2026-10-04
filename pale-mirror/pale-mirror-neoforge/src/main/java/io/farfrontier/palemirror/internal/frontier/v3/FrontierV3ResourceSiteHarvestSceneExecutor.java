@@ -226,8 +226,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     }
 
     /**
-     * Gives field work the already observed farmer body.  This is a durable ownership transfer,
-     * not an ambient drain followed by a replacement body at a historical grid cell.
+     * Switches the farmer's presentation scope after common body inspection.
+     * Physical ownership, UUID and pose remain with the independent body lifecycle.
      */
     private static void handoff(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease, ScheduledAction binding) {
@@ -238,6 +238,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             if (ambient.status() != io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT) return;
             Entity entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)) return;
+            if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
             var supported = FrontierV3SupportedBodyCapture.observe(level, body);
             if (supported.isEmpty()) return;
             captures.add(new SceneMemberPosition(member.actorId(), supported.orElseThrow(),
@@ -256,6 +257,13 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                              FrontierWorldState state, SceneLease lease) {
         ResourceSiteHarvestSceneCause cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
         var job = FrontierResourceSiteHarvestSceneSupport.require(state, cause);
+        if (state.actorExecutions().retainsSuspended(job.workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id())) {
+            // UAE already handed activity authority to self-care. Close only this old
+            // presentation/effect scope, without capturing permission to STOP its successor.
+            beginImmediateColdRelease(level, runtime, state, lease);
+            return;
+        }
         var site = state.resourceSite(job.siteId());
         if (site == null) { conflict(level, runtime, lease, "field-work-site-unavailable"); return; }
         var physicalClaim = FrontierV3ResourceSiteLedger.get(level).siteClaim(site.id());

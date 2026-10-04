@@ -9,9 +9,9 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Sole domain policy for exclusive actor execution and safe ownership transfer.
- * Existing jobs, movement orders and leases are the durable records, not a second queue.
- * Scheduling chooses purpose; family owners prove effects; this owner arbitrates authority.
+ * Domain admission and presentation-scope coordination. Retained execution and body
+ * lifecycles own their separate authority; this read model never writes HOT positions.
+ * Scheduling chooses purpose and registered family owners prove interruption safety.
  */
 public final class ActorExecutionCoordinator {
     private ActorExecutionCoordinator() { }
@@ -35,7 +35,7 @@ public final class ActorExecutionCoordinator {
         public Waiting { Objects.requireNonNull(reason, "execution wait"); }
     }
 
-    /** Physical presence is not employment: a HOT idle body can transfer to a new job. */
+    /** Physical presence is not employment: ordinary presentation can yield to a new job. */
     public static WorkAdmission ordinaryWorkAdmission(FrontierWorldState state, SubjectId actorId) {
         Objects.requireNonNull(state, "execution state"); Objects.requireNonNull(actorId, "actor");
         ActorLocation actor = state.actorLocations().get(actorId);
@@ -51,7 +51,7 @@ public final class ActorExecutionCoordinator {
         if (ambient.status() != AmbientLeaseStatus.HOT) return new Waiting(Wait.AMBIENT_RECOVERY);
         if (!ordinaryAmbientPurpose(ambient.goal())) return new Waiting(Wait.FOREIGN_AMBIENT_PURPOSE);
         // handoffBody is historical evidence, never a completion predicate. The subsequent
-        // scene handoff captures the actual body and closes this exact ambient epoch atomically.
+        // scene admission references common inspection and closes this exact presentation epoch atomically.
         return new AmbientTransfer(actorId, ambient.revision());
     }
 
@@ -80,7 +80,7 @@ public final class ActorExecutionCoordinator {
             throw new IllegalArgumentException("work admission waits: " + waiting.reason());
     }
 
-    /** Purpose comes from activity policy; this owner performs the common HOT retarget. */
+    /** Purpose comes from activity policy; this owner retargets presentation, not physical motion. */
     public static FrontierWorldState retargetAmbient(FrontierWorldState state, SubjectId actorId,
                                                      AmbientGoalKind goal, BodyPosition goalBody) {
         AmbientActorLease current = state.ambientLeases().get(Objects.requireNonNull(actorId, "actor"));
@@ -109,14 +109,8 @@ public final class ActorExecutionCoordinator {
     /** One shared safe-point assessment for self-care and every adapted work owner. */
     public static ResidentWorkYield workYield(FrontierWorldState state, HumanAssignment assignment) {
         Objects.requireNonNull(state, "yield state"); Objects.requireNonNull(assignment, "assignment");
-        SubjectId resident = assignment.residentId();
-        AmbientActorLease ambient = state.ambientLeases().get(resident);
-        boolean safeAmbient = ambient != null && ambient.status() == AmbientLeaseStatus.HOT
-                && (ordinaryAmbientPurpose(ambient.goal())
-                    || ambient.goal() == AmbientGoalKind.ACTOR_MOVEMENT
-                        && !state.actorMovements().containsKey(resident));
-        if ((!ambientAvailable(state, List.of(resident)) && !safeAmbient) || sceneOwns(state, resident))
-            return new ResidentWorkYield(resident, assignment, ResidentWorkYield.Status.SCENE_OR_AMBIENT_AUTHORITY);
+        // Presentation scope is not an interruption policy. The exact activity owner
+        // assesses its effect/continuation checkpoint; UAE commits the actual switch.
         return ActivityExecutionCapabilities.assess(state, assignment);
     }
 
@@ -132,10 +126,9 @@ public final class ActorExecutionCoordinator {
                 account.custody().equals(new ResourceCustody.Actor(actorId)));
     }
 
-    /** Actual observed body transfer, one canonical transaction and no despawn/replacement. */
+    /** Switch presentation scopes after common inspection; never transfer the physical body or write its pose. */
     static FrontierWorldState transferToScene(FrontierWorldState state, SceneLeaseHandoff handoff) {
         Objects.requireNonNull(handoff, "scene hand-off");
-        var actors = new LinkedHashMap<>(state.actorLocations());
         var ambient = new LinkedHashMap<>(state.ambientLeases());
         Set<SubjectId> captured = handoff.ambientMembers().stream().map(SceneMemberPosition::actorId)
                 .collect(java.util.stream.Collectors.toSet());
@@ -149,16 +142,17 @@ public final class ActorExecutionCoordinator {
             }
         }
         for (SceneMemberPosition capture : handoff.ambientMembers()) {
-            AmbientActorLease current = ambient.get(capture.actorId()); ActorLocation actor = actors.get(capture.actorId());
+            AmbientActorLease current = ambient.get(capture.actorId()); ActorLocation actor = state.actorLocations().get(capture.actorId());
             if (current == null || current.status() != AmbientLeaseStatus.HOT || actor == null
                     || actor.condition().status() != ActorLifeStatus.ALIVE)
                 throw new IllegalArgumentException("capture lacks one living HOT ambient actor");
             FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), capture.body().supportingSurface().support());
-            actors.put(capture.actorId(), new ActorLocation(capture.body(), actor.condition().withHealth(capture.health()), actor.kind()));
+            if (!actor.body().equals(capture.body()) || !actor.condition().health().equals(capture.health()))
+                throw new IllegalArgumentException("scene handoff requires independently recorded common body observation");
             ambient.put(capture.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
         }
         FrontierWorldState capturedState = state.withChanges(FrontierWorldStateUpdate.begin()
-                .actorLocations(actors).ambientLeases(ambient));
+                .ambientLeases(ambient));
         return FrontierSceneLeaseStateSupport.prepare(capturedState, handoff.lease());
     }
 }
