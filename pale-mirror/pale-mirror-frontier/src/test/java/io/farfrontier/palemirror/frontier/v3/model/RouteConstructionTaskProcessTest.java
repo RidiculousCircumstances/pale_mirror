@@ -293,8 +293,13 @@ class RouteConstructionTaskProcessTest {
         var capturedExecution = EngineeringExecutionAuthority.assemblyCurrent(state, state.routeConstructions().get(project.id())).requireMember(member);
         ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(state, capturedExecution, state.ambientLeases().get(member));
         EngineeringWorkAssembly advanced = assembly.advance(member);
+        state = ModeledActorBodyFacts.inspected(state, member, advanced.members().get(member).currentSurface().standingBody());
+        var arrival = new EngineeringHotArrival(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                ActorBodyAuthority.current(state, member), capturedExecution), state.ambientLeases().get(member).revision());
+        var inspectedLocations = state.actorLocations();
         state = RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER,
-                io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyAdvanced(state, project.id(), advanced));
+                EngineeringExecutionEvents.constructionAssemblyAdvanced(state, project.id(), advanced, Optional.of(arrival)));
+        assertEquals(inspectedLocations, state.actorLocations(), "HOT semantic arrival never rewrites the body observation");
         EngineeringWorkAssembly.Member after = state.routeConstructions().get(project.id()).assembly().orElseThrow().members().get(member);
         AmbientActorLease retargeted = state.ambientLeases().get(member);
         ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(state, capturedExecution, retargeted);
@@ -328,18 +333,24 @@ class RouteConstructionTaskProcessTest {
         state = confirmFixturePhysicalBody(state, member);
         state = AmbientLeaseStateProcess.transition(state, member, AmbientLeaseStatus.HOT);
         EngineeringWorkAssembly next = state.routeConstructions().get(project.id()).assembly().orElseThrow().advance(member);
+        state = ModeledActorBodyFacts.inspected(state, member, next.members().get(member).currentSurface().standingBody());
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(
                 world, state, new SimInstant(400L), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
                 base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
         var engine = FrontierEngines.create(configuration);
-        var arrivalPayload = EngineeringExecutionEvents.constructionAssemblyAdvanced(state, project.id(), next);
+        var captured = new EngineeringHotArrival(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                ActorBodyAuthority.current(state, member), EngineeringExecutionAuthority.assemblyCurrent(state, state.routeConstructions().get(project.id())).requireMember(member)),
+                state.ambientLeases().get(member).revision());
+        var arrivalPayload = EngineeringExecutionEvents.constructionAssemblyAdvanced(state, project.id(), next, Optional.of(captured));
         var staleExecutions = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup(arrivalPayload.executions().members().stream()
                 .map(id -> new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
                         id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1)).toList());
         CommandId wrongAuthority = new CommandId("executor:engineering-arrival-wrong-generation");
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(1, wrongAuthority, world, engine.checkpoint().revision(),
                 engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(wrongAuthority),
-                new RouteConstructionAssemblyAdvanced(project.id(), next, staleExecutions, arrivalPayload.workExecutions()))));
+                new RouteConstructionAssemblyAdvanced(project.id(), next, staleExecutions, arrivalPayload.workExecutions(),
+                        Optional.of(new EngineeringHotArrival(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                                captured.actuation().body(), staleExecutions.requireMember(member)), captured.leaseRevision()))))));
         assertEquals(state, state(engine), "stale execution rejection cannot move the crew or admit a work successor");
         CommandId arrival = new CommandId("executor:engineering-arrival");
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, arrival, world, engine.checkpoint().revision(),

@@ -99,8 +99,11 @@ final class FrontierV3DiagnosticEngineeringJson {
 
     private static String engineeringAssemblyMember(FrontierWorldState state, SubjectId actorId, io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly.Member member) {
         var lease = state.ambientLeases().get(actorId);
-        String next = member.arrived() ? "null" : FrontierV3DiagnosticJson.position(member.corridor().get(member.cursor() + 1));
+        String next = member.arrived() ? "null" : FrontierV3DiagnosticJson.position(member.nextSurface().support());
         return "{\"actor\":\"" + FrontierV3DiagnosticJson.quote(actorId.value()) + "\",\"cursor\":" + member.cursor() + ",\"length\":" + member.corridor().size() + ",\"arrived\":" + member.arrived()
+                + ",\"routeRevision\":" + member.routeRevision() + ",\"approachCursor\":" + member.rejoin().map(value -> value.cursor()).orElse(-1)
+                + ",\"retainedPosition\":" + FrontierV3DiagnosticJson.position(member.currentPosition())
+                + ",\"actualBody\":" + FrontierV3DiagnosticJson.position(state.actorLocations().get(actorId).body())
                 + ",\"next\":" + next + ",\"ambientLease\":\"" + FrontierV3DiagnosticJson.quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + FrontierV3DiagnosticJson.quote(lease == null ? "NONE" : lease.goal().name())
                 + "\",\"leaseTarget\":" + (lease == null ? "null" : FrontierV3DiagnosticJson.position(lease.goalBody().supportingSurface().support())) + "}";
     }

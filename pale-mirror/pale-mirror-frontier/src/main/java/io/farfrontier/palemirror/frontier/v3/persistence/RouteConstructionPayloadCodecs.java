@@ -19,7 +19,8 @@ final class RouteConstructionPayloadCodecs {
         @Override public String type() { return "frontier.route_construction_started"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { var value = (RouteConstructionStarted) payload; write(output, value.project());
                 ActorExecutionStateCodec.writeOptionalGroup(output, value.executions()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RouteConstructionStarted(read(input), ActorExecutionStateCodec.readOptionalGroup(input))); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes,
+                input -> new RouteConstructionStarted(read(input), ActorExecutionStateCodec.readOptionalGroup(input))); }
     }; }
     static PayloadCodec cutover() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_topology_cutover"; }
@@ -48,11 +49,15 @@ final class RouteConstructionPayloadCodecs {
             });
         }
     }; }
-    static PayloadCodec assemblyStarted() { return assembly("frontier.route_construction_assembly_started", RouteConstructionAssemblyStarted::new); }
+    static PayloadCodec assemblyStarted() { return assembly("frontier.route_construction_assembly_started", (id, assembly, executions, work, arrival) -> {
+        EngineeringArrivalCodec.requireAbsent(arrival);
+        return new RouteConstructionAssemblyStarted(id, assembly, executions, work);
+    }); }
     static PayloadCodec assemblyAdvanced() { return assembly("frontier.route_construction_assembly_advanced", RouteConstructionAssemblyAdvanced::new); }
 
     private interface AssemblyFactory { FrontierPayload apply(SubjectId id, EngineeringWorkAssembly assembly, io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup executions,
-            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> workExecutions); }
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionGroup> workExecutions,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.EngineeringHotArrival> arrival); }
     private static PayloadCodec assembly(String type, AssemblyFactory factory) {
         return new PayloadCodec() {
             @Override public String type() { return type; }
@@ -63,11 +68,12 @@ final class RouteConstructionPayloadCodecs {
                 else if (payload instanceof RouteConstructionAssemblyAdvanced advanced) { project = advanced.projectId(); assembly = advanced.assembly(); executions = advanced.executions(); work = advanced.workExecutions(); }
                 else throw new IllegalArgumentException("route construction assembly codec received foreign payload");
                 return FrontierWorldPayloadCodecs.encodeProduction(output -> { FrontierWorldPayloadCodecs.writeSubject(output, project); writeAssembly(output, assembly); ActorExecutionStateCodec.writeGroup(output,
-                        executions); ActorExecutionStateCodec.writeOptionalGroup(output, work); });
+                        executions); ActorExecutionStateCodec.writeOptionalGroup(output, work);
+                        EngineeringArrivalCodec.write(output, payload instanceof RouteConstructionAssemblyAdvanced advanced ? advanced.hotArrival() : java.util.Optional.empty()); });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> factory.apply(FrontierWorldPayloadCodecs.readSubject(input).value(), readAssembly(input), ActorExecutionStateCodec.readGroup(input),
-                        ActorExecutionStateCodec.readOptionalGroup(input)));
+                        ActorExecutionStateCodec.readOptionalGroup(input), EngineeringArrivalCodec.read(input)));
             }
         };
     }
@@ -111,32 +117,9 @@ final class RouteConstructionPayloadCodecs {
     }
 
     static void writeAssembly(DataOutputStream output, EngineeringWorkAssembly assembly) throws IOException {
-        output.writeByte(assembly.purpose().wireTag());
-        output.writeByte(assembly.members().size());
-        for (var entry : assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
-            FrontierWorldPayloadCodecs.writeSubject(output, entry.getKey());
-            EngineeringWorkAssembly.Member member = entry.getValue(); output.writeShort(member.corridor().size());
-            for (BlockPosition cell : member.corridor()) FrontierWorldPayloadCodecs.writePosition(output, cell);
-            output.writeShort(member.cursor());
-        }
+        RouteConstructionStateCodec.writeAssembly(output, assembly);
     }
-
     static EngineeringWorkAssembly readAssembly(DataInputStream input) throws IOException {
-        EngineeringJourneyPurpose purpose = FrontierWireTags.require(EngineeringJourneyPurpose.class, input.readUnsignedByte());
-        int count = input.readUnsignedByte();
-        if (count < EngineeringRecoveryTeam.MIN_MEMBERS || count > EngineeringRecoveryTeam.MAX_MEMBERS) {
-            throw new IllegalArgumentException("route construction assembly payload has invalid size");
-        }
-        java.util.Map<SubjectId, EngineeringWorkAssembly.Member> members = new java.util.LinkedHashMap<>();
-        for (int index = 0; index < count; index++) {
-            SubjectId actor = FrontierWorldPayloadCodecs.readSubject(input).value(); int cells = input.readUnsignedShort();
-            if (cells < 1 || cells > OperationTravel.MAX_CELLS) throw new IllegalArgumentException("route construction assembly payload corridor is invalid");
-            List<BlockPosition> corridor = new ArrayList<>();
-            for (int cell = 0; cell < cells; cell++) corridor.add(FrontierWorldPayloadCodecs.readPosition(input));
-            if (members.put(actor, new EngineeringWorkAssembly.Member(corridor, input.readUnsignedShort())) != null) {
-                throw new IllegalArgumentException("route construction assembly payload has duplicate member");
-            }
-        }
-        return new EngineeringWorkAssembly(purpose, members);
+        return RouteConstructionStateCodec.readAssembly(input);
     }
 }

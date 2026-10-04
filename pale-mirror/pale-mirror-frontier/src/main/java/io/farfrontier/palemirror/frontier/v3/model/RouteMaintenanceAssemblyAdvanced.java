@@ -8,9 +8,17 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 
 /** One exact retained crew step; it cannot retarget the repair or replace a member. */
 public record RouteMaintenanceAssemblyAdvanced(SubjectId maintenanceId, EngineeringWorkAssembly assembly, ActorExecutionGroup executions,
-        java.util.Optional<ActorExecutionGroup> workExecutions) implements FrontierPayload {
+        java.util.Optional<ActorExecutionGroup> workExecutions, java.util.Optional<EngineeringHotArrival> hotArrival) implements FrontierPayload {
+    public RouteMaintenanceAssemblyAdvanced(SubjectId id, EngineeringWorkAssembly assembly, ActorExecutionGroup executions,
+            java.util.Optional<ActorExecutionGroup> workExecutions) {
+        this(id, assembly, executions, workExecutions, java.util.Optional.empty());
+    }
     public RouteMaintenanceAssemblyAdvanced { Objects.requireNonNull(maintenanceId, "route maintenance id"); Objects.requireNonNull(assembly, "route maintenance assembly");
         EngineeringExecutionAuthority.requireOwner(executions, maintenanceId, ActorActivityKind.ENGINEERING_ASSEMBLY);
-        Objects.requireNonNull(workExecutions, "engineering work successor").ifPresent(group -> EngineeringExecutionAuthority.requireOwner(group, maintenanceId, ActorActivityKind.ENGINEERING_WORK)); }
+        Objects.requireNonNull(workExecutions, "engineering work successor").ifPresent(group -> EngineeringExecutionAuthority.requireOwner(group, maintenanceId, ActorActivityKind.ENGINEERING_WORK));
+        Objects.requireNonNull(hotArrival, "engineering physical arrival").ifPresent(arrival -> {
+            if (!executions.members().contains(arrival.actuation().execution()))
+                throw new IllegalArgumentException("engineering arrival does not carry its captured execution");
+        }); }
     @Override public String type() { return "frontier.route_maintenance_assembly_advanced"; }
 }

@@ -194,7 +194,9 @@ public final class RouteConstructionProcess {
                         && lease.status() != SceneLeaseStatus.CLOSED);
         if (retainedHotOrRecovery) return List.of(next);
         SubjectId advancing = assembly.safeAdvances().stream()
-                .filter(member -> ActorExecutionCoordinator.coldAvailable(state, member)).findFirst().orElse(null);
+                .filter(member -> ActorExecutionCoordinator.coldAvailable(state, member))
+                .filter(member -> io.farfrontier.palemirror.frontier.v3.model.EngineeringJourneyKnowledge.openEdge(state, project, member))
+                .findFirst().orElse(null);
         if (advancing == null) return List.of(next);
         EngineeringWorkAssembly advanced = assembly.advance(advancing);
         ProposedEvent progressed = advanced.complete() ? new ProposedEvent(project.id(),

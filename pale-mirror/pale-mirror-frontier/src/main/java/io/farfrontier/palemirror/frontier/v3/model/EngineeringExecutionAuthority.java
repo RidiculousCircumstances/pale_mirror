@@ -134,10 +134,7 @@ public final class EngineeringExecutionAuthority {
                 return request -> {
                     var owner = require(EngineeringWorkOrderSupport.registry(request.expectedState().routeConstructions(),
                             request.expectedState().routeMaintenances()), request.execution());
-                    if (owner.assembly().isPresent() && !owner.assembly().orElseThrow().members().get(
-                            request.execution().actorId()).currentPosition().equals(request.observedPosition().supportingSurface().support()))
-                        throw new IllegalArgumentException("engineering assembly requires its observed rejoin before COLD");
-                    return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+                    return EngineeringBodyCheckpoint.acknowledge(request, owner);
                 };
             }
             @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId id, AmbientActorLease lease) {
@@ -145,8 +142,8 @@ public final class EngineeringExecutionAuthority {
                 var owner = require(EngineeringWorkOrderSupport.registry(state.routeConstructions(), state.routeMaintenances()), id);
                 if (owner.assembly().isEmpty()) return lease.goalBody().equals(state.actorLocations().get(id.actorId()).body());
                 var member = owner.assembly().orElseThrow().members().get(id.actorId());
-                var target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
-                return lease.goalBody().supportingSurface().support().equals(target);
+                var target = member.arrived() ? member.currentSurface() : member.nextSurface();
+                return lease.goalBody().supportingSurface().equals(target);
             }
             @Override public ActorActivityKind kind() { return kind; }
             @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }

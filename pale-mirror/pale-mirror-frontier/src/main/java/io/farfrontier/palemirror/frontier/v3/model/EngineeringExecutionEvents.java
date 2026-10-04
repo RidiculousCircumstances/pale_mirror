@@ -17,9 +17,13 @@ public final class EngineeringExecutionEvents {
                 EngineeringExecutionAuthority.workAdmission(state, owner, assembly));
     }
     public static RouteConstructionAssemblyAdvanced constructionAssemblyAdvanced(FrontierWorldState state, SubjectId id, EngineeringWorkAssembly assembly) {
+        return constructionAssemblyAdvanced(state, id, assembly, java.util.Optional.empty());
+    }
+    public static RouteConstructionAssemblyAdvanced constructionAssemblyAdvanced(FrontierWorldState state, SubjectId id,
+            EngineeringWorkAssembly assembly, java.util.Optional<EngineeringHotArrival> arrival) {
         var owner = construction(state, id);
         return new RouteConstructionAssemblyAdvanced(id, assembly, EngineeringExecutionAuthority.assemblyCurrent(state, owner),
-                EngineeringExecutionAuthority.workAdmission(state, owner, assembly));
+                EngineeringExecutionAuthority.workAdmission(state, owner, assembly), arrival);
     }
     public static RouteMaintenanceAssemblyStarted maintenanceAssemblyStarted(FrontierWorldState state, SubjectId id, EngineeringWorkAssembly assembly) {
         var owner = maintenance(state, id);
@@ -27,9 +31,13 @@ public final class EngineeringExecutionEvents {
                 EngineeringExecutionAuthority.workAdmission(state, owner, assembly));
     }
     public static RouteMaintenanceAssemblyAdvanced maintenanceAssemblyAdvanced(FrontierWorldState state, SubjectId id, EngineeringWorkAssembly assembly) {
+        return maintenanceAssemblyAdvanced(state, id, assembly, java.util.Optional.empty());
+    }
+    public static RouteMaintenanceAssemblyAdvanced maintenanceAssemblyAdvanced(FrontierWorldState state, SubjectId id,
+            EngineeringWorkAssembly assembly, java.util.Optional<EngineeringHotArrival> arrival) {
         var owner = maintenance(state, id);
         return new RouteMaintenanceAssemblyAdvanced(id, assembly, EngineeringExecutionAuthority.assemblyCurrent(state, owner),
-                EngineeringExecutionAuthority.workAdmission(state, owner, assembly));
+                EngineeringExecutionAuthority.workAdmission(state, owner, assembly), arrival);
     }
     public static RouteTopologyCutover cutover(FrontierWorldState state, SubjectId id) {
         return new RouteTopologyCutover(id, EngineeringExecutionAuthority.terminalDeclaration(state, construction(state, id)));

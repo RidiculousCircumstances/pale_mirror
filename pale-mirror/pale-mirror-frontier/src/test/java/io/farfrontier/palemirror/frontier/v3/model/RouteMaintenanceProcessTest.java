@@ -502,6 +502,7 @@ class RouteMaintenanceProcessTest {
                 candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(), java.util.Set.of(), Optional.empty());
 
         FrontierWorldState prepared = assembled.prepareSceneLease(lease);
+        for (SubjectId actor : candidate.memberPositions().keySet()) prepared = ModeledActorBodyFacts.present(prepared, actor);
         assertEquals(SceneLeaseStatus.HOT, prepared.transitionSceneLease(leaseId, SceneLeaseStatus.HOT).sceneLeases().get(leaseId).status(),
                 "a current BUILDING maintenance owner and its exact completed COLD crew must admit the matching HOT lease");
     }
@@ -539,7 +540,9 @@ class RouteMaintenanceProcessTest {
         SceneLease lease = SceneLease.forCause(leaseId, world, new EngineeringWorkSceneCause(candidate.projectId(), candidate.workCellIndex()),
                 candidate.workCell(), io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
                 candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(), java.util.Set.of(), Optional.empty());
-        FrontierWorldState hot = assembled.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        FrontierWorldState hot = assembled.prepareSceneLease(lease);
+        for (SubjectId actor : candidate.memberPositions().keySet()) hot = ModeledActorBodyFacts.present(hot, actor);
+        hot = hot.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         // Completed-cell input isolates recovery policy; this does not claim a physical repair receipt.
         var completedInput = hot.withChanges(FrontierWorldStateUpdate.begin()
                 .routeMaintenances(Map.of(maintenance.id(), hot.routeMaintenances().get(maintenance.id()).ready()))

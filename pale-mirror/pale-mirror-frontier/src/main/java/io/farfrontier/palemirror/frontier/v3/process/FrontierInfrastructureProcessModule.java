@@ -326,12 +326,14 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
         if (command.payload() instanceof RoutePatrolObstructionConfirmed confirmed) return planPatrolObstruction(state, confirmed, command.submittedAt().ticks());
         if (command.payload() instanceof RouteConstructionAssemblyAdvanced advanced) {
             RouteConstruction project = state.routeConstructions().get(advanced.projectId());
+            if (advanced.hotArrival().isEmpty()) return FrontierWorldCommandPlanner.rejected("physical engineering arrival has no captured actuation");
             return planEngineeringAssemblyAdvance(state, command, project, advanced.assembly(), advanced,
                     () -> RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER, advanced),
                     "route construction assembly observation has no active project");
         }
         if (command.payload() instanceof RouteMaintenanceAssemblyAdvanced advanced) {
             RouteMaintenance maintenance = state.routeMaintenances().get(advanced.maintenanceId());
+            if (advanced.hotArrival().isEmpty()) return FrontierWorldCommandPlanner.rejected("physical engineering arrival has no captured actuation");
             return planEngineeringAssemblyAdvance(state, command, maintenance, advanced.assembly(), advanced,
                     () -> RouteMaintenanceStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER, advanced),
                     "route maintenance assembly observation has no active operation");
@@ -429,7 +431,6 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                                                                String missingOwner) {
         if (project == null) return FrontierWorldCommandPlanner.rejected(missingOwner);
         try {
-            SubjectId observed = validateHotEngineeringAssemblyObservation(state, project, next);
             validatePayload.run();
             List<ProposedEvent> events = next.complete()
                     ? List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, payload), new ProposedEvent(project.id(),
@@ -439,37 +440,6 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
         } catch (IllegalArgumentException invalid) {
             return FrontierWorldCommandPlanner.rejected(invalid.getMessage());
         }
-    }
-
-    /** The physical boundary may acknowledge exactly one live body at its existing lease goal. */
-    private static SubjectId validateHotEngineeringAssemblyObservation(FrontierWorldState state, EngineeringWorkOrder project,
-                                                                        EngineeringWorkAssembly next) {
-        EngineeringWorkAssembly current = project.assembly().orElseThrow(() -> new IllegalArgumentException("engineering work has no active assembly"));
-        if (!current.members().keySet().equals(next.members().keySet())) {
-            throw new IllegalArgumentException("HOT engineering assembly observation changes the retained crew");
-        }
-        SubjectId observed = null;
-        for (SubjectId actor : current.members().keySet()) {
-            EngineeringWorkAssembly.Member before = current.members().get(actor);
-            EngineeringWorkAssembly.Member after = next.members().get(actor);
-            if (!before.corridor().equals(after.corridor()) || after.cursor() < before.cursor() || after.cursor() > before.cursor() + 1) {
-                throw new IllegalArgumentException("HOT engineering assembly observation may advance only one adjacent cursor");
-            }
-            if (after.cursor() > before.cursor()) {
-                if (observed != null) throw new IllegalArgumentException("HOT engineering assembly observation may acknowledge only one actor");
-                observed = actor;
-            }
-        }
-        if (observed == null || !current.advance(observed).equals(next)) {
-            throw new IllegalArgumentException("HOT engineering assembly observation is not the retained safe next step");
-        }
-        EngineeringWorkAssembly.Member arrived = next.members().get(observed);
-        AmbientActorLease lease = state.ambientLeases().get(observed);
-        if (lease == null || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY
-                || !lease.goalBody().equals(BodyPosition.above(new SurfaceAnchor(arrived.currentPosition())))) {
-            throw new IllegalArgumentException("HOT engineering assembly observation lacks its exact active actor lease");
-        }
-        return observed;
     }
 
     private static io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction progress(EngineeringWorkOrder project, long dueAt) {

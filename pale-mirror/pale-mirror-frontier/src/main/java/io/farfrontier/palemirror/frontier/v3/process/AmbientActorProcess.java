@@ -190,7 +190,7 @@ public final class AmbientActorProcess {
             if (engineering.assembly().isEmpty()) return new AmbientGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY,
                     state.actorLocations().get(actorId).supportingSurface().support());
             EngineeringWorkAssembly.Member member = engineering.assembly().orElseThrow().members().get(actorId);
-            BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
+            BlockPosition target = member.arrived() ? member.currentPosition() : member.nextSurface().support();
             return new AmbientGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target);
         }
         RouteOperation assembling = OperationExecutionAuthority.assemblyOwner(state, actorId).orElse(null);

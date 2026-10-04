@@ -294,7 +294,7 @@ final class FrontierV3AmbientMovementExecutor {
             return FrontierV3ResidentMealPhysicalEffect.tick(level, runtime, state, actorId, body, lease);
         }
         if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) return observeAssemblyArrival(level, runtime, state, actorId, body, lease, actuation);
-        if (lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) return observeEngineeringAssemblyArrival(level, runtime, state, actorId, body, lease);
+        if (lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) return observeEngineeringAssemblyArrival(level, runtime, state, actorId, body, lease, actuation);
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_ASSEMBLY) return observeHiveAssemblyArrival(level, runtime, state, actorId, body, lease, actuation);
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN) return FrontierV3HiveReturnMotion.observeArrival(level, runtime, state, actorId, body, lease, actuation);
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL) return observeScoutPatrolArrival(level, runtime, state, actorId, body, lease);
@@ -332,15 +332,18 @@ final class FrontierV3AmbientMovementExecutor {
         return true;
     }
     private static boolean observeEngineeringAssemblyArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                              FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
+                                                              FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease,
+                                                              FrontierV3ActorActuation actuation) {
         EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, lease);
         EngineeringWorkOrder project = engineeringProject(state, actorId);
         if (project == null || member == null || member.arrived()
                 || !observedBody(body).equals(lease.goalBody())) return false;
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
         if (!assembly.safeAdvances().contains(actorId)) return false;
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-engineering-assembly", actorId.value(),
-                assemblyAdvanced(state, project, assembly.advance(actorId)));
+                assemblyAdvanced(state, project, assembly.advance(actorId),
+                        new io.farfrontier.palemirror.frontier.v3.model.EngineeringHotArrival(actuation.id(), lease.revision())));
         FrontierV3DiagnosticTrace.record(level.getServer(), "engineering:" + project.id().value(),
                 "engineering_assembly_advanced", actorId, result);
         return true;
@@ -402,8 +405,8 @@ final class FrontierV3AmbientMovementExecutor {
         EngineeringWorkOrder project = engineeringProject(state, actorId);
         if (project == null || lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY) return null;
         EngineeringWorkAssembly.Member member = project.assembly().orElseThrow().members().get(actorId);
-        BlockPosition expected = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
-        return lease.goalBody().equals(BodyPosition.above(new SurfaceAnchor(expected))) ? member : null;
+        SurfaceAnchor expected = member.arrived() ? member.currentSurface() : member.nextSurface();
+        return lease.goalBody().equals(expected.standingBody()) ? member : null;
     }
     private static HiveMobilization assemblingMobilization(FrontierWorldState state, SubjectId actorId) {
         return io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyExecutionAuthority.owner(state, actorId)
@@ -417,10 +420,11 @@ final class FrontierV3AmbientMovementExecutor {
         SurfaceAnchor expected = member.arrived() ? member.currentSurface() : member.nextSurface();
         return lease.goalBody().equals(expected.standingBody()) ? member : null;
     }
-    private static FrontierPayload assemblyAdvanced(FrontierWorldState state, EngineeringWorkOrder project, EngineeringWorkAssembly assembly) {
+    private static FrontierPayload assemblyAdvanced(FrontierWorldState state, EngineeringWorkOrder project, EngineeringWorkAssembly assembly,
+                                                    io.farfrontier.palemirror.frontier.v3.model.EngineeringHotArrival arrival) {
         return switch (project) {
-            case RouteConstruction construction -> io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyAdvanced(state, construction.id(), assembly);
-            case RouteMaintenance maintenance -> io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyAdvanced(state, maintenance.id(), assembly);
+            case RouteConstruction construction -> io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyAdvanced(state, construction.id(), assembly, Optional.of(arrival));
+            case RouteMaintenance maintenance -> io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyAdvanced(state, maintenance.id(), assembly, Optional.of(arrival));
         };
     }
 }

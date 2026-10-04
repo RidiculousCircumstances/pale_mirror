@@ -36,19 +36,14 @@ public final class RouteConstructionStateSupport {
                 throw new IllegalArgumentException("route construction readiness does not match confirmed work");
             }
             EngineeringWorksite.validate(bootstrap, topology, project);
-            project.assembly().ifPresent(assembly -> assembly.positions().forEach((member, position) -> {
-                ActorLocation actor = actors.get(member);
-                if (actor == null || !actor.supportingSurface().support().equals(position)) {
-                    throw new IllegalArgumentException("engineering assembly must retain each member's exact canonical position");
-                }
-            }));
+            // A semantic checkpoint is not the independently observed physical pose.
             project.assembly().ifPresent(assembly -> assembly.members().forEach((memberId, cursor) -> {
                 AmbientActorLease lease = ambientLeases.get(memberId);
                 if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) return;
-                BlockPosition expected = cursor.arrived() ? cursor.currentPosition() : cursor.corridor().get(cursor.cursor() + 1);
-                if (lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY
-                        || !lease.goalBody().supportingSurface().support().equals(expected)) {
-                    throw new IllegalArgumentException("active engineering assembly lease must retain its one exact next cursor");
+                // A departing scope can retain its captured old goal until it is closed.
+                // Motion/arrival admission checks the current goal and revision explicitly.
+                if (lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY) {
+                    throw new IllegalArgumentException("engineering assembly has a foreign active scope");
                 }
             }));
         }
@@ -309,31 +304,25 @@ public final class RouteConstructionStateSupport {
         if (current == null || !current.members().keySet().equals(advanced.assembly().members().keySet())) {
             throw new IllegalArgumentException("route construction assembly has no matching current crew");
         }
-        SubjectId moved = current.members().keySet().stream().filter(member -> current.members().get(member).cursor() != advanced.assembly().members().get(member).cursor())
-                .reduce((left, right) -> { throw new IllegalArgumentException("engineering assembly advances more than one member"); }).orElseThrow(() ->
-                        new IllegalArgumentException("engineering assembly advances no member"));
-        if (!current.advance(moved).equals(advanced.assembly())) throw new IllegalArgumentException("engineering assembly advances outside its exact corridor");
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        ActorLocation prior = actors.get(moved);
-        if (prior == null || prior.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("engineering assembly advances a nonliving member");
-        AmbientActorLease authority = state.ambientLeases().get(moved);
-        if ((authority == null || authority.status() == AmbientLeaseStatus.CLOSED) && !ActorExecutionCoordinator.coldAvailable(state, moved))
-            throw new IllegalArgumentException("COLD engineering assembly cannot advance its physically held member");
-        if (authority != null && authority.status() != AmbientLeaseStatus.CLOSED
-                && (authority.status() != AmbientLeaseStatus.HOT || authority.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY))
-            throw new IllegalArgumentException("engineering arrival has no exact HOT assembly authority");
-        actors.put(moved, new ActorLocation(BodyPosition.above(new SurfaceAnchor(advanced.assembly().members().get(moved).currentPosition())), prior.condition(), prior.kind()));
+        SubjectId moved = EngineeringAssemblyProgress.validate(state, project, advanced.assembly(), advanced.executions(), advanced.hotArrival());
+        var update = FrontierWorldStateUpdate.begin();
+        if (advanced.hotArrival().isEmpty()) {
+            Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+            ActorLocation prior = actors.get(moved);
+            actors.put(moved, new ActorLocation(advanced.assembly().members().get(moved).currentSurface().standingBody(), prior.condition(), prior.kind()));
+            update.actorLocations(actors);
+        }
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withAdvancedAssembly(advanced.assembly()));
         Map<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>(state.ambientLeases());
         AmbientActorLease lease = ambient.get(moved);
         if (lease != null && lease.status() == AmbientLeaseStatus.HOT && lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
             EngineeringWorkAssembly.Member member = advanced.assembly().members().get(moved);
-            BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
-            ambient.put(moved, lease.withGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, BodyPosition.above(new SurfaceAnchor(target))));
+            SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
+            ambient.put(moved, lease.withGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target.standingBody()));
         }
         return EngineeringExecutionAuthority.assembled(state, project, advanced.assembly(), advanced.executions(), advanced.workExecutions(),
-                FrontierWorldStateUpdate.begin().actorLocations(actors).routeConstructions(projects).ambientLeases(ambient));
+                update.routeConstructions(projects).ambientLeases(ambient));
     }
 
     public static FrontierWorldState reduceCutover(FrontierWorldState state, SubjectId subject, RouteTopologyCutover cutover) {

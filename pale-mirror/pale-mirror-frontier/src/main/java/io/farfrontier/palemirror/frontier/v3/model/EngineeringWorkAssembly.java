@@ -7,14 +7,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin;
 
 /**
- * Bounded COLD approach of one exact engineering crew to declared work-site positions.
+ * Bounded approach of one exact engineering crew to declared service/work positions.
  *
  * <p>This is a movement record, not a scene and not a second crew roster. It retains the
- * same people already owned by {@link EngineeringRecoveryTeam}; a future HOT lease may begin
- * only after every one of these immutable corridors reaches its terminal position.</p>
+ * same people already owned by {@link EngineeringRecoveryTeam}. HOT observes the same
+ * checkpoints as COLD; departure retains an approach from the actual saved body position.</p>
  */
 public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<SubjectId, Member> members) {
     public EngineeringWorkAssembly {
@@ -58,7 +58,7 @@ public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<Sub
         members.keySet().stream().sorted().forEach(actor -> {
             Member member = members.get(actor);
             if (!member.arrived() && members.entrySet().stream().noneMatch(entry -> !entry.getKey().equals(actor)
-                    && entry.getValue().currentPosition().equals(member.corridor().get(member.cursor() + 1)))) {
+                    && entry.getValue().currentPosition().equals(member.nextSurface().support()))) {
                 movable.add(actor);
             }
         });
@@ -71,11 +71,21 @@ public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<Sub
         Member current = members.get(actor);
         if (current == null || current.arrived() || !safeAdvances().contains(actor)) throw new IllegalArgumentException("engineering assembly actor cannot safely advance");
         Map<SubjectId, Member> next = new LinkedHashMap<>(members);
-        next.put(actor, new Member(current.corridor(), current.cursor() + 1));
+        next.put(actor, current.advanceOne());
         return new EngineeringWorkAssembly(purpose, next);
     }
 
-    public record Member(List<BlockPosition> corridor, int cursor) {
+    /** Departure changes only the exact member's spatial continuation, never its semantic route. */
+    public EngineeringWorkAssembly checkpoint(SubjectId actor, TraversalRejoin approach) {
+        Member current = members.get(actor);
+        if (current == null) throw new IllegalArgumentException("engineering checkpoint has no exact member");
+        Map<SubjectId, Member> next = new LinkedHashMap<>(members);
+        next.put(actor, current.withRejoin(approach));
+        return new EngineeringWorkAssembly(purpose, next);
+    }
+
+    public record Member(List<BlockPosition> corridor, int cursor, long routeRevision, Optional<TraversalRejoin> rejoin) {
+        public Member(List<BlockPosition> corridor, int cursor) { this(corridor, cursor, 1L, Optional.empty()); }
         public Member {
             corridor = List.copyOf(Objects.requireNonNull(corridor, "engineering assembly corridor"));
             if (corridor.isEmpty() || corridor.size() > OperationTravel.MAX_CELLS || cursor < 0 || cursor >= corridor.size()) {
@@ -88,9 +98,30 @@ public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<Sub
                     throw new IllegalArgumentException("engineering assembly corridor must use adjacent supports with grade at most one");
                 }
             }
+            if (routeRevision < 1) throw new IllegalArgumentException("engineering route requires a positive revision");
+            Objects.requireNonNull(rejoin, "engineering rejoin");
+            if (rejoin.isPresent() && !rejoin.orElseThrow().target().equals(new SurfaceAnchor(
+                    corridor.get(Math.min(cursor + 1, corridor.size() - 1)))))
+                throw new IllegalArgumentException("engineering rejoin changes its next semantic checkpoint");
         }
-        public BlockPosition currentPosition() { return corridor.get(cursor); }
+        public SurfaceAnchor currentSurface() { return rejoin.map(TraversalRejoin::current).orElseGet(() -> new SurfaceAnchor(corridor.get(cursor))); }
+        public BlockPosition currentPosition() { return currentSurface().support(); }
+        public SurfaceAnchor nextSurface() {
+            if (arrived()) throw new IllegalArgumentException("arrived engineer has no next step");
+            return rejoin.map(value -> value.path().get(value.nextCursor(1))).orElseGet(() -> new SurfaceAnchor(corridor.get(cursor + 1)));
+        }
         public BlockPosition destination() { return corridor.getLast(); }
-        public boolean arrived() { return cursor == corridor.size() - 1; }
+        public boolean arrived() { return cursor == corridor.size() - 1 && rejoin.isEmpty(); }
+        public Member withRejoin(TraversalRejoin approach) {
+            return new Member(corridor, cursor, Math.incrementExact(routeRevision), Optional.of(approach));
+        }
+        public Member advanceOne() {
+            if (arrived()) throw new IllegalArgumentException("complete engineering member cannot advance");
+            if (rejoin.isEmpty()) return new Member(corridor, cursor + 1, routeRevision, Optional.empty());
+            var approach = rejoin.orElseThrow();
+            var advanced = approach.arrived() ? approach : approach.advance(approach.nextCursor(1), 1);
+            return advanced.arrived() ? new Member(corridor, Math.min(cursor + 1, corridor.size() - 1), routeRevision, Optional.empty())
+                    : new Member(corridor, cursor, routeRevision, Optional.of(advanced));
+        }
     }
 }

@@ -84,6 +84,8 @@ final class RouteConstructionStateCodec {
             output.writeShort(member.corridor().size());
             for (BlockPosition cell : member.corridor()) FrontierWorldStateCodec.writePosition(output, cell);
             output.writeShort(member.cursor());
+            output.writeLong(member.routeRevision());
+            TraversalRejoinCodec.write(output, member.rejoin());
         }
     }
 
@@ -97,7 +99,8 @@ final class RouteConstructionStateCodec {
             if (cells < 1 || cells > OperationTravel.MAX_CELLS) throw new IllegalArgumentException("route construction assembly corridor size is invalid");
             java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>();
             for (int cell = 0; cell < cells; cell++) corridor.add(FrontierWorldStateCodec.readPosition(input));
-            if (members.put(actor, new EngineeringWorkAssembly.Member(corridor, input.readUnsignedShort())) != null) {
+            if (members.put(actor, new EngineeringWorkAssembly.Member(corridor, input.readUnsignedShort(),
+                    input.readLong(), TraversalRejoinCodec.read(input))) != null) {
                 throw new IllegalArgumentException("route construction assembly has duplicate member");
             }
         }

@@ -58,12 +58,7 @@ public final class RouteMaintenanceStateSupport {
                 throw new IllegalArgumentException("route maintenance repair cell no longer matches the retained route plan");
             }
             EngineeringWorksite.validate(bootstrap, topology, maintenance);
-            maintenance.assembly().ifPresent(assembly -> assembly.positions().forEach((member, position) -> {
-                ActorLocation actor = actors.get(member);
-                if (actor == null || !actor.supportingSurface().support().equals(position)) {
-                    throw new IllegalArgumentException("route maintenance assembly must retain each member's exact canonical position");
-                }
-            }));
+            // A semantic checkpoint is not the independently observed physical pose.
         }
         RouteConstructionTeamStateSupport.validate(population, constructions, maintenances, jobs, sites, operations, contracts, plans);
     }
@@ -72,11 +67,10 @@ public final class RouteMaintenanceStateSupport {
                                               Map<SubjectId, AmbientActorLease> ambientLeases) {
         for (RouteMaintenance maintenance : maintenances.values()) for (Map.Entry<SubjectId, EngineeringWorkAssembly.Member> entry : maintenance.assembly()
                 .map(EngineeringWorkAssembly::members).orElse(Map.of()).entrySet()) {
-            EngineeringWorkAssembly.Member member = entry.getValue(); AmbientActorLease lease = ambientLeases.get(entry.getKey());
+            AmbientActorLease lease = ambientLeases.get(entry.getKey());
             if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) continue;
-            BlockPosition expected = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
-            if (lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY || !lease.goalBody().supportingSurface().support().equals(expected)) {
-                throw new IllegalArgumentException("active route maintenance assembly lease must retain its one exact next cursor");
+            if (lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY) {
+                throw new IllegalArgumentException("maintenance assembly has a foreign active scope");
             }
         }
     }
@@ -139,29 +133,24 @@ public final class RouteMaintenanceStateSupport {
         if (current == null || !current.members().keySet().equals(advanced.assembly().members().keySet())) {
             throw new IllegalArgumentException("route maintenance has no matching current crew");
         }
-        SubjectId moved = current.members().keySet().stream().filter(member -> current.members().get(member).cursor() != advanced.assembly().members().get(member).cursor())
-                .reduce((left, right) -> { throw new IllegalArgumentException("route maintenance advances more than one member"); })
-                .orElseThrow(() -> new IllegalArgumentException("route maintenance advances no member"));
-        if (!current.advance(moved).equals(advanced.assembly())) throw new IllegalArgumentException("route maintenance advances outside its exact corridor");
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations()); ActorLocation prior = actors.get(moved);
-        if (prior == null || prior.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("route maintenance advances a nonliving member");
-        AmbientActorLease authority = state.ambientLeases().get(moved);
-        if ((authority == null || authority.status() == AmbientLeaseStatus.CLOSED) && !ActorExecutionCoordinator.coldAvailable(state, moved))
-            throw new IllegalArgumentException("COLD engineering assembly cannot advance its physically held member");
-        if (authority != null && authority.status() != AmbientLeaseStatus.CLOSED
-                && (authority.status() != AmbientLeaseStatus.HOT || authority.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY))
-            throw new IllegalArgumentException("engineering arrival has no exact HOT assembly authority");
-        actors.put(moved, new ActorLocation(BodyPosition.above(new SurfaceAnchor(advanced.assembly().members().get(moved).currentPosition())), prior.condition(), prior.kind()));
+        SubjectId moved = EngineeringAssemblyProgress.validate(state, maintenance, advanced.assembly(), advanced.executions(), advanced.hotArrival());
+        var update = FrontierWorldStateUpdate.begin();
+        if (advanced.hotArrival().isEmpty()) {
+            Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+            ActorLocation prior = actors.get(moved);
+            actors.put(moved, new ActorLocation(advanced.assembly().members().get(moved).currentSurface().standingBody(), prior.condition(), prior.kind()));
+            update.actorLocations(actors);
+        }
         Map<SubjectId, RouteMaintenance> next = new LinkedHashMap<>(state.routeMaintenances()); next.put(maintenance.id(), maintenance.withAdvancedAssembly(advanced.assembly()));
         Map<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>(state.ambientLeases());
         AmbientActorLease lease = ambient.get(moved);
         if (lease != null && lease.status() == AmbientLeaseStatus.HOT && lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
             EngineeringWorkAssembly.Member member = advanced.assembly().members().get(moved);
-            BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
-            ambient.put(moved, lease.withGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, BodyPosition.above(new SurfaceAnchor(target))));
+            SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
+            ambient.put(moved, lease.withGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target.standingBody()));
         }
         return EngineeringExecutionAuthority.assembled(state, maintenance, advanced.assembly(), advanced.executions(), advanced.workExecutions(),
-                FrontierWorldStateUpdate.begin().actorLocations(actors).routeMaintenances(next).ambientLeases(ambient));
+                update.routeMaintenances(next).ambientLeases(ambient));
     }
 
     public static FrontierWorldState reduceClosed(FrontierWorldState state, SubjectId subject, RouteMaintenanceClosed closed) {
