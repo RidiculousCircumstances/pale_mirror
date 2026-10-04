@@ -27,6 +27,31 @@ obligations. This amendment supersedes earlier activity-dependent body ownership
 clauses only; process/effect custody and player-action safeguards remain binding.
 Full adoption is an exit condition, not claimed by the amendment itself.
 
+Observed arrival and prospective admission are different physical facts. The
+shared arrival provider checks this actor's actual supported body and actual
+block/fluid clearance; a neighbour does not revoke an already witnessed arrival.
+Prospective admission still checks occupancy of the destination body volume.
+Actual displacement requires re-approaching the same retained station, never
+inventing arrival. A prepared harvest cell and a local return-route hold may
+coexist: preserve its exact cell/generation, pending physical effect and cargo;
+clear the hold only on an exact current observation. Pending work cannot retarget
+to another cell or become a batch return. The final paired crop/hand receipt is
+still required exactly once; recording a hold is not successful work.
+The harvest-owned release barrier must protect that canonical preparation even
+before a physical crop witness exists. Ordinary release and every stored-body
+recovery path consult the same barrier before entering DRAINING or changing hand
+custody. Disk proof of body residence does not prove a prepared crop was settled.
+Retain its original recoverable scope for exact loaded-world settlement, rather
+than misclassifying an illegal release as loss of its carrier or pausing the field.
+
+Internal invariant violations are development failures, not ordinary navigation
+dispositions. Preserve and expose the original exception and causal trace, and
+stop the simulation explicitly. Never convert an inconsistent process to a local
+silent wait while presenting the remaining world as healthy. Ordinary observed
+obstacles use the declared navigation/replanning lifecycle; they do not justify
+discarding state or masking a programming error. Root-cause repair remains
+mandatory: neither a global stop nor a local hold counts as fixing the defect.
+
 Engineering work stations remain owner-issued targets, not projections of a
 worker's latest observed position. Unbegun construction/repair requires the
 exact living, equipped current work crew at its retained stations, an exact HOT
@@ -60,14 +85,22 @@ from an intermediate observed position must refuse that handoff explicitly;
 such a retained local hold is incomplete provider adoption, not full HOT/COLD
 acceptance or permission to restore the old pose.
 
-Migration retains a versioned known `TraversalRejoin` approach from the saved
-actual support to its next original journey checkpoint. Its owner uses shared
+Migration retains a versioned `StationApproachState`: a known `TraversalRejoin`
+or the actual waiting origin when geometry cannot supply a path. Absence of a
+known path cannot throw away the common physical departure. Its owner uses shared
 frontier pedestrian geometry: all authored floors/roads, structural and witnessed
 physical obstacles; moving actors are not hard walls. Departure preserves the
 original route/cursor, household reservation and execution. COLD consumes bounded
 legal approach edges and credits the journey checkpoint only after reaching it.
 A new physical handoff replaces only the approach and increments its spatial
 revision. Unknown/blocked geometry remains a local hold, not an invented edge.
+The existing owned progress cadence rechecks a waiting origin; it may consume a
+bounded known approach only after geometry is available. HOT refreshes the same
+origin's read-only hint without changing saved state or awarding progress. The
+original COLD corridor checks shared feet/head obstruction knowledge as well as
+route support loss; a clear support alone cannot permit walking through a block.
+Schema247 persists that origin in snapshots and journey payloads; incompatible
+historical disposable worlds are rejected, never repaired by route inference.
 HOT semantic completion requires the common independently observed target,
 exact body epoch, presentation revision, execution and spatial revision. The
 migration owner then advances its journey without writing a physical pose.
@@ -889,7 +922,15 @@ award treatment. A closed registered family strategy supplies participant
 permission to the shared exact-consumption algorithm, which does not inspect
 medical phases or infer an owner. Retired settlement-wide ration consumption
 remains explicitly ineligible. This source adoption is not medical native
-acceptance. Unknown-geometry HOT re-wake remains an implementation obligation.
+acceptance. A HOT waiting-origin approach rechecks the owning family's shared
+known geometry through StationApproachState.knownApproach. A recovered read-only
+hint resumes the existing final-goal navigator without replacing the saved
+origin, advancing a spatial revision, crediting work or relocating the actor.
+Repeated refresh uses the retained origin, not each in-flight pose, so it does
+not continually replace the same path. Production, service and plain logistics
+consume this boundary; continued missing knowledge remains a visible hold.
+Medical pre-effect HOT displacement similarly returns through the same clinical
+final-goal navigator, never an old readiness snapshot.
 
 Process families consume one closed provider-neutral movement/result contract.
 They may own different routes, formations and station semantics, but may not

@@ -193,6 +193,22 @@ native/pilot/test compile passed. Service pre-loot resource disposition, remaini
 caller inventory, unknown-geometry wake and integrated/native/deployment exit
 conditions remain OPEN. This checkpoint is not epic completion.
 
+Checkpoint35718f17 restores read-only HOT approach hints for production, service
+and logistics when geometry becomes known, removes migration's redundant terminal
+pose write and re-approaches clinical stations before an unbegun medical effect.
+Checkpoint627fdd54 (schema247) makes migration's unavailable-path departure retain
+actual waiting origin rather than throw, with owned COLD recheck/HOT hint refresh,
+unchanged purpose/reservation and shared support/feet/head geometry checks. Eleven
+migration checks plus five architecture checks/native/pilot/test compile passed
+in48322/17s. Checkpoint8a2b4162 corrects the native harvest matcher to join the
+exact retained intent/site/job/worker/output rather than demand an output resource
+inside the participant list; its two focused checks passed in80250. This method
+fix does not repaint the failed native run green. Worker-meal35718f17 observed
+real consumption, resumption and confirmed exact harvest delivery, but failed
+at its obsolete terminal matcher; its inspected frame is dark/distant. Complete
+integrated graphical/restart/multicrew acceptance, service pre-loot disposition,
+remaining caller closure and release/deployment conditions remain OPEN.
+
 1. **Assignment is not current execution.** A paused job retains its exact
    worker relation without permission to act. Execution holds a typed reference
    to its activity owner, never a copied job/progress/resource ledger. Derived

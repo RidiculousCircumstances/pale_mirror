@@ -1,7 +1,7 @@
 # Continuity Ledger
 
 2026-10-04. Main alone implements, diagnoses and reviews. Terra is stopped;
-subagents are prohibited. The single active unbudgeted goal is FULL
+subagents are prohibited. The unfinished unbudgeted objective is FULL
 [Unified Actor Execution](docs/work-orders/PM-UAE001-UNIFIED-ACTOR-EXECUTION-01.md):
 all resident/bioform consumers, sole body lifecycle/HOT writer, resource and
 interruption safety, HOT/COLD/recovery, integrated product verification and an
@@ -13,14 +13,16 @@ do not finish it. The user's current assignment and
 
 Implementation Git root: /home/rd/proj/pm-f06r3-facility-lane-recovery,
 branch feat/baker-carry-orders-20260926; Gradle root is its pale-mirror/.
-Source HEAD 8b249f68, fresh-world schema246. Canonical governance is this
+Source HEAD f7d442cc, current schema247. Canonical governance is this
 checkout, /home/rd/proj/pm-governance/pale-mirror. One active ledger only.
 Origin: git@github.com:RidiculousCircumstances/pale_mirror.git.
 
-Private local checkpoint commits are authorized. No new push, live deployment,
-world reset or unrelated-service authority follows from repository access or
-this ledger. Eventual goal deployment must use actual applicable authority and
-release/server-operation boundaries. Preserve R17 diagnosis data and all WIP.
+Private local checkpoint commits are authorized. On 2026-10-04 the user accepted
+intermediate UAE deployment in a NEW test world with R18 preserved ("ок, давай").
+That authorized operation is now completed as R19 below, for targeted human
+diagnostics, not formal candidate promotion. No git push or unrelated-service
+authority follows. Eventual goal deployment must use actual applicable authority
+and release/server-operation boundaries. Preserve R17 diagnosis data and all WIP.
 Do not deploy half-migrated ownership or infer completion from registration.
 
 The original /home/rd/proj/minecraft root and nested pale-mirror histories and
@@ -162,10 +164,56 @@ assertion; decoded drain settlement now explicitly checks no pose/execution/
 scope mutation. Its nine native body/selection checks passed and remain reusable.
 Run30128 failed at task selection (wrong pilot compile name), not code/test;
 13932 uses actual compileTestJava dependency on compilePilotJava. Both maps validate.
-No medical graphical acceptance claim. Next: real remaining physical caller
-inventory and unknown-geometry HOT re-wake, prioritizing integrated main loop
-once coherent rather than more isolated confirmation. No task-owned process live.
-No packaging, push, live operation or new deployment occurred.
+No medical graphical acceptance claim.
+
+Checkpoint35718f17 refreshes production/service/logistics HOT hints from the saved
+waiting origin when known geometry becomes available; the read-only refresh
+neither adopts a new pose nor credits work. Migration terminal completion no
+longer redundantly writes ActorLocation. Medical PREPARED treatment re-approaches
+the role-assigned stations before a new remedy effect. Run5072 PASS22s covers
+two production continuation/eleven migration/five architecture checks and native/
+pilot/test compile; final medical addition compiled in native preparation35270
+PASS7s. Prepared35718f17 is clean, JAR SHA256
+4e4ed57defb872917451e2458109f2c3a333615c3e0c19d2750a7025b029e045.
+
+Checkpoint627fdd54 closes migration's unavailable-path departure: one saved
+StationApproachState holds actual origin or known approach to the unchanged
+next journey checkpoint. COLD rechecks through the existing owned cadence;
+HOT refreshes a read-only hint. Original corridor and approaches both check
+shared feet/head obstruction knowledge, not only road support. Snapshot/journey
+payloads require schema247. Run48322 PASS17s: eleven migration/five architecture
+checks with native/pilot/test compile. The connected departure test includes
+blocked target, saved waiting origin, hydration, geometry restoration and exact
+continuation. Earlier80250 exposed the remaining support-only route check;
+that source contradiction is fixed, not waived. Both architecture maps validate.
+
+Checkpoint8a2b4162 corrects the real native terminal matcher: an output resource
+is not an intent participant. Read-only terminal lineage now exposes its retained
+intent ID; matching joins exact site/intent/job/worker/output with confirmed
+physical receipt. Two matcher checks passed in80250, including foreign binding
+rejection. No confidence rerun of the already observed farmer loop.
+
+Native worker-meal run66716/port26721 on35718f17 observed the same farmer eat
+(bread64->63; WORK at t16417), finish its last cell and confirm depot delivery
+with exact terminal lineage at t16982/revision179. Overall run FAILED at
+step11 because the matcher required the output ID in intent.subjects. This is
+partial real-client evidence, not native acceptance. Reviewed worker-after-meal
+frame is dark/distant and does not establish readable full-story acceptance.
+World, manifest/PMV3 and one failure bundle remain under build/uae-integrated-20261004/
+worker-meal-35718f17*. Exact server durable stop completed; client/server/Xvfb
+are terminal. No push, live operation or deployment occurred.
+
+Native bakery-restart-8a2b4162 on disposable port26723 is TERMINAL FAILED,
+runner exec session76737 exited1. Step7 assert_visible_entity could not see the
+BAKER (candidate distance3, LOS=false); failure precedes restart. This does not
+establish a production defect or successful full lifecycle. Its owned processes
+stopped and world/evidence remain. Previous runner66716 is terminal. Prepared8a2b4162
+is clean, JAR SHA256
+aaee351700f56226d9734729a239da2b687f454b2100713d24240dbcb0ae67b7,
+preparation8574 built successfully6s (combined shell's final rg returned1,
+not a build failure). The existing bakery scenario checks physical pickup,
+station processing, graceful restart and depot delivery. It is not full-pack
+or three-farmer/two-baker acceptance. Inspect actual frames and retain outcome.
 
 Then close the real production caller inventory: creation/adoption/removal,
 navigation/stop, position, death/unload/recovery across all UAE rows, including
@@ -199,12 +247,88 @@ No native rerun solely to repaint that obsolete oracle green. All owned
 diagnostic client/server/Xvfb processes exited; worlds/evidence retained under
 build/uae-integrated-20261004. These older partial facts do not verify schema243.
 
-Live R18 is unchanged at /home/rd/far-frontier-server,
-service far-frontier-v3-live.service, schema226,
-world frontier-v3-storage-capacity-r18-20261003, seed20260918065.
-Recorded start1791042550, invocation2bca82ef04e844fc94fcfefd91a51404,
-launcher197508/Java197532: REVERIFY before any operation.
-Live JAR SHA512:
+R19 at /home/rd/far-frontier-server is deliberately STOPPED after the diagnosed
+recovery contradiction. Previously far-frontier-v3-live.service ran sourcefbdcd22a/schema247,
+world frontier-v3-uae-r19-20261004, seed20260918065.
+Start1791115377, invocatione92507146f3d464f863f5ef761af9634,
+launcher2871701: old PID exited, service inactive/MainPID0, all dimensions saved
+17:09:07.224+05 via vanilla flush/stop. REVERIFY before any operation. R19 has a recorded
+Clearwater field CONFLICT and is NOT a healthy manual-test candidate (see below).
+
+R19 source8a2b4162 originally quarantined at15:53:50.695+05:
+withNavigationBlock rejected a prepared crop while the native adapter was trying
+to re-approach its exact station. Current summary then returned runtime_unavailable.
+Checkpointfbdcd22a fixes that contradictory state transition and its exact
+observed-return clearance, without retargeting, crop/cargo credit or exception
+suppression. Shared arrival now observes the actual supported body/block clearance,
+not prospective centre-volume occupancy; other living bodies still block entry,
+but cannot revoke existing arrival. A connected modeled return/receipt test and
+snapshot roundtrip passed among18 harvest/reconciliation checks (39203/23s);
+native harvest-support1988 PASS28s/3 checks, including neighbour admission versus
+arrival and real block intrusion. Earlier69011 found an obsolete fixture asserting
+that generic standing forbids crop passage; it was corrected to the already-shared
+standing contract, retaining fence/support negatives. No full product acceptance.
+
+Detached fbdcd22a guardrails/JAR/package16548 PASS15s; preflight and startup verifier
+passed. The same R19 was saved via vanilla save-all flush/stop: all dimensions
+saved17:02:36.795+05 and old PIDs exited. No world reset or canonical edits.
+Installed/hosted fbdcd22a SHA512:
+3a750aa2b647536902c9a09fd4a94fb4a9042da43734ad65b07732462a7d46ae7c72a8f2b0b2c104c5daae07a0305bae9a19d2ff943eaa204700a2ff8cddc0cb.
+Initial summary revision76410/t57691 was green, but after no-demand disk recovery
+at17:03:22.652+05, job8's pending crop was incorrectly released as an ordinary saved
+hand. Hand-release preflight refused; the adapter misclassified it as
+CARRIER_FENCE_UNRESOLVED, marking the field/jobs CONFLICT/CONFLICTED. Job8 retains
+58 wheat/pending242, job9 retains59/pending229; job7 retains64 returning for batch.
+Thus the startup-green receipt does NOT establish successful field recovery.
+
+Checkpointf7d442cc fixes the missing canonical prepared-cell condition in the
+registered HarvestSceneReleaseBarrier used by ordinary release AND both stored
+recovery paths. UNKNOWN remains recoverable for loaded-world settlement instead
+of entering invalid DRAINING and corrupting the field. It does not serialize other
+workers behind a sibling's effect. Existing delivery barrier is retained. Two
+adapter regressions/guardrails/native/pilot/test compile PASS10488/16s. No second
+native arrival run: that code did not change. Corrected detached artifact build
+45242 PASS12s (guardrails/JAR/verifyPackagedJar) at exactf7d442cc in
+/home/rd/proj/pm-uae-r19-root-fix-20261004. Prepared JAR SHA512:
+e04a0953473c9c6febf0e9546d053372a7f4c7bb6c6748917feed7411d0d2696696961f6dc31192f043dd9e8553aeb2a2d5294df0306b5a0b368c7cafcee3b2b.
+f7d442cc is NOT installed or hosted yet; installed/hosted binary remainsfbdcd22a.
+No task-owned diagnostic runner remains live. Source and detached worktrees clean.
+Final governance diff check and source guardrails64216 PASS7s; no git push.
+
+User clarification: repair root causes, never hide internal errors as local silent
+freezes. Internal invariant failures require explicit simulation stop/original causal
+trace; ordinary obstacles remain navigation/replanning outcomes. This is recorded
+in execution-semantics. Physical trigger of the ORIGINAL station loss remains
+unconfirmed: neighbour invalidation is a proven source/native counterexample,
+not retrospectively established causation. The original log lacks exact job ID.
+R19's already committed field conflict has no implemented site/intent recovery
+transition; scene-only reconciliation requires HARVESTING and cannot undo it.
+No force-clear or data edit performed. Asked the user whether to use a NEW world
+with R19 preserved (recommended), or expand work to recovery of R19; response
+pending. Preserve all evidence/old artifacts under
+pm-uae-r19-root-fix-20261004/pale-mirror/build/deploy-r19-root-fix.
+The system get_goal query returned PAUSED on2026-10-04; this ordinary explicit
+user-authorized live repair is not full goal resumption/completion. No tool can
+resume it on the executor's behalf. Do not silently expand back to all UAE rows.
+
+Prior initial R19 receipt (source8a2b4162, superseded):
+Clean detached build /home/rd/proj/pm-uae-diagnostic-release-20261004,
+guardrails + NeoForge jar + verifyPackagedJar PASS10s, session8918.
+Preflight and post-start deployment verifier PASS; fresh Done15:11:04.554+05
+and v3 runtime started15:11:06.482+05. Summary revision440/t268 green,
+12 settlements/366 residents/48 bioforms, conflict/index0. Clearwater7 at
+t1223 NORMAL:21 nourished/0 hungry/0 starving, bread64, field not ready yet.
+Client-host and installed JAR SHA512:
+ab090f358fdf2b25d8eceee53b767536f8a99c474e3eda33bbd87cece87c6d4c00f128b9c21249ec8552f4ac65424699c3d819c45b5b38eb48afe22942c13997.
+User must update the client, enter pale_mirror:frontier_graybox and visit
+Clearwater near140,66,-2. Deployment is exploratory diagnostic access, NOT
+full UAE acceptance or formal HUMAN_CANDIDATE. No full gates/graphical whole-story
+claim. Receipt build/deploy-r19/deployment.json in that release checkout.
+Old R18 world is preserved; its properties, prior JAR and pre-stop log also
+copied under build/deploy-r19. No world deletion, history edit, git push or client
+host service change. Original pack .f0v-baseline and nested23 WIP untouched.
+
+Prior R18 schema226 artifact SHA512 (NOT current live identity):
 c1cbc304ded5fa8c9694371af7cccc273a1a80344f5c92f1ef79d1a1bcae76d71b360816a01ee93d4b893f7c2665c58c1af4174f24f42b69ad3b2a4bb471c190.
 Release source /home/rd/proj/pm-storage-capacity-release.5R1ZZx/source;
 diagnostic pack /home/rd/proj/pm-meal-harvest-recovery-release.W5dizK/client-pack.
