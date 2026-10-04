@@ -619,7 +619,7 @@ public final class ResourceSiteHarvestProcess {
                 || goal.nextWorkSlot() != advanced.nextWorkSlot() || goal.kind() != advanced.kind())
             throw new IllegalArgumentException("COLD field goal has a stale work target");
         if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
-                && !ServiceAccessCoordinator.depotAvailableForHarvest(state, job))
+                && !HarvestServiceAccess.available(state, job))
             throw new IllegalArgumentException("COLD field depot approach lacks its service turn");
         List<SurfaceAnchor> known = ResourceSiteHarvestKnownNavigation.path(state, job);
         BodyPosition next = known.get(Math.min(1, known.size() - 1)).standingBody();

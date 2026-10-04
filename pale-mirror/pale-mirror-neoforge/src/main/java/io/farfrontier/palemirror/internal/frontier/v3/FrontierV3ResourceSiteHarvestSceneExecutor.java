@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.HarvestServiceAccess;
+
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport;
@@ -268,7 +270,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (projectColdCarriedHand(level, runtime, state, lease, job)) return;
         if (job.navigationBlock().isEmpty()
                 && ResourceSiteHarvestGoal.actorAtDepot(state, job)
-                && (ServiceAccessCoordinator.depotAvailableForHarvest(state, job)
+                && (HarvestServiceAccess.available(state, job)
                     || FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()) != null
                         && FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()).jobId().equals(job.id()))) {
             // The delivery effect owns the returned hand, chest and atomic terminal event.
@@ -303,7 +305,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         var actuation = workActuation(state, runtime, lease, job, worker);
         if (!actuation.current(worker)) return;
         var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
-        if (supportedExit.isPresent() && ServiceAccessCoordinator.witnessedHarvestExit(
+        if (supportedExit.isPresent() && HarvestServiceAccess.witnessedExit(
                 state, job, lease.id(), supportedExit.orElseThrow())) {
             FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);
             return;
@@ -320,7 +322,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         ResourceSiteHarvestGoal serviceGoal = ResourceSiteHarvestGoal.current(state, job);
         if (serviceGoal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
-                && !ServiceAccessCoordinator.depotAvailableForHarvest(state, job)) {
+                && !HarvestServiceAccess.available(state, job)) {
             var settlementId = ResourceSiteHarvestGoal.depotPort(state, job).settlementId();
             var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
                     settlementId, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState.depotId(settlementId),

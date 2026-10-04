@@ -75,8 +75,8 @@ class AmbientBodyConfirmationProcessTest {
         Fixture f = fixture();
         FrontierWorldState state = confirmed(f.state(), confirmation(f.state(), f.security(),
                 AmbientBodyConfirmed.Boundary.SERVICE_OCCUPANCY, f.port().serviceSurface().standingBody()));
-        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, FrontierWorldState.depotId(f.port().settlementId()), f.security()));
-        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, FrontierWorldState.depotId(f.port().settlementId()), f.medic()));
+        assertTrue(ResidentMealServiceAccess.available(state, FrontierWorldState.depotId(f.port().settlementId()), f.security()));
+        assertFalse(ResidentMealServiceAccess.available(state, FrontierWorldState.depotId(f.port().settlementId()), f.medic()));
         ResidentMealHotArrived arrival = new ResidentMealHotArrived(f.security(), state.ambientLeases().get(f.security()).revision(),
                 f.port().serviceSurface().standingBody(), ModeledActorBodyFacts.hotObservation(state,
                         state.humanPopulation().meals().get(f.security()).executionId(), state.ambientLeases().get(f.security()).revision()));
@@ -157,7 +157,7 @@ class AmbientBodyConfirmationProcessTest {
         state = confirmed(state, confirmation(state, f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION,
                 f.port().serviceSurface().standingBody()));
         // Earlier security meal owns arbitration; the medic must leave rather than stand in its socket.
-        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, FrontierWorldState.depotId(f.port().settlementId()), f.medic()));
+        assertFalse(ResidentMealServiceAccess.available(state, FrontierWorldState.depotId(f.port().settlementId()), f.medic()));
         ResidentMeal meal = state.humanPopulation().meals().get(f.medic());
         List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
         assertTrue(route.size() > 1);

@@ -197,7 +197,7 @@ class ResidentMealProcessTest {
         ResidentMealStarted next = ResidentMealProcess.selectSourceAtYield(state, second, 27_000L).orElseThrow();
         state = ResidentMealProcess.reduceStarted(state, second, next);
         assertEquals(2, state.inventory().fungibleResources().claims().size());
-        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second),
+        assertTrue(ResidentMealServiceAccess.available(state, depot, second),
                 "a travelling resident reserves bread but not the physical service turn");
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         ServiceAccessBoundary boundary = SettlementDepotServicePort.forDepot(settlement.structures().stream()
@@ -219,11 +219,11 @@ class ResidentMealProcessTest {
             firstTick++;
             if (state.humanPopulation().meals().containsKey(first)
                     && state.humanPopulation().meals().get(first).carriesFood()
-                    && ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second))
+                    && ResidentMealServiceAccess.available(state, depot, second))
                 releasedDuringReturn = true;
         }
         assertFalse(boundary.cleared(state.actorLocations().get(first).body()));
-        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second));
+        assertFalse(ResidentMealServiceAccess.available(state, depot, second));
         long secondTick = nextColdTick(state, second, 27_003L);
         ResidentMealColdStep approach = ResidentMealProcess.planColdStep(state, second, secondTick).orElseThrow();
         assertTrue(approach.nextSurface().isPresent());
@@ -249,7 +249,7 @@ class ResidentMealProcessTest {
             firstTick++;
             if (state.humanPopulation().meals().containsKey(first)
                     && state.humanPopulation().meals().get(first).carriesFood()
-                    && ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second))
+                    && ResidentMealServiceAccess.available(state, depot, second))
                 releasedDuringReturn = true;
         }
         assertFalse(state.humanPopulation().meals().containsKey(first),
@@ -258,7 +258,7 @@ class ResidentMealProcessTest {
         assertFalse(state.actorMovements().containsKey(first));
         assertTrue(state.humanPopulation().meals().containsKey(second),
                 "the second resident's independent meal must survive the first return");
-        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second));
+        assertTrue(ResidentMealServiceAccess.available(state, depot, second));
         assertEquals(63, state.inventory().fungibleResources().totalQuantity(settlement.id(), ResidentMeal.BREAD_KIND));
         for (int turn = 0; state.humanPopulation().meals().containsKey(second) && turn < 32; turn++) {
             secondTick = nextColdTick(state, second, Math.max(secondTick + 1L, firstTick));

@@ -51,7 +51,7 @@ final class FrontierV3ResidentMealNavigation {
             return;
         }
         Route route = ROUTES.get(body);
-        boolean admitted = ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId());
+        boolean admitted = ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId());
         if (route == null || !route.actuation().equals(actuation.id()) || route.leaseRevision() != lease.revision()
                 || route.mealStart() != meal.startedAtTick() || route.phase() != meal.phase()
                 || route.admitted() != admitted

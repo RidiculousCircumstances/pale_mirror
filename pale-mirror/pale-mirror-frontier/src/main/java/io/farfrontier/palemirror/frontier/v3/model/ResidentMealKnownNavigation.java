@@ -68,7 +68,7 @@ public final class ResidentMealKnownNavigation {
         SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
         if (!meal.depotId().equals(FrontierWorldState.depotId(settlement.id())))
             throw new IllegalArgumentException("meal navigation has a foreign depot identity");
-        boolean admitted = ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId());
+        boolean admitted = ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId());
         if (admitted && start.equals(port.serviceSurface())) return List.of(start);
         if (admitted && start.equals(port.exteriorApproach()))
             return serviceLeg(state, meal, depot, port.exteriorApproach());
@@ -163,7 +163,7 @@ public final class ResidentMealKnownNavigation {
         // COLD stops its admitted entrance leg just before crossing the shared
         // boundary. That transient approach is not a waiting/parking claim.
         if ((point.egressSurfaces().contains(surface) || point.boundary().occupied(surface.standingBody()))
-                && ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId()))
+                && ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId()))
             return !ServiceDestinationClaims.forImmediateExit(state, meal.residentId()).contains(surface);
         return point.waitingSurfaces().contains(surface)
                 && !ServiceDestinationClaims.excludedFor(state, meal.residentId()).contains(surface);

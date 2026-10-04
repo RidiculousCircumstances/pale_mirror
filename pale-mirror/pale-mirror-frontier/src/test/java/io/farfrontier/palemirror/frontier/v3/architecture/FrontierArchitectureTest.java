@@ -13,6 +13,13 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 )
 final class FrontierArchitectureTest {
     @ArchTest
+    static final ArchRule service_access_coordinator_does_not_inspect_family_work = noClasses()
+            .that().haveSimpleName("ServiceAccessCoordinator")
+            .should().dependOnClassesThat().haveNameMatching(
+                    ".*\\.(ProductionJob|BakeryWorkState|BakeryWorkGoal|ResourceSiteHarvestJob|ResourceSiteHarvestGoal|ResidentMeal)")
+            .because("registered service Strategies interpret family stages; the shared arbiter receives complete nominal demands");
+
+    @ArchTest
     static final ArchRule execution_coordinator_does_not_inspect_family_work = noClasses()
             .that().haveSimpleName("ActorExecutionCoordinator")
             .should().dependOnClassesThat().haveNameMatching(

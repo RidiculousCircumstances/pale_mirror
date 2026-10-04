@@ -117,6 +117,8 @@ runtime_transitions:
       - V2 runtime removal requires the automated, performance, restart, physical-world and player-product gates in the Frontier v3 implementation plan.
 
 invariants:
+  - id: "frontier-v3-service-owner-capabilities"
+    statement: "Registered meal, production and field-work Strategies publish complete typed owner/actor/point access demands and their declared arbitration priority. Family providers alone interpret job phases, delivery goals and committed meal entrance. The shared ServiceAccessCoordinator arbitrates occupied, entering and approach claims without reading family jobs or completing their work. Closed registration rejects missing/duplicate families and foreign point, kind, priority or duplicate demands before arbitration. Witnessed physical exit is common geometry evidence; its interpretation belongs to the relevant family. No second job queue, stock ledger, movement writer or body owner is introduced."
   - id: "frontier-v3-admitted-current-purpose"
     statement: "Physical ambient admission and restart-to-HOT orchestration resolve purpose from the current retained domain activity at the event instant; a historical presentation goal cannot override an already-retained meal or movement. Body confirmation owns custody, not activity choice. Purpose refresh preserves identity, physical epoch, lease revision, position and resources."
   - id: "frontier-v3-delivered-clearance-ownership"

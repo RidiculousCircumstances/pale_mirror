@@ -124,7 +124,7 @@ public final class BakeryProcess {
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
         BakeryWorkState.Phase phase = job.bakeryWork().orElseThrow().phase();
         if ((phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY)
-                && !ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), job.workerId()))
+                && !ProductionServiceAccess.available(state, job))
             return Optional.of("DEPOT_SERVICE_WAIT");
         if (ReferenceContainerCustody.hasLiveCustody(state, depot)) return Optional.of("DEPOT_PHYSICAL_AUTHORITY");
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return Optional.of("DEPOT_CONFLICT");

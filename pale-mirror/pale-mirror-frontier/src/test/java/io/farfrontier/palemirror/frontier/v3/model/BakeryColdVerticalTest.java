@@ -101,9 +101,9 @@ class BakeryColdVerticalTest {
                 .filter(value -> value.id().equals(job.settlementId())).findFirst().orElseThrow()
                 .residents().stream().map(value -> value.id()).filter(id -> !id.equals(resident))
                 .findFirst().orElseThrow();
-        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, otherResident),
+        assertTrue(ResidentMealServiceAccess.available(state, depot, otherResident),
                 "a baker travelling to the depot does not occupy its physical service throat");
-        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, resident),
+        assertTrue(ResidentMealServiceAccess.available(state, depot, resident),
                 "the retained baker may safely yield the same service turn to their own meal");
         assertEquals(ResidentWorkYield.Status.READY, ResidentWorkYield.assess(state,
                 HumanAssignmentProjection.compile(state).assignment(resident)).status());
@@ -120,13 +120,13 @@ class BakeryColdVerticalTest {
         overlapLocations.put(otherResident, overlapLocations.get(otherResident).withBody(port.stations().getFirst().standingBody()));
         overlapLocations.put(resident, overlapLocations.get(resident).withBody(port.stations().get(1).standingBody()));
         overlap = overlap.withChanges(FrontierWorldStateUpdate.begin().actorLocations(overlapLocations));
-        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(overlap, depot, otherResident),
+        assertTrue(ResidentMealServiceAccess.available(overlap, depot, otherResident),
                 "an already-present meal must win over a worker also waiting in the throat");
-        assertFalse(ServiceAccessCoordinator.depotAvailableForWork(overlap, depot, job.id(), resident));
+        assertFalse(ProductionServiceAccess.available(overlap, job));
         ResidentMealStarted meal = ResidentMealProcess.selectSourceAtYield(state, resident, 27_000L).orElseThrow();
         assertEquals(Optional.of(job.id()), meal.meal().retainedWorkOwner());
         state = ResidentMealProcess.reduceStarted(state, resident, meal);
-        assertFalse(ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), resident));
+        assertFalse(ProductionServiceAccess.available(state, job));
         assertTrue(FrontierProductionWorkSceneSupport.candidate(state, job).isEmpty());
         var held = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 27_001L));
         assertEquals(1, held.size());
@@ -143,17 +143,17 @@ class BakeryColdVerticalTest {
                     .orElseThrow(() -> new AssertionError("meal=" + beforeMealStep.humanPopulation().meals().get(resident)
                             + " body=" + beforeMealStep.actorLocations().get(resident).body()
                             + " at=" + atMealTick + " depotAvailable="
-                            + ServiceAccessCoordinator.depotAvailableForMeal(beforeMealStep, depot, resident)));
+                            + ResidentMealServiceAccess.available(beforeMealStep, depot, resident)));
             state = ResidentMealProcess.reduceColdStep(state, resident, step);
             mealTick++;
         }
         assertFalse(state.humanPopulation().meals().containsKey(resident));
         if (state.actorMovements().containsKey(resident)) {
             assertFalse(ResidentActivityCoordinator.ordinaryWorkPermitted(state, resident, mealTick));
-            assertFalse(ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), resident));
+            assertFalse(ProductionServiceAccess.available(state, job));
             assertTrue(FrontierProductionWorkSceneSupport.candidate(state, job).isEmpty());
         }
-        boolean releasedBeforeArrival = ServiceAccessCoordinator.depotAvailableForMeal(state, depot, otherResident);
+        boolean releasedBeforeArrival = ResidentMealServiceAccess.available(state, depot, otherResident);
         for (int turn = 0; state.actorMovements().containsKey(resident) && turn < 32; turn++) {
             var movement = state.actorMovements().get(resident);
             mealTick = movement.coldTravel().map(io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute::arrivalTick)
@@ -163,7 +163,7 @@ class BakeryColdVerticalTest {
                             .getFirst().payload());
             state = ActorMovementProcess.reduceColdAdvanced(state, resident, advanced);
             if (state.actorMovements().containsKey(resident)
-                    && ServiceAccessCoordinator.depotAvailableForMeal(state, depot, otherResident)) {
+                    && ResidentMealServiceAccess.available(state, depot, otherResident)) {
                 releasedBeforeArrival = true;
                 assertFalse(ResidentActivityCoordinator.ordinaryWorkPermitted(state, resident, mealTick));
                 assertTrue(FrontierProductionWorkSceneSupport.candidate(state, job).isEmpty());
@@ -171,7 +171,7 @@ class BakeryColdVerticalTest {
         }
         assertFalse(state.actorMovements().containsKey(resident));
         assertTrue(releasedBeforeArrival, "the service turn ends independently of any subsequent movement");
-        assertTrue(ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), resident));
+        assertTrue(ProductionServiceAccess.available(state, job));
         assertEquals(job, state.productionJobs().get(job.id()));
         assertEquals(3, state.inventory().fungibleResources().totalQuantity(job.settlementId(), "minecraft:bread"));
         assertTrue(state.actorExecutions().actors().get(resident).current().isEmpty(),
@@ -218,7 +218,7 @@ class BakeryColdVerticalTest {
             if (step.action() == BakeryColdStep.Action.PICKUP) {
                 SubjectId other = state.bootstrap().settlements().getFirst().residents().stream()
                         .map(Resident::id).filter(id -> !id.equals(job.workerId())).findFirst().orElseThrow();
-                assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state,
+                assertFalse(ResidentMealServiceAccess.available(state,
                         FrontierWorldState.depotId(task.ownerId()), other),
                         "pickup changes the work phase before the same baker has cleared the depot");
             }
@@ -291,7 +291,7 @@ class BakeryColdVerticalTest {
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
             completed = ProductionProcess.reduceBakeryColdStep(completed, task.ownerId(), clearing);
             if (completed.productionJobs().containsKey(job.id())) {
-                boolean released = ServiceAccessCoordinator.depotAvailableForMeal(completed,
+                boolean released = ResidentMealServiceAccess.available(completed,
                         FrontierWorldState.depotId(job.settlementId()), waitingResident);
                 releasedBeforeFinalization |= released;
                 if (released && !breadEatenBeforeFinalization) {

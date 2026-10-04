@@ -80,7 +80,7 @@ public final class ResidentMealProcess {
                     yield false;
                 }
                 yield meal.phase() == ResidentMeal.Phase.MOVE
-                        && !ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId())
+                        && !ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId())
                         && ResidentMealKnownNavigation.atWaitingPocket(state, meal);
             }
         };
@@ -164,7 +164,7 @@ public final class ResidentMealProcess {
                 || !resident.settlementId().equals(meal.settlementId())
                 || state.humanPopulation().meals().containsKey(subject)
                 || state.actorMovements().containsKey(subject)
-                || !ServiceAccessCoordinator.depotMayStartMeal(state, meal.depotId(), subject)
+                || !ResidentMealServiceAccess.mayStart(state, meal.depotId(), subject)
                 || !ServiceAccessCoordinator.mealClearingSurface(state, subject).equals(Optional.of(meal.clearingSurface()))
                 || state.humanPopulation().migration(subject) != null
                 || state.actorLocations().get(subject).condition().status() != ActorLifeStatus.ALIVE
@@ -248,7 +248,7 @@ public final class ResidentMealProcess {
                 || !serviceSurface(state, meal).standingBody().equals(arrived.observedBody()))
             throw new IllegalArgumentException("HOT meal arrival lacks its exact retained resident and service station");
         arrived.observation().require(state, meal.executionId(), lease.revision(), arrived.observedBody());
-        return ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), subject);
+        return ResidentMealServiceAccess.available(state, meal.depotId(), subject);
     }
 
     public static FrontierWorldState reduceHotPrepared(FrontierWorldState state, SubjectId subject,
@@ -485,7 +485,7 @@ public final class ResidentMealProcess {
         if (!travel.arrivedBy(now)) return Optional.empty();
         if (meal.phase() == ResidentMeal.Phase.MOVE
                 && travel.route().getLast().equals(serviceSurface(state, meal))
-                && !ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId()))
+                && !ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId()))
             return Optional.of(new ResidentMealColdStep(meal.residentId(), meal.phase(), now, meal.executionId()));
         return Optional.of(new ResidentMealColdStep(meal.residentId(), meal.phase(), now,
                 Optional.of(travel.route().getLast()), meal.executionId()));
@@ -671,7 +671,7 @@ public final class ResidentMealProcess {
                     yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                             .humanPopulation(state.humanPopulation().advanceMeal(meal, arrived)));
                 }
-                if (!ServiceAccessCoordinator.cleared(state, meal, actor.body()))
+                if (!ResidentMealServiceAccess.cleared(state, meal, actor.body()))
                     throw new IllegalArgumentException("meal cannot release an occupied service throat");
                 yield state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.CONSUME)));
             }

@@ -1,4 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.frontier.v3.model.ResidentMealServiceAccess;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.OperationExecutionAuthority;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
@@ -301,7 +303,7 @@ final class FrontierV3AmbientMovementExecutor {
                         "resident_meal_hot_arrived", actorId, result);
                 return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
             }
-            if (ServiceAccessCoordinator.witnessedMealExit(state, meal, observedBody(body))
+            if (ResidentMealServiceAccess.witnessedExit(state, meal, observedBody(body))
                     || meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
                         && ServiceAccessCoordinator.boundary(state, meal.depotId()).cleared(observedBody(body))) {
                 var cleared = new ResidentMealHotAccessCleared(actorId, lease.revision(), observedBody(body),

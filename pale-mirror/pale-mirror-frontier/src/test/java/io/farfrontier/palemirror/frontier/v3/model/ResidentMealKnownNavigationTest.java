@@ -41,9 +41,9 @@ class ResidentMealKnownNavigationTest {
         assertTrue(ServiceAreaDestinations.temporary(point, route.getLast()),
                 "a resident must clear the escape perimeter after eating");
         assertTrue(point.waitingSurfaces().stream().noneMatch(point.egressSurfaces()::contains));
-        assertTrue(!ServiceAccessCoordinator.depotAvailableForMeal(state, depot, settlement.residents().getFirst().id()));
+        assertTrue(!ResidentMealServiceAccess.available(state, depot, settlement.residents().getFirst().id()));
         state = state.withActorBody(actor, route.getLast().standingBody());
-        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, settlement.residents().getFirst().id()),
+        assertTrue(ResidentMealServiceAccess.available(state, depot, settlement.residents().getFirst().id()),
                 "a witnessed exit, not home arrival, releases the turn");
         // Actual bodies remain exclusive even though deferred preferred targets do not.
         var blocked = state.withActorBody(actor, port.serviceSurface().standingBody());

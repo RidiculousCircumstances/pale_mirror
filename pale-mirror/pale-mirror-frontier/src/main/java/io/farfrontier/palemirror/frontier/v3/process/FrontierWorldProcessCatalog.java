@@ -493,7 +493,7 @@ public final class FrontierWorldProcessCatalog {
                     || state.sceneLeases().values().stream()
                         .anyMatch(lease -> lease.retainsMemberCustody(meal.residentId()))
                     || meal.phase() != ResidentMeal.Phase.MOVE || meal.coldTravel().isPresent()
-                    || ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId()))
+                    || ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId()))
                 return Set.of();
         }
         return Set.of(action.subject(), FrontierWorldState.depotId(resident.settlementId()));

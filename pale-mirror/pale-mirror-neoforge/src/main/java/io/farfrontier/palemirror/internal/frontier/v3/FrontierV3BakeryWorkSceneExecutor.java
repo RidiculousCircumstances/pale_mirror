@@ -60,7 +60,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
                     new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             return;
         }
-        if (supportedExit.isPresent() && ServiceAccessCoordinator.witnessedBakeryExit(
+        if (supportedExit.isPresent() && ProductionServiceAccess.witnessedExit(
                 state, job, supportedExit.orElseThrow())) {
             FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);
             return;
@@ -87,8 +87,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 // A durable prepared transfer settles under its original witness;
                 // only a new transfer can yield to a later service contender.
                 && job.bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty()
-                && !ServiceAccessCoordinator.depotAvailableForWork(state,
-                        FrontierWorldState.depotId(job.settlementId()), job.id(), job.workerId())) {
+                && !ProductionServiceAccess.available(state, job)) {
             FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "depot-service-unavailable");
             var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
                     job.settlementId(), FrontierWorldState.depotId(job.settlementId()), job.id(), job.workerId(),

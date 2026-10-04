@@ -123,7 +123,7 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + ",\"mealTravelArrivalAt\":" + (meal == null ? "null" : meal.coldTravel()
                     .map(route -> Long.toString(route.arrivalTick())).orElse("null"))
                 + ",\"mealAtWaitingPocket\":" + (meal != null && ResidentMealKnownNavigation.atWaitingPocket(state, meal))
-                + ",\"mealServiceAvailable\":" + (meal != null && ServiceAccessCoordinator.depotAvailableForMeal(
+                + ",\"mealServiceAvailable\":" + (meal != null && ResidentMealServiceAccess.available(
                     state, meal.depotId(), meal.residentId()))
                 + ",\"movementOrderPresent\":" + (movement != null)
                 + ",\"movementActionDueAt\":" + (movementAction.isPresent()

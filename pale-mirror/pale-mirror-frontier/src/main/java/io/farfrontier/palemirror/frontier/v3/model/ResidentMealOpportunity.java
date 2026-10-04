@@ -74,7 +74,7 @@ public final class ResidentMealOpportunity {
         SubjectId depot = FrontierWorldState.depotId(resident.settlementId());
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot))
             return CandidateAdmission.waiting(Wait.CONTAINER_CUSTODY);
-        if (!ServiceAccessCoordinator.depotMayStartMeal(state, depot, residentId))
+        if (!ResidentMealServiceAccess.mayStart(state, depot, residentId))
             return CandidateAdmission.waiting(Wait.SERVICE_ACCESS);
         var account = FungibleResourceCustodySupport.accountAtContainer(state, depot).orElse(null);
         if (account == null) return CandidateAdmission.waiting(Wait.FOOD_STOCK);

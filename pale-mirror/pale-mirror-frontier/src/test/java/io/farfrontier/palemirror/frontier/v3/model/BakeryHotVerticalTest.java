@@ -307,16 +307,16 @@ class BakeryHotVerticalTest {
                 resumed, task.ownerId(), reconciled), "a duplicate inspection cannot reset the fence");
         SubjectId nextResident = state.bootstrap().settlements().getFirst().residents().stream()
                 .map(Resident::id).filter(id -> !id.equals(job.workerId())).findFirst().orElseThrow();
-        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, nextResident),
+        assertFalse(ResidentMealServiceAccess.available(state, depot, nextResident),
                 "the HOT worker still owns the depot approach after the pickup phase changes");
         var accessAfterPickup = ServiceAccessCoordinator.boundary(state, depot);
         SurfaceAnchor pickupExit = BakeryKnownNavigation.pathFrom(state, state.productionJobs().get(job.id()),
                         state.actorLocations().get(job.workerId()).supportingSurface()).stream()
                 .filter(surface -> accessAfterPickup.cleared(surface.standingBody())).findFirst().orElseThrow();
         ProductionJob pickedUp = state.productionJobs().get(job.id());
-        assertFalse(ServiceAccessCoordinator.witnessedBakeryExit(state, pickedUp, actor.body()),
+        assertFalse(ProductionServiceAccess.witnessedExit(state, pickedUp, actor.body()),
                 "phase change alone cannot release physical access");
-        assertTrue(ServiceAccessCoordinator.witnessedBakeryExit(state, pickedUp, pickupExit.standingBody()),
+        assertTrue(ProductionServiceAccess.witnessedExit(state, pickedUp, pickupExit.standingBody()),
                 "input departure must be observed before station arrival, not just after final delivery");
         var inputExit = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(
                 ActorBodyAuthority.current(state, job.workerId()),
@@ -324,12 +324,12 @@ class BakeryHotVerticalTest {
                 actor.body(), actor.condition().health(), pickupExit.standingBody(), actor.condition().health(),
                 state.actorExecutions().actors().get(job.workerId()).current());
         FrontierWorldState inputDeparted = ActorBodyAuthority.inspected(state, inputExit);
-        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(inputDeparted, depot, nextResident),
+        assertTrue(ResidentMealServiceAccess.available(inputDeparted, depot, nextResident),
                 "a baker stalled beyond the access boundary must not block the depot");
         assertEquals(state.productionJobs(), inputDeparted.productionJobs());
         assertEquals(state.inventory(), inputDeparted.inventory(), "exit does not consume or abandon carried input");
         assertEquals(inputDeparted, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(inputDeparted)));
-        assertFalse(ServiceAccessCoordinator.witnessedBakeryExit(inputDeparted, pickedUp, pickupExit.standingBody()),
+        assertFalse(ProductionServiceAccess.witnessedExit(inputDeparted, pickedUp, pickupExit.standingBody()),
                 "an already observed exit cannot produce another access transition");
         assertEquals(new ResourceCustody.Actor(job.workerId()), state.inventory().fungibleResources().accounts()
                 .get(work.actorAccountId()).custody());
@@ -361,7 +361,7 @@ class BakeryHotVerticalTest {
                         ReferenceContainerCustody.PROVIDER_ID, 1L, 8L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null));
         state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
         state = at(state, leaseId, job.workerId(), station.workerStation().standingBody());
-        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, nextResident),
+        assertTrue(ResidentMealServiceAccess.available(state, depot, nextResident),
                 "the witnessed baker departure must free the depot during station work");
         BakeryWorkBlock occupiedMachine = new BakeryWorkBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED,
                 machine, station.inputSlot(), "minecraft:stone", 1);
@@ -501,7 +501,7 @@ class BakeryHotVerticalTest {
                 .noneMatch(binding -> binding.accountId().equals(work.destinationAccountId())));
         assertEquals(BakeryWorkState.Phase.DELIVERED,
                 checkpointedDepot.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
-        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(checkpointedDepot, depot,
+        assertFalse(ResidentMealServiceAccess.available(checkpointedDepot, depot,
                 checkpointedDepot.bootstrap().settlements().getFirst().residents().getFirst().id()),
                 "delivered bread does not release the shared entrance until the baker leaves it");
         ServiceAccessBoundary access = SettlementDepotServicePort.forDepot(
@@ -523,7 +523,7 @@ class BakeryHotVerticalTest {
         FrontierWorldState departedDepot = ActorBodyAuthority.inspected(checkpointedDepot, exitObserved);
         assertTrue(departedDepot.productionJobs().containsKey(job.id()),
                 "leaving shared access must not complete the bakery job");
-        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(departedDepot, depot,
+        assertTrue(ResidentMealServiceAccess.available(departedDepot, depot,
                 departedDepot.bootstrap().settlements().getFirst().residents().getFirst().id()),
                 "the next resident may enter before the baker returns to the workshop");
         assertThrows(IllegalArgumentException.class, () -> ActorBodyAuthority.inspected(

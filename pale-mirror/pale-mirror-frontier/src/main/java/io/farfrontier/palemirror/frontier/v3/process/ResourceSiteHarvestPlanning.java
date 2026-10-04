@@ -291,7 +291,7 @@ final class ResourceSiteHarvestPlanning {
         }
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
-                && !ServiceAccessCoordinator.depotAvailableForHarvest(state, job))
+                && !HarvestServiceAccess.available(state, job))
             return List.of(reschedule(action, coldProgress(job, nextDue)));
         ActorLocation worker = state.actorLocations().get(job.workerId());
         if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE)
@@ -404,7 +404,7 @@ final class ResourceSiteHarvestPlanning {
                     // due queue ahead of the meal whose arrival would release it.
                     || (ResourceSiteHarvestGoal.current(state, job).kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
                         && !ResourceSiteHarvestGoal.actorAtDepot(state, job)
-                        && !ServiceAccessCoordinator.depotAvailableForHarvest(state, job))
+                        && !HarvestServiceAccess.available(state, job))
                     || (ResourceSiteHarvestGoal.actorAtDepot(state, job) && job.returningForBatch()
                         && !batchDeliveryCapacityAvailable(state, job))
                     || job.navigationBlock().filter(block -> !block.reroutable()).isPresent());
