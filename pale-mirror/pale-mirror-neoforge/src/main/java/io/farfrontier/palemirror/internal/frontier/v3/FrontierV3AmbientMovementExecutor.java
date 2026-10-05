@@ -245,6 +245,7 @@ final class FrontierV3AmbientMovementExecutor {
         } else {
             // Idle presentation is not a second locomotion owner or permission to orbit.
             if (FrontierV3AmbientServiceOccupancy.observe(level, runtime, state, actorId, body, lease)) return true;
+            if (FrontierV3PresenceTrafficYield.pursue(level, state, body, lease, actuation)) return false;
             if (FrontierV3ServicePointClearance.pursue(level, state, body, lease, actuation)) return false;
             FrontierV3GoalNavigation.stop(body, actuation);
         }

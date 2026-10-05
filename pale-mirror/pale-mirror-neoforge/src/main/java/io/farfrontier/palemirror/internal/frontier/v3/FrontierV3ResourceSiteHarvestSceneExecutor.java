@@ -591,6 +591,13 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     private static void holdSemanticGoal(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                          FrontierWorldState state, SceneLease lease, ResourceSiteHarvestJob job,
                                          Mob worker, FrontierV3GoalNavigation.BlockReason reason) {
+        if (reason == FrontierV3GoalNavigation.BlockReason.TRAFFIC_BLOCKED) {
+            // Living contention is not a crop/terrain change and cannot freeze the COLD
+            // work target as a permanent physical obstruction. The shared provider retains
+            // the same goal and asks eligible passive participants to yield.
+            FrontierV3PhysicalWaitTrace.actor(worker, state, job.workerId(), "navigation:traffic-blocked");
+            return;
+        }
         if ((reason == FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE
                 || reason == FrontierV3GoalNavigation.BlockReason.PATH_STALLED)
                 && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
@@ -600,6 +607,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         ResourceSiteHarvestNavigationBlock.Reason cause = switch (reason) {
             case PATH_UNAVAILABLE -> ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE;
             case PATH_STALLED -> ResourceSiteHarvestNavigationBlock.Reason.PATH_STALLED;
+            case TRAFFIC_BLOCKED -> throw new IllegalArgumentException("traffic must use the shared courtesy protocol");
             case TARGET_CHUNK_UNLOADED -> ResourceSiteHarvestNavigationBlock.Reason.TARGET_CHUNK_UNLOADED;
             case OFF_CONTRACT -> ResourceSiteHarvestNavigationBlock.Reason.OFF_CONTRACT;
             case UNSUPPORTED_CAPABILITY -> ResourceSiteHarvestNavigationBlock.Reason.UNSUPPORTED_CAPABILITY;

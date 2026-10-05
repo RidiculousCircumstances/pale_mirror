@@ -12,6 +12,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void idleDestinationsCannotBuildADenseRingAroundAnotherResident() {
+        var occupied = java.util.Set.of(SurfaceAnchor.at(128, 63, 12));
+        assertTrue(!ServiceAreaDestinations.hasStandingClearance(SurfaceAnchor.at(129, 63, 12), occupied));
+        assertTrue(!ServiceAreaDestinations.hasStandingClearance(SurfaceAnchor.at(129, 64, 13), occupied));
+        assertTrue(ServiceAreaDestinations.hasStandingClearance(SurfaceAnchor.at(130, 63, 12), occupied));
+    }
     @Test void concurrentFutureMealReservationsCannotHoldTheServiceExitHostage() {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:concurrent-meal-exit"), 20260918065L));

@@ -31,7 +31,7 @@ public final class ServiceAreaDestinations {
                 int dz = distance - Math.abs(dx);
                 for (int sign : dz == 0 ? new int[] {1} : new int[] {1, -1}) {
                     SurfaceAnchor candidate = knowledge.supportAt(start.x() + dx, start.z() + sign * dz);
-                    if (excluded.contains(candidate) || points.stream().anyMatch(point -> temporary(point, candidate))
+                    if (!hasStandingClearance(candidate, excluded) || points.stream().anyMatch(point -> temporary(point, candidate))
                             || !available.test(candidate)) continue;
                     MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
                             TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
@@ -46,5 +46,14 @@ public final class ServiceAreaDestinations {
             }
         }
         return Optional.empty();
+    }
+
+    /** Idle placement leaves a pedestrian-width gap; this is not a route obstacle policy. */
+    public static boolean hasStandingClearance(SurfaceAnchor candidate, Set<SurfaceAnchor> occupied) {
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+            for (int dy = -1; dy <= 1; dy++)
+                if (occupied.contains(SurfaceAnchor.at(candidate.x() + dx, candidate.y() + dy, candidate.z() + dz)))
+                    return false;
+        return true;
     }
 }

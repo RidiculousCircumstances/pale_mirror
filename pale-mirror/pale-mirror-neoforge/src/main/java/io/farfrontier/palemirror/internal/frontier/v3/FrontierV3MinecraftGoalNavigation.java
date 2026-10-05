@@ -45,6 +45,7 @@ final class FrontierV3MinecraftGoalNavigation {
     }
 
     private static final int RETRY_TICKS = 20;
+    static int retryIntervalTicks() { return RETRY_TICKS; }
     private static final int STALLED_TICKS = 80;
     private static final double SPEED = 0.70D;
     private static final Map<Mob, Control> ACTIVE = new WeakHashMap<>();
@@ -148,18 +149,22 @@ final class FrontierV3MinecraftGoalNavigation {
         boolean unloaded = false;
         String rejection = "";
         FrontierV3GoalNavigation.BlockReason rejectionReason = FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE;
+        FrontierV3PedestrianTraffic.Query traffic = null;
         // A service region is one semantic goal. Minecraft may choose whichever declared
         // support has a reachable, envelope-contained pedestrian path; this does not select
         // another work item or change the canonical task.
         for (SurfaceAnchor station : legalStations) {
             BlockPos feet = new BlockPos(station.x(), station.y() + 1, station.z());
             if (!level.hasChunkAt(feet)) { unloaded = true; continue; }
-            Path candidate = FrontierV3PedestrianTraffic.createPath(level, actor, feet, scope);
+            var query = FrontierV3PedestrianTraffic.query(level, actor, feet, scope);
+            Path candidate = query.path();
             var refused = FrontierV3PhysicalPathPolicy.reject(level, candidate, scope);
             if (refused.isPresent()) {
+                if (traffic == null && query.trafficBlocked(level, scope)) traffic = query;
                 if (rejection.isEmpty()) {
                     rejection = FrontierV3PathExplanation.rejected(level, station, candidate, scope);
-                    rejectionReason = refused.orElseThrow().reason();
+                    rejectionReason = query.budgetExhausted()
+                            ? FrontierV3GoalNavigation.BlockReason.SEARCH_BUDGET_EXHAUSTED : refused.orElseThrow().reason();
                 }
                 continue;
             }
@@ -168,10 +173,19 @@ final class FrontierV3MinecraftGoalNavigation {
                 target = station;
             }
         }
-        if (path == null) return retry(level, actor, legalStations, scope, order, permission, level.getGameTime(),
-                unloaded ? "target-chunk-unloaded" : "minecraft-path-unavailable[" + rejection + "]",
-                unloaded ? FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED
-                        : rejectionReason);
+        if (path == null) {
+            if (traffic != null) {
+                FrontierV3PedestrianYieldRequests.request(level, actor, permission, traffic);
+                return retry(level, actor, legalStations, scope, order, permission, level.getGameTime(),
+                        "traffic-blocked[" + FrontierV3PedestrianYieldRequests.explanation(level, traffic) + "]",
+                        FrontierV3GoalNavigation.BlockReason.TRAFFIC_BLOCKED);
+            }
+            FrontierV3PedestrianYieldRequests.clear(actor);
+            return retry(level, actor, legalStations, scope, order, permission, level.getGameTime(),
+                    unloaded ? "target-chunk-unloaded" : "minecraft-path-unavailable[" + rejection + "]",
+                    unloaded ? FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED : rejectionReason);
+        }
+        FrontierV3PedestrianYieldRequests.clear(actor);
         if (!actor.getNavigation().moveTo(path, SPEED))
             return retry(level, actor, legalStations, scope, order, permission, level.getGameTime(),
                     "minecraft-path-refused", FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE);
@@ -261,18 +275,34 @@ final class FrontierV3MinecraftGoalNavigation {
         return control != null && control.permission().current(actor);
     }
 
+    record Observation(String status, String reason, List<SurfaceAnchor> targets,
+                       List<io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId> blockers) {
+        static Observation idle() { return new Observation("IDLE", "", List.of(), List.of()); }
+    }
+
+    static Observation observation(Mob actor) {
+        var control = ACTIVE.get(actor);
+        if (control != null && control.permission().current(actor))
+            return new Observation("MOVING", "", control.legalStations(), List.of());
+        var failure = FAILURES.get(actor);
+        return failure != null && failure.permission().current(actor)
+                ? new Observation(failure.blockReason().name(), failure.reason(), failure.legalStations(),
+                    FrontierV3PedestrianYieldRequests.observedBlockers(actor)) : Observation.idle();
+    }
+
     static boolean canReach(ServerLevel level, Mob actor, List<SurfaceAnchor> stations, FrontierV3NavigationScope scope) {
         if (actor.level() != level || !actor.isAlive() || actor.isRemoved()) return false;
         for (SurfaceAnchor station : stations) {
             BlockPos feet = new BlockPos(station.x(), station.y() + 1, station.z());
             if (!scope.permits(station.support()) || !level.hasChunkAt(feet)) continue;
-            if (FrontierV3PhysicalPathPolicy.reject(level, actor.getNavigation().createPath(feet, 0), scope).isEmpty()) return true;
+            if (FrontierV3PhysicalPathPolicy.reject(level, FrontierV3PedestrianTraffic.createPath(level, actor, feet, scope), scope).isEmpty()) return true;
         }
         return false;
     }
 
     static void stop(Mob actor) {
         if (actor == null) return;
+        FrontierV3PedestrianYieldRequests.clear(actor);
         stopPath(actor);
         FAILURES.remove(actor);
         actor.getJumpControl().tick();

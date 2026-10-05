@@ -39,7 +39,9 @@ final class FrontierV3ServicePointClearance {
                             KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
             List<SurfaceAnchor> surfaces = ServiceAreaDestinations.select(points, lease.actorId(),
                     observed.supportingSurface(), knowledge, ServiceDestinationClaims.excludedFor(state, lease.actorId()),
-                    surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface))
+                    surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface)
+                            && FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(surface,
+                                new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds()))))
                     .map(List::of).orElse(List.of());
             if (surfaces.isEmpty()) {
                 FrontierV3GoalNavigation.stop(body, actuation);

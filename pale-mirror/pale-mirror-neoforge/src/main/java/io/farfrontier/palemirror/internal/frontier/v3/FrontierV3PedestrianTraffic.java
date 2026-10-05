@@ -22,6 +22,18 @@ final class FrontierV3PedestrianTraffic {
     private FrontierV3PedestrianTraffic() { }
 
     record Body(java.util.UUID id, AABB bounds) { }
+    /** A clear native route rejected only by live occupants, not a guessed terrain failure. */
+    record Query(Path path, List<Body> blockers, List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage,
+                 boolean budgetExhausted) {
+        Query { blockers = List.copyOf(blockers); passage = List.copyOf(passage); }
+        Query(Path path, List<Body> blockers, List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage) {
+            this(path, blockers, passage, false);
+        }
+        boolean trafficBlocked(ServerLevel level, FrontierV3NavigationScope scope) {
+            return !blockers.isEmpty() && !budgetExhausted && FrontierV3PhysicalPathPolicy.reject(level, path, scope)
+                    .filter(refused -> refused.reason() == FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE).isPresent();
+        }
+    }
 
     static List<Body> goalOccupants(ServerLevel level, Mob actor,
             List<io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor> stations) {
@@ -48,8 +60,26 @@ final class FrontierV3PedestrianTraffic {
     }
 
     static Path createPath(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope) {
+        return query(level, actor, target, scope).path();
+    }
+
+    static Query query(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope) {
         Path ordinary = actor.getNavigation().createPath(target, 0);
-        if (!blocked(level, actor, ordinary, FrontierV3PhysicalPathPolicy.MAX_PATH_NODES)) return ordinary;
+        // Only a scope-valid terrain path can establish that bodies caused this failure.
+        if (FrontierV3PhysicalPathPolicy.reject(level, ordinary, scope).isPresent())
+            return new Query(ordinary, List.of(), List.of());
+        java.util.Map<java.util.UUID, Body> blockers = new java.util.LinkedHashMap<>();
+        java.util.List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage = new java.util.ArrayList<>();
+        for (int index = ordinary.getNextNodeIndex(); index < ordinary.getNodeCount(); index++) {
+            var feet = ordinary.getNode(index).asBlockPos();
+            passage.add(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(feet.getX(), feet.getY() - 1, feet.getZ()));
+            for (var other : level.getEntitiesOfClass(LivingEntity.class, bodyAt(actor, feet),
+                    entity -> entity != actor && entity.isAlive() && !entity.isSpectator())) {
+                if (blockers.size() >= MAX_BODIES) return new Query(null, List.of(), List.of(), true);
+                blockers.putIfAbsent(other.getUUID(), new Body(other.getUUID(), other.getBoundingBox()));
+            }
+        }
+        if (blockers.isEmpty()) return new Query(ordinary, List.of(), passage);
         // Use the same native graph and block/step semantics, adding only ephemeral body
         // clearance. The native region uses getChunkNow: no tickets or unloaded reads.
         int radius = Math.min(MAX_QUERY_RADIUS, Math.max(8,
@@ -60,7 +90,7 @@ final class FrontierV3PedestrianTraffic {
         List<AABB> bodies = level.getEntitiesOfClass(LivingEntity.class, query,
                 other -> other != actor && other.isAlive() && !other.isSpectator())
                 .stream().limit(MAX_BODIES + 1L).map(LivingEntity::getBoundingBox).toList();
-        if (bodies.size() > MAX_BODIES) return null; // visible bounded retry, never ignored occupants
+        if (bodies.size() > MAX_BODIES) return new Query(null, List.of(), List.of(), true);
         WalkNodeEvaluator evaluator = new WalkNodeEvaluator() {
             @Override public PathType getPathTypeOfMob(PathfindingContext context, int x, int y, int z, Mob mob) {
                 BlockPos feet = new BlockPos(x, y, z);
@@ -74,9 +104,10 @@ final class FrontierV3PedestrianTraffic {
         evaluator.setCanPassDoors(actor.getNavigation().getNodeEvaluator().canPassDoors());
         evaluator.setCanOpenDoors(actor.getNavigation().getNodeEvaluator().canOpenDoors());
         evaluator.setCanFloat(actor.getNavigation().getNodeEvaluator().canFloat());
-        return new PathFinder(evaluator, MAX_VISITED_NODES).findPath(
+        Path detour = new PathFinder(evaluator, MAX_VISITED_NODES).findPath(
                 new PathNavigationRegion(level, origin.offset(-radius, -radius, -radius), origin.offset(radius, radius, radius)),
                 actor, Set.of(target), radius, 0, 1.0F);
+        return new Query(detour, List.copyOf(blockers.values()), passage);
     }
 
     private static AABB bodyAt(Mob actor, BlockPos feet) {

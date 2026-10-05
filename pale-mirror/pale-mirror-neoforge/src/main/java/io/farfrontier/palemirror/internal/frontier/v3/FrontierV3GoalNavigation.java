@@ -37,7 +37,7 @@ final class FrontierV3GoalNavigation {
         }
     }
     enum Status { IN_PROGRESS, ARRIVED, BLOCKED, AMBIGUOUS }
-    enum BlockReason { PATH_UNAVAILABLE, PATH_STALLED, TARGET_CHUNK_UNLOADED, OFF_CONTRACT,
+    enum BlockReason { PATH_UNAVAILABLE, PATH_STALLED, TRAFFIC_BLOCKED, TARGET_CHUNK_UNLOADED, OFF_CONTRACT,
         UNSUPPORTED_CAPABILITY, UNSUPPORTED_MEDIUM, SEARCH_BUDGET_EXHAUSTED }
     record Goal(List<SurfaceAnchor> legalStations, TraversalCapability capability, FrontierV3NavigationScope scope,
                 Optional<MovementOrder> order, List<SurfaceAnchor> routeHint) {

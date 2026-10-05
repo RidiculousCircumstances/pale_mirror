@@ -27,6 +27,37 @@ public final class FrontierV3RouteNavigationGameTests {
     private FrontierV3RouteNavigationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void enclosedPedestrianReportsLivingBlockersAndReachabilityUsesTheSameTrafficPolicy(GameTestHelper helper) {
+        floor(helper);
+        var level = helper.getLevel();
+        Villager actor = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(3.5D, 1.0D, 3.5D));
+        var occupants = List.of(
+                helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(2.5D, 1.0D, 3.5D)),
+                helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5D, 1.0D, 3.5D)),
+                helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(3.5D, 1.0D, 2.5D)),
+                helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(3.5D, 1.0D, 4.5D)));
+        SurfaceAnchor target = anchor(helper, 6, 3);
+        var scope = new FrontierV3NavigationScope.ObservedWorld(bounds(helper));
+        helper.runAfterDelay(1, () -> {
+            actor.setOnGround(true);
+            var query = FrontierV3PedestrianTraffic.query(level, actor,
+                    new BlockPos(target.x(), target.y() + 1, target.z()), scope);
+            helper.assertTrue(query.trafficBlocked(level, scope), "a clear terrain route must identify the living enclosure: "
+                    + query + "; rejection=" + FrontierV3PhysicalPathPolicy.reject(level, query.path(), scope));
+            helper.assertTrue(query.blockers().stream().anyMatch(blocker -> blocker.id().equals(occupants.get(1).getUUID())),
+                    "the obstruction must retain the exact east-side blocker, not a generic no-path string");
+            helper.assertFalse(FrontierV3GoalNavigation.canReach(level, actor, FrontierV3GoalNavigation.Goal.station(target, scope)),
+                    "a prospective destination cannot ignore the occupants which execution will respect");
+            // Negative discriminator: with bodies gone this is not a terrain failure.
+            occupants.forEach(Villager::discard);
+            helper.assertTrue(FrontierV3GoalNavigation.canReach(level, actor, FrontierV3GoalNavigation.Goal.station(target, scope)),
+                    "the same goal must become reachable without a reconnect or terrain edit");
+            actor.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 110)
     public static void pedestrianDetoursAroundResidentWithoutChangingItsGoal(GameTestHelper helper) {
         var level = helper.getLevel();

@@ -16,7 +16,7 @@ import java.util.WeakHashMap;
 final class FrontierV3ResidentMealNavigation {
     private record Route(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId actuation,
                          long leaseRevision, long mealStart, ResidentMeal.Phase phase, boolean admitted,
-                         List<SurfaceAnchor> waypoints) { }
+                         List<SurfaceAnchor> waypoints, long plannedAt) { }
 
     private static final Map<Mob, Route> ROUTES = new WeakHashMap<>();
     private static final Map<Mob, String> BLOCKED = new WeakHashMap<>();
@@ -55,6 +55,8 @@ final class FrontierV3ResidentMealNavigation {
         if (route == null || !route.actuation().equals(actuation.id()) || route.leaseRevision() != lease.revision()
                 || route.mealStart() != meal.startedAtTick() || route.phase() != meal.phase()
                 || route.admitted() != admitted
+                || BLOCKED.containsKey(body) && level.getGameTime() - route.plannedAt()
+                        >= FrontierV3MinecraftGoalNavigation.retryIntervalTicks()
                 || meal.phase() == ResidentMeal.Phase.MOVE
                     && !route.waypoints().getLast().equals(ResidentMealProcess.serviceSurface(state, meal))
                     && (!ResidentMealKnownNavigation.waitingStationAvailable(state, meal, route.waypoints().getLast())
@@ -65,11 +67,9 @@ final class FrontierV3ResidentMealNavigation {
             try {
                 route = new Route(actuation.id(), lease.revision(), meal.startedAtTick(), meal.phase(), admitted,
                         meal.phase() == ResidentMeal.Phase.MOVE
-                                ? ResidentMealKnownNavigation.pathFrom(state, meal,
-                                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface(),
-                                    station -> available(level, body, station))
+                                ? approach(level, state, body, meal)
                                 : ResidentMealKnownNavigation.clearancePathFrom(state, meal,
-                                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface()));
+                                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface()), level.getGameTime());
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 blocked(body, meal, "known_route:" + unavailable.getMessage());
                 FrontierV3GoalNavigation.stop(body, actuation);
@@ -109,5 +109,21 @@ final class FrontierV3ResidentMealNavigation {
     private static boolean available(ServerLevel level, Mob body, SurfaceAnchor station) {
         return level.hasChunkAt(new net.minecraft.core.BlockPos(station.x(), station.y(), station.z()))
                 && FrontierV3SemanticMovement.targetIsNavigable(level, body, station);
+    }
+
+    private static List<SurfaceAnchor> approach(ServerLevel level, FrontierWorldState state, Mob body, ResidentMeal meal) {
+        var start = FrontierV3SurfaceObservation.observedBody(body).supportingSurface();
+        int[] queries = {0};
+        try {
+            return ResidentMealKnownNavigation.pathFrom(state, meal, start, station -> available(level, body, station)
+                    && queries[0]++ < MovementOrder.MAX_LEGAL_STATIONS
+                    && FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(station,
+                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds()))));
+        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            // Retain a legal intent when no approach is currently reachable. The physical
+            // provider must explain the obstruction and request courtesy; filtering every
+            // goal away here would hide the blocking bodies and permanently park the meal.
+            return ResidentMealKnownNavigation.pathFrom(state, meal, start, station -> available(level, body, station));
+        }
     }
 }
