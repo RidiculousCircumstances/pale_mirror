@@ -152,11 +152,11 @@ final class SettlementEconomyPayloadCodecs {
             if (!(item.custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("cold production input must retain its depot slot");
             writeSubject(output, slot.containerId()); output.writeByte(slot.slot());
         } else if (hold instanceof ProductionInputHold.FungibleCold cold) {
-            output.writeByte(cold.inputLots().size() == 1 ? 2 : 4); writeSubject(output, cold.accountId()); writeSubject(output, cold.claimId());
-            if (cold.inputLots().size() != 1) writeProductionInputLots(output, cold.inputLots());
+            output.writeByte(4); writeSubject(output, cold.accountId()); writeSubject(output, cold.claimId());
+            writeProductionInputLots(output, cold.inputLots());
         } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
-            output.writeByte(bound.inputLots().size() == 1 ? 3 : 5); writeSubject(output, bound.accountId()); writeSubject(output, bound.claimId()); output.writeLong(bound.authorityEpoch());
-            if (bound.inputLots().size() != 1) writeProductionInputLots(output, bound.inputLots());
+            output.writeByte(5); writeSubject(output, bound.accountId()); writeSubject(output, bound.claimId()); output.writeLong(bound.authorityEpoch());
+            writeProductionInputLots(output, bound.inputLots());
         } else throw new IllegalArgumentException("unknown production input hold");
     }
     private static ProductionInputHold readProductionInputHold(DataInputStream input, SubjectId itemId) throws IOException {
@@ -179,7 +179,7 @@ final class SettlementEconomyPayloadCodecs {
     }
     private static Map<SubjectId, Integer> readProductionInputLots(DataInputStream input) throws IOException {
         int count = input.readUnsignedByte();
-        if (count < 2 || count > 64) throw new IllegalArgumentException("invalid multi-lot production input count");
+        if (count < 1 || count > 64) throw new IllegalArgumentException("invalid production input lot count");
         Map<SubjectId, Integer> lots = new java.util.LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
             if (lots.put(readSubject(input).value(), input.readUnsignedByte()) != null) {

@@ -105,23 +105,24 @@ public final class ProductionProcess {
             return blocked(task, settlement, workshop, depot, ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
         }
         boolean physicalCustody = ReferenceContainerCustody.hasLiveCustody(state, depot);
-        Optional<FungibleResourceCustodySupport.LotSelection> fungible = FungibleResourceCustodySupport
-                .selectAtContainer(state, depot, settlement.id(), WHEAT, 64);
-        Optional<ExactItemStack> input = wheat(state, settlement);
-        if (physicalCustody && fungible.isEmpty() && input.isEmpty()
+        var availableInput = BakeryBatchSelection.available(state, settlement.id());
+        if (physicalCustody && availableInput.isEmpty()
                 && FungibleResourceCustodySupport.accountAtContainer(state, depot).map(account ->
                 account.lotQuantities().entrySet().stream().filter(entry -> {
                     ResourceLot lot = state.inventory().fungibleResources().lots().get(entry.getKey());
                     return lot.economicOwnerId().equals(settlement.id()) && WHEAT.equals(lot.itemKind());
-                }).mapToInt(java.util.Map.Entry::getValue).sum() >= 64).orElse(false)) {
+                }).mapToInt(java.util.Map.Entry::getValue).sum() > 0).orElse(false)) {
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
         }
-        if (fungible.isEmpty() && input.isEmpty()) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
-        if (!ProductionOutputCapacity.canAdmitBreadBatch(state, settlement.id()))
+        if (availableInput.isEmpty()) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
+        var batch = BakeryBatchSelection.admissible(state, settlement.id());
+        if (batch.isEmpty())
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
                     state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
+        Optional<ExactItemStack> input = batch.orElseThrow().exactInput();
+        Optional<FungibleResourceCustodySupport.LotSelection> fungible = batch.orElseThrow().fungibleInput();
         if (physicalCustody && !ReferenceContainerCustody.hasOperationalCustody(state, depot)
-                || fungible.isPresent() && input.isEmpty() && !ProductionResourceCustody.canStart(state, fungible.orElseThrow(), 64)) {
+                || fungible.isPresent() && !ProductionResourceCustody.canStart(state, fungible.orElseThrow(), batch.orElseThrow().quantity())) {
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
         }
         // Exact and fungible stock remain distinct representations. A resource job admitted
@@ -600,7 +601,8 @@ public final class ProductionProcess {
         if (!declaredTask.ownerId().equals(settlement.id()) || retainedJob != null && !retainedJob.taskId().equals(declaredTask.id())) {
             throw new IllegalArgumentException("production block must name the exact owner task of its job or pending work");
         }
-        SubjectId depot = FrontierWorldState.depotId(settlement.id()); boolean wheatPresent = wheat(state, settlement).isPresent();
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        boolean wheatPresent = BakeryBatchSelection.available(state, settlement.id()).isPresent();
         switch (blocked.reason()) {
             case INPUT_UNAVAILABLE -> {
                 ProductionJob job = state.productionJobs().get(blocked.workId());
@@ -655,17 +657,15 @@ public final class ProductionProcess {
                 // start-time block to the exact pending task and prospective job so a forged
                 // block cannot free a facility that actually has available funds.
                 StrategicTask pending = declaredTask;
-                Optional<ExactItemStack> prospectiveInput = wheat(state, settlement);
-                Optional<FungibleResourceCustodySupport.LotSelection> prospectiveFungible = FungibleResourceCustodySupport
-                        .selectAtContainer(state, depot, settlement.id(), WHEAT, 64);
-                if (!blocked.workId().equals(workshop.id()) || prospectiveInput.isEmpty() && prospectiveFungible.isEmpty()
+                var prospective = BakeryBatchSelection.admissible(state, settlement.id());
+                if (!blocked.workId().equals(workshop.id()) || prospective.isEmpty()
                         || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY).isEmpty()) {
                     throw new IllegalArgumentException("production finance start block precondition does not hold");
                 }
                 if (SettlementWorkforce.candidates(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY).stream()
                         .map(worker -> BakeryJobAdmission.propose(state, pending, settlement, workshop,
-                                prospectiveInput, prospectiveFungible, worker))
-                        .anyMatch(prospective -> CompanyWorkPaymentProcess.canReserve(state, prospective))) {
+                                prospective.orElseThrow().exactInput(), prospective.orElseThrow().fungibleInput(), worker))
+                        .anyMatch(candidate -> CompanyWorkPaymentProcess.canReserve(state, candidate))) {
                     throw new IllegalArgumentException("production finance start block has available funds");
                 }
             }
@@ -861,13 +861,6 @@ public final class ProductionProcess {
                 throw new IllegalArgumentException("production market order contradicts the job's declared task");
         });
         return task;
-    }
-    private static Optional<ExactItemStack> wheat(FrontierWorldState state, Settlement settlement) {
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> WHEAT.equals(item.itemKind())
-                && item.count() == 64 && item.economicOwnerId().equals(settlement.id())
-                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
-                && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id())).findFirst();
     }
     private static boolean materializedInputMatches(FrontierWorldState state, ProductionJob job) {
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());

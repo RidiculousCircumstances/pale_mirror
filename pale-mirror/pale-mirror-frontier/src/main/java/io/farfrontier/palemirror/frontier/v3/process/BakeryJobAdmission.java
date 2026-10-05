@@ -52,9 +52,9 @@ final class BakeryJobAdmission {
 
     static ProductionJob exact(FrontierWorldState state, StrategicTask task, Settlement settlement,
                                SettlementStructure workshop, ExactItemStack input, ResidentProfile worker) {
-        if (input.count() != 64 || !input.economicOwnerId().equals(settlement.id())
+        if (!input.economicOwnerId().equals(settlement.id())
                 || !"minecraft:wheat".equals(input.itemKind()))
-            throw new IllegalArgumentException("bakery exact input must be 64 settlement-owned wheat");
+            throw new IllegalArgumentException("bakery exact input must be settlement-owned wheat");
         SubjectId jobId = ProductionProcess.jobId(task);
         String stem = jobId.value().substring("job:".length());
         return new ProductionJob(jobId, task.id(), settlement.id(), workshop.id(), worker.id(), input.id(),
@@ -71,9 +71,9 @@ final class BakeryJobAdmission {
         SubjectId jobId = ProductionProcess.jobId(task);
         String stem = jobId.value().substring("job:".length());
         ProductionInputHold hold = ProductionResourceCustody.holdForStart(state, input,
-                new SubjectId("claim:" + stem), 64);
+                new SubjectId("claim:" + stem), input.quantity());
         return new ProductionJob(jobId, task.id(), settlement.id(), workshop.id(), worker.id(), input.firstLotId(), hold,
-                new SubjectId("lot:" + stem + "-bread"), "minecraft:bread", 64,
+                new SubjectId("lot:" + stem + "-bread"), "minecraft:bread", ProductionStationRecipe.breadOutputQuantity(input.quantity()),
                 ProductionWorkProgress.notStarted(), anchor(jobId, workshop, state.actorLocations().get(worker.id())), 0,
                 Optional.of(work(state, workshop, jobId, input.accountId())));
     }
@@ -107,7 +107,7 @@ final class BakeryJobAdmission {
         // successful depot-slot wheat-to-bread path through a forged event.
         if (job.bakeryWork().isEmpty())
             throw new IllegalArgumentException("bread production start requires declared bakery station work");
-        if (!ProductionOutputCapacity.canAdmitBreadBatch(state, job.settlementId()))
+        if (!ProductionOutputCapacity.canAdmitBreadBatch(state, job.settlementId(), job.outputCount()))
             throw new IllegalArgumentException("production start has no capacity for its retained output");
         SettlementStructure workshop = ProductionProcess.workshop(settlement);
         if (!workshop.id().equals(job.facilityId()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production start facility is unavailable");

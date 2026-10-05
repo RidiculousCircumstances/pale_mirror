@@ -47,7 +47,7 @@ public final class MarketClearingProcess {
         }
         // Capacity may disappear between objective selection and market clearing. Keep the
         // pending demand rather than accepting work that cannot return its output.
-        if (!ProductionOutputCapacity.canAdmitBreadBatch(state, demand.buyerId())) return retry(state, demand, action, now);
+        if (BakeryBatchSelection.admissible(state, demand.buyerId()).isEmpty()) return retry(state, demand, action, now);
         List<ProposedEvent> start = ProductionProcess.planStart(state, ProductionProcess.start(task, now));
         ProductionStarted started = start.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
                 .map(ProductionStarted.class::cast).findFirst().orElse(null);

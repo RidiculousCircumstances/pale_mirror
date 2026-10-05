@@ -48,11 +48,11 @@ final class ProductionJobStateCodec {
         if (hold instanceof ProductionInputHold.Cold cold) {
             ExactItemStack item = cold.item(); output.writeByte(1); writeString(output, item.economicOwnerId().value()); writeString(output, item.itemKind()); output.writeByte(item.count()); writeCustody(output, item.custody());
         } else if (hold instanceof ProductionInputHold.FungibleCold cold) {
-            output.writeByte(cold.inputLots().size() == 1 ? 2 : 4); writeString(output, cold.accountId().value()); writeString(output, cold.claimId().value());
-            if (cold.inputLots().size() != 1) writeInputLots(output, cold.inputLots());
+            output.writeByte(4); writeString(output, cold.accountId().value()); writeString(output, cold.claimId().value());
+            writeInputLots(output, cold.inputLots());
         } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
-            output.writeByte(bound.inputLots().size() == 1 ? 3 : 5); writeString(output, bound.accountId().value()); writeString(output, bound.claimId().value()); output.writeLong(bound.authorityEpoch());
-            if (bound.inputLots().size() != 1) writeInputLots(output, bound.inputLots());
+            output.writeByte(5); writeString(output, bound.accountId().value()); writeString(output, bound.claimId().value()); output.writeLong(bound.authorityEpoch());
+            writeInputLots(output, bound.inputLots());
         } else throw new IllegalArgumentException("unknown production input hold");
     }
 
@@ -77,7 +77,7 @@ final class ProductionJobStateCodec {
 
     private static Map<SubjectId, Integer> readInputLots(DataInputStream input) throws IOException {
         int count = readCount(input);
-        if (count < 2 || count > 64) throw new IllegalArgumentException("invalid multi-lot production input count");
+        if (count < 1 || count > 64) throw new IllegalArgumentException("invalid production input lot count");
         Map<SubjectId, Integer> lots = new LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
             if (lots.put(new SubjectId(readString(input)), input.readUnsignedByte()) != null) {

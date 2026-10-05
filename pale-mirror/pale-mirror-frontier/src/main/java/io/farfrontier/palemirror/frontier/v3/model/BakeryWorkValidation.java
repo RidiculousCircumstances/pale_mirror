@@ -123,7 +123,7 @@ final class BakeryWorkValidation {
                     || !lot.itemKind().equals(outputPhase ? "minecraft:bread" : "minecraft:wheat"))
                 throw new IllegalArgumentException("bakery resource lot changed economic owner or recipe kind");
         }
-        // A selected 64-unit part may leave a lawful remainder in the source lot.
+        // A selected batch may leave a lawful remainder in the source lot.
         // Only the claimed part must be absent from this job's current custodian.
         if (!outputPhase && ledger.lots().containsKey(job.outputItemId()))
             throw new IllegalArgumentException("bakery output cannot pre-exist its station recipe");

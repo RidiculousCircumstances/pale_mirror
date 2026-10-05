@@ -4,7 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
-/** Same accepted bread job acquires a new explicit 64-wheat allocation after a witnessed loss. */
+/** Same accepted bread job reacquires its retained input quantity after a witnessed loss. */
 public record BakeryInputReallocated(SubjectId jobId, ProductionInputHold replacement) implements FrontierPayload {
     public BakeryInputReallocated {
         Objects.requireNonNull(jobId, "bakery job");

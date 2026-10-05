@@ -8,6 +8,12 @@ import java.util.Objects;
 
 /** Station-local recipe accounting; job phase and physical intent admission remain with the owner. */
 public final class ProductionStationRecipe {
+    /** Current declared bread recipe is 1:1; stack transport bounds are not a minimum batch. */
+    public static int breadOutputQuantity(int wheatQuantity) {
+        if (wheatQuantity < 1 || wheatQuantity > 64)
+            throw new IllegalArgumentException("bread recipe requires a bounded positive input quantity");
+        return wheatQuantity;
+    }
     private ProductionStationRecipe() { }
 
     /** Declared recipe port for an unbound station lot; never compact machine output into input. */
@@ -134,8 +140,8 @@ public final class ProductionStationRecipe {
             throw new IllegalArgumentException("recipe requires the current exclusively held station input");
         switch (station.capability()) {
             case BAKING -> {
-                if (!"minecraft:bread".equals(output.itemKind()) || output.quantity() != 64
-                        || inputs.values().stream().mapToInt(Integer::intValue).sum() != 64
+                if (!"minecraft:bread".equals(output.itemKind()) || output.quantity() != breadOutputQuantity(
+                        inputs.values().stream().mapToInt(Integer::intValue).sum())
                         || inputs.keySet().stream().anyMatch(id -> {
                             ResourceLot lot = ledger.lots().get(id);
                             return lot == null || !"minecraft:wheat".equals(lot.itemKind());

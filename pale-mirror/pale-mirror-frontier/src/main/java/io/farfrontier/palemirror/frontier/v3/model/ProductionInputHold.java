@@ -70,9 +70,9 @@ public sealed interface ProductionInputHold permits ProductionInputHold.Cold, Pr
         Map<SubjectId, Integer> lots = Map.copyOf(Objects.requireNonNull(portions, "production input lots"));
         if (lots.isEmpty() || lots.size() > 64 || !lots.containsKey(firstLotId)
                 || lots.values().stream().anyMatch(value -> value < 1 || value > 64)
-                || lots.values().stream().mapToInt(Integer::intValue).sum() != 64
+                || lots.values().stream().mapToInt(Integer::intValue).sum() > 64
                 || !firstLotId.equals(lots.keySet().stream().min(SubjectId::compareTo).orElseThrow())) {
-            throw new IllegalArgumentException("production input must retain exactly 64 units and its stable first lot");
+            throw new IllegalArgumentException("production input must retain 1..64 units and its stable first lot");
         }
         return lots;
     }

@@ -45,8 +45,14 @@ public record ProductionJob(
             throw new IllegalArgumentException("production output kind must be namespace:path");
         }
         if (outputCount <= 0 || outputCount > 64) throw new IllegalArgumentException("production output count must be 1..64");
-        if ((inputHold instanceof ProductionInputHold.FungibleCold || inputHold instanceof ProductionInputHold.FungibleBound)
-                && outputCount != 64) throw new IllegalArgumentException("fungible bread job must match its 64-unit input allocation");
+        int retainedInput = switch (inputHold) {
+            case ProductionInputHold.FungibleCold cold -> cold.inputLots().values().stream().mapToInt(Integer::intValue).sum();
+            case ProductionInputHold.FungibleBound bound -> bound.inputLots().values().stream().mapToInt(Integer::intValue).sum();
+            case ProductionInputHold.Cold cold -> cold.item().count();
+            case ProductionInputHold.Materialized ignored -> outputCount; // Checked against inventory at admission.
+        };
+        if (outputCount != retainedInput)
+            throw new IllegalArgumentException("bread job output must match its retained input allocation");
         if (!workTraversal.provenance().equals(facilityId) || workTraversal.edges().stream().anyMatch(edge -> edge.kind() != TraversalKind.PEDESTRIAN
                 || !edge.traversableBy(TraversalCapability.PEDESTRIAN)) || traversalCursor < 0
                 || traversalCursor >= workTraversal.linearCorridorSurfaces().size()) {
