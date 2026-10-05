@@ -123,6 +123,9 @@ final class FrontierV3HarvestDiagnosticJson {
                 + ",\"lastLease\":" + lastLeaseValue + "}"
                 + ",\"conservation\":{\"outputItem\":\"" + quote(job.outputItemId().value()) + "\",\"completedCropSlots\":"
                 + job.progress().completedCropSlots() + ",\"pendingCropSlot\":" + job.progress().pendingCropSlotIndex()
+                + ",\"workAcceptance\":" + job.progress().acceptance().map(value -> "{\"job\":\""
+                    + quote(value.receipt().jobId().value()) + "\",\"cell\":" + value.receipt().cellId().value()
+                    + ",\"epoch\":" + value.receipt().epoch() + ",\"cause\":\"" + quote(value.causationId()) + "\"}").orElse("null")
                 + ",\"nextCropSlot\":" + (job.progress().complete() ? -1 : job.progress().nextCropSlotIndex())
                 + ",\"deferredMaterializationSlots\":" + job.progress().completedCropSlots()
                 + ",\"totalCropSlots\":" + job.progress().totalCropSlots()

@@ -393,7 +393,8 @@ final class ResourceSiteHarvestPlanning {
         ResourceSiteHarvestJob job = jobForContinuation(state, action);
         return job != null && action.equals(coldProgress(job, action.dueAt().ticks()))
                 && state.resourceSites().site(job.siteId()).phase() == ResourceSitePhase.HARVESTING
-                && (state.resourceSites().hasPendingWorldChange(job.siteId())
+                && (job.progress().acceptance().isPresent()
+                    || state.resourceSites().hasPendingWorldChange(job.siteId())
                     || state.humanPopulation().meals().containsKey(job.workerId())
                     || state.actorMovements().containsKey(job.workerId())
                     || !ActorExecutionCoordinator.coldAvailable(state, job.workerId())

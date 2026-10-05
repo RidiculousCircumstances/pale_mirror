@@ -27,6 +27,12 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         navigationBlock = Objects.requireNonNull(navigationBlock, "field navigation block");
         Objects.requireNonNull(target, "exact field work target");
         if (!target.siteId().equals(siteId)) throw new IllegalArgumentException("field target belongs to another site");
+        progress.acceptance().ifPresent(accepted -> {
+            var receipt = accepted.receipt();
+            if (!receipt.jobId().equals(id) || !receipt.siteId().equals(siteId)
+                    || !receipt.observedHand().orElseThrow().address().actorId().equals(workerId))
+                throw new IllegalArgumentException("field acceptance has a foreign job, site or worker");
+        });
         if (!id.value().startsWith("job:site-harvest-") || !taskId.value().startsWith("task:")
                 || !siteId.value().startsWith("site:") || !workerId.value().startsWith("resident:")
                 || !actorAccountId.value().startsWith("custody:field-actor-") || !depotAccountId.value().startsWith("custody:")
@@ -92,7 +98,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         if (target.equals(next)) return this;
         ResourceSiteHarvestProgress selected = new ResourceSiteHarvestProgress(progress.totalCropSlots(),
                 progress.completedCropSlots(), progress.pendingCropSlotIndex(), progress.selectedCropSlotIndex(),
-                progress.lastCompletedCropSlotIndex());
+                progress.lastCompletedCropSlotIndex(), Optional.empty(), progress.acceptance());
         return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId, depotAccountId,
                 outputItemId, outputSlot, intentId, selected, deliveredYieldQuantity, returningForBatch,
                 batchSuccessorSlot, lastConfirmedBatch, navigationBlock, harvestedYieldQuantity, next);
@@ -106,7 +112,13 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         Objects.requireNonNull(next, "next field progress");
         if (navigationBlock.isPresent() || next.totalCropSlots() != progress.totalCropSlots())
             throw new IllegalArgumentException("blocked farmer or changed layout cannot progress crop work");
+        if (progress.acceptance().isPresent() && !progress.acceptance().equals(next.acceptance()))
+            throw new IllegalArgumentException("only exact field acknowledgement may clear retained acceptance");
         return copy(next, deliveredYieldQuantity, returningForBatch, batchSuccessorSlot, lastConfirmedBatch, navigationBlock);
+    }
+    public ResourceSiteHarvestJob acknowledgeWork(ResourceSiteHarvestWorkAcceptance accepted) {
+        return copy(progress.acknowledge(accepted), deliveredYieldQuantity, returningForBatch,
+                batchSuccessorSlot, lastConfirmedBatch, navigationBlock);
     }
 
     /** One external cell loss changes the work pool, not the actor's body or wheat hand. */

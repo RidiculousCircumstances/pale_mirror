@@ -68,7 +68,7 @@ final class HarvestActivityCapability implements ActorActivityCapability {
                 && lease.goalBody().equals(state.actorLocations().get(job.workerId()).body());
     }
     static ResidentWorkYield.Status checkpointStatus(FrontierWorldState state, ResourceSiteHarvestJob job) {
-        return job.progress().hasPendingCrop() || state.resourceSites().hasPendingWorldChange(job.siteId())
+        return job.progress().hasPendingPhysicalWork() || state.resourceSites().hasPendingWorldChange(job.siteId())
                 ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.READY;
     }
     @Override public FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long atTick) {

@@ -226,6 +226,7 @@ final class ResourceSiteStateCodec {
             output.writeInt(harvest.progress().selectedCropSlotIndex());
             output.writeInt(harvest.progress().lastCompletedCropSlotIndex());
             WorkStateCodec.writeProgress(output, harvest.progress().work());
+            ResourceSiteHarvestAcceptanceCodec.writeOptional(output, harvest.progress().acceptance());
             output.writeInt(harvest.deliveredYieldQuantity());
             output.writeInt(harvest.harvestedYieldQuantity());
             output.writeLong(harvest.target().layoutRevision());
@@ -272,7 +273,7 @@ final class ResourceSiteStateCodec {
         SubjectId output = new SubjectId(FrontierWorldStateCodec.readString(input));
         InventoryCustody.ContainerSlot slot = readOutputSlot(input);
         ResourceSiteHarvestProgress progress = new ResourceSiteHarvestProgress(input.readInt(), input.readInt(), input.readInt(),
-                input.readInt(), input.readInt(), WorkStateCodec.readProgress(input));
+                input.readInt(), input.readInt(), WorkStateCodec.readProgress(input), ResourceSiteHarvestAcceptanceCodec.readOptional(input));
         int delivered = input.readInt(), harvested = input.readInt();
         var target = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldWorkTarget(site,
                 input.readLong(), new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId(input.readLong()), input.readLong());

@@ -33,6 +33,25 @@ class FrontierV3HarvestSceneReleaseBarrierTest {
                 "ordinary release and disk recovery must respect the same prepared-cell boundary");
         assertEquals(state.inventory(), prepared.inventory());
         assertEquals(state.actorLocations(), prepared.actorLocations());
+        var field = state.resourceSites().cycle(site);
+        var cell = field.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+        var receipt = new ResourceSiteHarvestProgressed(site, field.epoch(), job.id(), 1, field.layout().revision(),
+                cell, job.target().generation(), ResourceFieldCycle.WorkOutcome.HARVESTED,
+                new ScheduleId("schedule:release-acceptance"), 1, Optional.of(new ResourceSiteHarvestProgressed.HandObservation(
+                        new PhysicalStackAddress.ActorHand(job.workerId(), lease.members().getFirst().entityId()), lease.revision(), 1)));
+        var acceptance = new ResourceSiteHarvestWorkAcceptance(receipt, field.physicalWorkTransition(cell).orElseThrow());
+        var nextProgress = job.progress().prepareNextCrop().confirmPreparedCrop().retainAcceptance(acceptance);
+        var acceptedJob = prepared.resourceSites().site(site).harvestJob(job.id()).orElseThrow()
+                .withConfirmedCrop(nextProgress, receipt.outcome()).bindTarget(field.worked(cell, receipt.outcome()));
+        var retainedSite = new ResourceSiteLifecycle(lifecycle.siteId(), lifecycle.phase(), lifecycle.growthEpoch(),
+                lifecycle.growthStage(), lifecycle.preparationWork(), lifecycle.conflictDisposition(),
+                Map.of(acceptedJob.id(), acceptedJob), lifecycle.harvestLineages(), lifecycle.harvestSequence());
+        var acceptedState = state.withResourceSites(state.resourceSites().replace(retainedSite, field.worked(cell, receipt.outcome())));
+        assertFalse(FrontierV3HarvestSceneReleaseBarrier.ready(ledger, acceptedState, lease),
+                "stored recovery cannot release canonical acceptance whose physical witness is still unretired");
+        var retiredSite = retainedSite.acknowledgeHarvestWork(acceptedJob, acceptance);
+        assertTrue(FrontierV3HarvestSceneReleaseBarrier.ready(ledger,
+                acceptedState.withResourceSites(acceptedState.resourceSites().replace(retiredSite)), lease));
     }
 
     @Test void savedUnconfirmedDeliveryBlocksOnlyItsSceneUntilTheOwnerRetiresItsWitness() {

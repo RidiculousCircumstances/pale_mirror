@@ -111,6 +111,7 @@ final class FrontierV3ResourceSiteExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
+        if (FrontierV3ResourceFieldAcceptanceExecutor.reconcileOne(level, runtime)) return;
         if (FrontierV3ResourceFieldPlayerBreakExecutor.reconcileOne(level, runtime)) return;
         if (FrontierV3ResourceFieldWorldChangeExecutor.reconcileOne(level, runtime)) return;
         if (observeOneNaturallyLoadedWorldCell(level, runtime, state)) return;

@@ -4,6 +4,8 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestWorkAcceptance;
+import io.farfrontier.palemirror.frontier.v3.persistence.ResourceSiteHarvestAcceptanceCodec;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
@@ -22,7 +24,7 @@ import java.util.UUID;
 
 /** Versioned value for the replacement SavedData field claim; not a second runtime owner. */
 final class FrontierV3ResourceFieldWitness {
-    private static final int FORMAT = 7;
+    private static final int FORMAT = 8;
 
     /** Raw block-state NBT is retained verbatim, never guessed from an OBSTRUCTED enum. */
     static final class ForeignIncident {
@@ -99,11 +101,15 @@ final class FrontierV3ResourceFieldWitness {
     }
 
     record Cell(ResourceFieldPhysicalSurface.Condition committed, Optional<Pending> pending,
-                Optional<ForeignIncident> foreign) {
+                Optional<ForeignIncident> foreign, Optional<ResourceSiteHarvestWorkAcceptance> retiredWork) {
+        Cell(ResourceFieldPhysicalSurface.Condition committed, Optional<Pending> pending, Optional<ForeignIncident> foreign) {
+            this(committed, pending, foreign, Optional.empty());
+        }
         Cell {
             Objects.requireNonNull(committed, "committed field cell");
             pending = Objects.requireNonNull(pending, "pending field effect");
             foreign = Objects.requireNonNull(foreign, "foreign field incident");
+            retiredWork = Objects.requireNonNull(retiredWork, "field work retirement seal");
             pending.ifPresent(effect -> {
                 if (!effect.transition().committedPrefix(effect.completedSteps()).equals(committed))
                     throw new IllegalArgumentException("field effect cursor disagrees with its committed prefix");
@@ -141,6 +147,11 @@ final class FrontierV3ResourceFieldWitness {
                 for (var entry : group.getValue().entrySet()) {
                     var id = Objects.requireNonNull(entry.getKey(), "physical field cell id");
                     var cell = Objects.requireNonNull(entry.getValue(), "physical field cell claim");
+                    cell.retiredWork().ifPresent(seal -> {
+                        if (!seal.receipt().siteId().equals(siteId) || !seal.receipt().cellId().equals(id)
+                                || seal.receipt().layoutRevision() != layoutRevision || seal.receipt().epoch() > epoch)
+                            throw new IllegalArgumentException("field work seal has a foreign cell, layout or future epoch");
+                    });
                     if (bucket(id) != group.getKey()) throw new IllegalArgumentException("field witness has a foreign ID bucket");
                     cell.pending().ifPresent(effect -> {
                         if (!effect.transition().siteId().equals(siteId) || effect.transition().epoch() != epoch
@@ -409,42 +420,39 @@ final class FrontierV3ResourceFieldWitness {
                 pending.canonicalSource())), prior.foreign()));
     }
 
-    /** Retire a physical-first farmer effect only after its exact canonical cell receipt exists. */
-    FrontierV3ResourceFieldWitness acknowledgeWork(FrontierCanonicalState<ResourceFieldCycle> accepted,
-                                                    ResourceFieldLayout.CellId id, String causationId,
-                                                    FrontierV3ResourceFieldObservation.Review fieldReview,
-                                                    Optional<FrontierV3ActorHandObservation.Review> handReview) {
-        Objects.requireNonNull(accepted, "accepted farmer work cycle");
-        Objects.requireNonNull(id, "accepted farmer work cell");
-        Objects.requireNonNull(causationId, "accepted farmer work cause");
-        Objects.requireNonNull(fieldReview, "accepted farmer work physical field");
-        handReview = Objects.requireNonNull(handReview, "accepted farmer work physical hand");
-        ResourceFieldCycle cycle = accepted.state();
-        Cell prior = cell(id);
-        Pending pending = prior.pending().orElseThrow(() -> new IllegalArgumentException("farmer work has no pending physical cause"));
-        if (!matchesCycle(cycle) || cycle.pendingPlayerBreaks().containsKey(id)
-                || prior.foreign().isPresent() || pending.canonicalSource().isPresent()
-                || !pending.causationId().equals(causationId)
+    /** Retire using the durable historical pair; no current body, scene or next-cell cursor is authority. */
+    FrontierV3ResourceFieldWitness retireWork(ResourceSiteHarvestWorkAcceptance accepted) {
+        var receipt = accepted.receipt();
+        if (!receipt.siteId().equals(siteId) || receipt.epoch() != epoch || receipt.layoutRevision() != layoutRevision)
+            throw new IllegalArgumentException("accepted field work has a foreign witness owner/epoch/layout");
+        Cell prior = cell(receipt.cellId());
+        if (prior.pending().isEmpty()) {
+            if (!prior.retiredWork().equals(Optional.of(accepted)))
+                throw new IllegalArgumentException("accepted field work has neither its pending effect nor exact retirement seal");
+            return this;
+        }
+        Pending pending = prior.pending().orElseThrow();
+        if (pending.canonicalSource().isPresent() || !pending.causationId().equals(accepted.causationId())
+                || !pending.transition().equals(accepted.transition())
                 || pending.completedSteps() != pending.transition().steps().size()
-                || !prior.committed().equals(pending.transition().after())
-                || !cycle.cell(id).accounted()
-                || !ResourceFieldPhysicalSurface.Condition.of(cycle.cell(id)).equalsOrGrowsFrom(prior.committed())
-                || fieldReview.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT
-                || !fieldReview.matches(this, id))
-            throw new IllegalArgumentException("farmer work lacks its accepted cell and physical postcondition");
+                || !prior.committed().equals(accepted.transition().after()))
+            throw new IllegalArgumentException("field retirement disagrees with accepted effect: site=" + siteId.value()
+                    + ";cell=" + receipt.cellId().value() + ";expectedCause=" + accepted.causationId()
+                    + ";actualCause=" + pending.causationId() + ";steps=" + pending.completedSteps());
         if (pending.handEffect().isPresent()) {
             HandEffect effect = pending.handEffect().orElseThrow();
-            FrontierV3ActorHandObservation.Review observed = handReview.orElseThrow(
-                    () -> new IllegalArgumentException("yielding farmer work lacks its physical hand"));
-            if (!pending.handConfirmed() || !cycle.cell(id).yielded() || !observed.matches(effect)
-                    || observed.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
-                    || observed.stack().orElseThrow().quantity() != effect.afterCount())
-                throw new IllegalArgumentException("yielding farmer work lacks its accepted hand postcondition");
-        } else if (pending.handConfirmed() || cycle.cell(id).yielded()) {
-            throw new IllegalArgumentException("non-yielding farmer work cannot acknowledge wheat");
+            var hand = receipt.observedHand().orElseThrow();
+            if (!pending.handConfirmed() || !effect.jobId().equals(receipt.jobId())
+                    || !effect.siteId().equals(receipt.siteId()) || !effect.actorId().equals(hand.address().actorId())
+                    || !effect.entityId().equals(hand.address().entityId()) || effect.authorityEpoch() != hand.authorityEpoch()
+                    || effect.afterCount() != hand.quantity())
+                throw new IllegalArgumentException("field retirement has a foreign or unconfirmed historical actor hand");
+        } else if (pending.handConfirmed() || accepted.transition().isHarvestAndReplant()) {
+            throw new IllegalArgumentException("yielding field retirement has no paired physical hand");
         }
-        return replace(id, new Cell(prior.committed(), Optional.empty(), Optional.empty()));
+        return replace(receipt.cellId(), new Cell(prior.committed(), Optional.empty(), prior.foreign(), Optional.of(accepted)));
     }
+
 
     /** A preaccepted canonical target can retire its own complete physical projection, never a farmer work effect. */
     FrontierV3ResourceFieldWitness acknowledgeCanonicalProjection(FrontierCanonicalState<ResourceFieldCycle> current,
@@ -500,6 +508,10 @@ final class FrontierV3ResourceFieldWitness {
     }
 
     private FrontierV3ResourceFieldWitness replace(ResourceFieldLayout.CellId id, Cell replacement) {
+        // Biology/world observations cannot erase the last exact retirement seal.
+        // It is bounded to one per CellId and replaced only by the next retireWork receipt.
+        if (replacement.retiredWork().isEmpty() && cell(id).retiredWork().isPresent())
+            replacement = new Cell(replacement.committed(), replacement.pending(), replacement.foreign(), cell(id).retiredWork());
         long bucket = bucket(id);
         var next = new HashMap<>(byIdBucket);
         var group = new HashMap<>(next.get(bucket)); group.put(id, replacement);
@@ -519,6 +531,8 @@ final class FrontierV3ResourceFieldWitness {
                 .forEach(entry -> {
                     var value = new CompoundTag(); value.putLong("id", entry.getKey().value());
                     writeCondition(value, "committed", entry.getValue().committed());
+                    entry.getValue().retiredWork().ifPresent(seal -> value.putByteArray("retiredWork",
+                            ResourceSiteHarvestAcceptanceCodec.encodeAcceptance(seal)));
                     entry.getValue().pending().ifPresent(pending -> {
                         var effect = new CompoundTag();
                         writeCondition(effect, "before", pending.transition().before());
@@ -650,7 +664,12 @@ final class FrontierV3ResourceFieldWitness {
                 foreign = Optional.of(new ForeignIncident(incident.getCompound("soil"), incident.getCompound("crop"),
                         incident.getString("cause")));
             }
-            if (claims.put(id, new Cell(committed, pending, foreign)) != null)
+            if (value.contains("retiredWork") && !value.contains("retiredWork", Tag.TAG_BYTE_ARRAY))
+                throw new IllegalStateException("field work retirement seal has an invalid tag type");
+            var retired = value.contains("retiredWork", Tag.TAG_BYTE_ARRAY)
+                    ? Optional.of(ResourceSiteHarvestAcceptanceCodec.decodeAcceptance(value.getByteArray("retiredWork")))
+                    : Optional.<ResourceSiteHarvestWorkAcceptance>empty();
+            if (claims.put(id, new Cell(committed, pending, foreign, retired)) != null)
                 throw new IllegalStateException("duplicate physical field cell claim");
         }
         return fromFlat(new SubjectId(tag.getString("site")), tag.getLong("epoch"), revision,

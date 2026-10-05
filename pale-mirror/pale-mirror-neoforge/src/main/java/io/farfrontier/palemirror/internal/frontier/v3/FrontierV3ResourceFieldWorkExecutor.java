@@ -113,7 +113,8 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 || !pending.transition().equals(transition.orElseThrow())
                 || pending.canonicalSource().isPresent()
                 || pending.handEffect().isPresent() != (outcome == ResourceFieldCycle.WorkOutcome.HARVESTED))
-            return Result.conflict("pending-cell-cause-or-transition-mismatch");
+            return Result.conflict("pending-cell-cause-or-transition-mismatch;expectedCause=" + cause(job, cycle, id)
+                    + ";actualCause=" + pending.causationId() + ";cell=" + id.value());
         var review = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.pending();
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED
@@ -166,48 +167,6 @@ final class FrontierV3ResourceFieldWorkExecutor {
     }
 
     /** The preceding physical cause remains retained until its canonical cell is durably accepted. */
-    static Disposition acknowledgePrevious(ServerLevel level, FrontierCanonicalState<FrontierWorldState> accepted,
-                                           SceneLease lease, ResourceSiteHarvestJob job) {
-        if (job.progress().completedCropSlots() == 0) return Disposition.READY;
-        FrontierWorldState state = accepted.state();
-        ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-        ResourceFieldLayout.CellId id = cycle.layout().cells().get(job.progress().lastCompletedCropSlotIndex()).id();
-        FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
-        var claim = ledger.fieldClaim(job.siteId());
-        // A COLD receipt is not a pending physical farmer effect. First-visibility
-        // initialization/projection belongs to the field owner, not to a returning farmer.
-        if (claim == null || claim instanceof FrontierV3ResourceSiteLedger.FieldInitialization initial
-                && initial.status() == FrontierV3ResourceSiteLedger.Status.PENDING)
-            return job.progress().complete() || job.returningForBatch() ? Disposition.READY : Disposition.PENDING;
-        if (!(claim instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
-                || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                || !owner.witness().matchesCycle(cycle)) return Disposition.CONFLICT;
-        FrontierV3ResourceFieldWitness witness = owner.witness();
-        var pending = witness.cell(id).pending();
-        if (pending.isEmpty()) {
-            // A completed work/projection cause already observed this physical cell before
-            // clearing its pending witness. Re-reading it on every return-route tick would
-            // incorrectly require the field chunk to stay loaded all the way to the depot.
-            // The job retains the accepted historical work; the cell owns its NEW growth.
-            // Its biology and later work epochs cannot revoke that historical receipt.
-            return Disposition.READY;
-        }
-        if (pending.orElseThrow().canonicalSource().isPresent()) return Disposition.READY;
-        if (!FrontierV3ActorHandObservation.ownsCurrentHarvest(state, lease, job)
-                || !pending.orElseThrow().causationId().equals(cause(job, cycle, id))) return Disposition.CONFLICT;
-        var field = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id,
-                cause(job, cycle, id) + ":accepted");
-        if (field.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Disposition.PENDING;
-        Optional<FrontierV3ActorHandObservation.Review> hand = pending.orElseThrow().handEffect().isPresent()
-                ? Optional.of(FrontierV3ActorHandObservation.observe(level, state, lease, job)) : Optional.empty();
-        try {
-            var acceptedCycle = new FrontierCanonicalState<>(accepted.worldId(), accepted.revision(), accepted.instant(), cycle);
-            witness = witness.acknowledgeWork(acceptedCycle, id, cause(job, cycle, id), field, hand);
-        } catch (IllegalArgumentException invalid) { return Disposition.CONFLICT; }
-        ledger.replaceFieldClaim(owner, owner.withWitness(witness));
-        ledger.persist(level);
-        return Disposition.READY;
-    }
 
     private static Result handResult(ServerLevel level, FrontierWorldState state, SceneLease lease,
                                      ResourceSiteHarvestJob job, ResourceFieldCycle.WorkOutcome outcome, int count) {

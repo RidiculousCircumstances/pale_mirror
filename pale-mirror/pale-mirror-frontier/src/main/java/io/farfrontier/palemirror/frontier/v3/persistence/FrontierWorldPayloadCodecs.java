@@ -52,6 +52,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static PayloadCodecs resourceSiteCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(ResourceSitePayloadCodecs.growthAdvanced(),
             ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(), ResourceSitePayloadCodecs.harvestWorkChanged(),
             ResourceSitePayloadCodecs.harvestCropPrepared(), ResourceSitePayloadCodecs.harvestProgressed(),
+            new ResourceSiteHarvestAcceptanceCodec(),
             ResourceSitePayloadCodecs.harvestColdTraversalAdvanced(), ResourceSitePayloadCodecs.harvestColdGoalAdvanced(),
             ResourceSitePayloadCodecs.harvestColdGoalHeld(), ResourceSitePayloadCodecs.harvestReturned(),
             ResourceSitePayloadCodecs.harvestSegmentRenewed(), ResourceSitePayloadCodecs.harvestBlockedCellSkipped(), ResourceSitePayloadCodecs.harvestImmatureCellSkipped(),

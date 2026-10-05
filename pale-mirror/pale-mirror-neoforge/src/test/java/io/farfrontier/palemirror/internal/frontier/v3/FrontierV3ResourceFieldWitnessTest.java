@@ -390,6 +390,30 @@ class FrontierV3ResourceFieldWitnessTest {
         assertThrows(IllegalArgumentException.class, () -> recovered.begin(transition, "farmer:replay"),
                 "a physically completed harvest cannot be replayed before canonical accounting");
 
+        var receipt = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgressed(SITE, 1,
+                hand.jobId(), 37, 1, FIRST, 0, ResourceFieldCycle.WorkOutcome.HARVESTED,
+                new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:accepted-cell"), 20,
+                java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgressed.HandObservation(
+                        new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(hand.actorId(), hand.entityId()),
+                        hand.authorityEpoch(), hand.afterCount())));
+        var acceptance = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestWorkAcceptance(receipt, transition);
+        assertThrows(IllegalArgumentException.class, () -> recovered.retireWork(acceptance), "foreign cause must fail before retirement");
+        var exactTag = recovered.write();
+        exactTag.getList("cells", Tag.TAG_COMPOUND).getCompound(0).getCompound("pending").putString("cause", acceptance.causationId());
+        var exact = FrontierV3ResourceFieldWitness.read(exactTag);
+        var retired = exact.retireWork(acceptance);
+        assertTrue(retired.cell(FIRST).pending().isEmpty());
+        assertEquals(acceptance, retired.cell(FIRST).retiredWork().orElseThrow());
+        var restarted = FrontierV3ResourceFieldWitness.read(retired.write());
+        assertEquals(restarted, restarted.retireWork(acceptance), "crash between seal and canonical ACK is idempotent");
+        var absent = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.restore(
+                layout, Map.of(FIRST, PLANTED, SECOND, PLANTED)));
+        assertThrows(IllegalArgumentException.class, () -> absent.retireWork(acceptance), "absence alone is never a retirement receipt");
+        var unconfirmedTag = exact.write();
+        unconfirmedTag.getList("cells", Tag.TAG_COMPOUND).getCompound(0).getCompound("pending").putBoolean("handConfirmed", false);
+        var unconfirmed = FrontierV3ResourceFieldWitness.read(unconfirmedTag);
+        assertThrows(IllegalArgumentException.class, () -> unconfirmed.retireWork(acceptance));
+
         var noHand = recovered.write();
         noHand.getList("cells", Tag.TAG_COMPOUND).getCompound(0).getCompound("pending").remove("hand");
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceFieldWitness.read(noHand));

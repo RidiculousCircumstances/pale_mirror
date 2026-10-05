@@ -254,6 +254,15 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                         FrontierResourceSiteHarvestSceneSupport.owner(state, FrontierSceneBehaviors.resourceSiteHarvest(handoff.lease())), handoff)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof ResourceSiteHarvestWorkAcknowledged acknowledged) {
+            try {
+                var site = acknowledged.acceptance().receipt().siteId();
+                ResourceSiteHarvestAcceptanceProcess.acknowledge(state, site, acknowledged);
+                return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(site, acknowledged)));
+            } catch (IllegalArgumentException | IllegalStateException invalid) {
+                return FrontierWorldCommandPlanner.rejected(invalid.getMessage());
+            }
+        }
         if (command.payload() instanceof ResourceSiteHarvestProgressed progressed) {
             if (!ResourceSiteHarvestProcess.irreversibleCropEffectsAdmitted()) {
                 return FrontierWorldCommandPlanner.rejected("resource-site irreversible harvest progress is deferred to F0.2");
@@ -507,6 +516,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestHotTraversalAdvanced advanced -> ResourceSiteHarvestProcess.reduceHotTraversalAdvanced(state, event.subject(), advanced);
             case ResourceSiteHarvestHotGoalArrived arrived -> ResourceSiteHarvestProcess.reduceHotGoalArrived(state, event.subject(), arrived);
             case ResourceSiteHarvestProgressed progressed -> ResourceSiteHarvestProcess.reduceProgressed(state, event.subject(), progressed);
+            case ResourceSiteHarvestWorkAcknowledged acknowledged -> ResourceSiteHarvestAcceptanceProcess.acknowledge(state, event.subject(), acknowledged);
             case ResourceSiteHarvestSceneReconciled reconciled -> ResourceSiteHarvestSceneReconciliation.reduce(state, event.subject(), reconciled);
             case ResourceSiteHarvestHandProjected projected -> ResourceSiteHarvestProcess.reduceHandProjected(state, event.subject(), projected);
             case ResourceSiteHarvestHandRelease released -> ResourceSiteHarvestProcess.reduceHandRelease(state, event.subject(), released);

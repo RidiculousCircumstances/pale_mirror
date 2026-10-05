@@ -274,6 +274,9 @@ class ResourceSiteHarvestProcessTest {
                             Optional.of(new ResourceSiteHarvestProgressed.HandObservation(
                                     new PhysicalStackAddress.ActorHand(current.workerId(), lease.members().getFirst().entityId()),
                                     lease.revision(), hand))));
+            var accepted = state.resourceSites().site(site).harvestJob(current.id()).orElseThrow().progress().acceptance();
+            if (accepted.isPresent()) state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestAcceptanceProcess
+                    .acknowledge(state, site, new ResourceSiteHarvestWorkAcknowledged(accepted.orElseThrow()));
         }
         return state;
     }
@@ -609,6 +612,21 @@ class ResourceSiteHarvestProcessTest {
         var finished = ResourceSiteHarvestProcess.reduceProgressed(resumed, hot.site(), receipt);
         assertEquals(1, finished.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow().harvestedYieldQuantity());
         assertFalse(finished.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow().progress().hasPendingCrop());
+        var acceptedJob = finished.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow();
+        var acceptance = acceptedJob.progress().acceptance().orElseThrow();
+        assertTrue(acceptedJob.progress().hasPendingPhysicalWork(), "accepted canonical progress still owns physical retirement");
+        assertThrows(IllegalStateException.class, acceptedJob.progress()::prepareNextCrop);
+        assertEquals(ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT, HarvestActivityCapability.checkpointStatus(finished, acceptedJob));
+        var codec = new FrontierWorldStateCodec();
+        var restored = codec.decode(codec.encode(finished));
+        assertEquals(acceptance, restored.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow().progress().acceptance().orElseThrow());
+        var acknowledged = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestAcceptanceProcess.acknowledge(
+                restored, hot.site(), new ResourceSiteHarvestWorkAcknowledged(acceptance));
+        assertFalse(acknowledged.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow().progress().hasPendingPhysicalWork());
+        assertEquals(restored.inventory(), acknowledged.inventory(), "retirement cannot repeat wheat accrual");
+        assertEquals(restored.actorLocations(), acknowledged.actorLocations(), "retirement has no body authority");
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestAcceptanceProcess
+                .acknowledge(acknowledged, hot.site(), new ResourceSiteHarvestWorkAcknowledged(acceptance)));
         assertEquals(resumed.actorLocations(), finished.actorLocations());
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceProgressed(finished, hot.site(), receipt));
     }

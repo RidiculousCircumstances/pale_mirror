@@ -92,20 +92,20 @@ final class ResourceFieldCycleStateCodec {
     private static BlockPosition readPosition(DataInputStream input) throws IOException {
         return new BlockPosition(input.readInt(), input.readInt(), input.readInt());
     }
-    private static int soilTag(ResourceFieldCycle.Soil value) {
+    static int soilTag(ResourceFieldCycle.Soil value) {
         return switch (value) { case UNKNOWN -> 1; case FARMLAND -> 2; case DIRT -> 3; case OBSTRUCTED -> 4; };
     }
-    private static ResourceFieldCycle.Soil soil(int tag) {
+    static ResourceFieldCycle.Soil soil(int tag) {
         return switch (tag) {
             case 1 -> ResourceFieldCycle.Soil.UNKNOWN; case 2 -> ResourceFieldCycle.Soil.FARMLAND;
             case 3 -> ResourceFieldCycle.Soil.DIRT; case 4 -> ResourceFieldCycle.Soil.OBSTRUCTED;
             default -> throw new IllegalArgumentException("unknown field soil wire tag " + tag);
         };
     }
-    private static int cropTag(ResourceFieldCycle.Crop value) {
+    static int cropTag(ResourceFieldCycle.Crop value) {
         return switch (value) { case UNKNOWN -> 1; case ABSENT -> 2; case GROWING -> 3; case MATURE -> 4; case OBSTRUCTED -> 5; };
     }
-    private static ResourceFieldCycle.Crop crop(int tag) {
+    static ResourceFieldCycle.Crop crop(int tag) {
         return switch (tag) {
             case 1 -> ResourceFieldCycle.Crop.UNKNOWN; case 2 -> ResourceFieldCycle.Crop.ABSENT;
             case 3 -> ResourceFieldCycle.Crop.GROWING; case 4 -> ResourceFieldCycle.Crop.MATURE;

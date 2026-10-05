@@ -50,4 +50,5 @@ public record ResourceSiteHarvestProgressed(SubjectId siteId, long epoch, Subjec
     }
 
     @Override public String type() { return "frontier.resource_site_harvest_progressed"; }
+    @Override public boolean requiresDurableBeforeEffect() { return observedHand.isPresent(); }
 }

@@ -21,7 +21,7 @@ final class FrontierV3HarvestSceneReleaseBarrier {
         // Keep the original scope available for loaded-world effect reconciliation;
         // do not enter DRAINING and mistake the owner's lawful refusal for lost custody.
         if (!FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause)
-                && FrontierResourceSiteHarvestSceneSupport.require(state, cause).progress().hasPendingCrop()) return false;
+                && FrontierResourceSiteHarvestSceneSupport.require(state, cause).progress().hasPendingPhysicalWork()) return false;
         return ready(ledger, lease);
     }
 

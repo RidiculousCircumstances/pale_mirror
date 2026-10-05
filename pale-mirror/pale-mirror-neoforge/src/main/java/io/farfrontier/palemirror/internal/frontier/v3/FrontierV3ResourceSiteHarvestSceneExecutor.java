@@ -266,15 +266,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         var site = state.resourceSite(job.siteId());
         if (site == null) { conflict(level, runtime, lease, "field-work-site-unavailable"); return; }
+        // The resource-site owner retires the exact retained receipt independently
+        // of this scene and current selection. No following-cell acknowledgement.
+        if (job.progress().acceptance().isPresent()) return;
         var physicalClaim = FrontierV3ResourceSiteLedger.get(level).siteClaim(site.id());
-        if (physicalClaim instanceof FrontierV3ResourceSiteLedger.CellSiteClaim) {
-            var acknowledged = FrontierV3ResourceFieldWorkExecutor.acknowledgePrevious(level,
-                    runtime.canonicalState().orElseThrow(), lease, job);
-            if (acknowledged == FrontierV3ResourceFieldWorkExecutor.Disposition.PENDING) return;
-            if (acknowledged == FrontierV3ResourceFieldWorkExecutor.Disposition.CONFLICT) {
-                conflict(level, runtime, lease, "field-work-accepted-cell-postcondition"); return;
-            }
-        }
         if (projectColdCarriedHand(level, runtime, state, lease, job)) return;
         if (job.navigationBlock().isEmpty()
                 && ResourceSiteHarvestGoal.actorAtDepot(state, job)

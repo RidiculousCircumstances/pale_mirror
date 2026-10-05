@@ -49,7 +49,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 239 retains patrol rejoin/predecessor versions and captured physical arrival authority.
     // Version 246 retains logistics formation goals, member approaches and captured HOT cohort receipts.
     // Version 247 retains migration waiting origins rather than throwing when a departure has no known path.
-    static final int VERSION = 247; private static final int MAX_ENTRIES = 65_535;
+    // Version 248 retains exact physical work acceptance until durable adapter retirement.
+    static final int VERSION = 248; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

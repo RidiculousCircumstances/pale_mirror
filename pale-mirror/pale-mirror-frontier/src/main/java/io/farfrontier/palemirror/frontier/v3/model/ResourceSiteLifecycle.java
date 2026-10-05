@@ -147,6 +147,12 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
     public ResourceSiteLifecycle returnFullHarvestBatch(ResourceSiteHarvestJob job) { return replace(require(job).withFullBatchReturn()); }
     public ResourceSiteLifecycle skipBlockedHarvestCell(ResourceSiteHarvestJob job, int count) { return replace(require(job).withBlockedCellsSkipped(count)); }
     public ResourceSiteLifecycle withHarvestLabour(ResourceSiteHarvestJob job, WorkProgress work) { return replace(require(job).withWork(work)); }
+    public ResourceSiteLifecycle withHarvestProgress(ResourceSiteHarvestJob job, ResourceSiteHarvestProgress progress) {
+        return replace(require(job).withProgress(progress));
+    }
+    public ResourceSiteLifecycle acknowledgeHarvestWork(ResourceSiteHarvestJob job, ResourceSiteHarvestWorkAcceptance accepted) {
+        return replace(require(job).acknowledgeWork(accepted));
+    }
     public ResourceSiteLifecycle bindHarvestTarget(ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {
         return replace(require(job).bindTarget(cycle));
     }
@@ -234,7 +240,8 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
     public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob job, boolean resolved, ResourceSiteHarvestCausality causality,
                                                     BodyPosition body, java.util.Set<PhysicalIntentId> reclaimable) {
         require(job);
-        if (!job.progress().complete()) throw new IllegalArgumentException("field execution is not complete");
+        if (!job.progress().complete() || job.progress().hasPendingPhysicalWork())
+            throw new IllegalArgumentException("field execution is incomplete or retains physical work acceptance");
         var jobs = new LinkedHashMap<>(harvestJobs); jobs.remove(job.id());
         var histories = new LinkedHashMap<>(harvestLineages);
         for (PhysicalIntentId id : reclaimable) {

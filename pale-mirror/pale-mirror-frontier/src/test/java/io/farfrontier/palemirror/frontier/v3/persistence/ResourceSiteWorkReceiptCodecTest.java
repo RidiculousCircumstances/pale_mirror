@@ -16,6 +16,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ResourceSiteWorkReceiptCodecTest {
+    @Test void acceptedPhysicalReceiptHasOneStableStrictCodec() {
+        var receipt = new ResourceSiteHarvestProgressed(new SubjectId("site:test"), 1,
+                new SubjectId("job:site-harvest-test"), 1, 1, new ResourceFieldLayout.CellId(1), 4,
+                ResourceFieldCycle.WorkOutcome.HARVESTED, new ScheduleId("schedule:accepted-cell"), 20,
+                java.util.Optional.of(new ResourceSiteHarvestProgressed.HandObservation(new PhysicalStackAddress.ActorHand(
+                        new SubjectId("resident:test"), java.util.UUID.fromString("00000000-0000-0000-0000-000000000125")), 9, 1)));
+        var ripe = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface.Condition(
+                ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.MATURE, 7);
+        var acceptance = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestWorkAcceptance(receipt,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellTransition.harvestAndReplant(
+                        receipt.siteId(), 1, 1, receipt.cellId(), ripe));
+        var value = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestWorkAcknowledged(acceptance);
+        var codecs = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
+        byte[] encoded = codecs.encode(value);
+        assertEquals(value, codecs.decode(value.type(), encoded));
+        assertThrows(IllegalArgumentException.class, () -> codecs.decode(value.type(), Arrays.copyOf(encoded, encoded.length - 1)));
+        byte[] wrongMode = encoded.clone();
+        int receiptBytes = java.nio.ByteBuffer.wrap(encoded).getInt();
+        wrongMode[4 + receiptBytes] = 99;
+        assertThrows(IllegalArgumentException.class, () -> codecs.decode(value.type(), wrongMode));
+    }
     @Test void labourWalRetainsExactPredecessorIntervalAndRejectsTruncation() {
         var before = io.farfrontier.palemirror.frontier.v3.model.WorkProgress.pending(200, 100).resume(100, 1_250, 260);
         var value = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestWorkChanged(

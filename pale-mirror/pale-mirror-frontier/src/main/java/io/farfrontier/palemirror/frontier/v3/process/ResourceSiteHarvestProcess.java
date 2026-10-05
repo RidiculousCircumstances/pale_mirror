@@ -95,7 +95,7 @@ public final class ResourceSiteHarvestProcess {
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING
                 || job == null
                 || !job.id().equals(projected.jobId()) || !job.actorAccountId().equals(projected.actorAccountId())
-                || job.progress().hasPendingCrop()) {
+                || job.progress().hasPendingPhysicalWork()) {
             throw new IllegalArgumentException("field hand projection lacks its active declared harvest job");
         }
         PhysicalIntent intent = state.physicalIntents().get(job.intentId());
@@ -139,7 +139,7 @@ public final class ResourceSiteHarvestProcess {
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING
                 || job == null
                 || !job.id().equals(released.jobId()) || !job.actorAccountId().equals(released.actorAccountId())
-                || job.progress().hasPendingCrop())
+                || job.progress().hasPendingPhysicalWork())
             throw new IllegalArgumentException("harvest hand release lacks its exact active job");
         SceneLease lease = state.sceneLeases().get(released.sceneRelease().leaseId());
         if (lease == null || lease.status() != SceneLeaseStatus.DRAINING
@@ -255,6 +255,11 @@ public final class ResourceSiteHarvestProcess {
                 inventory = inventory.withFungibleResources(inventory.fungibleResources()
                         .accrueColdActorHarvestPart(carried, actorAccount, job.workerId()));
             }
+        }
+        if (!hot.isEmpty() && field.physicalWorkTransition(cell.id()).isPresent()) {
+            var acceptedJob = advanced.harvestJob(job.id()).orElseThrow();
+            advanced = advanced.withHarvestProgress(acceptedJob, acceptedJob.progress().retainAcceptance(
+                    new ResourceSiteHarvestWorkAcceptance(progressed, field.physicalWorkTransition(cell.id()).orElseThrow())));
         }
         // The last crop is not the final worker position. Return along the retained
         // corridor before output and successor admission.

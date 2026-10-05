@@ -93,6 +93,7 @@ final class ResourceSitePayloadCodecs {
                     output.writeInt(job.progress().selectedCropSlotIndex());
                     output.writeInt(job.progress().lastCompletedCropSlotIndex());
                     WorkStateCodec.writeProgress(output, job.progress().work());
+                    ResourceSiteHarvestAcceptanceCodec.writeOptional(output, job.progress().acceptance());
                     output.writeInt(job.deliveredYieldQuantity());
                     output.writeInt(job.harvestedYieldQuantity());
                     output.writeLong(job.target().layoutRevision());
@@ -120,6 +121,7 @@ final class ResourceSitePayloadCodecs {
                     int total = input.readInt(), completed = input.readInt(), pending = input.readInt();
                     int selected = input.readInt(), lastCompleted = input.readInt();
                     var workProgress = WorkStateCodec.readProgress(input);
+                    var acceptance = ResourceSiteHarvestAcceptanceCodec.readOptional(input);
                     int delivered = input.readInt(), harvested = input.readInt();
                     var target = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldWorkTarget(site,
                             input.readLong(), new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId(input.readLong()), input.readLong());
@@ -137,7 +139,7 @@ final class ResourceSitePayloadCodecs {
                     }
                     return new ResourceSiteHarvestStarted(new ResourceSiteHarvestJob(id, task, site, worker, actorAccount, depotAccount, output,
                             new InventoryCustody.ContainerSlot(depot, slot), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(intent),
-                            new ResourceSiteHarvestProgress(total, completed, pending, selected, lastCompleted, workProgress), delivered,
+                            new ResourceSiteHarvestProgress(total, completed, pending, selected, lastCompleted, workProgress, acceptance), delivered,
                             returningForBatch, successorSlot, lastBatch, java.util.Optional.empty(), harvested, target));
                 });
             }

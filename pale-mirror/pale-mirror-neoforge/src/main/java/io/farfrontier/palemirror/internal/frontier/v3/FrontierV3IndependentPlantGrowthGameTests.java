@@ -23,7 +23,7 @@ public final class FrontierV3IndependentPlantGrowthGameTests {
             template = "bastion/mobs/empty", timeoutTicks = 30)
     public static void acceptedPlantGrowthDoesNotInvalidateTheExactSowingReceipt(GameTestHelper helper) {
         var level = helper.getLevel();
-        var soil = helper.absolutePos(new BlockPos(4, 0, 4));
+        var soil = helper.absolutePos(new BlockPos(1, 0, 1));
         var site = new SubjectId("site:independent-plant-receipt");
         var support = SurfaceAnchor.at(soil.getX(), soil.getY(), soil.getZ());
         var id = new ResourceFieldLayout.CellId(1);
@@ -38,17 +38,22 @@ public final class FrontierV3IndependentPlantGrowthGameTests {
             var claimed = FrontierV3ResourceFieldWitness.claimed(site, 1, ResourceFieldPhysicalSurface.fromCycle(bare));
             var transition = ResourceFieldCellTransition.between(site, 1, 1, id,
                     ResourceFieldPhysicalSurface.Condition.of(bare.cell(id)), ResourceFieldPhysicalSurface.Condition.of(planted.cell(id)));
-            var pending = claimed.begin(transition, "farmer:native:independent-sowing");
+            var receipt = new ResourceSiteHarvestProgressed(site, 1, new SubjectId("job:site-harvest-native-sowing"), 1,
+                    1, id, 0, ResourceFieldCycle.WorkOutcome.PLANTED, new ScheduleId("schedule:native-sowing"), 2,
+                    Optional.of(new ResourceSiteHarvestProgressed.HandObservation(new PhysicalStackAddress.ActorHand(
+                            new SubjectId("resident:native-sowing"), java.util.UUID.fromString("00000000-0000-0000-0000-000000000125")), 1, 0)));
+            var acceptance = new ResourceSiteHarvestWorkAcceptance(receipt, transition);
+            var pending = claimed.begin(transition, acceptance.causationId());
             level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState(), 3);
             var complete = pending.confirm(id, FrontierV3ResourceFieldObservation.observe(level, latest, pending, id, "native:sown"));
-            var physical = FrontierV3ResourceFieldObservation.observe(level, latest, complete, id, "native:accepted-sowing");
             var accepted = new FrontierCanonicalState<>(new WorldId("frontier:independent-plants"), new Revision(2), new SimInstant(2), latest);
-            var closed = complete.acknowledgeWork(accepted, id, "farmer:native:independent-sowing", physical, Optional.empty());
+            var closed = complete.retireWork(acceptance);
             helper.assertTrue(closed.cell(id).pending().isEmpty() && closed.cell(id).committed().growthStage() == 0
                     && latest.cell(id).growthStage() == 1, "sowing receipt confirms actual age0, never rewinds canonical age1");
-            var lost = new FrontierCanonicalState<>(accepted.worldId(), accepted.revision(), accepted.instant(), latest.cropRemoved(id));
-            helper.assertTrue(rejects(() -> complete.acknowledgeWork(lost, id,
-                    "farmer:native:independent-sowing", physical, Optional.empty())), "growth allowance cannot conceal crop loss");
+            var foreignReceipt = new ResourceSiteHarvestProgressed(site, 1, new SubjectId("job:site-harvest-other-sowing"), 1,
+                    1, id, 0, receipt.outcome(), receipt.coldScheduleId(), receipt.coldDueAt(), receipt.observedHand());
+            helper.assertTrue(rejects(() -> complete.retireWork(new ResourceSiteHarvestWorkAcceptance(foreignReceipt, transition))),
+                    "a different job cannot retire this exact accepted physical cause");
 
             var growth = ResourceFieldCellTransition.between(site, 1, 1, id,
                     closed.cell(id).committed(), ResourceFieldPhysicalSurface.Condition.of(latest.cell(id)));
