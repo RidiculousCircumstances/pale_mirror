@@ -17,6 +17,7 @@
     "FrontierV3ServerEntityManagerAccessor",
     "FrontierV3EntityPermanentStorageAccessor",
     "FrontierV3UnloadingTerrainAccessor",
+    "FrontierV3ChunkUnloadQueueMixin",
     "FrontierV3EntitySavePassMixin",
     "FrontierV3CargoCarrierMinecartMixin",
     "FrontierV3VehicleEntityMixin",
