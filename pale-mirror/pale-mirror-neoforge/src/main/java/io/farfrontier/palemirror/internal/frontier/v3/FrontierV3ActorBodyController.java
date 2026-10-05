@@ -90,6 +90,19 @@ final class FrontierV3ActorBodyController {
     /** Called by bounded actor probes, including actors with no remaining projection scope. */
     static void progressDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                   FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
+        var indexed = level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(), actor));
+        if (indexed instanceof Mob living && living.isAlive() && recognizesRecordedBody(level, state, living)
+                && (ActorBodyAuthority.require(state, ActorBodyAuthority.current(state, actor)).phase() == FencedRecoveryPhase.RUNNING
+                    || ActorBodyAuthority.require(state, ActorBodyAuthority.current(state, actor)).phase() == FencedRecoveryPhase.AMBIGUOUS)
+                && FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).currentBodyResidence(actor,
+                    living.getPersistentData().getLong(RESIDENCE_KEY))
+                && FrontierV3NativeBodyResidence.reconcile(level, living)) {
+            // Native visibility may close immediately; durable absence does not.
+            // Do not fabricate a receipt or skip the existing save/sync/read fence.
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_BODY_RESIDENCY_DRAIN actor={} epoch={} column={} reason=NATIVE_INACCESSIBLE_TERRAIN",
+                    actor.value(), ActorBodyAuthority.current(state, actor).physicalEpoch(), living.chunkPosition());
+            return;
+        }
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var receipt = ledger.bodyDeparture(actor).orElse(null);
         if (receipt == null || !receipt.current(state) || !ledger.savedBodyDeparture(receipt)
