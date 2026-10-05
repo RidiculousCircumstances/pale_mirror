@@ -47,6 +47,10 @@ final class FrontierV3DepartureReturnReadFence {
         return PENDING_READS.pending(level, chunk);
     }
 
+    static boolean readPending(ServerLevel level, io.farfrontier.palemirror.frontier.v3.model.BodyPosition body) {
+        return readPending(level, new ChunkPos(Math.floorDiv(body.x(), 16), Math.floorDiv(body.z(), 16)));
+    }
+
     static boolean anyReadPending(ServerLevel level) {
         return PENDING_READS.anyPending(level);
     }

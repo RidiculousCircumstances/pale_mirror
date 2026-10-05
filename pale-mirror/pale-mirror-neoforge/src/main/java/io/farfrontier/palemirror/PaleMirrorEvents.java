@@ -190,19 +190,10 @@ public final class PaleMirrorEvents {
         }
     }
 
-    /**
-     * Keep an exact managed-body departure observable. A body which leaves a
-     * loaded HOT scene without the actor executor initiating a drain is an
-     * invariant breach: source custody must recover on its normal cadence,
-     * but the operator also needs the physical evidence rather than a silent
-     * one-frame re-admission loop.
-     */
+    /** Legacy source runtime tracking hook; v3 certifies only final physical departure. */
     @SubscribeEvent
     public static void onEntityLeave(EntityLeaveLevelEvent event) {
         if (event.getLevel().isClientSide()) return;
-        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
-            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeEntityLeave(level, event.getEntity());
-        }
         if (SourceGrayboxRuntime.availableForSelectedLaunch()
                 && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
                 && SourceGrayboxRuntime.recognizesManagedEntity(event.getEntity())) {
@@ -534,6 +525,14 @@ public final class PaleMirrorEvents {
     public static void onBlockPlaced(BlockEvent.EntityPlaceEvent event) {
         if (!event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
             PaleMirrorRuntime.forServer(level.getServer()).railTopologyChanged(level, event.getPos());
+        }
+    }
+
+    @SubscribeEvent
+    public static void onChunkUnloaded(ChunkEvent.Unload event) {
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+                && event.getChunk() instanceof net.minecraft.world.level.chunk.LevelChunk chunk) {
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeNaturalChunkUnload(level, chunk);
         }
     }
 

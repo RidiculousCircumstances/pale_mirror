@@ -17,7 +17,7 @@ public final class FrontierV3BodyObservationSave {
     public static void observe(Entity entity, CompoundTag saved) {
         if (!(entity instanceof Mob) || !(entity.level() instanceof ServerLevel)
                 || !entity.getPersistentData().contains(FrontierV3ActorCarrierComposition.ACTOR_KEY, Tag.TAG_STRING)) return;
-        var observation = FrontierV3BodyObservation.capture(entity);
+        var observation = FrontierV3BodyObservation.captureForDeparture(entity);
         saved.put(KEY, encode(observation, entity.getX(), entity.getY(), entity.getZ()));
     }
 

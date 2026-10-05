@@ -200,7 +200,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 // reacquiring directly would strand that input outside the physical chest.
                 FrontierWorldState emitted = runtime.decodedState()
                         .orElseThrow(() -> new IllegalStateException("reference replica emission did not publish state"));
-                FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, emitted, containerId);
+                writeAndConfirmProjection(level, runtime, emitted, containerId, chest);
             }
             return;
         }
@@ -217,11 +217,9 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             if (lease.status() == PhysicalCustodyLeaseStatus.CHECKPOINTED
                     && canonical.equals(observed.fingerprint()) && replica.provenance().equals(observed.provenance())
                     && closeConfirmedMutation(runtime, state, containerId)) {
-                FrontierWorldState emitted = runtime.decodedState()
-                        .orElseThrow(() -> new IllegalStateException("reference mutation boundary did not publish state"));
-                if (emitted.replicaCustody().replicas().containsKey(containerId)) {
-                    FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, emitted, containerId);
-                }
+                // This successor records the witnessed HOT image, not permission to repack
+                // it. Observe that exact image first; any later COLD-layout write acquires
+                // its own projection fence through the released-scope branch above.
                 return;
             }
             drain(runtime, lease, "renew");
@@ -261,6 +259,27 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         return submit(runtime, "projection-conflict", lease.objectId(), replica.replicaRevision(),
                 ReplicaCustodyDiagnosticProducer.projectionConflict(lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(),
                         lease.expectedReplicaRevision(), actual.fingerprint(), actual.provenance()));
+    }
+
+    /** A physical write and its actual confirmation cannot depend on a later discovery turn. */
+    private static void writeAndConfirmProjection(ServerLevel level,
+                                                  FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                  FrontierWorldState prepared, SubjectId containerId,
+                                                  ChestBlockEntity chest) {
+        PhysicalCustodyLease lease = prepared.replicaCustody().custodyByScope()
+                .get(ReferenceContainerCustody.scopeId(containerId));
+        if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.PREPARING
+                || !lease.objectId().equals(containerId) || !lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID))
+            throw new IllegalStateException("reference projection lacks its exact prepared custody: " + containerId);
+        if (!FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, prepared, containerId))
+            throw new IllegalStateException("reference projection could not write its prepared slot image: " + containerId);
+        if (!reconcilePreparedProjection(runtime, prepared, lease, chest))
+            throw new IllegalStateException("reference projection could not record its actual slot observation: " + containerId);
+        FrontierWorldState confirmed = runtime.decodedState().orElseThrow();
+        PhysicalCustodyLease current = confirmed.replicaCustody().custodyByScope().get(lease.scopeId());
+        if (current.authorityEpoch() == lease.authorityEpoch()
+                && ReferenceContainerCustody.hasOperationalCustody(confirmed, containerId))
+            rememberCurrentProcessObservation(level, current);
     }
 
     private static void observe(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,

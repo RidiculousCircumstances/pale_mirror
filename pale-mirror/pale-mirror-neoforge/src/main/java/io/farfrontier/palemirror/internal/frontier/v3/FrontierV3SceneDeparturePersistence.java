@@ -45,12 +45,21 @@ final class FrontierV3SceneDeparturePersistence {
 
     static void completeSavePass(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                  boolean complete, Supplier<CompletableFuture<Void>> synchronize) {
+        if (complete) confirmRecordedDepartures(level, runtime, synchronize);
+    }
+
+    /** Positive proof for actual recorded writes, not a claim that the whole world saved.
+     * Natural chunk stores already ran final unload callbacks; they need not await autoSave.
+     * Adoption/cleanup absence proofs must not consume this bounded positive batch.
+     */
+    static void confirmRecordedDepartures(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                          Supplier<CompletableFuture<Void>> synchronize) {
         var index = INDEXES.get(level);
         if (index == null || index.runtime != runtime) return;
         var state = runtime.decodedState().orElse(null);
         if (state == null) return;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        var ticket = index.batch.complete(complete, synchronize, ledger).orElse(null);
+        var ticket = index.batch.complete(true, synchronize, ledger).orElse(null);
         if (ticket == null) return;
         var selectedIndex = index;
         ticket.saved().whenComplete((ignored, failure) -> level.getServer().execute(() -> {
@@ -64,6 +73,7 @@ final class FrontierV3SceneDeparturePersistence {
             var currentLedger = FrontierV3AmbientCarrierLedger.get(level, current.bootstrap().worldId());
             try {
                 selectedIndex.batch.acknowledgeBodies(ticket, currentLedger, receipt -> receipt.current(current)
+                        && !FrontierV3ActorBodyController.departureReadPending(level, receipt)
                         && level.getEntity(receipt.identity().entityId()) == null,
                         () -> currentLedger.persist(level, current.bootstrap().worldId()));
                 selectedIndex.batch.acknowledge(ticket, currentLedger, receipt -> {

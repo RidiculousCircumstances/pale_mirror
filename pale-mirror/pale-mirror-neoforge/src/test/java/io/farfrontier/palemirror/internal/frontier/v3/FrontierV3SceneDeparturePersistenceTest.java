@@ -68,6 +68,32 @@ class FrontierV3SceneDeparturePersistenceTest {
         return chunk;
     }
 
+    @Test void departingTerrainContactCannotFollowMotionOrInventSupport() {
+        var surface = io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(12, 64, 10);
+        var observed = new FrontierV3BodyObservation.Observation(surface.standingBody(), java.util.Optional.of(surface));
+        var contact = new FrontierV3BodyObservation.DepartingContact(12.5D, 64.9375D, 10.5D, observed);
+        assertTrue(contact.matches(12.5D, 64.9375D, 10.5D));
+        assertFalse(contact.matches(12.50001D, 64.9375D, 10.5D));
+        assertFalse(contact.matches(12.5D, 65.0D, 10.5D));
+        assertFalse(contact.matches(12.5D, 64.9375D, 10.50001D));
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3BodyObservation.DepartingContact(
+                12.5D, 64.9375D, 10.5D, new FrontierV3BodyObservation.Observation(surface.standingBody(), java.util.Optional.empty())));
+    }
+
+    @Test void airborneDepartureRetainsActualPoseWithoutClaimingSupportedCheckpoint() {
+        var chunk = storedChunk(9);
+        var entity = chunk.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
+        var observation = new FrontierV3BodyObservation.Observation(new BodyPosition(12, 65, 10), java.util.Optional.empty());
+        assertTrue(observation.supportedBody().isEmpty(), "physical work arrival is still unavailable");
+        entity.put(FrontierV3BodyObservationSave.KEY, FrontierV3BodyObservationSave.encode(observation, 12.5D, 65.0D, 10.5D));
+        assertEquals(2, entity.getCompound(FrontierV3BodyObservationSave.KEY).getInt("kind"));
+        assertEquals(observation.position(), FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().body());
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(receipt(9)),
+                "exact serialized pose can prove custody departure, not semantic arrival");
+        entity.getList("Pos", net.minecraft.nbt.Tag.TAG_DOUBLE).set(1, DoubleTag.valueOf(65.01D));
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).isEmpty(), "even airborne evidence is exact-pose bound");
+    }
+
     @Test void fractionalSavedFeetRequireTheExactSupportedObservationNotFlooringOrStaleEvidence() {
         var chunk = storedChunk(9);
         var entity = chunk.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);

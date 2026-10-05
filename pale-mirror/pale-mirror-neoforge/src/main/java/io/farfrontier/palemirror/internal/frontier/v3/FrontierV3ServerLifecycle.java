@@ -1,29 +1,20 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.PaleMirrorMod;
-import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
-import io.farfrontier.palemirror.frontier.v3.api.CommandId;
-import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
-import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRecoveryConfiguration;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierReadabilityPlan;
 import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
-import io.farfrontier.palemirror.internal.presentation.PaleMirrorPlayerPresentation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.level.storage.LevelResource;
 import java.util.IdentityHashMap;
@@ -771,12 +762,14 @@ public final class FrontierV3ServerLifecycle {
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         return FrontierV3ActorBodyController.observeDeath(level, runtime, entity, source);
     }
-    public static boolean observeEntityLeave(ServerLevel level, Entity entity) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && FrontierV3AmbientActorExecutor.observeLeave(runtime, entity, stopping(level.getServer()));
+    /** Observe final geometry without asking Minecraft to reload an unloading chunk. */
+    public static void observeNaturalChunkUnload(ServerLevel level, net.minecraft.world.level.chunk.LevelChunk chunk) {
+        var runtime = RUNTIMES.get(level.getServer());
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null
+                || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
+        runtime.decodedState().ifPresent(state -> FrontierV3ActorBodyController.observeTerrainDeparture(level, state, chunk));
     }
+
     /** Tracking-end precedes removal for hidden chunks and cannot certify final departure. */
     public static boolean observeFinalChunkDeparture(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
@@ -832,7 +825,7 @@ public final class FrontierV3ServerLifecycle {
     }
 
     /** Retain raw unload observations at the completed chunk-store boundary. */
-    public static void persistRawEntityDepartures(ServerLevel level) {
+    public static void persistRawEntityDepartures(ServerLevel level, Supplier<java.util.concurrent.CompletableFuture<Void>> synchronize) {
         var runtime = RUNTIMES.get(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null
                 || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
@@ -847,6 +840,9 @@ public final class FrontierV3ServerLifecycle {
         catch (RuntimeException failure) {
             PaleMirrorMod.LOGGER.error("Cargo raw departure publication failed; custody remains unresolved", failure);
         }
+        // A positive completed store is not global save/adoption/cleanup absence evidence.
+        FrontierV3SceneDeparturePersistence.confirmRecordedDepartures(level, runtime, synchronize);
+        FrontierV3CargoDeparturePersistence.confirmRecordedDepartures(level, runtime, synchronize);
     }
 
     public static java.util.concurrent.CompletableFuture<java.util.Optional<net.minecraft.nbt.CompoundTag>> observeEntityChunkRead(

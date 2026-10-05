@@ -161,14 +161,10 @@ public final class FrontierV3AmbientMotionGameTests {
                         && level.getBlockState(carpet).is(Blocks.RED_CARPET),
                 "the exact body must stand on the actual carpet collision top without replacing it: body="
                         + (carpetBody == null ? "missing" : carpetBody.position()) + " carpet=" + carpet);
-        helper.assertFalse(FrontierV3AmbientActorExecutor.observeLeave(runtime, body, false),
-                "an ordinary EntityLeave callback is too late to close a serialized HOT body into COLD");
+        helper.assertFalse(FrontierV3ActorBodyController.observeLeave(level, runtime, body),
+                "a still-present body cannot be certified unloaded by a tracking callback");
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
                 "unexpected departure retains the exact saved UUID for later recovery instead of permitting a duplicate");
-        helper.assertFalse(FrontierV3AmbientActorExecutor.observeLeave(runtime, body, true),
-                "server teardown must not release a saved HOT body into COLD");
-        helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
-                "a graceful shutdown retains the HOT lease for exact UUID recovery after restart");
         body.discard(); carpetBody.discard(); FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
     }
 

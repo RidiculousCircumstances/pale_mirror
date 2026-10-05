@@ -253,7 +253,6 @@ final class FrontierV3AmbientActorExecutor {
                 if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
                     Entity body = level.getEntity(entityId(state, actorId));
                     if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId))) {
-                        FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(mob);
                         FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, mob, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
                         if (FrontierV3AmbientActorLocalTargets.directedGoal(lease)) {
                             pursueLocalGoal(level, runtime, state, actorId, mob, lease);
@@ -287,7 +286,6 @@ final class FrontierV3AmbientActorExecutor {
             Entity body = level.getEntity(entityId(state, actorId));
             if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, actorId, bioform(state, actorId))) {
                 FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, mob, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
-                FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(mob);
                 FrontierV3ScenePresentation.applyAmbientActorPresentation(mob, state, actorId, bioform(state, actorId));
                 if (FrontierV3HotScoutObservation.observe(level, runtime, state, actorId, mob, lease)) {
                     admitted++;
@@ -526,20 +524,6 @@ final class FrontierV3AmbientActorExecutor {
     }
     static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         return FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity);
-    }
-    static boolean observeLeave(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, boolean serverStopping) {
-        if (serverStopping) return false;
-        FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null || !(entity instanceof Mob body)) return false;
-        String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
-        if (rawActorId.isBlank()) return false;
-        SubjectId actorId;
-        try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
-        var current = state.actorLocations().get(actorId);
-        if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(state, actorId).equals(entity.getUUID())
-                || !owned(entity, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F
-                || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) return false;
-        return false;
     }
     private static boolean demand(ServerLevel level, BlockPosition position) {
         return FrontierV3SceneExecutor.demandExists(level, position);

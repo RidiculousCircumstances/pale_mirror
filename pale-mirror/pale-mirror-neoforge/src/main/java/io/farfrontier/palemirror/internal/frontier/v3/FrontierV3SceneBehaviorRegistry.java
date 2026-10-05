@@ -37,32 +37,32 @@ final class FrontierV3SceneBehaviorRegistry {
                         return assault == null || attacker == null ? null : SettlementAssaultCauseIdentity.strike(assault.id(), attacker, epoch);
                     }, false,
                     FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty(), "AWAITING_EXACT_FLOOR", BodyReleasePolicy.FENCE, UNBOUND_RELEASE, NO_FAMILY_EFFECT),
+                    Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.SETTLEMENT_ASSAULT)),
             new Behavior(SceneCauseKind.ENGINEERING_WORKSITE, FrontierV3EngineeringWorkSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty(), "AWAITING_EXACT_FLOOR", BodyReleasePolicy.FENCE, UNBOUND_RELEASE, NO_FAMILY_EFFECT),
+                    Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.ENGINEERING_WORKSITE)),
             new Behavior(SceneCauseKind.MEDICAL_TREATMENT, FrontierV3MedicalTreatmentSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty(), "AWAITING_EXACT_FLOOR", BodyReleasePolicy.FENCE, UNBOUND_RELEASE, NO_FAMILY_EFFECT),
+                    Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.MEDICAL_TREATMENT)),
             new Behavior(SceneCauseKind.RESOURCE_SITE_HARVEST, FrontierV3ResourceSiteHarvestSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition,
-                    Optional.of(FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition), "HARVEST_STATION_OBSTRUCTED", BodyReleasePolicy.RETAIN_WHILE_OBSERVED,
+                    Optional.of(FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition), "HARVEST_STATION_OBSTRUCTED", ReleaseFailurePolicy.HARVEST_CUSTODY,
                     FrontierV3ResourceSiteHarvestSceneExecutor::releaseBinding,
-                    FrontierV3HarvestSceneReleaseBarrier::ready),
+                    FrontierV3HarvestSceneReleaseBarrier::ready, new FrontierV3HarvestSceneReleaseEffects()),
             new Behavior(SceneCauseKind.PRODUCTION_WORK, FrontierV3ProductionWorkSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.of(FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition), "AWAITING_EXACT_FLOOR", BodyReleasePolicy.FENCE, UNBOUND_RELEASE,
-                    FrontierV3ProductionWorkSceneExecutor::releaseReady),
+                    Optional.of(FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE,
+                    FrontierV3ProductionWorkSceneExecutor::releaseReady, new FrontierV3ProductionSceneReleaseEffects()),
             new Behavior(SceneCauseKind.SERVICE_WORK, FrontierV3SettlementServiceWorkSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty(), "AWAITING_EXACT_FLOOR", BodyReleasePolicy.FENCE, UNBOUND_RELEASE, NO_FAMILY_EFFECT),
+                    Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.SERVICE_WORK)),
             new Behavior(SceneCauseKind.ROUTE_PATROL, FrontierV3RoutePatrolSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty(), "AWAITING_EXACT_FLOOR", BodyReleasePolicy.FENCE, UNBOUND_RELEASE, NO_FAMILY_EFFECT),
+                    Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.ROUTE_PATROL)),
             new Behavior(SceneCauseKind.LOGISTICS, FrontierV3SceneExecutor::tickLogistics,
                     (state, lease, attacker, epoch) -> FrontierSceneBehaviors.logistics(lease).engagementId().isPresent() ? FrontierSceneBehaviors.logistics(lease).operationId() : null, true,
                     FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty(), "AWAITING_EXACT_FLOOR", BodyReleasePolicy.FENCE, UNBOUND_RELEASE, NO_FAMILY_EFFECT)));
+                    Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.LOGISTICS))));
 
     private final List<Behavior> ordered;
 
@@ -130,6 +130,11 @@ final class FrontierV3SceneBehaviorRegistry {
                 .releaseBarrier().ready(level, state, lease);
     }
 
+    static FrontierV3SceneReleaseEffects releaseEffects(SceneLease lease) {
+        return CURRENT.ordered.stream().filter(value -> value.kind() == lease.cause().kind()).findFirst()
+                .orElseThrow(() -> new IllegalStateException("unregistered scene resource release Strategy")).releaseEffects();
+    }
+
     /** The closed behavior registration—not generic scene lifecycle—selects standing policy. */
     static StandingPositionProvider standingPositionProvider(SceneLease lease) {
         for (Behavior behavior : CURRENT.ordered) {
@@ -169,18 +174,16 @@ final class FrontierV3SceneBehaviorRegistry {
         return FrontierV3StandingPosition.aboveExactFloor(level, floor);
     }
 
-    static BodyReleasePolicy bodyReleasePolicy(SceneCauseKind kind) {
+    static ReleaseFailurePolicy releaseFailurePolicy(SceneCauseKind kind) {
         return CURRENT.ordered.stream().filter(behavior -> behavior.kind() == kind).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("unregistered scene release policy: " + kind)).bodyReleasePolicy();
+                .orElseThrow(() -> new IllegalArgumentException("unregistered scene release policy: " + kind)).releaseFailurePolicy();
     }
 
-    enum BodyReleasePolicy {
-        FENCE(FrontierV3SceneExecutor::releaseCustodyConflict),
-        RETAIN_WHILE_OBSERVED(FrontierV3ResourceSiteHarvestSceneExecutor::releaseCustodyConflict);
+    enum ReleaseFailurePolicy {
+        STANDARD(FrontierV3SceneExecutor::releaseCustodyConflict),
+        HARVEST_CUSTODY(FrontierV3ResourceSiteHarvestSceneExecutor::releaseCustodyConflict);
         private final ReleaseFailure failure;
-        BodyReleasePolicy(ReleaseFailure failure) { this.failure = failure; }
-        boolean retainsLiveBody(boolean observed) { return this == RETAIN_WHILE_OBSERVED && observed; }
-        boolean permitsBoundActorHand() { return this == RETAIN_WHILE_OBSERVED; }
+        ReleaseFailurePolicy(ReleaseFailure failure) { this.failure = failure; }
         void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                       FrontierWorldState state, SceneLease lease, String reason) {
             failure.report(level, runtime, state, lease, reason);
@@ -195,13 +198,15 @@ final class FrontierV3SceneBehaviorRegistry {
 
     record Behavior(SceneCauseKind kind, Tick tick, StrikeCause strikeCause, boolean hasCargoCarrier,
                     StandingPositionProvider standingPositionProvider, Optional<StandingPositionProvider> preLeaseStandingPositionProvider,
-                    String standingUnavailableReason, BodyReleasePolicy bodyReleasePolicy, ReleaseBinding releaseBinding,
-                    ReleaseBarrier releaseBarrier) {
+                    String standingUnavailableReason, ReleaseFailurePolicy releaseFailurePolicy, ReleaseBinding releaseBinding,
+                    ReleaseBarrier releaseBarrier, FrontierV3SceneReleaseEffects releaseEffects) {
         Behavior {
+            Objects.requireNonNull(releaseEffects, "scene atomic resource release Strategy");
             Objects.requireNonNull(releaseBarrier, "scene pending-effect release barrier");
             Objects.requireNonNull(releaseBinding, "scene continuation release policy");
-            Objects.requireNonNull(bodyReleasePolicy, "scene body release policy");
+            Objects.requireNonNull(releaseFailurePolicy, "scene release failure policy");
             Objects.requireNonNull(kind, "scene kind");
+            if (releaseEffects.family() != kind) throw new IllegalArgumentException("scene resource release Strategy belongs to another family");
             Objects.requireNonNull(tick, "scene tick");
             Objects.requireNonNull(strikeCause, "scene strike cause");
             Objects.requireNonNull(standingPositionProvider, "scene standing provider");

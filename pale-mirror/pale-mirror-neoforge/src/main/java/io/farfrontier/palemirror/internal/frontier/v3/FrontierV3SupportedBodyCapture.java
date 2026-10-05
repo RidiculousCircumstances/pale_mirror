@@ -22,6 +22,7 @@ final class FrontierV3SupportedBodyCapture {
         if (actor.level() != level || actor.getHealth() <= 0.0F
                 || !departing && actor.isRemoved())
             return Optional.empty();
-        return FrontierV3BodyObservation.capture(actor).supportedBody();
+        return (departing ? FrontierV3BodyObservation.captureForDeparture(actor)
+                : FrontierV3BodyObservation.capture(actor)).supportedBody();
     }
 }

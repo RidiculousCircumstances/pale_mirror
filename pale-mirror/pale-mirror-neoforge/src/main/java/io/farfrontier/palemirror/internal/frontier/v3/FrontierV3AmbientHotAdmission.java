@@ -44,7 +44,6 @@ final class FrontierV3AmbientHotAdmission {
                 || !FrontierV3AmbientActorExecutor.owned(body, actorId, FrontierV3AmbientActorExecutor.bioform(current, actorId))) return;
         if (!arm) { FrontierV3AmbientActorExecutor.holdForPreLeaseHandoff(body); return; }
         FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, body, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
-        FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(body);
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, current, actorId, FrontierV3AmbientActorExecutor.bioform(current, actorId));
         if (!FrontierV3HotScoutObservation.observe(level, runtime, current, actorId, body, lease)) {
             FrontierV3AmbientActorExecutor.pursueLocalGoal(level, runtime, current, actorId, body, lease);

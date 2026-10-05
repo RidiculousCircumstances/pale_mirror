@@ -21,6 +21,8 @@ import java.util.function.BiFunction;
  * owner; activity and presentation changes never transfer or replace a body.
  */
 final class FrontierV3ActorBodyController {
+    /** Explanatory only; weak physical-object keys cannot retain a departed NPC or confer authority. */
+    private static final java.util.Map<Mob, String> INSPECTION_WAITS = new java.util.WeakHashMap<>();
     static final String RESIDENCE_KEY = "pm_v3_body_residence_generation";
     /** Source firewall and the Forge join event may observe the same object twice. */
     private static final java.util.Map<Mob, Long> JOINED_RESIDENCES = new java.util.WeakHashMap<>();
@@ -92,6 +94,7 @@ final class FrontierV3ActorBodyController {
         var receipt = ledger.bodyDeparture(actor).orElse(null);
         if (receipt == null || !receipt.current(state) || !ledger.savedBodyDeparture(receipt)
                 || !ledger.currentBodyResidence(actor, receipt.residenceGeneration())
+                || departureReadPending(level, receipt)
                 || level.getEntity(receipt.identity().entityId()) != null
                 || FrontierV3AmbientPendingAdmissions.get(runtime, receipt.identity().entityId()) != null) return;
         var body = ActorBodyAuthority.current(state, actor);
@@ -112,6 +115,18 @@ final class FrontierV3ActorBodyController {
         FrontierV3CommandSubmission.submit(runtime, "actor-body-unloaded", actor.value(), payload);
     }
 
+    /** Final terrain witness for all common bodies, including already-hidden entity sections. */
+    static void observeTerrainDeparture(ServerLevel level, FrontierWorldState state,
+                                        net.minecraft.world.level.chunk.LevelChunk chunk) {
+        var manager = ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3ServerEntityManagerAccessor) level)
+                .frontierV3$getEntityManager();
+        var sections = ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3EntityPermanentStorageAccessor) manager)
+                .frontierV3$getSectionStorage();
+        sections.getExistingSectionsInChunk(chunk.getPos().toLong()).flatMap(section -> section.getEntities())
+                .filter(entity -> entity instanceof Mob && recognizesRecordedBody(level, state, entity))
+                .forEach(entity -> FrontierV3BodyObservation.observeTerrainDeparture(entity, chunk));
+    }
+
     /** The source callback records physical facts, never discovers a job/scene owner. */
     static boolean observeLeave(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 net.minecraft.world.entity.Entity entity) {
@@ -125,6 +140,7 @@ final class FrontierV3ActorBodyController {
 
     static void observeJoin(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                             net.minecraft.world.entity.Entity entity) {
+        FrontierV3BodyObservation.forgetDeparture(entity);
         if (!(entity instanceof Mob body) || !body.isAlive()) return;
         var state = runtime.decodedState().orElse(null);
         if (state == null) return;
@@ -135,6 +151,7 @@ final class FrontierV3ActorBodyController {
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         if (!ledger.permitsRecordedOwner(FrontierV3ActorOwnerBinding.body(declaration))
                 || !hasKnownResidence(ledger, body, declaration.actorId())) return;
+        ensureOrdinaryPhysics(body);
         long residence = body.getPersistentData().getLong(RESIDENCE_KEY);
         if (java.util.Objects.equals(JOINED_RESIDENCES.get(body), residence)) return;
         var receipt = ledger.bodyDeparture(declaration.actorId()).orElse(null);
@@ -181,7 +198,13 @@ final class FrontierV3ActorBodyController {
         long residence = metadata.getLong(RESIDENCE_KEY);
         if (!(departing ? ledger.currentBodyResidence(declaration.actorId(), residence)
                 : ledger.knownBodyResidence(declaration.actorId(), residence))) return java.util.Optional.empty();
-        var position = departing ? FrontierV3SupportedBodyCapture.observeDeparting(level, body)
+        // Unload certifies physical custody/pose, not a grounded work checkpoint.
+        // Minecraft can stop ticking a jumping body before its final storage callback.
+        // Keep the actual classified pose (also retained in vanilla's save witness),
+        // rather than waiting for an impossible landing or inventing an old support.
+        // Live arrivals/inspection still require actual supported contact. COLD work
+        // must establish its normal known route/station, independently of this receipt.
+        var position = departing ? java.util.Optional.of(FrontierV3BodyObservation.captureForDeparture(body).position())
                 : FrontierV3SupportedBodyCapture.observe(level, body);
         if (position.isEmpty()) return java.util.Optional.empty();
         var off = body.getOffhandItem(); var main = body.getMainHandItem();
@@ -266,6 +289,7 @@ final class FrontierV3ActorBodyController {
         var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow();
         if (!FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).currentBodyResidence(
                 declaration.actorId(), body.getPersistentData().getLong(RESIDENCE_KEY))) return;
+        ensureOrdinaryPhysics(body);
         var id = ActorBodyAuthority.current(state, declaration.actorId());
         if (ActorBodyAuthority.require(state, id).phase() == FencedRecoveryPhase.RUNNING) return;
         var observed = FrontierV3SupportedBodyCapture.observe(level, body);
@@ -298,27 +322,51 @@ final class FrontierV3ActorBodyController {
     static boolean inspectCurrent(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
         var state = runtime.decodedState().orElse(null);
         if (state == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE
-                || !body.isAlive() || !recognizesRecordedBody(level, state, body)
-                || level.getEntity(body.getUUID()) != body) return false;
+                || !body.isAlive()) return inspectionDeferred(body, "RUNTIME_OR_LIFE");
+        if (!recognizesRecordedBody(level, state, body)) return inspectionDeferred(body, "RECORDED_BODY_IDENTITY");
+        if (level.getEntity(body.getUUID()) != body) return inspectionDeferred(body, "INDEXED_OBJECT");
         var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow();
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        if (!ledger.currentBodyResidence(declaration.actorId(), body.getPersistentData().getLong(RESIDENCE_KEY))) return false;
+        if (!ledger.currentBodyResidence(declaration.actorId(), body.getPersistentData().getLong(RESIDENCE_KEY)))
+            return inspectionDeferred(body, "RESIDENCE_GENERATION");
+        ensureOrdinaryPhysics(body);
         var id = ActorBodyAuthority.current(state, declaration.actorId());
         var phase = ActorBodyAuthority.require(state, id).phase();
-        if (phase != FencedRecoveryPhase.RUNNING && phase != FencedRecoveryPhase.AMBIGUOUS) return false;
+        if (phase != FencedRecoveryPhase.RUNNING && phase != FencedRecoveryPhase.AMBIGUOUS)
+            return inspectionDeferred(body, "BODY_PHASE:" + phase);
         var observed = FrontierV3SupportedBodyCapture.observe(level, body);
-        if (observed.isEmpty()) return false;
+        if (observed.isEmpty()) return inspectionDeferred(body, "SUPPORTED_CONTACT:chunk=" + level.hasChunkAt(body.getOnPos()));
         var actor = state.actorLocations().get(declaration.actorId());
         var health = new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth()
                 * (double) io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE));
         if (phase == FencedRecoveryPhase.RUNNING && actor.body().equals(observed.orElseThrow())
-                && actor.condition().health().equals(health)) return true;
+                && actor.condition().health().equals(health)) { INSPECTION_WAITS.remove(body); return true; }
         var receipt = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(id,
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING,
                 actor.body(), actor.condition().health(), observed.orElseThrow(), health,
                 FrontierV3ActorBodyDeparture.execution(state, declaration.actorId()));
-        return FrontierV3CommandSubmission.submitResult(runtime, "actor-body-inspected", declaration.actorId().value(), receipt)
-                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
+        var result = FrontierV3CommandSubmission.submitResult(runtime, "actor-body-inspected", declaration.actorId().value(), receipt);
+        if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted) {
+            INSPECTION_WAITS.remove(body); return true;
+        }
+        return inspectionDeferred(body, "OBSERVATION_REJECTED:" + result);
+    }
+
+    /** Physics belongs to the physical incarnation, never its ambient/work presentation.
+     * Native navigation supplies gravity while steering; its stop leaves this same bridge
+     * alive, without double-integrating an active native path or awarding goal arrival.
+     */
+    private static void ensureOrdinaryPhysics(Mob body) {
+        if (!FrontierV3ControlledMobMotion.ordinaryPhysicsRegistered(body))
+            FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(body);
+    }
+
+    private static boolean inspectionDeferred(Mob body, String reason) {
+        if (!reason.equals(INSPECTION_WAITS.put(body, reason)))
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
+                    "PMV3_BODY_INSPECTION_WAIT entity={} reason={} physical={},{},{} onGround={}",
+                    body.getUUID(), reason, body.getX(), body.getY(), body.getZ(), body.onGround());
+        return false;
     }
 
     /** Record a saved physical checkpoint before its process settles hands/effects and closes.
@@ -333,6 +381,7 @@ final class FrontierV3ActorBodyController {
         var physical = ledger.bodyDeparture(actorId).orElse(null);
         if (physical == null || !physical.current(state) || !ledger.savedBodyDeparture(physical)
                 || !ledger.currentBodyResidence(actorId, physical.residenceGeneration())
+                || departureReadPending(level, physical)
                 || level.getEntity(physical.identity().entityId()) != null
                 || FrontierV3AmbientPendingAdmissions.get(runtime, physical.identity().entityId()) != null) return false;
         var id = ActorBodyAuthority.current(state, actorId);
@@ -350,6 +399,11 @@ final class FrontierV3ActorBodyController {
         if (!ledger.fence(physical.identity(), id.physicalEpoch(), 0L)) return false;
         ledger.persist(level, state.bootstrap().worldId());
         return true;
+    }
+
+    /** Protect the reservation interval before the durable returned-body fence is published. */
+    static boolean departureReadPending(ServerLevel level, FrontierV3ActorBodyDeparture receipt) {
+        return FrontierV3DepartureReturnReadFence.readPending(level, receipt.observed().body());
     }
 
     /** Read-only conversion of explicit disk body identity; no scene/activity supplies an epoch or pose. */

@@ -892,7 +892,16 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (!(result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return;
         SceneLease draining = runtime.decodedState().map(current -> current.sceneLeases().get(lease.id()))
                 .filter(current -> current.status() == SceneLeaseStatus.DRAINING).orElse(null);
-        if (draining != null) execute(level, runtime, state, draining);
+        if (draining != null) {
+            execute(level, runtime, state, draining);
+            var current = runtime.decodedState().orElseThrow();
+            if (current.sceneLeases().get(draining.id()).status() == SceneLeaseStatus.DRAINING)
+                io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_FIELD_RELEASE_WAIT lease={} familyReady={} storagePending={} indexed={}",
+                        draining.id().value(), FrontierV3SceneBehaviorRegistry.releaseReady(level, current, draining),
+                        FrontierV3SceneReleaseReadiness.awaitingEntityStorage(level, current, draining),
+                        draining.members().stream().map(member -> member.actorId().value() + ":"
+                                + (level.getEntity(member.entityId()) != null)).toList());
+        }
     }
 
     /** Package-visible pure release policy regression seam. */

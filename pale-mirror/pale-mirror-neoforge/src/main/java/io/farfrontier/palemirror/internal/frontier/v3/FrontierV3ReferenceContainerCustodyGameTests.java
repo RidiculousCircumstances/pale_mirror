@@ -381,17 +381,17 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                 "first observation must confirm the retained physical image without a false conflict");
         FrontierV3ReferenceContainerCustodyExecutor.reconcile(helper.getLevel(), runtime, observed,
                 observed.inventory().surfaces().get(depot));
-        FrontierWorldState preparing = runtime.decodedState().orElseThrow();
-        PhysicalCustodyLease fence = preparing.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(depot));
-        helper.assertTrue(fence.status() == PhysicalCustodyLeaseStatus.PREPARING,
-                "only after retained observation may the canonical COLD repack acquire a write fence");
-        helper.assertTrue(FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, preparing, depot)
-                        && chest.getItem(0).is(net.minecraft.world.item.Items.WHEAT)
+        FrontierWorldState confirmed = runtime.decodedState().orElseThrow();
+        PhysicalCustodyLease fence = confirmed.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(depot));
+        helper.assertTrue(fence.authorityEpoch() == 2L
+                        && ReferenceContainerCustody.hasOperationalCustody(confirmed, depot),
+                "the fenced catch-up write confirms its actual image in the same loaded turn, before unload");
+        helper.assertTrue(chest.getItem(0).is(net.minecraft.world.item.Items.WHEAT)
                         && chest.getItem(1).is(net.minecraft.world.item.Items.BREAD),
                 "the fenced catch-up write must project the same lots in canonical COLD order");
-        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(runtime, preparing, fence, chest)
-                        && ReferenceContainerCustody.hasOperationalCustody(runtime.decodedState().orElseThrow(), depot),
-                "actual repacked slots confirm the next exact physical custody epoch");
+        helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.retainsUnobservedRestartFungibleHot(
+                        Map.of(fence.scopeId(), fence.authorityEpoch()), confirmed.inventory().fungibleResources(), fence),
+                "an actually confirmed current-process image must not be retained as unobserved restart custody");
         runtime.shutdown(); helper.succeed();
     }
 

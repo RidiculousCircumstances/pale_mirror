@@ -1,77 +1,24 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
-import io.farfrontier.palemirror.PaleMirrorMod;
-import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
-import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
-import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
-import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
-import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
-import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
-import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
-import io.farfrontier.palemirror.frontier.v3.model.Bioform;
-import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
-import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
-import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
-import io.farfrontier.palemirror.frontier.v3.model.OperationFront;
-import io.farfrontier.palemirror.frontier.v3.model.ActorDirective;
-import io.farfrontier.palemirror.frontier.v3.model.OperationTravelAdvanced;
-import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
-import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
-import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseHandoff;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
-import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
-import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
-import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
-import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
-import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.monster.Zombie;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
-import java.util.function.Function;
 import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3SceneExecutor.*;
 
 /** Atomic physical release of an owned HOT scene back into canonical custody. */
@@ -123,8 +70,7 @@ final class FrontierV3SceneReleaseExecutor {
         }
         List<SceneMemberPosition> positions = new ArrayList<>();
         List<SceneMember> departedMembers = new ArrayList<>();
-        var actorLedger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        var releasePolicy = FrontierV3SceneBehaviorRegistry.bodyReleasePolicy(lease.cause().kind());
+        var releasePolicy = FrontierV3SceneBehaviorRegistry.releaseFailurePolicy(lease.cause().kind());
         for (SceneMember member : lease.members()) {
             if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
             Entity entity = level.getEntity(member.entityId());
@@ -150,8 +96,8 @@ final class FrontierV3SceneReleaseExecutor {
             if (!(entity instanceof Mob body) || body.getHealth() <= 0.0F) {
                 conflict(level, runtime, state, lease, "release-body-dead"); return;
             }
-            if (!FrontierV3BakeryHandProjection.matchesCurrent(state, lease, member, body)) {
-                conflict(level, runtime, state, lease, "release-bakery-hand-mismatch"); return;
+            if (!FrontierV3SceneBehaviorRegistry.releaseEffects(lease).matchesBody(state, lease, member, body)) {
+                conflict(level, runtime, state, lease, "release-family-hand-mismatch"); return;
             }
             if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
             state = runtime.decodedState().orElseThrow();
@@ -160,103 +106,15 @@ final class FrontierV3SceneReleaseExecutor {
             // A process releases its participant, not that participant's body.
             // Natural unload and the body controller alone settle physical absence.
         }
-        // A field worker may still carry an already-accounted HOT wheat part. Its physical
-        // offhand, fungible binding and scene exit must close in the same WAL transition.
-        // Visible retention keeps the same stack/body and records its confirmed passive
-        // carry witness below; it is not permission to duplicate or discard the cargo.
-        io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease harvestHandRelease = null;
-        io.farfrontier.palemirror.frontier.v3.model.BakeryHotHandRelease bakeryHandRelease = null;
-        if (io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)) {
-            if (FrontierSceneBehaviors.isProductionWork(lease)) {
-                ProductionJob job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
-                if (job == null || job.bakeryWork().isEmpty() || lease.members().size() != 1) {
-                    releasePolicy.conflict(level, runtime, state, lease, "release-bakery-hand-without-owner"); return;
-                }
-                var work = job.bakeryWork().orElseThrow();
-                Entity carrier = level.getEntity(lease.members().getFirst().entityId());
-                FrontierV3ActorBodyDeparture.HandStack hand;
-                if (carrier instanceof Mob worker && owned(carrier, state, lease, lease.members().getFirst())) {
-                    var held = worker.getMainHandItem();
-                    if (held.isEmpty()) {
-                        releasePolicy.conflict(level, runtime, state, lease, "release-bakery-hand-binding-unavailable"); return;
-                    }
-                    hand = new FrontierV3ActorBodyDeparture.HandStack(
-                            net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem()).toString(), held.getCount());
-                } else if (carrier == null && departedMembers.contains(lease.members().getFirst())) {
-                    var departure = FrontierV3SceneDepartureObserver.validDeparture(state, lease,
-                            lease.members().getFirst(), actorLedger).orElse(null);
-                    if (departure == null || departure.mainhand().isEmpty()) {
-                        releasePolicy.conflict(level, runtime, state, lease, "release-bakery-saved-hand-unavailable"); return;
-                    }
-                    hand = departure.mainhand().orElseThrow();
-                } else {
-                    releasePolicy.conflict(level, runtime, state, lease, "release-bakery-hand-body-unavailable"); return;
-                }
-                var bindings = state.inventory().fungibleResources().bindings().values().stream()
-                        .filter(value -> value.accountId().equals(work.actorAccountId())).toList();
-                if (bindings.size() != 1) {
-                    releasePolicy.conflict(level, runtime, state, lease, "release-bakery-hand-binding-unavailable"); return;
-                }
-                bakeryHandRelease = new io.farfrontier.palemirror.frontier.v3.model.BakeryHotHandRelease(
-                        job.id(), work.actorAccountId(), bindings.getFirst().authorityEpoch(),
-                        new io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation.Stack(
-                                new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(
-                                        job.workerId(), lease.members().getFirst().entityId(),
-                                        io.farfrontier.palemirror.frontier.v3.model.ActorContainerItemOrder.Hand.MAIN),
-                                hand.itemKind(), hand.quantity()),
-                        new SceneLeaseReleased(lease.id(), positions));
-                try {
-                    io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.reduceBakeryHotHandRelease(
-                            state, job.settlementId(), bakeryHandRelease);
-                } catch (IllegalArgumentException invalid) {
-                    releasePolicy.conflict(level, runtime, state, lease,
-                            "release-bakery-hand-preflight:" + invalid.getMessage()); return;
-                }
-            } else if (!releasePolicy.permitsBoundActorHand() || lease.members().size() != 1) {
-                releasePolicy.conflict(level, runtime, state, lease, "release-bound-hand-without-typed-owner"); return;
-            } else {
-            var cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
-            var job = io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport.require(state, cause);
-            Entity carrier = level.getEntity(lease.members().getFirst().entityId());
-            FrontierV3ActorBodyDeparture.HandStack hand;
-            if (carrier instanceof Mob worker && owned(carrier, state, lease, lease.members().getFirst())) {
-                var held = worker.getOffhandItem();
-                if (held.isEmpty() || !net.minecraft.world.item.ItemStack.isSameItemSameComponents(held,
-                        new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, held.getCount()))) {
-                    FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
-                            "bound-hand-release-physical-foreign"); return;
-                }
-                hand = new FrontierV3ActorBodyDeparture.HandStack("minecraft:wheat", held.getCount());
-            } else if (carrier == null && departedMembers.contains(lease.members().getFirst())) {
-                var departure = FrontierV3SceneDepartureObserver.validDeparture(state, lease,
-                        lease.members().getFirst(), actorLedger).orElse(null);
-                if (departure == null || departure.offhand().isEmpty()
-                        || !departure.offhand().orElseThrow().itemKind().equals("minecraft:wheat")) {
-                    FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
-                            "bound-hand-release-saved-hand-unavailable"); return;
-                }
-                hand = departure.offhand().orElseThrow();
-            } else {
-                FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
-                        "bound-hand-release-body-unavailable"); return;
-            }
-            harvestHandRelease = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease(
-                    job.siteId(), job.id(), job.actorAccountId(), lease.revision(),
-                    new io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation.Stack(
-                            new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(
-                                    job.workerId(), lease.members().getFirst().entityId()), hand.itemKind(), hand.quantity()),
-                    new SceneLeaseReleased(lease.id(), positions));
-            try {
-                io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHandRelease(
-                        state, state.resourceSite(job.siteId()).settlementId(), harvestHandRelease);
-            } catch (IllegalArgumentException invalid) {
-                FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
-                        "bound-hand-release-preflight:" + invalid.getMessage()); return;
-            }
-            }
+        var effects = FrontierV3SceneBehaviorRegistry.releaseEffects(lease).prepare(level, state, lease,
+                new SceneLeaseReleased(lease.id(), positions),
+                departedMembers.stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toUnmodifiableSet()));
+        if (effects instanceof FrontierV3SceneReleaseEffects.Conflict rejected) {
+            releasePolicy.conflict(level, runtime, state, lease, rejected.reason()); return;
         }
+        var payload = ((FrontierV3SceneReleaseEffects.Ready) effects).payload();
         if (!FrontierV3CargoDepartureObserver.prepareRelease(level, state, lease)) return;
-        CommandResult result = releaseLoaded(runtime, lease, positions, binding, harvestHandRelease, bakeryHandRelease);
+        CommandResult result = releaseLoaded(runtime, lease, binding, payload);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released", lease, result);
         if (result instanceof CommandResult.Accepted) {
             FrontierWorldState releasedState = runtime.decodedState().orElseThrow();
@@ -277,12 +135,8 @@ final class FrontierV3SceneReleaseExecutor {
     }
     /** A rejected release retains its same observation for diagnosis; it is never rewritten or guessed. */
     private static CommandResult releaseLoaded(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
-                                               List<SceneMemberPosition> positions,
                                                java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding,
-                                               io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease harvestHandRelease,
-                                               io.farfrontier.palemirror.frontier.v3.model.BakeryHotHandRelease bakeryHandRelease) {
-        io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload = bakeryHandRelease != null
-                ? bakeryHandRelease : harvestHandRelease == null ? new SceneLeaseReleased(lease.id(), positions) : harvestHandRelease;
+                                               FrontierPayload payload) {
         CommandResult result = binding.map(action -> FrontierV3CommandSubmission.submitBound(runtime, "scene-release", lease.id().value(),
                         payload, action))
                 .orElseGet(() -> submit(runtime, "scene-release", lease.id().value(), payload));

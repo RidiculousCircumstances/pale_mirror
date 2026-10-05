@@ -52,7 +52,7 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
     }
 
     @Override public void frontierV3$storedChunk() {
-        FrontierV3ServerLifecycle.persistRawEntityDepartures(level);
+        FrontierV3ServerLifecycle.persistRawEntityDepartures(level, () -> simpleRegionStorage.synchronize(true));
     }
 
     @Override public CompletableFuture<Optional<CompoundTag>> frontierV3$readStoredEntityChunk(ChunkPos chunk) {

@@ -48,12 +48,18 @@ final class FrontierV3CargoDeparturePersistence {
 
     static void completeSavePass(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                  boolean complete, Supplier<CompletableFuture<Void>> synchronize) {
+        if (complete) confirmRecordedDepartures(level, runtime, synchronize);
+    }
+
+    /** Confirm only positive unload receipts against their recorded writes, independently of autoSave cadence. */
+    static void confirmRecordedDepartures(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                          Supplier<CompletableFuture<Void>> synchronize) {
         var index = INDEXES.get(level);
         if (index == null || index.runtime != runtime) return;
         var state = runtime.decodedState().orElse(null);
         if (state == null) return;
         var ledger = FrontierV3CargoDepartureLedger.get(level, state.bootstrap().worldId());
-        var ticket = index.batch.complete(complete, synchronize, ledger).orElse(null);
+        var ticket = index.batch.complete(true, synchronize, ledger).orElse(null);
         if (ticket == null) return;
         var selectedIndex = index;
         ticket.saved().whenComplete((ignored, failure) -> level.getServer().execute(() -> {
@@ -69,6 +75,7 @@ final class FrontierV3CargoDeparturePersistence {
                 selectedIndex.batch.acknowledge(ticket, currentLedger, receipt -> {
                     var lease = current.sceneLeases().get(receipt.leaseId());
                     return lease != null && level.getEntity(receipt.entityId()) == null
+                            && !FrontierV3DepartureReturnReadFence.readPending(level, receipt.body())
                             && FrontierV3CargoCarrierExecutor.currentDeparture(current, lease, receipt, level.registryAccess());
                 }, () -> currentLedger.persist(level, current.bootstrap().worldId()));
             } catch (RuntimeException failedPublication) {
