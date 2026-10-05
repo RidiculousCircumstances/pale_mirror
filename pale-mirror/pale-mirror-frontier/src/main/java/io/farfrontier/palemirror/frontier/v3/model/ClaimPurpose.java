@@ -7,5 +7,6 @@ public enum ClaimPurpose {
     SETTLEMENT_RATION,
     RESIDENT_MEAL,
     SUPPLY_CONTRACT,
+    GOODS_TRADE,
     EXTERNAL_RESERVATION
 }

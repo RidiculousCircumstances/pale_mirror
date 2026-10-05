@@ -7,7 +7,7 @@ import java.util.function.Function;
 final class ContainerStorageDemandSources {
     private ContainerStorageDemandSources() { }
     private static final List<Function<FrontierWorldState, List<ContainerInboundCapacity.Demand>>> SOURCES = List.of(
-            state -> ProductionOutputCapacity.pendingInbound(state.productionJobs()));
+            state -> ProductionOutputCapacity.pendingInbound(state.productionJobs()), GoodsTradeStorageDemand::pending);
 
     static List<ContainerInboundCapacity.Demand> demands(FrontierWorldState state) {
         return SOURCES.stream().flatMap(source -> source.apply(state).stream()).toList();

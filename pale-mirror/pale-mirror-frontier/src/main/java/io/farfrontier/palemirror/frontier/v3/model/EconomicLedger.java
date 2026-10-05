@@ -103,12 +103,39 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
         return new EconomicLedger(accounts, next);
     }
 
+    /** Releases only the cancelled portion; no balance changes or implicit settlement. */
+    public EconomicLedger releasePortion(SubjectId reservationId, FixedScalar amount) {
+        FinancialReservation reservation = reservations.get(Objects.requireNonNull(reservationId, "financial reservation id"));
+        Objects.requireNonNull(amount, "released portion");
+        if (reservation == null || amount.raw() <= 0 || amount.compareTo(reservation.amount()) > 0) {
+            throw new IllegalArgumentException("partial release must fit its exact financial reservation");
+        }
+        Map<SubjectId, FinancialReservation> next = new LinkedHashMap<>(reservations);
+        if (amount.equals(reservation.amount())) next.remove(reservationId);
+        else next.put(reservationId, new FinancialReservation(reservation.id(), reservation.payerId(),
+                reservation.payeeId(), reservation.reasonId(), reservation.amount().minus(amount)));
+        return new EconomicLedger(accounts, next);
+    }
+
     /** Settles exactly one named hold, atomically removing it and transferring its held amount. */
     public EconomicLedger settle(SubjectId reservationId) {
         FinancialReservation reservation = reservations.get(Objects.requireNonNull(reservationId, "financial reservation id"));
         if (reservation == null) throw new IllegalArgumentException("unknown financial reservation: " + reservationId.value());
-        Map<SubjectId, FinancialReservation> remaining = new LinkedHashMap<>(reservations); remaining.remove(reservationId);
-        return transfer(accounts, remaining, reservation.payerId(), reservation.payeeId(), reservation.amount());
+        return settlePortion(reservationId, reservation.amount());
+    }
+
+    /** Pays only the authorized portion, retaining the same hold for the unpaid remainder. */
+    public EconomicLedger settlePortion(SubjectId reservationId, FixedScalar amount) {
+        FinancialReservation reservation = reservations.get(Objects.requireNonNull(reservationId, "financial reservation id"));
+        Objects.requireNonNull(amount, "settled portion");
+        if (reservation == null || amount.raw() <= 0L || amount.compareTo(reservation.amount()) > 0) {
+            throw new IllegalArgumentException("partial settlement must fit its exact financial reservation");
+        }
+        Map<SubjectId, FinancialReservation> remaining = new LinkedHashMap<>(reservations);
+        if (amount.equals(reservation.amount())) remaining.remove(reservationId);
+        else remaining.put(reservationId, new FinancialReservation(reservation.id(), reservation.payerId(),
+                reservation.payeeId(), reservation.reasonId(), reservation.amount().minus(amount)));
+        return transfer(accounts, remaining, reservation.payerId(), reservation.payeeId(), amount);
     }
 
     public FixedScalar availableToReserve(SubjectId payerId) {

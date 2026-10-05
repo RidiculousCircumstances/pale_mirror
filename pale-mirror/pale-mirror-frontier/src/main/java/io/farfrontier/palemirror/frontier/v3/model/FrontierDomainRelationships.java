@@ -26,6 +26,7 @@ public final class FrontierDomainRelationships {
 
     public enum EntityKind {
         OBJECTIVE, TASK, MARKET_DEMAND, MARKET_QUOTE, MARKET_ORDER, FINANCIAL_RESERVATION,
+        GOODS_ORDER, GOODS_CONTRACT, ECONOMIC_ACCOUNT, CONTAINER,
         PRODUCTION_JOB, HIVE_GROWTH_JOB, RESOURCE_SITE, RESOURCE_HARVEST_JOB, RESIDENT, EXACT_ITEM, RESOURCE_LOT, RESOURCE_ACCOUNT,
         RESOURCE_CLAIM, PROVISION_CYCLE, PROVISION_ALLOCATION, SCENE_LEASE, AMBIENT_LEASE, CARRIER_EVIDENCE,
         SUPPLY_CONTRACT, ROUTE_OPERATION, CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE
@@ -33,6 +34,10 @@ public final class FrontierDomainRelationships {
 
     /** Stable semantic strings are deliberately independent from enum ordinal/wire ordering. */
     public enum Kind {
+        GOODS_ORDER_PARTY("goods-order-party"), GOODS_ORDER_COUNTERPARTY("goods-order-counterparty"), GOODS_ORDER_CONTAINER("goods-order-container"),
+        GOODS_SELL_ORDER("goods-sell-order"), GOODS_BUY_ORDER("goods-buy-order"),
+        GOODS_SOURCE_CONTAINER("goods-source-container"), GOODS_RECEIVER_CONTAINER("goods-receiver-container"),
+        GOODS_SELLER("goods-seller"), GOODS_BUYER("goods-buyer"), GOODS_CLAIM("goods-claim"), GOODS_RESERVATION("goods-reservation"),
         OBJECTIVE_TASK("objective-task"), TASK_RESOURCE_SITE("task-resource-site"), TASK_PREDECESSOR("task-predecessor"),
         DEMAND_TASK("demand-task"), QUOTE_DEMAND("quote-demand"), ORDER_DEMAND("order-demand"),
         ORDER_QUOTE("order-quote"), ORDER_TASK("order-task"), ORDER_JOB("order-job"), ORDER_RESERVATION("order-reservation"),
@@ -79,6 +84,9 @@ public final class FrontierDomainRelationships {
         return Map.copyOf(result); }
     private static Set<Lifecycle> lifecycle(Kind kind) { return kind == Kind.ACTOR_AMBIENT_LEASE || kind == Kind.ACTOR_CARRIER_EVIDENCE ? EnumSet.of(Lifecycle.OBSERVED) : EnumSet.allOf(Lifecycle.class); }
     private static EntityKind source(Kind kind) { return switch (kind) {
+        case GOODS_ORDER_PARTY, GOODS_ORDER_COUNTERPARTY, GOODS_ORDER_CONTAINER -> EntityKind.GOODS_ORDER;
+        case GOODS_SELL_ORDER, GOODS_BUY_ORDER, GOODS_SOURCE_CONTAINER, GOODS_RECEIVER_CONTAINER,
+                GOODS_SELLER, GOODS_BUYER, GOODS_CLAIM, GOODS_RESERVATION -> EntityKind.GOODS_CONTRACT;
         case OBJECTIVE_TASK -> EntityKind.OBJECTIVE; case TASK_RESOURCE_SITE, TASK_PREDECESSOR -> EntityKind.TASK; case DEMAND_TASK -> EntityKind.MARKET_DEMAND; case QUOTE_DEMAND -> EntityKind.MARKET_QUOTE;
         case ORDER_DEMAND, ORDER_QUOTE, ORDER_TASK, ORDER_JOB, ORDER_RESERVATION -> EntityKind.MARKET_ORDER; case JOB_TASK, JOB_WORKER, JOB_INPUT, JOB_OUTPUT, JOB_SCENE_LEASE -> EntityKind.PRODUCTION_JOB;
         case HIVE_GROWTH_TASK -> EntityKind.HIVE_GROWTH_JOB;
@@ -89,6 +97,11 @@ public final class FrontierDomainRelationships {
         case SERVICE_TASK, SERVICE_WORKER, SERVICE_FACILITY, SERVICE_INPUT, SERVICE_SCENE_LEASE -> EntityKind.SERVICE_WORK;
         case HIVE_MOBILIZATION_TASK, HIVE_MOBILIZATION_MEMBER -> EntityKind.HIVE_MOBILIZATION; }; }
     private static EntityKind target(Kind kind) { return switch (kind) {
+        case GOODS_ORDER_PARTY, GOODS_ORDER_COUNTERPARTY, GOODS_SELLER, GOODS_BUYER -> EntityKind.ECONOMIC_ACCOUNT;
+        case GOODS_ORDER_CONTAINER, GOODS_SOURCE_CONTAINER, GOODS_RECEIVER_CONTAINER -> EntityKind.CONTAINER;
+        case GOODS_SELL_ORDER, GOODS_BUY_ORDER -> EntityKind.GOODS_ORDER;
+        case GOODS_CLAIM -> EntityKind.RESOURCE_CLAIM;
+        case GOODS_RESERVATION -> EntityKind.FINANCIAL_RESERVATION;
         case OBJECTIVE_TASK, ORDER_TASK, DEMAND_TASK, JOB_TASK, HIVE_GROWTH_TASK, HARVEST_TASK, HARVEST_SUCCESSOR_TASK, TASK_PREDECESSOR -> EntityKind.TASK;
         case TASK_RESOURCE_SITE -> EntityKind.RESOURCE_SITE; case QUOTE_DEMAND, ORDER_DEMAND -> EntityKind.MARKET_DEMAND;
         case ORDER_QUOTE -> EntityKind.MARKET_QUOTE; case ORDER_JOB -> EntityKind.PRODUCTION_JOB; case ORDER_RESERVATION -> EntityKind.FINANCIAL_RESERVATION;
@@ -100,6 +113,9 @@ public final class FrontierDomainRelationships {
         case SERVICE_TASK, HIVE_MOBILIZATION_TASK -> EntityKind.TASK; case SERVICE_FACILITY -> EntityKind.STRUCTURE; case SERVICE_INPUT -> EntityKind.EXACT_ITEM;
         case SERVICE_SCENE_LEASE -> EntityKind.SCENE_LEASE; case HIVE_MOBILIZATION_MEMBER -> EntityKind.BIOFORM; }; }
     private static EntityKind owner(Kind kind) { return switch (kind) {
+        case GOODS_ORDER_PARTY, GOODS_ORDER_COUNTERPARTY, GOODS_ORDER_CONTAINER -> EntityKind.GOODS_ORDER;
+        case GOODS_SELL_ORDER, GOODS_BUY_ORDER, GOODS_SOURCE_CONTAINER, GOODS_RECEIVER_CONTAINER,
+                GOODS_SELLER, GOODS_BUYER, GOODS_CLAIM, GOODS_RESERVATION -> EntityKind.GOODS_CONTRACT;
         case OBJECTIVE_TASK -> EntityKind.OBJECTIVE; case TASK_RESOURCE_SITE, TASK_PREDECESSOR -> EntityKind.TASK;
         case DEMAND_TASK -> EntityKind.MARKET_DEMAND; case QUOTE_DEMAND -> EntityKind.MARKET_QUOTE;
         case ORDER_DEMAND, ORDER_QUOTE, ORDER_TASK, ORDER_JOB, ORDER_RESERVATION -> EntityKind.MARKET_ORDER;
@@ -113,7 +129,7 @@ public final class FrontierDomainRelationships {
         case SERVICE_TASK, SERVICE_WORKER, SERVICE_FACILITY, SERVICE_INPUT, SERVICE_SCENE_LEASE -> EntityKind.SERVICE_WORK;
         case HIVE_MOBILIZATION_TASK, HIVE_MOBILIZATION_MEMBER -> EntityKind.HIVE_MOBILIZATION; }; }
     private static Cardinality cardinality(Kind kind) { return switch (kind) {
-        case OBJECTIVE_TASK, PROVISION_ALLOCATION, ACTOR_CARRIER_EVIDENCE -> Cardinality.ONE_TO_MANY;
+        case OBJECTIVE_TASK, PROVISION_ALLOCATION, ACTOR_CARRIER_EVIDENCE, GOODS_CLAIM -> Cardinality.ONE_TO_MANY;
         case TASK_PREDECESSOR, ALLOCATION_RECIPIENT -> Cardinality.MANY_TO_MANY; default -> Cardinality.MANY_TO_ONE; }; }
     public enum FamilyDisposition { RELATION_LAYER_CURRENT, OWNER_EXPLICIT_UNCHANGED, MIGRATION_REQUIRED_BEFORE_TOUCH, NOT_A_DOMAIN_RELATION }
     /** Closed inventory: only the current vertical is migrated by REL-001. */
@@ -124,6 +140,10 @@ public final class FrontierDomainRelationships {
         }
     }
     private static final List<Family> INVENTORY = List.of(
+            new Family("goods-trade", FamilyDisposition.RELATION_LAYER_CURRENT, "GoodsTradeState",
+                    "commercial orders/contracts retain explicit participants, endpoints, allocations and funds; GoodsTradeStateSupport validates publication/recovery"),
+            new Family("goods-receipt-evidence", FamilyDisposition.NOT_A_DOMAIN_RELATION, "GoodsTradeAcceptance/ResourceTitleTransfer",
+                    "immutable prior accepted quantity/custody/title evidence; consumed claim and prior lot/account IDs are historical, never current resource authority"),
             new Family("strategic-objective-task", FamilyDisposition.RELATION_LAYER_CURRENT, "StrategicPlanState", "F0.6R3 vertical"),
             new Family("market-demand-order-production", FamilyDisposition.RELATION_LAYER_CURRENT, "MarketOrderBook/ProductionJob", "F0.6R3 vertical"),
             new Family("hive-growth-task", FamilyDisposition.RELATION_LAYER_CURRENT, "HiveColony/HiveGrowthJob", "SA-09 explicit job-task retention"),
@@ -157,6 +177,15 @@ public final class FrontierDomainRelationships {
     }
 
     private static final List<OwnerSurface> CURRENT_OWNER_SURFACES = List.of(
+            surface(GoodsTradeParty.class, "id"),
+            surface(GoodsTradeOrder.class, "id", "containerId"),
+            surface(GoodsTradeContract.class, "id", "sellOrderId", "buyOrderId", "sourceContainerId", "receiverContainerId",
+                    "financialReservationId", "outstandingClaims", "acceptances", "dispositions"),
+            surface(GoodsTradeAcceptance.class, "id", "contractId"),
+            surface(GoodsTradeDisposition.class, "id", "contractId", "claimId"),
+            surface(ResourceClaimPartition.class, "accountId", "claimId", "childClaimId", "lotQuantities"),
+            surface(ResourceTitleTransfer.class, "accountId", "claimId", "sourceOwnerId", "destinationOwnerId", "portions", "splitLotIds"),
+            surface(GoodsTradeStockAllocation.class, "accountId"),
             surface(StrategicObjective.class, "id", "ownerId", "resourceSiteTarget", "authorityId"),
             surface(StrategicTask.class, "id", "objectiveId", "ownerId", "operationTarget", "resourceSiteTarget", "dependencies", "authorityId"),
             surface(MarketDemand.class, "id", "buyerId", "reasonId"),
@@ -288,6 +317,7 @@ public final class FrontierDomainRelationships {
         Objects.requireNonNull(state, "relationship state");
         List<Edge> edges = new ArrayList<>(); List<Incident> incidents = new ArrayList<>();
         addStrategic(state, edges, incidents); addMarketAndProduction(state, edges, incidents); addHarvest(state, edges, incidents); addProvision(state, edges, incidents); addCurrentRetirementFamilies(state, edges);
+        GoodsTradeRelationships.collect(state, edges);
         addLeases(state, edges);
         edges.sort(Comparator.comparing((Edge edge) -> edge.kind().tag()).thenComparing(edge -> edge.source().stableKey()).thenComparing(edge -> edge.target().stableKey()));
         incidents.sort(Comparator.comparing((Incident incident) -> incident.kind().tag()).thenComparing(incident -> incident.owner().stableKey()));
@@ -336,6 +366,8 @@ public final class FrontierDomainRelationships {
     private record ValidationFamily(java.util.function.Function<FrontierWorldState, List<Object>> dependencies,
                                     ValidationCollector collect) { }
     private static final List<ValidationFamily> VALIDATION_FAMILIES = List.of(
+            new ValidationFamily(s -> List.of(s.companies().goodsTrade(), s.inventory().economics(), s.inventory().containers(),
+                    s.inventory().fungibleResources()), (s, edges, incidents) -> GoodsTradeRelationships.collect(s, edges)),
             new ValidationFamily(s -> List.of(s.strategicPlans()), FrontierDomainRelationships::addStrategic),
             new ValidationFamily(s -> List.of(s.companies().market(), s.productionJobs(), s.strategicPlans().tasks(),
                     s.inventory().economics().reservations(), s.humanPopulation().residents(), s.hiveColony().growthJobs()),

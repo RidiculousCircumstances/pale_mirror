@@ -43,6 +43,9 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("item map key does not match item identity");
             economics.require(entry.getValue().economicOwnerId());
         }
+        for (ResourceLot lot : fungibleResources.lots().values()) {
+            economics.require(lot.economicOwnerId());
+        }
         for (Map.Entry<SubjectId, InventoryConflict> entry : conflicts.entrySet()) {
             InventoryConflict conflict = entry.getValue();
             if (!entry.getKey().equals(conflict.id())) {
@@ -807,20 +810,12 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 case ResourceCustody.Container container -> {
                     ContainerRecord record = containers.get(container.containerId());
                     if (record == null) throw new IllegalArgumentException("fungible account references an unknown container");
-                    account.lotQuantities().keySet().forEach(id -> {
-                        if (!fungibleResources.lots().get(id).economicOwnerId().equals(record.ownerId())) {
-                            throw new IllegalArgumentException("container fungible account has a foreign economic owner");
-                        }
-                    });
+                    // A holder may store another registered party's goods. Custody is not
+                    // title; admission and commercial acceptance enforce their own authority.
                 }
                 case ResourceCustody.Cargo cargoCustody -> {
                     CargoBatch batch = cargo.get(cargoCustody.cargoId());
                     if (batch == null || !batch.fungibleContents()) throw new IllegalArgumentException("fungible account references an unknown exact cargo batch");
-                    account.lotQuantities().keySet().forEach(id -> {
-                        if (!fungibleResources.lots().get(id).economicOwnerId().equals(batch.ownerId())) {
-                            throw new IllegalArgumentException("cargo fungible account has a foreign economic owner");
-                        }
-                    });
                 }
                 case ResourceCustody.Actor ignored -> { }
                 case ResourceCustody.Player ignored -> { }

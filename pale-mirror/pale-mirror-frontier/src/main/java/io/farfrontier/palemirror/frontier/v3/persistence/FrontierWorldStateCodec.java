@@ -50,7 +50,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 246 retains logistics formation goals, member approaches and captured HOT cohort receipts.
     // Version 247 retains migration waiting origins rather than throwing when a departure has no known path.
     // Version 248 retains exact physical work acceptance until durable adapter retirement.
-    static final int VERSION = 248; private static final int MAX_ENTRIES = 65_535;
+    // Version 249 adds independently authorized goods orders, commercial obligations and partial acceptance.
+    static final int VERSION = 249; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -447,6 +448,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             output.writeLong(contract.openedAtTick()); output.writeLong(contract.completedJobs()); output.writeLong(contract.totalWagesPaid().raw());
         }
         writeMarketOrderBook(output, registry.market());
+        GoodsTradeStateCodec.write(output, registry.goodsTrade());
     }
     private static CompanyRegistry readCompanyRegistry(DataInputStream input, boolean hasEmployment, boolean hasMarket, boolean hasMarketOrderJob) throws IOException {
         Map<SubjectId, Company> companies = new LinkedHashMap<>();
@@ -468,7 +470,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 throw new IllegalArgumentException("invalid or duplicate employment contract registry entry");
             }
         }
-        return new CompanyRegistry(companies, contracts, hasMarket ? readMarketOrderBook(input, hasMarketOrderJob) : MarketOrderBook.empty());
+        return new CompanyRegistry(companies, contracts, hasMarket ? readMarketOrderBook(input, hasMarketOrderJob) : MarketOrderBook.empty(),
+                GoodsTradeStateCodec.read(input));
     }
     private static void writeMarketOrderBook(DataOutputStream output, MarketOrderBook market) throws IOException {
         writeCount(output, market.demands().size());

@@ -12,6 +12,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SettlementFoodPolicyTest {
+    @Test void anotherRegisteredOwnersBreadInPublicDepotIsNotPublicFood() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:foreign-food"), 408L));
+        SubjectId buyer = state.bootstrap().settlements().getFirst().id(), seller = state.bootstrap().settlements().get(1).id();
+        SubjectId depot = FrontierWorldState.depotId(buyer), account = ReferenceContainerCustody.scopeId(depot);
+        SubjectId temporary = new SubjectId("custody:foreign-food"), lot = new SubjectId("lot:foreign-food");
+        var resources = state.inventory().fungibleResources().issue(new ResourceLot(lot, seller, SettlementFoodPolicy.BREAD,
+                64, "test-foreign-food", List.of()), new CustodyAccount(temporary,
+                new ResourceCustody.WorldCarrier(java.util.UUID.fromString("00000000-0000-0000-0000-000000000001")), Map.of(lot, 64), Map.of()));
+        resources = resources.transfer(temporary, account, Map.of(lot, 64), Map.of());
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        assertEquals(0, SettlementFoodPolicy.breadStock(state, buyer));
+        assertEquals(0, SettlementFoodPolicy.reserveCoverageBread(state, buyer));
+        assertEquals(0, SettlementFoodPolicy.coldUsableBread(state, buyer));
+        assertTrue(SettlementFoodPolicy.exportableFungibleBread(state, buyer).isEmpty());
+    }
     @Test void exactDepotReserveAllowsOneSurplusFungibleStackToExport() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:food-exact-reserve"), 408L));

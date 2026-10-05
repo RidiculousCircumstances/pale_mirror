@@ -29,7 +29,7 @@ public final class SettlementFoodPolicy {
                 .filter(resident -> resident.settlementId().equals(settlementId))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .noneMatch(resident -> state.humanPopulation().nutrition(resident.id()).wantsFood(state.bootstrap().ruleset().residentLife()))
-                && breadStock(state, settlementId) > reserveRequirement(state, settlementId);
+                && reserveCoverageBread(state, settlementId) > reserveRequirement(state, settlementId);
     }
 
     /** Current canonical depot stock, including physically bound HOT stacks; not a spending permit. */
@@ -37,6 +37,7 @@ public final class SettlementFoodPolicy {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return 0;
         int exact = state.inventory().items().values().stream()
+                .filter(item -> item.economicOwnerId().equals(settlementId))
                 .filter(item -> BREAD.equals(item.itemKind()))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
                         && slot.containerId().equals(depot))
@@ -45,6 +46,7 @@ public final class SettlementFoodPolicy {
                 .filter(account -> account.custody() instanceof ResourceCustody.Container container
                         && container.containerId().equals(depot))
                 .flatMap(account -> account.lotQuantities().entrySet().stream())
+                .filter(entry -> state.inventory().fungibleResources().lots().get(entry.getKey()).economicOwnerId().equals(settlementId))
                 .filter(entry -> BREAD.equals(state.inventory().fungibleResources().lots()
                         .get(entry.getKey()).itemKind()))
                 .mapToInt(java.util.Map.Entry::getValue).reduce(0, Math::addExact);
@@ -56,6 +58,7 @@ public final class SettlementFoodPolicy {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return 0;
         int exact = state.inventory().items().values().stream()
+                .filter(item -> item.economicOwnerId().equals(settlementId))
                 .filter(item -> BREAD.equals(item.itemKind()))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
                         && slot.containerId().equals(depot))
@@ -65,17 +68,27 @@ public final class SettlementFoodPolicy {
                 .filter(account -> account.custody() instanceof ResourceCustody.Container container
                         && container.containerId().equals(depot))
                 .flatMap(account -> account.lotQuantities().entrySet().stream())
+                .filter(entry -> state.inventory().fungibleResources().lots().get(entry.getKey()).economicOwnerId().equals(settlementId))
                 .filter(entry -> BREAD.equals(state.inventory().fungibleResources().lots()
                         .get(entry.getKey()).itemKind()))
                 .mapToInt(java.util.Map.Entry::getValue).reduce(0, Math::addExact);
-        return Math.addExact(exact, fungible);
+        int outgoing = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot))
+                .flatMap(account -> account.claimQuantities().entrySet().stream())
+                .filter(entry -> {
+                    ClaimAllocation claim = state.inventory().fungibleResources().claims().get(entry.getKey());
+                    return claim.economicOwnerId().equals(settlementId) && claim.itemKind().equals(BREAD)
+                            && (claim.purpose() == ClaimPurpose.GOODS_TRADE || claim.purpose() == ClaimPurpose.SUPPLY_CONTRACT);
+                }).mapToInt(java.util.Map.Entry::getValue).reduce(0, Math::addExact);
+        return Math.subtractExact(Math.addExact(exact, fungible), outgoing);
     }
 
-    /** Unbound stock available to COLD planning, distinct from total stock or HOT take eligibility. */
+    /** Unbound, unclaimed stock available to COLD planning, distinct from total stock or HOT take eligibility. */
     public static int coldUsableBread(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return 0;
         int exact = state.inventory().items().values().stream().filter(item -> BREAD.equals(item.itemKind()))
+                .filter(item -> item.economicOwnerId().equals(settlementId))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
                 .filter(item -> !hasUnconfirmedPhysicalCustody(state, item.id()))
                 .mapToInt(ExactItemStack::count).reduce(0, Math::addExact);
@@ -83,9 +96,8 @@ public final class SettlementFoodPolicy {
                 .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot))
                 .filter(account -> state.inventory().fungibleResources().bindings().values().stream()
                         .noneMatch(binding -> binding.accountId().equals(account.id())))
-                .flatMap(account -> account.lotQuantities().entrySet().stream())
-                .filter(entry -> BREAD.equals(state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind()))
-                .mapToInt(java.util.Map.Entry::getValue).sum();
+                .mapToInt(account -> state.inventory().fungibleResources().unclaimedQuantity(account.id(), settlementId, BREAD))
+                .reduce(0, Math::addExact);
         return Math.addExact(exact, fungible);
     }
 

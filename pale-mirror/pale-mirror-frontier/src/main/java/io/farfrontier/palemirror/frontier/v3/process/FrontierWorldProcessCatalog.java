@@ -155,7 +155,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
     private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, LOGISTICS, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
-            HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY);
+            HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
             Map.entry("physical-observation", new FrontierPhysicalProcessModule()),
             Map.entry("replica-custody", new FrontierReplicaCustodyProcessModule()),
@@ -167,6 +167,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("actor-body", new FrontierActorBodyProcessModule(io.farfrontier.palemirror.frontier.v3.model.FrontierActorDeathConsequences.INSTANCE,
                     FrontierActorDeathFollowUps::plan)),
             Map.entry("economy", new FrontierEconomyProcessModule()),
+            Map.entry("goods-trade", new GoodsTradeProcessModule()),
             Map.entry("resource-sites", new FrontierResourceSiteProcessModule()),
             Map.entry("hive", new FrontierHiveProcessModule()),
             Map.entry("infrastructure", new FrontierInfrastructureProcessModule()),
@@ -371,7 +372,8 @@ public final class FrontierWorldProcessCatalog {
                 descriptor("infrastructure", infrastructureCommands(), infrastructureSchedules(), INFRASTRUCTURE, emissions("infrastructure"), INFRASTRUCTURE),
                 descriptor("settlement-service-work", serviceWorkCommands(), serviceWorkSchedules(), SETTLEMENT_SERVICE_WORK,
                         emissions("settlement-service-work"), SETTLEMENT_SERVICE_WORK),
-                descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emissions("strategy"), STRATEGY));
+                descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emissions("strategy"), STRATEGY),
+                GoodsTradeProcessModule.DESCRIPTOR);
     }
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }

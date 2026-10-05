@@ -63,7 +63,7 @@ public final class FrontierWireTags {
             entry(ClaimPurpose.class,
                     tag(0, ClaimPurpose.PRODUCTION_WORK), tag(1, ClaimPurpose.HIVE_GROWTH),
                     tag(2, ClaimPurpose.SETTLEMENT_RATION), tag(3, ClaimPurpose.SUPPLY_CONTRACT),
-                    tag(4, ClaimPurpose.EXTERNAL_RESERVATION), tag(5, ClaimPurpose.RESIDENT_MEAL)),
+                    tag(4, ClaimPurpose.EXTERNAL_RESERVATION), tag(5, ClaimPurpose.RESIDENT_MEAL), tag(6, ClaimPurpose.GOODS_TRADE)),
             entry(CompanyStatus.class,
                     tag(0, CompanyStatus.ACTIVE), tag(1, CompanyStatus.INSOLVENT), tag(2, CompanyStatus.DISSOLVED)),
             entry(ContainerSurfaceStatus.class,

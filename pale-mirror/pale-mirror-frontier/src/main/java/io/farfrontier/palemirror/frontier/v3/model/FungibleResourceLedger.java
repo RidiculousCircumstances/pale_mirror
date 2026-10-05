@@ -33,6 +33,15 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
 
     public static FungibleResourceLedger empty() { return new FungibleResourceLedger(Map.of(), Map.of(), Map.of(), Map.of()); }
 
+    /** Transfers only allocated economic rights; physical holder and exact total stay unchanged. */
+    public FungibleResourceLedger transferTitle(ResourceTitleTransfer transfer) {
+        return ResourceTitleTransferSupport.transfer(this, Objects.requireNonNull(transfer, "title transfer"));
+    }
+
+    public FungibleResourceLedger partitionClaim(ResourceClaimPartition partition) {
+        return ResourceClaimPartitionSupport.apply(this, Objects.requireNonNull(partition, "claim partition"));
+    }
+
     /** Creates one initial lot/account pair for an authorized resource producer. */
     public FungibleResourceLedger issue(ResourceLot lot, CustodyAccount account) {
         Objects.requireNonNull(lot, "issued lot"); Objects.requireNonNull(account, "issued account");

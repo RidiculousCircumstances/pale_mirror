@@ -12,8 +12,7 @@ public final class ActorItemCustody {
         Objects.requireNonNull(order, "actor item order");
         ExactInventory inventory = state.inventory();
         ContainerRecord container = inventory.containers().get(order.containerEndpoint().containerId());
-        if (container == null || !container.ownerId().equals(resourceOwner(inventory, order)))
-            throw new IllegalArgumentException("actor item endpoint has no declared owner-compatible container");
+        requireEndpoint(container, order);
         if (order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot
                 || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation)
             order.requireCurrentStation(inventory);
@@ -48,11 +47,10 @@ public final class ActorItemCustody {
         Objects.requireNonNull(order, "observed actor item order");
         ExactInventory inventory = state.inventory();
         ContainerRecord container = inventory.containers().get(order.containerEndpoint().containerId());
-        if (container == null || !container.ownerId().equals(resourceOwner(inventory, order))
-                || !(ReferenceContainerCustody.hasOperationalCustody(state, container.id())
+        requireEndpoint(container, order);
+        if (!(ReferenceContainerCustody.hasOperationalCustody(state, container.id())
                 || ReferenceContainerCustody.hasLiveCustody(state, container.id())
-                && (BakeryPhysicalAuthority.pendingForContainer(state, container.id())
-                    || ResidentMealPhysicalAuthority.pendingForContainer(state, container.id())))
+                && ContainerPhysicalAuthorityComposition.pending(state, container.id()))
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container.id()))
             throw new IllegalArgumentException("observed handoff has no current owned physical endpoint");
         if (order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot
@@ -71,19 +69,12 @@ public final class ActorItemCustody {
                 .transferActorOrderObservedStacks(order, sourceEpoch, destinationEpoch, remainingSource, destination));
     }
 
-    private static io.farfrontier.palemirror.frontier.v3.api.SubjectId resourceOwner(
-            ExactInventory inventory, ActorContainerItemOrder order) {
-        return switch (order.portion()) {
-            case ActorContainerItemOrder.Portion.Exact exact -> exact.item().economicOwnerId();
-            case ActorContainerItemOrder.Portion.Fungible fungible -> fungible.lotQuantities().keySet().stream()
-                    .map(id -> inventory.fungibleResources().lots().get(id))
-                    .map(lot -> {
-                        if (lot == null) throw new IllegalArgumentException("actor item order names an unknown lot");
-                        return lot.economicOwnerId();
-                    })
-                    .distinct().reduce((left, right) -> {
-                        throw new IllegalArgumentException("actor item order cannot mix economic owners");
-                    }).orElseThrow();
-        };
+    private static void requireEndpoint(ContainerRecord container, ActorContainerItemOrder order) {
+        if (container == null || order.portion() instanceof ActorContainerItemOrder.Portion.Exact exact
+                && !container.ownerId().equals(exact.item().economicOwnerId())) {
+            throw new IllegalArgumentException("actor item endpoint has no compatible declared container");
+        }
+        // Fungible custody and title are independent. The calling owner authorizes the order;
+        // the resource ledger validates quantities/claims and preserves each lot's actual owner.
     }
 }

@@ -73,8 +73,14 @@ public final class FungibleClaimForfeitureStateSupport {
                 hive = hive.cancelGrowth(plan.hiveJobId());
             }
         }
-        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs).companies(companies)
+        FrontierWorldState next = state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs).companies(companies)
                 .physicalIntents(intents).hiveColony(hive).strategicPlans(strategic).actorExecutions(executions));
+        for (SubjectId claimId : observed.forfeitedClaimIds().stream().sorted().toList()) {
+            ClaimAllocation original = state.inventory().fungibleResources().claims().get(claimId);
+            var owner = FungibleClaimForfeitureComposition.OWNERS.get(original.purpose());
+            if (owner != null) next = owner.apply(next, original);
+        }
+        return next;
     }
 
     private static List<Plan> plan(FrontierWorldState state, FungibleResourceHandoffObserved observed) {
@@ -101,7 +107,12 @@ public final class FungibleClaimForfeitureStateSupport {
             }
             return claim;
         }).toList();
-        return affected.stream().map(claim -> switch (claim.purpose()) {
+        affected.forEach(claim -> {
+            var owner = FungibleClaimForfeitureComposition.OWNERS.get(claim.purpose());
+            if (owner != null) owner.validate(state, claim, observed);
+        });
+        return affected.stream().filter(claim -> !FungibleClaimForfeitureComposition.OWNERS.containsKey(claim.purpose()))
+                .map(claim -> switch (claim.purpose()) {
             case PRODUCTION_WORK -> {
                 ProductionJob job = state.productionJobs().get(claim.claimantId());
                 if (job == null) throw new IllegalArgumentException("physical theft has no declared production owner");
@@ -113,7 +124,7 @@ public final class FungibleClaimForfeitureStateSupport {
                 yield hivePlan(state, job, claim);
             }
             case SETTLEMENT_RATION -> throw new IllegalArgumentException("settlement ration claim is retired");
-            case RESIDENT_MEAL, SUPPLY_CONTRACT, EXTERNAL_RESERVATION ->
+            case RESIDENT_MEAL, SUPPLY_CONTRACT, GOODS_TRADE, EXTERNAL_RESERVATION ->
                     throw new IllegalArgumentException("physical theft has no declared retirement transition for " + claim.purpose());
         }).toList();
     }

@@ -34,6 +34,7 @@ final class FrontierReferenceClosure {
     }
 
     static void validateTransition(FrontierWorldState before, FrontierWorldState after, List<ScheduledAction> schedules) {
+        GoodsTradeStateSupport.validateTransition(before, after);
         FrontierDomainRelationships.verifyCurrentOwnerSurfaces();
         FrontierDomainRelationships.validateTransition(before, after);
         // Each cross-owner check uses its own exact dependency set. Scheduled subjects
@@ -92,6 +93,7 @@ final class FrontierReferenceClosure {
                 || state.strategicPlans().settlementAssaults().containsKey(id)
                 || state.companies().market().demands().containsKey(id) || state.companies().market().quotes().containsKey(id)
                 || state.companies().market().workOrders().containsKey(id)) return true;
+        if (state.companies().goodsTrade().orders().containsKey(id) || state.companies().goodsTrade().contracts().containsKey(id)) return true;
         // These fixed bootstrap/site collections have no separate subject index. Retain the
         // same accepted owner surface as the full recovery barrier without building its union.
         return state.bootstrap().hive().id().equals(id)
