@@ -51,9 +51,22 @@ class FrontierFileStoreTest {
     private static final SubjectId SUBJECT = new SubjectId("settlement:file-store");
 
     @Test
-    void boundsBatchableWalDurabilityToOneCanonicalServerTurn() {
-        assertEquals(1, FrontierFileStore.maxBatchableWalRecords(),
-                "separate WAL files must never accumulate their force cost onto a later server turn");
+    void groupsOneTurnButFlushesTheWholePrefixBeforePhysicalEffects(@TempDir Path directory) throws IOException {
+        FrontierFileStore store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects());
+        store.beginTurn();
+        store.append(transaction(1), Durability.BATCHABLE);
+        store.append(transaction(2), Durability.BATCHABLE);
+        assertEquals(0, store.flushedSequence(WORLD));
+        store.append(transaction(3), Durability.DURABLE_BEFORE_EFFECT);
+        assertEquals(3, store.flushedSequence(WORLD));
+        store.append(transaction(4), Durability.BATCHABLE);
+        store.endTurn();
+        assertEquals(4, store.flushedSequence(WORLD));
+        try (var paths = Files.list(directory.resolve("frontier-v3/frontier_file-store"))) {
+            assertEquals(1, paths.filter(path -> path.getFileName().toString().startsWith("wal-segment-")).count());
+        }
+        assertEquals(List.of(transaction(1), transaction(2), transaction(3), transaction(4)),
+                new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects()).recover(WORLD).walTail());
     }
 
     @Test
@@ -136,12 +149,53 @@ class FrontierFileStoreTest {
         Files.createDirectories(temporary.getParent());
         Files.write(temporary, new byte[] {9});
         store.append(transaction(1L), Durability.BATCHABLE);
-        assertTrue(Files.notExists(temporary));
-        Path wal = directory.resolve("frontier-v3/frontier_file-store/wal-00000000000000000001.bin");
+        assertTrue(Files.exists(temporary), "unrelated uncommitted old temporary files are not storage authority");
+        Path wal = directory.resolve("frontier-v3/frontier_file-store/wal-segment-00000000000000000001.bin");
         byte[] bytes = Files.readAllBytes(wal);
         bytes[bytes.length - 1] ^= 1;
         Files.write(wal, bytes);
-        assertThrows(IllegalArgumentException.class, () -> store.recover(WORLD));
+        assertThrows(IllegalStateException.class, () -> store.recover(WORLD));
+    }
+
+    @Test void ignoresOnlyAnIncompleteFinalFrameAndResumesItsExactPrefix(@TempDir Path directory) throws IOException {
+        var store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects());
+        store.append(transaction(1), Durability.DURABLE_BEFORE_EFFECT);
+        var path = directory.resolve("frontier-v3/frontier_file-store/wal-segment-00000000000000000001.bin");
+        Files.write(path, java.nio.ByteBuffer.allocate(13).putLong(2).putInt(100).put((byte) 7).array(),
+                java.nio.file.StandardOpenOption.APPEND);
+        var restarted = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects());
+        assertEquals(List.of(transaction(1)), restarted.recover(WORLD).walTail());
+        restarted.append(transaction(2), Durability.DURABLE_BEFORE_EFFECT);
+        assertEquals(List.of(transaction(1), transaction(2)), restarted.recover(WORLD).walTail());
+    }
+
+    @Test void corruptCompleteHeaderIsNotMisclassifiedAsATornFinalFrame(@TempDir Path directory) throws IOException {
+        var store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects());
+        store.append(transaction(1), Durability.DURABLE_BEFORE_EFFECT);
+        store.close();
+        var path = directory.resolve("frontier-v3/frontier_file-store/wal-segment-00000000000000000001.bin");
+        var bytes = Files.readAllBytes(path);
+        bytes[24] ^= 1; // Complete frame's length header, not a genuinely missing trailing write.
+        Files.write(path, bytes);
+        assertThrows(IllegalStateException.class,
+                () -> new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects()).recover(WORLD));
+    }
+
+    @Test void rotatesSegmentsAndRejectsTheOldStorageFormat(@TempDir Path directory) throws IOException {
+        var store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects());
+        store.beginTurn();
+        for (int index = 1; index <= FrontierWalSegment.MAX_RECORDS + 1; index++)
+            store.append(transaction(index), Durability.BATCHABLE);
+        store.endTurn();
+        assertEquals(FrontierWalSegment.MAX_RECORDS + 1, store.recover(WORLD).walTail().size());
+        try (var paths = Files.list(directory.resolve("frontier-v3/frontier_file-store"))) {
+            assertEquals(2, paths.filter(path -> path.getFileName().toString().startsWith("wal-segment-")).count());
+        }
+        var old = directory.resolve("old/frontier-v3/frontier_file-store");
+        Files.createDirectories(old);
+        Files.write(old.resolve("wal-00000000000000000001.bin"), new byte[] {1});
+        assertThrows(IllegalStateException.class, () -> new FrontierFileStore(directory.resolve("old"),
+                KernelPayloadCodecs.scheduleEffects()).recover(WORLD));
     }
 
     @Test

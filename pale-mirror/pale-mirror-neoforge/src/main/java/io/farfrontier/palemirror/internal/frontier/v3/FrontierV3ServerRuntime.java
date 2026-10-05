@@ -208,6 +208,9 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         return advanceOne(budget, true);
     }
 
+    void beginPersistenceTurn() { if (store instanceof FrontierFileStore fileStore) fileStore.beginTurn(); }
+    void endPersistenceTurn() { if (store instanceof FrontierFileStore fileStore) fileStore.endTurn(); }
+
     /**
      * Advances the ordinary ordered due-action engine by a bounded operator-requested interval.
      * Every unit retains its normal WAL-backed transition. Checkpoints remain periodic within
@@ -303,9 +306,14 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     }
 
     void shutdown() {
-        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
-        checkpoint();
-        if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) status = FrontierV3RuntimeStatus.stopped();
+        try {
+            if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+                checkpoint();
+                if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) status = FrontierV3RuntimeStatus.stopped();
+            }
+        } finally {
+            if (store instanceof FrontierFileStore files) files.close();
+        }
     }
 
     void quarantine(RuntimeException error) {

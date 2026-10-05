@@ -21,6 +21,19 @@ public final class ResidentMealProcess {
     private static final long COLD_TICKS_PER_EDGE = 20L;
     private ResidentMealProcess() { }
 
+    /** Only service-pocket waits are parked; physical custody holds remain directly inspected. */
+    public static java.util.Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
+        ResidentMeal meal = state.humanPopulation().meals().get(action.subject());
+        if (meal == null) return java.util.Set.of(action.subject());
+        if (meal.pendingPhysicalStep().isPresent()
+                || !FrontierSceneAdmission.available(state, List.of(meal.residentId()))
+                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(meal.residentId()))
+                || meal.phase() != ResidentMeal.Phase.MOVE || meal.coldTravel().isPresent()
+                || ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId()))
+            return java.util.Set.of();
+        return java.util.Set.of(meal.residentId(), meal.depotId());
+    }
+
     /** Read-only COLD projection; never grants a physical lease or consumes a meal effect. */
     public static BodyPosition bodyAt(FrontierWorldState state, SubjectId residentId, long atTick) {
         ResidentMeal meal = state.humanPopulation().meals().get(residentId);

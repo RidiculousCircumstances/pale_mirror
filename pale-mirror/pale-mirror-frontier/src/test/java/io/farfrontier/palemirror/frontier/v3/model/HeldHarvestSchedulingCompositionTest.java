@@ -125,6 +125,9 @@ class HeldHarvestSchedulingCompositionTest {
         var state = hot.state();
         var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
         var retained = ResourceSiteHarvestProcess.coldProgress(hot.job(), 22_301L);
+        var wakeKeys = io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.holdWakeKeys(state, retained);
+        assertTrue(wakeKeys.containsAll(java.util.Set.of(hot.job().id(), hot.site(), hot.job().workerId(),
+                FrontierWorldState.depotId(state.resourceSite(hot.site()).settlementId()))));
         var other = new SubjectId("site:2-wheat-field");
         var preparation = ResourceSiteProcess.preparation(other, 22_302L);
         var config = new FrontierEngineConfiguration<>(base.worldId(), state, new SimInstant(22_300L),
@@ -175,6 +178,11 @@ class HeldHarvestSchedulingCompositionTest {
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
                 io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(absentId), absent));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, absentResult, absentResult.toString());
+        var resumedLive = recovered.advanceTo(recovered.checkpoint().instant(), new WorkBudget(1, 64));
+        assertEquals(EngineStatus.Kind.ACTIVE, resumedLive.status().kind());
+        assertTrue(!hot.job().equals(recovered.canonicalState().state().resourceSites().site(hot.site()).harvestJobs()
+                .get(hot.job().id())) || !actor.body().equals(recovered.canonicalState().state().actorLocations()
+                .get(hot.job().workerId()).body()), "body release wakes the parked live continuation without restart");
         var releasedCheckpoint = recovered.checkpoint();
         var resumed = FrontierEngines.recoverCanonicalStateAccess(config,
                 new RecoveryImage(releasedCheckpoint.worldId(), Optional.of(new SnapshotRecord(releasedCheckpoint,

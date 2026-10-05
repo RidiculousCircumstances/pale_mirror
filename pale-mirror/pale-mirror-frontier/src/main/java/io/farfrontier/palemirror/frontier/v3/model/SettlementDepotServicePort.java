@@ -41,6 +41,20 @@ public record SettlementDepotServicePort(SubjectId settlementId, SubjectId depot
     public static SettlementDepotServicePort forDepot(SettlementStructure depot) {
         Objects.requireNonNull(depot, "depot structure");
         if (depot.kind() != StructureKind.DEPOT) throw new IllegalArgumentException("only a depot owns a depot service port");
+        var ports = PORTS.get();
+        var retained = ports.get(depot);
+        if (retained != null) return retained;
+        if (ports.size() >= MAX_RETAINED_PORTS) ports.clear();
+        var compiled = compileDepot(depot);
+        ports.put(depot, compiled);
+        return compiled;
+    }
+
+    private static final int MAX_RETAINED_PORTS = 128;
+    private static final ThreadLocal<java.util.IdentityHashMap<SettlementStructure, SettlementDepotServicePort>> PORTS =
+            ThreadLocal.withInitial(java.util.IdentityHashMap::new);
+
+    private static SettlementDepotServicePort compileDepot(SettlementStructure depot) {
         SurfaceAnchor center = new SurfaceAnchor(depot.anchor());
         int exteriorDistance = exteriorDistance(depot.facing());
         SurfaceAnchor threshold = depot.facing().step(center, exteriorDistance - 1);

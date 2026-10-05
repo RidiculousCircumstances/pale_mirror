@@ -14,6 +14,11 @@ final class ServiceAccessCapabilities {
     private static final ServiceAccessCapabilities CURRENT = new ServiceAccessCapabilities(List.of(
             new ResidentMealServiceAccess(), new ProductionServiceAccess(), new HarvestServiceAccess()));
     private final Map<ServiceAccessDemand.Kind, ServiceAccessCapability> capabilities;
+    private final ThreadLocal<PointIndex> pointIndexes = new ThreadLocal<>();
+    private static final int MAX_RETAINED_POINTS = 128;
+
+    /** Derived only; one immutable state and its queried points per owner thread, never history. */
+    private record PointIndex(FrontierWorldState state, Map<SubjectId, List<ServiceAccessDemand>> points) { }
 
     ServiceAccessCapabilities(List<? extends ServiceAccessCapability> registrations) {
         var values = new EnumMap<ServiceAccessDemand.Kind, ServiceAccessCapability>(ServiceAccessDemand.Kind.class);
@@ -29,7 +34,18 @@ final class ServiceAccessCapabilities {
     }
 
     static List<ServiceAccessDemand> current(FrontierWorldState state, SubjectId pointId) {
-        return CURRENT.evaluate(state, pointId);
+        return CURRENT.indexed(state, pointId);
+    }
+
+    List<ServiceAccessDemand> indexed(FrontierWorldState state, SubjectId pointId) {
+        PointIndex index = pointIndexes.get();
+        if (index == null || index.state() != state) {
+            index = new PointIndex(Objects.requireNonNull(state, "service state"), new java.util.HashMap<>());
+            pointIndexes.set(index);
+        }
+        Objects.requireNonNull(pointId, "service point");
+        if (!index.points().containsKey(pointId) && index.points().size() >= MAX_RETAINED_POINTS) index.points().clear();
+        return index.points().computeIfAbsent(pointId, ignored -> evaluate(state, pointId));
     }
 
     List<ServiceAccessDemand> evaluate(FrontierWorldState state, SubjectId pointId) {

@@ -70,6 +70,10 @@ public final class ResourceSiteHarvestProcess {
 
     public static boolean coldProgressHeld(FrontierWorldState state, ScheduledAction action) { return ResourceSiteHarvestPlanning.coldProgressHeld(state, action); }
 
+    public static java.util.Set<SubjectId> coldProgressWakeKeys(FrontierWorldState state, ScheduledAction action) {
+        return ResourceSiteHarvestPlanning.coldProgressWakeKeys(state, action);
+    }
+
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestStarted started) {
         return ResourceSiteHarvestPlanning.admitStarted(state, subject, started);
     }

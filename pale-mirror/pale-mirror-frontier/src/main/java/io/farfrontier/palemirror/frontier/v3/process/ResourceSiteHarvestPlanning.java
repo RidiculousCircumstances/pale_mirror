@@ -410,6 +410,15 @@ final class ResourceSiteHarvestPlanning {
                     || job.navigationBlock().filter(block -> !block.reroutable()).isPresent());
     }
 
+    /** Exact dependencies of an admitted field continuation; parking never changes its due time. */
+    static java.util.Set<SubjectId> coldProgressWakeKeys(FrontierWorldState state, ScheduledAction action) {
+        var job = jobForContinuation(state, action);
+        if (job == null) return java.util.Set.of(action.subject());
+        var settlement = site(state, job.siteId()).settlementId();
+        return java.util.Set.of(job.id(), job.siteId(), job.workerId(), settlement,
+                FrontierWorldState.depotId(settlement));
+    }
+
     /** COLD may not transfer an actor part into a chest held by a live physical custodian. */
     private static boolean loadedDepotCustodyBlocksDelivery(FrontierWorldState state, ResourceSiteHarvestJob job) {
         if (!(job.progress().complete() || job.returningForBatch()) || !state.inventory().fungibleResources().accounts()

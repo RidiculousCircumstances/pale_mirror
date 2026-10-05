@@ -30,19 +30,15 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /** NeoForge-owned filesystem host for the pure v3 store contract. No legacy SavedData is touched. */
-public final class FrontierFileStore implements FrontierStore {
+public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     private static final Pattern SNAPSHOT = Pattern.compile("snapshot-(\\d{20})\\.bin");
-    private static final Pattern WAL = Pattern.compile("wal-(\\d{20})\\.bin");
-    /**
-     * A canonical transaction is one server-turn boundary.  This store uses one immutable WAL
-     * file per transaction, so a larger "batch" does not coalesce a single fsync: the eventual
-     * flush has to force every preceding file on whichever ordinary turn reaches the threshold.
-     * That deferred 64-file flush was the measured multi-hundred-millisecond server-thread
-     * tail during COLD continuation.  Keep the durable tail to one record instead: it preserves
-     * the same ordered WAL/recovery contract and bounds one turn to one file force rather than
-     * transferring accumulated I/O to an unrelated exact worker or physical release.
-     */
-    private static final int MAX_BATCHABLE_WAL_RECORDS = 1;
+    private static final Pattern WAL = Pattern.compile("wal-segment-(\\d{20})\\.bin");
+    /** One shared segment force, never a deferred force per old transaction file. */
+    private static final int MAX_BATCHABLE_WAL_RECORDS = 64;
+    private static final byte[] FORMAT = "PM-FRONTIER-STORE-2".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+    private final Map<WorldId, FrontierWalSegment> activeSegments = new HashMap<>();
+    private final java.util.Set<Path> formattedDirectories = new java.util.HashSet<>();
+    private int turnDepth;
     private final Path baseDirectory;
     private final PayloadCodecs payloadCodecs;
     /**
@@ -64,7 +60,7 @@ public final class FrontierFileStore implements FrontierStore {
     }
 
     /** Package seam for the bounded server-turn durability contract. */
-    static int maxBatchableWalRecords() { return MAX_BATCHABLE_WAL_RECORDS; }
+    synchronized long flushedSequence(WorldId world) { return head(world).flushedSequence(); }
 
     @Override public synchronized RecoveryImage recover(WorldId worldId) {
         Path directory = worldDirectory(worldId);
@@ -74,23 +70,30 @@ public final class FrontierFileStore implements FrontierStore {
             return empty;
         }
         try {
+            verifyFormat(directory);
             List<NumberedPath> snapshots = entries(directory, SNAPSHOT);
             SnapshotRecord snapshot = snapshots.isEmpty() ? null : FrontierPersistenceCodec.decodeSnapshot(Files.readAllBytes(snapshots.getLast().path()));
             if (snapshot != null && !worldId.equals(snapshot.checkpoint().worldId())) throw new IllegalStateException("v3 snapshot world mismatch");
+            if (snapshot != null && snapshot.coveredWalSequence() != snapshots.getLast().sequence())
+                throw new IllegalStateException("v3 snapshot filename sequence mismatch");
             long covered = snapshot == null ? 0L : snapshot.coveredWalSequence();
             List<NumberedPath> wal = entries(directory, WAL);
             long expectedSequence = covered + 1L;
             Revision expectedRevision = snapshot == null ? Revision.ZERO : snapshot.checkpoint().revision();
             java.util.ArrayList<TransactionRecord> tail = new java.util.ArrayList<>();
-            for (NumberedPath entry : wal) {
-                if (entry.sequence() <= covered) continue;
-                if (entry.sequence() != expectedSequence++) throw new IllegalStateException("v3 WAL sequence gap");
-                TransactionRecord transaction = FrontierPersistenceCodec.decodeWal(Files.readAllBytes(entry.path()), payloadCodecs);
+            for (int index = 0; index < wal.size(); index++) {
+                NumberedPath entry = wal.get(index);
+                var segment = FrontierWalSegment.read(entry.path(), entry.sequence(), index == wal.size() - 1);
+                for (var frame : segment.frames()) {
+                if (frame.sequence() <= covered) continue;
+                if (frame.sequence() != expectedSequence++) throw new IllegalStateException("v3 WAL sequence gap");
+                TransactionRecord transaction = FrontierPersistenceCodec.decodeWal(frame.payload(), payloadCodecs);
                 if (!worldId.equals(transaction.worldId()) || !transaction.revision().equals(expectedRevision.next())) {
                     throw new IllegalStateException("v3 WAL transaction sequence mismatch");
                 }
                 expectedRevision = transaction.revision();
                 tail.add(transaction);
+                }
             }
             RecoveryImage image = new RecoveryImage(worldId, java.util.Optional.ofNullable(snapshot), tail);
             DurableHead recoveredHead = DurableHead.from(image);
@@ -121,7 +124,7 @@ public final class FrontierFileStore implements FrontierStore {
         if (!transaction.revision().equals(head.revision().next())) throw new IllegalStateException("WAL append revision is not next");
         long sequence = Math.addExact(head.lastSequence(), 1L);
         WorldId worldId = transaction.worldId();
-        writeAtomically(worldDirectory(worldId).resolve(fileName("wal", sequence)), FrontierPersistenceCodec.encodeWal(transaction, payloadCodecs), false);
+        appendSegment(worldId, sequence, FrontierPersistenceCodec.encodeWal(transaction, payloadCodecs));
         DurableHead appended = head.appended(sequence, transaction.revision());
         if (durability == Durability.DURABLE_BEFORE_EFFECT) {
             // A durable physical boundary depends on the complete preceding canonical history,
@@ -129,7 +132,7 @@ public final class FrontierFileStore implements FrontierStore {
             // receipt that permits an executor to observe or invoke an external effect.
             flushWalThrough(worldId, appended.flushedSequence(), sequence);
             appended = appended.flushedThrough(sequence);
-        } else if (sequence - appended.flushedSequence() >= MAX_BATCHABLE_WAL_RECORDS) {
+        } else if (turnDepth == 0 || sequence - appended.flushedSequence() >= MAX_BATCHABLE_WAL_RECORDS) {
             flushWalThrough(worldId, appended.flushedSequence(), sequence);
             appended = appended.flushedThrough(sequence);
         }
@@ -145,7 +148,10 @@ public final class FrontierFileStore implements FrontierStore {
         if (snapshot.coveredWalSequence() != head.lastSequence() || !snapshot.checkpoint().revision().equals(head.revision())) {
             throw new IllegalStateException("snapshot does not cover current WAL state");
         }
+        try { ensureFormat(worldDirectory(worldId)); }
+        catch (IOException failure) { throw new IllegalStateException("unable to initialize snapshot store", failure); }
         writeAtomically(worldDirectory(worldId).resolve(fileName("snapshot", head.lastSequence())), FrontierPersistenceCodec.encodeSnapshot(snapshot), true);
+        closeSegment(worldId);
         durableHeads.put(worldId, head.withSnapshot(head.lastSequence(), head.revision()));
         recoveredImages.put(worldId, new RecoveryImage(worldId, java.util.Optional.of(snapshot), List.of()));
         return new SnapshotReceipt(snapshot.checkpoint().revision(), head.lastSequence());
@@ -156,7 +162,15 @@ public final class FrontierFileStore implements FrontierStore {
         if (head.snapshotSequence() != head.lastSequence() || !head.snapshotRevision().equals(coveredRevision)
                 || !head.revision().equals(coveredRevision)) throw new IllegalStateException("snapshot does not cover all retained WAL");
         try {
-            for (NumberedPath entry : entries(worldDirectory(worldId), WAL)) if (entry.sequence() <= head.snapshotSequence()) Files.delete(entry.path());
+            var segments = entries(worldDirectory(worldId), WAL);
+            for (int index = 0; index < segments.size(); index++) {
+                var entry = segments.get(index);
+                var image = FrontierWalSegment.read(entry.path(), entry.sequence(), index == segments.size() - 1);
+                if (image.frames().isEmpty() || image.frames().getLast().sequence() <= head.snapshotSequence()) Files.delete(entry.path());
+            }
+            for (var entry : entries(worldDirectory(worldId), SNAPSHOT))
+                if (entry.sequence() < head.snapshotSequence()) Files.delete(entry.path());
+            forceDirectory(worldDirectory(worldId));
             return new CompactionReceipt(coveredRevision, 0L);
         } catch (IOException error) { throw new IllegalStateException("unable to compact Frontier v3 WAL", error); }
     }
@@ -172,13 +186,101 @@ public final class FrontierFileStore implements FrontierStore {
     private static String fileName(String prefix, long sequence) { return "%s-%020d.bin".formatted(prefix, sequence); }
     private void flushWalThrough(WorldId worldId, long alreadyFlushed, long throughSequence) {
         try {
-            for (long sequence = Math.addExact(alreadyFlushed, 1L); sequence <= throughSequence; sequence++) {
-                Path path = worldDirectory(worldId).resolve(fileName("wal", sequence));
-                try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE)) { channel.force(true); }
-            }
+            if (throughSequence > alreadyFlushed) Objects.requireNonNull(activeSegments.get(worldId), "active WAL prefix").force();
         } catch (IOException error) {
             throw new IllegalStateException("unable to flush Frontier v3 WAL batch", error);
         }
+    }
+
+    /** BATCHABLE records share one force at turn exit; irreversible effects flush immediately. */
+    synchronized void beginTurn() { turnDepth = Math.addExact(turnDepth, 1); }
+    synchronized void endTurn() {
+        if (turnDepth < 1) throw new IllegalStateException("unbalanced persistence turn");
+        if (--turnDepth != 0) return;
+        for (var world : List.copyOf(durableHeads.keySet())) {
+            var head = durableHeads.get(world);
+            flushWalThrough(world, head.flushedSequence(), head.lastSequence());
+            durableHeads.put(world, head.flushedThrough(head.lastSequence()));
+        }
+    }
+
+    private void appendSegment(WorldId world, long sequence, byte[] bytes) {
+        try {
+            if (bytes.length > FrontierWalSegment.MAX_RECORD_BYTES) throw new IllegalArgumentException("oversized WAL record");
+            Path directory = worldDirectory(world); ensureFormat(directory);
+            var active = activeSegments.get(world);
+            if (active == null) {
+                var paths = entries(directory, WAL);
+                if (!paths.isEmpty()) {
+                    var last = paths.getLast();
+                    var image = FrontierWalSegment.read(last.path(), last.sequence(), true);
+                    long end = last.sequence() + image.frames().size();
+                    if (end == sequence) active = FrontierWalSegment.resume(last.path(), image);
+                }
+            }
+            if (active != null && !active.fits(bytes.length)) { active.force(); active.close(); active = null; }
+            if (active == null) {
+                active = FrontierWalSegment.create(directory.resolve(fileName("wal-segment", sequence)), sequence);
+                forceDirectory(directory);
+            }
+            activeSegments.put(world, active);
+            active.append(sequence, bytes);
+        } catch (IOException failure) { throw new IllegalStateException("unable to append WAL segment", failure); }
+    }
+
+    private void closeSegment(WorldId world) {
+        var active = activeSegments.remove(world);
+        if (active != null) try { active.close(); }
+        catch (IOException failure) { throw new IllegalStateException("unable to close WAL segment", failure); }
+    }
+
+    @Override public synchronized void close() {
+        RuntimeException failure = null;
+        for (var world : List.copyOf(activeSegments.keySet())) {
+            var segment = activeSegments.remove(world);
+            try { segment.force(); }
+            catch (IOException error) {
+                if (failure == null) failure = new IllegalStateException("unable to flush closing WAL segment", error);
+                else failure.addSuppressed(error);
+            }
+            finally {
+                try { segment.close(); }
+                catch (IOException error) {
+                    if (failure == null) failure = new IllegalStateException("unable to close WAL segment", error);
+                    else failure.addSuppressed(error);
+                }
+            }
+        }
+        if (failure != null) throw failure;
+    }
+
+    private static void verifyFormat(Path directory) throws IOException {
+        Path marker = directory.resolve("store-format.bin");
+        if (Files.exists(marker)) {
+            if (Files.size(marker) != FORMAT.length || !java.util.Arrays.equals(Files.readAllBytes(marker), FORMAT))
+                throw new IllegalStateException("unsupported Frontier store format");
+        } else try (var paths = Files.list(directory)) {
+            if (paths.anyMatch(path -> path.getFileName().toString().endsWith(".bin")))
+                throw new IllegalStateException("old Frontier store requires a fresh world");
+        }
+    }
+
+    private void ensureFormat(Path directory) throws IOException {
+        if (formattedDirectories.contains(directory)) return;
+        var missing = new java.util.ArrayList<Path>();
+        for (Path ancestor = directory.toAbsolutePath(); !Files.exists(ancestor); ancestor = ancestor.getParent()) missing.add(ancestor);
+        Files.createDirectories(directory);
+        // A forced record is useless if the new world-store directory itself vanishes on crash.
+        // Publish newly created directory links from their existing ancestor downward once.
+        for (int index = missing.size() - 1; index >= 0; index--) forceDirectory(missing.get(index).getParent());
+        verifyFormat(directory);
+        Path marker = directory.resolve("store-format.bin");
+        if (!Files.exists(marker)) writeAtomically(marker, FORMAT, true);
+        formattedDirectories.add(directory);
+    }
+
+    private static void forceDirectory(Path directory) throws IOException {
+        try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) { channel.force(true); }
     }
     private static List<NumberedPath> entries(Path directory, Pattern pattern) throws IOException {
         if (!Files.exists(directory)) return List.of();
@@ -201,6 +303,7 @@ public final class FrontierFileStore implements FrontierStore {
             // the old verified checkpoint or the complete new one, never an absent checkpoint.
             try { Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
             catch (AtomicMoveNotSupportedException unsupported) { throw new IllegalStateException("atomic filesystem move is required for Frontier v3", unsupported); }
+            if (force) forceDirectory(target.getParent());
         } catch (IOException error) { throw new IllegalStateException("unable to atomically write Frontier v3 record", error); }
     }
     private record DurableHead(long lastSequence, Revision revision, long snapshotSequence, Revision snapshotRevision, long flushedSequence) {

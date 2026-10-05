@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,6 +34,7 @@ public final class FrontierWorldProcessCatalog {
             return plan(state, action, autonomousInterception);
         }
         default boolean held(FrontierWorldState state, ScheduledAction action) { return false; }
+        default Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return Set.of(); }
     }
 
     private static final Set<String> KERNEL = types(
@@ -222,6 +224,9 @@ public final class FrontierWorldProcessCatalog {
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                     return ResidentActivityProcess.held(state, action);
                 }
+                @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
+                    return ResidentActivityProcess.wakeDependencies(state, action.subject());
+                }
             }),
             Map.entry(ResidentMealProcess.PROGRESS, new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
@@ -235,6 +240,9 @@ public final class FrontierWorldProcessCatalog {
                 }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                     return ResidentMealProcess.held(state, action);
+                }
+                @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
+                    return ResidentMealProcess.wakeDependencies(state, action);
                 }
             }),
             Map.entry(ActorMovementProcess.PROGRESS, new ScheduledPlanner() {
@@ -282,6 +290,9 @@ public final class FrontierWorldProcessCatalog {
                 }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                     return ResourceSiteHarvestProcess.coldProgressHeld(state, action);
+                }
+                @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
+                    return ResourceSiteHarvestProcess.coldProgressWakeKeys(state, action);
                 }
             }),
             Map.entry("frontier.objective.resource_harvest", (state, action, autonomous) -> StrategicObjectiveProcess.planResourceHarvestOpportunity(state, action)),
@@ -477,26 +488,9 @@ public final class FrontierWorldProcessCatalog {
     /** Park only waits whose source/service owner has an exact wake address. */
     public static Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> holdWakeKeys(
             FrontierWorldState state, ScheduledAction action) {
-        if (!action.kind().equals(ResidentActivityProcess.REVIEW)
-                && !action.kind().equals(ResidentMealProcess.PROGRESS)) return Set.of();
-        ResidentProfile resident = state.humanPopulation().resident(action.subject());
-        if (resident == null) return Set.of(action.subject());
-        if (action.kind().equals(ResidentActivityProcess.REVIEW)) {
-            return ResidentActivityProcess.wakeDependencies(state, action.subject());
-        } else {
-            ResidentMeal meal = state.humanPopulation().meals().get(action.subject());
-            if (meal == null) return Set.of(action.subject());
-            // Only the side-pocket wait is depot-addressed. Route/physical/HOT
-            // holds have different causal owners and remain directly checked.
-            if (meal.pendingPhysicalStep().isPresent()
-                    || !FrontierSceneAdmission.available(state, List.of(meal.residentId()))
-                    || state.sceneLeases().values().stream()
-                        .anyMatch(lease -> lease.retainsMemberCustody(meal.residentId()))
-                    || meal.phase() != ResidentMeal.Phase.MOVE || meal.coldTravel().isPresent()
-                    || ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId()))
-                return Set.of();
-        }
-        return Set.of(action.subject(), FrontierWorldState.depotId(resident.settlementId()));
+        ScheduledPlanner planner = SCHEDULED_PLANNERS.get(action.kind());
+        if (planner == null) throw new IllegalStateException("scheduled kind has no wake owner: " + action.kind());
+        return planner.wakeDependencies(state, action);
     }
 
     /** Derived invalidation; canonical facts and due order stay in the WAL-backed queue. */

@@ -39,6 +39,66 @@ public final class FrontierV3ResourceFieldObservationGameTests {
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 30)
+    public static void growthBatchRecoversIndividuallyAfterPartialPhysicalApplication(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var first = helper.absolutePos(new BlockPos(4, 0, 4));
+        var second = helper.absolutePos(new BlockPos(5, 0, 4));
+        for (var soil : List.of(first, second)) {
+            level.setBlock(soil.below(), Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(soil, Blocks.DIRT.defaultBlockState(), 3);
+            level.setBlock(soil.above(), Blocks.AIR.defaultBlockState(), 3);
+        }
+        var siteId = new SubjectId("site:field-growth-batch-test");
+        var layout = new ResourceFieldLayout(1, 3, List.of(cell(1, first), cell(2, second)), List.of());
+        var site = new ResourceSite(siteId, new SubjectId("settlement:field-growth-batch-test"),
+                new SubjectId("structure:field-growth-batch-test"), ResourceSiteKind.WHEAT_FIELD, layout);
+        helper.runAtTickTime(1, () -> {
+            FrontierV3ResourceFieldInitialWriter.reserve(level, site,
+                    new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:field-growth-batch-test"));
+            for (int write = 0; write < 4; write++) FrontierV3ResourceFieldInitialWriter.writeOne(level, site);
+            var seeded = ResourceFieldCycle.seeded(siteId, layout, 1);
+            FrontierV3ResourceFieldInitialWriter.activate(level, site, seeded,
+                    FrontierV3ResourceFieldWitness.claimed(siteId, 1, ResourceFieldPhysicalSurface.fromCycle(seeded)));
+            var ids = layout.cells().stream().map(ResourceFieldLayout.Cell::id).toList();
+            var grown = seeded.advanceGrowth(ids.getFirst()).advanceGrowth(ids.getLast());
+            var accepted = new FrontierCanonicalState<>(new WorldId("frontier:field-growth-batch-test"),
+                    new Revision(5), new SimInstant(5), grown);
+            FrontierV3ResourceFieldGrowthProjector.projectAcceptedBatch(level, site, accepted, ids);
+            var ledger = FrontierV3ResourceSiteLedger.get(level);
+            var owner = (FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId);
+            helper.assertTrue(ids.stream().allMatch(id -> owner.witness().cell(id).pending().isEmpty()
+                            && owner.witness().cell(id).committed().growthStage() == 1)
+                            && level.getBlockState(first.above()).getValue(CropBlock.AGE) == 1
+                            && level.getBlockState(second.above()).getValue(CropBlock.AGE) == 1,
+                    "bounded batch publishes separate real-cell results");
+            var next = grown.advanceGrowth(ids.getFirst()).advanceGrowth(ids.getLast());
+            var acceptedNext = new FrontierCanonicalState<>(accepted.worldId(), new Revision(6), new SimInstant(6), next);
+            var witness = owner.witness();
+            for (var id : ids) {
+                var before = FrontierV3ResourceFieldObservation.observe(level, next, witness, id, "batch:before-crash");
+                var transition = ResourceFieldCellTransition.between(siteId, 1, layout.revision(), id,
+                        witness.cell(id).committed(), ResourceFieldPhysicalSurface.Condition.of(next.cell(id)));
+                witness = witness.beginCanonicalProjection(acceptedNext, transition, "batch:prepared:" + id.value(), before);
+            }
+            var live = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId);
+            ledger.replaceFieldClaim(live, live.withWitness(witness)); ledger.persist(level);
+            level.setBlock(first.above(), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 2), 3);
+            // Restore the actual persisted pending claims: first physical effect applied, second not.
+            var saved = (FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId);
+            ledger.replaceFieldClaim((FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId), saved);
+            FrontierV3ResourceFieldGrowthProjector.projectAcceptedBatch(level, site, acceptedNext, ids);
+            var recovered = (FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId);
+            helper.assertTrue(ids.stream().allMatch(id -> recovered.witness().cell(id).pending().isEmpty()
+                            && recovered.witness().cell(id).committed().growthStage() == 2)
+                            && level.getBlockState(first.above()).getValue(CropBlock.AGE) == 2
+                            && level.getBlockState(second.above()).getValue(CropBlock.AGE) == 2,
+                    "saved per-cell witnesses recover a split batch without duplicate growth");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 30)
     public static void soundCropWithBlockedWorkerHeadroomHasAnIndependentAccessObservation(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos soil = helper.absolutePos(new BlockPos(4, 0, 4));

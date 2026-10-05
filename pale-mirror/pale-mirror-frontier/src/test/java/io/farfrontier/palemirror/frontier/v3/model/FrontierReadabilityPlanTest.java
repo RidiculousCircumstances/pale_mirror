@@ -16,6 +16,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierReadabilityPlanTest {
     @Test
+    void localFormattingRetainsGeometryAndReadsChangedPopulation() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-local"), 91L));
+        var geometry = FrontierReadabilityPlan.StableObjectGeometry.compile(state);
+        var index = new FrontierReadabilityPlan.StableBoardIndex(state, geometry);
+        var actor = state.bootstrap().settlements().getFirst().residents().getFirst().id();
+        var moved = state.withActorBody(actor, state.actorLocations().get(actor).body().offset(1, 0, 0));
+        assertTrue(geometry.matches(moved));
+        var settlement = state.bootstrap().settlements().getFirst();
+        var changed = state.withHumanPopulation(state.humanPopulation().accrueHunger(actor, 30_000L));
+        assertTrue(geometry.matches(changed), "nutrition changes must not rebuild object cells");
+        var expected = FrontierReadabilityPlan.compileStableBaseline(changed).boards();
+        expected.forEach((owner, board) -> assertEquals(board, index.render(changed, owner)));
+        var conditions = new LinkedHashMap<>(state.structureConditions());
+        conditions.put(settlement.structures().getFirst().id(), StructureCondition.DESTROYED);
+        var damaged = state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(conditions));
+        assertTrue(!geometry.matches(damaged));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> index.render(damaged, settlement.structures().getFirst().id()));
+    }
+    @Test
     void givesEveryFunctionalBuildingOrganAndResourceSiteOneStablePlayerFacingBoard() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-plan"), 91L));
         FrontierReadabilityPlan plan = FrontierReadabilityPlan.compile(state);

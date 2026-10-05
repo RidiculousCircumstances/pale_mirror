@@ -503,7 +503,7 @@ class FrontierV3ServerRuntimeTest {
         FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), store, 20);
         assertInstanceOf(CommandResult.Accepted.class,
                 runtime.submit(command("command:corrupt", Revision.ZERO, SimInstant.ZERO, 1)).orElseThrow());
-        Path wal = directory.resolve("frontier-v3/frontier_runtime/wal-00000000000000000001.bin");
+        Path wal = directory.resolve("frontier-v3/frontier_runtime/wal-segment-00000000000000000001.bin");
         byte[] bytes = Files.readAllBytes(wal);
         bytes[bytes.length - 1] ^= 1;
         Files.write(wal, bytes);

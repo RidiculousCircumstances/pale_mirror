@@ -436,7 +436,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 }
             }
         }
-        // WAL commits are already durable before the state becomes authoritative. A complete
+        // WAL records precede publication. Critical effects force the complete prefix;
+        // BATCHABLE progression may share the host's bounded turn-exit force. A complete
         // snapshot is needed only at the explicit checkpoint boundary; eagerly encoding every
         // immutable state transition turns ordinary COLD background work into repeated full
         // serialization. Schedule-only transactions retain the existing bytes, while a changed

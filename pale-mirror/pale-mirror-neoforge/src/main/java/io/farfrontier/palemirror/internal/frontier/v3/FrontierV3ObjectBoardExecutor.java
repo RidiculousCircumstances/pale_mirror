@@ -36,6 +36,8 @@ final class FrontierV3ObjectBoardExecutor {
     private static final int MAX_BOARDS_PER_TICK = 8;
     private static final String OWNER_KEY = "pale_mirror.frontier_v3.board_owner";
     private static final Map<FrontierV3ServerRuntime<?, ?>, Cursor> CURSORS = new IdentityHashMap<>();
+    private static final Map<FrontierV3ServerRuntime<?, ?>, FrontierReadabilityPlan.StableObjectGeometry> GEOMETRIES = new IdentityHashMap<>();
+    private static final Map<FrontierV3ServerRuntime<?, ?>, FrontierReadabilityPlan.StableBoardIndex> BOARD_INDEXES = new IdentityHashMap<>();
 
     enum ProjectionResult { APPLIED, CURRENT, UPDATED, CONFLICT, DEFERRED }
 
@@ -53,21 +55,32 @@ final class FrontierV3ObjectBoardExecutor {
         FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         FrontierReadabilityPlan.ReadabilityInput input = FrontierReadabilityPlan.input(state);
         Cursor cursor = CURSORS.get(runtime);
-        if (cursor == null || !cursor.input().matchesStableBaseline(input)) {
-            FrontierReadabilityPlan baseline = FrontierReadabilityPlan.compileStableBaseline(state);
+        var geometry = GEOMETRIES.get(runtime);
+        if (cursor == null || geometry == null || !geometry.matches(state)) {
+            geometry = FrontierReadabilityPlan.StableObjectGeometry.compile(state);
+            GEOMETRIES.put(runtime, geometry);
+            BOARD_INDEXES.put(runtime, new FrontierReadabilityPlan.StableBoardIndex(state, geometry));
+            FrontierReadabilityPlan baseline = FrontierReadabilityPlan.compileStableBaseline(state, geometry);
             FrontierReadabilityPlan dynamicHive = FrontierReadabilityPlan.compileDynamicHiveOverlay(state, 256 - baseline.boards().size());
             cursor = Cursor.from(input, sorted(baseline), sorted(dynamicHive), cursor);
             CURSORS.put(runtime, cursor);
-        } else if (!cursor.input().matchesDynamicHiveOverlay(input)) {
+        } else if (!cursor.input().matchesStableBaseline(input) || !cursor.input().matchesDynamicHiveOverlay(input)) {
             FrontierReadabilityPlan dynamicHive = FrontierReadabilityPlan.compileDynamicHiveOverlay(state, cursor.dynamicHiveCapacity());
             cursor = cursor.withDynamicHiveOverlay(input, sorted(dynamicHive));
             CURSORS.put(runtime, cursor);
         }
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
-        for (int count = 0; count < MAX_BOARDS_PER_TICK && cursor.hasNext(); count++) project(level, ledger, runtime, state, cursor.next());
+        var index = BOARD_INDEXES.get(runtime);
+        for (int count = 0; count < MAX_BOARDS_PER_TICK && cursor.hasNext(); count++) {
+            var slot = cursor.next();
+            var board = index.contains(slot.ownerId()) ? index.render(state, slot.ownerId()) : slot;
+            project(level, ledger, runtime, state, board);
+        }
     }
 
-    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
+        CURSORS.remove(runtime); GEOMETRIES.remove(runtime); BOARD_INDEXES.remove(runtime);
+    }
 
     private static List<FrontierObjectBoard> sorted(FrontierReadabilityPlan plan) {
         return plan.boards().values().stream().sorted(Comparator.comparing(value -> value.ownerId().value())).toList();

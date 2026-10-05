@@ -342,9 +342,12 @@ final class FrontierV3ResourceSiteExecutor {
             if (!owner.witness().matchesCycle(cycle)) return;
             var cursors = CELL_CURSORS.computeIfAbsent(runtime, ignored -> new HashMap<>());
             int cellIndex = Math.floorMod(cursors.getOrDefault(site.id(), 0), cycle.layout().cells().size());
-            cursors.put(site.id(), (cellIndex + 1) % cycle.layout().cells().size());
-            FrontierV3ResourceFieldGrowthProjector.projectCurrentOne(level, runtime, site.id(),
-                    cycle.layout().cells().get(cellIndex).id());
+            int count = Math.min(projectionWriteBudget(), cycle.layout().cells().size());
+            var cells = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId>(count);
+            for (int offset = 0; offset < count; offset++)
+                cells.add(cycle.layout().cells().get((cellIndex + offset) % cycle.layout().cells().size()).id());
+            cursors.put(site.id(), (cellIndex + count) % cycle.layout().cells().size());
+            FrontierV3ResourceFieldGrowthProjector.projectCurrentBatch(level, runtime, site.id(), cells);
             return;
         }
         // Only a per-cell physical owner may project the current field. A stage/prefix
