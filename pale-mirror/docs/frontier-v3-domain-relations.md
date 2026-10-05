@@ -336,3 +336,37 @@ implementation.
   successor facts.
 - Removing the read-only view or cache cannot change simulation behavior.
 - No database, ORM, adapter state or Minecraft object becomes canonical truth.
+
+## PM-TRADE001 commercial-core adoption
+
+The registered goods-trade family now retains typed order parties/counterparties,
+container endpoints, buy/sell order links, outstanding resource claims and exact
+financial holds. `GoodsTradeStateSupport` validates these relationships during
+publication/recovery; `GoodsTradeRelationships` derives the read-only view.
+Storage beside the production-service market in `CompanyRegistry` is structural
+aggregation, not company-policy authority over another participant's orders.
+
+Acceptance/disposition receipts are bounded historical evidence, not live
+account/lot/claim references. Their last128 entries may be evicted while cumulative
+accepted/disposed quantities and monotonic result revision remain authoritative.
+Only expired, terminal, completely closed order components can be explicitly
+retired; live promises, claims or payment holds cannot be deleted together to
+evade closure. Fungible container/cargo custody is independent of economic title;
+every lot still names an existing economic account. Shared actor/container
+handoffs preserve these rights instead of retitling on arrival.
+
+This adoption covers the commercial core only. Shipment/crew/cargo obligations,
+participant policies and physical delivery recovery remain the next PM-TRADE001
+work; the registered reducer/relationships are not evidence of a native caravan.
+
+Step2 WIP adds explicit shipment-to-courier/container/claim/account/contract
+relationships owned by `ShipmentState`. Endpoint declarations retain facility
+and container IDs separately: a depot structure is not its stock account/container.
+The closed authorization capability supplies commercial links; shared shipment
+coordination does not infer the authorizing family. The current loaded/source
+allocation and exact common execution are audited at publication and hydration.
+Delivered/withdrawn resource declarations become historical evidence, permitting
+the buyer's later acceptance to retire its claim without a dangling shipment.
+Live transports cannot be silently erased together with cargo/execution state.
+Transport state and its named aggregate updates remain independent of company/
+commercial storage. This is custody/reference adoption, not native route recovery.
