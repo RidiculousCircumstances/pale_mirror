@@ -57,9 +57,11 @@ class FrontierV3OfflineActorRecoveryPublicationTest {
             assertEquals(2L, recovered.checkpointImage().orElseThrow().revision().value());
             assertArrayEquals(published, Files.readAllBytes(ledgerFile));
             assertArrayEquals(retainedReceipt, Files.readAllBytes(receipt));
-            try (var paths = Files.walk(world.resolve("frontier-v3"))) {
-                assertEquals(2L, paths.filter(path -> path.getFileName().toString().startsWith("wal-")).count());
-            }
+            // Format 2 appends multiple transactions to one bounded segment.
+            // Idempotency concerns recovered transactions, not the file count.
+            var disk = new FrontierFileStore(world, FrontierWorldRuntimeDefinition.payloadCodecs());
+            assertEquals(List.of(1L, 2L), disk.recover(state.bootstrap().worldId()).walTail().stream()
+                    .map(transaction -> transaction.revision().value()).toList());
         }
     }
 
