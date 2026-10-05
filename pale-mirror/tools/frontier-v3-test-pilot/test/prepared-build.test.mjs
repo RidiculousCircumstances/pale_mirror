@@ -114,7 +114,7 @@ test('prepared build fingerprints both native classpaths and fails closed on dri
     await ensurePreparedLaunchWorkingDirectory({ cwd: ownedClientDirectory });
     assert.ok((await stat(ownedClientDirectory)).isDirectory());
     assert.equal(await readFile(resolve(ownedClientDirectory, 'options.txt'), 'utf8'),
-      'onboardAccessibility:b:true\nskipMultiplayerWarning:b:true\nnarrator:0\n',
+      'onboardAccessibility:b:true\nskipMultiplayerWarning:b:true\nnarrator:0\nmaxFps:20\n',
       'a fresh private prepared client can Quick Play without a first-run screen');
     await writeFile(resolve(ownedClientDirectory, 'options.txt'), 'foreign-private-options\n');
     await ensurePreparedLaunchWorkingDirectory({ cwd: ownedClientDirectory });

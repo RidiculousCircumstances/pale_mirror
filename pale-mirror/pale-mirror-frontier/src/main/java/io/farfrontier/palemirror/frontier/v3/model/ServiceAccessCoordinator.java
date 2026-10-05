@@ -29,12 +29,6 @@ public final class ServiceAccessCoordinator {
         var access = boundary(state, requested.pointId());
         var demands = ServiceAccessCapabilities.current(state, requested.pointId());
         var selfCare = demands.stream().filter(demand -> demand.priority() == ServiceAccessDemand.Priority.SELF_CARE).toList();
-        var first = selfCare.stream().filter(demand -> demand.presence() == ServiceAccessDemand.Presence.OCCUPIED)
-                .min(Comparator.<ServiceAccessDemand, Boolean>comparing(demand ->
-                        !access.occupied(currentBody(state, demand.identity().actorId())))
-                        .thenComparing(demand -> !demand.physicallyAdmitted())
-                        .thenComparingLong(ServiceAccessDemand::requestedAtTick)
-                        .thenComparing(demand -> demand.identity().actorId()));
         var entering = selfCare.stream().filter(demand -> demand.presence() == ServiceAccessDemand.Presence.ENTERING)
                 .min(Comparator.comparingLong(ServiceAccessDemand::requestedAtTick)
                         .thenComparing(demand -> demand.identity().actorId()));
@@ -49,15 +43,30 @@ public final class ServiceAccessCoordinator {
                         && !awaitingBody(state, movement.order().actorId())
                         && access.occupied(currentBody(state, movement.order().actorId()))
                         && (!requestingSelfCare || !movement.order().actorId().equals(requested.actorId())));
-        if (requestingSelfCare) {
-            boolean ownsOccupiedTurn = first.filter(demand -> demand.identity().equals(requested)).isPresent();
-            return !departing && first.or(() -> entering).map(demand -> demand.identity().equals(requested)).orElse(true)
-                    && (ownsOccupiedTurn || workers.stream()
-                        .filter(demand -> demand.presence() == ServiceAccessDemand.Presence.OCCUPIED)
-                        .allMatch(demand -> demand.identity().actorId().equals(requested.actorId())));
-        }
-        return first.isEmpty() && entering.isEmpty() && !departing && workers.stream().findFirst()
+        // Priority selects the next visitor; it cannot revoke an incumbent's
+        // atomic service/clearance turn while another visitor approaches.
+        var incumbent = demands.stream().filter(demand -> demand.presence() == ServiceAccessDemand.Presence.OCCUPIED)
+                .min(Comparator.comparing(ServiceAccessDemand::priority)
+                        .thenComparing(demand -> !demand.physicallyAdmitted())
+                        .thenComparingLong(ServiceAccessDemand::requestedAtTick)
+                        .thenComparing(demand -> demand.identity().ownerId()));
+        if (departing) return false;
+        if (incumbent.isPresent()) return incumbent.orElseThrow().identity().equals(requested);
+        if (requestingSelfCare)
+            return entering.map(demand -> demand.identity().equals(requested)).orElse(true);
+        return entering.isEmpty() && workers.stream().findFirst()
                 .filter(demand -> demand.identity().equals(requested)).isPresent();
+    }
+
+    /** COLD transit is shared; only entry into the service boundary needs a turn. */
+    public static boolean mayAdvance(FrontierWorldState state, ServiceAccessDemand.Identity requested,
+                                     SurfaceAnchor destination) {
+        Objects.requireNonNull(destination, "service approach destination");
+        Objects.requireNonNull(requested, "complete service approach identity");
+        if (ServiceAccessCapabilities.current(state, requested.pointId()).stream()
+                .noneMatch(demand -> demand.identity().equals(requested)))
+            throw new IllegalArgumentException("service approach has no exact current owner declaration");
+        return boundary(state, requested.pointId()).cleared(destination.standingBody()) || available(state, requested);
     }
 
     /** Access ends at the first witnessed exit, never on a later work or return-route endpoint. */

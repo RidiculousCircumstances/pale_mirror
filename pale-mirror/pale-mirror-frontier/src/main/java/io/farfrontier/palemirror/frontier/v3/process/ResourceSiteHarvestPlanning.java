@@ -280,6 +280,8 @@ final class ResourceSiteHarvestPlanning {
         // continuation.  Each step below advances one retained pedestrian edge or one exact
         // crop receipt; it still never touches an unloaded block or manufactures final output.
         if (ResourceSiteHarvestGoal.actorAtDepot(state, job)) {
+            if (!HarvestServiceAccess.available(state, job))
+                return List.of(reschedule(action, coldProgress(job, nextDue)));
             if (job.returningForBatch() && !batchDeliveryCapacityAvailable(state, job))
                 return List.of(reschedule(action, coldProgress(job, nextDue)));
             ProposedEvent returned = new ProposedEvent(job.siteId(), new ResourceSiteHarvestReturned(job.id(), job.workerId(),
@@ -290,9 +292,6 @@ final class ResourceSiteHarvestPlanning {
                     : coldTerminal(state, action, job, returned, now);
         }
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
-        if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
-                && !HarvestServiceAccess.available(state, job))
-            return List.of(reschedule(action, coldProgress(job, nextDue)));
         ActorLocation worker = state.actorLocations().get(job.workerId());
         if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("COLD field goal has no living retained worker");
@@ -336,6 +335,9 @@ final class ResourceSiteHarvestPlanning {
                     ResourceSiteHarvestNavigationBlock.Reason.KNOWN_GEOMETRY_UNAVAILABLE);
         }
         BodyPosition next = path.get(Math.min(1, path.size() - 1)).standingBody();
+        if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
+                && !HarvestServiceAccess.mayAdvance(state, job, next.supportingSurface()))
+            return List.of(reschedule(action, coldProgress(job, nextDue)));
         ResourceSiteHarvestColdGoalAdvanced advanced = new ResourceSiteHarvestColdGoalAdvanced(
                 job.id(), job.workerId(), goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(),
                 next, action.id(), action.dueAt().ticks());
@@ -400,15 +402,22 @@ final class ResourceSiteHarvestPlanning {
                     || !ActorExecutionCoordinator.coldAvailable(state, job.workerId())
                     || pendingPlayerBreakAtNextCell(state, job)
                     || loadedDepotCustodyBlocksDelivery(state, job)
-                    // A denied shared service turn is a wait, not a new COLD step.
-                    // Reissuing the same one-tick continuation can monopolize the
-                    // due queue ahead of the meal whose arrival would release it.
-                    || (ResourceSiteHarvestGoal.current(state, job).kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
-                        && !ResourceSiteHarvestGoal.actorAtDepot(state, job)
-                        && !HarvestServiceAccess.available(state, job))
+                    || serviceEntryHeld(state, job)
                     || (ResourceSiteHarvestGoal.actorAtDepot(state, job) && job.returningForBatch()
                         && !batchDeliveryCapacityAvailable(state, job))
                     || job.navigationBlock().filter(block -> !block.reroutable()).isPresent());
+    }
+
+    private static boolean serviceEntryHeld(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        if (ResourceSiteHarvestGoal.current(state, job).kind() != ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
+                || HarvestServiceAccess.available(state, job)) return false;
+        if (ResourceSiteHarvestGoal.actorAtDepot(state, job)) return true;
+        try {
+            var path = ResourceSiteHarvestKnownNavigation.path(state, job);
+            return !HarvestServiceAccess.mayAdvance(state, job, path.get(Math.min(1, path.size() - 1)));
+        } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
+            return false; // The planner must record the exact knowledge hold, not park it as a service wait.
+        }
     }
 
     /** Exact dependencies of an admitted field continuation; parking never changes its due time. */

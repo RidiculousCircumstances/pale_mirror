@@ -561,17 +561,13 @@ public final class ResidentMealProcess {
         return new TimedKnownRoute(order, route, now, COLD_TICKS_PER_EDGE, epoch);
     }
 
-    /** Travel never coalesces across the single physical service entrance or its exit. */
+    /** Entrance ends at the semantic station; clearance still witnesses the first exit. */
     private static List<SurfaceAnchor> routeToBoundary(FrontierWorldState state, ResidentMeal meal) {
         List<SurfaceAnchor> route = meal.phase() == ResidentMeal.Phase.MOVE
                 ? ResidentMealKnownNavigation.path(state, meal)
                 : ResidentMealKnownNavigation.returnPath(state, meal);
         ServiceAccessBoundary boundary = port(state, meal).accessBoundary();
-        if (meal.phase() == ResidentMeal.Phase.MOVE) {
-            for (int index = 1; index < route.size() - 1; index++)
-                if (index > 1 && boundary.occupied(route.get(index).standingBody()))
-                    return List.copyOf(route.subList(0, index));
-        } else if (boundary.occupied(route.getFirst().standingBody())) {
+        if (meal.phase() != ResidentMeal.Phase.MOVE && boundary.occupied(route.getFirst().standingBody())) {
             for (int index = 1; index < route.size() - 1; index++)
                 if (boundary.cleared(route.get(index).standingBody()))
                     return List.copyOf(route.subList(0, index + 1));

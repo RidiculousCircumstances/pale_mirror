@@ -5,7 +5,7 @@ import { delimiter, join, relative, resolve } from 'node:path';
 // private client root therefore needs the same first-run acknowledgements that
 // RunGame ordinarily writes before Quick Play can act.  This is disposable
 // consumer state, never part of the immutable prepared artifact.
-const DISPOSABLE_CLIENT_OPTIONS = 'onboardAccessibility:b:true\nskipMultiplayerWarning:b:true\nnarrator:0\n';
+const DISPOSABLE_CLIENT_OPTIONS = 'onboardAccessibility:b:true\nskipMultiplayerWarning:b:true\nnarrator:0\nmaxFps:20\n';
 // This belongs only to the disposable automated semantic client.  NeoForge's
 // pre-game splash has no player or PMV3 meaning, while the eventual ordinary
 // Minecraft GLFW window remains the client that connects and renders actions.

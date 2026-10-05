@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.List;
-import java.util.Set;
 
 /** Feeding owns its entrance checkpoint and meal completion, not the shared access arbiter. */
 public final class ResidentMealServiceAccess implements ServiceAccessCapability {
@@ -12,11 +11,10 @@ public final class ResidentMealServiceAccess implements ServiceAccessCapability 
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var port = ServiceAccessCoordinator.port(state, pointId);
         var boundary = port.accessBoundary();
-        var egress = SettlementServiceAccessPoints.egress(state, port);
         return state.humanPopulation().meals().values().stream().filter(meal -> meal.depotId().equals(pointId))
                 .map(meal -> new ServiceAccessDemand(identity(pointId, meal.residentId()), priority(),
-                        occupies(state, meal, boundary, egress) ? ServiceAccessDemand.Presence.OCCUPIED
-                                : committedEntrance(meal, boundary, egress) ? ServiceAccessDemand.Presence.ENTERING
+                        ServiceAccessCoordinator.occupies(state, boundary, meal.residentId()) ? ServiceAccessDemand.Presence.OCCUPIED
+                                : committedEntrance(meal, boundary) ? ServiceAccessDemand.Presence.ENTERING
                                 : ServiceAccessDemand.Presence.APPROACH,
                         meal.startedAtTick(), physicallyAdmitted(state, meal.residentId()))).toList();
     }
@@ -32,19 +30,11 @@ public final class ResidentMealServiceAccess implements ServiceAccessCapability 
         return actor != null && (ServiceAccessCoordinator.boundary(state, pointId).cleared(actor.body())
                 || available(state, pointId, residentId));
     }
-    private static boolean committedEntrance(ResidentMeal meal, ServiceAccessBoundary boundary, Set<SurfaceAnchor> egress) {
+    private static boolean committedEntrance(ResidentMeal meal, ServiceAccessBoundary boundary) {
         return meal.phase() == ResidentMeal.Phase.MOVE && meal.coldTravel().map(travel -> {
             var destination = travel.route().getLast();
-            return boundary.occupied(destination.standingBody()) || egress.contains(destination);
+            return boundary.occupied(destination.standingBody());
         }).orElse(false);
-    }
-    private static boolean occupies(FrontierWorldState state, ResidentMeal meal, ServiceAccessBoundary access,
-                                     Set<SurfaceAnchor> egress) {
-        var lease = state.ambientLeases().get(meal.residentId());
-        if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED) return false;
-        var actor = state.actorLocations().get(meal.residentId());
-        return actor == null || !access.cleared(actor.body())
-                || meal.phase() == ResidentMeal.Phase.MOVE && egress.contains(actor.supportingSurface());
     }
     private static boolean physicallyAdmitted(FrontierWorldState state, SubjectId actorId) {
         var lease = state.ambientLeases().get(actorId);

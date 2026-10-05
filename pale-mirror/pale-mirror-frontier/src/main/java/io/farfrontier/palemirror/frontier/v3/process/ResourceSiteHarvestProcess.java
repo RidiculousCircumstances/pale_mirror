@@ -574,6 +574,8 @@ public final class ResourceSiteHarvestProcess {
         ActorLocation actor = state.actorLocations().get(job.workerId());
         if (actor == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job))
             throw new IllegalArgumentException("resource-site COLD terminal lacks its returned worker body");
+        if (!HarvestServiceAccess.available(state, job))
+            throw new IllegalArgumentException("resource-site COLD delivery lacks its exact service turn");
         ScheduledAction action = new ScheduledAction(returned.coldScheduleId(), new SimInstant(returned.coldDueAt()),
                 0, subject, COLD_PROGRESS_KIND, 1);
         return job.returningForBatch() ? finishAfterColdBatchReturn(state, job, action)
@@ -628,7 +630,7 @@ public final class ResourceSiteHarvestProcess {
                 || goal.nextWorkSlot() != advanced.nextWorkSlot() || goal.kind() != advanced.kind())
             throw new IllegalArgumentException("COLD field goal has a stale work target");
         if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
-                && !HarvestServiceAccess.available(state, job))
+                && !HarvestServiceAccess.mayAdvance(state, job, advanced.nextBody().supportingSurface()))
             throw new IllegalArgumentException("COLD field depot approach lacks its service turn");
         List<SurfaceAnchor> known = ResourceSiteHarvestKnownNavigation.path(state, job);
         BodyPosition next = known.get(Math.min(1, known.size() - 1)).standingBody();

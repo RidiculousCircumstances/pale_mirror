@@ -33,6 +33,11 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
         return ServiceAccessCoordinator.available(state, identity(job, FrontierWorldState.depotId(job.settlementId())));
     }
 
+    public static boolean mayAdvance(FrontierWorldState state, ProductionJob job, SurfaceAnchor destination) {
+        return ServiceAccessCoordinator.mayAdvance(state,
+                identity(job, FrontierWorldState.depotId(job.settlementId())), destination);
+    }
+
     public static boolean witnessedExit(FrontierWorldState state, ProductionJob job, BodyPosition observedBody) {
         if (job.bakeryWork().isEmpty()) return false;
         var phase = job.bakeryWork().orElseThrow().phase();

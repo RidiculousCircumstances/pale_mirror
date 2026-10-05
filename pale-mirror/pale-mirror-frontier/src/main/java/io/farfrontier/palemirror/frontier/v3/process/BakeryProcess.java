@@ -124,6 +124,7 @@ public final class BakeryProcess {
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
         BakeryWorkState.Phase phase = job.bakeryWork().orElseThrow().phase();
         if ((phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY)
+                && BakeryWorkGoal.current(state, job).station().equals(state.actorLocations().get(job.workerId()).supportingSurface())
                 && !ProductionServiceAccess.available(state, job))
             return Optional.of("DEPOT_SERVICE_WAIT");
         if (ReferenceContainerCustody.hasLiveCustody(state, depot)) return Optional.of("DEPOT_PHYSICAL_AUTHORITY");
@@ -142,7 +143,11 @@ public final class BakeryProcess {
         Optional<String> eligibility = coldBlocker(state, job);
         if (eligibility.isPresent()) return Optional.of("NOT_EVALUATED:" + eligibility.orElseThrow());
         try {
-            BakeryKnownNavigation.path(state, job);
+            var route = BakeryKnownNavigation.path(state, job);
+            var phase = job.bakeryWork().orElseThrow().phase();
+            if (route.size() > 1 && (phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY)
+                    && !ProductionServiceAccess.mayAdvance(state, job, route.get(1)))
+                return Optional.of("DEPOT_SERVICE_WAIT");
             return Optional.empty();
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
             return Optional.of(unavailable.getMessage());
@@ -181,7 +186,11 @@ public final class BakeryProcess {
         List<SurfaceAnchor> route;
         try { route = BakeryKnownNavigation.path(state, job); }
         catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
-        if (route.size() > 1) return Optional.of(new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.MOVE, route.get(1)));
+        if (route.size() > 1) {
+            if ((work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
+                    && !ProductionServiceAccess.mayAdvance(state, job, route.get(1))) return Optional.empty();
+            return Optional.of(new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.MOVE, route.get(1)));
+        }
         SurfaceAnchor current = state.actorLocations().get(job.workerId()).supportingSurface();
         BakeryColdStep.Action action = switch (work.phase()) {
             case DEPOT_PICKUP -> BakeryColdStep.Action.PICKUP;

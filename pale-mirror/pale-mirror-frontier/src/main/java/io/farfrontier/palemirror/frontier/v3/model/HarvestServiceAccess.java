@@ -36,6 +36,12 @@ public final class HarvestServiceAccess implements ServiceAccessCapability {
         return ServiceAccessCoordinator.available(state, identity(job, FrontierWorldState.depotId(port.settlementId())));
     }
 
+    public static boolean mayAdvance(FrontierWorldState state, ResourceSiteHarvestJob job, SurfaceAnchor destination) {
+        var port = ResourceSiteHarvestGoal.depotPort(state, job);
+        return ServiceAccessCoordinator.mayAdvance(state,
+                identity(job, FrontierWorldState.depotId(port.settlementId())), destination);
+    }
+
     public static boolean witnessedExit(FrontierWorldState state, ResourceSiteHarvestJob job,
                                         SceneLeaseId leaseId, BodyPosition observedBody) {
         if (ResourceSiteHarvestGoal.current(state, job).kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE) return false;

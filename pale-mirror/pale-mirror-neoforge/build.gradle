@@ -1068,7 +1068,8 @@ def syncFrontierV3PilotPackClient = tasks.register('syncFrontierV3PilotPackClien
         def options = new File(frontierV3PilotPackClientDirectory.get().asFile, 'options.txt')
         options.text = 'onboardAccessibility:b:true\n' +
                 'skipMultiplayerWarning:b:true\n' +
-                'narrator:0\n'
+                'narrator:0\n' +
+                'maxFps:20\n'
     }
 }
 tasks.named('prepareFrontierV3PilotPackClientRun') { dependsOn syncFrontierV3PilotPackClient }
@@ -1104,7 +1105,8 @@ tasks.named('prepareFrontierV3PilotClientRun') {
                 // client-local informational screen alongside accessibility.  This changes
                 // neither the server, canonical state, nor any normal-player profile.
                 'skipMultiplayerWarning:b:true\n' +
-                'narrator:0\n'
+                'narrator:0\n' +
+                'maxFps:20\n'
         // NeoForge's early loading screen is not game-facing evidence and is
         // known to fail intermittently in the disposable XWayland profile
         // before Minecraft creates its real client window.  Disable only that
