@@ -61,8 +61,8 @@ class FrontierPersistenceCodecTest {
     void preCurrentEnvelopeAndTruncatedSnapshotsFailClosed() {
         byte[] encoded = FrontierPersistenceCodec.encodeSnapshot(new SnapshotRecord(new CheckpointImage(new WorldId("frontier:empty"), Revision.ZERO,
                 SimInstant.ZERO, new byte[0], List.of(), List.of()), 0L));
-        assertEquals(97, Byte.toUnsignedInt(encoded[4]));
-        for (int version : new int[]{74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 91, 92}) {
+        assertEquals(98, Byte.toUnsignedInt(encoded[4]));
+        for (int version : new int[]{74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 91, 92, 97}) {
             byte[] oldEnvelope = encoded.clone(); oldEnvelope[4] = (byte) version;
             assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeSnapshot(oldEnvelope));
         }

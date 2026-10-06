@@ -51,7 +51,8 @@ final class FrontierV3GoalNavigation {
                     || legalStations.stream().anyMatch(Objects::isNull)
                     || legalStations.stream().distinct().count() != legalStations.size()
                     || legalStations.stream().anyMatch(station -> !scope.permits(station.support()))
-                    || routeHint.size() > 4096 || routeHint.stream().anyMatch(station -> !scope.permits(station.support()))
+                    || routeHint.size() > io.farfrontier.palemirror.frontier.v3.model.navigation.HierarchicalPedestrianSearch.MAX_ROUTE_SURFACES
+                    || routeHint.stream().anyMatch(station -> !scope.permits(station.support()))
                     || !routeHint.isEmpty() && !legalStations.contains(routeHint.getLast())
                     || order.isPresent() && (!order.orElseThrow().legalStations().equals(legalStations)
                         || order.orElseThrow().capability() != capability))

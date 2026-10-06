@@ -79,13 +79,14 @@ public final class GoodsParticipantProcess {
             var value = match.orElseThrow();
             var seller = state.companies().goodsTrade().participants().participants().get(value.contract().seller().id());
             var buyer = state.companies().goodsTrade().participants().participants().get(value.contract().buyer().id());
-            if (GoodsShipmentPlanning.reachable(state, seller.endpoint(), buyer.endpoint(), value.contract().id())) {
+            var routeStatus = GoodsShipmentPlanning.routeStatus(state, seller.endpoint(), buyer.endpoint(), value.contract().id());
+            if (routeStatus == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.FOUND) {
                 state = GoodsTradeStateSupport.reserve(state, value.contract().seller().id(), value.contract(), value.allocations(), now);
                 events.add(new ProposedEvent(value.contract().seller().id(), new GoodsTradeReserved(value.contract(), value.allocations())));
                 decision = "CONTRACT_RESERVED; contract=" + value.contract().id().value();
                 var dispatch = GoodsShipmentPlanning.dispatch(state, seller, now); events.addAll(dispatch);
                 if (!value.contract().sourceContainerId().equals(value.contract().receiverContainerId()) && dispatch.isEmpty()) decision = "RESERVED_AWAITING_AVAILABLE_COURIER";
-            } else decision = "NO_KNOWN_SAFE_ROUTE";
+            } else decision = "NAVIGATION_" + routeStatus.name();
         } else events.addAll(GoodsShipmentPlanning.dispatch(state, participant, now));
         decision += "; " + GoodsParticipantPolicies.require(participant).explain(GoodsParticipantView.read(state, participant), rules);
         if (decision.length() > 512) decision = decision.substring(0, 512);

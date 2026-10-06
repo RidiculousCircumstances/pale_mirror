@@ -41,8 +41,9 @@ final class FrontierV3ActorMovementNavigation {
                 route = new Route(actuation.id(), lease.revision(), movement.order().goalRevision(), state.routeTopology(), state.physicalDeltas(),
                         provider.route(state, movement,
                                 FrontierV3SurfaceObservation.observedBody(body).supportingSurface()));
-            } catch (IllegalArgumentException unavailable) {
-                blocked(body, movement, "known_route:" + unavailable.getMessage());
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != PedestrianRouteResult.Status.PLANNING)
+                    blocked(body, movement, "known_route:" + unavailable.status() + ":" + unavailable.getMessage());
                 FrontierV3GoalNavigation.stop(body, actuation);
                 return;
             }

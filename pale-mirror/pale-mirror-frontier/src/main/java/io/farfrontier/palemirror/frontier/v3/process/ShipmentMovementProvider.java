@@ -29,11 +29,19 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
         Shipment shipment = state.shipments().shipments().get(movement.order().ownerId());
         var knowledge = KnownPedestrianRouteKnowledge.forJourney(state,
                 List.of(passage(state, shipment.sender()), passage(state, shipment.receiver())));
-        return knowledge.path(start, movement.order());
+        return knowledge.plannedPath(start, movement.order());
+    }
+    @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
+        validate(state, movement);
+        Shipment shipment = state.shipments().shipments().get(movement.order().ownerId());
+        KnownPedestrianRouteKnowledge.forJourney(state,
+                List.of(passage(state, shipment.sender()), passage(state, shipment.receiver()))).requireRoute(route);
+        if (!movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)
+            throw new IllegalArgumentException("shipment segment is neither a bounded prefix nor its declared goal");
     }
     @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);
-        return route;
+        return List.copyOf(route.subList(0, Math.min(route.size(), TimedKnownRoute.MAX_SURFACES)));
     }
     private static KnownPedestrianRouteKnowledge.SettlementPassage passage(FrontierWorldState state, ShipmentEndpoint endpoint) {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), endpoint.settlementId());

@@ -12,6 +12,48 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void distantReturnedCourierGetsADeferredRouteAndReplayNeedsNoPlannerCache() throws Exception {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:distant-meal"), 20260918065L));
+        var settlement = state.bootstrap().settlements().get(6);
+        var actor = new SubjectId("resident:7-12");
+        var depot = FrontierWorldState.depotId(settlement.id());
+        var meal = testMeal(state, settlement, actor, depot, SurfaceAnchor.at(134, 63, 16));
+        state = withMeal(state.withActorBody(actor, SurfaceAnchor.at(-111, 64, 14).standingBody()), meal);
+        var directState = state;
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> ResidentMealKnownNavigation.path(directState, meal));
+        ResidentMealColdStep step;
+        try (var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
+             var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner)) {
+            assertTrue(io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.planColdStep(state, actor, 24_001L).isEmpty());
+            Optional<ResidentMealColdStep> candidate = Optional.empty();
+            for (int i = 0; i < 256 && candidate.isEmpty(); i++) {
+                planner.advance(io.farfrontier.palemirror.frontier.v3.model.navigation.HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+                candidate = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.planColdStep(state, actor, 24_001L);
+            }
+            step = candidate.orElseThrow();
+            assertTrue(step.plannedRoute().isPresent());
+            assertTrue(step.plannedRoute().orElseThrow().route().size() > 200);
+        }
+        var codecs = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
+        var decoded = (ResidentMealColdStep) codecs.decode(step.type(), codecs.encode(step));
+        assertEquals(step, decoded);
+        // A cold/empty new calculation owner cannot make replay depend on search readiness.
+        try (var empty = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
+             var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(empty)) {
+            var retained = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceColdStep(state, actor, decoded);
+            assertTrue(retained.humanPopulation().meals().get(actor).coldTravel().isPresent());
+            assertEquals(0, empty.pendingCount());
+            var travel = retained.humanPopulation().meals().get(actor).coldTravel().orElseThrow();
+            var arrival = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.planColdStep(retained, actor, travel.arrivalTick()).orElseThrow();
+            var arrived = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceColdStep(retained, actor, arrival);
+            assertEquals(travel.route().getLast(), arrived.actorLocations().get(actor).supportingSurface());
+            var changed = state.recordPhysicalDelta(new PhysicalDelta(step.plannedRoute().orElseThrow().route().get(3).support(),
+                    PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:changed-route"));
+            assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceColdStep(changed, actor, decoded));
+            var moved = state.withActorBody(actor, step.plannedRoute().orElseThrow().route().get(1).standingBody());
+            assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceColdStep(moved, actor, decoded));
+        }
+    }
     @Test void idleDestinationsCannotBuildADenseRingAroundAnotherResident() {
         var occupied = java.util.Set.of(SurfaceAnchor.at(128, 63, 12));
         assertTrue(!ServiceAreaDestinations.hasStandingClearance(SurfaceAnchor.at(129, 63, 12), occupied));

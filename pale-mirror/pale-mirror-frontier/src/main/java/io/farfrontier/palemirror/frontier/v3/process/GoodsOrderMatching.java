@@ -41,7 +41,10 @@ final class GoodsOrderMatching {
                         || sell.unitPriceLimit().compareTo(buyerIntent.orElseThrow().limit()) > 0) {
                     disposition = "CURRENT_PRICE_POLICY"; continue;
                 }
-                if (!GoodsShipmentPlanning.reachable(state, seller.endpoint(), buyer.endpoint(), sell.id())) { disposition = "NO_KNOWN_SAFE_ROUTE"; continue; }
+                var routeStatus = GoodsShipmentPlanning.routeStatus(state, seller.endpoint(), buyer.endpoint(), sell.id());
+                if (routeStatus != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.FOUND) {
+                    disposition = "NAVIGATION_" + routeStatus.name(); continue;
+                }
                 int max = Math.min(Math.min(sell.availableQuantity(), buy.availableQuantity()),
                         Math.min(sellerIntent.orElseThrow().quantity(), buyerIntent.orElseThrow().quantity()));
                 FixedScalar price = sell.unitPriceLimit();

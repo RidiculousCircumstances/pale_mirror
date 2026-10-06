@@ -365,6 +365,7 @@ public final class FrontierV3ServerLifecycle {
             runtime.beginPersistenceTurn();
             try {
                 boolean active = runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE;
+                if (active) FrontierV3PedestrianPlanning.tick(runtime);
                 boolean initialHold = INITIAL_CANONICAL_HOLDS.containsKey(server);
                 boolean absoluteTargetPresent = FAST_FORWARD_TARGETS.containsKey(server);
                 boolean fastForwardRemaining = FAST_FORWARD_REMAINING.containsKey(server);
@@ -459,6 +460,7 @@ public final class FrontierV3ServerLifecycle {
     }
     static void releaseRuntime(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         Objects.requireNonNull(runtime, "runtime");
+        FrontierV3PedestrianPlanning.forget(runtime);
         FrontierV3CargoCleanupPersistence.forget(runtime);
         FrontierV3CargoDeparturePersistence.forget(runtime);
         FrontierV3ActorAdoptionPersistence.forget(runtime);

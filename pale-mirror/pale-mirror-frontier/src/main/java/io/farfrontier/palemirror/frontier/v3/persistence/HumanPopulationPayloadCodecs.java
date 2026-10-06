@@ -327,6 +327,7 @@ final class HumanPopulationPayloadCodecs {
                     if (value.nextSurface().isPresent()) FrontierWorldPayloadCodecs.writePosition(output,
                             value.nextSurface().orElseThrow().support());
                     ActorExecutionStateCodec.writeId(output, value.executionId());
+                    PedestrianRouteReceiptCodec.write(output, value.plannedRoute());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
@@ -337,7 +338,8 @@ final class HumanPopulationPayloadCodecs {
                     var next = input.readBoolean() ? java.util.Optional.of(
                             new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(input)))
                             : java.util.Optional.<SurfaceAnchor>empty();
-                    return new ResidentMealColdStep(resident, phase, atTick, next, ActorExecutionStateCodec.readId(input));
+                    var execution = ActorExecutionStateCodec.readId(input);
+                    return new ResidentMealColdStep(resident, phase, atTick, next, execution, PedestrianRouteReceiptCodec.read(input));
                 });
             }
         };

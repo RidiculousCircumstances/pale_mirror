@@ -64,6 +64,7 @@ final class ActorMovementPayloadCodecs {
                 if (value.arrivedSurface().isPresent()) FrontierWorldPayloadCodecs.writePosition(out,
                         value.arrivedSurface().orElseThrow().support());
                 ActorExecutionStateCodec.writeId(out, value.executionId());
+                PedestrianRouteReceiptCodec.write(out, value.plannedRoute());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
@@ -73,7 +74,8 @@ final class ActorMovementPayloadCodecs {
                 Optional<SurfaceAnchor> arrived = in.readBoolean()
                         ? Optional.of(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(in)))
                         : Optional.empty();
-                return new ActorMovementColdAdvanced(actor, revision, atTick, arrived, ActorExecutionStateCodec.readId(in));
+                var execution = ActorExecutionStateCodec.readId(in);
+                return new ActorMovementColdAdvanced(actor, revision, atTick, arrived, execution, PedestrianRouteReceiptCodec.read(in));
             });
         }
     }; }

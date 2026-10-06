@@ -9,18 +9,28 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId;
 
 /** One COLD-only stage receipt for a retained meal, never evidence of a HOT physical effect. */
 public record ResidentMealColdStep(SubjectId residentId, ResidentMeal.Phase expectedPhase,
-                                   long atTick, Optional<SurfaceAnchor> nextSurface, ActorExecutionId executionId) implements FrontierPayload {
+                                   long atTick, Optional<SurfaceAnchor> nextSurface, ActorExecutionId executionId,
+                                   Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> plannedRoute) implements FrontierPayload {
     public ResidentMealColdStep {
         Objects.requireNonNull(residentId, "meal resident");
         Objects.requireNonNull(executionId, "meal execution authority");
         if (!residentId.equals(executionId.actorId())) throw new IllegalArgumentException("meal step has foreign execution actor");
         Objects.requireNonNull(expectedPhase, "meal predecessor phase");
         nextSurface = Objects.requireNonNull(nextSurface, "optional next meal surface");
+        plannedRoute = Objects.requireNonNull(plannedRoute, "optional accepted meal route");
+        if (plannedRoute.isPresent() && (nextSurface.isPresent()
+                || expectedPhase != ResidentMeal.Phase.MOVE && expectedPhase != ResidentMeal.Phase.CLEAR_ACCESS))
+            throw new IllegalArgumentException("accepted meal route cannot be a stage effect or arrival");
         if (atTick < 0) throw new IllegalArgumentException("meal step tick must be non-negative");
         if (expectedPhase != ResidentMeal.Phase.MOVE
                 && expectedPhase != ResidentMeal.Phase.CLEAR_ACCESS
                 && nextSurface.isPresent())
             throw new IllegalArgumentException("only a movement-stage meal can advance its body");
+    }
+
+    public ResidentMealColdStep(SubjectId residentId, ResidentMeal.Phase expectedPhase, long atTick,
+                                Optional<SurfaceAnchor> nextSurface, ActorExecutionId executionId) {
+        this(residentId, expectedPhase, atTick, nextSurface, executionId, Optional.empty());
     }
 
     public ResidentMealColdStep(SubjectId residentId, ResidentMeal.Phase expectedPhase, long atTick, ActorExecutionId executionId) {

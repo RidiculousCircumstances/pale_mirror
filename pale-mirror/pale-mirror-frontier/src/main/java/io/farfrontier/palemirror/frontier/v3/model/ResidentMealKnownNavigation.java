@@ -99,13 +99,14 @@ public final class ResidentMealKnownNavigation {
         List<SurfaceAnchor> destinations = directService ? List.of(port.exteriorApproach())
                 : waitingSurfaces(state, meal, port, routeKnowledge).stream()
                     .filter(availableWaitingStation).toList();
+        KnownPedestrianNavigation.RouteUnavailable lastUnavailable = null;
         for (SurfaceAnchor destination : destinations) {
             if (start.equals(destination)) return List.of(start);
             MovementOrder outdoor = new MovementOrder(meal.residentId(), meal.residentId(),
                     FrontierWireTags.tag(meal.phase()), 1L, List.of(destination),
                     TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
             try {
-                List<SurfaceAnchor> route = routeKnowledge.path(outdoorStart, outdoor);
+                List<SurfaceAnchor> route = routeKnowledge.plannedPath(outdoorStart, outdoor);
                 if (!directService && !port.accessBoundary().allowsWaitingRoute(route)) continue;
                 List<SurfaceAnchor> result = new ArrayList<>(prefix);
                 result.addAll(route.subList(1, route.size()));
@@ -115,10 +116,35 @@ public final class ResidentMealKnownNavigation {
                 }
                 return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathComposition.withoutLoops(result);
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                lastUnavailable = unavailable;
+                if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING)
+                    throw unavailable; // Do not fill the shared queue with every waiting point for one resident.
                 if (directService) throw unavailable;
             }
         }
-        throw new KnownPedestrianNavigation.RouteUnavailable("no clear depot waiting surface");
+        if (lastUnavailable != null) throw new KnownPedestrianNavigation.RouteUnavailable(lastUnavailable.status(),
+                "depot approach: " + lastUnavailable.getMessage());
+        throw new KnownPedestrianNavigation.RouteUnavailable("no clear depot waiting surface or legal access approach");
+    }
+
+    /** Accept a current semantic leg without repeating search during WAL replay. */
+    public static void requireMovementRoute(FrontierWorldState state, ResidentMeal meal, List<SurfaceAnchor> route) {
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
+        var passages = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT
+                || value.kind() == StructureKind.WORKSHOP).map(value -> new KnownPedestrianRouteKnowledge.Passage(value,
+                    value.kind() == StructureKind.WORKSHOP ? KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS
+                            : KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)).toList();
+        KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), passages).requireRoute(route);
+        var port = SettlementServiceAccessPoints.depotPort(state, meal.settlementId());
+        var end = route.getLast();
+        if (meal.phase() == ResidentMeal.Phase.MOVE) {
+            if (end.equals(port.serviceSurface())) {
+                if (!ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId()))
+                    throw new IllegalArgumentException("accepted meal entrance lost its access turn");
+            } else if (!waitingStationAvailable(state, meal, end) || !port.accessBoundary().allowsWaitingRoute(route))
+                throw new IllegalArgumentException("accepted meal approach is not a current waiting destination");
+        } else if (!port.accessBoundary().cleared(end.standingBody()))
+            throw new IllegalArgumentException("accepted meal clearance does not clear its access boundary");
     }
 
     /** Side pockets keep simultaneous approaches off the single-file exit route. */

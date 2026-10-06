@@ -31,8 +31,8 @@ public final class ActorMovementProcess {
                 || state.actorMovements().containsKey(subject) || state.humanPopulation().meals().containsKey(subject)
                 || ActorExecutionCoordinator.sceneOwns(state, subject))
             throw new IllegalArgumentException("movement start lacks exclusive living actor authority");
-        // Validate the explicitly declared provider and known route before retaining any authority.
-        segmentRoute(state, movement, movement.issuedAtTick());
+        // Admission retains an exact goal, not an assertion that a route has already executed.
+        ActorMovementProviders.require(movement).validate(state, movement);
         var movements = new LinkedHashMap<>(state.actorMovements());
         movements.put(subject, movement);
         return ResidentActivityProcess.retargetHotResident(ActorMovementProviders.require(movement).start(state, movement,
@@ -111,8 +111,8 @@ public final class ActorMovementProcess {
             events.addAll(ActorMovementProviders.require(movement).arrived(state, movement, now));
             events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         } else {
-            long nextDue = movement.coldTravel().isEmpty() && step.arrivedSurface().isEmpty()
-                    ? segmentRoute(state, movement, now).arrivalTick()
+            long nextDue = step.plannedRoute().isPresent()
+                    ? timedSegment(state, movement, step.plannedRoute().orElseThrow().route(), now).arrivalTick()
                     : Math.addExact(now, 1L);
             events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(),
                     progress(movement, nextDue))));
@@ -140,8 +140,10 @@ public final class ActorMovementProcess {
         if (movement.order().arrivedAt(actor.supportingSurface()))
             return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now, movement.executionId()));
         try {
-            if (segmentRoute(state, movement, now).route().size() <= 1) return Optional.empty();
-            return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now, movement.executionId()));
+            var travel = segmentRoute(state, movement, now);
+            if (travel.route().size() <= 1) return Optional.empty();
+            return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now,
+                    Optional.empty(), movement.executionId(), Optional.of(new PedestrianRouteReceipt(travel.route()))));
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
             return Optional.empty();
         }
@@ -153,10 +155,20 @@ public final class ActorMovementProcess {
         if (!subject.equals(step.actorId()) || movement == null
                 || !movement.executionId().equals(step.executionId())
                 || movement.order().goalRevision() != step.goalRevision()
-                || !step.equals(coldStep(state, movement, step.atTick()).orElse(null)))
+                || !ActorExecutionCoordinator.coldAvailable(state, subject))
             throw new IllegalArgumentException("COLD movement lacks exact current order or causal boundary");
         state.actorExecutions().requireCurrent(movement.executionId());
         ActorLocation actor = state.actorLocations().get(subject);
+        if (step.plannedRoute().isPresent()) {
+            var route = step.plannedRoute().orElseThrow().route();
+            if (movement.coldTravel().isPresent() || actor.condition().status() != ActorLifeStatus.ALIVE
+                    || !route.getFirst().equals(actor.supportingSurface()) || step.atTick() < movement.issuedAtTick())
+                throw new IllegalArgumentException("accepted route lacks its exact current departure");
+            ActorMovementProviders.require(movement).requireRoute(state, movement, route);
+        } else if ((movement.coldTravel().isEmpty() && actor.condition().status() == ActorLifeStatus.ALIVE
+                && !movement.order().arrivedAt(actor.supportingSurface()))
+                || !step.equals(coldStep(state, movement, step.atTick()).orElse(null)))
+            throw new IllegalArgumentException("COLD movement has no accepted route or causal arrival");
         Map<SubjectId, ActorMovement> next = new LinkedHashMap<>(state.actorMovements());
         if (actor.condition().status() != ActorLifeStatus.ALIVE) {
             next.remove(subject);
@@ -169,7 +181,8 @@ public final class ActorMovementProcess {
                 return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(next)
                         .actorExecutions(ActorMovementProviders.require(movement).arrivalAuthority(state, movement)));
             }
-            next.put(subject, movement.withColdTravel(segmentRoute(state, movement, step.atTick())));
+            next.put(subject, movement.withColdTravel(timedSegment(state, movement,
+                    step.plannedRoute().orElseThrow().route(), step.atTick())));
             return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(next));
         }
         TimedKnownRoute travel = movement.coldTravel().orElseThrow();
@@ -232,6 +245,12 @@ public final class ActorMovementProcess {
         var provider = ActorMovementProviders.require(movement);
         List<SurfaceAnchor> route = provider.coldSegment(state, movement,
                 provider.route(state, movement, state.actorLocations().get(order.actorId()).supportingSurface()));
+        return timedSegment(state, movement, route, now);
+    }
+
+    private static TimedKnownRoute timedSegment(FrontierWorldState state, ActorMovement movement,
+                                               List<SurfaceAnchor> route, long now) {
+        MovementOrder order = movement.order();
         AmbientActorLease lease = state.ambientLeases().get(order.actorId());
         long epoch = lease == null ? 1L : Math.addExact(lease.revision(), 1L);
         return new TimedKnownRoute(ActorMovement.segmentOrder(order, route.getLast()), route,

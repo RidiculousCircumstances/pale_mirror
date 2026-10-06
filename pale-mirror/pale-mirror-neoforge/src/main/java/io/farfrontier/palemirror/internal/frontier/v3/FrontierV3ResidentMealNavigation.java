@@ -71,7 +71,8 @@ final class FrontierV3ResidentMealNavigation {
                                 : ResidentMealKnownNavigation.clearancePathFrom(state, meal,
                                     FrontierV3SurfaceObservation.observedBody(body).supportingSurface()), level.getGameTime());
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                blocked(body, meal, "known_route:" + unavailable.getMessage());
+                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING)
+                    blocked(body, meal, "known_route:" + unavailable.status() + ":" + unavailable.getMessage());
                 FrontierV3GoalNavigation.stop(body, actuation);
                 return;
             }
@@ -107,23 +108,14 @@ final class FrontierV3ResidentMealNavigation {
     }
 
     private static boolean available(ServerLevel level, Mob body, SurfaceAnchor station) {
-        return level.hasChunkAt(new net.minecraft.core.BlockPos(station.x(), station.y(), station.z()))
-                && FrontierV3SemanticMovement.targetIsNavigable(level, body, station);
+        // An unloaded destination is a known intent, not a physical clearance observation.
+        // The shared provider checks each naturally loaded local leg; never force-load the endpoint.
+        return !level.hasChunkAt(new net.minecraft.core.BlockPos(station.x(), station.y(), station.z()))
+                || FrontierV3SemanticMovement.targetIsNavigable(level, body, station);
     }
 
     private static List<SurfaceAnchor> approach(ServerLevel level, FrontierWorldState state, Mob body, ResidentMeal meal) {
         var start = FrontierV3SurfaceObservation.observedBody(body).supportingSurface();
-        int[] queries = {0};
-        try {
-            return ResidentMealKnownNavigation.pathFrom(state, meal, start, station -> available(level, body, station)
-                    && queries[0]++ < MovementOrder.MAX_LEGAL_STATIONS
-                    && FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(station,
-                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds()))));
-        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-            // Retain a legal intent when no approach is currently reachable. The physical
-            // provider must explain the obstruction and request courtesy; filtering every
-            // goal away here would hide the blocking bodies and permanently park the meal.
-            return ResidentMealKnownNavigation.pathFrom(state, meal, start, station -> available(level, body, station));
-        }
+        return ResidentMealKnownNavigation.pathFrom(state, meal, start, station -> available(level, body, station));
     }
 }

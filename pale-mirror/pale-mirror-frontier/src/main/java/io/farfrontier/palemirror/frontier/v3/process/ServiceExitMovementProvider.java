@@ -41,6 +41,18 @@ public final class ServiceExitMovementProvider implements ActorMovementProvider 
         }
         return route;
     }
+    @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
+        validate(state, movement);
+        var exit = (ActorMovementContext.ServiceExit) movement.context();
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), exit.settlementId());
+        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        KnownPedestrianRouteKnowledge.forSettlement(state, exit.settlementId(), List.of(
+                new KnownPedestrianRouteKnowledge.Passage(depot, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS))).requireRoute(route);
+        if (!movement.order().arrivedAt(route.getLast())
+                && !(ServiceAccessCoordinator.boundary(state, exit.depotId()).occupied(route.getFirst().standingBody())
+                    && ServiceAccessCoordinator.boundary(state, exit.depotId()).cleared(route.getLast().standingBody())))
+            throw new IllegalArgumentException("service exit leg does not clear its boundary or reach its goal");
+    }
     @Override public ActorExecutionState arrivalAuthority(FrontierWorldState state, ActorMovement movement) {
         validate(state, movement);
         return state.actorExecutions().finish(movement.executionId());

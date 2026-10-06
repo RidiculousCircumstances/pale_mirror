@@ -64,7 +64,14 @@ class ActorMovementProcessTest {
             long due = order.coldTravel().map(value -> value.arrivalTick()).orElse(2L);
             var advanced = assertInstanceOf(ActorMovementColdAdvanced.class,
                     ActorMovementProcess.plan(state, ActorMovementProcess.progress(order, due), due).getFirst().payload());
-            state = ActorMovementProcess.reduceColdAdvanced(state, actor, advanced);
+            var wire = FrontierWorldRuntimeDefinition.payloadCodecs();
+            assertEquals(advanced, wire.decode(advanced.type(), wire.encode(advanced)));
+            if (advanced.plannedRoute().isPresent()) {
+                try (var empty = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(empty)) {
+                    state = ActorMovementProcess.reduceColdAdvanced(state, actor, advanced);
+                    assertEquals(0, empty.pendingCount(), "replay validates the receipt without scheduling a new search");
+                } catch (Exception error) { throw new AssertionError(error); }
+            } else state = ActorMovementProcess.reduceColdAdvanced(state, actor, advanced);
             if (state.actorMovements().get(actor) != null
                     && state.actorMovements().get(actor).coldTravel().isPresent()) {
                 assertInstanceOf(ActivityInterruptionPlanner.Waiting.class,

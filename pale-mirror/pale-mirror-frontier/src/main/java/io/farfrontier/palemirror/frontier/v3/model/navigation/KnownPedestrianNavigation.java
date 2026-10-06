@@ -10,48 +10,95 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-/** Pure, bounded local route search over retained knowledge; never reads loaded blocks or awards arrival. */
+/** One known-route boundary for local and distant goals; never reads loaded blocks or awards arrival. */
 public final class KnownPedestrianNavigation {
-    public enum SearchScope { LOCAL_APPROACH, FRONTIER_JOURNEY }
     private KnownPedestrianNavigation() { }
 
     public static final class RouteUnavailable extends IllegalArgumentException {
-        public RouteUnavailable(String detail) { super(detail); }
+        private final PedestrianRouteResult.Status status;
+        public RouteUnavailable(String detail) { this(PedestrianRouteResult.Status.NO_PATH, detail); }
+        public RouteUnavailable(PedestrianRouteResult.Status status, String detail) { super(detail); this.status = status; }
+        public PedestrianRouteResult.Status status() { return status; }
     }
 
     public static List<SurfaceAnchor> route(FrontierBootstrap bootstrap, SurfaceAnchor start, MovementOrder order,
                                             Set<BlockPosition> occupied,
                                             BoundedPedestrianApproach.SurveyedSurface surveyed) {
-        return route(bootstrap, start, order, occupied, surveyed, SearchScope.LOCAL_APPROACH);
-    }
-    public static List<SurfaceAnchor> route(FrontierBootstrap bootstrap, SurfaceAnchor start, MovementOrder order,
-            Set<BlockPosition> occupied, BoundedPedestrianApproach.SurveyedSurface surveyed, SearchScope scope) {
         Objects.requireNonNull(bootstrap, "known navigation bootstrap");
         Objects.requireNonNull(start, "known navigation start");
         Objects.requireNonNull(order, "known navigation order");
         occupied = Set.copyOf(Objects.requireNonNull(occupied, "known navigation occupancy"));
         Objects.requireNonNull(surveyed, "known navigation survey");
-        Objects.requireNonNull(scope, "known navigation search scope");
         if (order.capability() != TraversalCapability.PEDESTRIAN)
             throw new IllegalArgumentException("known pedestrian navigation cannot change actor capability");
         if (!bootstrap.bounds().contains(start.support()))
             throw new RouteUnavailable("known pedestrian start is outside the retained world");
         if (blocked(start, occupied))
             throw new RouteUnavailable("known pedestrian start has no clear support/body column");
+        PedestrianRouteGeometry geometry = geometry(bootstrap, occupied, surveyed);
+        return route(geometry, start, order);
+    }
+
+    public static PedestrianRouteGeometry geometry(FrontierBootstrap bootstrap, Set<BlockPosition> occupied,
+                                                    BoundedPedestrianApproach.SurveyedSurface surveyed) {
+        return geometry(bootstrap, occupied, surveyed, new Object());
+    }
+    public static PedestrianRouteGeometry geometry(FrontierBootstrap bootstrap, Set<BlockPosition> occupied,
+                                                    BoundedPedestrianApproach.SurveyedSurface surveyed, Object version) {
+        var hard = java.util.Collections.unmodifiableSet(new java.util.HashSet<>(occupied));
+        return new PedestrianRouteGeometry() {
+            @Override public Object version() { return version; }
+            @Override public io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds() { return bootstrap.bounds(); }
+            @Override public SurfaceAnchor supportAt(int x, int z) { return surveyed.at(x, z); }
+            @Override public boolean blocked(SurfaceAnchor surface) { return KnownPedestrianNavigation.blocked(surface, hard); }
+        };
+    }
+
+    /** Geometry identity binds reusable search evidence, independently of caller/task identity. */
+    public static List<SurfaceAnchor> route(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order) {
+        return route(geometry, start, order, false);
+    }
+
+    /** Admission may wait for runtime-owned work; readiness never grants arrival or authority. */
+    public static List<SurfaceAnchor> plannedRoute(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order) {
+        return route(geometry, start, order, true);
+    }
+
+    private static List<SurfaceAnchor> route(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order, boolean deferredPlanning) {
+        Objects.requireNonNull(geometry); Objects.requireNonNull(start); Objects.requireNonNull(order);
+        if (order.capability() != TraversalCapability.PEDESTRIAN)
+            throw new IllegalArgumentException("known pedestrian navigation cannot change actor capability");
+        if (!geometry.bounds().contains(start.support()) || geometry.blocked(start))
+            throw new RouteUnavailable("known pedestrian start has no clear support/body column");
         List<SurfaceAnchor> best = null;
+        PedestrianRouteResult deferred = null;
+        PedestrianRouteResult failure = null;
         for (SurfaceAnchor station : order.legalStations()) {
-            if (!bootstrap.bounds().contains(station.support()) || blocked(station, occupied)) continue;
-            try {
-                List<SurfaceAnchor> candidate = scope == SearchScope.FRONTIER_JOURNEY
-                        ? BoundedPedestrianApproach.compileJourney(bootstrap, start, station, occupied, surveyed, "known-pedestrian-journey")
-                        : BoundedPedestrianApproach.compile(bootstrap, start, station, occupied, surveyed, "known-pedestrian-goal");
+            if (!geometry.bounds().contains(station.support()) || geometry.blocked(station)) continue;
+            PedestrianRouteResult result = deferredPlanning ? PedestrianRoutePlanning.query(geometry, start, station)
+                    : PedestrianRoutePlanning.calculate(geometry, start, station);
+            if (result.status() == PedestrianRouteResult.Status.FOUND) {
+                List<SurfaceAnchor> candidate = result.route();
                 if (best == null || candidate.size() < best.size()) best = candidate;
-            } catch (BoundedPedestrianApproach.ApproachUnavailable unavailable) {
-                // The caller's station order is the deterministic tie break.
+            } else {
+                failure = result;
+                if (result.status() != PedestrianRouteResult.Status.NO_PATH) deferred = result;
             }
         }
-        if (best == null) throw new RouteUnavailable("no bounded route to the declared pedestrian goal");
+        if (best == null && deferred != null) throw new RouteUnavailable(deferred.status(), deferred.reason());
+        if (best == null) throw new RouteUnavailable(failure == null ? "NO_CLEAR_DECLARED_STATION"
+                : failure.reason() + "; start=" + start + "; goals=" + order.legalStations());
         return best;
+    }
+
+    /** Validate accepted evidence, not optimality: replay never needs a planner/cache. */
+    public static void requireRoute(PedestrianRouteGeometry geometry, List<SurfaceAnchor> route) {
+        if (route.isEmpty()) throw new IllegalArgumentException("accepted pedestrian route is empty");
+        for (SurfaceAnchor surface : route) {
+            if (!geometry.bounds().contains(surface.support()) || geometry.blocked(surface)
+                    || !surface.equals(geometry.supportAt(surface.x(), surface.z())))
+                throw new IllegalArgumentException("accepted pedestrian route differs from current known geometry at " + surface);
+        }
     }
 
     private static boolean blocked(SurfaceAnchor surface, Set<BlockPosition> occupied) {

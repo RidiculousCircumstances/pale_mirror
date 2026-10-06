@@ -11,6 +11,7 @@ public interface ActorMovementProvider {
     void validate(FrontierWorldState state, ActorMovement movement);
     FrontierWorldState start(FrontierWorldState state, ActorMovement movement, FrontierWorldStateUpdate movementUpdate);
     List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start);
+    void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route);
     List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route);
     ActorExecutionState arrivalAuthority(FrontierWorldState state, ActorMovement movement);
     java.util.Optional<BodyPosition> interruptionCheckpoint(FrontierWorldState state, ActorMovement movement, long atTick);

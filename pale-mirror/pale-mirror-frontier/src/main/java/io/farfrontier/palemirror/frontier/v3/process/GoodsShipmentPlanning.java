@@ -44,14 +44,17 @@ final class GoodsShipmentPlanning {
         return List.of();
     }
     static boolean reachable(FrontierWorldState state, ShipmentEndpoint sender, ShipmentEndpoint receiver, SubjectId owner) {
-        if (sender.containerId().equals(receiver.containerId())) return true;
+        return routeStatus(state, sender, receiver, owner) == PedestrianRouteResult.Status.FOUND;
+    }
+    static PedestrianRouteResult.Status routeStatus(FrontierWorldState state, ShipmentEndpoint sender, ShipmentEndpoint receiver, SubjectId owner) {
+        if (sender.containerId().equals(receiver.containerId())) return PedestrianRouteResult.Status.FOUND;
         var order = new MovementOrder(owner, owner, 0, 1, List.of(receiver.station()),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         try {
             KnownPedestrianRouteKnowledge.forJourney(state, List.of(passage(state, sender), passage(state, receiver)))
-                    .path(sender.station(), order);
-            return true;
-        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return false; }
+                    .plannedPath(sender.station(), order);
+            return PedestrianRouteResult.Status.FOUND;
+        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return unavailable.status(); }
     }
     private static KnownPedestrianRouteKnowledge.SettlementPassage passage(FrontierWorldState state, ShipmentEndpoint endpoint) {
         ShipmentEndpointComposition.validate(state, endpoint);
