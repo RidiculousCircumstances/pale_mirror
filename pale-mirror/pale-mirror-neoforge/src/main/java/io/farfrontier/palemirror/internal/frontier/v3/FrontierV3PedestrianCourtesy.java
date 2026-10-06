@@ -90,13 +90,23 @@ final class FrontierV3PedestrianCourtesy {
         if (target != null) FrontierV3GoalNavigation.stopCourtesy(body, target.authority());
     }
 
+    private static boolean canYield(FrontierWorldState state, Mob body) {
+        if (body == null) return false;
+        var declared = FrontierV3ActorCarrierComposition.declaredBy(body).orElse(null);
+        var retained = declared == null ? null : state.actorExecutions().actors().get(declared.actorId());
+        var execution = retained == null ? null : retained.current().orElse(null);
+        var lease = execution == null ? null : state.ambientLeases().get(execution.actorId());
+        return execution != null && (lease == null || lease.status() == AmbientLeaseStatus.HOT)
+                && ActorSpatialCourtesy.assess(state, execution).ready();
+    }
+
     private static boolean pursue(ServerLevel level, FrontierWorldState state, Mob body, FrontierV3ActorActuation actuation) {
         SubjectId actor = actuation.id().execution().actorId();
         Target target = TARGETS.get(body);
         if (target != null && !target.authority().id().equals(actuation.id())) {
             cancel(body); target = null;
         }
-        var request = FrontierV3PedestrianYieldRequests.forBody(level, body, actuation.id().body());
+        var request = FrontierV3PedestrianYieldRequests.forBody(level, body, actuation.id().body(), other -> canYield(state, other));
         if (target == null && request.isEmpty()) return false;
         if (target == null || !FrontierV3SemanticMovement.targetIsNavigable(level, body, target.station())) {
             if (request.isEmpty()) { cancel(body); return false; }
@@ -107,7 +117,7 @@ final class FrontierV3PedestrianCourtesy {
             var start = observed.orElseThrow().supportingSurface();
             var points = state.bootstrap().settlements().stream()
                     .flatMap(settlement -> SettlementServiceAccessPoints.forSettlement(state, settlement.id()).stream()).toList();
-            var knowledge = PedestrianCourtesyGeometry.departure(state, start);
+            var knowledge = PedestrianLocalDeparture.departure(state, start);
             var excluded = new HashSet<>(ServiceDestinationClaims.excludedFor(state, actor));
             TARGETS.entrySet().removeIf(entry -> !entry.getValue().authority().current(entry.getKey()));
             TARGETS.forEach((other, reserved) -> { if (other != body) excluded.add(reserved.station()); });
@@ -116,7 +126,7 @@ final class FrontierV3PedestrianCourtesy {
             int[] queries = {0};
             var destination = ServiceAreaDestinations.select(points, actor,
                     start, knowledge, excluded,
-                    station -> !passage.contains(station.support())
+                    station -> PedestrianLocalDeparture.publicPosition(state, station) && !passage.contains(station.support())
                             && FrontierV3SemanticMovement.targetIsNavigable(level, body, station)
                             && queries[0]++ < MAX_PHYSICAL_CANDIDATES
                             && FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(station, scope)));

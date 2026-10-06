@@ -21,13 +21,24 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void clearwaterPrivateStationCanBeExitedButCannotBecomeACourtesyRestingPosition() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:courtesy-private-station"), 20260918065L));
+        var start = SurfaceAnchor.at(136, 64, 14);
+        assertTrue(PedestrianLocalDeparture.departure(state, start).traversable(List.of(start)));
+        assertTrue(!PedestrianLocalDeparture.publicPosition(state, start),
+                "an escape passage does not grant permission to park on an internal station");
+        var exit = PedestrianLocalDeparture.exitToPublic(state, new SubjectId("resident:7-12"), start);
+        assertEquals(start, exit.getFirst());
+        assertTrue(exit.size() > 1 && PedestrianLocalDeparture.publicPosition(state, exit.getLast()));
+    }
     @Test void courtesyEscapesTheCurrentFacilityWithoutOpeningUnrelatedWorkStations() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:courtesy-geometry"), 91L));
         var workshops = state.bootstrap().settlements().stream().flatMap(settlement -> settlement.structures().stream())
                 .filter(facility -> facility.kind() == StructureKind.WORKSHOP).limit(2).toList();
         var port = FrontierTraversalPlan.facilityPort(workshops.getFirst()).orElseThrow();
         var start = port.stations().getFirst();
-        var knowledge = PedestrianCourtesyGeometry.departure(state, start);
+        var knowledge = PedestrianLocalDeparture.departure(state, start);
         assertTrue(knowledge.traversable(List.of(start)), "the current station has a declared exit");
         var exit = port.ingressSurfaces().reversed();
         var path = knowledge.path(start, new MovementOrder(new SubjectId("resident:courtesy"), new SubjectId("task:courtesy"),

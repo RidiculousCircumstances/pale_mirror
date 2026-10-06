@@ -73,20 +73,11 @@ public final class ResidentMealKnownNavigation {
         if (admitted && start.equals(port.exteriorApproach()))
             return serviceLeg(state, meal, depot, port.exteriorApproach());
 
-        List<SurfaceAnchor> prefix = workshopExit(settlement, start);
+        List<SurfaceAnchor> prefix = PedestrianLocalDeparture.exitToPublic(state, meal.residentId(), start);
         SurfaceAnchor outdoorStart = prefix.getLast();
         List<KnownPedestrianRouteKnowledge.Passage> passages = new ArrayList<>();
         passages.add(new KnownPedestrianRouteKnowledge.Passage(depot,
                 KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS));
-        if (prefix.size() > 1) {
-            SettlementStructure workshop = settlement.structures().stream()
-                    .filter(structure -> structure.kind() == StructureKind.WORKSHOP)
-                    .filter(structure -> SettlementWorkshopServicePort.forWorkshop(structure)
-                            .exteriorApproach().equals(outdoorStart))
-                    .findFirst().orElseThrow(() -> new IllegalArgumentException("meal start has no declared workshop exit"));
-            passages.add(new KnownPedestrianRouteKnowledge.Passage(workshop,
-                    KnownPedestrianRouteKnowledge.Passage.Reach.EXTERIOR));
-        }
         KnownPedestrianRouteKnowledge routeKnowledge = KnownPedestrianRouteKnowledge.forSettlement(
                 state, meal.settlementId(), passages);
         // A distant applicant is not an occupant and does not own the service
@@ -195,17 +186,6 @@ public final class ResidentMealKnownNavigation {
                 && !ServiceDestinationClaims.excludedFor(state, meal.residentId()).contains(surface);
     }
 
-    private static List<SurfaceAnchor> workshopExit(Settlement settlement, SurfaceAnchor start) {
-        for (SettlementStructure structure : settlement.structures()) {
-            if (structure.kind() != StructureKind.WORKSHOP) continue;
-            SettlementWorkshopServicePort port = SettlementWorkshopServicePort.forWorkshop(structure);
-            List<SurfaceAnchor> exit = List.of(port.workStation(), port.inputStation(),
-                    port.interiorSurface(), port.throatSurface(), port.approachSurface(), port.exteriorApproach());
-            int index = exit.indexOf(start);
-            if (index >= 0) return exit.subList(index, exit.size());
-        }
-        return List.of(start);
-    }
 
     private static List<SurfaceAnchor> serviceLeg(FrontierWorldState state, ResidentMeal meal,
                                                    SettlementStructure depot, SurfaceAnchor start) {

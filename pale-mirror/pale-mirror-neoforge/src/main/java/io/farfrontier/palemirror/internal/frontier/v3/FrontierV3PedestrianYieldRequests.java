@@ -46,12 +46,14 @@ final class FrontierV3PedestrianYieldRequests {
     }
 
     /** The participant's own activity decides whether it can yield under its own exact permission. */
-    static Optional<Request> forBody(ServerLevel level, Mob body, ActorBodyId identity) {
+    static Optional<Request> forBody(ServerLevel level, Mob body, ActorBodyId identity,
+                                     java.util.function.Predicate<Mob> canYield) {
         prune();
         return REQUESTS.values().stream().filter(request -> request.current(level))
                 .filter(request -> request.blockers().stream().anyMatch(blocker ->
                         matches(blocker, body.getUUID(), identity, body.getBoundingBox())))
-                .filter(request -> winsReciprocal(request.requester(), body.getUUID(), reciprocal(body, request.requester())))
+                .filter(request -> winsReciprocal(request.requester(), body.getUUID(),
+                        reciprocal(body, request.requester()) && canYield.test(request.source().get())))
                 .min(java.util.Comparator.comparing(Request::requester));
     }
 
