@@ -14,7 +14,12 @@ final class FrontierV3RouteNavigation {
     // Safety bound on local hints, not a task-specific detour radius or durable cursor.
     private static final int MAX_LEG_SUPPORTS = 12;
     private static final Map<Mob, Leg> LEGS = new WeakHashMap<>();
-    private record Leg(FrontierV3GoalNavigation.Goal goal, int startIndex, List<SurfaceAnchor> stations) { }
+    record Leg(FrontierV3GoalNavigation.Goal goal, int startIndex, List<SurfaceAnchor> stations, long retryHintsAt) {
+        boolean retryHints(long tick, FrontierV3MinecraftGoalNavigation.Status status) {
+            return retryHintsAt >= 0 && tick >= retryHintsAt && stations.equals(goal.legalStations())
+                    && status == FrontierV3MinecraftGoalNavigation.Status.BLOCKED;
+        }
+    }
     private FrontierV3RouteNavigation() { }
 
     static FrontierV3MinecraftGoalNavigation.Result pursue(ServerLevel level, Mob actor,
@@ -37,14 +42,25 @@ final class FrontierV3RouteNavigation {
             LEGS.put(actor, leg);
         }
         var result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order(), permission);
+        if (leg.retryHints(level.getGameTime(), result.status())) {
+            // A failed distant fallback is not a permanent replacement for the
+            // route. Reconsider nearby hints at the provider's bounded retry
+            // cadence as chunks/physical terrain become available. Never cancel
+            // a fallback path that is actually progressing.
+            leg = leg(goal, nearest(actor, route));
+            LEGS.put(actor, leg);
+            result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order(), permission);
+        }
         if (result.status() == FrontierV3MinecraftGoalNavigation.Status.BLOCKED
                 && !leg.stations().equals(goal.legalStations())
                 && result.blockReason().filter(reason -> reason == FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE
                     || reason == FrontierV3GoalNavigation.BlockReason.PATH_STALLED
                     || reason == FrontierV3GoalNavigation.BlockReason.TRAFFIC_BLOCKED).isPresent()) {
-            // Hints are advisory. Recover once to the real goal under the identical hard scope;
-            // retain that choice so successive ticks cannot oscillate back to a buried hint.
-            leg = new Leg(goal, leg.startIndex(), goal.legalStations());
+            // Hints are advisory. Try the real goal under the same hard scope;
+            // keep its path while progressing, but periodically retry local
+            // hints if the distant goal itself proves unreachable.
+            leg = new Leg(goal, leg.startIndex(), goal.legalStations(),
+                    level.getGameTime() + FrontierV3MinecraftGoalNavigation.retryIntervalTicks());
             LEGS.put(actor, leg);
             result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order(), permission);
         }
@@ -68,7 +84,7 @@ final class FrontierV3RouteNavigation {
             SurfaceAnchor station = route.get(Math.min(route.size() - 1, start + offset));
             if (!stations.contains(station)) stations.add(station);
         }
-        return new Leg(goal, start, List.copyOf(stations));
+        return new Leg(goal, start, List.copyOf(stations), -1L);
     }
 
     private static int nearest(Mob actor, List<SurfaceAnchor> route) {
