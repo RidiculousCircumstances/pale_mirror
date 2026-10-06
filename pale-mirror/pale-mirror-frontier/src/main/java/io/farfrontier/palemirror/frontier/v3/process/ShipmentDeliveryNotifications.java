@@ -7,6 +7,11 @@ import java.util.function.BiFunction;
 
 /** Composition connects declared authorization owners to independent recipient acknowledgement. */
 final class ShipmentDeliveryNotifications {
+    static List<ProposedEvent> loaded(Shipment shipment, long atTick) {
+        if (shipment.status() != Shipment.Status.CARRYING || shipment.pendingPhysicalStep().isPresent())
+            throw new IllegalArgumentException("loaded notification lacks confirmed cargo custody");
+        return shipment.transportMissionId().map(id -> List.of(TransportMissionProcess.wake(id, atTick))).orElseGet(List::of);
+    }
     private static final Map<ResourceClaimDelegation.Kind, BiFunction<Shipment, Long, List<ProposedEvent>>> PORTS = Map.of(
             ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT,
             (shipment, tick) -> List.of(GoodsTradeReceiptProcess.wake(shipment.authorization().claimantId(), shipment.reception().orElseThrow().id(), tick)));

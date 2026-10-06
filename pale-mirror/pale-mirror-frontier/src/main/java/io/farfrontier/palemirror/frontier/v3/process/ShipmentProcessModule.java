@@ -61,6 +61,7 @@ final class ShipmentProcessModule implements FrontierWorldProcessModule {
                     Shipment shipment = state.shipments().shipments().get(value.shipmentId());
                     if (shipment.status() == Shipment.Status.CARRYING)
                         events.addAll(ShipmentDeliveryNotifications.delivered(preview.shipments().shipments().get(shipment.id()), command.submittedAt().ticks()));
+                    else events.addAll(ShipmentDeliveryNotifications.loaded(preview.shipments().shipments().get(shipment.id()), command.submittedAt().ticks()));
                     events.add(ShipmentProcess.wake(shipment.id(), command.submittedAt().ticks()));
                 }
                 default -> throw new IllegalArgumentException("shipment rejects an undeclared physical command");

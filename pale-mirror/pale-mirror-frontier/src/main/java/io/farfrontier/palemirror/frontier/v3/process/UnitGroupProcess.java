@@ -46,6 +46,31 @@ public final class UnitGroupProcess {
                     Optional.of(GroupFormation.first(group, target, route, port.knowledge(state, group))), Optional.of(departure.actorId())));
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
     }
+    public record NavigationReadiness(String status, String reason) {
+        public boolean reconsiderOnPlanningProgress() {
+            return status.equals("FOUND") || status.equals("NOT_REQUESTED")
+                    || status.equals("PLANNING") && reason.equals("PLANNING_QUEUE_CAPACITY");
+        }
+    }
+    /** Retained calculation evidence only; this read must not enqueue work or declare arrival. */
+    public static NavigationReadiness navigationReadiness(FrontierWorldState state, UnitGroup group) {
+        if (group.phase() == UnitGroup.Phase.CLOSED) return new NavigationReadiness("CLOSED", "GROUP_CLOSED");
+        if (group.phase() == UnitGroup.Phase.TRAVELLING && !settled(state, group))
+            return new NavigationReadiness("TRAVELLING", "FORMATION_IN_PROGRESS");
+        var port = UnitGroupMissionPorts.require(group);
+        long ordinal = group.phase() == UnitGroup.Phase.TRAVELLING ? group.goalOrdinal() : group.goalOrdinal() + 1;
+        if (!port.mayTravel(state, group, ordinal)) return new NavigationReadiness("MISSION_WAIT", "MISSION_NOT_AUTHORIZED");
+        if (group.members().stream().anyMatch(member -> port.execution(state, group, member).isEmpty()
+                || state.actorMovements().containsKey(member.actorId())))
+            return new NavigationReadiness("PARTICIPANT_WAIT", "EXECUTION_NOT_AVAILABLE");
+        var target = port.destination(state, group, ordinal);
+        var departure = group.members().stream().max(Comparator
+                .comparingLong((UnitGroup.Member member) -> distance(state.actorLocations().get(member.actorId()).supportingSurface(), target))
+                .thenComparing(UnitGroup.Member::actorId)).orElseThrow();
+        return port.knowledge(state, group).planningEvidence(state.actorLocations().get(departure.actorId()).supportingSurface(), target)
+                .map(result -> new NavigationReadiness(result.status().name(), result.reason()))
+                .orElseGet(() -> new NavigationReadiness("NOT_REQUESTED", "NO_CURRENT_CALCULATION_EVIDENCE"));
+    }
     private static long distance(SurfaceAnchor left, SurfaceAnchor right) {
         return Math.abs((long) left.x() - right.x()) + Math.abs((long) left.z() - right.z());
     }
@@ -110,11 +135,14 @@ public final class UnitGroupProcess {
         var group = state.unitGroups().groups().get(action.subject()); long now = Math.max(currentTick, action.dueAt().ticks());
         if (group == null)
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
-        if (group.phase() != UnitGroup.Phase.TRAVELLING)
-            return List.of(new ProposedEvent(group.id(), new ScheduleEffect.Rescheduled(action.id(), progress(group.id(),
-                    now + state.bootstrap().ruleset().cadence().terminalLogisticsReviewInterval()))));
         var port = UnitGroupMissionPorts.require(group); port.validate(state, group);
         var events = new ArrayList<ProposedEvent>();
+        if (group.phase() != UnitGroup.Phase.TRAVELLING) {
+            if (group.phase() != UnitGroup.Phase.CLOSED) events.addAll(port.reconsider(state, group, now));
+            events.add(new ProposedEvent(group.id(), new ScheduleEffect.Rescheduled(action.id(), progress(group.id(),
+                    now + state.bootstrap().ruleset().cadence().terminalLogisticsReviewInterval()))));
+            return List.copyOf(events);
+        }
         if (settled(state, group)) {
             var journey = group.journey().orElseThrow();
             if (journey.cursor() < journey.route().size() - 1) {
@@ -129,7 +157,7 @@ public final class UnitGroupProcess {
                         group.goalOrdinal(), Optional.empty(), Optional.empty())));
             else start(state, group, group.goalOrdinal()).ifPresent(value -> events.add(new ProposedEvent(group.id(), value)));
             if (events.stream().anyMatch(event -> event.payload() instanceof UnitGroupAdvanced value
-                    && value.change() == UnitGroupAdvanced.Change.ARRIVE)) events.addAll(port.arrived(state, group, now));
+                    && value.change() == UnitGroupAdvanced.Change.ARRIVE)) events.addAll(port.reconsider(state, group, now));
         } else for (var member : group.members()) {
             var target = group.journey().orElseThrow().stations().get(member.actorId());
             if (state.actorMovements().containsKey(member.actorId()) || state.actorLocations().get(member.actorId()).supportingSurface().equals(target)) continue;

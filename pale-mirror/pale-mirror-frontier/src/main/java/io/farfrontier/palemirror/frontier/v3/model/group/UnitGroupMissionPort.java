@@ -14,5 +14,5 @@ public interface UnitGroupMissionPort {
     Optional<ActorExecutionId> execution(FrontierWorldState state, UnitGroup group, UnitGroup.Member member);
     boolean mayTravel(FrontierWorldState state, UnitGroup group, long ordinal);
     boolean mayClose(FrontierWorldState state, UnitGroup group);
-    java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> arrived(FrontierWorldState state, UnitGroup group, long tick);
+    java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> reconsider(FrontierWorldState state, UnitGroup group, long tick);
 }

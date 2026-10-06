@@ -85,7 +85,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
                     + Math.abs((long) surface.z() - target.z()) < members * 2L))
             throw new IllegalArgumentException("transport admission lacks a known assembly point outside its service boundary");
     }
-    @Override public List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> arrived(FrontierWorldState state, UnitGroup group, long tick) {
+    @Override public List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> reconsider(FrontierWorldState state, UnitGroup group, long tick) {
         return List.of(TransportMissionContinuation.wake(mission(state, group).id(), tick));
     }
     @Override public Optional<ActorExecutionId> execution(FrontierWorldState state, UnitGroup group, UnitGroup.Member member) {

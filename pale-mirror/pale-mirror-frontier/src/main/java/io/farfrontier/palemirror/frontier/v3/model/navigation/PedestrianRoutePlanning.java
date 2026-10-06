@@ -25,6 +25,13 @@ public final class PedestrianRoutePlanning {
         return planner.query(geometry, start, target);
     }
 
+    /** Read retained evidence without starting a search. */
+    public static java.util.Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+        PedestrianRoutePlanner planner;
+        synchronized (PedestrianRoutePlanning.class) { planner = current; }
+        return planner.peek(geometry, start, target);
+    }
+
     /** Deterministic calculation for synchronous owners and isolated replay, using the same search. */
     public static PedestrianRouteResult calculate(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         return DIRECT.query(geometry, start, target);

@@ -12,6 +12,7 @@ final class FrontierV3GroupDiagnosticJson {
     private FrontierV3GroupDiagnosticJson() { }
     static String render(CheckpointImage checkpoint, FrontierWorldState state, UnitGroup group) {
         var mission = state.shipments().missions().get(group.mission().id());
+        var readiness = io.farfrontier.palemirror.frontier.v3.process.UnitGroupProcess.navigationReadiness(state, group);
         String members = group.members().stream().map(member -> {
             var actor = member.actorId(); var movement = state.actorMovements().get(actor);
             var body = ActorMovementProcess.bodyAt(state, actor, checkpoint.instant().ticks());
@@ -40,6 +41,7 @@ final class FrontierV3GroupDiagnosticJson {
                 + ",\"missionStage\":" + (mission == null ? "null" : string(mission.stage().name()))
                 + ",\"routeCursor\":" + group.journey().map(UnitGroup.Journey::cursor).orElse(-1)
                 + ",\"routeSize\":" + group.journey().map(journey -> journey.route().size()).orElse(0)
+                + ",\"navigationStatus\":" + string(readiness.status()) + ",\"navigationReason\":" + string(readiness.reason())
                 + ",\"members\":[" + members + "],\"schedule\":[" + schedules + "]}";
     }
     private static String string(String value) { return "\"" + FrontierV3DiagnosticJson.quote(value) + "\""; }

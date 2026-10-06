@@ -80,6 +80,8 @@ public final class ShipmentProcess {
         if (shipment.status() == Shipment.Status.CARRYING)
             events.addAll(ShipmentDeliveryNotifications.delivered(ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(),
                     shipment.revision(), shipment.status()).shipments().shipments().get(shipment.id()), now));
+        else events.addAll(ShipmentDeliveryNotifications.loaded(ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(),
+                shipment.revision(), shipment.status()).shipments().shipments().get(shipment.id()), now));
         events.add(wake(shipment.id(), now));
         return List.copyOf(events);
     }

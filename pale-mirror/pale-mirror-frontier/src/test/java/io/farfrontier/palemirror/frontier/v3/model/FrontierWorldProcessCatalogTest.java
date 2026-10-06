@@ -292,6 +292,10 @@ class FrontierWorldProcessCatalogTest {
                 Map.entry("economy", new MarketDemandExpired(new SubjectId("demand:representative"))),
                 Map.entry("goods-trade", new GoodsTradeRetired(java.util.Set.of(new SubjectId("order:representative")), java.util.Set.of())),
                 Map.entry("shipments", new ShipmentRetired(new SubjectId("shipment:representative"), 1L)),
+                Map.entry("unit-groups", new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupAdvanced(
+                        new SubjectId("group:representative"), 1L,
+                        io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupAdvanced.Change.CLOSE, 2L, Optional.empty(), Optional.empty())),
+                Map.entry("transport-missions", new TransportMissionRetired(new SubjectId("mission:representative"), 1L)),
                 Map.entry("resource-sites", new ResourceSiteGrowthAdvanced(new SubjectId("site:representative"), 1L, 0)),
                 Map.entry("hive", new InfectionChanged(new InfectionCell(1, 1), new FixedRatio(FixedScalar.ONE))),
                 Map.entry("infrastructure", new RouteTopologyCutover(new SubjectId("route-construction:representative"), Optional.empty())),

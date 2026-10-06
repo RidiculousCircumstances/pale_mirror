@@ -55,11 +55,15 @@ class HierarchicalPedestrianNavigationTest {
         var start = SurfaceAnchor.at(2, 63, 2); var end = SurfaceAnchor.at(25, 63, 2);
         try (var planner = new CooperativePedestrianPlanner()) {
             assertEquals(PedestrianRouteResult.Status.PLANNING, planner.query(unknown, start, end).status());
+            long planningRevision = planner.progressRevision();
             while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            assertTrue(planner.progressRevision() > planningRevision);
+            assertEquals(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, planner.peek(unknown, start, end).orElseThrow().status());
             long cost = planner.workUnits();
             for (int i = 0; i < 100; i++) assertEquals(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, planner.query(unknown, start, end).status());
             assertEquals(cost, planner.workUnits());
             var changed = geometry(bounds, (x, z) -> SurfaceAnchor.at(x, 63, z), s -> false);
+            assertTrue(planner.peek(changed, start, end).isEmpty(), "obsolete geometry is not current evidence");
             assertEquals(PedestrianRouteResult.Status.PLANNING, planner.query(changed, start, end).status());
             while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
             assertEquals(PedestrianRouteResult.Status.FOUND, planner.query(changed, start, end).status());
@@ -86,6 +90,22 @@ class HierarchicalPedestrianNavigationTest {
             assertEquals(1, planner.pendingCount());
             while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
             assertEquals(PedestrianRouteResult.Status.NO_PATH, planner.query(changed, start, SurfaceAnchor.at(4, 63, 1)).status());
+            assertEquals(PedestrianRouteResult.Status.NO_PATH, planner.peek(changed, start, SurfaceAnchor.at(4, 63, 1)).orElseThrow().status());
+        }
+    }
+    @Test void queueCapacityWaitRemainsVisibleAndCanRetryWhenCalculationFreesASlot() {
+        var ground = geometry(new WorldBounds(0, 0, 32, 32), (x, z) -> SurfaceAnchor.at(x, 63, z), s -> false);
+        var start = SurfaceAnchor.at(1, 63, 1); var deferred = SurfaceAnchor.at(12, 63, 1);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            for (int i = 0; i < 8; i++) planner.query(ground, start, SurfaceAnchor.at(3 + i, 63, 1));
+            assertEquals("PLANNING_QUEUE_CAPACITY", planner.query(ground, start, deferred).reason());
+            assertEquals("PLANNING_QUEUE_CAPACITY", planner.peek(ground, start, deferred).orElseThrow().reason());
+            long signal = planner.progressRevision();
+            for (int turn = 0; turn < 100 && planner.pendingCount() == 8; turn++)
+                planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            assertTrue(planner.pendingCount() < 8); assertTrue(planner.progressRevision() > signal);
+            assertEquals("PLANNING_QUEUED", planner.query(ground, start, deferred).reason());
+            assertEquals("PLANNING_QUEUED", planner.peek(ground, start, deferred).orElseThrow().reason());
         }
     }
 }

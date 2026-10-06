@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /** One read-only known-geometry policy for pedestrian routes and typed area overlays. */
@@ -126,6 +127,9 @@ public final class KnownPedestrianRouteKnowledge {
 
     public List<SurfaceAnchor> plannedPath(SurfaceAnchor start, MovementOrder order) {
         return KnownPedestrianNavigation.plannedRoute(geometryFrom(start), start, order);
+    }
+    public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult> planningEvidence(SurfaceAnchor start, SurfaceAnchor target) {
+        return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.peek(geometryFrom(start), start, target);
     }
 
     public void requireRoute(List<SurfaceAnchor> route) {

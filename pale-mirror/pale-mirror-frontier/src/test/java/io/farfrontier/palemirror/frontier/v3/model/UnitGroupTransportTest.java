@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.model.group.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.*;
 import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -13,6 +14,59 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Actual registered policy, queue, movement and custody; no fabricated arrival or delivery. */
 class UnitGroupTransportTest {
+    @Test void confirmedLoadingAndCooperativeCompletionWakeTheRegisteredMissionWithoutPeriodicDelay() throws Exception {
+        var configuration = completeNeedClocks(FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:group-readiness"), 41));
+        var engine = FrontierEngines.createCanonicalStateAccess(configuration);
+        UnitGroup ready = null;
+        for (int boundary = 0; boundary < 500; boundary++) {
+            var state = engine.canonicalState().state();
+            ready = state.unitGroups().groups().values().stream().filter(group -> {
+                var mission = state.shipments().missions().get(group.mission().id());
+                return mission.stage() == TransportMission.Stage.LOADING && mission.shipmentIds().stream()
+                        .allMatch(id -> state.shipments().shipments().get(id).status() == Shipment.Status.CARRYING);
+            }).findFirst().orElse(null);
+            if (ready != null) break;
+            var next = engine.checkpoint().schedules().stream().filter(action -> !FrontierWorldRuntimeDefinition.scheduledHeld(state, action)).sorted().findFirst().orElseThrow();
+            var result = engine.advanceTo(new SimInstant(Math.max(engine.checkpoint().instant().ticks(), next.dueAt().ticks())), new WorkBudget(1, 1024));
+            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
+        }
+        assertNotNull(ready, "must stop at actual confirmed COLD pickup, before mission progress");
+        var groupId = ready.id(); var missionId = ready.mission().id();
+        long loadedAt = engine.checkpoint().instant().ticks();
+        assertEquals(loadedAt + 1, engine.checkpoint().schedules().stream()
+                .filter(action -> action.subject().equals(missionId)).findFirst().orElseThrow().dueAt().ticks());
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner)) {
+            var result = engine.advanceTo(new SimInstant(loadedAt + 2), new WorkBudget(128, 1024));
+            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
+            var state = engine.canonicalState().state(); var group = state.unitGroups().groups().get(groupId);
+            assertEquals(TransportMission.Stage.OUTBOUND, state.shipments().missions().get(missionId).stage());
+            assertEquals(UnitGroup.Phase.READY, group.phase());
+            assertEquals("PLANNING", UnitGroupProcess.navigationReadiness(state, group).status());
+            long work = planner.workUnits();
+            for (int read = 0; read < 20; read++) assertEquals("PLANNING", UnitGroupProcess.navigationReadiness(state, group).status());
+            assertEquals(work, planner.workUnits(), "diagnostics cannot advance or enqueue planning");
+            long signal = planner.progressRevision();
+            for (int slice = 0; slice < 2000 && planner.pendingCount() > 0; slice++)
+                planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            assertEquals(0, planner.pendingCount()); assertTrue(planner.progressRevision() > signal);
+            assertEquals("FOUND", UnitGroupProcess.navigationReadiness(state, group).status());
+            var notification = new UnitGroupNavigationReady(group.id(), group.revision());
+            var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+            assertEquals(notification, codecs.decode(notification.type(), codecs.encode(notification)));
+            var checkpoint = engine.checkpoint(); var commandId = new CommandId("test:group-navigation-ready");
+            assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, commandId,
+                    checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                    CauseChain.root(commandId), notification)));
+            assertEquals(checkpoint.instant().ticks() + 1, engine.checkpoint().schedules().stream()
+                    .filter(action -> action.subject().equals(missionId)).findFirst().orElseThrow().dueAt().ticks());
+            var advanced = engine.advanceTo(new SimInstant(checkpoint.instant().ticks() + 3), new WorkBudget(128, 1024));
+            assertEquals(EngineStatus.Kind.ACTIVE, advanced.status().kind(), advanced.status().failureDetail().orElse("active"));
+            assertEquals(UnitGroup.Phase.TRAVELLING, engine.canonicalState().state().unitGroups().groups().get(groupId).phase());
+            var after = engine.checkpoint(); var staleId = new CommandId("test:group-navigation-stale");
+            assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(1, staleId, after.worldId(),
+                    after.revision(), after.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(staleId), notification)));
+        }
+    }
     @Test void formationDeliveryPaymentReturnAndRetirementSurviveAnInFlightCheckpoint() {
         var configuration = completeNeedClocks(FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:group-transport"), 41));
         var engine = FrontierEngines.createCanonicalStateAccess(configuration);

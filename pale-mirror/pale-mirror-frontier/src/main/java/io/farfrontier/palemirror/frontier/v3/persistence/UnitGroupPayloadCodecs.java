@@ -23,7 +23,10 @@ final class UnitGroupPayloadCodecs {
             long ordinal = in.readLong(); var journey = in.readBoolean() ? Optional.of(UnitGroupStateCodec.journey(in)) : Optional.<UnitGroup.Journey>empty();
             var departure = in.readBoolean() ? Optional.of(UnitGroupStateCodec.id(in)) : Optional.<SubjectId>empty();
             return new UnitGroupAdvanced(id, revision, change, ordinal, journey, departure);
-        })));
+        }), codec("frontier.unit_group_navigation_ready", (out, payload) -> {
+            var value = (UnitGroupNavigationReady) payload;
+            UnitGroupStateCodec.id(out, value.groupId()); out.writeLong(value.expectedRevision());
+        }, in -> new UnitGroupNavigationReady(UnitGroupStateCodec.id(in), in.readLong()))));
     }
     static PayloadCodecs transport() {
         return new PayloadCodecs(List.of(codec("frontier.transport_mission_started", (out, payload) -> {
