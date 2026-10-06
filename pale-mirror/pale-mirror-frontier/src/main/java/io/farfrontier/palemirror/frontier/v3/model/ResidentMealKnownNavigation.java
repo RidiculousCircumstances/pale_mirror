@@ -133,7 +133,8 @@ public final class ResidentMealKnownNavigation {
             if (end.equals(port.serviceSurface())) {
                 if (!ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId()))
                     throw new IllegalArgumentException("accepted meal entrance lost its access turn");
-            } else if (!waitingStationAvailable(state, meal, end) || !port.accessBoundary().allowsWaitingRoute(route))
+            } else if (!waitingStationAvailable(state, meal, end)
+                    || !port.accessBoundary().allowsWaitingRoute(PedestrianLocalDeparture.publicContinuation(state, route)))
                 throw new IllegalArgumentException("accepted meal approach is not a current waiting destination");
         } else if (!port.accessBoundary().cleared(end.standingBody()))
             throw new IllegalArgumentException("accepted meal clearance does not clear its access boundary");

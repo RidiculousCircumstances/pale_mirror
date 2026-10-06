@@ -35,6 +35,25 @@ class ResidentMealKnownNavigationTest {
                 PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:departure-floor-loss"));
         assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
                 .reduceColdStep(damaged, actor, decoded));
+        // An incumbent makes this an exit followed by a waiting approach, not a direct entrance.
+        var other = new SubjectId("resident:7-6");
+        var port = SettlementServiceAccessPoints.depotPort(state, settlement.id());
+        var incumbent = testMeal(state, settlement, other, meal.depotId(), port.exteriorApproach());
+        var waiting = withMeal(state.withActorBody(other, port.serviceSurface().standingBody()), incumbent);
+        assertTrue(!ResidentMealServiceAccess.available(waiting, meal.depotId(), actor));
+        var waitingStep = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
+                .planColdStep(waiting, actor, 90_596L).orElseThrow();
+        var accepted = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
+                .reduceColdStep(waiting, actor, waitingStep);
+        assertTrue(accepted.humanPopulation().meals().get(actor).coldTravel().isPresent());
+        var route = waitingStep.plannedRoute().orElseThrow().route();
+        assertTrue(port.accessBoundary().cleared(route.getLast().standingBody()));
+        assertTrue(port.accessBoundary().allowsWaitingRoute(PedestrianLocalDeparture.publicContinuation(waiting, route)));
+        var reentry = new java.util.ArrayList<>(route);
+        reentry.add(port.serviceSurface());
+        reentry.add(route.getLast());
+        assertThrows(IllegalArgumentException.class,
+                () -> ResidentMealKnownNavigation.requireMovementRoute(waiting, meal, reentry));
     }
 
     @Test void raisedWorkshopMealDepartureCanBeAcceptedAndReplayedWithoutInventingSupport() throws Exception {
