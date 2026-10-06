@@ -320,3 +320,83 @@ on 2026-10-06 after explicit user authorization; no push/deploy,
 full-pack/HUMAN/M3 or whole-trade completion follows. Current explicit goal
 authorizes participant agency and market dispatch (Step3) with existing bread
 and money; stone remains Step4. Main alone; no subagents.
+
+### Step3 connected implementation — autonomous participant agency
+
+Settlements and registered companies now retain nominal policy, lawful endpoint,
+known counterparties and monotonic decision receipts. Registered periodic and
+producer-authored opportunity actions run their independent read-only policies.
+The matcher rechecks both current consents, price limits, public protected food,
+unclaimed source allocations, available funds, receiver capacity and shared
+known-route availability. It rotates bounded quote-pair examination; an
+unreachable first candidate cannot suppress subsequent feasible candidates.
+No recurring capital grant or omniscient inventory scan is introduced.
+
+`ProductionRights` is explicit in admission, all job replacements, snapshot and
+WAL. Company production uses the existing strategic admission, actual baker,
+station/custody/navigation and completion protocol, with company input/output
+and one reserved wage. Existing public manufacturing remains buyer-owned with
+its existing service fee. The company's independent procurement/sale policy
+does not gain permission to spend public resources merely from its legal home.
+Shared-container purchases transfer title against exact accepted custody without
+inventing a fake courier trip; inter-settlement purchases use existing Shipment.
+
+Actual connected canonical checks cover company grain procurement and payment,
+own-account bakery processing/recovery and wage, sale of company bread into
+public food, protected/promised food, unfunded/unknown explained non-matches, and
+autonomous inter-settlement delivery through the real registered engine queue.
+The delivery starts with finite initial stock, not precreated orders/contracts/
+shipments: it selects terms, dispatches, travels, unloads and accepts16 bread,
+debiting32 money exactly once. The engine check exposed use of the continuation
+gate at fresh courier admission; it now uses common `mayStartOrdinaryWork`, not
+a private shipment permission rule. Fixture capital/stock are explicitly finite
+setup, not production logic. The company station check goes through actual
+strategic planning/production and snapshot recovery while processing; it is not
+a native Minecraft restart claim.
+
+Focused51/51 PASS in26s: AutonomousGoodsTradeTest5, GoodsTradeTest21,
+BakeryHotVerticalTest4, FrontierWorldProcessCatalogTest17 and
+FrontierPersistenceCodecTest4. Command:
+
+```text
+./gradlew :pale-mirror-frontier:test --tests '*AutonomousGoodsTradeTest' --tests '*GoodsTradeTest' --tests '*BakeryHotVerticalTest' --tests '*FrontierWorldProcessCatalogTest' --tests '*FrontierPersistenceCodecTest' :pale-mirror-neoforge:compileJava verifyArchitectureContract verifyFrontierV3ArchitectureDebt verifyJavaStyle verifySourceIsolation --no-daemon
+```
+
+The subsequent edit only extends the read-only participant diagnostic with known
+counterparties, next review and linked shipment identities, and corrects the
+initial knowledge comment; the unchanged canonical evidence is reused. This
+step is M0/M1 implementation/automation, not M3/HUMAN or a green whole-release
+gate. Step2 native5 retains only its unchanged narrow journey evidence. No new
+native client/server, world reset, live deployment, push or full matrix was
+started for Step3; previous aggregate failures remain explicitly unclosed above.
+Fresh-world schema254 / ruleset R12/schema14 is required for this candidate.
+The next planned product content is Step4 finite stone extraction and its real
+consumer; connected bread/stone graphical/release acceptance remains Step5.
+
+Private source checkpoint `5846ba4d` contains Step3. A subsequent adapter build
+completed701 unit tests with19 failures in3m18s; it is NOT a green build gate.
+The complete failed XML/binary reports are retained under
+`build/trade-step3-adapter-failed-5846ba4d/test/`, before any focused report writer.
+Fifteen failures explicitly reject the newly scheduled company participant
+review as a retired subject; the maximum COLD interval test also quarantines
+at tick1000. The exact closed reference barrier omitted the existing nominal
+CompanyRegistry surface. It now validates company existence there, not by ID
+prefix or an arbitrary policy exception. A sixth autonomous-trade test runs
+ordinary company foundation and its review through the real registered queue,
+rather than skipping schedule effects in a direct reducer fixture.
+Three other failures time out before the historical cargo assembly boundary;
+their reports remain failures and do not establish a new Step3 product cause.
+Focused reruns, not a second aggregate, verify the changed company boundary.
+
+Final correction is privately committed at `72732be7`: autonomous6/6 and
+`FrontierV3ServerRuntimeTest.maximumColdOperatorIntervalCompactsBeforeTransactionRetentionCanQuarantine`
+1/1 PASS in30s. The latter advances the ordinary persisted server runtime through
+24,000 COLD ticks, including real company foundation, with no quarantine and
+the exact terminal instant. This confirms the production failure's correction;
+it is not a native graphical/client test or proof that all19 failed aggregate
+cases now pass. Guardrails, compiled JAR and verifyPackagedJar also PASS16s in
+the preceding correction cut; only the regression's stop condition changed
+afterward, from elapsed tick to the actual participant-review receipt. No
+production source changed after those package checks. The failed aggregate is
+retained and no full-green release claim follows. Implementation worktree is
+clean; main alone, no push/deployment. Scoped Step3 goal is complete.

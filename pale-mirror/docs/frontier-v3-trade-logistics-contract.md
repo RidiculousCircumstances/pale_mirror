@@ -1,6 +1,7 @@
 # Frontier v3 autonomous trade and logistics
 
-Status: accepted target, implementation pending. Accepted 2026-10-05.
+Status: accepted target; steps1-3 have scoped implementation, steps4-5 remain.
+Accepted 2026-10-05. This is not full trade/product acceptance.
 This contract extends [the player/system contract](frontier-v3-contract.md).
 [PM-TRADE001](work-orders/PM-TRADE001-AUTONOMOUS-TRADE-01.md) owns implementation
 sequencing; [execution semantics](frontier-v3-execution-semantics.md),
@@ -45,6 +46,56 @@ not concrete bakery/quarry jobs, company purposes or ID prefixes. Closed
 composition registers participant policies, receiver acceptance and production
 capabilities; adding a commodity must not require editing the matcher or carrier.
 Record names and interface shapes are implementation choices, not mandated classes.
+
+### Current participant/production composition (Step3)
+
+`GoodsParticipantPolicies` is the closed strategy composition. Policies consume
+one participant's read-only stock, protected reserve, incoming obligations and
+available funds. `GoodsOrderMatching` consumes independently authorized quotes;
+`GoodsTradeStateSupport` commits through the sole stock/financial/capacity owners.
+`GoodsShipmentPlanning` delegates actual carriage to the existing Shipment/UAE
+protocol. Neither policy nor matcher writes bodies or another inventory.
+
+`ProductionRights` explicitly distinguishes buyer-owned public manufacturing
+from company own-account manufacturing. The company proposes use of its own
+input and pays its worker; settlement operations arbitrate access to shared
+machinery/workforce. `CompanyBakeryPlanning` submits to the same bakery admission,
+station processing, item custody, navigation and completion path. It does not
+create a second production engine. Own-account production neither issues a
+public manufacturing invoice nor pays the worker twice. Output retains the
+declared input owner's title; placing company bread in a public depot does not
+make it public food. An authorized goods acceptance is required.
+
+Production rights currently declare the participant's home depot. Current
+autonomous stock accounting uses fungible lots. Initial acquaintance is a stable
+settlement-ID chain, plus explicit introductions of home companies; it is not a
+claim of nearest-neighbor geography, diplomacy AI or discovery of remote stock.
+Actual routes still require the shared known geometry. Route-risk valuation and
+the bread/stone complementary content remain subsequent work, not Step3 evidence.
+
+Ruleset `frontier-v3-production-r12` / ruleset schema14 hashes the commodity
+catalogs, prices, stock targets and review/search limits. Current defaults are a
+400-tick fallback review, 24,000-tick quote lifetime, at most64-unit autonomous
+batches and64 compatible-pair examinations per review. The commercial core still
+supports larger obligations/partial shipments; a policy batch is not its limit.
+Public bread target is the greater of four units per living resident and the
+existing needs-system protected reserve. Both policies target64 wheat; public
+bread quotes use minimum2/maximum3, company bread minimum2/maximum2, wheat1/1.
+These are catalog data, not branches inside matching or logistics.
+
+Producer-authored stock changes, bakery deliveries, new quotes and accepted
+goods wake the relevant participants through `GoodsParticipantWakeup`.
+Notifications only invalidate decisions; owners reread current authority before
+acting. The periodic fallback also handles expiry and otherwise missed changes.
+No arbitrary world-wide event scan or new permanent per-stock polling loop is
+introduced. Current fresh-world canonical schema254 persists participant
+knowledge/review receipts and production rights in snapshots/WAL; prior
+disposable schemas are rejected rather than silently reconstructed.
+
+Read-only `diagnose process <participant-id>` exposes policy/decision, owned and
+unclaimed stock, protected minimum, incoming quantities, available funds, known
+counterparties, next scheduled review, orders, contracts and linked shipment IDs.
+The shipment diagnostic owns the deeper physical journey/cargo detail.
 
 Company residence, founder and settlement membership are relationships, not
 permission to spend another account or infer ownership. Each durable participant,
