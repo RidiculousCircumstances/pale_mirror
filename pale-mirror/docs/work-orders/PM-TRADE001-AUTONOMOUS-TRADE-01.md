@@ -232,10 +232,10 @@ not inspect concrete trade/job types or duplicate stock claims.
 `ActorItemCustody` already uses the existing shared container-before-effect port;
 the new shipment owner must register its exact pending-effect fence there.
 
-### Step2 started — transport authority/custody checkpoint, not a caravan
+### Step2 connected implementation — scoped logistics complete
 
 Task-owned WIP adds a separate root `ShipmentState`, registered event reducer and
-current-schema250 snapshot/payload codecs. Every shipment retains distinct
+current-schema253 snapshot/payload codecs. Every shipment retains distinct
 facility and container identities, typed supported service stations, one exact
 COURIER UAE execution and delegated cargo allocation. Loading/unloading preserve
 title and use common item custody, service arbitration and storage admission.
@@ -250,9 +250,73 @@ Their station placement is explicit fixture setup, not navigation evidence.
 No route timing, HOT transfer, partial physical unload, native journey, casualty/
 interruption or autonomous production is proved by these checks.
 
-The new shipment family is not admitted by an autonomous producer yet. Its
-ambient locomotion is explicitly denied until common goal navigation is wired;
-there is no fallback actuator or second body. Next increment must connect the
-actual route/physical-effect producer and receiver result, not grow more inactive
-infrastructure. The old hive supply admission is not removed yet; do not claim
-Step2 complete or deploy this foundation. Existing runtime remains unchanged.
+The registered shipment command and native executor are now connected. Common
+navigation owns the actual journey; COURIER retains the same resident and shared
+resource account through HOT/COLD. A saved departure releases physical hand
+bindings only from the exact saved receipt, not player absence. HOT endpoint
+transfers retain exact durable preimages and confirm the next replica boundary.
+Partial unloading creates an independently acknowledged reception:17 of60 pays17,
+retains43 on the carrier, and survives recovery. No return journey gates payment.
+
+Common activity selection can interrupt a road leg for an actual meal, retaining
+freight separately from personal food. Resumption updates the same shipment's
+execution generation atomically and starts from the resident's real post-meal
+position. The interruption port explicitly names the resident; owner wake events
+may legitimately address the retained shipment rather than the resident itself.
+Confirmed casualty disposition uses the common recorded death fence and an exact
+pre-loot/actual dropped-item witness, preserving unsold title and releasing only
+unfulfilled funds. Ambiguous prepared effects are retained and explained locally,
+not guessed from a missing entity. Terminal records retire explicitly when the
+bounded admission history fills, never by erasing live references.
+
+Audit of the old path: production SettlementSupplyPlanner does not offer
+bread-to-hive delivery; uncontested-supply/autonomous-supply-interception are
+unit-only fixtures, rejected by the graphical pilot. Historical operation/scene
+recovery coverage remains for unrelated combat, not a second active commercial
+delivery admission. Do not remove those independent responsibilities under this
+order. Ordinary market dispatch remains Step3; the new generic admission needs
+no bread/hive/mandatory escort checks.
+
+The checked-in `disposable-goods-shipment-hot-cold-restart.json` passed as
+`build/trade-step2-native5.json`, run `4e86c2dc-5dff-4f23-bee9-45e032b4bd9c`:
+17 ordinary evidence actions, HOT physical pickup32, exact COLD hand departure,
+graceful restart of the same world, shared receiver approach, HOT unload and
+independent buyer acceptance32. Same resident1-1/entity
+1b400b9e-14eb-318c-8d11-467cc5bc9e01/execution generation1 throughout.
+The terminal at canonical4820 is DELIVERED, remaining0, accepted32, fulfilled,
+no pending effect/reception. The owner-versioned progress receipt is SATISFIED.
+Receiver resource inspection and its real opened chest agree: owned by
+settlement2, initial64 plus delivered32, physical slots64/32. Both frames were
+reviewed: the inventory UI is legible, but the clean courier frame does not
+clearly isolate the loaded worker. It does not establish M3 or HUMAN promotion;
+the exact local entity-motion trace supplies narrower M2 journey evidence.
+
+Native4 exposed a real ordering race, not a timeout: projection release ran
+before the EFFECT stage settled saved cargo, then common body unload rejected
+the retained binding. Registered courier release now waits for its exact saved
+hand acknowledgement, matching its body checkpoint. The regression uses the
+actual ambient release owner before/after that receipt. Native3's Java/Node
+anchor mismatch and Native2's wrong terminal-action reference are also corrected;
+all failed receipts remain failures. No confidence rerun was used as a fix.
+
+Focused goods21, catalog17, ambient6, harvest reconciliation5, persistence4 and
+native scenario parser43 pass, plus guardrails/build/packaged-JAR checks.
+Earlier loss, body-lifetime, shared activity and absolute-control evidence is
+retained within its unchanged scope. Cargo GameTest slice19/19 passes, including
+the old impact-reload case that returned DEFERRED in the421-test aggregate.
+The aggregate itself remains failed:1253 frontier tests/6 failures and421
+GameTests/1 failure. Focused reports overlapped that aggregate's report directory;
+do not claim an exhaustive identity-bound repaired failure inventory or a green
+release milestone. This is separate release/test-isolation debt, not permission
+to erase failures or widen Step2 into a legacy scene campaign.
+
+Final source review replaces the new private20-tick shipment retry with the
+persisted common terminal-logistics review cadence; the partial-full receiver
+case verifies that cadence and retained43-unit cargo. Native5 evidence is reused
+only for its unchanged successful path, not the revised blocked retry branch.
+Existing live runtime remains unchanged; owned disposable server/client stopped
+and ports25596/25597 closed. Step2 source privately committed at `3a6e9d7c`
+on 2026-10-06 after explicit user authorization; no push/deploy,
+full-pack/HUMAN/M3 or whole-trade completion follows. Current explicit goal
+authorizes participant agency and market dispatch (Step3) with existing bread
+and money; stone remains Step4. Main alone; no subagents.
