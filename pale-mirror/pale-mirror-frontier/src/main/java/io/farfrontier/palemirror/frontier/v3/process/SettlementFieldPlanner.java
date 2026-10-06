@@ -33,7 +33,8 @@ final class SettlementFieldPlanner implements SettlementOperationPlanner {
                 .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT)
                 .min(Comparator.comparing(ResourceSite::id));
         if (recoverableField.isPresent() && state.firstFreeContainerSlot(depot).isPresent()
-                && FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentProfession.AGRICULTURAL_WORKER).isPresent())
+                && FrontierWorldStateSupport.availableWorkResident(state, settlement.id(),
+                        ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE).isPresent())
             return Assessment.offer(settlement.id(), new StrategicOperationProposal(
                 StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(),
                 Optional.of(recoverableField.orElseThrow().id()), FixedScalar.SCALE), Priority.BACKGROUND);

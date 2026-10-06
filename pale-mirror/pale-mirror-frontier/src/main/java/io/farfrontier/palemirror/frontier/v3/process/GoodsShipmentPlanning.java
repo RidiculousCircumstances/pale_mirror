@@ -9,6 +9,36 @@ import java.util.*;
 
 /** Seller-arranged dispatch port: trade decisions never own motion or a second cargo inventory. */
 final class GoodsShipmentPlanning {
+    static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
+        var retained = state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal())
+                .map(shipment -> shipment.execution().actorId())
+                .filter(id -> state.humanPopulation().resident(id).settlementId().equals(home))
+                .collect(java.util.stream.Collectors.toSet());
+        return new SettlementStaffingPort.Demand(ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS,
+                rules.targetWorkers(), rules.minimumLocalStaff(), rules.priority(), retained);
+    }
+    /** Read-only cargo opportunity for priority comparison; it never invokes selection or dispatch. */
+    static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long now) {
+        if (!SettlementLabourAllocation.canCommitToMission(state, resident.settlementId(),
+                ResidentWorkKind.LOGISTICS, List.of(resident.id()))) return false;
+        for (var contract : state.companies().goodsTrade().contracts().values().stream()
+                .filter(value -> !value.terminal() && !value.sourceContainerId().equals(value.receiverContainerId()))
+                .sorted(Comparator.comparing(GoodsTradeContract::id)).toList()) {
+            var seller = state.companies().goodsTrade().participants().participants().get(contract.seller().id());
+            var buyer = state.companies().goodsTrade().participants().participants().get(contract.buyer().id());
+            if (seller == null || buyer == null || !seller.endpoint().settlementId().equals(resident.settlementId())) continue;
+            var source = FungibleResourceCustodySupport.accountAtContainer(state, contract.sourceContainerId()).orElse(null);
+            if (source == null) continue;
+            for (var claimId : contract.outstandingClaims().keySet().stream().sorted().toList()) {
+                var claim = state.inventory().fungibleResources().claims().get(claimId);
+                if (state.shipments().holds(claimId) || !source.claimQuantities().containsKey(claimId) || claim.quantity() > 64) continue;
+                var shipmentId = new SubjectId("shipment:goods/" + claimId.value().replace(':', '-'));
+                if (!state.shipments().shipments().containsKey(shipmentId)
+                        && reachable(state, seller.endpoint(), buyer.endpoint(), shipmentId)) return true;
+            }
+        }
+        return false;
+    }
     static List<ProposedEvent> dispatch(FrontierWorldState state, GoodsParticipant seller, long now) {
         for (var contract : state.companies().goodsTrade().contracts().values().stream()
                 .filter(value -> !value.terminal() && value.seller().equals(seller.party())
@@ -22,15 +52,10 @@ final class GoodsShipmentPlanning {
                 if (state.shipments().holds(claimId) || !source.claimQuantities().containsKey(claimId)) continue;
                 var claim = state.inventory().fungibleResources().claims().get(claimId);
                 if (claim.quantity() > 64) continue; // Current policy batches are bounded; larger manual contracts retain their own partition protocol.
-                var courier = state.humanPopulation().residents().values().stream()
-                        .filter(resident -> resident.settlementId().equals(seller.endpoint().settlementId())
-                                && resident.capability(HumanCapability.LOGISTICS) > 0
-                                && state.unitGroups().groups().values().stream().noneMatch(group -> group.phase() != io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.CLOSED
-                                    && group.members().stream().anyMatch(member -> member.actorId().equals(resident.id())))
-                                && ActorExecutionCoordinator.ordinaryWorkAdmission(state, resident.id()).permitted()
-                                && ResidentActivityCoordinator.mayStartOrdinaryWork(state, resident.id(), now))
-                        .sorted(Comparator.comparingInt((ResidentProfile resident) -> resident.capability(HumanCapability.LOGISTICS)).reversed()
-                                .thenComparing(ResidentProfile::id)).findFirst();
+                var candidates = ResidentWorkComposition.SELECTION.eligible(state, seller.endpoint().settlementId(),
+                        ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, now);
+                var courier = candidates.stream().filter(resident -> SettlementLabourAllocation.canCommitToMission(
+                        state, seller.endpoint().settlementId(), ResidentWorkKind.LOGISTICS, List.of(resident.id()))).findFirst();
                 if (courier.isEmpty()) return List.of();
                 var id = new SubjectId("shipment:goods/" + claimId.value().replace(':', '-'));
                 if (state.shipments().shipments().containsKey(id)) continue;
@@ -49,14 +74,10 @@ final class GoodsShipmentPlanning {
                         io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Role.CARRIER, ActorActivityKind.COURIER, shipment.id()));
                 var carrierId = shipment.execution().actorId();
                 // Initial non-combat accompaniment. Escort tactics are a separate future mission capability.
-                state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(seller.endpoint().settlementId())
-                        && !resident.id().equals(carrierId) && resident.capability(HumanCapability.LOGISTICS) > 0
-                        && state.unitGroups().groups().values().stream().noneMatch(existing -> existing.phase() != io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.CLOSED
-                            && existing.members().stream().anyMatch(member -> member.actorId().equals(resident.id())))
-                        && ActorExecutionCoordinator.ordinaryWorkAdmission(state, resident.id()).permitted()
-                        && ResidentActivityCoordinator.mayStartOrdinaryWork(state, resident.id(), now))
-                        .sorted(Comparator.comparingInt((ResidentProfile resident) -> resident.capability(HumanCapability.LOGISTICS)).reversed()
-                                .thenComparing(ResidentProfile::id)).findFirst().ifPresent(resident -> members.add(
+                candidates.stream().filter(resident -> !resident.id().equals(carrierId)
+                        && SettlementLabourAllocation.canCommitToMission(state, seller.endpoint().settlementId(),
+                                ResidentWorkKind.LOGISTICS, List.of(carrierId, resident.id())))
+                        .findFirst().ifPresent(resident -> members.add(
                             new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member(resident.id(),
                                     io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Role.GUIDE, ActorActivityKind.GROUP_MEMBER, groupId)));
                 var group = new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup(groupId,

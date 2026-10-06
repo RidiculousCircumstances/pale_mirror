@@ -26,10 +26,11 @@ class FrontierPersistenceCodecTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:footprint-version"), 91L));
         var codec = new FrontierWorldStateCodec();
         var encoded = codec.encode(state);
-        assertEquals(255, Byte.toUnsignedInt(encoded[4]));
+        assertEquals(257, Byte.toUnsignedInt(encoded[4]) * 256 + Byte.toUnsignedInt(encoded[5]));
+        assertEquals(state.bootstrap().worldId(), FrontierWorldSnapshotHeader.read(encoded).worldId());
         assertArrayEquals(encoded, codec.encode(codec.decode(encoded)));
-        for (int legacy = 177; legacy < 255; legacy++) {
-            var old = encoded.clone(); old[4] = (byte) legacy;
+        for (int legacy = 177; legacy < 257; legacy++) {
+            var old = encoded.clone(); old[4] = (byte) (legacy >>> 8); old[5] = (byte) legacy;
             var before = old.clone();
             org.junit.jupiter.api.Assertions.assertTrue(assertThrows(IllegalArgumentException.class,
                     () -> FrontierWorldSnapshotHeader.read(old)).getMessage().contains("schema " + legacy));
@@ -37,6 +38,11 @@ class FrontierPersistenceCodecTest {
                     () -> codec.decode(old)).getMessage().contains("schema " + legacy));
             assertArrayEquals(before, old, "rejection must not rewrite an old world");
         }
+        var oldByteHeader = new byte[encoded.length - 1];
+        System.arraycopy(encoded, 0, oldByteHeader, 0, 4); oldByteHeader[4] = (byte) 255;
+        System.arraycopy(encoded, 6, oldByteHeader, 5, encoded.length - 6);
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldSnapshotHeader.read(oldByteHeader));
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(oldByteHeader));
     }
 
     @Test
@@ -61,8 +67,8 @@ class FrontierPersistenceCodecTest {
     void preCurrentEnvelopeAndTruncatedSnapshotsFailClosed() {
         byte[] encoded = FrontierPersistenceCodec.encodeSnapshot(new SnapshotRecord(new CheckpointImage(new WorldId("frontier:empty"), Revision.ZERO,
                 SimInstant.ZERO, new byte[0], List.of(), List.of()), 0L));
-        assertEquals(99, Byte.toUnsignedInt(encoded[4]));
-        for (int version : new int[]{74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 91, 92, 97, 98}) {
+        assertEquals(101, Byte.toUnsignedInt(encoded[4]));
+        for (int version : new int[]{74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 91, 92, 97, 98, 99, 100}) {
             byte[] oldEnvelope = encoded.clone(); oldEnvelope[4] = (byte) version;
             assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeSnapshot(oldEnvelope));
         }

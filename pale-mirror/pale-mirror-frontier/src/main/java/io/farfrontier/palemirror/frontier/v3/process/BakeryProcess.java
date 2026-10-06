@@ -40,12 +40,12 @@ public final class BakeryProcess {
                     || !(wheat.custody() instanceof InventoryCustody.ContainerSlot slot)
                     || !slot.containerId().equals(FrontierWorldState.depotId(job.settlementId())))
                 throw new IllegalArgumentException("bakery exact start has no owned depot wheat");
-            return CompanyWorkPaymentProcess.reserve(state.withProductionJob(job), job);
+            return ProductionCommercialProcess.reserve(state.withProductionJob(job), job);
         }
         if (!(job.inputHold() instanceof ProductionInputHold.FungibleCold
                 || job.inputHold() instanceof ProductionInputHold.FungibleBound))
             throw new IllegalArgumentException("bakery job has no supported input custody");
-        return CompanyWorkPaymentProcess.reserve(state.startFungibleProductionJob(job), job);
+        return ProductionCommercialProcess.reserve(state.startFungibleProductionJob(job), job);
     }
 
     /** A witnessed source loss does not retire the accepted order; choose only currently unclaimed depot wheat. */
@@ -493,7 +493,7 @@ public final class BakeryProcess {
         StrategicTask task = state.strategicPlans().tasks().get(job.taskId());
         if (task == null || task.status() != StrategicTaskStatus.ACTIVE || !task.ownerId().equals(job.settlementId()))
             throw new IllegalArgumentException("delivered bakery output has no active owner task");
-        FrontierWorldState paid = CompanyWorkPaymentProcess.settle(state, job);
+        FrontierWorldState paid = ProductionCommercialProcess.settle(state, job);
         Optional<MarketWorkOrder> order = paid.companies().market().acceptedForJob(job.id());
         CompanyRegistry companies = order.map(value -> paid.companies().withMarket(paid.companies().market().complete(value.id(), job)))
                 .orElse(paid.companies());

@@ -16,6 +16,8 @@ public final class ShipmentStateSupport {
     }
     /** Validation contributes no partial shipment, execution or mission publication. */
     public static void validateDispatch(FrontierWorldState state, SubjectId subject, Shipment shipment) {
+        SettlementLabourAllocation.requireMissionCommitment(state, shipment.sender().settlementId(),
+                ResidentWorkKind.LOGISTICS, java.util.List.of(shipment.execution().actorId()));
         ShipmentAuthorizationComposition.validate(state, shipment, true);
         ShipmentEndpointComposition.validate(state, shipment.sender()); ShipmentEndpointComposition.validate(state, shipment.receiver());
         ClaimAllocation claim = state.inventory().fungibleResources().claims().get(shipment.authorization().claimId());

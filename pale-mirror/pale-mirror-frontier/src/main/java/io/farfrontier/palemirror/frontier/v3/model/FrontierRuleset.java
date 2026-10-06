@@ -18,7 +18,15 @@ import java.util.Objects;
 public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                               FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
                               ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
-                              GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks) {
+                              GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks,
+                              SettlementLabourRules labour) {
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                           ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
+                           GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand, residentLife,
+                resourceHarvestColdTravelTicksPerEdge, workCatalog, goodsTrade, initialSettlementStocks, SettlementLabourRules.initial());
+    }
     public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                            FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
                            ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
@@ -61,6 +69,9 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         if (schemaVersion <= 0) throw new IllegalArgumentException("ruleset schema version must be positive");
         workCatalog = Objects.requireNonNull(workCatalog, "work catalog");
         goodsTrade = Objects.requireNonNull(goodsTrade, "goods trade rules");
+        labour = Objects.requireNonNull(labour, "labour rules");
+        if (schemaVersion < 16 && !labour.equals(SettlementLabourRules.initial()))
+            throw new IllegalArgumentException("custom labour rules require their hashed schema16 profile");
         initialSettlementStocks = java.util.List.copyOf(initialSettlementStocks);
         if (initialSettlementStocks.size() > 64 || schemaVersion < 15 && !initialSettlementStocks.isEmpty()
                 || initialSettlementStocks.stream().map(value -> value.settlementId().value() + '|' + value.itemKind()).distinct().count()
@@ -95,7 +106,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 + (schemaVersion >= 13 ? "|" + workCatalog.canonicalText() : "")
                 + (schemaVersion >= 14 ? "|" + goodsTrade.canonicalText() : "")
                 + (schemaVersion >= 15 ? "|" + initialSettlementStocks.stream()
-                    .map(InitialSettlementStock::canonicalText).sorted().collect(java.util.stream.Collectors.joining(";")) : "");
+                    .map(InitialSettlementStock::canonicalText).sorted().collect(java.util.stream.Collectors.joining(";")) : "")
+                + (schemaVersion >= 16 ? "|" + labour.canonicalText() : "");
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */

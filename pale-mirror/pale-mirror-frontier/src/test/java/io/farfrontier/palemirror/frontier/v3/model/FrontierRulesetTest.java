@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierRulesetTest {
     @Test void tradePlaytestStockIsFinitePublicGenesisAndPinnedOnRecovery() {
-        var selected = FrontierRulesets.installed("frontier-v3-trade-playtest-r1");
+        var selected = FrontierRulesets.installed("frontier-v3-trade-playtest-r2");
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:trade-playtest"), 41L, selected));
         var seller = new SubjectId("settlement:7");
         assertEquals(320, SettlementFoodPolicy.breadStock(initial, seller));

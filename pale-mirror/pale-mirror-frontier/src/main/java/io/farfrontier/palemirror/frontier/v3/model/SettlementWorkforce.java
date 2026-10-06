@@ -17,9 +17,11 @@ public final class SettlementWorkforce {
                         throw new IllegalArgumentException("work authorization references a missing or foreign resident");
                     return resident;
                 })
-                .filter(resident -> availableForNewAssignment(state, resident) && assignments.idle(resident.id()))
-                .sorted(Comparator.comparingInt((ResidentProfile resident) -> resident.capability(capability))
-                        .reversed().thenComparing(ResidentProfile::id)).toList();
+                .filter(resident -> resident.capability(capability) > 0
+                        && availableForNewAssignment(state, resident) && assignments.idle(resident.id()))
+                .sorted(Comparator.comparingInt((ResidentProfile resident) -> permissions.priority(work, resident.id()))
+                        .thenComparing(Comparator.comparingInt((ResidentProfile resident) -> resident.capability(capability)).reversed())
+                        .thenComparing(ResidentProfile::id)).toList();
     }
     public static List<ResidentProfile> candidates(FrontierWorldState state, SubjectId settlementId,
                                                     ResidentProfession profession) {

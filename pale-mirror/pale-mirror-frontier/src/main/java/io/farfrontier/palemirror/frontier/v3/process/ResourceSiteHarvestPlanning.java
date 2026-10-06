@@ -66,7 +66,7 @@ final class ResourceSiteHarvestPlanning {
             throw new IllegalArgumentException("resource-site harvest task has a foreign field owner");
         }
         if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) return List.of();
-        var candidates = ResidentWorkSelection.eligible(state, settlement.id(),
+        var candidates = ResidentWorkComposition.SELECTION.eligible(state, settlement.id(),
                 ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE, atTick);
         var events = new java.util.ArrayList<ProposedEvent>();
         boolean activate = task.status() == StrategicTaskStatus.PENDING;
@@ -74,7 +74,7 @@ final class ResourceSiteHarvestPlanning {
                 state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE)) : state;
         ResidentWorkProvider<ResourceSiteHarvestJob> provider = provider(task, site);
         for (ResidentProfile farmer : candidates) {
-            var offered = ResidentWorkSelection.offer(projected, farmer, atTick, provider);
+            var offered = ResidentWorkComposition.SELECTION.offer(projected, farmer, atTick, provider);
             if (offered.isEmpty()) continue;
             ResourceSiteHarvestJob job = offered.orElseThrow().execution();
             PhysicalIntent intent = intent(site, job);
@@ -102,6 +102,38 @@ final class ResourceSiteHarvestPlanning {
                                 new WorkReservationClaim.ContainerCapacity(job.outputSlot()))));
             }
         };
+    }
+
+    static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
+        var fields = state.resourceSiteDescriptors().values().stream().filter(site -> site.settlementId().equals(home))
+                .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT).toList();
+        boolean workable = fields.stream().anyMatch(site -> state.resourceSites().site(site.id()).phase() == ResourceSitePhase.READY
+                || state.resourceSites().site(site.id()).phase() == ResourceSitePhase.HARVESTING);
+        var retained = state.resourceSites().sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
+                .filter(job -> state.resourceSite(job.siteId()).settlementId().equals(home))
+                .map(ResourceSiteHarvestJob::workerId).collect(java.util.stream.Collectors.toSet());
+        int reserve = fields.isEmpty() ? 0 : rules.minimumLocalStaff();
+        return new SettlementStaffingPort.Demand(ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE,
+                workable ? rules.targetWorkers() : reserve, reserve, rules.priority(), retained);
+    }
+
+    /** Family-owned executable opportunity; this probe creates no assignment, movement or reservation. */
+    static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long atTick) {
+        if (state.firstFreeContainerSlot(FrontierWorldState.depotId(resident.settlementId())).isEmpty()) return false;
+        for (var task : state.strategicPlans().tasks().values().stream()
+                .filter(task -> task.ownerId().equals(resident.settlementId())
+                        && task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
+                        && (task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE))
+                .sorted(java.util.Comparator.comparing(StrategicTask::id)).toList()) {
+            var lifecycle = state.resourceSites().site(task.resourceSiteTarget().orElseThrow());
+            if (lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING) continue;
+            var site = site(state, lifecycle.siteId());
+            if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) continue;
+            var projected = task.status() == StrategicTaskStatus.PENDING
+                    ? state.withStrategicPlans(state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE)) : state;
+            if (offer(projected, task, site, resident, atTick).isPresent()) return true;
+        }
+        return false;
     }
 
     private static java.util.Optional<ResourceSiteHarvestJob> offer(FrontierWorldState state, StrategicTask task,

@@ -15,18 +15,19 @@ class AutonomousGoodsTradeTest {
     private static final SubjectId COMPANY = CompanyFoundationProcess.companyId(HOME);
     private static final SubjectId DEPOT = FrontierWorldState.depotId(HOME);
 
-    @Test void ordinaryCompanyFoundationPublishesAndExecutesItsParticipantReview() {
+    @Test void ordinarySettlementBootstrapExecutesItsTradeReviewWithoutACompany() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:goods-company-foundation"), 47L);
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
         for (int boundary = 0; boundary < 2000; boundary++) {
-            var participant = engine.canonicalState().state().companies().goodsTrade().participants().participants().get(COMPANY);
+            var participant = engine.canonicalState().state().companies().goodsTrade().participants().participants().get(HOME);
             if (participant != null && participant.reviewRevision() > 0) break;
             var next = engine.checkpoint().schedules().stream().sorted().findFirst().orElseThrow();
             var result = engine.advanceTo(next.dueAt(), new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(128, 1024));
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
         }
-        assertTrue(engine.canonicalState().state().companies().goodsTrade().participants().participants().get(COMPANY).reviewRevision() > 0);
-        assertTrue(engine.checkpoint().schedules().stream().anyMatch(action -> action.subject().equals(COMPANY)
+        assertTrue(engine.canonicalState().state().companies().companies().isEmpty());
+        assertTrue(engine.canonicalState().state().companies().goodsTrade().participants().participants().get(HOME).reviewRevision() > 0);
+        assertTrue(engine.checkpoint().schedules().stream().anyMatch(action -> action.subject().equals(HOME)
                 && action.kind().equals(GoodsParticipantProcess.REVIEW)));
     }
 
@@ -146,7 +147,7 @@ class AutonomousGoodsTradeTest {
         assertTrue(state.companies().goodsTrade().contracts().isEmpty());
     }
 
-    @Test void ownAccountCompanyUsesTheSameBakerStationAndPaysAWageWithoutPublicInvoice() {
+    @Test void ownAccountCompanyUsesTheSameBakerStationWithoutResidentWagesOrPublicInvoice() {
         var state = companyFixture();
         // Finite owned fixture stock isolates the production integration; procurement has its own connected check above.
         var publicWheat = new SubjectId("lot:bootstrap-1-wheat");
@@ -168,13 +169,10 @@ class AutonomousGoodsTradeTest {
         assertEquals(COMPANY, started.job().rights().resourceOwner().id());
         state = apply(state, startedEvents, 201, "economy");
         var job = started.job();
-        var reservation = state.inventory().economics().reservations().values().stream()
-                .filter(value -> value.reasonId().equals(job.id())).findFirst().orElseThrow();
-        assertEquals(COMPANY, reservation.payerId()); assertEquals(job.workerId(), reservation.payeeId());
-        assertEquals(FixedScalar.ONE, reservation.amount());
+        assertTrue(state.inventory().economics().reservations().isEmpty());
         var companyMoney = state.inventory().economics().require(COMPANY).balance();
         var publicMoney = state.inventory().economics().require(HOME).balance();
-        var workerMoney = state.inventory().economics().require(job.workerId()).balance();
+        assertFalse(state.inventory().economics().accounts().containsKey(job.workerId()));
         boolean recoveredAtStation = false;
         for (long tick = 300, count = 0; state.productionJobs().containsKey(job.id()) && count < 700; tick += 20, count++) {
             var events = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, tick));
@@ -190,14 +188,14 @@ class AutonomousGoodsTradeTest {
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(COMPANY, "minecraft:bread"));
         assertEquals(0, SettlementFoodPolicy.breadStock(state, HOME));
         assertEquals(publicMoney, state.inventory().economics().require(HOME).balance());
-        assertEquals(companyMoney.minus(FixedScalar.ONE), state.inventory().economics().require(COMPANY).balance());
-        assertEquals(workerMoney.plus(FixedScalar.ONE), state.inventory().economics().require(job.workerId()).balance());
+        assertEquals(companyMoney, state.inventory().economics().require(COMPANY).balance());
+        assertFalse(state.inventory().economics().accounts().containsKey(job.workerId()));
         state = review(state, COMPANY, 20_000);
         state = review(state, HOME, 20_000);
         state = review(state, HOME, 20_400);
         assertEquals(64, SettlementFoodPolicy.breadStock(state, HOME));
         assertEquals(0, state.inventory().fungibleResources().totalQuantity(COMPANY, "minecraft:bread"));
-        assertEquals(companyMoney.minus(FixedScalar.ONE).plus(FixedScalar.whole(128)), state.inventory().economics().require(COMPANY).balance());
+        assertEquals(companyMoney.plus(FixedScalar.whole(128)), state.inventory().economics().require(COMPANY).balance());
     }
 
     @Test void publicPolicyDoesNotExportPromisedFoodTwiceOrOverrideTheNeedsReserve() {
@@ -221,7 +219,7 @@ class AutonomousGoodsTradeTest {
 
     private static FrontierWorldState companyFixture() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:autonomous-goods"), 41));
-        state = apply(state, CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(HOME, 1, 0)), 0, "economy");
+        state = apply(state, OptionalCompanyEmploymentFixture.foundation(state, HOME, 0), 0, "economy");
         // Finite capital transferred from existing treasury, never periodically minted by a market rule.
         var economics = state.inventory().economics().transfer(HOME, COMPANY, FixedScalar.whole(80))
                 .transfer(new SubjectId("settlement:2"), HOME, FixedScalar.whole(100))

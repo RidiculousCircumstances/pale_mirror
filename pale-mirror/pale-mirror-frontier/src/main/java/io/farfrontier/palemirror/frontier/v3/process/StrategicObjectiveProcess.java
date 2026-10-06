@@ -267,6 +267,21 @@ public final class StrategicObjectiveProcess {
     private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring,
                                             boolean allowHiveInterception, String eventIdentity,
                                             Optional<HiveOperationKnowledge.Sighting> interceptSighting, long currentTick) {
+        if (!action.subject().equals(state.bootstrap().hive().id())) {
+            var policy = SettlementStaffingComposition.change(state, action.subject(), currentTick);
+            if (policy.isPresent()) {
+                var changed = policy.orElseThrow();
+                var projected = SettlementStaffingComposition.reduce(state, action.subject(), changed);
+                return concatenate(List.of(new ProposedEvent(action.subject(), changed)),
+                        planWithStaffing(projected, action, recurring, allowHiveInterception, eventIdentity, interceptSighting, currentTick));
+            }
+        }
+        return planWithStaffing(state, action, recurring, allowHiveInterception, eventIdentity, interceptSighting, currentTick);
+    }
+
+    private static List<ProposedEvent> planWithStaffing(FrontierWorldState state, ScheduledAction action, boolean recurring,
+                                            boolean allowHiveInterception, String eventIdentity,
+                                            Optional<HiveOperationKnowledge.Sighting> interceptSighting, long currentTick) {
         if (currentTick < action.dueAt().ticks()) throw new IllegalArgumentException("policy admission precedes its due action");
         SubjectId owner = action.subject(); int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         requireKnownOwner(state.bootstrap(), owner);
@@ -343,14 +358,9 @@ public final class StrategicObjectiveProcess {
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveRouteEngagementProcess.start(task, action.dueAt().ticks() + 1L))));
         }
         if (task.kind() == StrategicTaskKind.PRODUCE_BREAD) {
-            if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION)
-                return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)),
+            return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)),
                         new ProposedEvent(owner, new StrategicTaskPlanned(task)), new ProposedEvent(task.id(),
                         new ScheduleEffect.Created(ProductionProcess.start(task, action.dueAt().ticks() + 1L))));
-            MarketDemand demand = MarketClearingProcess.foodDemand(state, task, action.dueAt().ticks());
-            return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
-                    new ProposedEvent(owner, new MarketDemandOpened(demand)),
-                    new ProposedEvent(demand.id(), new ScheduleEffect.Created(MarketClearingProcess.clear(demand, 1, action.dueAt().ticks() + 100L))));
         }
         if (task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE) {
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)),

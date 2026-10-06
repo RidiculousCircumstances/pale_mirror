@@ -176,10 +176,10 @@ class FrontierV3DiagnosticJsonTest {
 
     @Test
     void terminalMarketOrderDiagnosticRetainsItsExactInputOutputLineage() {
-        // Ordinary route admission follows completed bread production; use that semantic
-        // boundary instead of the old pre-labor assumption that work finishes at tick2200.
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
-                new WorldId("frontier:diagnostic-terminal-order"), 91L));
+        // A commercial receipt requires an explicitly commissioned company service,
+        // not ordinary direct settlement employment or a route-custody fixture.
+        var engine = io.farfrontier.palemirror.frontier.v3.model.OptionalCompanyEmploymentFixture.completedColdService(
+                new WorldId("frontier:diagnostic-terminal-order"), 91L);
         FrontierWorldState state = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
                 .decode(engine.checkpoint().canonicalState());
         var order = state.companies().market().workOrders().values().stream()

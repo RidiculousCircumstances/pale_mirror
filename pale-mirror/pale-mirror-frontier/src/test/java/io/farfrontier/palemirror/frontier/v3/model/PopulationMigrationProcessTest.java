@@ -283,8 +283,8 @@ class PopulationMigrationProcessTest {
         state = state.registerCompany(company);
         SubjectId reserved = state.humanPopulation().residents().values().stream().filter(person -> person.settlementId().equals(source.id()))
                 .sorted(java.util.Comparator.comparing(ResidentProfile::id)).findFirst().orElseThrow().id();
-        state = state.openEmployment(new EmploymentContract(new SubjectId("contract:employment-migration-reservation"), company.id(), reserved,
-                FixedScalar.whole(2L), FixedScalar.ONE, EmploymentContractStatus.ACTIVE, 1L, 0L, FixedScalar.ZERO));
+        state = state.openEmployment(new EmploymentContract(new SubjectId("contract:employment-migration-reservation"), WorkEmployer.company(company), reserved,
+                FixedScalar.whole(2L), EmploymentContractStatus.ACTIVE, 1L, 0L));
 
         List<ResidentMigrationStarted> starts = PopulationMigrationProcess.planReview(state, PopulationMigrationProcess.review(1, 100L)).stream()
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(ResidentMigrationStarted.class::isInstance)

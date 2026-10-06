@@ -41,7 +41,7 @@ public final class FungibleProductionStateSupport {
                 "recipe:bread", held.inputLots().keySet().stream().sorted().toList());
         FungibleResourceLedger resources = state.inventory().fungibleResources().transformObserved(held.accountId(), held.authorityEpoch(),
                 held.inputLots(), Map.of(held.claimId(), job.outputCount()), output, observation.observedStacks());
-        FrontierWorldState paid = CompanyWorkPaymentStateSupport.settleCommittedPhysicalWork(state, job);
+        FrontierWorldState paid = ProductionCommercialStateSupport.settleCommittedPhysicalWork(state, job);
         Optional<MarketWorkOrder> order = paid.companies().market().acceptedForJob(job.id());
         CompanyRegistry companies = order.map(value -> paid.companies().withMarket(paid.companies().market().complete(value.id(), job)))
                 .orElse(paid.companies());

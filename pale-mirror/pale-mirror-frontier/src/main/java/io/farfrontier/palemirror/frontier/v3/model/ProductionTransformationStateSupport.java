@@ -73,14 +73,14 @@ public final class ProductionTransformationStateSupport {
         activeTask(state, job);
         java.util.Optional<EmploymentContract> contract = intent.status() == PhysicalIntentStatus.RUNNING
                 || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
-                ? CompanyWorkPaymentStateSupport.settlementContractFor(state, job) : CompanyWorkPaymentStateSupport.contractFor(state, job);
-        contract.ifPresent(value -> {
-            FinancialReservation expected = CompanyWorkPaymentStateSupport.reservation(job, value);
+                ? ProductionCommercialStateSupport.settlementContractFor(state, job) : ProductionCommercialStateSupport.contractFor(state, job);
+        if (ProductionCommercialStateSupport.requiresInvoice(job)) contract.ifPresent(value -> {
+            FinancialReservation expected = ProductionCommercialStateSupport.reservation(job, value);
             if (!state.inventory().economics().reservations().containsKey(expected.id())) {
                 throw new IllegalArgumentException("production transformation has no held company finance");
             }
         });
-        if (intent.status() == PhysicalIntentStatus.PREPARED && contract.isEmpty()) {
+        if (job.rights().mode() != ProductionRights.Mode.PUBLIC_PRODUCTION && contract.isEmpty()) {
             throw new IllegalArgumentException("prepared production transformation has no living exact worker");
         }
     }
@@ -96,7 +96,7 @@ public final class ProductionTransformationStateSupport {
                 || job.outputCount() != observation.outputCount()) {
             throw new IllegalArgumentException("production transformation receipt does not match its durable job");
         }
-        FrontierWorldState paidState = CompanyWorkPaymentStateSupport.settleCommittedPhysicalWork(state, job);
+        FrontierWorldState paidState = ProductionCommercialStateSupport.settleCommittedPhysicalWork(state, job);
         java.util.Optional<MarketWorkOrder> order = paidState.companies().market().acceptedForJob(job.id());
         if (order.isPresent()) {
             paidState = paidState.withCompanies(paidState.companies().withMarket(

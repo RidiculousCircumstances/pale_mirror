@@ -9,7 +9,47 @@ import java.util.Set;
 
 /** Fresh-world bread admission: one baker, one declared facility and one station identity. */
 final class BakeryJobAdmission {
+    static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), home);
+        boolean intact = state.structureConditions().get(ProductionProcess.workshop(settlement).id()) == StructureCondition.INTACT;
+        boolean input = intact && BakeryBatchSelection.admissible(state, ProductionRights.publicService(home)).isPresent();
+        var retained = state.productionJobs().values().stream().filter(job -> job.settlementId().equals(home))
+                .map(ProductionJob::workerId).collect(java.util.stream.Collectors.toSet());
+        int reserve = intact ? rules.minimumLocalStaff() : 0;
+        return new SettlementStaffingPort.Demand(ResidentWorkKind.BAKING, HumanCapability.INDUSTRY,
+                input ? rules.targetWorkers() : reserve, reserve, rules.priority(), retained);
+    }
     private BakeryJobAdmission() { }
+
+    /** Family-owned probe for executable public or own-account production; no speculative job is retained. */
+    static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long atTick) {
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
+        var workshop = ProductionProcess.workshop(settlement);
+        if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
+                || !SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id())
+                || ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlement.id()))
+                || ReferenceContainerCustody.hasLiveCustody(state, FrontierWorldState.depotId(settlement.id()))
+                    && !ReferenceContainerCustody.hasOperationalCustody(state, FrontierWorldState.depotId(settlement.id()))) return false;
+        for (var task : state.strategicPlans().tasks().values().stream()
+                .filter(task -> task.ownerId().equals(settlement.id()) && task.kind() == StrategicTaskKind.PRODUCE_BREAD
+                        && task.status() == StrategicTaskStatus.PENDING)
+                .sorted(java.util.Comparator.comparing(StrategicTask::id)).toList()) {
+            var objective = state.strategicPlans().objectives().get(task.objectiveId());
+            if (objective == null) throw new IllegalArgumentException("bakery opportunity lost its exact strategic objective");
+            var rights = objective.kind() == StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION
+                    ? CompanyBakeryPlanning.requestingCompany(state, settlement.id()).map(CompanyBakeryPlanning::rights)
+                    : Optional.of(ProductionRights.publicService(settlement.id()));
+            if (rights.isEmpty()) continue;
+            var batch = BakeryBatchSelection.admissible(state, rights.orElseThrow());
+            if (batch.isEmpty() || batch.orElseThrow().fungibleInput().filter(input ->
+                    !ProductionResourceCustody.canStart(state, input, batch.orElseThrow().quantity())).isPresent()) continue;
+            var job = batch.orElseThrow().exactInput().isPresent()
+                    ? exact(state, task, settlement, workshop, batch.orElseThrow().exactInput().orElseThrow(), resident, rights.orElseThrow())
+                    : fungible(state, task, settlement, workshop, batch.orElseThrow().fungibleInput().orElseThrow(), resident, rights.orElseThrow());
+            if (ProductionCommercialProcess.canReserve(state, job)) return true;
+        }
+        return false;
+    }
 
     static ResidentWorkProvider<ProductionJob> provider(StrategicTask task, Settlement settlement,
             SettlementStructure workshop, Optional<ExactItemStack> exactInput,

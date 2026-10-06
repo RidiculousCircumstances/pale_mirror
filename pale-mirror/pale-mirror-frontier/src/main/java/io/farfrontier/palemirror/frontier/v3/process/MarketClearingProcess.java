@@ -70,30 +70,42 @@ public final class MarketClearingProcess {
             cancelled.addAll(start);
             return List.copyOf(cancelled);
         }
-        ProductionJob job = started.job();
-        EmploymentContract jobContract = CompanyWorkPaymentProcess.contractFor(state, job).orElse(null);
+        var companyAgreement = state.companies().employmentContracts().values().stream()
+                .filter(contract -> contract.residentId().equals(started.job().workerId())
+                        && contract.employer().kind() == EconomicOwnerKind.COMPANY
+                        && contract.employer().settlementId().equals(started.job().settlementId())
+                        && contract.status() == EmploymentContractStatus.ACTIVE)
+                .sorted(java.util.Comparator.comparing(EmploymentContract::id)).findFirst();
+        if (companyAgreement.isEmpty()) return retry(state, demand, action, now);
+        ProductionRights publicRights = started.job().rights();
+        ProductionJob job = started.job().withRights(new ProductionRights(ProductionRights.Mode.BUYER_OWNED_SERVICE, publicRights.resourceOwner(),
+                publicRights.destinationContainerId(), companyAgreement.orElseThrow().employer()));
+        if (!ProductionCommercialProcess.canReserve(state, job)) return retry(state, demand, action, now);
+        EmploymentContract jobContract = ProductionCommercialProcess.contractFor(state, job).orElse(null);
         // A quote is commercial evidence for one exact prospective job, not an offer from an
         // arbitrarily selected company founder.  Production chooses the available worker first;
         // only that worker's active contract can price and reserve the work.  If an old quote
         // survived while availability or terms changed, retain the open demand and retry rather
         // than admitting a job whose financial cause cannot be proven.
         if (jobContract == null) return retry(state, demand, action, now);
-        Company company = state.companies().companies().get(jobContract.companyId());
+        Company company = state.companies().companies().get(jobContract.employer().id());
         if (company == null || company.status() != CompanyStatus.ACTIVE) return retry(state, demand, action, now);
         Optional<CompanyQuote> existing = state.companies().market().bestCurrentQuote(demand.id(), now);
-        if (existing.isPresent() && (!jobContract.companyId().equals(existing.orElseThrow().sellerId())
+        if (existing.isPresent() && (!jobContract.employer().id().equals(existing.orElseThrow().sellerId())
                 || !jobContract.invoicePerCompletedJob().equals(existing.orElseThrow().totalPrice()))) {
             return retry(state, demand, action, now);
         }
         List<ProposedEvent> planned = new ArrayList<>();
         CompanyQuote quote = existing.orElseGet(() -> new CompanyQuote(new SubjectId("quote:"
-                + demand.id().value().substring("demand:".length()) + "-" + jobContract.companyId().value().substring("company:".length())),
+                + demand.id().value().substring("demand:".length()) + "-" + jobContract.employer().id().value().substring("company:".length())),
                 demand.id(), company.id(), demand.itemCount(), jobContract.invoicePerCompletedJob(), now, demand.expiresAtTick()));
-        FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, jobContract);
+        FinancialReservation reservation = ProductionCommercialProcess.reservation(job, jobContract);
         MarketWorkOrder order = new MarketWorkOrder(new SubjectId("order:" + job.id().value().substring("job:".length())), demand.id(), quote.id(), quote.sellerId(),
                 task.id(), job.id(), reservation.id(), quote.totalPrice(), MarketWorkOrderStatus.ACCEPTED);
         if (existing.isEmpty()) planned.add(new ProposedEvent(company.id(), new MarketQuotePublished(quote)));
-        planned.add(new ProposedEvent(demand.buyerId(), new MarketWorkOrderAccepted(order))); planned.addAll(start);
+        planned.add(new ProposedEvent(demand.buyerId(), new MarketWorkOrderAccepted(order)));
+        for (var event : start) planned.add(event.payload() instanceof ProductionStarted production
+                ? new ProposedEvent(event.subject(), new ProductionStarted(job, production.inputItemId())) : event);
         return List.copyOf(planned);
     }
 
@@ -166,7 +178,7 @@ public final class MarketClearingProcess {
             case INPUT_UNAVAILABLE -> job.inputHold() instanceof ProductionInputHold.Materialized
                     && !materializedInputMatches(state, job);
             case WORKER_UNAVAILABLE -> state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE
-                    || CompanyWorkPaymentProcess.contractFor(state, job).isEmpty();
+                    || ProductionCommercialProcess.contractFor(state, job).isEmpty();
             case ROUTE_BLOCKED -> state.sceneLeases().values().stream().anyMatch(lease -> FrontierSceneBehaviors.isProductionWork(lease)
                     && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id()) && lease.status() == SceneLeaseStatus.CLOSED);
             default -> false;

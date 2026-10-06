@@ -97,7 +97,7 @@ public final class ProductionProcess {
         if (availableBaker.isEmpty()) {
             return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.WORKER_UNAVAILABLE);
         }
-        List<ResidentProfile> eligible = ResidentWorkSelection.eligible(state, settlement.id(),
+        List<ResidentProfile> eligible = ResidentWorkComposition.SELECTION.eligible(state, settlement.id(),
                 ResidentWorkKind.BAKING, HumanCapability.INDUSTRY, action.dueAt().ticks());
         if (eligible.isEmpty())
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
@@ -129,10 +129,10 @@ public final class ProductionProcess {
         }
         // Exact and fungible stock remain distinct representations. A resource job admitted
         // under physical custody reserves the current bound epoch, never a COLD mirror.
-        Optional<ProductionJob> selectedJob = ResidentWorkSelection.offers(state, settlement.id(), action.dueAt().ticks(),
+        Optional<ProductionJob> selectedJob = ResidentWorkComposition.SELECTION.offers(state, settlement.id(), action.dueAt().ticks(),
                 BakeryJobAdmission.provider(task, settlement, workshop, input, fungible)).stream()
                 .map(ResidentWorkOffer::execution)
-                .filter(job -> CompanyWorkPaymentProcess.canReserve(state, job)).findFirst();
+                .filter(job -> ProductionCommercialProcess.canReserve(state, job)).findFirst();
         // Finance is a start precondition.  A blocked task must not leave a durable job
         // occupying its workshop: otherwise a later objective review could create a
         // second job for the same facility and quarantine the canonical engine.
@@ -140,7 +140,7 @@ public final class ProductionProcess {
             // A funded but temporarily unavailable worker is not a settlement finance failure.
             if (SettlementWorkforce.candidates(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY).stream()
                     .map(worker -> BakeryJobAdmission.propose(state, task, settlement, workshop, input, fungible, worker))
-                    .anyMatch(job -> CompanyWorkPaymentProcess.canReserve(state, job)))
+                    .anyMatch(job -> ProductionCommercialProcess.canReserve(state, job)))
                 return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
                         state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
             return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.FINANCE_UNAVAILABLE);
@@ -179,7 +179,7 @@ public final class ProductionProcess {
         }
         boolean marketBacked = state.companies().market().acceptedForJob(job.id()).isPresent();
         if (state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE
-                || (marketBacked && CompanyWorkPaymentProcess.contractFor(state, job).isEmpty())) {
+                || (marketBacked && ProductionCommercialProcess.contractFor(state, job).isEmpty())) {
             return failActiveJob(state, task, settlement, workshop, job, ProductionDiagnosticProducer.WORKER_UNAVAILABLE);
         }
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
@@ -301,7 +301,7 @@ public final class ProductionProcess {
                 .filter(job -> coldHold(job.inputHold()))
                 .filter(job -> state.physicalIntents().values().stream().noneMatch(intent -> intent.causeSubjectId().equals(job.id())))
                 .filter(job -> state.companies().market().acceptedForJob(job.id()).isPresent())
-                .filter(job -> CompanyWorkPaymentProcess.contractFor(state, job).isPresent())
+                .filter(job -> ProductionCommercialProcess.contractFor(state, job).isPresent())
                 .filter(job -> state.strategicPlans().tasks().get(job.taskId()) instanceof StrategicTask task
                         && task.ownerId().equals(job.settlementId()) && task.kind() == StrategicTaskKind.PRODUCE_BREAD
                         && task.status() == StrategicTaskStatus.ACTIVE)
@@ -368,7 +368,7 @@ public final class ProductionProcess {
             throw new IllegalArgumentException("cold production cannot complete after its worker has died");
         }
         StrategicTask task = activeTask(state, job); validateMarketOrder(state, task, job);
-        FrontierWorldState paid = CompanyWorkPaymentProcess.settle(state, job);
+        FrontierWorldState paid = ProductionCommercialProcess.settle(state, job);
         java.util.Optional<MarketWorkOrder> order = paid.companies().market().acceptedForJob(job.id());
         if (order.isPresent()) paid = paid.withCompanies(paid.companies().withMarket(paid.companies().market().complete(order.orElseThrow().id(), job)));
         return paid.completeProductionJob(completed.jobId(), completed.output());
@@ -394,7 +394,7 @@ public final class ProductionProcess {
             throw new IllegalArgumentException("fungible production completion has no exact reserved wheat input");
         }
         StrategicTask task = activeTask(state, job); validateMarketOrder(state, task, job);
-        FrontierWorldState paid = CompanyWorkPaymentProcess.settle(state, job);
+        FrontierWorldState paid = ProductionCommercialProcess.settle(state, job);
         java.util.Optional<MarketWorkOrder> order = paid.companies().market().acceptedForJob(job.id());
         if (order.isPresent()) paid = paid.withCompanies(paid.companies().withMarket(paid.companies().market().complete(order.orElseThrow().id(), job)));
         return paid.completeFungibleProductionJob(job.id(), completed.output());
@@ -581,10 +581,10 @@ public final class ProductionProcess {
         StrategicTask production = activeTask(state, job);
         MarketWorkOrder order = state.companies().market().acceptedForJob(job.id()).orElseThrow(() ->
                 new IllegalArgumentException("interrupted production must retain one accepted market work order"));
-        EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow(() ->
+        EmploymentContract contract = ProductionCommercialProcess.contractFor(state, job).orElseThrow(() ->
                 new IllegalArgumentException("interrupted production must retain its active worker contract"));
-        FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, contract);
-        if (!order.reservationId().equals(reservation.id()) || !order.sellerId().equals(contract.companyId())
+        FinancialReservation reservation = ProductionCommercialProcess.reservation(job, contract);
+        if (!order.reservationId().equals(reservation.id()) || !order.sellerId().equals(contract.employer().id())
                 || !state.inventory().economics().reservations().containsKey(reservation.id())) {
             throw new IllegalArgumentException("production interruption has no matching exact financial reservation");
         }
@@ -637,7 +637,7 @@ public final class ProductionProcess {
                 ProductionJob job = state.productionJobs().get(blocked.workId());
                 if (job != null) {
                     if (!job.settlementId().equals(settlement.id()) || (state.actorLocations().get(job.workerId()).condition().status() == ActorLifeStatus.ALIVE
-                            && (!state.companies().market().acceptedForJob(job.id()).isPresent() || CompanyWorkPaymentProcess.contractFor(state, job).isPresent()))) {
+                            && (!state.companies().market().acceptedForJob(job.id()).isPresent() || ProductionCommercialProcess.contractFor(state, job).isPresent()))) {
                         throw new IllegalArgumentException("active production worker block precondition does not hold");
                     }
                     break;
@@ -650,7 +650,7 @@ public final class ProductionProcess {
             case FINANCE_UNAVAILABLE -> {
                 ProductionJob job = state.productionJobs().get(blocked.workId());
                 if (job != null) {
-                    if (!job.settlementId().equals(settlement.id()) || CompanyWorkPaymentProcess.canReserve(state, job)) {
+                    if (!job.settlementId().equals(settlement.id()) || ProductionCommercialProcess.canReserve(state, job)) {
                         throw new IllegalArgumentException("production finance block precondition does not hold");
                     }
                     break;
@@ -667,7 +667,7 @@ public final class ProductionProcess {
                 if (SettlementWorkforce.candidates(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY).stream()
                         .map(worker -> BakeryJobAdmission.propose(state, pending, settlement, workshop,
                                 prospective.orElseThrow().exactInput(), prospective.orElseThrow().fungibleInput(), worker))
-                        .anyMatch(candidate -> CompanyWorkPaymentProcess.canReserve(state, candidate))) {
+                        .anyMatch(candidate -> ProductionCommercialProcess.canReserve(state, candidate))) {
                     throw new IllegalArgumentException("production finance start block has available funds");
                 }
             }
@@ -914,10 +914,17 @@ public final class ProductionProcess {
         return new SubjectId("job:production-" + task.id().value().substring("task:".length()));
     }
     static void validateMarketOrder(FrontierWorldState state, StrategicTask task, ProductionJob job) {
+        if (job.rights().mode() == ProductionRights.Mode.PUBLIC_PRODUCTION) {
+            job.rights().validate(state, job);
+            if (state.companies().market().demands().values().stream().anyMatch(demand -> demand.reasonId().equals(task.id()))
+                    || state.companies().market().acceptedForJob(job.id()).isPresent())
+                throw new IllegalArgumentException("public production cannot complete a commercial service order");
+            return;
+        }
         if (job.rights().mode() == ProductionRights.Mode.COMPANY_OWN_ACCOUNT) {
             job.rights().validate(state, job);
             if (state.strategicPlans().objectives().get(task.objectiveId()).kind() != StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION
-                    || CompanyWorkPaymentProcess.contractFor(state, job).isEmpty()
+                    || ProductionCommercialProcess.contractFor(state, job).isEmpty()
                     || state.companies().market().acceptedForJob(job.id()).isPresent())
                 throw new IllegalArgumentException("own-account production requires a separate company proposal and exact employment, not a public invoice");
             return;
@@ -926,10 +933,10 @@ public final class ProductionProcess {
         if (!demandExists) return; // Explicit compatibility for old fixtures/snapshots that predate the v3 market boundary.
         MarketWorkOrder order = state.companies().market().acceptedForJob(job.id()).orElseThrow(() ->
                 new IllegalArgumentException("market-backed production has no accepted exact work order"));
-        EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow(() ->
+        EmploymentContract contract = ProductionCommercialProcess.contractFor(state, job).orElseThrow(() ->
                 new IllegalArgumentException("market-backed production has no exact employment contract"));
-        FinancialReservation expected = CompanyWorkPaymentProcess.reservation(job, contract);
-        if (!order.taskId().equals(task.id()) || !order.sellerId().equals(contract.companyId()) || !order.reservationId().equals(expected.id())
+        FinancialReservation expected = ProductionCommercialProcess.reservation(job, contract);
+        if (!order.taskId().equals(task.id()) || !order.sellerId().equals(contract.employer().id()) || !order.reservationId().equals(expected.id())
                 || !order.acceptedTotalPrice().equals(contract.invoicePerCompletedJob())) {
             throw new IllegalArgumentException("market-backed production order no longer matches its durable job terms");
         }

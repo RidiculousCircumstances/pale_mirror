@@ -21,6 +21,24 @@ class FrontierV3ResourceSiteCellClaimTest {
     private static final SubjectId SITE = new SubjectId("site:cell-claim-test");
     private static final PhysicalIntentId INTENT = new PhysicalIntentId("intent:cell-claim-test");
 
+    @Test void initialProjectionRetainsTheActualColdSurfaceInsteadOfReplayingAgeZero() {
+        var site = site();
+        var cycle = ResourceFieldCycle.seeded(SITE, site.layout(), 4);
+        var id = site.layout().cells().getFirst().id();
+        for (int stage = 0; stage < 7; stage++) cycle = cycle.advanceGrowth(id);
+        var ledger = FrontierV3ResourceSiteLedger.fixture();
+        ledger.reserveFieldInitialization(site, INTENT, cycle);
+        var restored = FrontierV3ResourceSiteLedger.load(ledger.save(new CompoundTag(), null), null);
+        var initial = (FrontierV3ResourceSiteLedger.FieldInitialization) restored.fieldClaim(SITE);
+        assertEquals(4, initial.cursor().epoch());
+        assertEquals(7, initial.cursor().target().cell(id).committed().growthStage());
+        assertEquals(0, initial.cursor().nextWrite());
+        assertTrue(initial.cursor().target().matchesCycle(cycle));
+        var incompatible = restored.save(new CompoundTag(), null);
+        incompatible.putInt("format", 14);
+        assertThrows(IllegalStateException.class, () -> FrontierV3ResourceSiteLedger.load(incompatible, null));
+    }
+
     @Test void currentSavedDataRetainsOnlyTheCellOwnerAndRejectsLegacyMutation() {
         var site = site();
         var cycle = ResourceFieldCycle.seeded(SITE, layout(), 1);
@@ -191,10 +209,10 @@ class FrontierV3ResourceSiteCellClaimTest {
         old.putInt("format", 8);
         assertThrows(IllegalStateException.class, () -> FrontierV3ResourceSiteLedger.load(old, null));
         CompoundTag missingPrepared = field.save(new CompoundTag(), null);
-        missingPrepared.getList("fieldClaims", 10).getCompound(0).getCompound("initial").remove("prepared");
+        missingPrepared.getList("fieldClaims", 10).getCompound(0).getCompound("initial").remove("target");
         assertThrows(IllegalStateException.class, () -> FrontierV3ResourceSiteLedger.load(missingPrepared, null));
         CompoundTag invalidPrepared = field.save(new CompoundTag(), null);
-        invalidPrepared.getList("fieldClaims", 10).getCompound(0).getCompound("initial").putByte("prepared", (byte) 2);
+        invalidPrepared.getList("fieldClaims", 10).getCompound(0).getCompound("initial").putByte("batch", (byte) 2);
         assertThrows(IllegalStateException.class, () -> FrontierV3ResourceSiteLedger.load(invalidPrepared, null));
         for (String section : List.of("claims", "fieldClaims", "nativeGrowthFences", "harvestReceipts",
                 "fieldWorldChanges", "fieldForeignChanges")) {

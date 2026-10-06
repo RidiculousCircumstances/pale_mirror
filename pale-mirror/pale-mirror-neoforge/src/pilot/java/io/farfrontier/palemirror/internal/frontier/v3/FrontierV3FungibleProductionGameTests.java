@@ -125,22 +125,19 @@ public final class FrontierV3FungibleProductionGameTests {
         SubjectId settlement = new SubjectId("settlement:" + settlementIndex), depot = FrontierWorldState.depotId(settlement);
         var anchor = state.inventory().surfaces().get(depot).position();
         BlockPos position = new BlockPos(anchor.x(), anchor.y(), anchor.z());
-        for (var event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
-            if (event.payload() instanceof CompanyRegistered registered) state = CompanyFoundationProcess.reduce(state, settlement, registered);
-            if (event.payload() instanceof EmploymentContractOpened opened) state = CompanyFoundationProcess.reduceEmployment(state, settlement, opened);
-        }
         var objective = new StrategicObjective(new SubjectId("objective:lot-effect-" + suffix), settlement,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         var task = new StrategicTask(new SubjectId("task:lot-effect-" + suffix), objective.id(), settlement, StrategicTaskKind.PRODUCE_BREAD,
                 Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.ACTIVE);
         state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
-        var worker = state.companies().companies().get(CompanyFoundationProcess.companyId(settlement)).founderId();
+        var worker = SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.BAKING)
+                .stream().sorted().findFirst().orElseThrow();
         SubjectId account = new SubjectId("custody:container-" + settlementIndex + "-depot"), claim = new SubjectId("claim:lot-effect-" + suffix);
         SubjectId input = new SubjectId("lot:bootstrap-" + settlementIndex + "-wheat");
         var job = new ProductionJob(new SubjectId("job:lot-effect-" + suffix), task.id(), settlement, new SubjectId("structure:" + settlementIndex + "-workshop"), worker,
                 input, new ProductionInputHold.FungibleCold(input, account, claim),
                 new SubjectId("lot:effect-bread-" + suffix), "minecraft:bread", 64).withWorkProgress(ProductionWorkProgress.outputReady());
-        state = CompanyWorkPaymentProcess.reserve(state.startFungibleProductionJob(job), job);
+        state = ProductionCommercialProcess.reserve(state.startFungibleProductionJob(job), job);
         var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64));
         state = ProductionResourceCustody.bind(state, account, 1L, FungiblePhysicalObservation.bind(state.inventory().fungibleResources(), account, 1L, stacks));
         state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));

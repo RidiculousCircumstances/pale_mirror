@@ -52,6 +52,8 @@ final class FrontierV3GrayboxExecutor {
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> DYNAMIC_CATCH_UP = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PENDING_FIRST_VISIBILITY = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PRIORITY_FIRST_VISIBILITY = new IdentityHashMap<>();
+    private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.Set<ChunkPos>> PARKED_FIRST_VISIBILITY = new IdentityHashMap<>();
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Boolean> PRIORITY_VISIBILITY_TURN = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PENDING_HIVE_FENCES = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PRIORITY_HIVE_FENCES = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PENDING_SETTLEMENT_FENCES = new IdentityHashMap<>();
@@ -205,6 +207,7 @@ final class FrontierV3GrayboxExecutor {
         FIRST_VISIBILITY_WORK.remove(runtime);
         DYNAMIC_CATCH_UP.remove(runtime);
         PENDING_FIRST_VISIBILITY.remove(runtime); PRIORITY_FIRST_VISIBILITY.remove(runtime);
+        PARKED_FIRST_VISIBILITY.remove(runtime); PRIORITY_VISIBILITY_TURN.remove(runtime);
         PENDING_HIVE_FENCES.remove(runtime); PRIORITY_HIVE_FENCES.remove(runtime);
         PENDING_SETTLEMENT_FENCES.remove(runtime); PRIORITY_SETTLEMENT_FENCES.remove(runtime);
     }
@@ -212,6 +215,8 @@ final class FrontierV3GrayboxExecutor {
         Objects.requireNonNull(level, "first visibility level"); Objects.requireNonNull(runtime, "first visibility runtime");
         Objects.requireNonNull(chunk, "first visibility chunk");
         if (runtime.decodedState().isEmpty() || !level.hasChunk(chunk.x, chunk.z)) return;
+        var parked = PARKED_FIRST_VISIBILITY.get(runtime);
+        if (parked != null && parked.remove(chunk)) firstVisibilityQueue(runtime, true).add(chunk);
         Cursor cursor = CURSORS.get(runtime);
         // Natural chunk arrival is the first lawful chance to make immutable plan geometry
         // current.  Do not wait for an EntityJoin ingress event: that made roads and settlement
@@ -234,7 +239,11 @@ final class FrontierV3GrayboxExecutor {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
         boolean newIngress = PLAYER_INGRESS.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
-        if (!newIngress) return;
+        if (!newIngress) {
+            // Deduplication of discovery is not permission to lose pending work on revisit.
+            retainFirstVisibility(runtime, chunk, true);
+            return;
+        }
         retainResourceSiteVisibility(runtime, state, chunk);
         retainFirstVisibility(runtime, chunk, true);
         retainSettlementVisibility(runtime, chunk);
@@ -302,7 +311,12 @@ final class FrontierV3GrayboxExecutor {
             if (chunk == null) return;
             FirstVisibilityRecord record = records.get(chunk);
             if (record == null || record.status() != FirstVisibility.PENDING) continue;
-            if (!level.hasChunk(chunk.x, chunk.z)) continue;
+            if (!level.hasChunk(chunk.x, chunk.z)) {
+                PARKED_FIRST_VISIBILITY.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
+                continue;
+            }
+            var parked = PARKED_FIRST_VISIBILITY.get(runtime);
+            if (parked != null) parked.remove(chunk);
             FirstVisibilityWork work = firstVisibilityWork(runtime, chunk, cursor.cellsIn(chunk));
             FirstVisibility result = FirstVisibility.PENDING;
             while (remainingCells > 0 && !work.complete()) {
@@ -342,8 +356,12 @@ final class FrontierV3GrayboxExecutor {
                 .computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>());
     }
     private static ChunkPos pollFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime) {
-        ChunkPos priority = poll(PRIORITY_FIRST_VISIBILITY.get(runtime));
-        return priority != null ? priority : poll(PENDING_FIRST_VISIBILITY.get(runtime));
+        boolean priority = !PRIORITY_VISIBILITY_TURN.getOrDefault(runtime, false);
+        PRIORITY_VISIBILITY_TURN.put(runtime, priority);
+        var first = priority ? PRIORITY_FIRST_VISIBILITY.get(runtime) : PENDING_FIRST_VISIBILITY.get(runtime);
+        var second = priority ? PENDING_FIRST_VISIBILITY.get(runtime) : PRIORITY_FIRST_VISIBILITY.get(runtime);
+        ChunkPos next = poll(first);
+        return next != null ? next : poll(second);
     }
     private static void drainHiveFences(FrontierV3ServerRuntime<?, ?> runtime, Cursor cursor) {
         for (int drained = 0; drained < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK; drained++) {

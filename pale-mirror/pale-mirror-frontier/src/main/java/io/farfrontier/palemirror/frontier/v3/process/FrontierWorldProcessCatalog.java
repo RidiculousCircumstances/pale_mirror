@@ -152,7 +152,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.settlement_service_work_scene_lease_handoff", "frontier.settlement_service_work_traversal_advanced",
             "frontier.settlement_service_work_traversal_blocked", "frontier.settlement_service_work_progressed");
     private static final Set<String> STRATEGY = types(
-            "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
+            "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected",
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
     private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, LOGISTICS, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
@@ -298,7 +298,6 @@ public final class FrontierWorldProcessCatalog {
                     return ActorMovementProcess.held(state, action);
                 }
             }),
-            Map.entry("frontier.company.foundation.review", (state, action, autonomous) -> CompanyFoundationProcess.plan(state, action)),
             Map.entry("frontier.market.clear", (state, action, autonomous) -> MarketClearingProcess.plan(state, action)),
             Map.entry("frontier.resource_site.growth", new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomous) {
@@ -471,8 +470,6 @@ public final class FrontierWorldProcessCatalog {
                     cadence.settlementStrategicInitialReviewTick() + index * cadence.settlementInitialStagger()));
             actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1,
                     cadence.populationBirthInitialReviewTick() + index * cadence.settlementInitialStagger()));
-            actions.add(CompanyFoundationProcess.review(bootstrap.settlements().get(index).id(), 1,
-                    cadence.companyFoundationInitialReviewTick() + index * cadence.settlementInitialStagger()));
         }
         for (Settlement settlement : bootstrap.settlements()) {
             actions.add(GoodsParticipantProcess.review(settlement.id(), bootstrap.ruleset().goodsTrade().reviewInterval()));
@@ -712,7 +709,7 @@ public final class FrontierWorldProcessCatalog {
             ResidentNeedProcess.REVIEW, ResidentActivityProcess.REVIEW, ResidentMealProcess.PROGRESS); }
     private static Set<String> economySchedules() { return types(
             "frontier.settlement.production.task.start", "frontier.settlement.production.task.complete",
-            "frontier.company.foundation.review", "frontier.market.clear"); }
+            "frontier.market.clear"); }
     private static Set<String> resourceSchedules() { return types(
             "frontier.resource_site.growth", "frontier.resource_site.prepare", "frontier.resource_site.harvest",
             "frontier.resource_site.harvest.cold_progress", "frontier.objective.resource_harvest"); }
@@ -766,7 +763,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.medical_treatment_transition", "frontier.company_registered", "frontier.employment_contract_opened",
                     "frontier.employment_contract_terminated", "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
                     "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled", "frontier.production_started",
-                    "frontier.production_completed", "frontier.production_blocked", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
+                    "frontier.production_completed", "frontier.production_blocked", "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected",
                     "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.scene_lease_transition",
                     "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized");
             case "replica-custody" -> union(REPLICA_CUSTODY, types("kernel.schedule_created"));
@@ -791,7 +788,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
                     "frontier.structure_damaged", "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed",
                     "frontier.inventory_conflict_observed", "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed",
-                    "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.company_registered",
+                    "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.company_registered",
                     "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened", "frontier.market_quote_published",
                     "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled",
                     "frontier.production_started", "frontier.production_completed", "frontier.production_blocked", "frontier.infection_changed", "frontier.hive_growth_started",
@@ -841,7 +838,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.scene_lease_transition",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
-                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
+                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected",
                     "frontier.strategic_task_planned", "frontier.strategic_task_transition");
             case "resource-sites" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
@@ -865,7 +862,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resource_field_player_break_prepared",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
-                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
+                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected",
                     "frontier.strategic_task_planned", "frontier.strategic_task_transition");
             case "hive" -> types(
                     "frontier.actor_presence_started",
@@ -883,7 +880,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.production_interrupted",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
-                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
+                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected",
                     "frontier.strategic_task_planned", "frontier.strategic_task_transition");
             case "infrastructure" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
@@ -902,7 +899,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled", "frontier.settlement_provision_started",
                     "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",
                     "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.medical_treatment_started", "frontier.medical_treatment_transition", "frontier.settlement_infection_observed",
-                    "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition");
+                    "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition");
             case "settlement-service-work" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.settlement_service_work_started", "frontier.settlement_service_work_scene_lease_prepared",
@@ -919,7 +916,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resident_birth_cancelled", "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed",
                     "frontier.settlement_provision_resolved", "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
                     "frontier.physical_intent_prepared",
-                    "frontier.settlement_infection_observed", "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition",
+                    "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition",
                     "frontier.infection_changed", "frontier.hive_growth_started", "frontier.hive_growth_biomass_consumed", "frontier.hive_growth_completed",
                     "frontier.hive_growth_blocked", "frontier.hive_nutrient_transfer_started", "frontier.hive_nutrient_transfer_advanced",
                     "frontier.hive_nutrient_transfer_completed", "frontier.hive_nutrient_transfer_blocked", "frontier.hive_nutrient_transfer_endpoint_prepared",

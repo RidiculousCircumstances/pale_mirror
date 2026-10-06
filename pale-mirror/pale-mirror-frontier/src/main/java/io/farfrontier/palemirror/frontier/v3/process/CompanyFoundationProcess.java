@@ -1,57 +1,23 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
-import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
-import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
-import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
-import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
-import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import java.util.ArrayList;
-import java.util.List;
-
-/** One deterministic initial bread-works company per settlement, emitted by the canonical scheduler. */
+/** Optional legal company registration; it neither appoints workers nor creates mandatory intermediaries. */
 public final class CompanyFoundationProcess {
     private CompanyFoundationProcess() { }
 
-    public static ScheduledAction review(SubjectId settlementId, int ordinal, long dueAt) {
-        return new ScheduledAction(new ScheduleId("schedule:company-foundation-" + suffix(settlementId) + "-" + ordinal),
-                new SimInstant(dueAt), 0, settlementId, "frontier.company.foundation.review", 1);
-    }
-
-    public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), action.subject());
-        List<ProposedEvent> events = new ArrayList<>();
-        Company company = state.companies().companies().values().stream().filter(candidate -> candidate.settlementId().equals(settlement.id())
-                && candidate.purpose() == CompanyPurpose.WORKS).sorted(java.util.Comparator.comparing(Company::id)).findFirst().orElse(null);
-        if (company == null) {
-            ResidentProfile founder = state.humanPopulation().residents().values().stream()
-                    .filter(resident -> resident.settlementId().equals(settlement.id())
-                            && SettlementWorkPolicy.permissions(state, settlement.id()).permits(ResidentWorkKind.BAKING, resident.id()))
-                    .sorted(java.util.Comparator.comparing(ResidentProfile::id)).findFirst()
-                    .orElseThrow(() -> new IllegalStateException("settlement has no canonical works founder"));
-            company = new Company(companyId(settlement.id()), settlement.id(), founder.id(), CompanyPurpose.WORKS, CompanyStatus.ACTIVE, action.dueAt().ticks());
-            events.add(new ProposedEvent(settlement.id(), new CompanyRegistered(company)));
-            events.add(new ProposedEvent(company.id(), new ScheduleEffect.Created(GoodsParticipantProcess.review(company.id(),
-                    Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().goodsTrade().reviewInterval())))));
-        }
-        if (company.status() == CompanyStatus.ACTIVE) {
-            Company employer = company;
-            state.humanPopulation().residents().values().stream()
-                    .filter(resident -> resident.settlementId().equals(settlement.id())
-                            && SettlementWorkPolicy.permissions(state, settlement.id()).permits(ResidentWorkKind.BAKING, resident.id()))
-                    .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
-                    .filter(resident -> !state.companies().employmentContracts().containsKey(
-                            employmentId(settlement.id(), resident.id())))
-                    .sorted(java.util.Comparator.comparing(ResidentProfile::id))
-                    .forEach(resident -> events.add(new ProposedEvent(settlement.id(), new EmploymentContractOpened(
-                            employment(state, employer, resident.id(), action.dueAt().ticks())))));
-        }
-        events.add(new ProposedEvent(settlement.id(), new ScheduleEffect.Created(review(settlement.id(), nextOrdinal(action),
-                Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().companyFoundationReviewInterval())))));
-        return List.copyOf(events);
+    /** Optional registration producer supplies the actual recurrent trade review, not a mandatory bootstrap company. */
+    public static java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planRegistration(
+            FrontierWorldState state, Company company, long atTick) {
+        if (atTick != company.registeredAtTick()) throw new IllegalArgumentException("company registration has a foreign opening instant");
+        var registered = new CompanyRegistered(company);
+        reduce(state, company.settlementId(), registered);
+        return java.util.List.of(new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(company.settlementId(), registered),
+                new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(company.id(),
+                        new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
+                                GoodsParticipantProcess.review(company.id(), Math.addExact(atTick,
+                                        state.bootstrap().ruleset().goodsTrade().reviewInterval())))));
     }
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, CompanyRegistered registered) {
@@ -64,54 +30,13 @@ public final class CompanyFoundationProcess {
         }
         ResidentProfile founder = state.humanPopulation().resident(company.founderId());
         if (founder == null || !founder.settlementId().equals(company.settlementId())
-                || !SettlementWorkPolicy.permissions(state, company.settlementId()).permits(ResidentWorkKind.BAKING, founder.id())) {
-            throw new IllegalArgumentException("bread-works founder must be a current settlement baker");
+                || state.actorLocations().get(founder.id()).condition().status() != ActorLifeStatus.ALIVE) {
+            throw new IllegalArgumentException("company founder must be a living declared local resident, not a prescribed profession");
         }
         return state.registerCompany(company);
     }
 
-    public static FrontierWorldState reduceEmployment(FrontierWorldState state, SubjectId subject, EmploymentContractOpened opened) {
-        EmploymentContract contract = opened.contract(); Company company = state.companies().companies().get(contract.companyId());
-        ResidentProfile resident = state.humanPopulation().resident(contract.residentId());
-        ActorLocation actor = state.actorLocations().get(contract.residentId());
-        if (company == null || company.status() != CompanyStatus.ACTIVE || !subject.equals(company.settlementId())
-                || resident == null || !resident.settlementId().equals(company.settlementId())
-                || !SettlementWorkPolicy.permissions(state, company.settlementId()).permits(ResidentWorkKind.BAKING, resident.id()) || actor == null
-                || actor.condition().status() != ActorLifeStatus.ALIVE) {
-            throw new IllegalArgumentException("works employment requires a living authorized baker in the employer's settlement");
-        }
-        EmploymentContract expected = employment(state, company, resident.id(), contract.openedAtTick());
-        if (!expected.equals(contract)) throw new IllegalArgumentException("works employment must use canonical exact terms");
-        return state.openEmployment(contract);
-    }
-
-    public static FrontierWorldState reduceEmploymentTermination(FrontierWorldState state, SubjectId subject, EmploymentContractTerminated terminated) {
-        EmploymentContract contract = state.companies().employmentContracts().get(terminated.contractId());
-        Company company = contract == null ? null : state.companies().companies().get(contract.companyId());
-        ActorLocation actor = state.actorLocations().get(terminated.residentId());
-        if (contract == null || company == null || !subject.equals(company.settlementId()) || !contract.residentId().equals(terminated.residentId())
-                || terminated.reason() != EmploymentTerminationReason.DEATH || actor == null || actor.condition().status() != ActorLifeStatus.DEAD) {
-            throw new IllegalArgumentException("employment termination lacks the resident's confirmed death");
-        }
-        return state.withCompanies(state.companies().terminate(contract.id()));
-    }
-
     public static SubjectId companyId(SubjectId settlementId) { return new SubjectId("company:" + suffix(settlementId) + "-works"); }
-
-    public static SubjectId employmentId(SubjectId settlementId, SubjectId residentId) {
-        return new SubjectId("contract:employment-" + suffix(settlementId) + "-works-" + residentId.value().replace(':', '-'));
-    }
-    private static EmploymentContract employment(FrontierWorldState state, Company company, SubjectId residentId, long tick) {
-        return new EmploymentContract(employmentId(company.settlementId(), residentId), company.id(), residentId,
-                state.bootstrap().ruleset().rates().worksJobPrice(), FixedScalar.ONE,
-                EmploymentContractStatus.ACTIVE, tick, 0L, FixedScalar.ZERO);
-    }
-
-    private static int nextOrdinal(ScheduledAction action) {
-        String prefix = "schedule:company-foundation-" + suffix(action.subject()) + "-";
-        if (!action.id().value().startsWith(prefix)) throw new IllegalArgumentException("company foundation schedule identity is invalid");
-        return Math.addExact(Integer.parseInt(action.id().value().substring(prefix.length())), 1);
-    }
 
     private static String suffix(SubjectId settlementId) {
         if (!settlementId.value().startsWith("settlement:")) throw new IllegalArgumentException("company foundation requires settlement subject");

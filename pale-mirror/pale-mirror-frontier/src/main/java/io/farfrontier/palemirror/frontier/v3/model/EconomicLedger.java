@@ -30,6 +30,9 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
             if (!entry.getKey().equals(reservation.id()) || !accounts.containsKey(reservation.payerId()) || !accounts.containsKey(reservation.payeeId())) {
                 throw new IllegalArgumentException("financial reservation must retain its identity and registered counterparties");
             }
+            if (accounts.get(reservation.payerId()).ownerKind() == EconomicOwnerKind.RESIDENT
+                    || accounts.get(reservation.payeeId()).ownerKind() == EconomicOwnerKind.RESIDENT)
+                throw new IllegalArgumentException("resident resource-title registration cannot participate in monetary reservations");
         }
     }
 

@@ -41,17 +41,17 @@ final class SettlementEconomyPayloadCodecs {
     } private static final class EmploymentContractOpenedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.employment_contract_opened"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
-            EmploymentContract contract = ((EmploymentContractOpened) payload).contract(); writeSubject(output, contract.id()); writeSubject(output, contract.companyId());
-            writeSubject(output, contract.residentId()); output.writeLong(contract.invoicePerCompletedJob().raw()); output.writeLong(contract.wagePerCompletedJob().raw());
-            output.writeByte(contract.status().wireTag()); output.writeLong(contract.openedAtTick()); output.writeLong(contract.completedJobs()); output.writeLong(contract.totalWagesPaid().raw());
+            EmploymentContract contract = ((EmploymentContractOpened) payload).contract(); writeSubject(output, contract.id()); WorkEmployerCodec.write(output, contract.employer());
+            writeSubject(output, contract.residentId()); output.writeLong(contract.invoicePerCompletedJob().raw());
+            output.writeByte(contract.status().wireTag()); output.writeLong(contract.openedAtTick()); output.writeLong(contract.completedJobs());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            SubjectId id = readSubject(input).value(); SubjectId company = readSubject(input).value(); SubjectId resident = readSubject(input).value();
-            long invoice = input.readLong(); long wage = input.readLong(); int status = input.readUnsignedByte(); long openedAt = input.readLong();
-            long completed = input.readLong(); long totalWages = input.readLong();
+            SubjectId id = readSubject(input).value(); WorkEmployer employer = WorkEmployerCodec.read(input); SubjectId resident = readSubject(input).value();
+            long invoice = input.readLong(); int status = input.readUnsignedByte(); long openedAt = input.readLong();
+            long completed = input.readLong();
             if (status >= EmploymentContractStatus.values().length) throw new IllegalArgumentException("invalid employment contract status");
-            return new EmploymentContractOpened(new EmploymentContract(id, company, resident, new FixedScalar(invoice), new FixedScalar(wage),
-                    FrontierWireTags.require(EmploymentContractStatus.class, status), openedAt, completed, new FixedScalar(totalWages)));
+            return new EmploymentContractOpened(new EmploymentContract(id, employer, resident, new FixedScalar(invoice),
+                    FrontierWireTags.require(EmploymentContractStatus.class, status), openedAt, completed));
         }); }
     } private static final class EmploymentContractTerminatedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.employment_contract_terminated"; }

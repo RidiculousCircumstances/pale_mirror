@@ -34,17 +34,27 @@ final class FrontierV3ResourceFieldInitialPlan {
         private final Disposition disposition;
         private final Optional<BlockState> observed;
         private final boolean writtenThisCall;
+        private final boolean reconciledProjection;
 
         private Review(Step step, Disposition disposition, Optional<BlockState> observed, boolean writtenThisCall) {
+            this(step, disposition, observed, writtenThisCall, false);
+        }
+        private Review(Step step, Disposition disposition, Optional<BlockState> observed, boolean writtenThisCall,
+                       boolean reconciledProjection) {
             this.step = step; this.disposition = disposition; this.observed = observed;
             this.writtenThisCall = writtenThisCall;
+            this.reconciledProjection = reconciledProjection;
         }
         Step step() { return step; }
         Disposition disposition() { return disposition; }
         Optional<BlockState> observed() { return observed; }
         boolean writtenThisCall() { return writtenThisCall; }
+        boolean reconciledProjection() { return reconciledProjection; }
         boolean matches(ResourceSite site, int nextWrite, Disposition expected) {
             return disposition == expected && step.equals(stepAt(site, nextWrite));
+        }
+        boolean matches(ResourceSite site, FrontierV3ResourceSiteLedger.InitialCursor cursor, Disposition expected) {
+            return disposition == expected && step.equals(stepAt(site, cursor.nextWrite(), cursor.target()));
         }
     }
 
@@ -56,8 +66,15 @@ final class FrontierV3ResourceFieldInitialPlan {
     }
 
     static Step stepAt(ResourceSite site, int index) {
+        return stepAt(site, index, FrontierV3ResourceFieldWitness.claimed(site.id(), 1,
+                ResourceFieldPhysicalSurface.fromCycle(ResourceFieldCycle.seeded(site.id(), site.layout(), 1))));
+    }
+
+    static Step stepAt(ResourceSite site, int index, FrontierV3ResourceFieldWitness snapshot) {
         Objects.requireNonNull(site, "initial field site");
         ResourceFieldLayout layout = site.layout();
+        if (!snapshot.matchesLayout(site.id(), layout))
+            throw new IllegalArgumentException("initial projection target has a foreign layout or owner");
         if (index < 0 || index >= writeCount(site)) throw new IllegalArgumentException("initial field write is outside its declared layout");
         int water = layout.irrigationSlots().size();
         BlockPosition position;
@@ -68,12 +85,21 @@ final class FrontierV3ResourceFieldInitialPlan {
         } else {
             int cellIndex = (index - water) >>> 1;
             ResourceFieldLayout.Cell cell = layout.cells().get(cellIndex);
+            var condition = snapshot.cell(cell.id()).committed();
             if (((index - water) & 1) == 0) {
                 position = cell.soil().support();
-                target = Blocks.FARMLAND.defaultBlockState();
+                target = switch (condition.soil()) {
+                    case FARMLAND -> Blocks.FARMLAND.defaultBlockState();
+                    case DIRT -> Blocks.DIRT.defaultBlockState();
+                    default -> throw new IllegalArgumentException("initial projection cannot invent unknown soil");
+                };
             } else {
                 position = cell.crop();
-                target = Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0);
+                target = switch (condition.crop()) {
+                    case GROWING, MATURE -> Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, condition.growthStage());
+                    case ABSENT -> Blocks.AIR.defaultBlockState();
+                    default -> throw new IllegalArgumentException("initial projection cannot invent an unknown plant");
+                };
             }
         }
         return new Step(site.id(), layout.revision(), layout.fingerprint(), index, position, target);
@@ -81,13 +107,16 @@ final class FrontierV3ResourceFieldInitialPlan {
 
     /** Read only the declared step; an unloaded position is never queried or forced into memory. */
     static Review observe(ServerLevel level, ResourceSite site, int index) {
+        return observe(level, site, stepAt(site, index));
+    }
+
+    static Review observe(ServerLevel level, ResourceSite site, Step step) {
         Objects.requireNonNull(level, "initial field world");
-        Step step = stepAt(site, index);
         BlockPos position = new BlockPos(step.position().x(), step.position().y(), step.position().z());
         if (!level.hasChunkAt(position)) return new Review(step, Disposition.UNLOADED, Optional.empty(), false);
         BlockState current = level.getBlockState(position);
         int water = site.layout().irrigationSlots().size();
-        boolean cropStep = index >= water && ((index - water) & 1) == 1;
+        boolean cropStep = step.index() >= water && ((step.index() - water) & 1) == 1;
         boolean baseline = cropStep ? current.isAir()
                 : (current.is(Blocks.DIRT) || current.is(Blocks.GRASS_BLOCK)
                         || current.is(Blocks.LIGHT_GRAY_CONCRETE))
@@ -97,7 +126,8 @@ final class FrontierV3ResourceFieldInitialPlan {
         return new Review(step, disposition, Optional.of(current), false);
     }
 
-    /** A prepared cursor permits one block write; only a write performed by this call is proof for advancement. */
+    /** Prepared replay-safe projection accepts an observed target or writes its retained predecessor.
+     * Neither path is evidence of crop work, custody transfer or a resource-producing effect. */
     static Review applyPrepared(ServerLevel level, ResourceSite site,
                                 FrontierV3ResourceSiteLedger ledger) {
         if (!(ledger.fieldClaim(site.id()) instanceof FrontierV3ResourceSiteLedger.FieldInitialization claim))
@@ -107,12 +137,19 @@ final class FrontierV3ResourceFieldInitialPlan {
                 || !cursor.matches(site) || !cursor.prepared() || cursor.complete())
             throw new IllegalArgumentException("initial field write has no prepared SavedData cursor");
         int index = cursor.nextWrite();
-        Review before = observe(level, site, index);
+        Step step = stepAt(site, index, cursor.target());
+        Review before = observe(level, site, step);
+        if (before.disposition() == Disposition.APPLIED) {
+            // Only replay-safe current-state block projection is reconciled here.
+            // This does not prove who wrote it, award work or replay an inventory effect.
+            return new Review(step, Disposition.APPLIED, before.observed(), false, true);
+        }
         if (before.disposition() != Disposition.BEFORE) return before;
-        Step step = before.step();
+        if (!before.observed().orElseThrow().equals(cursor.predecessor()))
+            return new Review(step, Disposition.FOREIGN, before.observed(), false);
         BlockPos position = new BlockPos(step.position().x(), step.position().y(), step.position().z());
-        if (!level.setBlock(position, step.target(), 3)) return observe(level, site, index);
-        Review after = observe(level, site, index);
+        if (!level.setBlock(position, step.target(), 3)) return observe(level, site, step);
+        Review after = observe(level, site, step);
         return after.disposition() == Disposition.APPLIED
                 ? new Review(after.step(), after.disposition(), after.observed(), true) : after;
     }

@@ -14,7 +14,6 @@ import java.util.Objects;
 
 /** Immutable installed selector read before a complete saved aggregate is decoded. */
 public record FrontierWorldSnapshotHeader(WorldId worldId, long seed, FrontierRuleset ruleset) {
-    private static final int MAGIC = 0x4656334D;
 
     public FrontierWorldSnapshotHeader {
         Objects.requireNonNull(worldId, "snapshot world");
@@ -23,10 +22,7 @@ public record FrontierWorldSnapshotHeader(WorldId worldId, long seed, FrontierRu
 
     public static FrontierWorldSnapshotHeader read(byte[] encoded) {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
-            if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
-            int version = input.readUnsignedByte();
-            if (version != FrontierWorldStateCodec.VERSION) throw new IllegalArgumentException("Frontier v3 header schema " + version + " is incompatible with required schema " + FrontierWorldStateCodec.VERSION +
-                    "; fresh current-schema world required");
+            FrontierStateSchema.read(input);
             // The state codec prefixes every current-schema aggregate with the closed
             // Process/Scene descriptor inventory.  Header selection happens before complete
             // hydration, but it must consume and validate that exact field too: otherwise the

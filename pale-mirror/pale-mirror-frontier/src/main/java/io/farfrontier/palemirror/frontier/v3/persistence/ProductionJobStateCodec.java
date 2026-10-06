@@ -59,11 +59,12 @@ final class ProductionJobStateCodec {
     static void writeRights(DataOutputStream out, ProductionRights rights) throws IOException {
         out.writeByte(rights.mode().wireTag()); out.writeUTF(rights.resourceOwner().id().value());
         out.writeByte(FrontierWireTags.tag(rights.resourceOwner().kind())); out.writeUTF(rights.destinationContainerId().value());
+        WorkEmployerCodec.write(out, rights.employer());
     }
     static ProductionRights readRights(DataInputStream in) throws IOException {
         return new ProductionRights(ProductionRights.Mode.fromWireTag(in.readUnsignedByte()),
                 new GoodsTradeParty(new SubjectId(in.readUTF()), FrontierWireTags.require(EconomicOwnerKind.class, in.readUnsignedByte())),
-                new SubjectId(in.readUTF()));
+                new SubjectId(in.readUTF()), WorkEmployerCodec.read(in));
     }
 
     static ProductionInputHold readHold(DataInputStream input, SubjectId itemId) throws IOException {

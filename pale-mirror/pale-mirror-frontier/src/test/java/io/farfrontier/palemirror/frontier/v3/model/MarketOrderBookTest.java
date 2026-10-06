@@ -93,12 +93,6 @@ class MarketOrderBookTest {
 
     private static FrontierWorldState foundedState() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:market-book"), 88L));
-        for (Settlement settlement : state.bootstrap().settlements()) {
-            for (var event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlement.id(), 1, 4_000L))) {
-                if (event.payload() instanceof CompanyRegistered registered) state = CompanyFoundationProcess.reduce(state, settlement.id(), registered);
-                if (event.payload() instanceof EmploymentContractOpened opened) state = CompanyFoundationProcess.reduceEmployment(state, settlement.id(), opened);
-            }
-        }
         return state;
     }
 }

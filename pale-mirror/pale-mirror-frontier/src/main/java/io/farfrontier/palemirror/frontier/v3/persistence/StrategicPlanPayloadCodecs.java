@@ -16,6 +16,17 @@ import java.util.Optional;
 /** WAL payload codecs for durable strategic decision and task admission. */
 final class StrategicPlanPayloadCodecs {
     private StrategicPlanPayloadCodecs() { }
+    static PayloadCodec workPolicyChanged() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.settlement_work_policy_changed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            var event = (SettlementWorkPolicyChanged) payload; subject(output, event.settlementId());
+            output.writeLong(event.authorityEpoch()); output.writeLong(event.assessedAtTick());
+            ResidentWorkPermissionsCodec.write(output, event.expected()); ResidentWorkPermissionsCodec.write(output, event.next());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                new SettlementWorkPolicyChanged(subject(input), input.readLong(), input.readLong(),
+                        ResidentWorkPermissionsCodec.read(input), ResidentWorkPermissionsCodec.read(input))); }
+    }; }
     static PayloadCodec selected() { return new PayloadCodec() {
         @Override public String type() { return "frontier.strategic_objective_selected"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> writeObjective(output, ((StrategicObjectiveSelected) payload).objective())); }

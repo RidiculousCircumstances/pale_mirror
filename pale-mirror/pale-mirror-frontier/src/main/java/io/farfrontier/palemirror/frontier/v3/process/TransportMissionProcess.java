@@ -31,6 +31,8 @@ public final class TransportMissionProcess {
         var declarations = new ArrayList<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId>();
         var declaredShipments = value.shipments().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Shipment::id, java.util.function.Function.identity()));
         TransportGroupMissionPort.validateDeclaration(state, mission, group, declaredShipments);
+        SettlementLabourAllocation.requireMissionCommitment(state, mission.sender().settlementId(),
+                ResidentWorkKind.LOGISTICS, group.members().stream().map(UnitGroup.Member::actorId).toList());
         TransportGroupMissionPort.validateRendezvous(state, mission.sender(), mission.homeRendezvous(), group.members().size());
         TransportGroupMissionPort.validateRendezvous(state, mission.receiver(), mission.destinationRendezvous(), group.members().size());
         for (var shipment : value.shipments()) {

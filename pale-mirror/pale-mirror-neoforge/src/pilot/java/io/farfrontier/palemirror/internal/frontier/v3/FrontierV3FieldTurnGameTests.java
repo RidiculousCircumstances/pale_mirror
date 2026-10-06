@@ -16,7 +16,7 @@ import java.util.*;
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3FieldTurnGameTests {
-    @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 40)
+    @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 300)
     public static void pausedFieldDoesNotOwnOtherFieldsTurnsAndResumesItsExactPrefix(GameTestHelper helper) {
         var level = helper.getLevel();
         var config = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:field-turns"), 42L);
@@ -39,19 +39,15 @@ public final class FrontierV3FieldTurnGameTests {
             }
             FrontierV3ResourceFieldInitialWriter.reserve(level, a, new PhysicalIntentId("intent:field-turn-a"));
             FrontierV3ResourceFieldInitialWriter.reserve(level, b, new PhysicalIntentId("intent:field-turn-b"));
-            helper.assertTrue(FrontierV3ResourceFieldInitialWriter.writeOne(level, a)
-                    == FrontierV3ResourceFieldInitialWriter.Result.ADVANCED, "A starts one durable cell write");
+            FrontierV3ResourceFieldInitialWriter.writeBatch(level, a);
             var paused = (FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(a.id());
             int prefix = paused.cursor().nextWrite();
             var sites = List.of(new ResourceSiteLifecycle(a.id(), ResourceSitePhase.GROWING, 1L, 0, Optional.empty()),
                     new ResourceSiteLifecycle(b.id(), ResourceSitePhase.GROWING, 1L, 0, Optional.empty()));
-            for (int turn = 0; turn < 256; turn++) {
+            finishProjection(helper, b, () -> {
                 var selected = FrontierV3ResourceSiteExecutor.projectionCandidates(sites, Set.of(),
                         site -> site.siteId().equals(b.id()));
                 helper.assertValueEqual(selected.size(), 1, "paused A cannot monopolize B's demanded turn");
-                if (FrontierV3ResourceFieldInitialWriter.writeOne(level, b)
-                        == FrontierV3ResourceFieldInitialWriter.Result.CURSOR_COMPLETE) break;
-            }
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, b, 0), "B completes its physical cells");
             helper.assertValueEqual(((FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(a.id()))
                     .cursor().nextWrite(), prefix, "B cannot consume A's cursor");
@@ -60,16 +56,26 @@ public final class FrontierV3FieldTurnGameTests {
                     level.registryAccess()), level.registryAccess());
             helper.assertValueEqual(((FrontierV3ResourceSiteLedger.FieldInitialization) reloaded.fieldClaim(a.id()))
                     .cursor().nextWrite(), prefix, "SavedData retains A's exact cursor");
-            FrontierV3ResourceFieldInitialWriter.writeOne(level, a);
-            helper.assertValueEqual(((FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(a.id()))
-                    .cursor().nextWrite(), prefix + 1, "A resumes instead of replaying its first write");
-            for (int turn = 0; turn < 256; turn++) {
-                if (FrontierV3ResourceFieldInitialWriter.writeOne(level, a)
-                        == FrontierV3ResourceFieldInitialWriter.Result.CURSOR_COMPLETE) break;
-            }
+            finishProjection(helper, a, () -> {
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, a, 0), "A completes after return");
             helper.succeed();
+            });
+            });
         } finally { FrontierV3ResourceSiteExecutor.forget(runtime); }
+    }
+    private static void finishProjection(GameTestHelper helper, ResourceSite site, Runnable complete) {
+        var ledger = FrontierV3ResourceSiteLedger.get(helper.getLevel());
+        var before = ((FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id())).cursor();
+        if (before.complete()) { complete.run(); return; }
+        var result = FrontierV3ResourceFieldInitialWriter.writeBatch(helper.getLevel(), site);
+        if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
+                || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS)
+            helper.fail("declared field projection lost its exact predecessor: " + result);
+        var after = ((FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id())).cursor();
+        helper.assertTrue(after.nextWrite() >= before.nextWrite()
+                && after.nextWrite() - before.nextWrite() <= FrontierV3ResourceSiteExecutor.projectionWriteBudget(),
+                "one physical turn retains monotonic bounded projection progress");
+        helper.runAfterDelay(1, () -> finishProjection(helper, site, complete));
     }
     private static ResourceSite field(BlockPos origin, String id) {
         var crops = new ArrayList<BlockPosition>();

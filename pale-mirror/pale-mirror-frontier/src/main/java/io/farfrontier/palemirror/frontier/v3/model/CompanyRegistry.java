@@ -25,12 +25,16 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
         for (Map.Entry<SubjectId, Company> entry : companies.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("company registry key must match company identity");
         }
-        Set<SubjectId> currentlyEmployed = new HashSet<>();
+        Set<java.util.List<SubjectId>> currentlyEmployed = new HashSet<>();
         for (Map.Entry<SubjectId, EmploymentContract> entry : employmentContracts.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("employment contract key must match contract identity");
-            if (!companies.containsKey(entry.getValue().companyId())) throw new IllegalArgumentException("employment contract must name a registered company");
-            if (entry.getValue().status() != EmploymentContractStatus.TERMINATED && !currentlyEmployed.add(entry.getValue().residentId())) {
-                throw new IllegalArgumentException("resident cannot retain multiple current employment contracts");
+            WorkEmployer employer = entry.getValue().employer();
+            if (employer.kind() == EconomicOwnerKind.COMPANY
+                    && (!companies.containsKey(employer.id())
+                        || !companies.get(employer.id()).settlementId().equals(employer.settlementId())))
+                throw new IllegalArgumentException("company employment must name its exact registered legal home");
+            if (!currentlyEmployed.add(java.util.List.of(employer.id(), entry.getValue().residentId()))) {
+                throw new IllegalArgumentException("one employer/resident pair must retain one unambiguous agreement including committed-work history");
             }
         }
     }
@@ -58,13 +62,16 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
 
     public CompanyRegistry openEmployment(EmploymentContract contract) {
         Objects.requireNonNull(contract, "employment contract");
-        Company company = companies.get(contract.companyId());
-        if (company == null || company.status() != CompanyStatus.ACTIVE) throw new IllegalArgumentException("employment needs an active registered company");
-        if (!company.settlementId().value().startsWith("settlement:")) throw new IllegalArgumentException("employment company has an invalid settlement");
+        if (contract.employer().kind() == EconomicOwnerKind.COMPANY) {
+            Company company = companies.get(contract.employer().id());
+            if (company == null || company.status() != CompanyStatus.ACTIVE
+                    || !company.settlementId().equals(contract.employer().settlementId()))
+                throw new IllegalArgumentException("company employment needs an active exact company home");
+        }
         if (employmentContracts.containsKey(contract.id())) throw new IllegalArgumentException("employment contract identity already exists: " + contract.id().value());
-        if (employmentContracts.values().stream().anyMatch(existing -> existing.residentId().equals(contract.residentId())
-                && existing.status() != EmploymentContractStatus.TERMINATED)) {
-            throw new IllegalArgumentException("resident already has a current employment contract");
+        if (employmentContracts.values().stream().anyMatch(existing -> existing.employer().equals(contract.employer())
+                && existing.residentId().equals(contract.residentId()))) {
+            throw new IllegalArgumentException("employer/resident pair already has a retained work agreement");
         }
         Map<SubjectId, EmploymentContract> next = new LinkedHashMap<>(employmentContracts); next.put(contract.id(), contract);
         return new CompanyRegistry(companies, next, market, goodsTrade);
@@ -90,9 +97,11 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
         var active = employmentContracts.values().stream()
                 .filter(contract -> contract.residentId().equals(residentId)
                         && contract.status() == EmploymentContractStatus.ACTIVE)
-                .reduce((left, right) -> { throw new IllegalArgumentException("resident has ambiguous active employment"); });
+                .sorted(Comparator.comparing(EmploymentContract::id)).toList();
         // Already committed work may still invoice this retained terminated contract.
-        return active.map(contract -> terminate(contract.id())).orElse(this);
+        CompanyRegistry result = this;
+        for (var contract : active) result = result.terminate(contract.id());
+        return result;
     }
 
     public CompanyRegistry withMarket(MarketOrderBook nextMarket) {
@@ -109,8 +118,8 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
                 .sorted(Comparator.comparing(Company::id)).findFirst();
     }
 
-    public Optional<EmploymentContract> activeEmployment(SubjectId companyId, SubjectId residentId) {
-        return employmentContracts.values().stream().filter(contract -> contract.companyId().equals(companyId)
+    public Optional<EmploymentContract> activeEmployment(WorkEmployer employer, SubjectId residentId) {
+        return employmentContracts.values().stream().filter(contract -> contract.employer().equals(employer)
                 && contract.residentId().equals(residentId) && contract.status() == EmploymentContractStatus.ACTIVE)
                 .sorted(Comparator.comparing(EmploymentContract::id)).findFirst();
     }

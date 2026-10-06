@@ -145,7 +145,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         Map<SubjectId, Household> households = new LinkedHashMap<>();
         Map<SubjectId, ResidentProfile> residents = new LinkedHashMap<>();
         for (Settlement settlement : bootstrap.settlements()) {
-            ResidentWorkPermissions initialWork = SettlementWorkPolicy.initial(settlement);
+            ResidentWorkPermissions initialWork = SettlementWorkPolicy.initial(settlement, bootstrap.ruleset().labour());
             int householdOrdinal = 0;
             for (int ordinal = 0; ordinal < settlement.residents().size(); ordinal++) {
                 if (ordinal % 4 == 0) householdOrdinal++;

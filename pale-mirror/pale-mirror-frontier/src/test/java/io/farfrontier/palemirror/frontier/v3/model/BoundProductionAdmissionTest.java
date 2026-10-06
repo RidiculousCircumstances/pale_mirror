@@ -33,7 +33,7 @@ class BoundProductionAdmissionTest {
         state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(owner, ResidentWorkPermissions.none()));
         var restored = codec.decode(codec.encode(state));
         assertEquals(started.job(), restored.productionJobs().get(started.job().id()));
-        assertTrue(ResidentWorkSelection.eligible(restored, owner, ResidentWorkKind.BAKING,
+        assertTrue(ResidentWorkComposition.SELECTION.eligible(restored, owner, ResidentWorkKind.BAKING,
                 HumanCapability.INDUSTRY, 201L).isEmpty());
         assertFalse(HumanAssignmentProjection.compile(restored).idle(selected));
     }
@@ -53,6 +53,14 @@ class BoundProductionAdmissionTest {
     void unavailablePreferredBakerDoesNotPreventAnotherBakerTakingTheWork() {
         var state = twoBakerFixture();
         var settlement = new SubjectId("settlement:1");
+        var companyWorker = SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.BAKING)
+                .stream().sorted().findFirst().orElseThrow();
+        var company = new Company(CompanyFoundationProcess.companyId(settlement), settlement, companyWorker,
+                CompanyPurpose.WORKS, CompanyStatus.ACTIVE, 0);
+        state = CompanyFoundationProcess.reduce(state, settlement, new CompanyRegistered(company));
+        for (var worker : SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.BAKING))
+            state = SettlementEmploymentProcess.reduceEmployment(state, settlement, new EmploymentContractOpened(
+                    SettlementEmploymentProcess.agreement(state, WorkEmployer.company(company), worker, 0)));
         var candidates = SettlementWorkforce.candidates(state, settlement, ResidentProfession.BAKER);
         assertEquals(2, candidates.size());
         var preferred = candidates.getFirst();
@@ -75,7 +83,7 @@ class BoundProductionAdmissionTest {
         var job = after.productionJobs().values().iterator().next();
         assertEquals(candidates.get(1).id(), job.workerId());
         assertTrue(after.companies().market().acceptedForJob(job.id()).isPresent());
-        assertEquals(job.workerId(), CompanyWorkPaymentProcess.contractFor(after, job).orElseThrow().residentId());
+        assertEquals(job.workerId(), ProductionCommercialProcess.contractFor(after, job).orElseThrow().residentId());
         assertTrue(HumanAssignmentProjection.compile(after).idle(preferred.id()));
         assertFalse(HumanAssignmentProjection.compile(after).idle(job.workerId()));
         assertEquals(AmbientLeaseStatus.UNKNOWN_AFTER_RESTART, after.ambientLeases().get(preferred.id()).status());
@@ -114,10 +122,6 @@ class BoundProductionAdmissionTest {
         var state = coldFixture();
         var settlement = new SubjectId("settlement:1");
         assertEquals(2, SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.BAKING).size());
-        for (var event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlement, 2, 4_001L))) {
-            if (event.payload() instanceof EmploymentContractOpened opened)
-                state = CompanyFoundationProcess.reduceEmployment(state, settlement, opened);
-        }
         return state;
     }
 
@@ -275,10 +279,6 @@ class BoundProductionAdmissionTest {
     static FrontierWorldState coldFixture() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:bound-production-admission"), 91L));
         var settlement = new SubjectId("settlement:1");
-        for (var event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
-            if (event.payload() instanceof CompanyRegistered registered) state = CompanyFoundationProcess.reduce(state, settlement, registered);
-            if (event.payload() instanceof EmploymentContractOpened opened) state = CompanyFoundationProcess.reduceEmployment(state, settlement, opened);
-        }
         return ProductionProcessTest.productionTask(state, StrategicTaskStatus.PENDING);
     }
 }

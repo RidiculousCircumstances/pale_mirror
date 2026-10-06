@@ -82,7 +82,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             RoutePatrolPayloadCodecs.prepared(), RoutePatrolPayloadCodecs.handoff())); }
     static PayloadCodecs settlementServiceWorkCodecs() { return SettlementServiceWorkPayloadCodecs.codecs(); }
     static PayloadCodecs strategyCodecs() { return new PayloadCodecs(List.of(StrategicPlanPayloadCodecs.selected(),
-            StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition(), StrategicPlanPayloadCodecs.infectionObserved())); }
+            StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition(), StrategicPlanPayloadCodecs.infectionObserved(),
+            StrategicPlanPayloadCodecs.workPolicyChanged())); }
     private static final class KernelQuarantineCodec implements PayloadCodec {
         @Override public String type() { return "frontier.kernel_quarantine_observed"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {

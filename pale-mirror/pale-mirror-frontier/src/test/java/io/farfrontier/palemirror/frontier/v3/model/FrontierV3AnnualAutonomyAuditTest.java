@@ -93,8 +93,8 @@ class FrontierV3AnnualAutonomyAuditTest {
         assertEquals(NOMINAL_DAY_TICKS, engine.checkpoint().instant().ticks());
         assertTrue(state.companies().market().workOrders().values().stream().allMatch(order -> {
             var job = state.productionJobs().get(order.jobId());
-            return job == null || CompanyWorkPaymentProcess.contractFor(state, job).map(contract ->
-                    contract.companyId().equals(order.sellerId()) && contract.invoicePerCompletedJob().equals(order.acceptedTotalPrice())).orElse(false);
+            return job == null || ProductionCommercialProcess.contractFor(state, job).map(contract ->
+                    contract.employer().id().equals(order.sellerId()) && contract.invoicePerCompletedJob().equals(order.acceptedTotalPrice())).orElse(false);
         }), "every active order must remain bound to the exact worker contract that priced it");
     }
 

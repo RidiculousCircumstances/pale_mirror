@@ -12,7 +12,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     // Version 180 requires cargo storage footprints from physical birth. Version 179
     // worlds may already contain carts with unknown historical storage columns;
     // accepting their state cannot manufacture that missing provider evidence.
@@ -51,7 +51,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 247 retains migration waiting origins rather than throwing when a departure has no known path.
     // Version 248 retains exact physical work acceptance until durable adapter retirement.
     // Version 249 adds independently authorized goods orders, commercial obligations and partial acceptance.
-    static final int VERSION = 255; private static final int MAX_ENTRIES = 65_535;
+    static final int VERSION = FrontierStateSchema.VERSION; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -65,7 +65,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             verifyPinnedBootstrap(state.bootstrap());
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
-                output.writeInt(MAGIC); output.writeByte(VERSION); writeString(output, FrontierDurationProcessDriverRegistry.inventoryFingerprint());
+                FrontierStateSchema.write(output); writeString(output, FrontierDurationProcessDriverRegistry.inventoryFingerprint());
                 writeString(output, FrontierWorldProcessCatalog.physicalLifecycleFingerprint());
                 writeString(output, state.bootstrap().worldId().value()); output.writeLong(state.bootstrap().seed()); writeRuleset(output, state.bootstrap().ruleset());
                 TerrainSurfacePlanCodec.write(output, state.bootstrap().terrain());
@@ -108,9 +108,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     }
     @Override public FrontierWorldState decode(byte[] encoded) {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
-            if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
-            int version = input.readUnsignedByte();
-            if (version != VERSION) throw new IllegalArgumentException("Frontier v3 state schema " + version + " is incompatible with required schema " + VERSION + "; fresh current-schema world required");
+            FrontierStateSchema.read(input);
             if (!FrontierDurationProcessDriverRegistry.inventoryFingerprint().equals(readString(input))) {
                 throw new IllegalArgumentException("Frontier v3 state has an incompatible process/scene descriptor inventory");
             }
@@ -445,9 +443,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         writeCount(output, registry.employmentContracts().size());
         for (EmploymentContract contract : registry.employmentContracts().values().stream().sorted(Comparator.comparing(EmploymentContract::id)).toList()) {
-            writeString(output, contract.id().value()); writeString(output, contract.companyId().value()); writeString(output, contract.residentId().value());
-            output.writeLong(contract.invoicePerCompletedJob().raw()); output.writeLong(contract.wagePerCompletedJob().raw()); output.writeByte(contract.status().wireTag());
-            output.writeLong(contract.openedAtTick()); output.writeLong(contract.completedJobs()); output.writeLong(contract.totalWagesPaid().raw());
+            writeString(output, contract.id().value()); WorkEmployerCodec.write(output, contract.employer()); writeString(output, contract.residentId().value());
+            output.writeLong(contract.invoicePerCompletedJob().raw()); output.writeByte(contract.status().wireTag());
+            output.writeLong(contract.openedAtTick()); output.writeLong(contract.completedJobs());
         }
         writeMarketOrderBook(output, registry.market());
         GoodsTradeStateCodec.write(output, registry.goodsTrade());
@@ -464,11 +462,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         Map<SubjectId, EmploymentContract> contracts = new LinkedHashMap<>();
         if (hasEmployment) for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); SubjectId company = new SubjectId(readString(input)); SubjectId resident = new SubjectId(readString(input));
-            long invoice = input.readLong(); long wage = input.readLong(); int status = input.readUnsignedByte(); long openedAt = input.readLong();
-            long completed = input.readLong(); long totalWages = input.readLong();
-            if (status >= EmploymentContractStatus.values().length || contracts.put(id, new EmploymentContract(id, company, resident,
-                    new FixedScalar(invoice), new FixedScalar(wage), FrontierWireTags.require(EmploymentContractStatus.class, status), openedAt, completed, new FixedScalar(totalWages))) != null) {
+            SubjectId id = new SubjectId(readString(input)); WorkEmployer employer = WorkEmployerCodec.read(input); SubjectId resident = new SubjectId(readString(input));
+            long invoice = input.readLong(); int status = input.readUnsignedByte(); long openedAt = input.readLong();
+            long completed = input.readLong();
+            if (status >= EmploymentContractStatus.values().length || contracts.put(id, new EmploymentContract(id, employer, resident,
+                    new FixedScalar(invoice), FrontierWireTags.require(EmploymentContractStatus.class, status), openedAt, completed)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate employment contract registry entry");
             }
         }

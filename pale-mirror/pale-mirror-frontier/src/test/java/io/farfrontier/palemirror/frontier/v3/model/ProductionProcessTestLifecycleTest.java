@@ -42,6 +42,29 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProductionProcessLifecycleTest extends ProductionProcessTest {
+    @Test
+    void delayedSchedulerCommitRetainsTheQuoteTickThatWasCurrentAtItsExactDueAction() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:market-delayed-quote"), 91L));
+        SubjectId settlement = new SubjectId("settlement:1");
+        for (ProposedEvent event : OptionalCompanyEmploymentFixture.foundation(initial, settlement, 4_000L)) {
+            if (event.payload() instanceof CompanyRegistered registered) initial = CompanyFoundationProcess.reduce(initial, settlement, registered);
+            if (event.payload() instanceof EmploymentContractOpened opened) initial = SettlementEmploymentProcess.reduceEmployment(initial, settlement, opened);
+        }
+        FrontierWorldState state = productionTask(initial, StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        MarketDemand demand = MarketClearingProcess.foodDemand(state, task, 100L);
+        state = state.withCompanies(state.companies().withMarket(MarketOrderBook.empty().open(demand)));
+        SubjectId company = CompanyFoundationProcess.companyId(settlement);
+        CompanyQuote quote = new CompanyQuote(new SubjectId("quote:delayed-due"), demand.id(), company, demand.itemCount(),
+                demand.maximumTotalPrice(), 100L, demand.expiresAtTick());
+        FrontierWorldState open = state;
+
+        FrontierWorldState published = MarketClearingProcess.reduceQuote(state, company, demand.expiresAtTick() + 1L, new MarketQuotePublished(quote));
+
+        assertEquals(quote, published.companies().market().quotes().get(quote.id()));
+        assertThrows(IllegalArgumentException.class, () -> MarketClearingProcess.reduceQuote(open, company, 99L, new MarketQuotePublished(quote)));
+    }
+
     private static Map<SubjectId, ActorLocation> withBody(FrontierWorldState state, SubjectId actor, BodyPosition body) {
         var actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(actor, actors.get(actor).withBody(body));
@@ -231,31 +254,14 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertEquals(64, completed.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:bread"));
         assertEquals(StrategicTaskStatus.COMPLETED, completed.strategicPlans().tasks().values().stream()
                 .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow().status());
-        MarketDemand demand = completed.companies().market().demands().values().stream().filter(value -> value.buyerId().equals(new SubjectId("settlement:1")))
-                .findFirst().orElseThrow();
-        assertEquals(MarketDemandStatus.FULFILLED, demand.status());
-        MarketWorkOrder terminalOrder = completed.companies().market().workOrders().values().stream()
-                .filter(order -> order.demandId().equals(demand.id())).findFirst().orElseThrow();
-        assertEquals(MarketWorkOrderStatus.FULFILLED, terminalOrder.status());
-        TerminalProductionReceipt receipt = terminalOrder.terminalReceipt().orElseThrow();
-        FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(completed));
-        TerminalProductionReceipt recoveredReceipt = recovered.companies().market().workOrders().get(terminalOrder.id()).terminalReceipt().orElseThrow();
-        assertEquals(receipt.topologyId(), recoveredReceipt.topologyId());
-        assertEquals(receipt.topologyRevision(), recoveredReceipt.topologyRevision());
-        assertEquals(receipt.traversalCursor(), recoveredReceipt.traversalCursor());
-        assertEquals(receipt.terminalBody(), recoveredReceipt.terminalBody());
-        assertThrows(IllegalArgumentException.class, () -> new TerminalProductionReceipt(receipt.jobId(), receipt.workerId(),
-                receipt.inputId(), receipt.outputId(), receipt.inputRepresentation(), receipt.outputRepresentation(), receipt.outputKind(),
-                receipt.outputCount(), receipt.topologyId(), -1L, receipt.traversalCursor(), receipt.terminalBody()));
-        FrontierDomainRelationships.View view = FrontierDomainRelationships.view(recovered, 99L);
-        FrontierDomainRelationships.Endpoint terminalJob = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.PRODUCTION_JOB, receipt.jobId());
-        assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.JOB_WORKER && edge.target().stableKey().contains(receipt.workerId().value())));
-        assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.JOB_OUTPUT && edge.target().stableKey().contains(receipt.outputId().value())));
-        assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.JOB_OUTPUT
-                && edge.target().kind() == FrontierDomainRelationships.EntityKind.RESOURCE_LOT), "fungible terminal output retains its lot type");
-        assertTrue(recovered.humanPopulation().provisions().isEmpty(),
-                "terminal bread enters the resource ledger, not a settlement ration cycle");
-        assertTrue(SettlementFoodPolicy.breadStock(recovered, demand.buyerId()) >= 64);
+        assertTrue(completed.companies().companies().isEmpty());
+        assertTrue(completed.companies().market().workOrders().isEmpty(), "direct production must not fabricate a commercial order");
+        var home = new SubjectId("settlement:1");
+        assertTrue(completed.companies().employmentContracts().isEmpty());
+        assertTrue(completed.inventory().economics().accounts().values().stream()
+                .noneMatch(account -> account.ownerKind() == EconomicOwnerKind.RESIDENT));
+        assertEquals(completed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(completed)));
+        assertTrue(completed.humanPopulation().provisions().isEmpty());
         assertTrue(completed.inventory().economics().reservations().isEmpty());
     }
 
@@ -275,7 +281,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
     @Test
     void terminalFungibleBreadAndIndependentFieldAdmissionKeepTheirExactOwners() {
         // This is a terminal relationship test, not a 16x16 field throughput/calendar test.
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(
+        var engine = FrontierEngines.create(OptionalCompanyEmploymentFixture.coldServiceConfiguration(
                 FrontierResourceSiteHarvestFixture.smallFieldBootstrap(new WorldId("frontier:production-harvest-relation"), 91L)));
         for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         finishRetainedColdWork(engine);

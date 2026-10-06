@@ -115,6 +115,7 @@ final class FrontierStrategyProcessModule implements FrontierWorldProcessModule 
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {
+            case SettlementWorkPolicyChanged changed -> SettlementStaffingComposition.reduce(state, event.subject(), changed);
             case SettlementInfectionObserved observed -> SettlementPerceptionProcess.reduce(state, event.subject(), observed);
             case StrategicObjectiveSelected selected -> StrategicObjectiveProcess.reduceObjective(state, event.subject(), selected);
             case StrategicTaskPlanned planned -> StrategicObjectiveProcess.reduceTask(state, event.subject(), planned);

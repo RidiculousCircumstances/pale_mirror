@@ -24,7 +24,7 @@ import java.util.Map;
 /** One SavedData owner for twelve sites; legacy and cell claims are disjoint during cutover. */
 final class FrontierV3ResourceSiteLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_resource_sites";
-    private static final int FORMAT = 14;
+    private static final int FORMAT = 15;
     static final int MAX_SITES = 12;
     private final Map<SubjectId, Claim> claims;
     /** Mutually exclusive replacement for a site's legacy stage/prefix claim. */
@@ -275,7 +275,10 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
     }
     /** Reserve the one cell owner before any first-field block write. */
     void reserveFieldInitialization(ResourceSite site, PhysicalIntentId intentId) {
-        FieldClaim claim = new FieldInitialization(site.id(), intentId, Status.PENDING, InitialCursor.atStart(site));
+        reserveFieldInitialization(site, intentId, ResourceFieldCycle.seeded(site.id(), site.layout(), 1));
+    }
+    void reserveFieldInitialization(ResourceSite site, PhysicalIntentId intentId, ResourceFieldCycle target) {
+        FieldClaim claim = new FieldInitialization(site.id(), intentId, Status.PENDING, InitialCursor.atStart(site, target));
         SubjectId siteId = claim.siteId();
         if (claims.containsKey(siteId)) throw new IllegalStateException("field site still has a legacy stage/prefix owner");
         FieldClaim prior = fieldClaims.putIfAbsent(siteId, claim);
@@ -292,8 +295,8 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         FieldInitialization prior = fieldClaim(site.id()) instanceof FieldInitialization value ? value : null;
         if (prior == null || prior.status() != Status.PENDING || !prior.cursor().matches(site)
                 || prior.cursor().complete() || !prior.cursor().prepared()
-                || !review.writtenThisCall()
-                || !review.matches(site, prior.cursor().nextWrite(), FrontierV3ResourceFieldInitialPlan.Disposition.APPLIED))
+                || !review.writtenThisCall() && !review.reconciledProjection()
+                || !review.matches(site, prior.cursor(), FrontierV3ResourceFieldInitialPlan.Disposition.APPLIED))
             throw new IllegalStateException("initial field write lacks its exact observed next block");
         fieldClaims.put(prior.siteId(), new FieldInitialization(prior.siteId(), prior.intentId(), Status.PENDING,
                 prior.cursor().advanced())); setDirty();
@@ -302,17 +305,38 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         FieldInitialization prior = fieldClaim(site.id()) instanceof FieldInitialization value ? value : null;
         if (prior == null || prior.status() != Status.PENDING || !prior.cursor().matches(site)
                 || prior.cursor().complete() || prior.cursor().prepared()
-                || !review.matches(site, prior.cursor().nextWrite(), FrontierV3ResourceFieldInitialPlan.Disposition.BEFORE))
+                || !review.matches(site, prior.cursor(), FrontierV3ResourceFieldInitialPlan.Disposition.BEFORE))
             throw new IllegalStateException("initial field write lacks its exact observed neutral predecessor");
         fieldClaims.put(prior.siteId(), new FieldInitialization(prior.siteId(), prior.intentId(), Status.PENDING,
-                prior.cursor().preparedStep())); setDirty();
+                prior.cursor().preparedStep(review.observed().orElseThrow()))); setDirty();
+    }
+    void prepareFieldInitializationBatch(ResourceSite site,
+            java.util.List<FrontierV3ResourceFieldInitialPlan.Review> reviews) {
+        FieldInitialization prior = fieldClaim(site.id()) instanceof FieldInitialization value ? value : null;
+        if (prior == null || prior.status() != Status.PENDING || !prior.cursor().matches(site)
+                || prior.cursor().prepared() || reviews.isEmpty()
+                || reviews.size() > FrontierV3ResourceSiteExecutor.projectionWriteBudget()
+                || prior.cursor().nextWrite() + reviews.size() > prior.cursor().writeCount())
+            throw new IllegalStateException("initial field batch lacks its exact unprepared owner");
+        for (int offset = 0; offset < reviews.size(); offset++) {
+            var review = reviews.get(offset);
+            var step = FrontierV3ResourceFieldInitialPlan.stepAt(site, prior.cursor().nextWrite() + offset, prior.cursor().target());
+            boolean emptyTarget = (step.target().isAir() || step.target().is(net.minecraft.world.level.block.Blocks.DIRT))
+                    && review.disposition() == FrontierV3ResourceFieldInitialPlan.Disposition.APPLIED;
+            if (!review.step().equals(step) || review.observed().isEmpty()
+                    || !emptyTarget && review.disposition() != FrontierV3ResourceFieldInitialPlan.Disposition.BEFORE)
+                throw new IllegalStateException("initial field batch has an unloaded, foreign or unclaimed predecessor");
+        }
+        fieldClaims.put(site.id(), new FieldInitialization(site.id(), prior.intentId(), Status.PENDING,
+                prior.cursor().preparedBatch(reviews.stream().map(review -> review.observed().orElseThrow()).toList())));
+        setDirty();
     }
     void activateField(ServerLevel level, ResourceSite site, ResourceFieldCycle target, FrontierV3ResourceFieldWitness witness) {
         FieldInitialization prior = fieldClaim(site.id()) instanceof FieldInitialization value ? value : null;
         if (prior == null || prior.status() != Status.PENDING || !prior.cursor().matches(site)
                 || !prior.cursor().complete() || !witness.matchesCycle(target)
-                || !ResourceFieldCycle.seeded(site.id(), site.layout(), 1).equals(target))
-            throw new IllegalStateException("initial field cannot activate without its complete exact seeded cycle");
+                || !prior.cursor().target().equals(witness))
+            throw new IllegalStateException("initial field cannot activate without its complete exact retained target");
         for (ResourceFieldLayout.Cell cell : site.layout().cells()) {
             FrontierV3ResourceFieldWitness.Cell physical = witness.cell(cell.id());
             if (!physical.committed().equals(ResourceFieldPhysicalSurface.Condition.of(target.cell(cell.id())))
@@ -716,45 +740,103 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         PhysicalIntentId intentId();
         Status status();
     }
+    record InitialBatch(int start, java.util.List<net.minecraft.world.level.block.state.BlockState> predecessors) {
+        InitialBatch {
+            predecessors = java.util.List.copyOf(predecessors);
+            if (start < 0 || predecessors.isEmpty() || predecessors.size() > FrontierV3ResourceSiteExecutor.projectionWriteBudget())
+                throw new IllegalArgumentException("initial projection batch is outside its bounded window");
+        }
+        int end() { return start + predecessors.size(); }
+        CompoundTag write() {
+            var tag = new CompoundTag(); tag.putInt("start", start);
+            var states = new ListTag();
+            predecessors.forEach(state -> states.add(net.minecraft.nbt.NbtUtils.writeBlockState(state)));
+            tag.put("predecessors", states); return tag;
+        }
+        static InitialBatch read(CompoundTag tag) {
+            if (!tag.contains("start", Tag.TAG_INT) || !tag.contains("predecessors", Tag.TAG_LIST))
+                throw new IllegalStateException("incomplete initial projection batch");
+            var values = tag.getList("predecessors", Tag.TAG_COMPOUND);
+            if (values.isEmpty() || values.size() > FrontierV3ResourceSiteExecutor.projectionWriteBudget())
+                throw new IllegalStateException("initial projection predecessors exceed the bounded window");
+            var states = new java.util.ArrayList<net.minecraft.world.level.block.state.BlockState>();
+            for (var value : values) {
+                var stateTag = (CompoundTag) value;
+                var state = net.minecraft.nbt.NbtUtils.readBlockState(net.minecraft.core.registries.BuiltInRegistries.BLOCK.asLookup(), stateTag);
+                if (!net.minecraft.nbt.NbtUtils.writeBlockState(state).equals(stateTag))
+                    throw new IllegalStateException("unknown or malformed initial projection predecessor");
+                states.add(state);
+            }
+            return new InitialBatch(tag.getInt("start"), states);
+        }
+    }
     record InitialCursor(long epoch, long layoutRevision, String layoutFingerprint,
-                         int nextWrite, int writeCount, boolean prepared) {
+                         int nextWrite, int writeCount, java.util.Optional<InitialBatch> batch,
+                         FrontierV3ResourceFieldWitness target) {
         InitialCursor {
-            if (epoch != 1 || layoutRevision < 1 || layoutFingerprint == null
+            java.util.Objects.requireNonNull(target, "retained initial field target");
+            java.util.Objects.requireNonNull(batch, "initial projection batch");
+            if (!target.projectionImageOnly() || epoch < 1 || epoch != target.epoch() || layoutRevision != target.layoutRevision()
+                    || !java.util.Objects.equals(layoutFingerprint, target.layoutFingerprint())
+                    || layoutRevision < 1 || layoutFingerprint == null
                     || !layoutFingerprint.matches("[0-9a-f]{64}") || nextWrite < 0
                     || writeCount < 0 || writeCount > ResourceFieldLayout.MAX_CELLS * 3
-                    || nextWrite > writeCount || prepared && nextWrite == writeCount)
+                    || nextWrite > writeCount || batch.filter(value -> value.start() > nextWrite
+                        || value.end() <= nextWrite || value.end() > writeCount).isPresent())
                 throw new IllegalArgumentException("initial field cursor is invalid");
         }
-        static InitialCursor atStart(ResourceSite site) {
-            return new InitialCursor(1, site.layout().revision(), site.layout().fingerprint(), 0,
-                    FrontierV3ResourceFieldInitialPlan.writeCount(site), false);
+        static InitialCursor atStart(ResourceSite site, ResourceFieldCycle cycle) {
+            if (!cycle.siteId().equals(site.id()) || !cycle.layout().equals(site.layout())
+                    || !cycle.pendingPlayerBreaks().isEmpty())
+                throw new IllegalArgumentException("initial field has a foreign or unsettled canonical target");
+            var target = FrontierV3ResourceFieldWitness.claimed(site.id(), cycle.epoch(),
+                    ResourceFieldPhysicalSurface.fromCycle(cycle));
+            return new InitialCursor(cycle.epoch(), site.layout().revision(), site.layout().fingerprint(), 0,
+                    FrontierV3ResourceFieldInitialPlan.writeCount(site), java.util.Optional.empty(), target);
+        }
+        boolean prepared() { return batch.isPresent(); }
+        net.minecraft.world.level.block.state.BlockState predecessor() {
+            var prepared = batch.orElseThrow(); return prepared.predecessors().get(nextWrite - prepared.start());
         }
         boolean complete() { return nextWrite == writeCount; }
         boolean matches(ResourceSite site) {
             return site.layout().revision() == layoutRevision
                     && site.layout().fingerprint().equals(layoutFingerprint)
-                    && FrontierV3ResourceFieldInitialPlan.writeCount(site) == writeCount;
+                    && FrontierV3ResourceFieldInitialPlan.writeCount(site) == writeCount
+                    && target.matchesLayout(site.id(), site.layout());
         }
-        InitialCursor preparedStep() { return new InitialCursor(epoch, layoutRevision, layoutFingerprint, nextWrite, writeCount, true); }
+        InitialCursor preparedStep(net.minecraft.world.level.block.state.BlockState before) {
+            return preparedBatch(java.util.List.of(before));
+        }
+        InitialCursor preparedBatch(java.util.List<net.minecraft.world.level.block.state.BlockState> before) {
+            if (prepared() || complete()) throw new IllegalStateException("initial field already has a prepared batch");
+            return new InitialCursor(epoch, layoutRevision, layoutFingerprint, nextWrite, writeCount,
+                    java.util.Optional.of(new InitialBatch(nextWrite, before)), target);
+        }
         InitialCursor advanced() {
-            if (!prepared || complete()) throw new IllegalStateException("initial field cursor cannot advance an unprepared step");
-            return new InitialCursor(epoch, layoutRevision, layoutFingerprint, nextWrite + 1, writeCount, false);
+            if (!prepared() || complete()) throw new IllegalStateException("initial field cursor cannot advance an unprepared step");
+            var retained = nextWrite + 1 == batch.orElseThrow().end() ? java.util.Optional.<InitialBatch>empty() : batch;
+            return new InitialCursor(epoch, layoutRevision, layoutFingerprint, nextWrite + 1, writeCount, retained, target);
         }
         CompoundTag write() {
             CompoundTag tag = new CompoundTag(); tag.putLong("epoch", epoch); tag.putLong("revision", layoutRevision);
             tag.putString("fingerprint", layoutFingerprint); tag.putInt("next", nextWrite); tag.putInt("count", writeCount);
-            tag.putBoolean("prepared", prepared);
+            batch.ifPresent(value -> tag.put("batch", value.write()));
+            tag.put("target", target.write());
             return tag;
         }
         static InitialCursor read(CompoundTag tag) {
             if (!tag.contains("epoch", Tag.TAG_LONG) || !tag.contains("revision", Tag.TAG_LONG)
                     || !tag.contains("fingerprint", Tag.TAG_STRING) || !tag.contains("next", Tag.TAG_INT)
-                    || !tag.contains("count", Tag.TAG_INT) || !tag.contains("prepared", Tag.TAG_BYTE))
+                    || !tag.contains("count", Tag.TAG_INT)
+                    || !tag.contains("target", Tag.TAG_COMPOUND)
+                    || tag.contains("batch") && !tag.contains("batch", Tag.TAG_COMPOUND)
+                    || tag.contains("prepared"))
                 throw new IllegalStateException("incomplete initial field cursor");
-            byte prepared = tag.getByte("prepared");
-            if (prepared != 0 && prepared != 1) throw new IllegalStateException("invalid initial field write-ahead flag");
             return new InitialCursor(tag.getLong("epoch"), tag.getLong("revision"), tag.getString("fingerprint"),
-                    tag.getInt("next"), tag.getInt("count"), prepared == 1);
+                    tag.getInt("next"), tag.getInt("count"), tag.contains("batch", Tag.TAG_COMPOUND)
+                        ? java.util.Optional.of(InitialBatch.read(tag.getCompound("batch"))) : java.util.Optional.empty(),
+                    FrontierV3ResourceFieldWitness.read(tag.getCompound("target")));
         }
     }
     record FieldInitialization(SubjectId siteId, PhysicalIntentId intentId, Status status,
@@ -763,7 +845,8 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
             java.util.Objects.requireNonNull(siteId, "initial field site");
             java.util.Objects.requireNonNull(intentId, "initial field intent");
             java.util.Objects.requireNonNull(cursor, "initial field cursor");
-            if (!siteId.value().startsWith("site:") || status != Status.PENDING && status != Status.CONFLICT)
+            if (!siteId.equals(cursor.target().siteId())
+                    || !siteId.value().startsWith("site:") || status != Status.PENDING && status != Status.CONFLICT)
                 throw new IllegalArgumentException("initial field has invalid owner or status");
         }
         FieldInitialization conflicted() { return new FieldInitialization(siteId, intentId, Status.CONFLICT, cursor); }

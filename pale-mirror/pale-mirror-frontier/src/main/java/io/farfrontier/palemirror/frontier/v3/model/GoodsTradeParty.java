@@ -12,9 +12,15 @@ public record GoodsTradeParty(SubjectId id, EconomicOwnerKind kind) {
         }
     }
     public void validate(EconomicLedger ledger) {
+        validateTitle(ledger);
         EconomicAccount account = ledger.require(id);
-        if (account.ownerKind() != kind || account.status() != EconomicAccountStatus.ACTIVE) {
+        if (account.status() != EconomicAccountStatus.ACTIVE) {
             throw new IllegalArgumentException("trade party differs from its active nominal economic account");
         }
+    }
+    /** Financial insolvency does not invalidate title to already-owned resources. */
+    public void validateTitle(EconomicLedger ledger) {
+        if (ledger.require(id).ownerKind() != kind)
+            throw new IllegalArgumentException("resource title has a forged nominal owner kind");
     }
 }

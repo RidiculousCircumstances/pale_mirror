@@ -192,6 +192,20 @@ final class FrontierV3ResourceFieldWitness {
     }
 
     SubjectId siteId() { return siteId; }
+    boolean projectionImageOnly() {
+        return byIdBucket.values().stream().flatMap(bucket -> bucket.values().stream())
+                .allMatch(cell -> cell.pending().isEmpty() && cell.foreign().isEmpty() && cell.retiredWork().isEmpty());
+    }
+    @Override public boolean equals(Object other) {
+        return other instanceof FrontierV3ResourceFieldWitness witness
+                && siteId.equals(witness.siteId) && epoch == witness.epoch
+                && layoutRevision == witness.layoutRevision && layoutFingerprint.equals(witness.layoutFingerprint)
+                && cellCount == witness.cellCount && cellIdsFingerprint.equals(witness.cellIdsFingerprint)
+                && byIdBucket.equals(witness.byIdBucket);
+    }
+    @Override public int hashCode() {
+        return Objects.hash(siteId, epoch, layoutRevision, layoutFingerprint, byIdBucket, cellCount, cellIdsFingerprint);
+    }
     long epoch() { return epoch; }
     long layoutRevision() { return layoutRevision; }
     String layoutFingerprint() { return layoutFingerprint; }

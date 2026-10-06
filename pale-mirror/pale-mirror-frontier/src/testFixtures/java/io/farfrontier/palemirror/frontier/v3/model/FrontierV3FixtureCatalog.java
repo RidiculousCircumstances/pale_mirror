@@ -359,10 +359,6 @@ public final class FrontierV3FixtureCatalog {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         if (twoLots) state = splitFixtureWheat(state);
         SubjectId settlement = new SubjectId("settlement:1");
-        for (ProposedEvent event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
-            if (event.payload() instanceof CompanyRegistered registered) state = CompanyFoundationProcess.reduce(state, settlement, registered);
-            if (event.payload() instanceof EmploymentContractOpened opened) state = CompanyFoundationProcess.reduceEmployment(state, settlement, opened);
-        }
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-fungible-production"), settlement,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:development-fungible-production"), objective.id(), settlement,

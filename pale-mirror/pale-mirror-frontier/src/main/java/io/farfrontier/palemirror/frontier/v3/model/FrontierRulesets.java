@@ -11,8 +11,8 @@ public final class FrontierRulesets {
      * semantic checkpoint left a HOT farmer visibly pausing at every grid cell even though the
      * motion actuator was continuous.  Crop work remains a slower, distinct boundary.
      */
-    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r12", 14, 1L, 20L, 20L);
-    private static final FrontierRuleset TRADE_PLAYTEST = new FrontierRuleset("frontier-v3-trade-playtest-r1", 15,
+    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r13", 16, 1L, 20L, 20L);
+    private static final FrontierRuleset TRADE_PLAYTEST = new FrontierRuleset("frontier-v3-trade-playtest-r2", 16,
             PRODUCTION.cadence(), PRODUCTION.spatial(), PRODUCTION.rates(), PRODUCTION.facilityCapacity(),
             PRODUCTION.combat(), PRODUCTION.hiveCommand(), PRODUCTION.residentLife(),
             PRODUCTION.resourceHarvestColdTravelTicksPerEdge(), PRODUCTION.workCatalog(), PRODUCTION.goodsTrade(),

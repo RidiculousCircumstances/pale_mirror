@@ -38,6 +38,42 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     private FrontierV3ResourceFieldObservationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 100)
+    public static void firstProjectionWritesMatureAndAbsentColdCellsWithoutHistoricalGrowth(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var first = helper.absolutePos(new BlockPos(4, 0, 4));
+        var second = helper.absolutePos(new BlockPos(5, 0, 4));
+        for (var soil : List.of(first, second)) {
+            level.setBlock(soil.below(), Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(soil, Blocks.DIRT.defaultBlockState(), 3);
+            level.setBlock(soil.above(), Blocks.AIR.defaultBlockState(), 3);
+        }
+        var siteId = new SubjectId("site:field-current-initial-test");
+        var layout = new ResourceFieldLayout(1, 3, List.of(cell(1, first), cell(2, second)), List.of());
+        var site = new ResourceSite(siteId, new SubjectId("settlement:field-current-initial-test"),
+                new SubjectId("structure:field-current-initial-test"), ResourceSiteKind.WHEAT_FIELD, layout);
+        var target = ResourceFieldCycle.restore(siteId, layout, 3, Map.of(
+                layout.cells().getFirst().id(), new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.FARMLAND,
+                        ResourceFieldCycle.Crop.MATURE, 7, false, false),
+                layout.cells().getLast().id(), new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.DIRT,
+                        ResourceFieldCycle.Crop.ABSENT, 0, true, false)));
+        helper.runAtTickTime(1, () -> {
+            FrontierV3ResourceFieldInitialWriter.reserve(level, site,
+                    new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:field-current-initial-test"), target);
+            finishInitialProjection(helper, site, () -> {
+                var witness = FrontierV3ResourceFieldWitness.claimed(siteId, target.epoch(), ResourceFieldPhysicalSurface.fromCycle(target));
+                FrontierV3ResourceFieldInitialWriter.activate(level, site, target, witness);
+                helper.assertTrue(level.getBlockState(first.above()).getValue(CropBlock.AGE) == 7
+                        && level.getBlockState(second).is(Blocks.DIRT) && level.getBlockState(second.above()).isAir()
+                        && persistedField(level, siteId) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner
+                        && owner.witness().matchesCycle(target) && target.harvestedCount() == 0,
+                        "initial materialization shows the retained mature/absent COLD surface and awards no crop work");
+                helper.succeed();
+            });
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 30)
     public static void growthBatchRecoversIndividuallyAfterPartialPhysicalApplication(GameTestHelper helper) {
         var level = helper.getLevel();
@@ -55,7 +91,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
         helper.runAtTickTime(1, () -> {
             FrontierV3ResourceFieldInitialWriter.reserve(level, site,
                     new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:field-growth-batch-test"));
-            for (int write = 0; write < 4; write++) FrontierV3ResourceFieldInitialWriter.writeOne(level, site);
+            finishInitialProjection(helper, site, () -> {
             var seeded = ResourceFieldCycle.seeded(siteId, layout, 1);
             FrontierV3ResourceFieldInitialWriter.activate(level, site, seeded,
                     FrontierV3ResourceFieldWitness.claimed(siteId, 1, ResourceFieldPhysicalSurface.fromCycle(seeded)));
@@ -94,6 +130,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                             && level.getBlockState(second.above()).getValue(CropBlock.AGE) == 2,
                     "saved per-cell witnesses recover a split batch without duplicate growth");
             helper.succeed();
+            });
         });
     }
 
@@ -140,8 +177,8 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 30)
-    public static void initialFieldWriterPersistsEachRealBlockBoundary(GameTestHelper helper) {
+            template = "bastion/mobs/empty", timeoutTicks = 100)
+    public static void initialFieldWriterPersistsItsBoundedProjectionBeforeActivation(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos soil = helper.absolutePos(new BlockPos(4, 0, 4));
         level.setBlock(soil.below(), Blocks.STONE.defaultBlockState(), 3);
@@ -158,15 +195,8 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                             && initial.cursor().nextWrite() == 0 && !initial.cursor().prepared()
                             && level.getBlockState(soil).is(Blocks.DIRT),
                     "reservation is durable before the first physical effect");
-            helper.assertTrue(FrontierV3ResourceFieldInitialWriter.writeOne(level, site)
-                            == FrontierV3ResourceFieldInitialWriter.Result.ADVANCED
-                            && persistedField(level, siteId) instanceof FrontierV3ResourceSiteLedger.FieldInitialization first
-                            && first.cursor().nextWrite() == 1 && !first.cursor().prepared()
-                            && level.getBlockState(soil).is(Blocks.FARMLAND),
-                    "first actual block write and its cursor are published together");
-            helper.assertTrue(FrontierV3ResourceFieldInitialWriter.writeOne(level, site)
-                            == FrontierV3ResourceFieldInitialWriter.Result.CURSOR_COMPLETE
-                            && persistedField(level, siteId) instanceof FrontierV3ResourceSiteLedger.FieldInitialization complete
+            finishInitialProjection(helper, site, () -> {
+            helper.assertTrue(persistedField(level, siteId) instanceof FrontierV3ResourceSiteLedger.FieldInitialization complete
                             && complete.cursor().complete() && level.getBlockState(soil.above()).is(Blocks.WHEAT),
                     "last real crop write has a durable completed cursor");
             var target = ResourceFieldCycle.seeded(siteId, layout, 1);
@@ -289,7 +319,19 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                             && mature.harvestedCount() == 0 && owner.witness().cell(cellId).pending().isEmpty(),
                     "persisted projection admits the exact harvest predecessor without crediting yield");
             helper.succeed();
+            });
         });
+    }
+
+    private static void finishInitialProjection(GameTestHelper helper, ResourceSite site, Runnable completed) {
+        var ledger = FrontierV3ResourceSiteLedger.get(helper.getLevel());
+        var owner = (FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id());
+        if (owner.cursor().complete()) { completed.run(); return; }
+        var result = FrontierV3ResourceFieldInitialWriter.writeBatch(helper.getLevel(), site);
+        if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
+                || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS)
+            helper.fail("initial projection rejected its actual physical predecessor: " + result);
+        helper.runAfterDelay(1, () -> finishInitialProjection(helper, site, completed));
     }
 
     private static FrontierV3ResourceSiteLedger.FieldClaim persistedField(ServerLevel level, SubjectId siteId) {
@@ -397,8 +439,13 @@ public final class FrontierV3ResourceFieldObservationGameTests {
             var unproven = FrontierV3ResourceFieldInitialPlan.applyPrepared(level, site, retained);
             helper.assertTrue(unproven.disposition() == FrontierV3ResourceFieldInitialPlan.Disposition.APPLIED
                             && !unproven.writtenThisCall()
-                            && rejectsState(() -> retained.advanceFieldInitialization(site, unproven)),
-                    "a saved permission alone cannot claim a target block written by another actor");
+                            && unproven.reconciledProjection(),
+                    "a prepared replay-safe projection may reconcile its exact target without claiming who wrote it");
+            var replayedProjection = FrontierV3ResourceSiteLedger.load(retained.save(new CompoundTag(), null), null);
+            replayedProjection.advanceFieldInitialization(site, unproven);
+            helper.assertTrue(((FrontierV3ResourceSiteLedger.FieldInitialization) replayedProjection.fieldClaim(SITE))
+                            .cursor().nextWrite() == 3,
+                    "a persisted prepared projection closes the split block-write/result-save window once");
             level.setBlock(secondSoil, Blocks.STONE.defaultBlockState(), 3);
             var blocked = FrontierV3ResourceFieldInitialPlan.observe(level, site, 2);
             helper.assertTrue(blocked.disposition() == FrontierV3ResourceFieldInitialPlan.Disposition.FOREIGN

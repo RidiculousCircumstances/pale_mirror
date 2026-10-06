@@ -15,6 +15,8 @@ public record EconomicAccount(SubjectId ownerId, EconomicOwnerKind ownerKind, Ec
         Objects.requireNonNull(balance, "account balance");
         Objects.requireNonNull(creditLimit, "account credit limit");
         if (creditLimit.raw() < 0L) throw new IllegalArgumentException("account credit limit must not be negative");
+        if (ownerKind == EconomicOwnerKind.RESIDENT && (balance.raw() != 0L || creditLimit.raw() != 0L))
+            throw new IllegalArgumentException("resident title registration cannot hold money or credit");
     }
 
     EconomicAccount debit(FixedScalar amount) {

@@ -678,9 +678,9 @@ final class FrontierDevelopmentScenarios {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         state = withLegacyMaterializedWheat(state);
         SubjectId settlementId = new SubjectId("settlement:1");
-        for (ProposedEvent event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlementId, 1, 4_000L))) {
+        for (ProposedEvent event : OptionalCompanyEmploymentFixture.foundation(state, settlementId, 4_000L)) {
             if (event.payload() instanceof CompanyRegistered registered) state = CompanyFoundationProcess.reduce(state, settlementId, registered);
-            if (event.payload() instanceof EmploymentContractOpened opened) state = CompanyFoundationProcess.reduceEmployment(state, settlementId, opened);
+            if (event.payload() instanceof EmploymentContractOpened opened) state = SettlementEmploymentProcess.reduceEmployment(state, settlementId, opened);
         }
         Settlement settlement = state.bootstrap().settlements().getFirst();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-production-input-theft"), settlementId,
@@ -689,17 +689,19 @@ final class FrontierDevelopmentScenarios {
                 StrategicTaskKind.PRODUCE_BREAD, Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT),
                 List.of(), StrategicTaskStatus.ACTIVE);
         state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
+        SubjectId worker = SettlementWorkPolicy.permissions(state, settlementId).workers(ResidentWorkKind.BAKING)
+                .stream().sorted().findFirst().orElseThrow();
         SubjectId company = CompanyFoundationProcess.companyId(settlementId);
-        SubjectId worker = state.companies().companies().get(company).founderId();
         ExactItemStack input = state.inventory().items().get(new SubjectId("item:bootstrap-1-wheat"));
         SubjectId jobId = new SubjectId("job:production-development-input-theft");
         SettlementStructure workshop = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
         ProductionJob job = new ProductionJob(jobId, task.id(), settlementId, workshop.id(), worker, input.id(), new ProductionInputHold.Materialized(input.id()),
                 new SubjectId("item:development-production-input-theft-bread"), "minecraft:bread", input.count(), ProductionWorkProgress.notStarted(),
-                ProductionWorkTraversal.compile(state.bootstrap(), workshop, state.actorLocations().get(worker), jobId), 0);
-        state = CompanyWorkPaymentProcess.reserve(state.withProductionJob(job), job);
-        EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow();
-        FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, contract);
+                ProductionWorkTraversal.compile(state.bootstrap(), workshop, state.actorLocations().get(worker), jobId), 0)
+                .withRights(OptionalCompanyEmploymentFixture.publicCompanyService(state, settlementId));
+        state = ProductionCommercialProcess.reserve(state.withProductionJob(job), job);
+        EmploymentContract contract = ProductionCommercialProcess.contractFor(state, job).orElseThrow();
+        FinancialReservation reservation = ProductionCommercialProcess.reservation(job, contract);
         MarketDemand demand = new MarketDemand(new SubjectId("demand:development-production-input-theft"), settlementId, task.id(), "minecraft:bread", input.count(),
                 FixedScalar.whole(2L), 0L, 1_000L, MarketDemandStatus.OPEN);
         CompanyQuote quote = new CompanyQuote(new SubjectId("quote:development-production-input-theft"), demand.id(), company, input.count(),

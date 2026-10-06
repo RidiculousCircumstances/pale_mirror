@@ -28,7 +28,7 @@ public final class DecisionAuthorityState {
         bootstrap.settlements().stream().sorted(java.util.Comparator.comparing(Settlement::id)).forEach(settlement ->
                 initial.put(settlement.id(), new DecisionAuthority(settlement.id(), DecisionAuthorityKind.SETTLEMENT,
                         new DecisionPolicyDescriptor("frontier:settlement", 1), 0L, java.util.List.of(), java.util.List.of(),
-                        SettlementWorkPolicy.initial(settlement))));
+                        SettlementWorkPolicy.initial(settlement, bootstrap.ruleset().labour()))));
         SubjectId hive = bootstrap.hive().id();
         initial.put(hive, new DecisionAuthority(hive, DecisionAuthorityKind.HIVEMIND,
                 new DecisionPolicyDescriptor("frontier:hivemind", 1), 0L, java.util.List.of(), java.util.List.of()));

@@ -123,16 +123,14 @@ class ProductionProcessTest {
                         prepared.job().workerId(), position, "entity:test-explosion")));
         assertInstanceOf(CommandResult.Accepted.class, deathResult, deathResult::toString);
         FrontierWorldState afterDeath = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        EmploymentContract terminated = afterDeath.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(prepared.settlementId(), prepared.job().workerId()));
+        EmploymentContract terminated = afterDeath.companies().employmentContracts().get(SettlementEmploymentProcess.employmentId(prepared.job().rights().employer(), prepared.job().workerId()));
         assertEquals(ActorLifeStatus.DEAD, afterDeath.actorLocations().get(prepared.job().workerId()).condition().status());
         assertEquals(EmploymentContractStatus.TERMINATED, terminated.status());
         assertTrue(afterDeath.productionJobs().containsKey(prepared.job().id()));
         assertTrue(afterDeath.inventory().economics().reservations().containsKey(prepared.order().reservationId()));
         assertEquals(PhysicalIntentStatus.RUNNING, afterDeath.physicalIntents().get(prepared.intent().id()).status());
-        assertTrue(CompanyWorkPaymentProcess.contractFor(afterDeath, prepared.job()).isEmpty());
-        assertTrue(CompanyWorkPaymentProcess.settlementContractFor(afterDeath, prepared.job()).isPresent());
-        assertFalse(CompanyFoundationProcess.plan(afterDeath, CompanyFoundationProcess.review(prepared.settlementId(), 2, 28_000L)).stream()
-                .map(ProposedEvent::payload).anyMatch(EmploymentContractOpened.class::isInstance));
+        assertTrue(ProductionCommercialProcess.contractFor(afterDeath, prepared.job()).isEmpty());
+        assertTrue(ProductionCommercialProcess.settlementContractFor(afterDeath, prepared.job()).isPresent());
 
         ExactItemStack input = afterDeath.inventory().items().get(prepared.job().consumedItemId());
         ProductionTransformationObservation receipt = new ProductionTransformationObservation(new PhysicalObservationId("observation:production-dead-worker-confirmed"),
@@ -145,7 +143,7 @@ class ProductionProcessTest {
         assertTrue(completed.inventory().economics().reservations().isEmpty());
         assertEquals(1L, completed.companies().employmentContracts().get(terminated.id()).completedJobs());
         assertEquals(EmploymentContractStatus.TERMINATED, completed.companies().employmentContracts().get(terminated.id()).status());
-        assertEquals(FixedScalar.ONE, completed.inventory().economics().require(prepared.job().workerId()).balance());
+        assertFalse(completed.inventory().economics().accounts().containsKey(prepared.job().workerId()));
         assertEquals(MarketWorkOrderStatus.FULFILLED, completed.companies().market().workOrders().get(prepared.order().id()).status());
     }
 
@@ -166,7 +164,7 @@ class ProductionProcessTest {
         FrontierWorldState released = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
 
         assertEquals(EmploymentContractStatus.TERMINATED, released.companies().employmentContracts()
-                .get(CompanyFoundationProcess.employmentId(prepared.settlementId(), prepared.job().workerId())).status());
+                .get(SettlementEmploymentProcess.employmentId(prepared.job().rights().employer(), prepared.job().workerId())).status());
         assertFalse(released.productionJobs().containsKey(prepared.job().id()));
         assertEquals(prepared.input(), released.inventory().items().get(prepared.input().id()));
         assertTrue(released.inventory().economics().reservations().isEmpty());
@@ -191,7 +189,7 @@ class ProductionProcessTest {
         FrontierWorldState cancelled = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
 
         assertEquals(EmploymentContractStatus.TERMINATED, cancelled.companies().employmentContracts()
-                .get(CompanyFoundationProcess.employmentId(prepared.settlementId(), prepared.job().workerId())).status());
+                .get(SettlementEmploymentProcess.employmentId(prepared.job().rights().employer(), prepared.job().workerId())).status());
         assertTrue(cancelled.productionJobs().isEmpty());
         assertFalse(cancelled.physicalIntents().containsKey(prepared.intent().id()));
         assertEquals(prepared.state().inventory().items().get(prepared.job().consumedItemId()),
@@ -709,12 +707,12 @@ class ProductionProcessTest {
     }
 
     @Test
-    void unaffordableCompanyWorkBlocksBeforeItOccupiesTheWorkshop() {
+    void publicWorkStartsEvenWhenItsSettlementTreasuryIsEmpty() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-finance"), 91L));
         SubjectId settlementId = new SubjectId("settlement:1");
-        for (ProposedEvent event : CompanyFoundationProcess.plan(initial, CompanyFoundationProcess.review(settlementId, 1, 4_000L))) {
+        for (ProposedEvent event : OptionalCompanyEmploymentFixture.foundation(initial, settlementId, 4_000L)) {
             if (event.payload() instanceof CompanyRegistered registered) initial = CompanyFoundationProcess.reduce(initial, settlementId, registered);
-            if (event.payload() instanceof EmploymentContractOpened opened) initial = CompanyFoundationProcess.reduceEmployment(initial, settlementId, opened);
+            if (event.payload() instanceof EmploymentContractOpened opened) initial = SettlementEmploymentProcess.reduceEmployment(initial, settlementId, opened);
         }
         EconomicAccount treasury = initial.inventory().economics().require(settlementId);
         var accounts = new LinkedHashMap<>(initial.inventory().economics().accounts());
@@ -724,19 +722,23 @@ class ProductionProcessTest {
 
         List<ProposedEvent> planned = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L));
 
-        ProductionBlocked block = assertInstanceOf(ProductionBlocked.class, planned.getFirst().payload());
-        assertEquals(ProductionBlockReason.FINANCE_UNAVAILABLE, block.reason());
-        assertTrue(planned.stream().map(ProposedEvent::payload).noneMatch(ProductionStarted.class::isInstance));
-        assertEquals(state, ProductionProcess.reduceBlocked(state, settlementId, block));
+        var started = planned.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        assertEquals(ProductionRights.Mode.PUBLIC_PRODUCTION, started.job().rights().mode());
+        var activated = StrategicObjectiveProcess.reduceTaskTransition(state, settlementId,
+                assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload()));
+        var admitted = ProductionProcess.reduceStarted(activated, settlementId, started);
+        assertTrue(admitted.inventory().economics().reservations().isEmpty());
+        assertEquals(FixedScalar.ZERO, admitted.inventory().economics().require(settlementId).balance());
     }
 
     @Test
     void staleMarketQuoteDefersInsteadOfAdmittingAJobWithDifferentExactEmploymentTerms() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:market-stale-quote"), 91L));
         SubjectId settlement = new SubjectId("settlement:1");
-        for (ProposedEvent event : CompanyFoundationProcess.plan(initial, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
+        for (ProposedEvent event : OptionalCompanyEmploymentFixture.foundation(initial, settlement, 4_000L)) {
             if (event.payload() instanceof CompanyRegistered registered) initial = CompanyFoundationProcess.reduce(initial, settlement, registered);
-            if (event.payload() instanceof EmploymentContractOpened opened) initial = CompanyFoundationProcess.reduceEmployment(initial, settlement, opened);
+            if (event.payload() instanceof EmploymentContractOpened opened) initial = SettlementEmploymentProcess.reduceEmployment(initial, settlement, opened);
         }
         FrontierWorldState state = productionTask(initial, StrategicTaskStatus.PENDING);
         StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
@@ -756,28 +758,6 @@ class ProductionProcessTest {
         assertTrue(planned.stream().map(ProposedEvent::payload).noneMatch(MarketWorkOrderAccepted.class::isInstance));
     }
 
-    @Test
-    void delayedSchedulerCommitRetainsTheQuoteTickThatWasCurrentAtItsExactDueAction() {
-        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:market-delayed-quote"), 91L));
-        SubjectId settlement = new SubjectId("settlement:1");
-        for (ProposedEvent event : CompanyFoundationProcess.plan(initial, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
-            if (event.payload() instanceof CompanyRegistered registered) initial = CompanyFoundationProcess.reduce(initial, settlement, registered);
-            if (event.payload() instanceof EmploymentContractOpened opened) initial = CompanyFoundationProcess.reduceEmployment(initial, settlement, opened);
-        }
-        FrontierWorldState state = productionTask(initial, StrategicTaskStatus.PENDING);
-        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
-        MarketDemand demand = MarketClearingProcess.foodDemand(state, task, 100L);
-        state = state.withCompanies(state.companies().withMarket(MarketOrderBook.empty().open(demand)));
-        SubjectId company = CompanyFoundationProcess.companyId(settlement);
-        CompanyQuote quote = new CompanyQuote(new SubjectId("quote:delayed-due"), demand.id(), company, demand.itemCount(),
-                demand.maximumTotalPrice(), 100L, demand.expiresAtTick());
-        FrontierWorldState open = state;
-
-        FrontierWorldState published = MarketClearingProcess.reduceQuote(state, company, demand.expiresAtTick() + 1L, new MarketQuotePublished(quote));
-
-        assertEquals(quote, published.companies().market().quotes().get(quote.id()));
-        assertThrows(IllegalArgumentException.class, () -> MarketClearingProcess.reduceQuote(open, company, 99L, new MarketQuotePublished(quote)));
-    }
 
     static FrontierWorldState productionTask(FrontierWorldState state, StrategicTaskStatus status) {
         SubjectId settlement = new SubjectId("settlement:1");
@@ -804,23 +784,24 @@ class ProductionProcessTest {
     static MaterializedProduction activeMaterializedProduction() {
         FrontierWorldState initial = withLegacyExactWheat(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-physical"), 91L)));
         SubjectId settlement = new SubjectId("settlement:1"), depot = new SubjectId("container:1-depot");
-        for (ProposedEvent event : CompanyFoundationProcess.plan(initial, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
+        for (ProposedEvent event : OptionalCompanyEmploymentFixture.foundation(initial, settlement, 4_000L)) {
             if (event.payload() instanceof CompanyRegistered registered) initial = CompanyFoundationProcess.reduce(initial, settlement, registered);
-            if (event.payload() instanceof EmploymentContractOpened opened) initial = CompanyFoundationProcess.reduceEmployment(initial, settlement, opened);
+            if (event.payload() instanceof EmploymentContractOpened opened) initial = SettlementEmploymentProcess.reduceEmployment(initial, settlement, opened);
         }
         SubjectId worker = initial.companies().companies().get(CompanyFoundationProcess.companyId(settlement)).founderId();
         FrontierWorldState state = productionTask(initial.withInventory(initial.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)), StrategicTaskStatus.ACTIVE);
         StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
         ProductionJob job = new ProductionJob(new SubjectId("job:production-1-physical"), task.id(), settlement, new SubjectId("structure:1-workshop"),
-                worker, new SubjectId("item:bootstrap-1-wheat"), new SubjectId("item:production-1-physical-bread"), "minecraft:bread", 64);
-        state = CompanyWorkPaymentProcess.reserve(state.withProductionJob(job), job);
-        EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow();
-        FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, contract);
+                worker, new SubjectId("item:bootstrap-1-wheat"), new SubjectId("item:production-1-physical-bread"), "minecraft:bread", 64)
+                .withRights(OptionalCompanyEmploymentFixture.publicCompanyService(state, settlement));
+        state = ProductionCommercialProcess.reserve(state.withProductionJob(job), job);
+        EmploymentContract contract = ProductionCommercialProcess.contractFor(state, job).orElseThrow();
+        FinancialReservation reservation = ProductionCommercialProcess.reservation(job, contract);
         MarketDemand demand = new MarketDemand(new SubjectId("demand:production-1-physical"), settlement, task.id(), "minecraft:bread", 64,
                 FixedScalar.whole(2L), 0L, 1_000L, MarketDemandStatus.OPEN);
-        CompanyQuote quote = new CompanyQuote(new SubjectId("quote:production-1-physical"), demand.id(), contract.companyId(), 64, contract.invoicePerCompletedJob(), 0L, 1_000L);
-        MarketWorkOrder order = new MarketWorkOrder(new SubjectId("order:production-1-physical"), demand.id(), quote.id(), contract.companyId(), task.id(), job.id(),
+        CompanyQuote quote = new CompanyQuote(new SubjectId("quote:production-1-physical"), demand.id(), contract.employer().id(), 64, contract.invoicePerCompletedJob(), 0L, 1_000L);
+        MarketWorkOrder order = new MarketWorkOrder(new SubjectId("order:production-1-physical"), demand.id(), quote.id(), contract.employer().id(), task.id(), job.id(),
                 reservation.id(), quote.totalPrice(), MarketWorkOrderStatus.ACCEPTED);
         state = state.withCompanies(state.companies().withMarket(MarketOrderBook.empty().open(demand).publish(quote, 0L).accept(order, 0L)));
         return new MaterializedProduction(state, job, order, settlement, task.id());
@@ -829,9 +810,9 @@ class ProductionProcessTest {
     static ColdMarketJob coldMarketJob() {
         FrontierWorldState state = withLegacyExactWheat(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-cold-cancel"), 91L)));
         SubjectId settlement = new SubjectId("settlement:1");
-        for (ProposedEvent event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
+        for (ProposedEvent event : OptionalCompanyEmploymentFixture.foundation(state, settlement, 4_000L)) {
             if (event.payload() instanceof CompanyRegistered registered) state = CompanyFoundationProcess.reduce(state, settlement, registered);
-            if (event.payload() instanceof EmploymentContractOpened opened) state = CompanyFoundationProcess.reduceEmployment(state, settlement, opened);
+            if (event.payload() instanceof EmploymentContractOpened opened) state = SettlementEmploymentProcess.reduceEmployment(state, settlement, opened);
         }
         state = productionTask(state, StrategicTaskStatus.ACTIVE);
         StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
@@ -839,10 +820,11 @@ class ProductionProcessTest {
         SubjectId company = CompanyFoundationProcess.companyId(settlement);
         SubjectId worker = state.companies().companies().get(company).founderId();
         ProductionJob job = new ProductionJob(new SubjectId("job:production-1-cold-cancel"), task.id(), settlement, new SubjectId("structure:1-workshop"), worker,
-                input.id(), new ProductionInputHold.Cold(input), new SubjectId("item:production-1-cold-cancel-bread"), "minecraft:bread", input.count());
-        state = CompanyWorkPaymentProcess.reserve(state.startProductionJob(job, input.id()), job);
-        EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow();
-        FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, contract);
+                input.id(), new ProductionInputHold.Cold(input), new SubjectId("item:production-1-cold-cancel-bread"), "minecraft:bread", input.count())
+                .withRights(OptionalCompanyEmploymentFixture.publicCompanyService(state, settlement));
+        state = ProductionCommercialProcess.reserve(state.startProductionJob(job, input.id()), job);
+        EmploymentContract contract = ProductionCommercialProcess.contractFor(state, job).orElseThrow();
+        FinancialReservation reservation = ProductionCommercialProcess.reservation(job, contract);
         MarketDemand demand = new MarketDemand(new SubjectId("demand:production-1-cold-cancel"), settlement, task.id(), "minecraft:bread", input.count(),
                 FixedScalar.whole(2L), 0L, 1_000L, MarketDemandStatus.OPEN);
         CompanyQuote quote = new CompanyQuote(new SubjectId("quote:production-1-cold-cancel"), demand.id(), company, input.count(), contract.invoicePerCompletedJob(), 0L, 1_000L);

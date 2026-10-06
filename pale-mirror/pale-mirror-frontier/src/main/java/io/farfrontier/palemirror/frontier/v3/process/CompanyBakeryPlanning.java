@@ -11,7 +11,8 @@ final class CompanyBakeryPlanning implements SettlementOperationPlanner {
 
     static ProductionRights rights(Company company) {
         return new ProductionRights(ProductionRights.Mode.COMPANY_OWN_ACCOUNT,
-                new GoodsTradeParty(company.id(), EconomicOwnerKind.COMPANY), FrontierWorldState.depotId(company.settlementId()));
+                new GoodsTradeParty(company.id(), EconomicOwnerKind.COMPANY), FrontierWorldState.depotId(company.settlementId()),
+                WorkEmployer.company(company));
     }
 
     static Optional<Company> requestingCompany(FrontierWorldState state, SubjectId home) {
@@ -19,12 +20,11 @@ final class CompanyBakeryPlanning implements SettlementOperationPlanner {
                 && company.purpose() == CompanyPurpose.WORKS).sorted(Comparator.comparing(Company::id)).filter(company -> {
                     var batch = BakeryBatchSelection.admissible(state, rights(company));
                     var employment = state.companies().employmentContracts().values().stream()
-                            .filter(contract -> contract.companyId().equals(company.id()) && contract.status() == EmploymentContractStatus.ACTIVE)
+                            .filter(contract -> contract.employer().id().equals(company.id()) && contract.status() == EmploymentContractStatus.ACTIVE)
                             .sorted(Comparator.comparing(EmploymentContract::id)).findFirst();
                     return employment.isPresent() && CompanyManufacturingPolicy.requestsProduction(new CompanyManufacturingPolicy.View(
                             company.status() == CompanyStatus.ACTIVE, state.companies().goodsTrade().participants().participants().containsKey(company.id()),
-                            batch.map(BakeryBatchSelection::quantity).orElse(0), state.inventory().economics().availableToReserve(company.id()),
-                            employment.orElseThrow().wagePerCompletedJob()));
+                            batch.map(BakeryBatchSelection::quantity).orElse(0)));
                 }).findFirst();
     }
 
@@ -46,12 +46,13 @@ final class CompanyBakeryPlanning implements SettlementOperationPlanner {
                 || ReferenceContainerCustody.blocksCanonicalUse(state, rights.destinationContainerId())
                 || batch.fungibleInput().filter(input -> !FungibleResourceCustodySupport.canReserve(state, input)).isPresent())
             return retry(state, task, action);
-        var job = ResidentWorkSelection.eligible(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY,
-                action.dueAt().ticks()).stream().filter(worker -> state.companies().activeEmployment(company.orElseThrow().id(), worker.id()).isPresent())
+        var job = ResidentWorkComposition.SELECTION.eligible(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY,
+                action.dueAt().ticks()).stream().filter(worker -> state.companies().activeEmployment(
+                        WorkEmployer.company(company.orElseThrow()), worker.id()).isPresent())
                 .map(worker -> batch.exactInput().isPresent()
                         ? BakeryJobAdmission.exact(state, task, settlement, workshop, batch.exactInput().orElseThrow(), worker, rights)
                         : BakeryJobAdmission.fungible(state, task, settlement, workshop, batch.fungibleInput().orElseThrow(), worker, rights))
-                .filter(candidate -> CompanyWorkPaymentProcess.canReserve(state, candidate)).findFirst();
+                .filter(candidate -> ProductionCommercialProcess.canReserve(state, candidate)).findFirst();
         if (job.isEmpty()) return retry(state, task, action);
         ProductionJob selected = job.orElseThrow();
         return List.of(new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE)),

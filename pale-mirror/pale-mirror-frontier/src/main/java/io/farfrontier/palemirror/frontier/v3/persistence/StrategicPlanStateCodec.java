@@ -79,11 +79,7 @@ public final class StrategicPlanStateCodec {
             writeSubject(output, authority.ownerId()); output.writeByte(FrontierWireTags.tag(authority.kind()));
             FrontierWorldStateCodec.writeString(output, authority.policy().id()); output.writeInt(authority.policy().version());
             output.writeLong(authority.reconsiderationEpoch()); writeSubjects(output, authority.commitmentIds()); writeSubjects(output, authority.provenanceIds());
-            writeCount(output, authority.workPermissions().workers().size());
-            for (var entry : authority.workPermissions().workers().entrySet().stream()
-                    .sorted(Comparator.comparingInt(value -> value.getKey().wireTag())).toList()) {
-                output.writeByte(entry.getKey().wireTag()); writeSubjects(output, entry.getValue().stream().sorted().toList());
-            }
+            ResidentWorkPermissionsCodec.write(output, authority.workPermissions());
         }
         writeCount(output, plans.frontEffects().applied().size());
         for (OperationFrontEffectKey effect : plans.frontEffects().applied().stream()
@@ -257,16 +253,9 @@ public final class StrategicPlanStateCodec {
             DecisionAuthorityKind authorityKind = FrontierWireTags.require(DecisionAuthorityKind.class, kind);
             DecisionPolicyDescriptor policy = new DecisionPolicyDescriptor(FrontierWorldStateCodec.readString(input), input.readInt());
             long epoch = input.readLong(); var commitments = readSubjects(input); var provenance = readSubjects(input);
-            Map<ResidentWorkKind, java.util.Set<SubjectId>> permissions = new java.util.EnumMap<>(ResidentWorkKind.class);
-            for (int grant = 0, grants = readCount(input); grant < grants; grant++) {
-                ResidentWorkKind work = ResidentWorkKind.fromWireTag(input.readUnsignedByte());
-                var workers = readSubjects(input);
-                if (workers.stream().distinct().count() != workers.size()
-                        || permissions.put(work, java.util.Set.copyOf(workers)) != null)
-                    throw new IllegalArgumentException("duplicate resident work permission or worker");
-            }
+            ResidentWorkPermissions permissions = ResidentWorkPermissionsCodec.read(input);
             DecisionAuthority authority = new DecisionAuthority(owner, authorityKind, policy, epoch, commitments, provenance,
-                    new ResidentWorkPermissions(permissions));
+                    permissions);
             if (authorities.put(owner, authority) != null) throw new IllegalArgumentException("duplicate decision authority");
         }
         java.util.Set<OperationFrontEffectKey> frontEffects = new java.util.LinkedHashSet<>();

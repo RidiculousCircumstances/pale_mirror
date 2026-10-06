@@ -29,6 +29,12 @@ class UnitGroupTransportTest {
                 var mission = state.shipments().missions().get(admitted.mission().id());
                 if (group == null) { closed = true; break; }
                 if (!recovered && group.phase() == UnitGroup.Phase.TRAVELLING && state.actorMovements().values().stream().anyMatch(m -> m.coldTravel().isPresent())) {
+                    var home = state.shipments().missions().get(group.mission().id()).sender().settlementId();
+                    var permissions = SettlementStaffingComposition.POLICY.propose(state, home);
+                    for (var member : group.members()) {
+                        assertTrue(permissions.permits(ResidentWorkKind.LOGISTICS, member.actorId()));
+                        assertFalse(HumanAssignmentProjection.compile(state).idle(member.actorId()));
+                    }
                     var checkpoint = engine.checkpoint();
                     var codec = new FrontierWorldStateCodec();
                     assertArrayEquals(checkpoint.canonicalState(), codec.encode(codec.decode(checkpoint.canonicalState())));

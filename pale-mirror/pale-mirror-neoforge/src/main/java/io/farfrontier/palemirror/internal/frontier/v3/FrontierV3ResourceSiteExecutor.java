@@ -319,7 +319,7 @@ final class FrontierV3ResourceSiteExecutor {
             // A COLD-grown site may have no preparation intent at first player ingress.
             // The ordinary projector, not only the preparation-intent executor, is therefore
             // an initial physical owner. It must reserve the same cell claim before writing.
-            FrontierV3ResourceFieldInitialWriter.reserve(level, site, projectionClaim(site));
+            FrontierV3ResourceFieldInitialWriter.reserve(level, site, projectionClaim(site), state.resourceSites().cycle(site.id()));
             siteClaim = ledger.siteClaim(site.id());
         }
         if (siteClaim instanceof FrontierV3ResourceSiteLedger.CellSiteClaim cellClaim) {
@@ -364,20 +364,28 @@ final class FrontierV3ResourceSiteExecutor {
                                                   FrontierV3ResourceSiteLedger.FieldInitialization initial) {
         if (initial.status() != FrontierV3ResourceSiteLedger.Status.PENDING || !initial.cursor().matches(site)) return;
         if (initial.cursor().complete()) {
-            var seeded = io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.seeded(site.id(), site.layout(), 1);
-            var witness = FrontierV3ResourceFieldWitness.claimed(site.id(), seeded.epoch(),
-                    io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface.fromCycle(seeded));
-            try { FrontierV3ResourceFieldInitialWriter.activate(level, site, seeded, witness); }
+            // Validate the retained prepared image, not a newly constructed age-zero field.
+            var witness = initial.cursor().target();
+            var conditions = new java.util.LinkedHashMap<io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId,
+                    io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.CellState>();
+            for (var cell : site.layout().cells()) {
+                var condition = witness.cell(cell.id()).committed();
+                conditions.put(cell.id(), new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.CellState(
+                        condition.soil(), condition.crop(), condition.growthStage(), false, false));
+            }
+            var target = io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.restore(
+                    site.id(), site.layout(), witness.epoch(), conditions);
+            try { FrontierV3ResourceFieldInitialWriter.activate(level, site, target, witness); }
             catch (IllegalStateException physicalMismatch) {
                 recordCellInitializationConflict(level, runtime, site,
                         firstMismatch(level, site, 0).orElse(site.cropSlots().getFirst()));
             }
             return;
         }
-        var result = FrontierV3ResourceFieldInitialWriter.writeOne(level, site);
+        var result = FrontierV3ResourceFieldInitialWriter.writeBatch(level, site);
         if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
                 || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS) {
-            var step = FrontierV3ResourceFieldInitialPlan.stepAt(site, initial.cursor().nextWrite());
+            var step = FrontierV3ResourceFieldInitialPlan.stepAt(site, initial.cursor().nextWrite(), initial.cursor().target());
             recordCellInitializationConflict(level, runtime, site, step.position());
         }
     }
@@ -661,7 +669,7 @@ final class FrontierV3ResourceSiteExecutor {
             unknown(runtime, intent.id(), "cell-field-initialization-conflict"); return;
         }
         if (!initial.cursor().complete()) {
-            var result = FrontierV3ResourceFieldInitialWriter.writeOne(level, site);
+            var result = FrontierV3ResourceFieldInitialWriter.writeBatch(level, site);
             if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
                     || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS)
                 unknown(runtime, intent.id(), "cell-field-" + result.name().toLowerCase(java.util.Locale.ROOT));
