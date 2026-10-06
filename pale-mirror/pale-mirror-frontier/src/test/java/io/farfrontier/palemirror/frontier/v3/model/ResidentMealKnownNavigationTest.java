@@ -176,6 +176,17 @@ class ResidentMealKnownNavigationTest {
             blocked = blocked.withActorBody(waiter, actualExits.get(i).standingBody());
         }
         assertTrue(KnownServiceExitNavigation.exitStations(blocked, settlement.id(), depot, actor, port.serviceSurface()).isEmpty());
+        assertEquals(actualExits, KnownServiceExitNavigation.supportedExitStations(blocked,
+                settlement.id(), depot, port.serviceSurface()),
+                "HOT must expose supported occupied goals to traffic/courtesy; COLD may not enter them");
+        var damaged = blocked;
+        for (var exit : actualExits) {
+            damaged = damaged.recordPhysicalDelta(new PhysicalDelta(exit.support(), PhysicalDeltaKind.UNKNOWN_SCAR,
+                    Optional.empty(), Optional.empty(), "test:damaged-service-exit"));
+        }
+        assertTrue(KnownServiceExitNavigation.supportedExitStations(damaged,
+                settlement.id(), depot, port.serviceSurface()).isEmpty(),
+                "courtesy must not turn a damaged physical exit into a traversable goal");
     }
 
     @Test void authoredThresholdAndProtectedExitReplaceStaleWaitingPocketInBothModes() {

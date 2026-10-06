@@ -52,6 +52,14 @@ final class FrontierV3SemanticMovement {
         return target(level, worker, surface) == SemanticTraversalArrival.Disposition.IN_PROGRESS;
     }
 
+    /** Goal selection keeps pedestrians soft; shared traffic still forbids entering their bodies. */
+    static boolean targetGeometryIsNavigable(ServerLevel level, Mob worker, SurfaceAnchor surface) {
+        BlockPos support = block(surface);
+        return SemanticTraversalArrival.target(new SemanticTraversalArrival.Observation(surface,
+                medium(level, support.above()), hasSupport(level, support), clearGeometry(level, worker, surface)),
+                pedestrian(surface)) == SemanticTraversalArrival.Disposition.IN_PROGRESS;
+    }
+
     /**
      * Reports a physical body that is still inside the explicit HOT latitude of one retained
      * edge.  This is deliberately separate from arrival: only {@link #arrived} can advance a
@@ -113,15 +121,20 @@ final class FrontierV3SemanticMovement {
 
     /** Uses the exact target body volume, so slabs and carpets are valid only when they really support this body. */
     private static boolean clear(ServerLevel level, Mob worker, SurfaceAnchor surface) {
+        if (!clearGeometry(level, worker, surface)) return false;
+        AABB target = worker.getBoundingBox().move(point(level, surface).subtract(worker.position()));
+        return level.getEntities(worker, target.inflate(0.001D),
+                entity -> entity instanceof LivingEntity living && living.isAlive() && !living.isSpectator()).isEmpty();
+    }
+
+    private static boolean clearGeometry(ServerLevel level, Mob worker, SurfaceAnchor surface) {
         BlockPos support = block(surface);
         if (!hasSupport(level, support) || !level.getFluidState(support.above()).isEmpty()) return false;
         Vec3 point = point(level, surface);
         AABB target = worker.getBoundingBox().move(point.subtract(worker.position()));
-        // Prospective admission checks the body volume the actuator would enter, including
-        // living occupants. This is distinct from observing an already-arrived body's actual
-        // block clearance: a neighbour can prevent entry without revoking existing arrival.
-        return level.noCollision(worker, target) && level.getEntities(worker, target.inflate(0.001D),
-                entity -> entity instanceof LivingEntity living && living.isAlive() && !living.isSpectator()).isEmpty();
+        // Terrain and hard collision remain mandatory even when a semantic goal is
+        // occupied by a pedestrian that the shared traffic owner may ask to yield.
+        return level.noCollision(worker, target);
     }
 
     private static SemanticTraversalArrival.Medium medium(ServerLevel level, BlockPos position) {

@@ -41,11 +41,11 @@ final class FrontierV3ServiceClearanceNavigation {
     static FrontierV3GoalNavigation.Result pursue(ServerLevel level, Mob body, FrontierWorldState state,
             SubjectId settlementId, SubjectId depotId, SubjectId ownerId, SubjectId actorId,
             int phase, long generation, FrontierV3ActorActuation actuation) {
-        var knownStations = KnownServiceExitNavigation.exitStations(state, settlementId, depotId, actorId,
+        var knownStations = KnownServiceExitNavigation.supportedExitStations(state, settlementId, depotId,
                 FrontierV3SurfaceObservation.observedBody(body).supportingSurface());
         var stations = knownStations.stream().filter(station ->
                 level.hasChunkAt(new net.minecraft.core.BlockPos(station.x(), station.y(), station.z()))
-                        && FrontierV3SemanticMovement.targetIsNavigable(level, body, station)).toList();
+                        && FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, station)).toList();
         if (stations.isEmpty()) {
             FrontierV3GoalNavigation.stop(body, actuation);
             return new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.BLOCKED,

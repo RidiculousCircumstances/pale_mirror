@@ -12,6 +12,22 @@ public final class KnownServiceExitNavigation {
 
     public static List<SurfaceAnchor> exitStations(FrontierWorldState state, SubjectId settlementId,
             SubjectId depotId, SubjectId actorId, SurfaceAnchor start) {
+        return exitStations(state, settlementId, depotId, start,
+                ServiceDestinationClaims.forImmediateExit(state, actorId));
+    }
+
+    /**
+     * Supported semantic goals for HOT traffic arbitration, not permission to occupy them.
+     * Live pedestrians must reach the shared navigator so it can request safe courtesy.
+     * COLD still uses exitStations and excludes occupied or committed destinations.
+     */
+    public static List<SurfaceAnchor> supportedExitStations(FrontierWorldState state, SubjectId settlementId,
+            SubjectId depotId, SurfaceAnchor start) {
+        return exitStations(state, settlementId, depotId, start, java.util.Set.of());
+    }
+
+    private static List<SurfaceAnchor> exitStations(FrontierWorldState state, SubjectId settlementId,
+            SubjectId depotId, SurfaceAnchor start, java.util.Set<SurfaceAnchor> excluded) {
         if (!depotId.equals(FrontierWorldState.depotId(settlementId)))
             throw new IllegalArgumentException("exit has a foreign service identity");
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
@@ -21,7 +37,7 @@ public final class KnownServiceExitNavigation {
                 List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
                         KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
         return ServiceClearanceTargets.exits(SettlementDepotServicePort.forDepot(depot).accessBoundary(),
-                start, knowledge, ServiceDestinationClaims.forImmediateExit(state, actorId));
+                start, knowledge, excluded);
     }
 
     public static List<SurfaceAnchor> path(FrontierWorldState state, SubjectId settlementId,
