@@ -26,6 +26,11 @@ public interface ActorActivityCapability {
     /** Family-owned semantic permission. Presentation purpose alone never grants actuation. */
     boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease);
     ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId execution);
+    /** Local avoidance keeps this execution and custody. This is not activity interruption.
+     * Owners with a different spatial safety boundary explicitly override this policy. */
+    default ActorActivityCheckpoint spatialYieldCheckpoint(FrontierWorldState state, ActorExecutionId execution) {
+        return checkpoint(state, execution);
+    }
     FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long atTick);
     FrontierWorldState resume(FrontierWorldState state, ActorExecutionId execution, long atTick);
     /** Release owners retire their own ephemeral data before common authority changes. */

@@ -31,7 +31,7 @@ final class FrontierV3PedestrianYieldRequests {
 
     static void request(ServerLevel level, Mob requester, FrontierV3GoalNavigation.ProviderPermission permission,
                         FrontierV3PedestrianTraffic.Query evidence) {
-        if (!permission.current(requester)) return;
+        if (!permission.current(requester) || FrontierV3PedestrianCourtesy.active(requester)) return;
         prune();
         List<Blocker> blockers = evidence.blockers().stream().map(observed -> {
             var entity = level.getEntity(observed.id());
@@ -51,7 +51,25 @@ final class FrontierV3PedestrianYieldRequests {
         return REQUESTS.values().stream().filter(request -> request.current(level))
                 .filter(request -> request.blockers().stream().anyMatch(blocker ->
                         matches(blocker, body.getUUID(), identity, body.getBoundingBox())))
+                .filter(request -> winsReciprocal(request.requester(), body.getUUID(), reciprocal(body, request.requester())))
                 .min(java.util.Comparator.comparing(Request::requester));
+    }
+
+    /** Only one participant yields when requests are reciprocal; no collision-order coin flip. */
+    static boolean winsReciprocal(java.util.UUID requester, java.util.UUID blocker, boolean reciprocal) {
+        return !reciprocal || requester.compareTo(blocker) < 0;
+    }
+
+    private static boolean reciprocal(Mob body, java.util.UUID requester) {
+        var own = REQUESTS.get(body);
+        return own != null && own.blockers().stream().anyMatch(blocker -> blocker.entity().equals(requester));
+    }
+
+    static List<Blocker> candidates(ServerLevel level) {
+        prune();
+        return REQUESTS.values().stream().filter(request -> request.current(level))
+                .flatMap(request -> request.blockers().stream()).distinct()
+                .sorted(java.util.Comparator.comparing(Blocker::entity)).toList();
     }
 
     static boolean matches(Blocker blocker, java.util.UUID entity, ActorBodyId identity, AABB currentBounds) {

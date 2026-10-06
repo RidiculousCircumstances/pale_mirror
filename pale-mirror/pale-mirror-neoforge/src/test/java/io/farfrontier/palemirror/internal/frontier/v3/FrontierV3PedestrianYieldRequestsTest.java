@@ -8,6 +8,12 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3PedestrianYieldRequestsTest {
+    @Test void reciprocalRequestsElectExactlyOneYielderWithoutRejectingAnUnopposedRequest() {
+        UUID first = new UUID(0, 1), second = new UUID(0, 2);
+        assertTrue(FrontierV3PedestrianYieldRequests.winsReciprocal(first, second, true));
+        assertFalse(FrontierV3PedestrianYieldRequests.winsReciprocal(second, first, true));
+        assertTrue(FrontierV3PedestrianYieldRequests.winsReciprocal(second, first, false));
+    }
     @Test void courtesyRequestCannotAddressAnotherIncarnationOrAnAlreadyDepartedBody() {
         UUID entity = UUID.randomUUID();
         var identity = new ActorBodyId(new SubjectId("resident:7-6"), 1L);

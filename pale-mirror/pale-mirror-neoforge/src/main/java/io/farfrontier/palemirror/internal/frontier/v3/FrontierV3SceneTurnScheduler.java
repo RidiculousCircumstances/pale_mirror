@@ -24,7 +24,12 @@ final class FrontierV3SceneTurnScheduler {
 
     static boolean run(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state, SceneCauseKind kind,
                        Consumer<SceneLease> execute, BooleanSupplier admit) {
-        return runInventory(runtime, state.sceneLeases().values(), kind, execute, admit);
+        return runInventory(runtime, state.sceneLeases().values(), kind, lease -> {
+            // Recovery/release still progress. HOT business actions cannot compete with local avoidance.
+            if (lease.status() == SceneLeaseStatus.HOT && lease.members().stream()
+                    .anyMatch(member -> FrontierV3PedestrianCourtesy.active(state, member.actorId()))) return;
+            execute.accept(lease);
+        }, admit);
     }
 
     /** Selection consumes a read-only inventory; callbacks retain all execution authority. */

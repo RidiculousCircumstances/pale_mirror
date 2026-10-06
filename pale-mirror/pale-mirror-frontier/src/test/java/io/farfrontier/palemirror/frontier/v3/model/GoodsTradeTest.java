@@ -11,6 +11,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Canonical commercial/ledger boundary, not native delivery or visual acceptance. */
 class GoodsTradeTest {
+    @Test void loadedCourierCanYieldSpatiallyWithoutChangingCargoOrItsRetainedExecution() {
+        var state = reserved(); var shipment = shipment(state); var actor = shipment.execution().actorId();
+        state = shipmentFact(state, SELLER, new ShipmentDispatched(shipment));
+        state = atStation(state, actor, shipment.sender().station());
+        state = shipmentFact(state, shipment.id(), new ShipmentColdTransferred(shipment.id(), 1, Shipment.Status.AWAITING_LOAD));
+        var checkpoint = ActorSpatialCourtesy.assess(state, shipment.execution());
+        assertTrue(checkpoint.ready(), "waiting for a companion does not pin a loaded carrier to a passage");
+        assertSame(state, checkpoint.basis());
+        assertEquals(Map.of(LOT, 60), state.inventory().fungibleResources().accounts().get(shipment.carriedAccountId()).lotQuantities());
+        assertEquals(shipment.execution(), state.actorExecutions().actors().get(actor).current().orElseThrow());
+        var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertTrue(ActorSpatialCourtesy.assess(restored, shipment.execution()).ready());
+        var foreign = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,
+                shipment.execution().activityKind(), id("shipment:foreign"), shipment.execution().generation());
+        assertThrows(IllegalArgumentException.class, () -> ActorSpatialCourtesy.assess(restored, foreign));
+    }
     @Test void hungryTravellingCourierEatsThroughTheActualActivityOwnerAndResumesWithItsCargo() {
         var state = reserved(); var shipment = shipment(state); var actor = shipment.execution().actorId();
         // Settlement1's production bootstrap has wheat but no ready food. Declare finite
@@ -258,12 +274,15 @@ class GoodsTradeTest {
         var unprepared = state;
         assertThrows(IllegalArgumentException.class, () -> shipmentFact(unprepared, shipment.id(), receipt));
         state = shipmentFact(state, shipment.id(), new ShipmentHotPrepared(shipment.id(), step));
+        assertFalse(ActorSpatialCourtesy.assess(state, shipment.execution()).ready(),
+                "courtesy cannot displace a carrier during an unresolved physical pickup");
         assertTrue(ContainerPhysicalAuthorityComposition.pending(state, SOURCE));
         var prepared = state;
         assertThrows(IllegalArgumentException.class, () -> ModeledActorBodyFacts.unloaded(prepared, actor));
         var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
         state = shipmentFact(state, shipment.id(), receipt);
         assertEquals(Shipment.Status.CARRYING, state.shipments().shipments().get(shipment.id()).status());
+        assertTrue(ActorSpatialCourtesy.assess(state, shipment.execution()).ready());
         assertEquals(SELLER, state.inventory().fungibleResources().lots().get(LOT).economicOwnerId());
         assertEquals(Map.of(LOT, 60), state.inventory().fungibleResources().accounts().get(shipment.carriedAccountId()).lotQuantities());
         var committed = state;

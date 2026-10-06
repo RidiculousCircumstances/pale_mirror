@@ -262,6 +262,9 @@ class ActorExecutionLifecycleTest {
         var state = field.state();
         var current = state.actorExecutions().actors().get(field.job().workerId()).current().orElseThrow();
         var checkpoint = new HarvestActivityCapability().checkpoint(state, current);
+        assertEquals(checkpoint.ready() && field.job().progress().work().filter(WorkProgress::running).isEmpty(),
+                ActorSpatialCourtesy.assess(state, current).ready(),
+                "spatial displacement cannot accrue field labour while away from its cell");
         checkpoint.validate(state, current);
         var changed = state.withActorBody(current.actorId(), state.actorLocations().get(current.actorId()).body());
         assertThrows(IllegalArgumentException.class, () -> checkpoint.validate(changed, current));

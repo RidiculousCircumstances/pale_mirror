@@ -22,7 +22,8 @@ final class FrontierV3PhysicalExecutors {
             // graybox cell.
             executor("hive-cocoon-mobilization", FrontierV3PhysicalExecutorRegistry.Stage.RELEASE, Set.of("object-boards"), "hive-cocoon-mobilization", FrontierV3HiveMobilizationExecutor::tick),
 
-            executor("ambient-actors", FrontierV3PhysicalExecutorRegistry.Stage.ACTOR, Set.of("hive-cocoon-mobilization"), "ambient-actor-leases", FrontierV3AmbientActorExecutor::tick),
+            executor("pedestrian-courtesy", FrontierV3PhysicalExecutorRegistry.Stage.ACTOR, Set.of("hive-cocoon-mobilization"), "pedestrian-courtesy", FrontierV3PedestrianCourtesy::tick),
+            executor("ambient-actors", FrontierV3PhysicalExecutorRegistry.Stage.ACTOR, Set.of("pedestrian-courtesy"), "ambient-actor-leases", FrontierV3AmbientActorExecutor::tick),
 
             executor("inventory-observation", FrontierV3PhysicalExecutorRegistry.Stage.CUSTODY, Set.of("ambient-actors"), "inventory-custody-observation", FrontierV3InventoryObservationExecutor::tick),
             executor("cargo-carrier-observation", FrontierV3PhysicalExecutorRegistry.Stage.CUSTODY, Set.of("inventory-observation"), "cargo-carrier-custody-observation", FrontierV3CargoCarrierObservationExecutor::tick),

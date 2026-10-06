@@ -94,6 +94,7 @@ final class FrontierV3AmbientMovementExecutor {
     private FrontierV3AmbientMovementExecutor() { }
 
     static boolean pursueLocalGoal(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
+        if (FrontierV3PedestrianCourtesy.active(body)) return false;
         // Admission is the scout policy's typed command, not permission for unowned motion.
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL && HiveScoutPatrolProcess.active(state, actorId).isEmpty()) {
             var started = HiveScoutPatrolProcess.start(state, actorId);
@@ -245,7 +246,6 @@ final class FrontierV3AmbientMovementExecutor {
         } else {
             // Idle presentation is not a second locomotion owner or permission to orbit.
             if (FrontierV3AmbientServiceOccupancy.observe(level, runtime, state, actorId, body, lease)) return true;
-            if (FrontierV3PresenceTrafficYield.pursue(level, state, body, lease, actuation)) return false;
             if (FrontierV3ServicePointClearance.pursue(level, state, body, lease, actuation)) return false;
             FrontierV3GoalNavigation.stop(body, actuation);
         }
@@ -259,6 +259,7 @@ final class FrontierV3AmbientMovementExecutor {
     }
     static boolean observeDirectedArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                    SubjectId actorId, Mob body, AmbientActorLease lease) {
+        if (FrontierV3PedestrianCourtesy.active(body)) return false;
         var actuation = (lease.goal() == AmbientGoalKind.SCOUT_PATROL
                 ? FrontierV3ScoutPatrolMotion.capture(state, runtime, body, lease)
                 : FrontierV3AmbientActuation.capture(state, runtime, body, lease)).orElse(null);

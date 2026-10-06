@@ -63,6 +63,14 @@ final class HarvestActivityCapability implements ActorActivityCapability {
         };
         return new ActorActivityCheckpoint(state, execution, waiting);
     }
+    @Override public ActorActivityCheckpoint spatialYieldCheckpoint(FrontierWorldState state, ActorExecutionId execution) {
+        var ordinary = checkpoint(state, execution);
+        if (!ordinary.ready()) return ordinary;
+        var job = job(state, execution);
+        return job.progress().work().filter(WorkProgress::running).isPresent()
+                ? new ActorActivityCheckpoint(state, execution, Optional.of(new ActorActivityCheckpoint.Wait(
+                        ActorActivityCheckpoint.Reason.OWNER_TERMINAL_BOUNDARY, job.id()))) : ordinary;
+    }
     @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease) {
         var job = job(state, execution);
         return lease.goal() == AmbientGoalKind.WORK

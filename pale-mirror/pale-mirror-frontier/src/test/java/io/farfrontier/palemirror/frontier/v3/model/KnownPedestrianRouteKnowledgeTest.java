@@ -21,6 +21,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void courtesyEscapesTheCurrentFacilityWithoutOpeningUnrelatedWorkStations() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:courtesy-geometry"), 91L));
+        var workshops = state.bootstrap().settlements().stream().flatMap(settlement -> settlement.structures().stream())
+                .filter(facility -> facility.kind() == StructureKind.WORKSHOP).limit(2).toList();
+        var port = FrontierTraversalPlan.facilityPort(workshops.getFirst()).orElseThrow();
+        var start = port.stations().getFirst();
+        var knowledge = PedestrianCourtesyGeometry.departure(state, start);
+        assertTrue(knowledge.traversable(List.of(start)), "the current station has a declared exit");
+        var exit = port.ingressSurfaces().reversed();
+        var path = knowledge.path(start, new MovementOrder(new SubjectId("resident:courtesy"), new SubjectId("task:courtesy"),
+                0, 1, List.of(exit.getLast()), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION));
+        assertEquals(exit.getLast(), path.getLast());
+        var unrelated = SettlementWorkshopServicePort.forWorkshop(workshops.getLast()).workStation();
+        assertTrue(!knowledge.traversable(List.of(unrelated)), "courtesy is not a permit for a different interior");
+    }
     @Test void facilityStationsShareTheirMaterializedSupportWithoutGrantingEntry() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:facility-station-ground"), 20260918065L));

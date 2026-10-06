@@ -126,6 +126,21 @@ final class FrontierV3GoalNavigation {
         Objects.requireNonNull(actuation, "navigation actuation");
         if (!actuation.current(actor))
             return new Result(Status.AMBIGUOUS, "stale-body-or-execution-authority", Optional.empty(), Optional.empty());
+        if (FrontierV3PedestrianCourtesy.active(actor))
+            return new Result(Status.IN_PROGRESS, "owner-authorized-spatial-yield", Optional.empty(), Optional.empty());
+        return pursueCaptured(level, actor, goal, actuation);
+    }
+
+    static Result pursueCourtesy(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation) {
+        if (!FrontierV3PedestrianCourtesy.active(actor))
+            throw new IllegalArgumentException("courtesy motion requires its admitted owner checkpoint");
+        return pursueCaptured(level, actor, goal, actuation);
+    }
+
+    private static Result pursueCaptured(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation) {
+        Objects.requireNonNull(actuation, "navigation actuation");
+        if (!actuation.current(actor))
+            return new Result(Status.AMBIGUOUS, "stale-body-or-execution-authority", Optional.empty(), Optional.empty());
         var previous = ACTUATIONS.get(actor);
         if (previous == null || !previous.id().equals(actuation.id())) {
             clearProvider(actor);
@@ -170,6 +185,11 @@ final class FrontierV3GoalNavigation {
         clearProvider(actor);
     }
     static boolean stop(Mob actor, FrontierV3ActorActuation actuation) {
+        if (FrontierV3PedestrianCourtesy.active(actor)) return false;
+        return stopCourtesy(actor, actuation);
+    }
+
+    static boolean stopCourtesy(Mob actor, FrontierV3ActorActuation actuation) {
         Objects.requireNonNull(actuation, "stop actuation");
         if (!actuation.current(actor)) return false;
         var retained = ACTUATIONS.get(actor);

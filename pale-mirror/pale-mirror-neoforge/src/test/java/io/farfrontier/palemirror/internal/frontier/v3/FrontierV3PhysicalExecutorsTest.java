@@ -21,6 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3PhysicalExecutorsTest {
+    @Test void courtesyArbitratesBeforeOrdinaryActorGoalsAndBusinessEffects() {
+        var diagnostics = FrontierV3PhysicalExecutors.registry().diagnostics();
+        var ids = diagnostics.stream().map(FrontierV3PhysicalExecutorRegistry.Diagnostic::id).toList();
+        assertTrue(ids.indexOf("pedestrian-courtesy") < ids.indexOf("ambient-actors"));
+        assertTrue(ids.indexOf("pedestrian-courtesy") < ids.indexOf("shipment-resource-effects"));
+        assertTrue(ids.indexOf("pedestrian-courtesy") < ids.indexOf("scenes"));
+        assertTrue(diagnostics.stream().filter(value -> value.id().equals("ambient-actors")).findFirst().orElseThrow()
+                .dependencies().contains("pedestrian-courtesy"));
+    }
     @Test
     void recoveredFungibleDepartureIsObservedBeforeTheGenericContainerAudit() {
         var diagnostics = FrontierV3PhysicalExecutors.registry().diagnostics();

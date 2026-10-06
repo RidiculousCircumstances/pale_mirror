@@ -54,6 +54,13 @@ final class MealActivityCapability implements ActorActivityCapability {
                 meal.pendingPhysicalStep().isPresent() ? ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION
                         : ActorActivityCheckpoint.Reason.OWNER_TERMINAL_BOUNDARY, execution.activityOwnerId())));
     }
+    @Override public ActorActivityCheckpoint spatialYieldCheckpoint(FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution);
+        var meal = state.humanPopulation().meals().get(execution.actorId());
+        // Moving aside cannot consume a portion or acknowledge leaving the service boundary.
+        return meal.phase() == ResidentMeal.Phase.MOVE && meal.pendingPhysicalStep().isEmpty()
+                ? new ActorActivityCheckpoint(state, execution, Optional.empty()) : checkpoint(state, execution);
+    }
     @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease) {
         var meal = state.humanPopulation().meals().get(execution.actorId());
         return lease.goal() == AmbientGoalKind.MEAL && lease.goalBody().supportingSurface().equals(
