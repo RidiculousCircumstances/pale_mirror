@@ -19,10 +19,14 @@ class FrontierV3ActorBodyLifetimeTest {
                 FrontierV3ActorDeathResourceComposition.Owner.RESIDENT_MEAL, noop);
         var service = new FrontierV3ActorDeathResourceComposition.Handler(
                 FrontierV3ActorDeathResourceComposition.Owner.SETTLEMENT_SERVICE, noop);
+        var shipment = new FrontierV3ActorDeathResourceComposition.Handler(
+                FrontierV3ActorDeathResourceComposition.Owner.SHIPMENT, noop);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal, meal)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal)));
-        assertEquals(java.util.List.of(equipment, meal, service), FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal, service)));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal, service)));
+        assertEquals(java.util.List.of(equipment, meal, service, shipment),
+                FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal, service, shipment)));
     }
     private static FrontierWorldState running() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:body-lifetime"), 91L));

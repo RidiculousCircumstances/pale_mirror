@@ -52,8 +52,10 @@ final class FrontierV3PhysicalExecutors {
                     Set.of("production-transformation", "fungible-resource-observation"),
                     "container-surface-effect", FrontierV3ContainerSurfaceExecutor::tick),
             executor("reference-container-custody", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("fungible-resource-observation"), "reference-container-custody", FrontierV3ReferenceContainerCustodyExecutor::tick),
+            executor("shipment-resource-effects", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
+                    Set.of("reference-container-custody", "container-surfaces"), "shipment-resource-effect", FrontierV3ShipmentPhysicalExecutor::tick),
             executor("resource-site-deferred-receipt", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
-                    Set.of("reference-container-custody"), "resource-site-deferred-receipt", FrontierV3ResourceSiteDeliveryExecutor::confirmDeferredOne),
+                    Set.of("reference-container-custody", "shipment-resource-effects"), "resource-site-deferred-receipt", FrontierV3ResourceSiteDeliveryExecutor::confirmDeferredOne),
             // Harvest changes both one PM-owned field and its exact chest slot, so it is an
             // effect after the container owner has established ACTIVE provenance, not projection.
             executor("resource-site-harvest", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-deferred-receipt"), "resource-site-harvest-effect", FrontierV3ResourceSiteHarvestExecutor::tick),

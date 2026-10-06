@@ -22,6 +22,7 @@ public final class KnownPedestrianRouteKnowledge {
     private final FrontierBootstrap bootstrap;
     private final Set<BlockPosition> hard;
     private final BoundedPedestrianApproach.SurveyedSurface surveyed;
+    private final KnownPedestrianNavigation.SearchScope searchScope;
 
     /** A task declares a real facility passage, never an arbitrary list of cells to clear. */
     public record Passage(SettlementStructure facility, Reach reach) {
@@ -33,11 +34,36 @@ public final class KnownPedestrianRouteKnowledge {
         }
     }
 
+    public record SettlementPassage(SubjectId settlementId, Passage passage) {
+        public SettlementPassage { Objects.requireNonNull(settlementId); Objects.requireNonNull(passage); }
+    }
+
+    /** Cross-settlement tasks declare their authorized ports, not their own obstacle rules. */
+    public static KnownPedestrianRouteKnowledge forJourney(FrontierWorldState state, List<SettlementPassage> passages) {
+        passages = List.copyOf(passages);
+        if (passages.isEmpty() || passages.size() > 8)
+            throw new IllegalArgumentException("journey needs bounded declared facility passages");
+        Set<BlockPosition> hard = null;
+        for (var declaration : passages) {
+            var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), declaration.settlementId());
+            var authorized = occupied(state, settlement, List.of(declaration.passage()));
+            if (hard == null) hard = authorized;
+            else hard.retainAll(authorized);
+        }
+        return new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, KnownPedestrianGround.forFrontier(state),
+                KnownPedestrianNavigation.SearchScope.FRONTIER_JOURNEY);
+    }
+
     private KnownPedestrianRouteKnowledge(FrontierBootstrap bootstrap, Set<BlockPosition> hard,
                                          BoundedPedestrianApproach.SurveyedSurface surveyed) {
+        this(bootstrap, hard, surveyed, KnownPedestrianNavigation.SearchScope.LOCAL_APPROACH);
+    }
+    private KnownPedestrianRouteKnowledge(FrontierBootstrap bootstrap, Set<BlockPosition> hard,
+            BoundedPedestrianApproach.SurveyedSurface surveyed, KnownPedestrianNavigation.SearchScope searchScope) {
         this.bootstrap = bootstrap;
         this.hard = Set.copyOf(hard);
         this.surveyed = surveyed;
+        this.searchScope = searchScope;
     }
 
     public static List<SurfaceAnchor> path(FrontierWorldState state, SubjectId settlementId,
@@ -172,7 +198,7 @@ public final class KnownPedestrianRouteKnowledge {
     public List<SurfaceAnchor> path(SurfaceAnchor start, MovementOrder order) {
         Objects.requireNonNull(start, "pedestrian route start");
         Objects.requireNonNull(order, "pedestrian route order");
-        return KnownPedestrianNavigation.route(bootstrap, start, order, hard, surveyed);
+        return KnownPedestrianNavigation.route(bootstrap, start, order, hard, surveyed, searchScope);
     }
 
     /** Explicit task exclusions for bounded alternative selection, not caller-owned terrain rules. */
@@ -183,7 +209,7 @@ public final class KnownPedestrianRouteKnowledge {
         if (excluded.isEmpty()) return path(start, order);
         var constrained = new HashSet<>(hard);
         excluded.forEach(surface -> constrained.add(surface.support()));
-        return KnownPedestrianNavigation.route(bootstrap, start, order, constrained, surveyed);
+        return KnownPedestrianNavigation.route(bootstrap, start, order, constrained, surveyed, searchScope);
     }
 
     public SurfaceAnchor supportAt(int x, int z) {

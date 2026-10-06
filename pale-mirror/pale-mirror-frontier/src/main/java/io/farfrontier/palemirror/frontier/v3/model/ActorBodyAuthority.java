@@ -89,6 +89,17 @@ public final class ActorBodyAuthority {
         Objects.requireNonNull(state, "body authority state"); Objects.requireNonNull(body, "body identity");
         return require(state.fencedRecovery(), body);
     }
+    /** Death retires actuation, not the independently retained resource evidence of that exact incarnation. */
+    public static void requireRetiredDeath(FrontierWorldState state, ActorBodyId body) {
+        var id = ActorBodyId.recoveryBindingId(body.actorId());
+        var retired = state.fencedRecovery().tombstones().get(id);
+        if (state.actorLocations().get(body.actorId()).condition().status() != ActorLifeStatus.DEAD
+                || state.fencedRecovery().current().containsKey(id) || retired == null
+                || retired.asset() != FencedRecoveryAsset.BODY || !retired.ownerId().equals(body.actorId())
+                || retired.ownerRevision() != 0 || retired.retiredEpoch() != body.physicalEpoch()
+                || retired.disposition() != FencedRecoveryDisposition.REJECT_STALE)
+            throw new IllegalArgumentException("resource death evidence lacks its exact retired body identity");
+    }
     private static FencedRecoveryBinding require(FencedRecoveryState recovery, ActorBodyId body) {
         var binding = recovery.current().get(ActorBodyId.recoveryBindingId(body.actorId()));
         if (binding == null || binding.asset() != FencedRecoveryAsset.BODY

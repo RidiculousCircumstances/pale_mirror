@@ -295,17 +295,7 @@ final class FrontierV3DiagnosticJson {
 
     /** Bounded read-only duration-process projection; aggregate, lease and schedule remain authoritative. */
     private static String process(String id, CheckpointImage checkpoint, FrontierWorldState state) {
-        SubjectId subject = subject(id).orElse(null);
-        ResourceSiteHarvestJob job = subject == null ? null : state.resourceSites().sites().values().stream()
-                .flatMap(site -> site.harvestJobs().values().stream())
-                .filter(value -> value.id().equals(subject)).findFirst().orElse(null);
-        if (job != null) return harvestProcess(checkpoint, state, job);
-        ProductionJob production = subject == null ? null : state.productionJobs().get(subject);
-        return production == null ? unavailable("process", id, checkpoint, "not_found")
-                : FrontierV3ProductionProcessDiagnosticJson.render(checkpoint, state, production);
-    }
-    private static String harvestProcess(CheckpointImage checkpoint, FrontierWorldState state, ResourceSiteHarvestJob job) {
-        return FrontierV3HarvestDiagnosticJson.harvestProcess(checkpoint, state, job);
+        return FrontierV3ProcessDiagnosticJson.render(id, checkpoint, state);
     }
 
     private static String site(String id, CheckpointImage checkpoint, FrontierWorldState state) {

@@ -369,6 +369,11 @@ export function validateScenario(scenario) {
         || !validDiagnosticIdentity(assertion) || !assertion.expect || typeof assertion.expect !== 'object') {
       throw new Error('invalid diagnostic assertion');
     }
+    const source = (scenario.actions ?? [])[assertion.after - 1];
+    if (source && ['inspect', 'wait_until_diagnostic'].includes(source.type)
+        && (source.view !== assertion.view || source.id !== assertion.id)) {
+      throw new Error('diagnostic assertion must match its declared diagnostic action');
+    }
   }
   const frames = scenario.frames ?? [];
   if (!Array.isArray(frames)) throw new Error('scenario frames must be an array');
@@ -541,6 +546,7 @@ function validResolvablePosition(value) {
         && ['farmAnchor', 'routeSurface'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'job:')
         && ['cursor.retainedBody', 'goal.station'].includes(reference.field))
+      || (reference.view === 'process' && requiredId(reference.id, 'shipment:') && reference.field === 'actorBody')
       || (reference.view === 'scene' && requiredId(reference.id, 'job:')
         && ['productionCurrent', 'productionNext', 'productionNextBody', 'productionFutureBody'].includes(reference.field))
       || (reference.view === 'scene' && requiredId(reference.id, 'service:') && reference.field === 'serviceCurrent')

@@ -22,6 +22,14 @@ test('scenario separates setup from evidence-bearing actions', () => {
   assert.throws(() => validateScenario({ ...scenario, setup: [{ type: 'break', position: { x: 1, y: 2, z: 3 } }] }), /unsupported setup action/);
 });
 
+test('terminal assertions cannot await a different view from their exact diagnostic action', () => {
+  const value = { ...scenario, actions: [{ type: 'inspect', view: 'resource', id: 'custody:receiver' }],
+    assertions: [{ after: 1, view: 'process', id: 'shipment:goods', expect: { status: 'ok' } }], frames: [] };
+  assert.throws(() => validateScenario(value), /must match its declared diagnostic action/);
+  assert.doesNotThrow(() => validateScenario({ ...value,
+    assertions: [{ after: 1, view: 'resource', id: 'custody:receiver', expect: { status: 'ok' } }] }));
+});
+
 test('persistent-pilot lifecycle failures are machine-readable control-plane evidence', () => {
   assert.equal(pilotFailureFromLine('[Render thread/ERROR] PMV3_PILOT_FATAL boundary=normal_disconnect reason=java.io.IOException: unavailable'),
     'boundary=normal_disconnect reason=java.io.IOException: unavailable');

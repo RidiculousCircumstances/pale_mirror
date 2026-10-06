@@ -13,14 +13,17 @@ public interface ActivityInterruptionPlanner {
 
     sealed interface Assessment permits Ready, Waiting { }
     /** Owner-local transitions are planned against the same immutable input revision. */
-    record Ready(FrontierWorldState basis, FrontierWorldState following, List<ProposedEvent> events) implements Assessment {
+    record Ready(SubjectId residentId, FrontierWorldState basis, FrontierWorldState following, List<ProposedEvent> events) implements Assessment {
         public Ready {
+            Objects.requireNonNull(residentId, "interruption resident");
             Objects.requireNonNull(basis, "interruption basis");
             Objects.requireNonNull(following, "interruption result");
             events = List.copyOf(events);
         }
         public Ready validate(FrontierWorldState current, SubjectId residentId) {
-            if (basis != current || events.stream().anyMatch(event -> !event.subject().equals(residentId)))
+            // A registered owner may wake its exact retained job as well as this resident.
+            // Correlate the port result explicitly, not by assuming all emitted subjects are bodies.
+            if (basis != current || !this.residentId.equals(residentId))
                 throw new IllegalArgumentException("interruption result has a stale basis or foreign subject");
             return this;
         }

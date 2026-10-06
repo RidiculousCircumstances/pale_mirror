@@ -13,7 +13,7 @@ final class ActorMovementStateSupport {
     private ActorMovementStateSupport() { }
 
     static void validate(Map<SubjectId, ActorMovement> movements, Map<SubjectId, ActorLocation> actors,
-                         HumanPopulation people, ExactInventory inventory, ActorExecutionState executions) {
+                         HumanPopulation people, ExactInventory inventory, ActorExecutionState executions, ShipmentState shipments) {
         if (movements.size() > 4_096)
             throw new IllegalArgumentException("actor movement retention bound exceeded");
         for (var id : executions.current(ActorActivityKind.SERVICE_EXIT).values()) {
@@ -35,6 +35,13 @@ final class ActorMovementStateSupport {
                             || entry.getValue().order().capability() != TraversalCapability.PEDESTRIAN
                             || !inventory.containers().containsKey(exit.depotId()))
                         throw new IllegalArgumentException("actor movement service exit lacks its declared resident, settlement or depot");
+                }
+                case ActorMovementContext.ShipmentLeg leg -> {
+                    Shipment shipment = shipments.shipments().get(leg.shipmentId());
+                    if (shipment == null || shipment.terminal() || shipment.revision() != leg.shipmentRevision()
+                            || !shipment.execution().equals(entry.getValue().executionId())
+                            || !shipment.movementOrder().equals(entry.getValue().order()))
+                        throw new IllegalArgumentException("movement shipment leg lost its exact live declaration");
                 }
             }
         }

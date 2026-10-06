@@ -137,6 +137,9 @@ public final class GoodsTradeStateSupport {
             throw new IllegalArgumentException("goods retirement lacks the process owner or retains a physical effect");
         }
         var trade = state.companies().goodsTrade().retire(retired, now);
+        if (state.shipments().shipments().values().stream().anyMatch(s -> (!s.terminal() || s.reception().isPresent())
+                && retired.contractIds().contains(s.authorization().claimantId())))
+            throw new IllegalArgumentException("commercial retirement retains a live shipment");
         return state.withCompanies(state.companies().withGoodsTrade(trade));
     }
 
@@ -146,6 +149,8 @@ public final class GoodsTradeStateSupport {
         GoodsTradeContract contract = state.companies().goodsTrade().contracts().get(contractId);
         var resources = state.inventory().fungibleResources();
         CustodyAccount account = resources.accounts().get(partition.accountId());
+        if (state.shipments().holds(partition.claimId()))
+            throw new IllegalArgumentException("dispatched allocation cannot change beneath its shipment");
         if (contract == null || !subject.equals(contract.seller().id()) || account == null
                 || !(account.custody() instanceof ResourceCustody.Container container)
                 || !container.containerId().equals(contract.sourceContainerId())
@@ -167,6 +172,8 @@ public final class GoodsTradeStateSupport {
             throw new IllegalArgumentException("goods cancellation lacks its declared source owner");
         }
         GoodsTradeState trade = state.companies().goodsTrade().dispose(disposition);
+        if (state.shipments().holds(disposition.claimId()))
+            throw new IllegalArgumentException("cancellation must settle its dispatched shipment first");
         var resources = state.inventory().fungibleResources();
         CustodyAccount account = resources.accounts().values().stream()
                 .filter(a -> a.claimQuantities().containsKey(disposition.claimId())).findFirst().orElseThrow(

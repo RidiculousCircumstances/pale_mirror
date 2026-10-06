@@ -43,6 +43,7 @@ public final class FrontierV3FixtureCatalog {
     private static final Map<String, FrontierRuleset> RULESETS = Map.of("production", FrontierRulesets.production());
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
+            Map.entry("goodsShipment", FrontierV3FixtureCatalog::goodsShipmentConfiguration),
             Map.entry("residentMeal", FrontierV3FixtureCatalog::residentMealConfiguration),
             Map.entry("residentMealClaimedSource", FrontierV3FixtureCatalog::residentMealClaimedSourceConfiguration),
             Map.entry("residentMealAfterColdTake", FrontierV3FixtureCatalog::residentMealAfterColdTakeConfiguration),
@@ -111,6 +112,10 @@ public final class FrontierV3FixtureCatalog {
     }
 
     public static List<Profile> profiles() { return List.copyOf(PROFILES.values()); }
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> goodsShipmentConfiguration(WorldId worldId, long seed) {
+        return configured(worldId, ShipmentFixture.initial(worldId, seed), SimInstant.ZERO,
+                List.of(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(ShipmentFixture.ID, 1)), false);
+    }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> uncontestedSupplyConfiguration(WorldId worldId, long seed) {
         return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, false), false);

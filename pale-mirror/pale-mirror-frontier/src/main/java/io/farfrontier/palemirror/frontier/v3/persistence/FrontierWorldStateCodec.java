@@ -51,7 +51,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 247 retains migration waiting origins rather than throwing when a departure has no known path.
     // Version 248 retains exact physical work acceptance until durable adapter retirement.
     // Version 249 adds independently authorized goods orders, commercial obligations and partial acceptance.
-    static final int VERSION = 249; private static final int MAX_ENTRIES = 65_535;
+    static final int VERSION = 253; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -100,6 +100,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 ResourceSiteStateCodec.write(output, state.resourceSites());
                 ActorMovementStateCodec.write(output, state.actorMovements());
                 ActorExecutionStateCodec.write(output, state.actorExecutions());
+                ShipmentStateCodec.write(output, state.shipments());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -146,7 +147,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, serviceWorks, contracts, operations, history,
                     intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances,
                     topology, plans, population, companies, sites, replicaCustody, deferredAftermath, fencedRecovery,
-                    diagnosticIncidents, actorMovements, ActorExecutionStateCodec.read(input));
+                    diagnosticIncidents, actorMovements, ActorExecutionStateCodec.read(input), ShipmentStateCodec.read(input));
             FrontierWorldStateCodecValidation.validate(input, state);
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }

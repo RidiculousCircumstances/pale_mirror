@@ -8,11 +8,12 @@ import java.util.UUID;
 final class GoodsTradeForfeitureOwner implements FungibleClaimForfeitureOwner {
     @Override public void validate(FrontierWorldState before, ClaimAllocation claim, FungibleResourceHandoffObserved observation) {
         GoodsTradeContract contract = require(before, claim);
+        ShipmentStateSupport.requireSourceWithdrawal(before, claim.id());
         if (before.physicalIntents().values().stream().anyMatch(i -> i.causeSubjectId().equals(contract.id()))) {
             throw new IllegalArgumentException("goods allocation change cannot bypass an unresolved physical effect");
         }
         // The resource handoff independently checks the exact old/new physical layout and holder.
-        // Admission of a shipment must retain its own pending-effect fence when adopted.
+        // Possibly applied shipment effects retain their own obligation independently.
     }
     @Override public FrontierWorldState apply(FrontierWorldState current, ClaimAllocation claim) {
         GoodsTradeContract contract = require(current, claim);
@@ -27,7 +28,8 @@ final class GoodsTradeForfeitureOwner implements FungibleClaimForfeitureOwner {
         var economics = current.inventory().economics().releasePortion(contract.financialReservationId(),
                 contract.deliveredUnitPrice().multiply(claim.quantity()));
         return current.withChanges(FrontierWorldStateUpdate.begin().inventory(current.inventory().withEconomics(economics))
-                .companies(current.companies().withGoodsTrade(trade)));
+                .companies(current.companies().withGoodsTrade(trade))
+                .merge(ShipmentStateSupport.withdrawSourceClaim(current, claim.id())));
     }
     private static GoodsTradeContract require(FrontierWorldState state, ClaimAllocation claim) {
         GoodsTradeContract contract = state.companies().goodsTrade().contracts().get(claim.claimantId());

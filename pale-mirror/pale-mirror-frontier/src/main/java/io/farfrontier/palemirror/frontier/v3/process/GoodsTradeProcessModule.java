@@ -11,7 +11,9 @@ final class GoodsTradeProcessModule implements FrontierWorldProcessModule {
     static final Set<String> TYPES = Set.of("frontier.goods_order_placed", "frontier.goods_trade_reserved", "frontier.goods_trade_accepted",
             "frontier.goods_trade_cancelled", "frontier.goods_trade_claim_partitioned", "frontier.goods_trade_retired");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor(
-            "goods-trade", Set.of(), Set.of(), TYPES, TYPES, TYPES);
+            "goods-trade", Set.of(), Set.of(GoodsTradeReceiptProcess.REVIEW), TYPES,
+            java.util.stream.Stream.concat(TYPES.stream(), Set.of("kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled", "frontier.shipment_receipt_acknowledged").stream())
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet()), TYPES);
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return apply(state, event.subject(), event.instant().ticks(), event.payload());
     }

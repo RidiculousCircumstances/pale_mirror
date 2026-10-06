@@ -20,6 +20,11 @@ class AmbientActorProcessTest {
         FrontierWorldState state = fixture.initialState();
         var job = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
                 .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
+        // This is a pure goal-selection check at a yield checkpoint, not a service-exit
+        // journey. The post-delivery fixture still occupies the depot's work turn; declare
+        // a cleared field position so absence of meal access cannot masquerade as yielding.
+        state = state.withActorBody(job.workerId(), state.resourceSites().descriptor(state.bootstrap(), job.siteId())
+                .layout().cells().getFirst().workstation().standingBody());
         long workTick = fixture.initialInstant().ticks();
 
         assertEquals(ResidentActivityChoice.Kind.WORK,

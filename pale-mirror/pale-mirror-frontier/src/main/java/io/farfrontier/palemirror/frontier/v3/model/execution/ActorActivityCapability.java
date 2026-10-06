@@ -15,6 +15,10 @@ public interface ActorActivityCapability {
      * It is not an interruption, body departure or route-checkpoint acknowledgement. */
     void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution);
     default boolean supportsContinuation() { return interruption() == Interruption.RETAIN_CONTINUATION; }
+    /** Retained owners must explicitly declare how the shared new generation reaches their record. */
+    default ActorActivityResumption resumptionReference() {
+        throw new IllegalArgumentException("retained owner has no registered resumption-reference policy");
+    }
     /** Mandatory for retained work. Other causal owners may retain their exact
      * execution until their coordinated terminal settlement; scenes never own death outcomes. */
     default java.util.Optional<ActorActivityDeath> deathAcknowledgement() { return java.util.Optional.empty(); }

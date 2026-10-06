@@ -5,11 +5,21 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Producer-declared provider context; a bare ID never selects navigation behavior. */
-public sealed interface ActorMovementContext permits ActorMovementContext.ServiceExit {
+public sealed interface ActorMovementContext permits ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg {
+    enum Provider { SERVICE_EXIT, SHIPMENT }
+    Provider provider();
     record ServiceExit(SubjectId settlementId, SubjectId depotId) implements ActorMovementContext {
+        @Override public Provider provider() { return Provider.SERVICE_EXIT; }
         public ServiceExit {
             Objects.requireNonNull(settlementId, "movement settlement");
             Objects.requireNonNull(depotId, "movement service depot");
+        }
+    }
+    record ShipmentLeg(SubjectId shipmentId, long shipmentRevision) implements ActorMovementContext {
+        @Override public Provider provider() { return Provider.SHIPMENT; }
+        public ShipmentLeg {
+            Objects.requireNonNull(shipmentId, "movement shipment");
+            if (shipmentRevision < 1) throw new IllegalArgumentException("movement shipment revision is invalid");
         }
     }
 }

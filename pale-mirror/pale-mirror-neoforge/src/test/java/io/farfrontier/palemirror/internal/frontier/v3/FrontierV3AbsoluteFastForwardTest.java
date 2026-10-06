@@ -7,6 +7,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 /** Focused admission regression: client delivery cannot become an implicit relative advance. */
 class FrontierV3AbsoluteFastForwardTest {
@@ -57,6 +59,15 @@ class FrontierV3AbsoluteFastForwardTest {
         assertEquals(14_000L, held.reachedCheckpointInstant());
         assertEquals(14_100L, rejected.targetInstant());
         assertEquals("REJECTED", rejected.status());
+    }
+
+    @Test void zeroTickInitialHoldCanBeReleasedWithoutAuthorizingAZeroTickAdvance() {
+        var released = FrontierV3ServerLifecycle.nextFastForwardTargetOutcome(null, 0L, 0L, 0L, "RELEASED", null);
+        assertEquals("RELEASED", released.status());
+        assertDoesNotThrow(() -> new FrontierV3ServerLifecycle.FastForwardRequestOutcome(1, "ABSOLUTE", 0, 0L, 0L, 0L, "RELEASED", null));
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3ServerLifecycle.FastForwardTargetOutcome(1, 0, 0L, 0L, "HELD", null));
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3ServerLifecycle.FastForwardRequestOutcome(1, "ABSOLUTE", 1, 0L, 0L, null, "QUEUED", null));
+        assertTrue(FrontierV3ServerLifecycle.absoluteFastForwardDelta(0, 0).isEmpty());
     }
 
     @Test

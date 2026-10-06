@@ -75,13 +75,24 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
 
         record Fungible(SubjectId sourceAccountId, ResourceCustody sourceCustody,
                         SubjectId destinationAccountId, ResourceCustody destinationCustody,
-                        Optional<SubjectId> claimId, String itemKind, Map<SubjectId, Integer> lotQuantities) implements Portion {
+                        Optional<SubjectId> claimId, String itemKind, Map<SubjectId, Integer> lotQuantities,
+                        Optional<ResourceClaimDelegation> delegation) implements Portion {
+            /** Ordinary owner-held claim, explicitly without delegated authority. */
+            public Fungible(SubjectId sourceAccountId, ResourceCustody sourceCustody, SubjectId destinationAccountId,
+                            ResourceCustody destinationCustody, Optional<SubjectId> claimId, String itemKind,
+                            Map<SubjectId, Integer> lotQuantities) {
+                this(sourceAccountId, sourceCustody, destinationAccountId, destinationCustody, claimId, itemKind,
+                        lotQuantities, Optional.empty());
+            }
             public Fungible {
                 Objects.requireNonNull(sourceAccountId, "source resource account");
                 Objects.requireNonNull(sourceCustody, "source resource custody");
                 Objects.requireNonNull(destinationAccountId, "destination resource account");
                 Objects.requireNonNull(destinationCustody, "destination resource custody");
                 claimId = Objects.requireNonNull(claimId, "optional resource claim");
+                delegation = Objects.requireNonNull(delegation, "explicit delegated claim authority");
+                if (delegation.isPresent() && !claimId.equals(Optional.of(delegation.orElseThrow().claimId())))
+                    throw new IllegalArgumentException("delegation and portion name different resource claims");
                 Objects.requireNonNull(itemKind, "resource item kind");
                 lotQuantities = Map.copyOf(Objects.requireNonNull(lotQuantities, "resource lot portions"));
                 if (sourceAccountId.equals(destinationAccountId)

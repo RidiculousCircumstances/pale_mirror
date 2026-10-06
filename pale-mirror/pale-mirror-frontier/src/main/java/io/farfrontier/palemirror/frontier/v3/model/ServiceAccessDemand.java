@@ -6,7 +6,7 @@ import java.util.Objects;
 /** Ephemeral owner-issued access claim; no copied job, resource ledger or movement authority. */
 public record ServiceAccessDemand(Identity identity, Priority priority, Presence presence, long requestedAtTick,
                                   boolean physicallyAdmitted) {
-    public enum Kind { MEAL, PRODUCTION, FIELD_HARVEST }
+    public enum Kind { MEAL, PRODUCTION, FIELD_HARVEST, COURIER }
     public enum Priority { SELF_CARE, WORK }
     public enum Presence { OCCUPIED, ENTERING, APPROACH }
     public record Identity(Kind kind, SubjectId ownerId, SubjectId actorId, SubjectId pointId) {

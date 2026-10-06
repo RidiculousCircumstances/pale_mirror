@@ -18,13 +18,18 @@ public final class ActorExecutionLifecycle {
         private final FrontierWorldState basis;
         private final FrontierWorldState prepared;
         private final ActorExecutionState executions;
+        private final FrontierWorldStateUpdate resumptionChanges;
         private Transition(FrontierWorldState basis, FrontierWorldState prepared, ActorExecutionState executions) {
+            this(basis, prepared, executions, FrontierWorldStateUpdate.begin());
+        }
+        private Transition(FrontierWorldState basis, FrontierWorldState prepared, ActorExecutionState executions, FrontierWorldStateUpdate resumptionChanges) {
             this.basis = basis; this.prepared = prepared; this.executions = executions;
+            this.resumptionChanges = resumptionChanges;
         }
         /** Family data and authority change in one reference-closed immutable update. */
         public FrontierWorldState commit(FrontierWorldState current, FrontierWorldStateUpdate ownedUpdate) {
             if (current != basis) throw new IllegalArgumentException("prepared execution transition has a stale immutable basis");
-            return prepared.withChanges(Objects.requireNonNull(ownedUpdate).actorExecutions(executions));
+            return prepared.withChanges(Objects.requireNonNull(ownedUpdate).merge(resumptionChanges).actorExecutions(executions));
         }
     }
     public Transition prepareVacant(FrontierWorldState state, ActorExecutionId successor) {
@@ -181,7 +186,16 @@ public final class ActorExecutionLifecycle {
         capability.validateReference(resumed, suspended);
         if (!resumed.actorExecutions().equals(state.actorExecutions()))
             throw new IllegalArgumentException("family resume changed common execution authority");
-        return new Transition(state, resumed, executions);
+        var request = new ActorActivityResumption.Request(resumed, suspended, successor);
+        var acknowledgement = Objects.requireNonNull(capability.resumptionReference().acknowledge(request));
+        if (acknowledgement.request().expectedState() != resumed || !acknowledgement.request().equals(request))
+            throw new IllegalArgumentException("resumption owner acknowledged stale or foreign evidence");
+        var changes = acknowledgement.changes();
+        if (changes.changedComponents().contains(FrontierWorldStateUpdate.Component.ACTOR_EXECUTIONS)
+                || changes.changedComponents().contains(FrontierWorldStateUpdate.Component.ACTOR_LOCATIONS)
+                || changes.changedComponents().contains(FrontierWorldStateUpdate.Component.FENCED_RECOVERY))
+            throw new IllegalArgumentException("resumption owner cannot replace shared execution/body authority");
+        return new Transition(state, resumed, executions, changes);
     }
     /** Prepare all retained owner checkpoints against the same observed physical fact.
      * The body owner combines these changes with its pose/absence update atomically. */

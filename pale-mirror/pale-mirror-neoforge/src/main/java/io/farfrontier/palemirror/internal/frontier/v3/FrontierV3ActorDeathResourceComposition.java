@@ -10,7 +10,7 @@ import java.util.Objects;
 
 /** Closed resource-owner hooks. Body death knows neither food phases nor equipment policy. */
 final class FrontierV3ActorDeathResourceComposition {
-    enum Owner { EXACT_EQUIPMENT, RESIDENT_MEAL, SETTLEMENT_SERVICE }
+    enum Owner { EXACT_EQUIPMENT, RESIDENT_MEAL, SETTLEMENT_SERVICE, SHIPMENT }
     @FunctionalInterface interface AfterFatality { void settle(); }
     @FunctionalInterface interface Preparation {
         AfterFatality prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -26,7 +26,8 @@ final class FrontierV3ActorDeathResourceComposition {
                 return () -> { };
             }),
             new Handler(Owner.RESIDENT_MEAL, FrontierV3ResidentMealDeathResources::prepare),
-            new Handler(Owner.SETTLEMENT_SERVICE, FrontierV3SettlementServiceDeathResources::prepare)));
+            new Handler(Owner.SETTLEMENT_SERVICE, FrontierV3SettlementServiceDeathResources::prepare),
+            new Handler(Owner.SHIPMENT, FrontierV3ShipmentDeathResources::prepare)));
 
     private FrontierV3ActorDeathResourceComposition() { }
     static List<Handler> closed(List<Handler> handlers) {

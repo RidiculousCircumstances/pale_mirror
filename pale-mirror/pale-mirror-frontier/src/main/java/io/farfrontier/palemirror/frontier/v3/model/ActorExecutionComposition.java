@@ -17,7 +17,7 @@ public final class ActorExecutionComposition {
                     ActorActivityKind.SCOUT_PATROL, ActorActivityKind.OPERATION_ASSEMBLY, ActorActivityKind.LOGISTICS,
                     ActorActivityKind.ROUTE_PATROL, ActorActivityKind.HIVE_TASK_ASSEMBLY, ActorActivityKind.HIVE_TASK_RETURN,
                     ActorActivityKind.SETTLEMENT_ASSAULT, ActorActivityKind.ENGINEERING_ASSEMBLY, ActorActivityKind.ENGINEERING_WORK,
-                    ActorActivityKind.SETTLEMENT_SERVICE, ActorActivityKind.MEDICAL_TREATMENT, ActorActivityKind.ROUTE_INTERCEPTION),
+                    ActorActivityKind.SETTLEMENT_SERVICE, ActorActivityKind.MEDICAL_TREATMENT, ActorActivityKind.ROUTE_INTERCEPTION, ActorActivityKind.COURIER),
             List.of(new PresenceActivityCapability(PRESENCE_POLICIES), new MealActivityCapability(), new ServiceExitActivityCapability(),
                     new HarvestActivityCapability(), new ProductionActivityCapability(), new TransitActivityCapability(),
                     new ScoutPatrolActivityCapability(), OperationExecutionAuthority.assemblyCapability(),
@@ -27,7 +27,7 @@ public final class ActorExecutionComposition {
                     EngineeringExecutionAuthority.capability(ActorActivityKind.ENGINEERING_ASSEMBLY),
                     EngineeringExecutionAuthority.capability(ActorActivityKind.ENGINEERING_WORK),
                     SettlementServiceExecutionAuthority.capability(), MedicalExecutionAuthority.capability(),
-                    RouteEngagementExecutionAuthority.capability()));
+                    RouteEngagementExecutionAuthority.capability(), new ShipmentExecutionCapability()));
     public static final ActorExecutionLifecycle LIFECYCLE = new ActorExecutionLifecycle(CAPABILITIES);
     private ActorExecutionComposition() { }
 }

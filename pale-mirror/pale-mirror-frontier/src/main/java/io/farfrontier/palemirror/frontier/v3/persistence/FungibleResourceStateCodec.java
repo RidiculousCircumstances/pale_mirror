@@ -84,7 +84,7 @@ final class FungibleResourceStateCodec {
         return quantities;
     }
 
-    private static void writePhysicalAddress(DataOutputStream output, PhysicalStackAddress address) throws IOException {
+    static void writePhysicalAddress(DataOutputStream output, PhysicalStackAddress address) throws IOException {
         switch (address) {
             case PhysicalStackAddress.ContainerSlot slot -> { output.writeByte(0); writeCustody(output, slot.slot()); }
             case PhysicalStackAddress.PlayerSlot slot -> { output.writeByte(1); writeString(output, slot.playerId().toString()); output.writeByte(slot.slot()); }
@@ -95,7 +95,7 @@ final class FungibleResourceStateCodec {
         }
     }
 
-    private static PhysicalStackAddress readPhysicalAddress(DataInputStream input) throws IOException {
+    static PhysicalStackAddress readPhysicalAddress(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> {
                 InventoryCustody custody = readCustody(input);

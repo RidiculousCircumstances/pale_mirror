@@ -19,6 +19,7 @@ public final class ActivityExecutionCapabilities {
                     ResourceSiteHarvestLabour::pause, ResourceSiteHarvestLabour::workStatsChanged,
                     FrontierResourceSiteHarvestSceneSupport::waitingForServiceResource),
             delegated(HumanAssignmentKind.CARGO_TRANSPORT, ActorActivityKind.OPERATION_ASSEMBLY, ActorActivityKind.LOGISTICS),
+            delegated(HumanAssignmentKind.COURIER, ActorActivityKind.COURIER),
             delegated(HumanAssignmentKind.ESCORT, ActorActivityKind.OPERATION_ASSEMBLY, ActorActivityKind.LOGISTICS),
             delegated(HumanAssignmentKind.ROUTE_PATROL, ActorActivityKind.ROUTE_PATROL),
             delegated(HumanAssignmentKind.SETTLEMENT_DEFENCE, ActorActivityKind.SETTLEMENT_ASSAULT),

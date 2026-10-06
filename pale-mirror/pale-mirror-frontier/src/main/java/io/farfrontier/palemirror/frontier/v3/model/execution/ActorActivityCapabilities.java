@@ -18,6 +18,8 @@ public final class ActorActivityCapabilities {
             var death = Objects.requireNonNull(capability.deathAcknowledgement(), "declared activity death port");
             if (capability.supportsContinuation() && death.isEmpty())
                 throw new IllegalArgumentException("retained work requires its declared death acknowledgement port");
+            if (capability.supportsContinuation()) Objects.requireNonNull(capability.resumptionReference(),
+                    "retained work requires its declared resumption-reference policy");
             if (values.putIfAbsent(Objects.requireNonNull(capability.kind()), capability) != null)
                 throw new IllegalArgumentException("duplicate actor activity capability");
         }

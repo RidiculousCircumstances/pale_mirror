@@ -849,6 +849,7 @@ public final class FrontierV3TestPilotClient {
         BlockPos target = resolvedPosition(minecraft, action, action.has("at") ? "at" : "position");
         if (target == null) return;
         look(minecraft, target);
+        captureFocus = Vec3.atCenterOf(target);
         advance("look");
     }
     /** Resolves a narrow immutable plan anchor from a read-only diagnostic. */

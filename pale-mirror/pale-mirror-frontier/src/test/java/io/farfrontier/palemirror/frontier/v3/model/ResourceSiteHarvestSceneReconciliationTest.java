@@ -198,10 +198,13 @@ class ResourceSiteHarvestSceneReconciliationTest {
         var cycle = state.resourceSites().cycle(hot.site());
         var cell = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
         var due = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
-        return io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceProgressed(state, hot.site(),
+        state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceProgressed(state, hot.site(),
                 new ResourceSiteHarvestProgressed(hot.site(), cycle.epoch(), job.id(), 1, cycle.layout().revision(), cell, job.target().generation(),
                         ResourceFieldCycle.WorkOutcome.HARVESTED, due.id(), due.dueAt().ticks(), java.util.Optional.of(
                         new ResourceSiteHarvestProgressed.HandObservation(new PhysicalStackAddress.ActorHand(job.workerId(),
                                 hot.lease().members().getFirst().entityId()), hot.lease().revision(), 1))));
+        var acceptance = state.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow().progress().acceptance().orElseThrow();
+        return io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestAcceptanceProcess.acknowledge(
+                state, hot.site(), new ResourceSiteHarvestWorkAcknowledged(acceptance));
     }
 }

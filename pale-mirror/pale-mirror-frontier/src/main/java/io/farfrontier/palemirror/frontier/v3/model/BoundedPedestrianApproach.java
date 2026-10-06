@@ -35,6 +35,18 @@ public final class BoundedPedestrianApproach {
     public static List<SurfaceAnchor> compile(FrontierBootstrap bootstrap, SurfaceAnchor start,
                                                SurfaceAnchor target, Set<BlockPosition> occupied,
                                                SurveyedSurface surveyedSurface, String owner) {
+        return compile(bootstrap, start, target, occupied, surveyedSurface, owner, MAX_RADIUS, false);
+    }
+
+    /** Same geometry/search owner, explicitly authorized for a bounded cross-frontier journey. */
+    public static List<SurfaceAnchor> compileJourney(FrontierBootstrap bootstrap, SurfaceAnchor start,
+            SurfaceAnchor target, Set<BlockPosition> occupied, SurveyedSurface surveyedSurface, String owner) {
+        return compile(bootstrap, start, target, occupied, surveyedSurface, owner, 1_024, true);
+    }
+
+    private static List<SurfaceAnchor> compile(FrontierBootstrap bootstrap, SurfaceAnchor start,
+            SurfaceAnchor target, Set<BlockPosition> occupied, SurveyedSurface surveyedSurface, String owner,
+            int radius, boolean journey) {
         Objects.requireNonNull(bootstrap, "pedestrian approach bootstrap");
         Objects.requireNonNull(start, "pedestrian approach start");
         Objects.requireNonNull(target, "pedestrian approach target");
@@ -45,7 +57,7 @@ public final class BoundedPedestrianApproach {
         record Candidate(SurfaceAnchor surface, int distance) { }
         PriorityQueue<Candidate> queue = new PriorityQueue<>(Comparator
                 .comparingInt((Candidate value) -> Math.addExact(value.distance(), manhattan(value.surface(), target)))
-                .thenComparingInt(Candidate::distance).thenComparingInt(value -> value.surface().x())
+                .thenComparingInt(value -> journey ? -value.distance() : value.distance()).thenComparingInt(value -> value.surface().x())
                 .thenComparingInt(value -> value.surface().y()).thenComparingInt(value -> value.surface().z()));
         Map<SurfaceAnchor, SurfaceAnchor> predecessor = new HashMap<>();
         Map<SurfaceAnchor, Integer> distance = new HashMap<>();
@@ -57,7 +69,7 @@ public final class BoundedPedestrianApproach {
             if (++explored > MAX_EXPLORED_SURFACES) throw new ApproachUnavailable(owner + " approach exceeds bounded exploration");
             for (int[] delta : orderedNeighbours()) {
                 int x = current.x() + delta[0], z = current.z() + delta[1];
-                if (Math.abs(x - start.x()) > MAX_RADIUS || Math.abs(z - start.z()) > MAX_RADIUS) continue;
+                if (Math.abs(x - start.x()) > radius || Math.abs(z - start.z()) > radius) continue;
                 SurfaceAnchor next = x == target.x() && z == target.z() ? target : surveyedSurface.at(x, z);
                 if (!bootstrap.bounds().contains(next.support()) || Math.abs(next.y() - current.y()) > 1 || blocked(next, occupied)) continue;
                 int nextDistance = Math.addExact(candidate.distance(), 1); Integer known = distance.get(next);

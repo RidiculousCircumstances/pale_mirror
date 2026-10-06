@@ -27,7 +27,7 @@ public final class MaterialSourceSelection {
         Objects.requireNonNull(ledger, "resource ledger");
         FungibleActorOrderTransfer.accounts(ledger, order);
         ActorContainerItemOrder.Portion.Fungible portion = (ActorContainerItemOrder.Portion.Fungible) order.portion();
-        if (portion.claimId().isPresent())
+        if (portion.claimId().isPresent() && portion.delegation().isEmpty())
             return select(ledger, portion.sourceAccountId(), portion.itemKind(), portion.quantity(), portion.claimId());
         List<PhysicalStackBinding> bindings = ledger.bindings().values().stream()
                 .filter(value -> value.accountId().equals(portion.sourceAccountId()))

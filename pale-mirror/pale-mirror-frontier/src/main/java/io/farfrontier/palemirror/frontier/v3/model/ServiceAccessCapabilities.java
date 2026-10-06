@@ -12,7 +12,7 @@ import java.util.Set;
 /** Closed composition root; the coordinator never rediscovers a job's family from its state. */
 final class ServiceAccessCapabilities {
     private static final ServiceAccessCapabilities CURRENT = new ServiceAccessCapabilities(List.of(
-            new ResidentMealServiceAccess(), new ProductionServiceAccess(), new HarvestServiceAccess()));
+            new ResidentMealServiceAccess(), new ProductionServiceAccess(), new HarvestServiceAccess(), new ShipmentServiceAccess()));
     private final Map<ServiceAccessDemand.Kind, ServiceAccessCapability> capabilities;
     private final ThreadLocal<PointIndex> pointIndexes = new ThreadLocal<>();
     private static final int MAX_RETAINED_POINTS = 128;

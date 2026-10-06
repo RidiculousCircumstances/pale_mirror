@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
+import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
@@ -28,8 +29,8 @@ final class FrontierV3ActorMovementNavigation {
             BLOCKED.remove(body);
             return;
         }
-        if (!(movement.context() instanceof ActorMovementContext.ServiceExit))
-            throw new IllegalArgumentException("service-exit navigator requires its declared movement context");
+        var provider = ActorMovementProviders.require(movement);
+        provider.validate(state, movement);
         var actuation = FrontierV3AmbientActuation.capture(state, runtime, body, lease, movement.executionId()).orElse(null);
         if (actuation == null || !actuation.current(body)) return;
         Route route = ROUTES.get(body);
@@ -37,13 +38,8 @@ final class FrontierV3ActorMovementNavigation {
                 || route.goalRevision() != movement.order().goalRevision()
                 || route.topology() != state.routeTopology() || route.physicalDeltas() != state.physicalDeltas()) {
             try {
-                ActorMovementContext.ServiceExit serviceExit = (ActorMovementContext.ServiceExit) movement.context();
-                ResidentProfile resident = state.humanPopulation().resident(movement.order().actorId());
-                if (resident == null || !resident.settlementId().equals(serviceExit.settlementId()))
-                    throw new IllegalArgumentException("movement actor lacks its declared service-exit owner");
                 route = new Route(actuation.id(), lease.revision(), movement.order().goalRevision(), state.routeTopology(), state.physicalDeltas(),
-                        KnownServiceExitNavigation.pathFrom(state, serviceExit.settlementId(),
-                                serviceExit.depotId(), movement.order(),
+                        provider.route(state, movement,
                                 FrontierV3SurfaceObservation.observedBody(body).supportingSurface()));
             } catch (IllegalArgumentException unavailable) {
                 blocked(body, movement, "known_route:" + unavailable.getMessage());

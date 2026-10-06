@@ -13,6 +13,15 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorMovementInterruptionPlannerTest {
+    @Test void interruptionAcknowledgementRequiresItsDeclaredResidentAndExactBasis() {
+        var state = fixture(false); var actor = new SubjectId("resident:1-1");
+        var ready = new ActorMovementInterruptionPlanner().assess(state, actor, 24_000L);
+        var result = assertInstanceOf(ActivityInterruptionPlanner.Ready.class, ready);
+        assertSame(result, result.validate(state, actor));
+        assertThrows(IllegalArgumentException.class, () -> result.validate(state, new SubjectId("resident:1-2")));
+        assertThrows(IllegalArgumentException.class, () -> result.validate(
+                state.withChanges(FrontierWorldStateUpdate.begin()), actor));
+    }
     @Test void interruptionCancelsItsOwnContinuationAndStartsFoodInOneEngineTransaction() {
         FrontierWorldState state = fixture(false);
         SubjectId actor = new SubjectId("resident:1-1");

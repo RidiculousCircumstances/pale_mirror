@@ -327,9 +327,11 @@ public final class FrontierV3ServerLifecycle {
             // first real client can establish HOT ownership.  Its release is a control-only
             // hand-off at the current checkpoint, not a synthetic advance; publish the same
             // monotonic receipt shape so the client can prove that hand-off before continuing.
-            if (INITIAL_CANONICAL_HOLDS.remove(server) == null || checkpoint == null) return false;
-            FAST_FORWARD_OUTCOMES.put(server, nextFastForwardTargetOutcome(prior, checkpoint, checkpoint, checkpoint, "RELEASED", null));
+            if (!INITIAL_CANONICAL_HOLDS.containsKey(server) || checkpoint == null) return false;
+            var released = nextFastForwardTargetOutcome(prior, checkpoint, checkpoint, checkpoint, "RELEASED", null);
             recordFastForwardRequest(server, "ABSOLUTE", 0, checkpoint, checkpoint, checkpoint, "RELEASED", null);
+            FAST_FORWARD_OUTCOMES.put(server, released);
+            INITIAL_CANONICAL_HOLDS.remove(server);
             return true;
         }
         FAST_FORWARD_OUTCOMES.put(server, nextFastForwardTargetOutcome(prior, target,
@@ -658,29 +660,15 @@ public final class FrontierV3ServerLifecycle {
                                      Long admittedCheckpointInstant, Long reachedCheckpointInstant,
                                      String status, String reason) {
         FastForwardRequestOutcome {
-            if (requestId < 1L || !java.util.Set.of("RELATIVE", "ABSOLUTE").contains(kind) || requestedTicks < 0
-                    || !java.util.Set.of("QUEUED", "COMPLETED", "HELD", "REJECTED", "RELEASED").contains(status)
-                    || ("RELATIVE".equals(kind) && (requestedTicks < 1
-                    || (targetInstant == null && !"REJECTED".equals(status))))
-                    || ("ABSOLUTE".equals(kind) && (targetInstant == null || targetInstant < 1L))
-                    || (("QUEUED".equals(status) || "COMPLETED".equals(status) || "HELD".equals(status) || "RELEASED".equals(status))
-                    && admittedCheckpointInstant == null)
-                    || (("COMPLETED".equals(status) || "HELD".equals(status) || "RELEASED".equals(status)) && reachedCheckpointInstant == null)
-                    || ("REJECTED".equals(status) != (reason != null))) {
-                throw new IllegalArgumentException("invalid fast-forward request receipt");
-            }
+            FrontierV3FastForwardReceiptValidation.request(requestId, kind, requestedTicks, targetInstant,
+                    admittedCheckpointInstant, reachedCheckpointInstant, status, reason);
         }
     }
     record FastForwardTargetOutcome(long requestId, long targetInstant, Long admittedCheckpointInstant, Long reachedCheckpointInstant,
                                     String status, String failure) {
         FastForwardTargetOutcome {
-            if (requestId < 1L || targetInstant < 1L || !java.util.Set.of("ADVANCING", "HELD", "REJECTED", "RELEASED").contains(status)
-                    || (failure == null) != !"REJECTED".equals(status)
-                    || (("HELD".equals(status) || "RELEASED".equals(status)) && !java.util.Objects.equals(reachedCheckpointInstant, targetInstant))
-                    || (reachedCheckpointInstant != null && reachedCheckpointInstant < 0L)
-                    || (admittedCheckpointInstant != null && admittedCheckpointInstant < 0L)) {
-                throw new IllegalArgumentException("invalid fast-forward target outcome");
-            }
+            FrontierV3FastForwardReceiptValidation.target(requestId, targetInstant,
+                    admittedCheckpointInstant, reachedCheckpointInstant, status, failure);
         }
     }
     public static void beginStopping(MinecraftServer server) {

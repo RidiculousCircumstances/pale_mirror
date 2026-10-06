@@ -14,15 +14,18 @@ import java.util.Optional;
 final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlanner {
     @Override public Assessment assess(FrontierWorldState state, SubjectId residentId, long atTick) {
         ActorMovement movement = state.actorMovements().get(residentId);
-        if (movement == null) return new Ready(state, state, List.of());
+        if (movement == null) return new Ready(residentId, state, state, List.of());
         Optional<BodyPosition> checkpoint = checkpoint(state, movement, atTick);
         if (checkpoint.isEmpty()) return new Waiting(ActorExecutionCoordinator.sceneOwns(state, residentId)
                 ? Reason.AUTHORITY_HANDOFF : Reason.SERVICE_CLEARANCE);
         ActorMovementInterrupted event = new ActorMovementInterrupted(residentId,
                 movement.order().goalRevision(), atTick, checkpoint.orElseThrow(), movement.executionId());
-        return new Ready(state, reduce(state, residentId, event), List.of(new ProposedEvent(residentId, event),
-                new ProposedEvent(residentId, new ScheduleEffect.Cancelled(ActorMovementProcess.progress(
-                        movement, Math.addExact(movement.issuedAtTick(), 1L)).id()))));
+        var events = new java.util.ArrayList<ProposedEvent>();
+        events.add(new ProposedEvent(residentId, event));
+        events.add(new ProposedEvent(residentId, new ScheduleEffect.Cancelled(ActorMovementProcess.progress(
+                movement, Math.addExact(movement.issuedAtTick(), 1L)).id())));
+        events.addAll(ActorMovementProviders.require(movement).interrupted(state, movement, atTick));
+        return new Ready(residentId, state, reduce(state, residentId, event), List.copyOf(events));
     }
 
     private static Optional<BodyPosition> checkpoint(FrontierWorldState state, ActorMovement movement, long atTick) {
@@ -33,17 +36,12 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
         // That historical instant cannot authorize interrupting the newer travel checkpoint.
         if (movement.coldTravel().filter(travel -> atTick < travel.departedAtTick()).isPresent())
             return Optional.empty();
-        // This typed context explicitly declares an optional personal journey after service.
-        // Future mandatory movement kinds must supply their own interruption capability.
-        if (!(movement.context() instanceof ActorMovementContext.ServiceExit exit)) return Optional.empty();
         AmbientActorLease lease = state.ambientLeases().get(actorId);
         if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED
                 && (lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.ACTOR_MOVEMENT
                     || !lease.goalBody().supportingSurface().equals(movement.order().legalStations().getFirst())))
             return Optional.empty();
-        BodyPosition current = ActorMovementProcess.bodyAt(state, actorId, atTick);
-        return ServiceAccessCoordinator.boundary(state, exit.depotId()).cleared(current)
-                ? Optional.of(current) : Optional.empty();
+        return ActorMovementProviders.require(movement).interruptionCheckpoint(state, movement, atTick);
     }
 
     static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, ActorMovementInterrupted event) {
@@ -59,6 +57,6 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
         var actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(subject, actors.get(subject).withBody(event.retainedBody()));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(movements).actorLocations(actors)
-                .actorExecutions(state.actorExecutions().finish(movement.executionId())));
+                .actorExecutions(ActorMovementProviders.require(movement).interruptionAuthority(state, movement)));
     }
 }

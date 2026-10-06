@@ -8,8 +8,13 @@ public final class ActorItemCustody {
     private ActorItemCustody() { }
 
     public static ExactInventory transferCold(FrontierWorldState state, ActorContainerItemOrder order) {
+        var changes = transferColdUpdate(state, order);
+        return changes.inventoryOnly();
+    }
+    public static FrontierWorldStateUpdate transferColdUpdate(FrontierWorldState state, ActorContainerItemOrder order) {
         Objects.requireNonNull(state, "actor item state");
         Objects.requireNonNull(order, "actor item order");
+        ActorClaimDelegationComposition.validate(state, order);
         ExactInventory inventory = state.inventory();
         ContainerRecord container = inventory.containers().get(order.containerEndpoint().containerId());
         requireEndpoint(container, order);
@@ -30,12 +35,14 @@ public final class ActorItemCustody {
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container.id()))
             throw new IllegalArgumentException("cold actor item handoff competes with physical container authority");
         if (order.portion() instanceof ActorContainerItemOrder.Portion.Exact)
-            return inventory.transferActorOrder(order);
+            return FrontierWorldStateUpdate.begin().inventory(inventory.transferActorOrder(order));
         if (order.direction() == ActorContainerItemOrder.Direction.TAKE
                 && order.actorSlot().equals(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN))
                 && !inventory.actorItems(order.actorId()).isEmpty())
             throw new IllegalArgumentException("actor already holds an exact item");
-        return inventory.withFungibleResources(inventory.fungibleResources().transferActorOrderCold(order));
+        var preparation = ActorClaimDelegationComposition.prepare(state, order);
+        inventory = preparation.inventory();
+        return preparation.ownerChanges().inventory(inventory.withFungibleResources(inventory.fungibleResources().transferActorOrderCold(preparation.order())));
     }
 
     /** Loaded counterpart: the job owner supplies a durable intent and post-effect stack witness. */
@@ -43,8 +50,16 @@ public final class ActorItemCustody {
                                                   long sourceEpoch, long destinationEpoch,
                                                   List<FungiblePhysicalObservation.Stack> remainingSource,
                                                   List<FungiblePhysicalObservation.Stack> destination) {
+        var changes = transferObservedUpdate(state, order, sourceEpoch, destinationEpoch, remainingSource, destination);
+        return changes.inventoryOnly();
+    }
+    public static FrontierWorldStateUpdate transferObservedUpdate(FrontierWorldState state, ActorContainerItemOrder order,
+                                                  long sourceEpoch, long destinationEpoch,
+                                                  List<FungiblePhysicalObservation.Stack> remainingSource,
+                                                  List<FungiblePhysicalObservation.Stack> destination) {
         Objects.requireNonNull(state, "observed actor item state");
         Objects.requireNonNull(order, "observed actor item order");
+        ActorClaimDelegationComposition.validate(state, order);
         ExactInventory inventory = state.inventory();
         ContainerRecord container = inventory.containers().get(order.containerEndpoint().containerId());
         requireEndpoint(container, order);
@@ -59,16 +74,17 @@ public final class ActorItemCustody {
         if (order.portion() instanceof ActorContainerItemOrder.Portion.Exact) {
             if (!remainingSource.isEmpty() || !destination.isEmpty())
                 throw new IllegalArgumentException("exact actor handoff may not retain fungible witness layouts");
-            return inventory.transferActorOrder(order);
+            return FrontierWorldStateUpdate.begin().inventory(inventory.transferActorOrder(order));
         }
         if (order.direction() == ActorContainerItemOrder.Direction.TAKE
                 && order.actorSlot().equals(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN))
                 && !inventory.actorItems(order.actorId()).isEmpty())
             throw new IllegalArgumentException("observed actor handoff would overwrite an exact item");
-        return inventory.withFungibleResources(inventory.fungibleResources()
-                .transferActorOrderObservedStacks(order, sourceEpoch, destinationEpoch, remainingSource, destination));
+        var preparation = ActorClaimDelegationComposition.prepare(state, order);
+        inventory = preparation.inventory();
+        return preparation.ownerChanges().inventory(inventory.withFungibleResources(inventory.fungibleResources()
+                .transferActorOrderObservedStacks(preparation.order(), sourceEpoch, destinationEpoch, remainingSource, destination)));
     }
-
     private static void requireEndpoint(ContainerRecord container, ActorContainerItemOrder order) {
         if (container == null || order.portion() instanceof ActorContainerItemOrder.Portion.Exact exact
                 && !container.ownerId().equals(exact.item().economicOwnerId())) {

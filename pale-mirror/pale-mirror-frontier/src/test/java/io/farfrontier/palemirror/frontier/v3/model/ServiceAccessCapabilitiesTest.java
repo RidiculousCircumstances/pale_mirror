@@ -15,7 +15,7 @@ class ServiceAccessCapabilitiesTest {
         var resident = state.bootstrap().settlements().getFirst().residents().getFirst().id();
         var changed = state.withActorBody(resident, state.actorLocations().get(resident).body().offset(1, 0, 0));
         assertEquals(new ServiceAccessCapabilities(List.of(new ResidentMealServiceAccess(),
-                new ProductionServiceAccess(), new HarvestServiceAccess())).evaluate(changed, point),
+                new ProductionServiceAccess(), new HarvestServiceAccess(), new ShipmentServiceAccess())).evaluate(changed, point),
                 ServiceAccessCapabilities.current(changed, point));
         assertSame(ServiceAccessCapabilities.current(changed, point), ServiceAccessCapabilities.current(changed, point));
         var depot = state.bootstrap().settlements().getFirst().structures().stream()
@@ -29,7 +29,8 @@ class ServiceAccessCapabilitiesTest {
                 calls.incrementAndGet(); return List.of();
             }
         };
-        var counted = new ServiceAccessCapabilities(List.of(new ResidentMealServiceAccess(), new HarvestServiceAccess(), production));
+        var counted = new ServiceAccessCapabilities(List.of(new ResidentMealServiceAccess(), new HarvestServiceAccess(),
+                new ShipmentServiceAccess(), production));
         counted.indexed(state, point); counted.indexed(state, point);
         assertEquals(1, calls.get(), "family demand scans occur once per immutable state and queried point");
         counted.indexed(changed, point);
@@ -68,7 +69,8 @@ class ServiceAccessCapabilitiesTest {
 
     private static ServiceAccessCapabilities registry(List<ServiceAccessDemand> demands) {
         return new ServiceAccessCapabilities(List.of(provider(ServiceAccessDemand.Kind.MEAL, List.of()),
-                provider(ServiceAccessDemand.Kind.FIELD_HARVEST, List.of()), provider(ServiceAccessDemand.Kind.PRODUCTION, demands)));
+                provider(ServiceAccessDemand.Kind.FIELD_HARVEST, List.of()), provider(ServiceAccessDemand.Kind.COURIER, List.of()),
+                provider(ServiceAccessDemand.Kind.PRODUCTION, demands)));
     }
 
     private static ServiceAccessCapability provider(ServiceAccessDemand.Kind kind, List<ServiceAccessDemand> demands) {

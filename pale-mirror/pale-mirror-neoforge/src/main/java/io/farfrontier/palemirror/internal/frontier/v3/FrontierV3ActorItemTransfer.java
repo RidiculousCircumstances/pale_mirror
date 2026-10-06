@@ -75,16 +75,22 @@ final class FrontierV3ActorItemTransfer {
         private final UUID declaredBodyId;
         private final List<MaterialSourceSelection.Slice> source;
         private final int destinationSlot;
+        private final int destinationBefore;
         private final Item item;
 
         FungibleStep(ActorContainerItemOrder order, ChestBlockEntity chest, Villager actor, UUID declaredBodyId,
                      List<MaterialSourceSelection.Slice> source, int destinationSlot) {
+            this(order, chest, actor, declaredBodyId, source, destinationSlot, 0);
+        }
+        FungibleStep(ActorContainerItemOrder order, ChestBlockEntity chest, Villager actor, UUID declaredBodyId,
+                     List<MaterialSourceSelection.Slice> source, int destinationSlot, int destinationBefore) {
             this.order = Objects.requireNonNull(order, "fungible actor order");
             this.chest = Objects.requireNonNull(chest, "declared material container");
             this.actor = Objects.requireNonNull(actor, "declared physical actor");
             this.declaredBodyId = Objects.requireNonNull(declaredBodyId, "declared scene body");
             this.source = List.copyOf(Objects.requireNonNull(source, "current source bindings"));
             this.destinationSlot = destinationSlot;
+            this.destinationBefore = destinationBefore;
             if (!(order.portion() instanceof ActorContainerItemOrder.Portion.Fungible portion)
                     || !actor.getUUID().equals(declaredBodyId)
                     || !order.containerEndpoint().containerId().value().equals(chest.getPersistentData()
@@ -95,7 +101,8 @@ final class FrontierV3ActorItemTransfer {
                 throw new IllegalArgumentException("fungible step has no exact declared body, container or bounded portion");
             ResourceLocation id = ResourceLocation.tryParse(portion.itemKind());
             this.item = id == null ? Items.AIR : BuiltInRegistries.ITEM.getOptional(id).orElse(Items.AIR);
-            if (item == Items.AIR || portion.quantity() > item.getDefaultMaxStackSize())
+            if (item == Items.AIR || destinationBefore < 0 || destinationBefore + portion.quantity() > item.getDefaultMaxStackSize()
+                    || order.direction() == ActorContainerItemOrder.Direction.TAKE && destinationBefore != 0)
                 throw new IllegalArgumentException("fungible step has no stackable Minecraft item");
             boolean taking = order.direction() == ActorContainerItemOrder.Direction.TAKE;
             if (taking) {
@@ -117,14 +124,14 @@ final class FrontierV3ActorItemTransfer {
         boolean before() {
             if (!sourceMatches(false)) return false;
             return order.direction() == ActorContainerItemOrder.Direction.TAKE
-                    ? held().isEmpty() : chest.getItem(destinationSlot).isEmpty();
+                    ? held().isEmpty() : destinationBefore == 0 ? chest.getItem(destinationSlot).isEmpty() : plain(chest.getItem(destinationSlot), destinationBefore);
         }
 
         boolean after() {
             if (!sourceMatches(true)) return false;
             return order.direction() == ActorContainerItemOrder.Direction.TAKE
                     ? plain(held(), order.portion().quantity())
-                    : plain(chest.getItem(destinationSlot), order.portion().quantity());
+                    : plain(chest.getItem(destinationSlot), destinationBefore + order.portion().quantity());
         }
 
         boolean apply() {
@@ -138,7 +145,7 @@ final class FrontierV3ActorItemTransfer {
                 FrontierV3ActorResourceSlots.set(actor, order.actorSlot(), new ItemStack(item, order.portion().quantity()));
             } else {
                 ItemStack held = held();
-                chest.setItem(destinationSlot, held.copyWithCount(order.portion().quantity()));
+                chest.setItem(destinationSlot, held.copyWithCount(destinationBefore + order.portion().quantity()));
                 FrontierV3ActorResourceSlots.set(actor, order.actorSlot(), held.getCount() == order.portion().quantity()
                         ? ItemStack.EMPTY : held.copyWithCount(held.getCount() - order.portion().quantity()));
             }

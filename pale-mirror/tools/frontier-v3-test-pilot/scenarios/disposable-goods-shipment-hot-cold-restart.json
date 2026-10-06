@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "id": "disposable_goods_shipment_hot_cold_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "goods-shipment", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "restart": { "mode": "graceful", "afterAction": 8 },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "shipment:development-goods", "expect": {
+        "status": "ok", "family": "frontier.shipment", "result": {
+          "stage": "AWAITING_LOAD", "remainingQuantity": 32, "acceptedQuantity": 0, "fulfilled": false }
+      } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "offset": { "x": -8, "y": 2, "z": -8 }, "settleMs": 0,
+      "causalMilestone": "ordinary_player_loads_sender_and_courier" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "shipment:development-goods",
+      "expect": { "status": "ok", "lease": "HOT" }, "timeoutMs": 60000 },
+    { "type": "release_fast_forward_hold" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "shipment:development-goods",
+      "expect": { "status": "ok", "result": { "stage": "CARRYING", "remainingQuantity": 32, "acceptedQuantity": 0 } },
+      "timeoutMs": 90000, "causalMilestone": "physical_pickup_retains_seller_title" },
+    { "type": "look", "at": { "diagnostic": { "view": "process", "id": "shipment:development-goods", "field": "actorBody" } } },
+    { "type": "observe_entity_motion", "id": "shipment:development-goods", "entityType": "minecraft:villager",
+      "maxDistance": 96, "durationTicks": 80, "sampleEveryTicks": 2, "timeoutMs": 30000,
+      "causalMilestone": "same_courier_physically_carries_goods" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 68, "z": -132 },
+      "settleMs": 0, "causalMilestone": "ordinary_player_releases_courier_to_cold" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "shipment:development-goods",
+      "expect": { "status": "ok", "lease": null, "result": { "stage": "CARRYING", "remainingQuantity": 32, "acceptedQuantity": 0 } },
+      "timeoutMs": 90000, "causalMilestone": "exact_cargo_and_actor_before_restart" },
+    { "type": "inspect", "view": "process", "id": "shipment:development-goods",
+      "causalMilestone": "recovered_same_transport_obligation" },
+    { "type": "fast_forward_to_instant", "targetInstant": 4500, "timeoutMs": 180000,
+      "causalMilestone": "cold_journey_without_per_cell_material_replay" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:2-depot", "field": "position" } },
+      "offset": { "x": -8, "y": 2, "z": -8 }, "settleMs": 0,
+      "causalMilestone": "ordinary_player_loads_receiver" },
+    { "type": "release_fast_forward_hold" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "shipment:development-goods",
+      "expect": { "status": "ok", "result": { "stage": "DELIVERED", "remainingQuantity": 0, "acceptedQuantity": 32,
+        "fulfilled": true, "receptionQuantity": 0, "pendingPhysicalEffect": false } },
+      "timeoutMs": 180000, "causalMilestone": "actual_received_goods_and_independent_buyer_acceptance" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:2-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } },
+      "timeoutMs": 60000, "causalMilestone": "accepted_goods_match_current_physical_receiver" },
+    { "type": "inspect", "view": "resource", "id": "custody:container-2-depot",
+      "causalMilestone": "buyer_owned_received_cargo" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:2-depot", "field": "position" } },
+      "offset": { "x": -2, "y": 1, "z": 0 }, "settleMs": 0 },
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:2-depot", "field": "position" } },
+      "timeoutMs": 30000, "causalMilestone": "ordinary_receiver_inventory_is_visible" }
+  ],
+  "assertions": [
+    { "after": 9, "view": "process", "id": "shipment:development-goods", "expect": {
+      "status": "ok", "result": { "stage": "CARRYING", "remainingQuantity": 32, "acceptedQuantity": 0 } } },
+    { "after": 13, "view": "process", "id": "shipment:development-goods", "expect": {
+      "status": "ok", "result": { "stage": "DELIVERED", "acceptedQuantity": 32, "fulfilled": true } } }
+  ],
+  "frames": [ { "after": 5, "name": "exact-loaded-courier" },
+              { "after": 17, "name": "goods-at-receiver", "presentation": "player" } ]
+}

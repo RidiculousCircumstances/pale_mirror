@@ -214,6 +214,9 @@ public final class ResidentActivityProcess {
         if (!(assessment instanceof ActivityInterruptionPlanner.Ready ready)) return assessment;
         ready.validate(state, residentId);
         ResidentActivityChoice next = ResidentActivityCoordinator.assess(ready.following(), residentId, now);
+        var movement = state.actorMovements().get(residentId);
+        if (movement != null && !ActorMovementProviders.require(movement).permitsReplacement(next.kind()))
+            return new ActivityInterruptionPlanner.Waiting(ActivityInterruptionPlanner.Reason.AUTHORITY_HANDOFF);
         if (next.kind() == ResidentActivityChoice.Kind.WORK
                 || next.kind() == ResidentActivityChoice.Kind.EAT
                     && ResidentMealOpportunity.find(ready.following(), residentId, now).isPresent()) return ready;

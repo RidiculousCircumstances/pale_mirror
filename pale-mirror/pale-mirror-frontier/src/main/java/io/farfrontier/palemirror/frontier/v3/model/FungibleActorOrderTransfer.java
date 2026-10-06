@@ -34,11 +34,15 @@ final class FungibleActorOrderTransfer {
         if (portion.claimId().isPresent()) {
             SubjectId claimId = portion.claimId().orElseThrow();
             ClaimAllocation claim = ledger.claims().get(claimId);
-            if (claim == null || !claim.claimantId().equals(order.ownerId())
+            SubjectId claimant = portion.delegation().map(ResourceClaimDelegation::claimantId).orElse(order.ownerId());
+            if (portion.delegation().isPresent() && !portion.delegation().orElseThrow().executorId().equals(order.ownerId()))
+                throw new IllegalArgumentException("delegated resource portion belongs to another executor");
+            if (claim == null || !claim.claimantId().equals(claimant)
                     || !claim.itemKind().equals(portion.itemKind())
-                    || claim.quantity() != portion.quantity()
-                    || !claim.lotQuantities().equals(portion.lotQuantities()))
+                    || (portion.delegation().isEmpty() && (claim.quantity() != portion.quantity()
+                    || !claim.lotQuantities().equals(portion.lotQuantities()))))
                 throw new IllegalArgumentException("actor item order has no exact owner-held claim");
+            FungibleResourceLedger.requireSubset(claim.lotQuantities(), portion.lotQuantities(), "delegated claim portion");
             claimed = Map.of(claimId, portion.quantity());
         } else {
             if (!source.claimQuantities().isEmpty())

@@ -7,7 +7,7 @@ import java.util.Optional;
 final class ServiceExitActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.SERVICE_EXIT; }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
-    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return ActorActivityBodyCheckpoint.usesActorLocation(); }
+    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return new ActorMovementBodyCheckpoint(); }
     @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
     @Override public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {
         throw new IllegalArgumentException("service exit uses its exact movement retirement boundary");

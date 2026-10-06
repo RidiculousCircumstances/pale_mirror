@@ -54,7 +54,8 @@ public final class FrontierWorldStateUpdate {
         FENCED_RECOVERY,
         DIAGNOSTIC_INCIDENTS,
         ACTOR_MOVEMENTS,
-        ACTOR_EXECUTIONS
+        ACTOR_EXECUTIONS,
+        SHIPMENTS
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -87,12 +88,20 @@ public final class FrontierWorldStateUpdate {
     private DiagnosticIncidentIndex diagnosticIncidents;
     private Map<SubjectId, ActorMovement> actorMovements;
     private ActorExecutionState actorExecutions;
+    private ShipmentState shipments;
 
     private FrontierWorldStateUpdate() { }
 
     public static FrontierWorldStateUpdate begin() { return new FrontierWorldStateUpdate(); }
 
     public Set<Component> changedComponents() { return Set.copyOf(changed); }
+
+    /** Preserve inventory-only callers' atomic publication with their owning job transition. */
+    ExactInventory inventoryOnly() {
+        if (!changed.equals(EnumSet.of(Component.INVENTORY)))
+            throw new IllegalArgumentException("delegated allocation changes require the atomic named-state update boundary");
+        return inventory;
+    }
 
     /** Compose independently owned contributions before one aggregate validation.
      * Duplicate component writers are rejected, never resolved by last-write-wins. */
@@ -132,6 +141,7 @@ public final class FrontierWorldStateUpdate {
                 case DIAGNOSTIC_INCIDENTS -> diagnosticIncidents(contribution.diagnosticIncidents);
                 case ACTOR_MOVEMENTS -> actorMovements(contribution.actorMovements);
                 case ACTOR_EXECUTIONS -> actorExecutions(contribution.actorExecutions);
+                case SHIPMENTS -> shipments(contribution.shipments);
             }
         }
         return this;
@@ -224,6 +234,9 @@ public final class FrontierWorldStateUpdate {
     public FrontierWorldStateUpdate actorExecutions(ActorExecutionState next) {
         mark(Component.ACTOR_EXECUTIONS); actorExecutions = require(next, "actor executions"); return this;
     }
+    public FrontierWorldStateUpdate shipments(ShipmentState next) {
+        mark(Component.SHIPMENTS); shipments = require(next, "shipments"); return this;
+    }
 
     Map<SubjectId, ActorLocation> actorLocations(FrontierWorldState state) { return changed(Component.ACTOR_LOCATIONS, actorLocations, state.actorLocations()); }
     Map<SubjectId, StructureCondition> structureConditions(FrontierWorldState state) { return changed(Component.STRUCTURE_CONDITIONS, structureConditions, state.structureConditions()); }
@@ -254,6 +267,7 @@ public final class FrontierWorldStateUpdate {
     DiagnosticIncidentIndex diagnosticIncidents(FrontierWorldState state) { return changed(Component.DIAGNOSTIC_INCIDENTS, diagnosticIncidents, state.diagnosticIncidents()); }
     Map<SubjectId, ActorMovement> actorMovements(FrontierWorldState state) { return changed(Component.ACTOR_MOVEMENTS, actorMovements, state.actorMovements()); }
     ActorExecutionState actorExecutions(FrontierWorldState state) { return changed(Component.ACTOR_EXECUTIONS, actorExecutions, state.actorExecutions()); }
+    ShipmentState shipments(FrontierWorldState state) { return changed(Component.SHIPMENTS, shipments, state.shipments()); }
 
     private void mark(Component component) {
         if (!changed.add(component)) throw new IllegalStateException("state component is specified more than once: " + component);

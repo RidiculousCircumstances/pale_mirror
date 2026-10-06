@@ -9,6 +9,7 @@ final class ProductionActivityCapability implements ActorActivityCapability {
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
     @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return ProductionJourneyKnowledge::acknowledge; }
     @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
+    @Override public ActorActivityResumption resumptionReference() { return ActorActivityResumption.noRetainedExecutionReference(); }
     @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
         return Optional.of((state, execution, tick) -> {
             job(state, execution);

@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, loadScenario, newManifest, pilotDiagnosticActionStep, saveManifest, scenarioDeadlineMs, traceRecord } from './scenario.mjs';
+import { SemanticProgressMonitor } from './semantic-progress.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { requirePreparedF0vBuild } from './prepared-build.mjs';
 import { ensurePreparedLaunchWorkingDirectory, preparedLaunch } from './prepared-launch.mjs';
@@ -95,10 +96,11 @@ function lifecycleSegment() {
   }
   return segment;
 }
+const lifecycleCancellation = new AbortController();
 function lifecycleBarrier(barrier, signal = undefined, suffix = undefined, detail = {}) {
   if (lifecycle === undefined) return;
   lifecycleWrites = lifecycleWrites.then(async () => {
-    if (signal !== undefined) await awaitLifecycleSignal(lifecycle, signal, suffix, 300_000);
+    if (signal !== undefined) await awaitLifecycleSignal(lifecycle, signal, suffix, 300_000, lifecycleCancellation.signal);
     await publishLifecycleBarrier(lifecycle, barrier, detail);
   });
   lifecycleWrites.catch((error) => { failure ??= `lifecycle barrier failure: ${String(error?.message ?? error)}`; publishPilotState(); });
@@ -137,6 +139,7 @@ lifecycleBarrier(LifecycleBarrier.CLIENT_CONNECTED_FIXTURE_READY, LifecycleSigna
 let childExit;
 exited(child).then((code) => { childExit = code; publishPilotState(); });
 const diagnostics = [];
+const semanticProgress = new SemanticProgressMonitor();
 const frameTasks = [];
 const executeFile = promisify(execFile);
 const auditScript = resolve(project, 'scripts/visual-audit-x11.py');
@@ -167,6 +170,7 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
     if (pilotDiagnostic != null) {
       try {
         if (pilotDiagnostic.error) throw new Error(pilotDiagnostic.error);
+        semanticProgress.observe(pilotDiagnostic.value);
         // A persistent Minecraft JVM intentionally reloads an after-restart segment whose local
         // pilot counter starts at one.  The immutable contract remains global, so its runner
         // correlation is authoritative during that one test-only hand-off.
@@ -175,7 +179,7 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
         const diagnostic = { at: new Date().toISOString(), actionStep, value: pilotDiagnostic.value, line: pilotDiagnostic.line };
         diagnostics.push(diagnostic); trace('diagnostic_received', { correlation: actionStep == null ? null : correlation(runId, actionStep), diagnostic: diagnostic.value });
       }
-      catch { failure ??= `malformed diagnostic line: ${line}`; }
+      catch (error) { failure ??= `diagnostic/progress violation: ${String(error?.message ?? error)}; line=${line}`; }
     }
     const inventory = line.match(/PMV3_PILOT_LOADED_MODS\s+(\{.*\})\s*$/);
     if (inventory) {
@@ -282,6 +286,7 @@ try {
     manifest.diagnostics.push({ assertion, observed });
   }
   timing.end('terminal_assertions');
+  manifest.semanticProgress = semanticProgress.receipts();
   // The stream queue may still contain unrelated late stdout work after the client has
   // durably published this segment.  Terminal authority is the nonce-bound journal, not an
   // incidental promise chain: wait for the exact published completion barrier before granting
@@ -317,8 +322,10 @@ try {
   if (fixtureStarted) timing.end('fixture_readiness');
   if (actionTimingName !== null) timing.end(actionTimingName);
   manifest.finishedAt = new Date().toISOString(); manifest.diagnostics.push(...diagnostics);
+  manifest.semanticProgress = semanticProgress.receipts();
   trace('run_finished', { status: manifest.status, error: manifest.error ?? null });
   await traceWrites;
+  if (manifest.status !== 'ok') lifecycleCancellation.abort();
   // A lifecycle signal can be absent only because the scenario itself failed; retain the exact
   // journal for the parent failure bundle instead of turning cleanup into an unbounded wait.
   await lifecycleWrites.catch(() => undefined);

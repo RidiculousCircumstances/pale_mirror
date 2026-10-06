@@ -12,6 +12,7 @@ import java.util.Set;
 
 /** Pure, bounded local route search over retained knowledge; never reads loaded blocks or awards arrival. */
 public final class KnownPedestrianNavigation {
+    public enum SearchScope { LOCAL_APPROACH, FRONTIER_JOURNEY }
     private KnownPedestrianNavigation() { }
 
     public static final class RouteUnavailable extends IllegalArgumentException {
@@ -21,11 +22,16 @@ public final class KnownPedestrianNavigation {
     public static List<SurfaceAnchor> route(FrontierBootstrap bootstrap, SurfaceAnchor start, MovementOrder order,
                                             Set<BlockPosition> occupied,
                                             BoundedPedestrianApproach.SurveyedSurface surveyed) {
+        return route(bootstrap, start, order, occupied, surveyed, SearchScope.LOCAL_APPROACH);
+    }
+    public static List<SurfaceAnchor> route(FrontierBootstrap bootstrap, SurfaceAnchor start, MovementOrder order,
+            Set<BlockPosition> occupied, BoundedPedestrianApproach.SurveyedSurface surveyed, SearchScope scope) {
         Objects.requireNonNull(bootstrap, "known navigation bootstrap");
         Objects.requireNonNull(start, "known navigation start");
         Objects.requireNonNull(order, "known navigation order");
         occupied = Set.copyOf(Objects.requireNonNull(occupied, "known navigation occupancy"));
         Objects.requireNonNull(surveyed, "known navigation survey");
+        Objects.requireNonNull(scope, "known navigation search scope");
         if (order.capability() != TraversalCapability.PEDESTRIAN)
             throw new IllegalArgumentException("known pedestrian navigation cannot change actor capability");
         if (!bootstrap.bounds().contains(start.support()))
@@ -36,8 +42,9 @@ public final class KnownPedestrianNavigation {
         for (SurfaceAnchor station : order.legalStations()) {
             if (!bootstrap.bounds().contains(station.support()) || blocked(station, occupied)) continue;
             try {
-                List<SurfaceAnchor> candidate = BoundedPedestrianApproach.compile(bootstrap, start, station,
-                        occupied, surveyed, "known-pedestrian-goal");
+                List<SurfaceAnchor> candidate = scope == SearchScope.FRONTIER_JOURNEY
+                        ? BoundedPedestrianApproach.compileJourney(bootstrap, start, station, occupied, surveyed, "known-pedestrian-journey")
+                        : BoundedPedestrianApproach.compile(bootstrap, start, station, occupied, surveyed, "known-pedestrian-goal");
                 if (best == null || candidate.size() < best.size()) best = candidate;
             } catch (BoundedPedestrianApproach.ApproachUnavailable unavailable) {
                 // The caller's station order is the deterministic tie break.

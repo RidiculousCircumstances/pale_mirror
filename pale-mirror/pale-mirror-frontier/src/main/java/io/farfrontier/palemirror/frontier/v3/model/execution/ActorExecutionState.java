@@ -61,6 +61,13 @@ public final class ActorExecutionState {
         if (execution == null || !execution.current().equals(Optional.of(id)))
             throw new IllegalArgumentException("execution authority is absent, stale or foreign");
     }
+    /** Retention validates an exact reference; it never grants current actuation. */
+    public void requireRetained(ActorExecutionId id) {
+        Objects.requireNonNull(id, "retained execution identity");
+        var execution = actors.get(id.actorId());
+        if (execution == null || !execution.current().equals(Optional.of(id)) && !execution.suspended().equals(Optional.of(id)))
+            throw new IllegalArgumentException("retained execution is absent, stale or foreign");
+    }
     public ActorExecutionState begin(ActorExecutionId id, long expectedGeneration) {
         Objects.requireNonNull(id, "execution identity");
         ActorExecution previous = actors.get(id.actorId());
