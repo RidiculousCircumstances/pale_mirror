@@ -12,6 +12,38 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3AmbientDepartureTest {
     private static final SubjectId ACTOR = new SubjectId("resident:1-1");
 
+    @Test void loadedCourierRetainsHotProjectionUntilItsOwnerSettlesTheSavedHand() {
+        var state = FrontierV3FixtureCatalog.goodsShipmentConfiguration(
+                new WorldId("frontier:loaded-courier-release"), 41L).initialState();
+        var shipment = state.shipments().shipments().values().iterator().next();
+        var actor = shipment.execution().actorId();
+        state = state.withActorBody(actor, shipment.sender().station().standingBody());
+        state = ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(),
+                shipment.revision(), Shipment.Status.AWAITING_LOAD);
+        state = AmbientLeaseStateProcess.prepare(state, AmbientActorProcess.nextLease(state, actor, SimInstant.ZERO));
+        state = ModeledActorBodyFacts.present(state, actor);
+        state = AmbientLeaseStateProcess.transition(state, actor, AmbientLeaseStatus.HOT);
+        var identity = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                ActorBodyAuthority.current(state, actor), shipment.execution());
+        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(actor,
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), actor),
+                ActorContainerItemOrder.Hand.MAIN), shipment.itemKind(), shipment.quantity());
+        state = ShipmentPhysicalStateSupport.handCustody(state, shipment.id(), new ShipmentHandCustodyObserved(
+                shipment.id(), identity, ShipmentHandCustodyObserved.Boundary.MATERIALIZED, hand));
+        var location = state.actorLocations().get(actor);
+        var release = new AmbientLeaseReleased(actor, location.body(), location.condition().health());
+        assertFalse(FrontierV3AmbientActorExecutor.releaseEligible(state, release));
+        assertEquals(AmbientLeaseStatus.HOT, state.ambientLeases().get(actor).status());
+        var cargo = state.inventory().fungibleResources().accounts().get(shipment.carriedAccountId());
+        state = ShipmentPhysicalStateSupport.handCustody(state, shipment.id(), new ShipmentHandCustodyObserved(
+                shipment.id(), identity, ShipmentHandCustodyObserved.Boundary.SAVED_DEPARTURE, hand));
+        assertTrue(FrontierV3AmbientActorExecutor.releaseEligible(state, release));
+        state = AmbientLeaseStateProcess.release(AmbientLeaseStateProcess.transition(state, actor, AmbientLeaseStatus.DRAINING), release);
+        state = ModeledActorBodyFacts.unloaded(state, actor);
+        assertEquals(cargo, state.inventory().fungibleResources().accounts().get(shipment.carriedAccountId()));
+        assertEquals(shipment.execution(), state.actorExecutions().actors().get(actor).current().orElseThrow());
+    }
+
     @Test void semanticGoalDepartureReleasesFromActualBodyNotOldAdmissionAnchor() {
         var state = hot();
         var lease = state.ambientLeases().get(ACTOR);
@@ -25,11 +57,11 @@ class FrontierV3AmbientDepartureTest {
                 original.canonicalBodyAtCapture(), original.canonicalHealthAtCapture());
         assertTrue(departure.current(state));
         assertNotEquals(lease.handoffBody(), moved);
-        assertFalse(FrontierV3AmbientActorExecutor.unloadedReleaseEligible(state,
+        assertFalse(FrontierV3AmbientActorExecutor.releaseEligible(state,
                 new AmbientLeaseReleased(ACTOR, moved, departure.observed().health())),
                 "a presentation release cannot install a pose or injury that the body owner has not recorded");
         state = inspectDeparture(state, departure);
-        assertTrue(FrontierV3AmbientActorExecutor.unloadedReleaseEligible(state,
+        assertTrue(FrontierV3AmbientActorExecutor.releaseEligible(state,
                 new AmbientLeaseReleased(ACTOR, moved, departure.observed().health())));
         var released = AmbientLeaseStateProcess.release(AmbientLeaseStateProcess.transition(
                 state, ACTOR, AmbientLeaseStatus.DRAINING),

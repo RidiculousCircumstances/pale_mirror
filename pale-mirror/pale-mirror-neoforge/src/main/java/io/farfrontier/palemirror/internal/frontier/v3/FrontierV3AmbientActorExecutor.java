@@ -624,13 +624,18 @@ final class FrontierV3AmbientActorExecutor {
         current = state.actorLocations().get(actorId);
         BodyPosition position = current.body(); FixedScalar health = current.condition().health();
         lease = state.ambientLeases().get(actorId);
+        var release = new AmbientLeaseReleased(actorId, position, health);
+        // Observer demand may end while an exact loaded hand/effect still owns
+        // this presentation. Keep it HOT so its registered executor can settle;
+        // only a real saved departure may release physical cargo custody.
+        if (!releaseEligible(state, release)) return Optional.empty();
         if (lease.status() != AmbientLeaseStatus.DRAINING && !(submit(runtime, "ambient-draining", actorId.value(),
                 new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
                 instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
         FrontierWorldState drained = runtime.decodedState().orElse(null);
         if (drained == null || drained.ambientLeases().get(actorId) == null
                 || drained.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return Optional.empty();
-        if (!(submit(runtime, "ambient-release", actorId.value(), new AmbientLeaseReleased(actorId, position, health))
+        if (!(submit(runtime, "ambient-release", actorId.value(), release)
                 instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
         FrontierWorldState released = runtime.decodedState().orElse(null);
         if (released == null || released.ambientLeases().get(actorId) == null
@@ -723,7 +728,7 @@ final class FrontierV3AmbientActorExecutor {
         var release = new AmbientLeaseReleased(actorId, receipt.observed().body(), receipt.observed().health());
         // Closing a projection retains body custody. Registered execution owners
         // check pending effects; route checkpoint settlement belongs to body departure.
-        if (!unloadedReleaseEligible(state, release)) return false;
+        if (!releaseEligible(state, release)) return false;
         if (lease.status() != AmbientLeaseStatus.DRAINING && !(submit(runtime, "ambient-unloaded-reserved-draining", actorId.value(),
                 new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
                 instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
@@ -736,7 +741,8 @@ final class FrontierV3AmbientActorExecutor {
         FrontierV3ActorBodyController.progressDeparture(level, runtime, runtime.decodedState().orElseThrow(), actorId);
         return true;
     }
-    static boolean unloadedReleaseEligible(FrontierWorldState state, AmbientLeaseReleased release) {
+    /** Common preflight for both loaded projection closure and saved departure. */
+    static boolean releaseEligible(FrontierWorldState state, AmbientLeaseReleased release) {
         ResidentMeal meal = state.humanPopulation().meals().get(release.actorId());
         // A departure pose alone does not prove a physical food-hand reconciliation.
         if (meal != null && (meal.pendingPhysicalStep().isPresent()
