@@ -9,11 +9,25 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3LaunchOwnershipTest {
     private static final String PROPERTY = "pale_mirror.frontier_v3.enabled";
     private static final String FIXTURE_PROFILE_PROPERTY = "pale_mirror.frontier_v3.pilot.profile";
     private static final String FIXTURE_RUN_ID_PROPERTY = "pale_mirror.frontier_v3.pilot.run_id";
+
+    @Test void freshWorldSelectsOnlyAnExplicitInstalledRuleset() {
+        String property = "pale_mirror.frontier_v3.ruleset";
+        String prior = System.getProperty(property);
+        try {
+            System.setProperty(property, "frontier-v3-trade-playtest-r1");
+            var selected = FrontierV3ServerLifecycle.initialConfiguration(new WorldId("frontier:trade-selector"), 41L);
+            assertEquals("frontier-v3-trade-playtest-r1", selected.initialState().bootstrap().ruleset().id());
+            assertTrue(selected.initialState().shipments().shipments().isEmpty());
+            System.setProperty(property, "not-installed");
+            assertThrows(IllegalArgumentException.class, () -> FrontierV3ServerLifecycle.initialConfiguration(new WorldId("frontier:bad-selector"), 41L));
+        } finally { restore(property, prior); }
+    }
 
     @Test
     void enabledV3LaunchRetainsPhysicalWorldOwnershipEvenWithoutAnActiveRuntime() {

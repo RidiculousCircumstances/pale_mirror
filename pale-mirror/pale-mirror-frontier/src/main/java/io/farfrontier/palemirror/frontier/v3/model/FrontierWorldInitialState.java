@@ -62,6 +62,18 @@ final class FrontierWorldInitialState {
                         new InventoryCustody.ContainerSlot(depot, 20 + index)));
             }
         });
+        int stockIndex = 0;
+        for (var stock : bootstrap.ruleset().initialSettlementStocks().stream()
+                .sorted(java.util.Comparator.comparing(InitialSettlementStock::canonicalText)).toList()) {
+            var settlement = FrontierWorldStateSupport.settlement(bootstrap, stock.settlementId());
+            SubjectId depot = FrontierWorldState.depotId(settlement.id());
+            SubjectId lot = new SubjectId("lot:initial-public-stock-" + ++stockIndex);
+            SubjectId staging = new SubjectId("custody:initial-public-stock-" + stockIndex);
+            resources = resources.issue(new ResourceLot(lot, settlement.id(), stock.itemKind(), stock.quantity(),
+                    "bootstrap-initial-public-stock", List.of()), new CustodyAccount(staging,
+                    new ResourceCustody.Container(depot), Map.of(lot, stock.quantity()), Map.of()));
+            resources = resources.transfer(staging, ReferenceContainerCustody.scopeId(depot), Map.of(lot, stock.quantity()), Map.of());
+        }
         SubjectId biomass = new SubjectId("lot:bootstrap-hive-biomass"); SubjectId eastStore = new SubjectId("container:hive-east-store");
         resources = resources.issue(new ResourceLot(biomass, bootstrap.hive().id(), "minecraft:rotten_flesh", 64, "bootstrap", List.of()),
                 new CustodyAccount(new SubjectId("custody:container-hive-east-store"), new ResourceCustody.Container(eastStore), Map.of(biomass, 64), Map.of()));

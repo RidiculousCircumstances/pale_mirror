@@ -12,6 +12,11 @@ public final class FrontierRulesets {
      * motion actuator was continuous.  Crop work remains a slower, distinct boundary.
      */
     private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r12", 14, 1L, 20L, 20L);
+    private static final FrontierRuleset TRADE_PLAYTEST = new FrontierRuleset("frontier-v3-trade-playtest-r1", 15,
+            PRODUCTION.cadence(), PRODUCTION.spatial(), PRODUCTION.rates(), PRODUCTION.facilityCapacity(),
+            PRODUCTION.combat(), PRODUCTION.hiveCommand(), PRODUCTION.residentLife(),
+            PRODUCTION.resourceHarvestColdTravelTicksPerEdge(), PRODUCTION.workCatalog(), PRODUCTION.goodsTrade(),
+            java.util.List.of(new InitialSettlementStock(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("settlement:7"), "minecraft:bread", 256)));
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -24,7 +29,7 @@ public final class FrontierRulesets {
      * current default: decoding old bytes is a named compatibility migration with fixed data.
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
-    private static final Map<String, FrontierRuleset> INSTALLED = Map.of(PRODUCTION.id(), PRODUCTION,
+    private static final Map<String, FrontierRuleset> INSTALLED = Map.of(PRODUCTION.id(), PRODUCTION, TRADE_PLAYTEST.id(), TRADE_PLAYTEST,
             PREVIOUS_PRODUCTION_R6.id(), PREVIOUS_PRODUCTION_R6,
             PREVIOUS_PRODUCTION_R4.id(), PREVIOUS_PRODUCTION_R4,
             PREVIOUS_PRODUCTION_R3.id(), PREVIOUS_PRODUCTION_R3,
@@ -34,6 +39,13 @@ public final class FrontierRulesets {
     private FrontierRulesets() { }
 
     public static FrontierRuleset production() { return PRODUCTION; }
+
+    /** Explicit installed configuration, including its complete pinned digest on persistence. */
+    public static FrontierRuleset installed(String id) {
+        var selected = INSTALLED.get(id);
+        if (selected == null) throw new IllegalArgumentException("unavailable Frontier ruleset: " + id);
+        return selected;
+    }
 
     public static FrontierRuleset legacyForSnapshotVersion(int version) {
         if (version < 41 || version > 79) throw new IllegalArgumentException("no explicit legacy ruleset for state version " + version);

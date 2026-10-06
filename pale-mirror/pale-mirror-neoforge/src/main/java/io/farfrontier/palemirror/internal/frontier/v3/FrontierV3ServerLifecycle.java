@@ -253,7 +253,10 @@ public final class FrontierV3ServerLifecycle {
     }
     static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
     initialConfiguration(io.farfrontier.palemirror.frontier.v3.api.WorldId worldId, long seed) {
-        return FrontierWorldRuntimeDefinition.configuration(worldId, seed);
+        var selected = System.getProperty("pale_mirror.frontier_v3.ruleset");
+        var ruleset = selected == null ? io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.production()
+                : io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.installed(selected);
+        return FrontierWorldRuntimeDefinition.configuration(worldId, seed, ruleset);
     }
     public static boolean requestFastForward(MinecraftServer server, int ticks) {
         Objects.requireNonNull(server, "server");
