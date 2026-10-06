@@ -85,6 +85,8 @@ public final class ProductionProcess {
 
     public static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING); Settlement settlement = settlement(state, task.ownerId());
+        if (state.strategicPlans().objectives().get(task.objectiveId()).kind() == StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION)
+            return CompanyBakeryPlanning.planStart(state, task, action);
         SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
         if (!SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id()))
@@ -234,7 +236,7 @@ public final class ProductionProcess {
             if (!retainsFungibleInput(state, job, held.accountId(), held.inputLots())) {
                 return failActiveJob(state, task, settlement, workshop, job, ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
             }
-            ResourceLot output = new ResourceLot(job.outputItemId(), settlement.id(), job.outputItemKind(), job.outputCount(), "recipe:bread", inputLineage(held.inputLots()));
+            ResourceLot output = new ResourceLot(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(), job.outputCount(), "recipe:bread", inputLineage(held.inputLots()));
             return List.of(new ProposedEvent(settlement.id(), new FungibleProductionCompleted(job.id(), output)), transition(task, StrategicTaskStatus.COMPLETED));
         }
         if (job.inputHold() instanceof ProductionInputHold.Cold held) {
@@ -249,7 +251,7 @@ public final class ProductionProcess {
             if (!(input.custody() instanceof InventoryCustody.ContainerSlot source) || !source.containerId().equals(FrontierWorldState.depotId(settlement.id()))) {
                 throw new IllegalStateException("cold production hold has no settlement depot source slot");
             }
-            ExactItemStack output = new ExactItemStack(job.outputItemId(), settlement.id(), job.outputItemKind(), job.outputCount(), source);
+            ExactItemStack output = new ExactItemStack(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(), job.outputCount(), source);
             return List.of(new ProposedEvent(settlement.id(), new ProductionCompleted(job.id(), output)), transition(task, StrategicTaskStatus.COMPLETED));
         }
         if (job.inputHold() instanceof ProductionInputHold.Materialized && !physicalCustody) {
@@ -257,7 +259,7 @@ public final class ProductionProcess {
             if (input == null || !(input.custody() instanceof InventoryCustody.ContainerSlot source) || !source.containerId().equals(depot)) {
                 return failActiveJob(state, task, settlement, workshop, job, ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
             }
-            ExactItemStack output = new ExactItemStack(job.outputItemId(), settlement.id(), job.outputItemKind(), job.outputCount(), source);
+            ExactItemStack output = new ExactItemStack(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(), job.outputCount(), source);
             return List.of(new ProposedEvent(settlement.id(), new ProductionCompleted(job.id(), output)), transition(task, StrategicTaskStatus.COMPLETED));
         }
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
@@ -354,7 +356,7 @@ public final class ProductionProcess {
             throw new IllegalArgumentException("production output is not stored in its settlement depot");
         }
         if (ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())) throw new IllegalArgumentException("production completion cannot use conflicted depot evidence");
-        if (!completed.output().economicOwnerId().equals(settlement.id())) throw new IllegalArgumentException("production output claim does not belong to its settlement");
+        if (!completed.output().economicOwnerId().equals(job.rights().resourceOwner().id())) throw new IllegalArgumentException("production output claim does not belong to its settlement");
         boolean coldHeld = job.inputHold() instanceof ProductionInputHold.Cold && !state.inventory().items().containsKey(job.consumedItemId());
         boolean releasedMaterialized = job.inputHold() instanceof ProductionInputHold.Materialized
                 && !ReferenceContainerCustody.hasLiveCustody(state, slot.containerId())
@@ -864,7 +866,7 @@ public final class ProductionProcess {
     }
     private static boolean materializedInputMatches(FrontierWorldState state, ProductionJob job) {
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
-        return input != null && input.economicOwnerId().equals(job.settlementId()) && WHEAT.equals(input.itemKind()) && input.count() == job.outputCount()
+        return input != null && input.economicOwnerId().equals(job.rights().resourceOwner().id()) && WHEAT.equals(input.itemKind()) && input.count() == job.outputCount()
                 && input.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(FrontierWorldState.depotId(job.settlementId()));
     }
     public static boolean completionHeld(FrontierWorldState state, ScheduledAction action) {
@@ -891,7 +893,7 @@ public final class ProductionProcess {
         return account != null && inputLots.values().stream().mapToInt(Integer::intValue).sum() == job.outputCount()
                 && inputLots.entrySet().stream().allMatch(entry -> {
                     ResourceLot lot = resources.lots().get(entry.getKey());
-                    return lot != null && lot.economicOwnerId().equals(job.settlementId()) && WHEAT.equals(lot.itemKind())
+                    return lot != null && lot.economicOwnerId().equals(job.rights().resourceOwner().id()) && WHEAT.equals(lot.itemKind())
                             && account.lotQuantities().getOrDefault(lot.id(), 0) >= entry.getValue();
                 });
     }
@@ -912,6 +914,14 @@ public final class ProductionProcess {
         return new SubjectId("job:production-" + task.id().value().substring("task:".length()));
     }
     static void validateMarketOrder(FrontierWorldState state, StrategicTask task, ProductionJob job) {
+        if (job.rights().mode() == ProductionRights.Mode.COMPANY_OWN_ACCOUNT) {
+            job.rights().validate(state, job);
+            if (state.strategicPlans().objectives().get(task.objectiveId()).kind() != StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION
+                    || CompanyWorkPaymentProcess.contractFor(state, job).isEmpty()
+                    || state.companies().market().acceptedForJob(job.id()).isPresent())
+                throw new IllegalArgumentException("own-account production requires a separate company proposal and exact employment, not a public invoice");
+            return;
+        }
         boolean demandExists = state.companies().market().demands().values().stream().anyMatch(demand -> demand.reasonId().equals(task.id()));
         if (!demandExists) return; // Explicit compatibility for old fixtures/snapshots that predate the v3 market boundary.
         MarketWorkOrder order = state.companies().market().acceptedForJob(job.id()).orElseThrow(() ->

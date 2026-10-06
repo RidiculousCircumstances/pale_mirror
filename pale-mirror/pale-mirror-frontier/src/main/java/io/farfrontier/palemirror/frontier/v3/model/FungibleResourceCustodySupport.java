@@ -11,6 +11,29 @@ import java.util.Optional;
 /** Narrow canonical queries shared by recipe and hive owners; it never infers stock from Vanilla. */
 public final class FungibleResourceCustodySupport {
     private FungibleResourceCustodySupport() { }
+    /** Shared allocation authority query; neither recipe nor commercial policy belongs here. */
+    public static boolean canReserve(FrontierWorldState state, LotSelection input) {
+        var resources = state.inventory().fungibleResources();
+        var account = resources.accounts().get(input.accountId());
+        if (account == null || !(account.custody() instanceof ResourceCustody.Container container)
+                || ReferenceContainerCustody.blocksCanonicalUse(state, container.containerId())) return false;
+        ResourceLot first = resources.lots().get(input.firstLotId());
+        if (first == null || resources.unclaimedQuantity(input.accountId(), first.economicOwnerId(), first.itemKind()) < input.quantity()) return false;
+        for (var entry : input.lotQuantities().entrySet()) {
+            ResourceLot lot = resources.lots().get(entry.getKey());
+            if (lot == null || !lot.economicOwnerId().equals(first.economicOwnerId()) || !lot.itemKind().equals(first.itemKind())) return false;
+            int pinned = account.claimQuantities().keySet().stream().map(resources.claims()::get)
+                    .mapToInt(claim -> claim.lotQuantities().getOrDefault(entry.getKey(), 0)).sum();
+            if (entry.getValue() > account.lotQuantities().getOrDefault(entry.getKey(), 0) - pinned) return false;
+        }
+        var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(input.accountId())).toList();
+        if (!ReferenceContainerCustody.hasLiveCustody(state, container.containerId())) return bindings.isEmpty();
+        if (!ReferenceContainerCustody.hasOperationalCustody(state, container.containerId())) return false;
+        long epoch = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container.containerId())).authorityEpoch();
+        return !bindings.isEmpty() && bindings.stream().allMatch(binding -> binding.authorityEpoch() == epoch)
+                && input.lotQuantities().entrySet().stream().allMatch(entry -> bindings.stream()
+                    .mapToInt(binding -> binding.lotQuantities().getOrDefault(entry.getKey(), 0)).sum() >= entry.getValue());
+    }
 
     public static Optional<LotAtContainer> firstAtContainer(FrontierWorldState state, SubjectId containerId, String itemKind, int minimumQuantity) {
         Objects.requireNonNull(state, "resource state"); Objects.requireNonNull(containerId, "resource container");

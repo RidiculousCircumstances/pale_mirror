@@ -62,7 +62,7 @@ final class BakeryWorkValidation {
             case STATION_UNLOAD -> new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot());
             case DELIVERED -> throw new IllegalStateException("delivered bakery resources are public stock");
         };
-        if (stack == null || !stack.custody().equals(expected) || !stack.economicOwnerId().equals(job.settlementId())
+        if (stack == null || !stack.custody().equals(expected) || !stack.economicOwnerId().equals(job.rights().resourceOwner().id())
                 || !stack.itemKind().equals(outputPhase ? "minecraft:bread" : "minecraft:wheat")
                 || stack.count() != job.outputCount()
                 || inventory.items().containsKey(outputPhase ? job.consumedItemId() : job.outputItemId()))
@@ -119,7 +119,7 @@ final class BakeryWorkValidation {
             throw new IllegalArgumentException("bakery resource has no sole phase-correct account and claim");
         for (SubjectId lotId : expectedLots.keySet()) {
             ResourceLot lot = ledger.lots().get(lotId);
-            if (lot == null || !lot.economicOwnerId().equals(settlement.id())
+            if (lot == null || !lot.economicOwnerId().equals(job.rights().resourceOwner().id())
                     || !lot.itemKind().equals(outputPhase ? "minecraft:bread" : "minecraft:wheat"))
                 throw new IllegalArgumentException("bakery resource lot changed economic owner or recipe kind");
         }

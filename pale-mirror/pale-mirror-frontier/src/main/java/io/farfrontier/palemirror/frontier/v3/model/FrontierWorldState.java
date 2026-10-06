@@ -310,6 +310,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         ProductionFacilityReservations.validate(productionJobs);
         for (Map.Entry<SubjectId, ProductionJob> entry : productionJobs.entrySet()) {
             ProductionJob job = entry.getValue();
+            job.rights().validate(inventory, companies, job);
             if (!entry.getKey().equals(job.id())) throw new IllegalArgumentException("production job map key must match job identity");
             requireJobTask(strategicPlans, job.taskId(), job.settlementId(), StrategicTaskKind.PRODUCE_BREAD, "production");
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, job.settlementId());
@@ -620,7 +621,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         EconomicLedger economics = inventory.economics().register(new EconomicAccount(company.id(), EconomicOwnerKind.COMPANY,
                 EconomicAccountStatus.ACTIVE, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO));
-        return withChanges(FrontierWorldStateUpdate.begin().inventory(inventory.withEconomics(economics)).companies(companies.register(company)));
+        var registered = companies.register(company);
+        var participants = GoodsParticipantDeclarations.registerCompany(bootstrap, registered.goodsTrade().participants(), company);
+        return withChanges(FrontierWorldStateUpdate.begin().inventory(inventory.withEconomics(economics))
+                .companies(registered.withGoodsTrade(registered.goodsTrade().withParticipants(participants))));
     }
     public FrontierWorldState openEmployment(EmploymentContract contract) {
         Objects.requireNonNull(contract, "employment contract");

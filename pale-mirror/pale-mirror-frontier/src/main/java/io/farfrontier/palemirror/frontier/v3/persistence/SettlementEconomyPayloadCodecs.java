@@ -134,6 +134,7 @@ final class SettlementEconomyPayloadCodecs {
         writeSubject(output, job.consumedItemId()); writeSubject(output, job.outputItemId()); writeString(output, job.outputItemKind()); output.writeByte(job.outputCount());
         ProductionWorkProgressStateCodec.write(output, job.workProgress()); TraversalTopologyStateCodec.write(output, job.workTraversal()); output.writeShort(job.traversalCursor());
         BakeryWorkStateCodec.write(output, job.bakeryWork()); StationApproachStateCodec.write(output, job.spatial());
+        ProductionJobStateCodec.writeRights(output, job.rights());
     }
     private static ProductionJob readJob(DataInputStream input) throws IOException {
         SubjectId id = readSubject(input).value(); SubjectId task = readSubject(input).value(); SubjectId settlement = readSubject(input).value(); SubjectId facility = readSubject(input).value();
@@ -142,7 +143,7 @@ final class SettlementEconomyPayloadCodecs {
         ProductionWorkProgress progress = ProductionWorkProgressStateCodec.read(input); TraversalTopology traversal = TraversalTopologyStateCodec.read(input);
         int cursor = input.readUnsignedShort();
         return new ProductionJob(id, task, settlement, facility, worker, consumed, new ProductionInputHold.Materialized(consumed), output, outputKind, outputCount,
-                progress, traversal, cursor, BakeryWorkStateCodec.read(input), StationApproachStateCodec.read(input));
+                progress, traversal, cursor, BakeryWorkStateCodec.read(input), StationApproachStateCodec.read(input), ProductionJobStateCodec.readRights(input));
     }
     private static void writeProductionInputHold(DataOutputStream output, ProductionInputHold hold) throws IOException {
         if (hold instanceof ProductionInputHold.Materialized) { output.writeByte(0); return; }

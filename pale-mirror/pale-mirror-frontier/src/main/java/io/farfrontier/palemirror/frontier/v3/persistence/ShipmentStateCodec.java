@@ -66,12 +66,12 @@ final class ShipmentStateCodec {
             default -> throw new IllegalArgumentException("unknown shipment status tag");
         };
     }
-    private static void endpoint(DataOutputStream out, ShipmentEndpoint endpoint) throws IOException {
+    static void endpoint(DataOutputStream out, ShipmentEndpoint endpoint) throws IOException {
         switch (endpoint.kind()) { case SETTLEMENT_DEPOT -> out.writeByte(1); }
         id(out, endpoint.settlementId()); id(out, endpoint.facilityId()); id(out, endpoint.containerId());
         FrontierWorldStateCodec.writePosition(out, endpoint.station().support());
     }
-    private static ShipmentEndpoint endpoint(DataInputStream in) throws IOException {
+    static ShipmentEndpoint endpoint(DataInputStream in) throws IOException {
         var kind = switch (in.readUnsignedByte()) { case 1 -> ShipmentEndpoint.Kind.SETTLEMENT_DEPOT; default -> throw new IllegalArgumentException("unknown shipment endpoint tag"); };
         return new ShipmentEndpoint(kind, id(in), id(in), id(in), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)));
     }

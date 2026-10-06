@@ -9,6 +9,8 @@ final class FrontierV3ProcessDiagnosticJson {
         var subject = FrontierV3DiagnosticJson.subject(id).orElse(null);
         var shipment = subject == null ? null : state.shipments().shipments().get(subject);
         if (shipment != null) return FrontierV3ShipmentDiagnosticJson.render(checkpoint, state, shipment);
+        var participant = subject == null ? null : state.companies().goodsTrade().participants().participants().get(subject);
+        if (participant != null) return FrontierV3GoodsParticipantDiagnosticJson.render(checkpoint, state, participant);
         var harvest = subject == null ? null : state.resourceSites().sites().values().stream()
                 .flatMap(site -> site.harvestJobs().values().stream())
                 .filter(value -> value.id().equals(subject)).findFirst().orElse(null);

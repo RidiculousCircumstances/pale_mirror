@@ -6,6 +6,6 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 public final class SettlementManagementComposition {
     public static final SettlementManagement MANAGEMENT = new SettlementManagement(java.util.List.of(
             new SettlementSupplyPlanner(), new SettlementFoodPlanner(),
-            new SettlementHealthPlanner(), new SettlementFieldPlanner()), SettlementManagementPolicy.standard());
+            new SettlementHealthPlanner(), new SettlementFieldPlanner(), new CompanyBakeryPlanning()), SettlementManagementPolicy.standard());
     private SettlementManagementComposition() { }
 }

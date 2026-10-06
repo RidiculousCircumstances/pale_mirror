@@ -472,7 +472,9 @@ class GoodsTradeTest {
         assertThrows(IllegalArgumentException.class, () -> fact(closed, GoodsTradeMarketIdentity.OWNER, retired));
         assertThrows(IllegalArgumentException.class, () -> fact(partial, GoodsTradeMarketIdentity.OWNER, retired, 10_001));
         FrontierWorldState compacted = fact(closed, GoodsTradeMarketIdentity.OWNER, retired, 10_001);
-        assertEquals(GoodsTradeState.empty(), compacted.companies().goodsTrade());
+        assertTrue(compacted.companies().goodsTrade().orders().isEmpty());
+        assertTrue(compacted.companies().goodsTrade().contracts().isEmpty());
+        assertEquals(closed.companies().goodsTrade().participants(), compacted.companies().goodsTrade().participants());
         assertEquals(closed.inventory(), compacted.inventory());
         assertEquals(compacted, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(compacted)));
         FrontierWorldState delivered = arrive(reserved());

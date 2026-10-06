@@ -11,13 +11,20 @@ public final class CompanyWorkPaymentStateSupport {
 
     public static Optional<EmploymentContract> contractFor(FrontierWorldState state, ProductionJob job) {
         Objects.requireNonNull(state, "world state"); Objects.requireNonNull(job, "production job");
-        return state.companies().activeWorksCompany(job.settlementId())
+        return employer(state, job)
                 .flatMap(company -> state.companies().activeEmployment(company.id(), job.workerId()));
+    }
+
+    private static Optional<Company> employer(FrontierWorldState state, ProductionJob job) {
+        if (job.rights().mode() == ProductionRights.Mode.BUYER_OWNED_SERVICE)
+            return state.companies().activeWorksCompany(job.settlementId());
+        Company company = state.companies().companies().get(job.rights().resourceOwner().id());
+        return Optional.ofNullable(company).filter(value -> value.status() == CompanyStatus.ACTIVE);
     }
 
     public static Optional<EmploymentContract> settlementContractFor(FrontierWorldState state, ProductionJob job) {
         Objects.requireNonNull(state, "world state"); Objects.requireNonNull(job, "production job");
-        return state.companies().activeWorksCompany(job.settlementId()).flatMap(company -> state.companies().employmentContracts().values().stream()
+        return employer(state, job).flatMap(company -> state.companies().employmentContracts().values().stream()
                 .filter(contract -> contract.companyId().equals(company.id()) && contract.residentId().equals(job.workerId())
                         && (contract.status() == EmploymentContractStatus.ACTIVE || contract.status() == EmploymentContractStatus.TERMINATED))
                 .sorted(java.util.Comparator.comparing(EmploymentContract::id))
@@ -25,13 +32,20 @@ public final class CompanyWorkPaymentStateSupport {
     }
 
     public static FinancialReservation reservation(ProductionJob job, EmploymentContract contract) {
+        if (job.rights().mode() == ProductionRights.Mode.COMPANY_OWN_ACCOUNT)
+            return new FinancialReservation(new SubjectId("reservation:" + job.id().value().substring("job:".length())),
+                    contract.companyId(), contract.residentId(), job.id(), contract.wagePerCompletedJob());
         return new FinancialReservation(new SubjectId("reservation:" + job.id().value().substring("job:".length())), job.settlementId(),
                 contract.companyId(), job.id(), contract.invoicePerCompletedJob());
     }
 
     public static FrontierWorldState reserve(FrontierWorldState state, ProductionJob job) {
         Optional<EmploymentContract> optional = contractFor(state, job);
-        if (optional.isEmpty()) return state;
+        if (optional.isEmpty()) {
+            if (job.rights().mode() == ProductionRights.Mode.COMPANY_OWN_ACCOUNT)
+                throw new IllegalArgumentException("own-account production requires exact employment");
+            return state;
+        }
         EconomicLedger economics = state.inventory().economics().reserve(reservation(job, optional.orElseThrow()));
         return state.withInventory(state.inventory().withEconomics(economics));
     }
@@ -46,8 +60,9 @@ public final class CompanyWorkPaymentStateSupport {
     }
 
     private static FrontierWorldState settle(FrontierWorldState state, ProductionJob job, EmploymentContract contract) {
-        EconomicLedger economics = state.inventory().economics().settle(reservation(job, contract).id())
-                .transfer(contract.companyId(), contract.residentId(), contract.wagePerCompletedJob());
+        EconomicLedger economics = state.inventory().economics().settle(reservation(job, contract).id());
+        if (job.rights().mode() == ProductionRights.Mode.BUYER_OWNED_SERVICE)
+            economics = economics.transfer(contract.companyId(), contract.residentId(), contract.wagePerCompletedJob());
         return state.withInventory(state.inventory().withEconomics(economics)).withCompanies(state.companies().settle(contract.id()));
     }
 }

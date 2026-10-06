@@ -117,6 +117,14 @@ public final class FrontierV3FixtureCatalog {
                 List.of(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(ShipmentFixture.ID, 1)), false);
     }
 
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousGoodsConfiguration(WorldId worldId, long seed) {
+        var state = AutonomousTradeFixture.initial(worldId, seed);
+        var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        return configured(worldId, state, SimInstant.ZERO, List.of(
+                io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(seller.party().id(), 1),
+                io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(seller.known().getFirst().party().id(), 2)), false);
+    }
+
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> uncontestedSupplyConfiguration(WorldId worldId, long seed) {
         return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, false), false);
     }

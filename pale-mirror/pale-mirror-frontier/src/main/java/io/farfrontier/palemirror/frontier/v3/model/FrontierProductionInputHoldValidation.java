@@ -20,11 +20,11 @@ final class FrontierProductionInputHoldValidation {
                 || inputLots.values().stream().mapToInt(Integer::intValue).sum() != job.outputCount()
                 || inputLots.entrySet().stream().anyMatch(entry -> {
                     ResourceLot lot = resources.lots().get(entry.getKey());
-                    return lot == null || !lot.economicOwnerId().equals(settlement.id()) || !"minecraft:wheat".equals(lot.itemKind())
+                    return lot == null || !lot.economicOwnerId().equals(job.rights().resourceOwner().id()) || !"minecraft:wheat".equals(lot.itemKind())
                             || account.lotQuantities().getOrDefault(lot.id(), 0) < entry.getValue();
                 })
                 || claim.purpose() != ClaimPurpose.PRODUCTION_WORK || !claim.claimantId().equals(job.id())
-                || !claim.economicOwnerId().equals(settlement.id())
+                || !claim.economicOwnerId().equals(job.rights().resourceOwner().id())
                 || !"minecraft:wheat".equals(claim.itemKind()) || claim.quantity() != job.outputCount()
                 || !claim.lotQuantities().equals(inputLots)
                 || account.claimQuantities().getOrDefault(claim.id(), 0) != claim.quantity()) {

@@ -19,19 +19,22 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
     }
 
     public static Optional<BakeryBatchSelection> available(FrontierWorldState state, SubjectId settlementId) {
-        return select(state, settlementId, quantity -> true);
+        return select(state, ProductionRights.publicService(settlementId), quantity -> true);
     }
 
     public static Optional<BakeryBatchSelection> admissible(FrontierWorldState state, SubjectId settlementId) {
-        return select(state, settlementId,
-                quantity -> ProductionOutputCapacity.canAdmitBreadBatch(state, settlementId, quantity));
+        return admissible(state, ProductionRights.publicService(settlementId));
+    }
+    public static Optional<BakeryBatchSelection> admissible(FrontierWorldState state, ProductionRights rights) {
+        return select(state, rights, quantity -> ProductionOutputCapacity.canAdmitBreadBatch(state, rights, quantity));
     }
 
-    private static Optional<BakeryBatchSelection> select(FrontierWorldState state, SubjectId settlementId,
+    private static Optional<BakeryBatchSelection> select(FrontierWorldState state, ProductionRights rights,
                                                          java.util.function.IntPredicate capacity) {
-        SubjectId depot = FrontierWorldState.depotId(settlementId);
+        SubjectId depot = rights.destinationContainerId();
+        SubjectId resourceOwner = rights.resourceOwner().id();
         var exact = state.inventory().items().values().stream()
-                .filter(item -> item.itemKind().equals("minecraft:wheat") && item.economicOwnerId().equals(settlementId)
+                .filter(item -> item.itemKind().equals("minecraft:wheat") && item.economicOwnerId().equals(resourceOwner)
                         && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
                         && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id())
                         && capacity.test(item.count()))
@@ -40,11 +43,11 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
         if (ReferenceContainerCustody.hasLiveCustody(state, depot) && exact.isPresent()) return exact;
         var account = FungibleResourceCustodySupport.accountAtContainer(state, depot);
         int maximum = account.map(value -> Math.min(64, state.inventory().fungibleResources()
-                .unclaimedQuantity(value.id(), settlementId, "minecraft:wheat"))).orElse(0);
+                .unclaimedQuantity(value.id(), resourceOwner, "minecraft:wheat"))).orElse(0);
         // A bounded stack-sized search also handles a nearly full output container.
         for (int quantity = maximum; quantity >= 1; quantity--) {
             if (!capacity.test(quantity)) continue;
-            var input = FungibleResourceCustodySupport.selectAtContainer(state, depot, settlementId, "minecraft:wheat", quantity);
+            var input = FungibleResourceCustodySupport.selectAtContainer(state, depot, resourceOwner, "minecraft:wheat", quantity);
             if (input.isPresent()) return Optional.of(new BakeryBatchSelection(Optional.empty(), input));
         }
         return exact;

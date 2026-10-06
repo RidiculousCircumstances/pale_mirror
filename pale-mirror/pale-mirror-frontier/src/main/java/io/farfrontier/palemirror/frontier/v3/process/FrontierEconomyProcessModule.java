@@ -170,6 +170,9 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 events.add(new ProposedEvent(job.settlementId(), observed));
                 events.addAll(BakeryCompletionPlanning.stationReleaseWake(state, successor, job.id(),
                         command.id().value(), command.submittedAt().ticks()));
+                if (job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
+                        && successor.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED)
+                    events.addAll(GoodsParticipantWakeup.container(successor, job.rights().destinationContainerId(), command.id().value(), command.submittedAt().ticks()));
                 return new CommandPlan.Accepted(List.copyOf(events));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }

@@ -34,6 +34,8 @@ public final class CompanyFoundationProcess {
                     .orElseThrow(() -> new IllegalStateException("settlement has no canonical works founder"));
             company = new Company(companyId(settlement.id()), settlement.id(), founder.id(), CompanyPurpose.WORKS, CompanyStatus.ACTIVE, action.dueAt().ticks());
             events.add(new ProposedEvent(settlement.id(), new CompanyRegistered(company)));
+            events.add(new ProposedEvent(company.id(), new ScheduleEffect.Created(GoodsParticipantProcess.review(company.id(),
+                    Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().goodsTrade().reviewInterval())))));
         }
         if (company.status() == CompanyStatus.ACTIVE) {
             Company employer = company;

@@ -51,7 +51,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 247 retains migration waiting origins rather than throwing when a departure has no known path.
     // Version 248 retains exact physical work acceptance until durable adapter retirement.
     // Version 249 adds independently authorized goods orders, commercial obligations and partial acceptance.
-    static final int VERSION = 253; private static final int MAX_ENTRIES = 65_535;
+    static final int VERSION = 254; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

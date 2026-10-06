@@ -23,8 +23,18 @@ public record ProductionJob(
         TraversalTopology workTraversal,
         int traversalCursor,
         java.util.Optional<BakeryWorkState> bakeryWork,
-        StationApproachState spatial
+        StationApproachState spatial,
+        ProductionRights rights
 ) {
+    /** Explicit public-service entry point retained for existing public producers and fixtures. */
+    public ProductionJob(SubjectId id, SubjectId taskId, SubjectId settlementId, SubjectId facilityId, SubjectId workerId,
+                         SubjectId consumedItemId, ProductionInputHold inputHold, SubjectId outputItemId,
+                         String outputItemKind, int outputCount, ProductionWorkProgress workProgress,
+                         TraversalTopology workTraversal, int traversalCursor, java.util.Optional<BakeryWorkState> bakeryWork,
+                         StationApproachState spatial) {
+        this(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind,
+                outputCount, workProgress, workTraversal, traversalCursor, bakeryWork, spatial, ProductionRights.publicService(settlementId));
+    }
     public ProductionJob {
         Objects.requireNonNull(id, "production job id");
         Objects.requireNonNull(taskId, "production task id");
@@ -37,6 +47,9 @@ public record ProductionJob(
         Objects.requireNonNull(workProgress, "production work progress"); workTraversal = Objects.requireNonNull(workTraversal, "production work traversal");
         bakeryWork = Objects.requireNonNull(bakeryWork, "bakery work state");
         Objects.requireNonNull(spatial, "production spatial continuation");
+        Objects.requireNonNull(rights, "production rights");
+        if (rights.mode() == ProductionRights.Mode.COMPANY_OWN_ACCOUNT && bakeryWork.isEmpty())
+            throw new IllegalArgumentException("own-account production requires the shared station workflow");
         if (bakeryWork.isPresent() && spatial.pending())
             throw new IllegalArgumentException("bakery goals cannot carry a legacy station approach");
         if (!taskId.value().startsWith("task:")) throw new IllegalArgumentException("production job needs its declared strategic task");
@@ -96,7 +109,7 @@ public record ProductionJob(
 
     public ProductionJob withInputHold(ProductionInputHold next) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, next, outputItemId, outputItemKind, outputCount,
-                workProgress, workTraversal, traversalCursor, bakeryWork, spatial);
+                workProgress, workTraversal, traversalCursor, bakeryWork, spatial, rights);
     }
 
     /** Family-owned reservation view; cargo/return ownership can survive releasing the machine. */
@@ -116,7 +129,7 @@ public record ProductionJob(
                 java.util.Optional.of(bakeryWork.orElseThrow().withReallocatedDepotAccount(
                         next instanceof ProductionInputHold.FungibleCold cold ? cold.accountId()
                                 : next instanceof ProductionInputHold.FungibleBound bound ? bound.accountId()
-                                : bakeryWork.orElseThrow().sourceAccountId())), spatial);
+                        : bakeryWork.orElseThrow().sourceAccountId())), spatial, rights);
     }
     /** Exact resource subjects retained by this job, including every fungible input lot. */
     public java.util.Map<SubjectId, Integer> inputQuantities() {
@@ -141,18 +154,18 @@ public record ProductionJob(
 
     public ProductionJob withWorkProgress(ProductionWorkProgress next) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
-                next, workTraversal, traversalCursor, bakeryWork, spatial.cleared());
+                next, workTraversal, traversalCursor, bakeryWork, spatial.cleared(), rights);
     }
 
     public ProductionJob withWorkTraversal(TraversalTopology next, int nextCursor) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
-                workProgress, next, nextCursor, bakeryWork, spatial.cleared());
+                workProgress, next, nextCursor, bakeryWork, spatial.cleared(), rights);
     }
 
     public ProductionJob withBakeryWork(BakeryWorkState next) {
         if (bakeryWork.isEmpty()) throw new IllegalArgumentException("only an admitted bakery job may advance bakery work");
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId,
-                outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, java.util.Optional.of(next), spatial);
+                outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, java.util.Optional.of(next), spatial, rights);
     }
 
     /**
@@ -166,12 +179,16 @@ public record ProductionJob(
             throw new IllegalArgumentException("only an unstarted production worker may rebase its traversal at HOT hand-off");
         }
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
-                workProgress, Objects.requireNonNull(next, "rebased production-work traversal"), 0, bakeryWork, spatial.cleared());
+                workProgress, Objects.requireNonNull(next, "rebased production-work traversal"), 0, bakeryWork, spatial.cleared(), rights);
     }
 
     public ProductionJob withSpatial(StationApproachState next) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold,
-                outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, bakeryWork, next);
+                outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, bakeryWork, next, rights);
+    }
+    public ProductionJob withRights(ProductionRights declaration) {
+        return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold,
+                outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, bakeryWork, spatial, declaration);
     }
 
     private static TraversalTopology fixtureTraversal(SubjectId jobId, SubjectId facilityId) {

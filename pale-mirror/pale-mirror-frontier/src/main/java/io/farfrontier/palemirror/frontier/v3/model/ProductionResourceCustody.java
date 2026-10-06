@@ -17,28 +17,7 @@ public final class ProductionResourceCustody {
     }
 
     public static boolean canStart(FrontierWorldState state, FungibleResourceCustodySupport.LotSelection input, int quantity) {
-        var resources = state.inventory().fungibleResources();
-        var account = resources.accounts().get(input.accountId());
-        if (quantity < 1 || account == null || !(account.custody() instanceof ResourceCustody.Container container)
-                || input.quantity() != quantity
-                || ReferenceContainerCustody.blocksCanonicalUse(state, container.containerId())) return false;
-        ResourceLot first = resources.lots().get(input.firstLotId());
-        if (first == null || resources.unclaimedQuantity(input.accountId(), first.economicOwnerId(), first.itemKind()) < quantity) return false;
-        for (var entry : input.lotQuantities().entrySet()) {
-            ResourceLot lot = resources.lots().get(entry.getKey());
-            if (lot == null || !lot.economicOwnerId().equals(first.economicOwnerId()) || !lot.itemKind().equals(first.itemKind())) return false;
-            int pinned = account.claimQuantities().keySet().stream().map(resources.claims()::get)
-                    .mapToInt(claim -> claim.lotQuantities().getOrDefault(entry.getKey(), 0)).sum();
-            if (entry.getValue() > account.lotQuantities().getOrDefault(entry.getKey(), 0) - pinned) return false;
-        }
-        var bindings = resources.bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(input.accountId())).toList();
-        if (!ReferenceContainerCustody.hasLiveCustody(state, container.containerId())) return bindings.isEmpty();
-        if (!ReferenceContainerCustody.hasOperationalCustody(state, container.containerId())) return false;
-        long epoch = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container.containerId())).authorityEpoch();
-        return !bindings.isEmpty() && bindings.stream().allMatch(binding -> binding.authorityEpoch() == epoch)
-                && input.lotQuantities().entrySet().stream().allMatch(entry -> bindings.stream()
-                .mapToInt(binding -> binding.lotQuantities().getOrDefault(entry.getKey(), 0)).sum() >= entry.getValue());
+        return quantity > 0 && input.quantity() == quantity && FungibleResourceCustodySupport.canReserve(state, input);
     }
 
     public static ProductionInputHold holdForStart(FrontierWorldState state, FungibleResourceCustodySupport.LotAtContainer input,

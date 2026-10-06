@@ -24,6 +24,7 @@ final class ProductionJobStateCodec {
             writeString(output, job.outputItemKind()); output.writeByte(job.outputCount()); ProductionWorkProgressStateCodec.write(output, job.workProgress());
             TraversalTopologyStateCodec.write(output, job.workTraversal()); output.writeShort(job.traversalCursor());
             BakeryWorkStateCodec.write(output, job.bakeryWork()); StationApproachStateCodec.write(output, job.spatial());
+            writeRights(output, job.rights());
         }
     }
 
@@ -37,7 +38,7 @@ final class ProductionJobStateCodec {
             ProductionWorkProgress progress = ProductionWorkProgressStateCodec.read(input); TraversalTopology traversal = TraversalTopologyStateCodec.read(input);
             int cursor = input.readUnsignedShort();
             ProductionJob job = new ProductionJob(id, task, settlement, facility, worker, consumed, hold, output, outputKind, outputCount,
-                    progress, traversal, cursor, BakeryWorkStateCodec.read(input), StationApproachStateCodec.read(input));
+                    progress, traversal, cursor, BakeryWorkStateCodec.read(input), StationApproachStateCodec.read(input), readRights(input));
             if (jobs.put(id, job) != null) throw new IllegalArgumentException("duplicate production job id");
         }
         return jobs;
@@ -54,6 +55,15 @@ final class ProductionJobStateCodec {
             output.writeByte(5); writeString(output, bound.accountId().value()); writeString(output, bound.claimId().value()); output.writeLong(bound.authorityEpoch());
             writeInputLots(output, bound.inputLots());
         } else throw new IllegalArgumentException("unknown production input hold");
+    }
+    static void writeRights(DataOutputStream out, ProductionRights rights) throws IOException {
+        out.writeByte(rights.mode().wireTag()); out.writeUTF(rights.resourceOwner().id().value());
+        out.writeByte(FrontierWireTags.tag(rights.resourceOwner().kind())); out.writeUTF(rights.destinationContainerId().value());
+    }
+    static ProductionRights readRights(DataInputStream in) throws IOException {
+        return new ProductionRights(ProductionRights.Mode.fromWireTag(in.readUnsignedByte()),
+                new GoodsTradeParty(new SubjectId(in.readUTF()), FrontierWireTags.require(EconomicOwnerKind.class, in.readUnsignedByte())),
+                new SubjectId(in.readUTF()));
     }
 
     static ProductionInputHold readHold(DataInputStream input, SubjectId itemId) throws IOException {

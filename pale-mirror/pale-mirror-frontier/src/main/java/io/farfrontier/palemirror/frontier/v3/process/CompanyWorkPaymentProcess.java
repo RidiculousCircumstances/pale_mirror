@@ -16,7 +16,7 @@ public final class CompanyWorkPaymentProcess {
         return contractFor(state, job).map(contract -> {
             try { state.inventory().economics().reserve(reservation(job, contract)); return true; }
             catch (IllegalArgumentException unavailable) { return false; }
-        }).orElse(true);
+        }).orElse(job.rights().mode() == ProductionRights.Mode.BUYER_OWNED_SERVICE);
     }
 
     /** A reservation happens in the same reduction that opens the durable production job. */

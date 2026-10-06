@@ -187,7 +187,7 @@ final class FrontierV3BakeryPhysicalEffect {
         ExactItemStack exactSource = exact ? state.inventory().items().get(work.phase() == BakeryWorkState.Phase.STATION_UNLOAD
                 || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY ? job.outputItemId() : job.consumedItemId()) : null;
         ExactItemStack exactOutput = exact && work.phase() == BakeryWorkState.Phase.PROCESSING
-                ? new ExactItemStack(job.outputItemId(), job.settlementId(), "minecraft:bread", job.outputCount(),
+                ? new ExactItemStack(job.outputItemId(), job.rights().resourceOwner().id(), "minecraft:bread", job.outputCount(),
                 new InventoryCustody.ContainerSlot(containerId, destinationSlot)) : null;
         if (exact && exactSource == null) throw new IllegalArgumentException("bakery physical source item absent");
         List<MaterialSourceSelection.Slice> slices = exact ? List.of() : sourceSlices(state, lease, job, order, kind);

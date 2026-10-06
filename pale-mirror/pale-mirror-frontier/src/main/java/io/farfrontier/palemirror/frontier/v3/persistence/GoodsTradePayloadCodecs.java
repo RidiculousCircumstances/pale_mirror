@@ -11,6 +11,10 @@ final class GoodsTradePayloadCodecs {
     private GoodsTradePayloadCodecs() { }
     static PayloadCodecs create() {
         return new PayloadCodecs(List.of(
+                codec("frontier.goods_participant_reviewed", (out, payload) -> {
+                    var value = (GoodsParticipantReviewed) payload;
+                    out.writeLong(value.expectedRevision()); out.writeUTF(value.decision()); out.writeLong(value.atTick());
+                }, in -> new GoodsParticipantReviewed(in.readLong(), in.readUTF(), in.readLong())),
                 codec("frontier.goods_order_placed", (out, payload) -> GoodsTradeStateCodec.writeOrder(out, ((GoodsTradeOrderPlaced) payload).order()),
                         in -> new GoodsTradeOrderPlaced(GoodsTradeStateCodec.readOrder(in))),
                 codec("frontier.goods_trade_reserved", (out, payload) -> {

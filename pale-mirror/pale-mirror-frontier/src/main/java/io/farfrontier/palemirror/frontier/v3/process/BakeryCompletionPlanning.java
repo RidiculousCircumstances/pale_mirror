@@ -39,6 +39,8 @@ final class BakeryCompletionPlanning {
             return List.of(new ProposedEvent(job.settlementId(), step.orElseThrow()));
         var events = new java.util.ArrayList<ProposedEvent>();
         events.add(new ProposedEvent(job.settlementId(), step.orElseThrow()));
+        if (step.orElseThrow().action() == BakeryColdStep.Action.DELIVER)
+            events.addAll(GoodsParticipantWakeup.container(state, job.rights().destinationContainerId(), "bakery-delivery|" + job.id().value(), action.dueAt().ticks()));
         events.add(reschedule(action, complete(job, due)));
         FrontierWorldState successor = BakeryProcess.reduceColdStep(state, job.settlementId(), step.orElseThrow());
         events.addAll(stationReleaseWake(state, successor, job.id(),

@@ -36,7 +36,7 @@ public final class BakeryProcess {
         if (job.inputHold() instanceof ProductionInputHold.Materialized) {
             ExactItemStack wheat = state.inventory().items().get(assertedInput);
             if (wheat == null || !"minecraft:wheat".equals(wheat.itemKind()) || wheat.count() != job.outputCount()
-                    || !wheat.economicOwnerId().equals(job.settlementId())
+                    || !wheat.economicOwnerId().equals(job.rights().resourceOwner().id())
                     || !(wheat.custody() instanceof InventoryCustody.ContainerSlot slot)
                     || !slot.containerId().equals(FrontierWorldState.depotId(job.settlementId())))
                 throw new IllegalArgumentException("bakery exact start has no owned depot wheat");
@@ -57,7 +57,7 @@ public final class BakeryProcess {
         if (job.inputHold() instanceof ProductionInputHold.Materialized) {
             SubjectId depot = FrontierWorldState.depotId(job.settlementId());
             return state.inventory().items().values().stream().sorted(java.util.Comparator.comparing(ExactItemStack::id))
-                    .filter(item -> item.economicOwnerId().equals(job.settlementId())
+                    .filter(item -> item.economicOwnerId().equals(job.rights().resourceOwner().id())
                             && item.itemKind().equals("minecraft:wheat") && item.count() == job.outputCount()
                             && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
                             && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id())
@@ -69,7 +69,7 @@ public final class BakeryProcess {
         SubjectId claim = claimId(job);
         if (state.inventory().fungibleResources().claims().containsKey(claim)) return Optional.empty();
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
-        return FungibleResourceCustodySupport.selectAtContainer(state, depot, job.settlementId(),
+        return FungibleResourceCustodySupport.selectAtContainer(state, depot, job.rights().resourceOwner().id(),
                 "minecraft:wheat", job.outputCount()).filter(selection ->
                 ProductionResourceCustody.canStart(state, selection, job.outputCount())).map(selection ->
                 new BakeryInputReallocated(job.id(), ProductionResourceCustody.holdForStart(state, selection,
@@ -94,7 +94,7 @@ public final class BakeryProcess {
                 ? cold.claimId() : ((ProductionInputHold.FungibleBound) replacement).claimId();
         Map<SubjectId, Integer> lots = replacement instanceof ProductionInputHold.FungibleCold cold
                 ? cold.inputLots() : ((ProductionInputHold.FungibleBound) replacement).inputLots();
-        ClaimAllocation allocation = new ClaimAllocation(claimId, job.id(), job.settlementId(),
+        ClaimAllocation allocation = new ClaimAllocation(claimId, job.id(), job.rights().resourceOwner().id(),
                 "minecraft:wheat", job.outputCount(), lots, ClaimPurpose.PRODUCTION_WORK);
         FungibleResourceLedger ledger = replacement instanceof ProductionInputHold.FungibleBound bound
                 ? state.inventory().fungibleResources().reserveBound(allocation, accountId, bound.authorityEpoch())
@@ -236,12 +236,12 @@ public final class BakeryProcess {
             ProductionStationSpec station = station(state, job);
             if (job.inputHold() instanceof ProductionInputHold.Materialized) {
                 ExactItemStack input = state.inventory().items().get(job.consumedItemId());
-                ExactItemStack output = new ExactItemStack(job.outputItemId(), job.settlementId(), job.outputItemKind(),
+                ExactItemStack output = new ExactItemStack(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(),
                         job.outputCount(), new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()));
                 inventory = ProductionStationRecipe.transformExactCold(state, station, input, output);
             } else {
                 FungibleResourceLedger ledger = state.inventory().fungibleResources();
-                ResourceLot output = new ResourceLot(job.outputItemId(), job.settlementId(), job.outputItemKind(), job.outputCount(),
+                ResourceLot output = new ResourceLot(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(), job.outputCount(),
                         "recipe:bread", job.inputQuantities().keySet().stream().sorted().toList());
                 inventory = ProductionStationRecipe.transformCold(state, station, work.stationAccountId(), job.inputQuantities(),
                         Map.of(claimId(job), job.outputCount()), output);
@@ -448,11 +448,11 @@ public final class BakeryProcess {
                 if (!observed.remainingSource().isEmpty() || !observed.destination().isEmpty())
                     throw new IllegalArgumentException("exact recipe cannot carry fungible witness layouts");
                 ExactItemStack input = state.inventory().items().get(job.consumedItemId());
-                ExactItemStack output = new ExactItemStack(job.outputItemId(), job.settlementId(), job.outputItemKind(),
+                ExactItemStack output = new ExactItemStack(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(),
                         job.outputCount(), new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()));
                 inventory = ProductionStationRecipe.transformExactObserved(state, station, input, output);
             } else {
-                ResourceLot output = new ResourceLot(job.outputItemId(), job.settlementId(), job.outputItemKind(), job.outputCount(),
+                ResourceLot output = new ResourceLot(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(), job.outputCount(),
                         "recipe:bread", job.inputQuantities().keySet().stream().sorted().toList());
                 inventory = ProductionStationRecipe.transformObserved(state, station, work.stationAccountId(),
                         observed.sourceEpoch(), job.inputQuantities(), Map.of(claimId(job), job.outputCount()),

@@ -248,6 +248,8 @@ public final class FrontierWorldProcessCatalog {
                 }
             }),
             Map.entry(GoodsTradeReceiptProcess.REVIEW, (state, action, autonomous) -> GoodsTradeReceiptProcess.plan(state, action)),
+            Map.entry(GoodsParticipantProcess.REVIEW, (state, action, autonomous) -> GoodsParticipantProcess.plan(state, action)),
+            Map.entry(GoodsParticipantWakeup.OPPORTUNITY, (state, action, autonomous) -> GoodsParticipantProcess.plan(state, action)),
             Map.entry(ShipmentProcess.PROGRESS, new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomous) {
                     return ShipmentProcess.plan(state, action, action.dueAt().ticks());
@@ -449,6 +451,7 @@ public final class FrontierWorldProcessCatalog {
                     cadence.companyFoundationInitialReviewTick() + index * cadence.settlementInitialStagger()));
         }
         for (Settlement settlement : bootstrap.settlements()) {
+            actions.add(GoodsParticipantProcess.review(settlement.id(), bootstrap.ruleset().goodsTrade().reviewInterval()));
             for (Resident resident : settlement.residents()) {
                 int metabolism = ResidentCharacteristics.initial(bootstrap.ruleset().residentLife(),
                         resident.id()).effectiveMetabolismPermille(0L);

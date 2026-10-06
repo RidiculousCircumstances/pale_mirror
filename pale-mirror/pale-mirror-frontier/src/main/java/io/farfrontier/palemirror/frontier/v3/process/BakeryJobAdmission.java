@@ -52,9 +52,13 @@ final class BakeryJobAdmission {
 
     static ProductionJob exact(FrontierWorldState state, StrategicTask task, Settlement settlement,
                                SettlementStructure workshop, ExactItemStack input, ResidentProfile worker) {
-        if (!input.economicOwnerId().equals(settlement.id())
+        return exact(state, task, settlement, workshop, input, worker, ProductionRights.publicService(settlement.id()));
+    }
+    static ProductionJob exact(FrontierWorldState state, StrategicTask task, Settlement settlement,
+                               SettlementStructure workshop, ExactItemStack input, ResidentProfile worker, ProductionRights rights) {
+        if (!input.economicOwnerId().equals(rights.resourceOwner().id())
                 || !"minecraft:wheat".equals(input.itemKind()))
-            throw new IllegalArgumentException("bakery exact input must be settlement-owned wheat");
+            throw new IllegalArgumentException("bakery exact input must belong to its declared production owner");
         SubjectId jobId = ProductionProcess.jobId(task);
         String stem = jobId.value().substring("job:".length());
         return new ProductionJob(jobId, task.id(), settlement.id(), workshop.id(), worker.id(), input.id(),
@@ -62,12 +66,20 @@ final class BakeryJobAdmission {
                 new SubjectId("item:" + stem + "-bread"), "minecraft:bread", input.count(),
                 ProductionWorkProgress.notStarted(), anchor(jobId, workshop, state.actorLocations().get(worker.id())), 0,
                 Optional.of(work(state, workshop, jobId,
-                        new SubjectId("custody:bakery-source-" + task.id().value().substring("task:".length())))));
+                        new SubjectId("custody:bakery-source-" + task.id().value().substring("task:".length()))))).withRights(rights);
     }
 
     static ProductionJob fungible(FrontierWorldState state, StrategicTask task, Settlement settlement,
                                   SettlementStructure workshop, FungibleResourceCustodySupport.LotSelection input,
                                   ResidentProfile worker) {
+        return fungible(state, task, settlement, workshop, input, worker, ProductionRights.publicService(settlement.id()));
+    }
+    static ProductionJob fungible(FrontierWorldState state, StrategicTask task, Settlement settlement,
+                                  SettlementStructure workshop, FungibleResourceCustodySupport.LotSelection input,
+                                  ResidentProfile worker, ProductionRights rights) {
+        if (input.lotQuantities().keySet().stream().anyMatch(id -> !state.inventory().fungibleResources()
+                .lots().get(id).economicOwnerId().equals(rights.resourceOwner().id())))
+            throw new IllegalArgumentException("bakery lot selection has a foreign production owner");
         SubjectId jobId = ProductionProcess.jobId(task);
         String stem = jobId.value().substring("job:".length());
         ProductionInputHold hold = ProductionResourceCustody.holdForStart(state, input,
@@ -75,7 +87,7 @@ final class BakeryJobAdmission {
         return new ProductionJob(jobId, task.id(), settlement.id(), workshop.id(), worker.id(), input.firstLotId(), hold,
                 new SubjectId("lot:" + stem + "-bread"), "minecraft:bread", ProductionStationRecipe.breadOutputQuantity(input.quantity()),
                 ProductionWorkProgress.notStarted(), anchor(jobId, workshop, state.actorLocations().get(worker.id())), 0,
-                Optional.of(work(state, workshop, jobId, input.accountId())));
+                Optional.of(work(state, workshop, jobId, input.accountId()))).withRights(rights);
     }
 
     private static TraversalTopology anchor(SubjectId jobId, SettlementStructure workshop, ActorLocation actor) {
@@ -99,6 +111,7 @@ final class BakeryJobAdmission {
 
     static FrontierWorldState admitStarted(FrontierWorldState state, SubjectId subject, ProductionStarted started) {
         ProductionJob job = started.job(); if (!subject.equals(job.settlementId())) throw new IllegalArgumentException("production event subject does not own the work");
+        job.rights().validate(state, job);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
         SettlementCommitmentComposition.ADMISSION.require(state, new SettlementCommitmentAdmission.Request(
                 job.taskId(), job.settlementId(), job.facilityId(), List.of(job.workerId())));
@@ -107,7 +120,7 @@ final class BakeryJobAdmission {
         // successful depot-slot wheat-to-bread path through a forged event.
         if (job.bakeryWork().isEmpty())
             throw new IllegalArgumentException("bread production start requires declared bakery station work");
-        if (!ProductionOutputCapacity.canAdmitBreadBatch(state, job.settlementId(), job.outputCount()))
+        if (!ProductionOutputCapacity.canAdmitBreadBatch(state, job.rights(), job.outputCount()))
             throw new IllegalArgumentException("production start has no capacity for its retained output");
         SettlementStructure workshop = ProductionProcess.workshop(settlement);
         if (!workshop.id().equals(job.facilityId()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production start facility is unavailable");

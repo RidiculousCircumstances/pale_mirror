@@ -43,9 +43,12 @@ public final class GoodsTradeReceiptProcess {
                         new ResourceTitleTransfer(account.id(), claimId, contract.seller().id(), contract.buyer().id(), reception.lotQuantities(), children));
                 var acknowledged = new ShipmentReceiptAcknowledged(shipment.id(), shipment.revision(), reception.id());
                 ShipmentStateSupport.acknowledge(GoodsTradeStateSupport.accept(state, contract.buyer().id(), receipt), shipment.id(), acknowledged);
-                return List.of(new ProposedEvent(contract.buyer().id(), new GoodsTradeAccepted(receipt)),
+                var events = new ArrayList<>(List.of(new ProposedEvent(contract.buyer().id(), new GoodsTradeAccepted(receipt)),
                         new ProposedEvent(shipment.id(), acknowledged), ShipmentProcess.wake(shipment.id(), action.dueAt().ticks()),
-                        cancelled);
+                        cancelled));
+                events.addAll(GoodsParticipantWakeup.party(state, contract.buyer().id(), receipt.id().value(), action.dueAt().ticks()));
+                events.addAll(GoodsParticipantWakeup.party(state, contract.seller().id(), receipt.id().value(), action.dueAt().ticks()));
+                return List.copyOf(events);
         }
         // A notice with no currently received allocation does not invent delivery or poll forever.
         // The next exact unload publishes another receiver review notice.

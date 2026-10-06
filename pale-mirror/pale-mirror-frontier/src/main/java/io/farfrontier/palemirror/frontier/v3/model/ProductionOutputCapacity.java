@@ -27,15 +27,19 @@ public final class ProductionOutputCapacity {
     }
 
     public static boolean canAdmitBreadBatch(FrontierWorldState state, SubjectId settlementId, int quantity) {
+        return canAdmitBreadBatch(state, ProductionRights.publicService(settlementId), quantity);
+    }
+
+    public static boolean canAdmitBreadBatch(FrontierWorldState state, ProductionRights rights, int quantity) {
         Objects.requireNonNull(state, "production output state");
         ProductionStationRecipe.breadOutputQuantity(quantity);
-        SubjectId depot = FrontierWorldState.depotId(Objects.requireNonNull(settlementId, "settlement id"));
+        SubjectId depot = rights.destinationContainerId();
         var pending = ContainerInboundCapacity.incoming(pendingInbound(state.productionJobs()), depot, java.util.Optional.empty());
         return state.canReceiveFungible(depot, "minecraft:bread", quantity)
                 || state.inventory().canTransformFungible(depot, "minecraft:wheat", quantity,
                     "minecraft:bread", quantity, state.reservedContainerSlots(depot), pending)
                 || state.inventory().items().values().stream().anyMatch(item ->
-                    item.economicOwnerId().equals(settlementId) && item.itemKind().equals("minecraft:wheat")
+                    item.economicOwnerId().equals(rights.resourceOwner().id()) && item.itemKind().equals("minecraft:wheat")
                     && item.count() == quantity && item.custody() instanceof InventoryCustody.ContainerSlot slot
                     && slot.containerId().equals(depot))
                     && state.inventory().canReserveSlots(depot, state.reservedContainerSlots(depot), pending);

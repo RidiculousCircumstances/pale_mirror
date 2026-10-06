@@ -17,7 +17,14 @@ import java.util.Objects;
  */
 public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                               FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
-                              ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog) {
+                              ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
+                              GoodsTradeRules goodsTrade) {
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                           ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand,
+                residentLife, resourceHarvestColdTravelTicksPerEdge, workCatalog, GoodsTradeRules.standard());
+    }
     /** Retains exact historical R4-and-earlier digests while those selectors remain installed. */
     public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                            FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand) {
@@ -46,6 +53,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         }
         if (schemaVersion <= 0) throw new IllegalArgumentException("ruleset schema version must be positive");
         workCatalog = Objects.requireNonNull(workCatalog, "work catalog");
+        goodsTrade = Objects.requireNonNull(goodsTrade, "goods trade rules");
         cadence = Objects.requireNonNull(cadence, "cadence");
         spatial = Objects.requireNonNull(spatial, "spatial");
         rates = Objects.requireNonNull(rates, "rates");
@@ -72,7 +80,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 + '|' + facilityCapacity.canonicalText() + '|' + combat.canonicalText() + '|' + hiveCommand.canonicalText()
                 + (schemaVersion >= 7 ? "|" + residentLife.canonicalText() : "")
                 + (schemaVersion >= 9 ? "|" + resourceHarvestColdTravelTicksPerEdge : "")
-                + (schemaVersion >= 13 ? "|" + workCatalog.canonicalText() : "");
+                + (schemaVersion >= 13 ? "|" + workCatalog.canonicalText() : "")
+                + (schemaVersion >= 14 ? "|" + goodsTrade.canonicalText() : "");
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */

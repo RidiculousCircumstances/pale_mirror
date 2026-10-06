@@ -141,7 +141,7 @@ public final class FrontierProductionWorkSceneSupport {
         }
         if (!(job.inputHold() instanceof ProductionInputHold.Materialized)) return false;
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
-        return input != null && input.economicOwnerId().equals(job.settlementId()) && "minecraft:wheat".equals(input.itemKind())
+        return input != null && input.economicOwnerId().equals(job.rights().resourceOwner().id()) && "minecraft:wheat".equals(input.itemKind())
                 && input.count() == job.outputCount() && input.custody() instanceof InventoryCustody.ContainerSlot slot
                 && slot.containerId().equals(FrontierWorldState.depotId(job.settlementId()));
     }

@@ -44,7 +44,6 @@ public final class ProductionStationRecipe {
                 || !input.custody().equals(source) || !output.custody().equals(destination)
                 || !"minecraft:wheat".equals(input.itemKind()) || !"minecraft:bread".equals(output.itemKind())
                 || input.count() != output.count() || !input.economicOwnerId().equals(output.economicOwnerId())
-                || !container.ownerId().equals(input.economicOwnerId())
                 || !input.equals(state.inventory().items().get(input.id()))
                 || state.inventory().items().containsKey(output.id())
                 || state.inventory().itemAt(destination.containerId(), destination.slot()).isPresent()
@@ -74,7 +73,6 @@ public final class ProductionStationRecipe {
                 || !output.custody().equals(new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()))
                 || !"minecraft:wheat".equals(input.itemKind()) || !"minecraft:bread".equals(output.itemKind())
                 || input.count() != output.count() || !input.economicOwnerId().equals(output.economicOwnerId())
-                || !container.ownerId().equals(input.economicOwnerId())
                 || !input.equals(state.inventory().items().get(input.id()))
                 || state.inventory().items().containsKey(output.id())
                 || !state.containerSlotAvailable(new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot())))
@@ -136,7 +134,8 @@ public final class ProductionStationRecipe {
         if (container == null || !container.productionStation().equals(java.util.Optional.of(station))
                 || account == null || !account.custody().equals(new ResourceCustody.Container(station.containerId()))
                 || !account.lotQuantities().equals(inputs) || !account.claimQuantities().equals(claims)
-                || !container.ownerId().equals(output.economicOwnerId()))
+                || inputs.keySet().stream().anyMatch(id -> ledger.lots().get(id) == null
+                    || !ledger.lots().get(id).economicOwnerId().equals(output.economicOwnerId())))
             throw new IllegalArgumentException("recipe requires the current exclusively held station input");
         switch (station.capability()) {
             case BAKING -> {

@@ -5,11 +5,16 @@ import java.util.HashMap;
 import java.util.Map;
 
 /** Bounded commercial registry, independent of the production-service order book. */
-public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<SubjectId, GoodsTradeContract> contracts) {
+public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<SubjectId, GoodsTradeContract> contracts,
+                              GoodsParticipantState participants) {
+    public GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<SubjectId, GoodsTradeContract> contracts) {
+        this(orders, contracts, GoodsParticipantState.empty());
+    }
     public static final int MAX_CONTRACTS = 1_024;
     public static final int MAX_ORDERS = 2_048;
     public GoodsTradeState {
         orders = Map.copyOf(orders);
+        java.util.Objects.requireNonNull(participants);
         contracts = Map.copyOf(contracts);
         if (orders.size() > MAX_ORDERS || orders.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id()))
                 || contracts.size() > MAX_CONTRACTS || contracts.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id()))) {
@@ -30,7 +35,7 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
             throw new IllegalArgumentException("goods order must be a fresh participant authorization");
         }
         Map<SubjectId, GoodsTradeOrder> next = new HashMap<>(orders); next.put(order.id(), order);
-        return new GoodsTradeState(next, contracts);
+        return new GoodsTradeState(next, contracts, participants);
     }
     public GoodsTradeState admit(GoodsTradeContract contract, long now) {
         if (contracts.containsKey(contract.id()) || contract.revision() != 0 || contract.terminal()) {
@@ -44,7 +49,7 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         Map<SubjectId, GoodsTradeOrder> nextOrders = new HashMap<>(orders);
         nextOrders.put(sell.id(), sell.commit(contract.quantity())); nextOrders.put(buy.id(), buy.commit(contract.quantity()));
         Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); next.put(contract.id(), contract);
-        return new GoodsTradeState(nextOrders, next);
+        return new GoodsTradeState(nextOrders, next, participants);
     }
     public GoodsTradeState accept(GoodsTradeAcceptance receipt) {
         GoodsTradeContract contract = contracts.get(receipt.contractId());
@@ -79,12 +84,13 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         }
         Map<SubjectId, GoodsTradeOrder> nextOrders = new HashMap<>(orders); retired.orderIds().forEach(nextOrders::remove);
         Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); retired.contractIds().forEach(next::remove);
-        return new GoodsTradeState(nextOrders, next);
+        return new GoodsTradeState(nextOrders, next, participants);
     }
     private GoodsTradeState put(GoodsTradeContract contract) {
         Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); next.put(contract.id(), contract);
-        return new GoodsTradeState(orders, next);
+        return new GoodsTradeState(orders, next, participants);
     }
+    public GoodsTradeState withParticipants(GoodsParticipantState next) { return new GoodsTradeState(orders, contracts, next); }
     static void validateTerms(GoodsTradeContract contract, GoodsTradeOrder sell, GoodsTradeOrder buy) {
         if (sell == null || buy == null || sell.side() != GoodsTradeOrder.Side.SELL || buy.side() != GoodsTradeOrder.Side.BUY
                 || !sell.party().equals(contract.seller()) || !buy.party().equals(contract.buyer())

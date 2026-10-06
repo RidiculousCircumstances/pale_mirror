@@ -52,7 +52,9 @@ public final class StrategicObjectiveProcess {
             throw new IllegalArgumentException("stock wake has a foreign settlement owner or action kind");
         // The wake is only a causal hint. Policy re-reads current stock, worker, station and
         // active lane before it may create a task. The recurring review remains a backstop.
-        return plan(state, action, false, false, action.id().value());
+        var events = new java.util.ArrayList<>(plan(state, action, false, false, action.id().value()));
+        events.addAll(GoodsParticipantWakeup.container(state, FrontierWorldState.depotId(action.subject()), action.id().value(), action.dueAt().ticks()));
+        return List.copyOf(events);
     }
 
     /** Station release is an availability signal; settlement policy remains the assignment owner. */
@@ -341,6 +343,10 @@ public final class StrategicObjectiveProcess {
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveRouteEngagementProcess.start(task, action.dueAt().ticks() + 1L))));
         }
         if (task.kind() == StrategicTaskKind.PRODUCE_BREAD) {
+            if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION)
+                return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)),
+                        new ProposedEvent(owner, new StrategicTaskPlanned(task)), new ProposedEvent(task.id(),
+                        new ScheduleEffect.Created(ProductionProcess.start(task, action.dueAt().ticks() + 1L))));
             MarketDemand demand = MarketClearingProcess.foodDemand(state, task, action.dueAt().ticks());
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new MarketDemandOpened(demand)),
@@ -470,7 +476,7 @@ public final class StrategicObjectiveProcess {
             case HIVE_GROW_ORGANISM -> StrategicTaskKind.GROW_HIVE_ORGANISM;
             case HIVE_INTERCEPT_ROUTE_OPERATION -> StrategicTaskKind.INTERCEPT_ROUTE_OPERATION;
             case HIVE_ASSAULT_SETTLEMENT -> StrategicTaskKind.ASSAULT_SETTLEMENT;
-            case SETTLEMENT_PRODUCE_BREAD -> StrategicTaskKind.PRODUCE_BREAD;
+            case SETTLEMENT_PRODUCE_BREAD, SETTLEMENT_COMPANY_PRODUCTION -> StrategicTaskKind.PRODUCE_BREAD;
             case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
             case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE;
             case SETTLEMENT_CONSTRUCT_ROUTE_BYPASS -> StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS;
