@@ -15,6 +15,7 @@ final class FrontierV3PilotVisitIngress {
     private FrontierV3PilotDemandReceiptTransition.Correlation correlation;
     private boolean targetDimensionSeen;
     private boolean targetChunkSeen;
+    private boolean targetChunkPresent;
     private String finalClientDimension = "";
     private BlockPos finalClientPosition;
 
@@ -36,6 +37,7 @@ final class FrontierV3PilotVisitIngress {
     void observe(String clientDimension, boolean targetChunkPresent, BlockPos clientPosition) {
         finalClientDimension = Objects.requireNonNull(clientDimension, "client dimension");
         finalClientPosition = Objects.requireNonNull(clientPosition, "client position");
+        this.targetChunkPresent = targetDimension.equals(clientDimension) && targetChunkPresent;
         if (!targetDimension.equals(clientDimension)) return;
         targetDimensionSeen = true;
         if (targetChunkPresent) targetChunkSeen = true;
@@ -51,7 +53,7 @@ final class FrontierV3PilotVisitIngress {
     }
     /** A loaded target chunk is not a player arrival; ordinary visit evidence needs both. */
     boolean arrivedAt(BlockPos target) {
-        return targetDimensionSeen && targetChunkSeen && Objects.requireNonNull(target, "target").equals(finalClientPosition);
+        return targetChunkPresent && Objects.requireNonNull(target, "target").equals(finalClientPosition);
     }
     String finalClientDimension() { return finalClientDimension; }
     BlockPos finalClientPosition() { return finalClientPosition; }

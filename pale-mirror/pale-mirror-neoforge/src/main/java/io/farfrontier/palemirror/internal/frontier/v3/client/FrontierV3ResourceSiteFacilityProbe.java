@@ -27,7 +27,9 @@ final class FrontierV3ResourceSiteFacilityProbe {
         int farmland = 0, air = 0, wheat = 0, water = 0;
         for (int x = minX; x < minX + 8; x++) for (int z = minZ; z < minZ + 8; z++) {
             BlockPos crop = new BlockPos(x, y, z); BlockPos soil = crop.below();
-            if (!minecraft.level.hasChunkAt(crop) || !minecraft.level.hasChunkAt(soil)) return new Result(false, farmland, air, wheat, water, "unloaded=" + crop);
+            if (!FrontierV3ClientChunkReadiness.received(minecraft.level, crop)
+                    || !FrontierV3ClientChunkReadiness.received(minecraft.level, soil))
+                return new Result(false, farmland, air, wheat, water, "unloaded=" + crop);
             if (minecraft.level.getBlockState(soil).is(Blocks.FARMLAND)) farmland++;
             int slot = (x - minX) * 8 + (((x - minX) & 1) == 0 ? z - minZ : minZ + 7 - z);
             if (minecraft.level.getBlockState(crop).isAir()) air++;
@@ -39,7 +41,8 @@ final class FrontierV3ResourceSiteFacilityProbe {
         }
         for (BlockPos waterSource : new BlockPos[] {new BlockPos(minX + 2, y - 1, minZ - 1), new BlockPos(minX + 6, y - 1, minZ - 1),
                 new BlockPos(minX + 2, y - 1, minZ + 8), new BlockPos(minX + 6, y - 1, minZ + 8)}) {
-            if (!minecraft.level.hasChunkAt(waterSource)) return new Result(false, farmland, air, wheat, water, "unloaded=" + waterSource);
+            if (!FrontierV3ClientChunkReadiness.received(minecraft.level, waterSource))
+                return new Result(false, farmland, air, wheat, water, "unloaded=" + waterSource);
             if (minecraft.level.getBlockState(waterSource).equals(Blocks.WATER.defaultBlockState())) water++;
         }
         boolean current = farmland == 64 && air == completed && wheat == 64 - completed && water == 4;

@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "id": "community_field_visibility",
+  "server": {"host": "127.0.0.1", "port": 25565},
+  "pilot": {"username": "PMTestPilot"},
+  "setup": [{"type": "command", "command": "/gamemode creative PMTestPilot"}],
+  "actions": [
+    {"type": "inspect", "view": "site", "id": "site:7-wheat-field"},
+    {"type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {"x": 116, "y": 64, "z": -11}, "settleMs": 1000},
+    {"type": "look", "at": {"x": 126, "y": 64, "z": -11}},
+    {"type": "wait_until_diagnostic", "view": "first_visibility", "id": "7,-1", "expect": {"status": "ok", "visibility": "READY", "dynamicReady": true, "dynamicPresentable": true}, "timeoutMs": 30000},
+    {"type": "wait_until_diagnostic", "view": "first_visibility", "id": "8,-1", "expect": {"status": "ok", "visibility": "READY", "dynamicReady": true, "dynamicPresentable": true}, "timeoutMs": 30000},
+    {"type": "wait_until_diagnostic", "view": "first_visibility", "id": "7,-2", "expect": {"status": "ok", "visibility": "READY", "dynamicReady": true, "dynamicPresentable": true}, "timeoutMs": 30000},
+    {"type": "wait_until_diagnostic", "view": "first_visibility", "id": "8,-2", "expect": {"status": "ok", "visibility": "READY", "dynamicReady": true, "dynamicPresentable": true}, "timeoutMs": 30000},
+    {"type": "inspect", "view": "summary", "id": ""}
+  ],
+  "assertions": [{"after": 8, "view": "summary", "id": "", "expect": {"status": "ok", "requiredConflicts": 0, "inventoryConflicts": 0}}],
+  "frames": [{"after": 7, "name": "community-field-current"}]
+}

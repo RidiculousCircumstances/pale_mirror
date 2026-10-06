@@ -472,7 +472,9 @@ public final class FrontierV3TestPilotClient {
         if (!visitSent) { String username = minecraft.player.getGameProfile().getName(); BlockPos teleport = target.teleportAnchor();
             minecraft.player.connection.sendCommand(crossDimensionVisitCommand(username, dimension, teleport));
             visitSent = true; return; }
-        String clientDimension = minecraft.level.dimension().location().toString(); boolean targetChunkPresent = clientDimension.equals(dimension) && minecraft.level.hasChunkAt(target.teleportAnchor());
+        String clientDimension = minecraft.level.dimension().location().toString();
+        boolean targetChunkPresent = clientDimension.equals(dimension)
+                && FrontierV3ClientChunkReadiness.received(minecraft.level, target.teleportAnchor());
         visitIngress.observe(clientDimension, targetChunkPresent,
                 target.normalizeObservation(minecraft.player.blockPosition(), minecraft.player.getOnPos()));
         boolean ready = visitIngress.arrivedAt(target.expectedClientFeet());

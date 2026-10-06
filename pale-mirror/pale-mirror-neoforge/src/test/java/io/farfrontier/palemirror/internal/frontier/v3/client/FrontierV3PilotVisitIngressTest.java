@@ -38,6 +38,10 @@ class FrontierV3PilotVisitIngressTest {
 
         ingress.observe(DESTINATION, true, TARGET);
         assertTrue(ingress.arrivedAt(TARGET), "only the exact requested local player position completes an ordinary visit");
+        ingress.observe(DESTINATION, false, TARGET);
+        assertFalse(ingress.arrivedAt(TARGET), "a prior receipt cannot replace the currently missing target chunk");
+        ingress.observe("minecraft:overworld", true, TARGET);
+        assertFalse(ingress.arrivedAt(TARGET), "the same coordinates in a different dimension cannot reuse prior arrival");
         ingress.observe(DESTINATION, true, TARGET.offset(1, 0, 0));
         assertFalse(ingress.arrivedAt(TARGET), "a nearby loaded position may not masquerade as the requested first arrival");
         ingress.observe("minecraft:overworld", false, BlockPos.ZERO);
