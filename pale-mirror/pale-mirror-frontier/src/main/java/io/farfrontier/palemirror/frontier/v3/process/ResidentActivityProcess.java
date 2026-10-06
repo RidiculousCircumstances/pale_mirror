@@ -108,7 +108,7 @@ public final class ResidentActivityProcess {
     }
 
     /** A completed meal changes activity eligibility immediately, not at the next day boundary. */
-    public static ProposedEvent wakeAfterMeal(SubjectId residentId, long atTick) {
+    public static ProposedEvent wakeAfterActivity(SubjectId residentId, long atTick) {
         ScheduledAction next = review(residentId, Math.addExact(atTick, 1L));
         return new ProposedEvent(residentId, new ScheduleEffect.Rescheduled(next.id(), next));
     }

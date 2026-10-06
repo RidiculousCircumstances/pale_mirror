@@ -130,7 +130,7 @@ public final class ResidentMealProcess {
         boolean consumed = meal.phase() == ResidentMeal.Phase.CONSUME;
         if (consumed) {
             events.add(ResidentNeedProcess.requeueAfterConfirmedFood(state, meal.residentId(), now, meal.portion().nutritionUnits()));
-            events.add(ResidentActivityProcess.wakeAfterMeal(meal.residentId(), now));
+            events.add(ResidentActivityProcess.wakeAfterActivity(meal.residentId(), now));
         }
         events.add(new ProposedEvent(meal.residentId(), consumed
                 ? new ScheduleEffect.Cancelled(action.id())
@@ -344,7 +344,7 @@ public final class ResidentMealProcess {
                 ResidentNeedProcess.requeueAfterConfirmedFood(state, observed.residentId(), atTick, meal.portion().nutritionUnits()),
                 new ProposedEvent(observed.residentId(), new ScheduleEffect.Cancelled(
                         progress(meal, Math.addExact(meal.startedAtTick(), 1L)).id())),
-                ResidentActivityProcess.wakeAfterMeal(observed.residentId(), atTick)));
+                ResidentActivityProcess.wakeAfterActivity(observed.residentId(), atTick)));
         return List.copyOf(events);
     }
 

@@ -17,6 +17,24 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorMovementProcessTest {
+    @Test void visitorClearsTheActualForeignServicePointWithoutChangingResidence() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:visitor-turnover"), 421L));
+        var home = state.bootstrap().settlements().getFirst();
+        var host = state.bootstrap().settlements().get(1);
+        var actor = home.residents().getFirst().id();
+        var point = SettlementServiceAccessPoints.forSettlement(state, host.id()).getFirst();
+        state = state.withActorBody(actor, point.station().standingBody());
+        assertEquals(point, ServiceAccessCoordinator.turnoverPoint(state, actor).orElseThrow());
+        var movement = ResidentServiceTurnover.select(state, actor, 1L).orElseThrow();
+        assertEquals(new ActorMovementContext.ServiceExit(host.id(), FrontierWorldState.depotId(host.id())), movement.context());
+        ActorMovementProviders.require(movement).validate(state, movement);
+        assertFalse(ServiceAreaDestinations.temporary(point, movement.order().legalStations().getFirst()));
+        var retained = retainMovement(state, movement);
+        assertEquals(home.id(), retained.humanPopulation().resident(actor).settlementId());
+        var codec = new FrontierWorldStateCodec();
+        assertEquals(retained, codec.decode(codec.encode(retained)));
+    }
+
     @Test void idleOccupantLeavesTemporaryBufferThroughPersistedInterruptibleMovement() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:service-buffer-turnover"), 421L));

@@ -26,10 +26,10 @@ final class ResidentServiceTurnover {
         AmbientActorLease lease = state.ambientLeases().get(actorId);
         if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.HOT)
             return Optional.empty();
-        List<ServiceAccessPoint> points = SettlementServiceAccessPoints.forSettlement(state, resident.settlementId());
         Optional<ServiceAccessPoint> occupied = ServiceAccessCoordinator.turnoverPoint(state, actorId);
         if (occupied.isEmpty()) return Optional.empty();
         ServiceAccessPoint point = occupied.orElseThrow();
+        List<ServiceAccessPoint> points = SettlementServiceAccessPoints.forSettlement(state, point.settlementId());
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), point.settlementId());
         SettlementStructure facility = settlement.structures().stream()
                 .filter(value -> value.id().equals(point.facilityId())).findFirst().orElseThrow();

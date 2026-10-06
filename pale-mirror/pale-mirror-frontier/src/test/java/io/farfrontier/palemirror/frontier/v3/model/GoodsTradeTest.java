@@ -133,8 +133,10 @@ class GoodsTradeTest {
     @Test void shipmentJourneyAndRecipientAcceptanceUseTheRealKernelScheduleLifecycle() {
         var configuration = FrontierV3FixtureCatalog.goodsShipmentConfiguration(new WorldId("frontier:shipment-schedules"), 41);
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
-        for (int boundary = 0; boundary < 20 && !engine.checkpoint().schedules().isEmpty(); boundary++) {
+        for (int boundary = 0; boundary < 20; boundary++) {
             var current = engine.canonicalState().state();
+            if (current.companies().goodsTrade().contracts().get(new SubjectId("contract:development-goods")).fulfilled()
+                    && engine.checkpoint().schedules().stream().noneMatch(action -> action.subject().equals(ShipmentFixture.ID))) break;
             var next = engine.checkpoint().schedules().stream()
                     .filter(action -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, action)).sorted().findFirst().orElseThrow();
             var advance = engine.advanceTo(next.dueAt(), new WorkBudget(128, 1024));

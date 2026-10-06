@@ -227,7 +227,7 @@ public final class FrontierWorldPhysicalObservationProcess {
             ResidentMeal meal = state.humanPopulation().meals().get(claim.claimantId());
             events.add(new ProposedEvent(meal.residentId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(
                     ResidentMealProcess.progress(meal, meal.startedAtTick() + 1L).id())));
-            events.add(ResidentActivityProcess.wakeAfterMeal(meal.residentId(), now));
+            events.add(ResidentActivityProcess.wakeAfterActivity(meal.residentId(), now));
         }
         events.add(playerStockWake(observed.economicOwnerId(), observed.interactionId(), now));
         return new CommandPlan.Accepted(List.copyOf(events));

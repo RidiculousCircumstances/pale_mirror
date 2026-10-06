@@ -113,16 +113,25 @@ public final class FrontierV3FixtureCatalog {
 
     public static List<Profile> profiles() { return List.copyOf(PROFILES.values()); }
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> goodsShipmentConfiguration(WorldId worldId, long seed) {
-        return configured(worldId, ShipmentFixture.initial(worldId, seed), SimInstant.ZERO,
-                List.of(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(ShipmentFixture.ID, 1)), false);
+        var state = ShipmentFixture.initial(worldId, seed);
+        return configured(worldId, state, SimInstant.ZERO,
+                tradeSchedules(state, List.of(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(ShipmentFixture.ID, 1))), false);
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousGoodsConfiguration(WorldId worldId, long seed) {
         var state = AutonomousTradeFixture.initial(worldId, seed);
         var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
-        return configured(worldId, state, SimInstant.ZERO, List.of(
+        return configured(worldId, state, SimInstant.ZERO, tradeSchedules(state, List.of(
                 io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(seller.party().id(), 1),
-                io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(seller.known().getFirst().party().id(), 2)), false);
+                io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(seller.known().getFirst().party().id(), 2))), false);
+    }
+
+    /** Narrow trade fixtures retain wakeable clocks without running an unrelated population day. */
+    private static List<ScheduledAction> tradeSchedules(FrontierWorldState state, List<ScheduledAction> trade) {
+        var schedules = new ArrayList<>(trade);
+        state.humanPopulation().residents().keySet().stream().sorted().forEach(actor -> schedules.add(
+                io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(actor, 48_000L)));
+        return List.copyOf(schedules);
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> uncontestedSupplyConfiguration(WorldId worldId, long seed) {

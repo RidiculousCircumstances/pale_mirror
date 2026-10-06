@@ -109,7 +109,10 @@ public final class ServiceAccessCoordinator {
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         ActorLocation actor = state.actorLocations().get(residentId);
         if (resident == null || actor == null) return Optional.empty();
-        return SettlementServiceAccessPoints.forSettlement(state, resident.settlementId()).stream()
+        // A service visitor need not belong to the facility's settlement.
+        // The declared point owns geometry; residence owns neither occupancy nor exit.
+        return state.bootstrap().settlements().stream()
+                .flatMap(settlement -> SettlementServiceAccessPoints.forSettlement(state, settlement.id()).stream())
                 .filter(point -> ServiceAreaDestinations.temporary(point, actor.supportingSurface())).findFirst();
     }
 

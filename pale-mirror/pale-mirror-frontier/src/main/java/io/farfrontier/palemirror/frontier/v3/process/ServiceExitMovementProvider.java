@@ -16,7 +16,8 @@ public final class ServiceExitMovementProvider implements ActorMovementProvider 
                 || movement.order().capability() != TraversalCapability.PEDESTRIAN)
             throw new IllegalArgumentException("service exit lacks its exact movement declaration");
         ResidentProfile resident = state.humanPopulation().resident(movement.order().actorId());
-        if (resident == null || !resident.settlementId().equals(exit.settlementId())
+        var container = state.inventory().containers().get(exit.depotId());
+        if (resident == null || container == null || !container.ownerId().equals(exit.settlementId())
                 || !FrontierWorldState.depotId(exit.settlementId()).equals(exit.depotId()))
             throw new IllegalArgumentException("service exit does not match its declared resident and depot");
     }
@@ -57,7 +58,7 @@ public final class ServiceExitMovementProvider implements ActorMovementProvider 
         return next == ResidentActivityChoice.Kind.WORK || next == ResidentActivityChoice.Kind.EAT;
     }
     @Override public List<ProposedEvent> arrived(FrontierWorldState state, ActorMovement movement, long atTick) {
-        return List.of(ResidentActivityProcess.wakeAfterMeal(movement.order().actorId(), atTick));
+        return List.of(ResidentActivityProcess.wakeAfterActivity(movement.order().actorId(), atTick));
     }
     @Override public List<ProposedEvent> interrupted(FrontierWorldState state, ActorMovement movement, long atTick) { return List.of(); }
 }

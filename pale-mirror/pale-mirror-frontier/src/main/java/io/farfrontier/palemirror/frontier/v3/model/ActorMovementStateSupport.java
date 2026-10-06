@@ -30,10 +30,11 @@ final class ActorMovementStateSupport {
                 case ActorMovementContext.ServiceExit exit -> {
                     ResidentProfile resident = people.resident(entry.getKey());
                     if (entry.getValue().executionId().activityKind() != ActorActivityKind.SERVICE_EXIT
-                            || resident == null || !resident.settlementId().equals(exit.settlementId())
+                            || resident == null
                             || !FrontierWorldState.depotId(exit.settlementId()).equals(exit.depotId())
                             || entry.getValue().order().capability() != TraversalCapability.PEDESTRIAN
-                            || !inventory.containers().containsKey(exit.depotId()))
+                            || !inventory.containers().containsKey(exit.depotId())
+                            || !inventory.containers().get(exit.depotId()).ownerId().equals(exit.settlementId()))
                         throw new IllegalArgumentException("actor movement service exit lacks its declared resident, settlement or depot");
                 }
                 case ActorMovementContext.ShipmentLeg leg -> {
