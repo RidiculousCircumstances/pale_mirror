@@ -12,6 +12,38 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void raisedWorkshopMealDepartureCanBeAcceptedAndReplayedWithoutInventingSupport() throws Exception {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:r28-workshop-meal"), 20260918065L));
+        var settlement = initial.bootstrap().settlements().get(1);
+        var actor = new SubjectId("resident:2-9");
+        var workshop = settlement.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP)
+                .findFirst().orElseThrow();
+        var port = SettlementWorkshopServicePort.forWorkshop(workshop);
+        assertEquals(SurfaceAnchor.at(-142, 64, -324), port.workStation());
+        assertEquals(SurfaceAnchor.at(-142, 64, -325), port.inputStation());
+        var meal = testMeal(initial, settlement, actor, FrontierWorldState.depotId(settlement.id()), port.workStation());
+        var state = withMeal(initial.withActorBody(actor, port.workStation().standingBody()), meal);
+        var step = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
+                .planColdStep(state, actor, 45_136L).orElseThrow();
+        assertTrue(step.plannedRoute().orElseThrow().route().contains(port.inputStation()));
+        var codecs = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
+        var decoded = (ResidentMealColdStep) codecs.decode(step.type(), codecs.encode(step));
+        try (var empty = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
+             var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(empty)) {
+            var retained = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceColdStep(state, actor, decoded);
+            assertTrue(retained.humanPopulation().meals().get(actor).coldTravel().isPresent());
+            assertEquals(0, empty.pendingCount(), "replay validates the accepted route without starting a new search");
+        }
+        var damaged = state.recordPhysicalDelta(new PhysicalDelta(port.inputStation().support(),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:workshop-input-floor-loss"));
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
+                .reduceColdStep(damaged, actor, decoded));
+        var moved = state.withActorBody(actor, port.inputStation().standingBody());
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
+                .reduceColdStep(moved, actor, decoded));
+    }
+
     @Test void distantReturnedCourierGetsADeferredRouteAndReplayNeedsNoPlannerCache() throws Exception {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:distant-meal"), 20260918065L));
         var settlement = state.bootstrap().settlements().get(6);

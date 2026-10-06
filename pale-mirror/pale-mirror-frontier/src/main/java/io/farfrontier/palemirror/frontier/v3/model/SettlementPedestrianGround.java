@@ -45,11 +45,13 @@ public final class SettlementPedestrianGround {
         // the depot/workshop sill even though its endpoint is the correct elevated station.
         settlement.structures().forEach(structure -> {
             FrontierGrayboxPlan.publicAccessSurfaces(structure).forEach(surface -> add(surfaces, surface));
-            // A declared threshold/connector rests on the authored floor, not on
+            // A declared threshold/connector/station rests on the authored floor, not on
             // natural terrain beneath it. Knowledge of support does not grant
             // permission to enter: the passage view still owns headroom/access.
-            FrontierTraversalPlan.facilityPort(structure).ifPresent(port ->
-                    port.ingressSurfaces().forEach(surface -> add(surfaces, surface)));
+            FrontierTraversalPlan.facilityPort(structure).ifPresent(port -> {
+                port.ingressSurfaces().forEach(surface -> add(surfaces, surface));
+                port.stations().forEach(surface -> add(surfaces, surface));
+            });
         });
         SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
                 bootstrap.ruleset().facilityCapacity().intactHousingBeds()).ownedSurfaces().forEach(surface -> add(surfaces, surface));

@@ -21,6 +21,42 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void facilityStationsShareTheirMaterializedSupportWithoutGrantingEntry() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:facility-station-ground"), 20260918065L));
+        var cells = FrontierGrayboxPlan.compile(state).cells();
+        var ground = KnownPedestrianGround.forFrontier(state);
+        for (var settlement : state.bootstrap().settlements()) {
+            for (var structure : settlement.structures()) {
+                var declared = FrontierTraversalPlan.facilityPort(structure);
+                if (declared.isEmpty()) continue;
+                var port = declared.orElseThrow();
+                var authorized = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
+                        new KnownPedestrianRouteKnowledge.Passage(structure,
+                                KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
+                for (var station : port.stations()) {
+                    assertTrue(cells.containsKey(station.support()), "station must have an authored physical floor");
+                    assertEquals(station, ground.at(station.x(), station.z()), structure.id().value());
+                    assertEquals(station, authorized.supportAt(station.x(), station.z()));
+                    authorized.requireRoute(List.of(station));
+                }
+                if (structure.kind() == StructureKind.WORKSHOP) {
+                    var work = SettlementWorkshopServicePort.forWorkshop(structure).workStation();
+                    assertEquals(GrayboxSemanticPart.WORKSHOP_PROCESS_STATION, cells.get(work.support()).semanticPart(),
+                            "knowledge must not turn a production floor into public circulation");
+                    var unauthorized = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of());
+                    assertTrue(!unauthorized.traversable(List.of(work)), "support knowledge is not entry permission");
+                    var changed = state.recordPhysicalDelta(new PhysicalDelta(work.support(),
+                            PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:station-floor-loss"));
+                    var damaged = KnownPedestrianRouteKnowledge.forSettlement(changed, settlement.id(), List.of(
+                            new KnownPedestrianRouteKnowledge.Passage(structure,
+                                    KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
+                    assertThrows(IllegalArgumentException.class, () -> damaged.requireRoute(List.of(work)));
+                }
+            }
+        }
+    }
+
     @Test void composingAnExitWithAnOutdoorRouteCannotRepeatTheEntranceDetour() {
         var apron = SurfaceAnchor.at(-384, 64, -326);
         var exterior = SurfaceAnchor.at(-385, 64, -326);
