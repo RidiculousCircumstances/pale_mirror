@@ -16,8 +16,9 @@ final class ShipmentServiceAccess implements ServiceAccessCapability {
             boolean occupied = ServiceAccessCoordinator.occupies(state, boundary, shipment.execution().actorId());
             SubjectId target = shipment.status() == Shipment.Status.AWAITING_LOAD
                     ? shipment.sender().containerId() : shipment.receiver().containerId();
-            boolean retainedSource = shipment.sender().containerId().equals(pointId) && occupied;
-            if (target.equals(pointId) || retainedSource)
+            // Loading completion ends the source operation. A body still at that source
+            // is a spatial blocker, not an incumbent of a finished container transaction.
+            if (target.equals(pointId))
                 result.add(new ServiceAccessDemand(identity(shipment, pointId), priority(), occupied
                         ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH, 0, false));
         }

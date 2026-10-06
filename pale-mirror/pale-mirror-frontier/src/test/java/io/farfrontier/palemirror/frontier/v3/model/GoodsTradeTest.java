@@ -15,7 +15,14 @@ class GoodsTradeTest {
         var state = reserved(); var shipment = shipment(state); var actor = shipment.execution().actorId();
         state = shipmentFact(state, SELLER, new ShipmentDispatched(shipment));
         state = atStation(state, actor, shipment.sender().station());
+        var service = new ShipmentServiceAccess();
+        assertEquals(ServiceAccessDemand.Presence.OCCUPIED,
+                service.demands(state, shipment.sender().containerId()).getFirst().presence());
         state = shipmentFact(state, shipment.id(), new ShipmentColdTransferred(shipment.id(), 1, Shipment.Status.AWAITING_LOAD));
+        assertTrue(service.demands(state, shipment.sender().containerId()).isEmpty(),
+                "cargo waiting for its group cannot retain a completed source service transaction");
+        assertEquals(shipment.receiver().containerId(),
+                service.demands(state, shipment.receiver().containerId()).getFirst().identity().pointId());
         var checkpoint = ActorSpatialCourtesy.assess(state, shipment.execution());
         assertTrue(checkpoint.ready(), "waiting for a companion does not pin a loaded carrier to a passage");
         assertSame(state, checkpoint.basis());
@@ -23,6 +30,7 @@ class GoodsTradeTest {
         assertEquals(shipment.execution(), state.actorExecutions().actors().get(actor).current().orElseThrow());
         var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertTrue(ActorSpatialCourtesy.assess(restored, shipment.execution()).ready());
+        assertTrue(service.demands(restored, shipment.sender().containerId()).isEmpty());
         var foreign = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,
                 shipment.execution().activityKind(), id("shipment:foreign"), shipment.execution().generation());
         assertThrows(IllegalArgumentException.class, () -> ActorSpatialCourtesy.assess(restored, foreign));
