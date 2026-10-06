@@ -10,12 +10,17 @@ final class ShipmentStateCodec {
     static void write(DataOutputStream out, ShipmentState state) throws IOException {
         out.writeInt(state.shipments().size());
         for (Shipment value : state.shipments().values().stream().sorted(Comparator.comparing(Shipment::id)).toList()) writeShipment(out, value);
+        out.writeInt(state.missions().size());
+        for (var mission : state.missions().values().stream().sorted(Comparator.comparing(TransportMission::id)).toList()) TransportMissionCodec.write(out, mission);
     }
     static ShipmentState read(DataInputStream in) throws IOException {
         int n = in.readInt(); if (n < 0 || n > ShipmentState.MAX_SHIPMENTS) throw new IllegalArgumentException("invalid shipment count");
         var result = new LinkedHashMap<SubjectId, Shipment>();
         for (int i = 0; i < n; i++) { Shipment value = readShipment(in); if (result.putIfAbsent(value.id(), value) != null) throw new IllegalArgumentException("duplicate shipment ID"); }
-        return new ShipmentState(result);
+        int count = UnitGroupStateCodec.count(in, io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS);
+        var missions = new LinkedHashMap<SubjectId, TransportMission>();
+        for (int i = 0; i < count; i++) { var mission = TransportMissionCodec.read(in); if (missions.putIfAbsent(mission.id(), mission) != null) throw new IllegalArgumentException("duplicate transport mission ID"); }
+        return new ShipmentState(result, missions);
     }
     static void writeShipment(DataOutputStream out, Shipment value) throws IOException {
         id(out, value.id());
@@ -26,6 +31,7 @@ final class ShipmentStateCodec {
         out.writeUTF(value.itemKind()); out.writeInt(value.lotQuantities().size());
         for (var e : value.lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) { id(out, e.getKey()); out.writeInt(e.getValue()); }
         status(out, value.status()); out.writeLong(value.revision());
+        out.writeBoolean(value.transportMissionId().isPresent()); if (value.transportMissionId().isPresent()) id(out, value.transportMissionId().orElseThrow());
         out.writeBoolean(value.pendingPhysicalStep().isPresent());
         if (value.pendingPhysicalStep().isPresent()) ShipmentPhysicalStepCodec.write(out, value.pendingPhysicalStep().orElseThrow());
         out.writeBoolean(value.reception().isPresent());
@@ -41,9 +47,10 @@ final class ShipmentStateCodec {
         var lots = new LinkedHashMap<SubjectId, Integer>();
         for (int i = 0; i < n; i++) if (lots.putIfAbsent(id(in), in.readInt()) != null) throw new IllegalArgumentException("duplicate shipment lot");
         var status = status(in); long revision = in.readLong();
+        var mission = in.readBoolean() ? Optional.of(id(in)) : Optional.<SubjectId>empty();
         var pending = in.readBoolean() ? Optional.of(ShipmentPhysicalStepCodec.read(in)) : Optional.<ShipmentPhysicalStep>empty();
         var reception = in.readBoolean() ? Optional.of(new ShipmentReception(id(in), id(in), lots(in))) : Optional.<ShipmentReception>empty();
-        return new Shipment(shipment, grant, execution, sender, receiver, source, carried, receiving, item, lots, status, revision, pending, reception);
+        return new Shipment(shipment, grant, execution, sender, receiver, source, carried, receiving, item, lots, status, revision, pending, reception, mission);
     }
     static void lots(DataOutputStream out, Map<SubjectId, Integer> lots) throws IOException {
         out.writeInt(lots.size());

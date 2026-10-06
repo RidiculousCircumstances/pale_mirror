@@ -46,6 +46,8 @@ public record PhysicalIntentRetirementProof(
         case GOODS_ORDER -> "goods-order"; case GOODS_CONTRACT -> "goods-contract";
         case ECONOMIC_ACCOUNT -> "economic-account"; case CONTAINER -> "container";
         case SHIPMENT -> "shipment";
+        case UNIT_GROUP -> "unit-group";
+        case TRANSPORT_MISSION -> "transport-mission";
         case HIVE_GROWTH_JOB -> "hive-growth-job";
         case RESOURCE_SITE -> "resource-site"; case RESOURCE_HARVEST_JOB -> "resource-harvest-job"; case RESIDENT -> "resident";
         case EXACT_ITEM -> "exact-item"; case RESOURCE_LOT -> "resource-lot"; case RESOURCE_ACCOUNT -> "resource-account"; case RESOURCE_CLAIM -> "resource-claim";

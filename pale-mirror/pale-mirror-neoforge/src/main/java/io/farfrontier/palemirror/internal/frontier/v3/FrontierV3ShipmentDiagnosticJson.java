@@ -16,12 +16,14 @@ final class FrontierV3ShipmentDiagnosticJson {
         var body = ActorMovementProcess.bodyAt(state, actor, checkpoint.instant().ticks());
         var contract = state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId());
         var obligation = ShipmentProgressObligation.describe(state, shipment);
+        var mission = shipment.transportMissionId().map(state.shipments().missions()::get);
         String phase = shipment.status().name();
         String wait = shipment.terminal() ? "TERMINAL" : shipment.reception().isPresent() ? "RECEIVER_ACKNOWLEDGEMENT"
                 : shipment.pendingPhysicalStep().isPresent() ? "PHYSICAL_EFFECT_RECEIPT"
                 : state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE ? "COURIER_CASUALTY"
                 : state.actorExecutions().actors().get(actor).suspended().filter(shipment.execution()::equals).isPresent() ? "HIGHER_PRIORITY_ACTIVITY"
-                : movement != null ? "JOURNEY" : shipment.status() == Shipment.Status.CARRYING
+                : movement != null ? "JOURNEY" : mission.filter(value -> value.stage() == TransportMission.Stage.OUTBOUND).isPresent()
+                    ? "GROUP_COORDINATION" : shipment.status() == Shipment.Status.CARRYING
                     && ShipmentStateSupport.coldTransferLots(state, shipment).isEmpty() ? "RECEIVER_CAPACITY" : "ENDPOINT_HANDOFF";
         String schedules = checkpoint.schedules().stream().filter(s -> s.subject().equals(shipment.id()) || s.subject().equals(actor))
                 .sorted().limit(8).map(s -> "{\"id\":" + string(s.id().value()) + ",\"kind\":" + string(s.kind())
@@ -30,6 +32,7 @@ final class FrontierV3ShipmentDiagnosticJson {
                 + ",\"status\":\"ok\",\"family\":\"frontier.shipment\",\"identity\":{\"shipment\":" + string(shipment.id().value())
                 + ",\"worker\":" + string(actor.value()) + ",\"entityId\":" + string(ActorBodyId.entityId(state.bootstrap().worldId(), actor).toString())
                 + ",\"workerPresentation\":" + string(FrontierSceneLabels.actor(state, actor, false))
+                + ",\"transportMission\":" + shipment.transportMissionId().map(value -> string(value.value())).orElse("null")
                 + ",\"executionGeneration\":" + shipment.execution().generation() + "},\"shipmentRevision\":" + shipment.revision()
                 + ",\"result\":{\"stage\":" + string(phase) + ",\"remainingQuantity\":" + (shipment.terminal() ? 0 : shipment.quantity())
                 + ",\"receptionQuantity\":" + shipment.reception().map(ShipmentReception::quantity).orElse(0)
@@ -37,7 +40,8 @@ final class FrontierV3ShipmentDiagnosticJson {
                 + ",\"fulfilled\":" + (contract != null && contract.fulfilled()) + ",\"disposition\":" + string(wait)
                 + ",\"dutyPhase\":" + string(movement == null ? phase : "TRAVELLING")
                 + ",\"pendingPhysicalEffect\":" + shipment.pendingPhysicalStep().isPresent() + "},\"actorBody\":" + FrontierV3DiagnosticJson.position(body)
-                + ",\"goal\":" + (shipment.terminal() ? "null" : FrontierV3DiagnosticJson.position(shipment.movementOrder().legalStations().getFirst().standingBody()))
+                + ",\"goal\":" + (shipment.terminal() ? "null" : FrontierV3DiagnosticJson.position(
+                    (movement == null ? shipment.movementOrder() : movement.order()).legalStations().getFirst().standingBody()))
                 + ",\"lease\":" + (lease == null || lease.status() == AmbientLeaseStatus.CLOSED ? "null" : string(lease.status().name()))
                 + ",\"coldArrivalTick\":" + (movement == null ? -1 : movement.coldTravel().map(TimedKnownRoute::arrivalTick).orElse(-1L))
                 + ",\"progressObligation\":{\"schema\":1,\"rule\":\"frontier.shipment.progress.v1\",\"subject\":" + string(shipment.id().value())

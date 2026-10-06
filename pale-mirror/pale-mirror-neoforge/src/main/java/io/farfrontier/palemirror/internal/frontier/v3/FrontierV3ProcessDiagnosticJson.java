@@ -7,6 +7,10 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 final class FrontierV3ProcessDiagnosticJson {
     static String render(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         var subject = FrontierV3DiagnosticJson.subject(id).orElse(null);
+        var group = subject == null ? null : state.unitGroups().groups().get(subject);
+        if (group != null) return FrontierV3GroupDiagnosticJson.render(checkpoint, state, group);
+        var mission = subject == null ? null : state.shipments().missions().get(subject);
+        if (mission != null) return FrontierV3GroupDiagnosticJson.render(checkpoint, state, state.unitGroups().groups().get(mission.groupId()));
         var shipment = subject == null ? null : state.shipments().shipments().get(subject);
         if (shipment != null) return FrontierV3ShipmentDiagnosticJson.render(checkpoint, state, shipment);
         var participant = subject == null ? null : state.companies().goodsTrade().participants().participants().get(subject);

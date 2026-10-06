@@ -25,7 +25,7 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
             return new Dependencies(List.of(state.humanPopulation().residents(), state.productionJobs(),
                     state.resourceSites().sites(), state.operations(), state.strategicPlans().routePatrols(),
                     state.strategicPlans().settlementAssaults(), state.routeConstructions(), state.routeMaintenances(),
-                    state.serviceWorks(), state.humanPopulation().medicalOperations(), state.humanPopulation().migrations(), state.shipments()));
+                    state.serviceWorks(), state.humanPopulation().medicalOperations(), state.humanPopulation().migrations(), state.shipments(), state.unitGroups()));
         }
         @Override public boolean equals(Object other) {
             if (!(other instanceof Dependencies value) || sources.size() != value.sources.size()) return false;
@@ -99,6 +99,13 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
         state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal())
                 .sorted(Comparator.comparing(Shipment::id))
                 .forEach(shipment -> claim(values, shipment.execution().actorId(), HumanAssignmentKind.COURIER, shipment.id()));
+        for (var group : state.unitGroups().groups().values()) if (group.phase() != io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.CLOSED)
+            for (var member : group.members()) {
+                var assigned = values.get(member.actorId());
+                if (assigned != null && assigned.kind() == HumanAssignmentKind.COURIER
+                        && assigned.ownerId().equals(java.util.Optional.of(member.activityOwnerId()))) continue;
+                claim(values, member.actorId(), HumanAssignmentKind.GROUP_MEMBER, group.id());
+            }
         return new HumanAssignmentProjection(values);
     }
 

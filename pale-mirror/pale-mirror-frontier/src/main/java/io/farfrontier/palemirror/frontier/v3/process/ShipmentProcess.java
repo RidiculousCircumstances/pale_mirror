@@ -36,6 +36,11 @@ public final class ShipmentProcess {
     public static boolean held(FrontierWorldState state, ScheduledAction action) {
         Shipment shipment = state.shipments().shipments().get(action.subject());
         if (shipment == null || shipment.terminal()) return false;
+        if (shipment.transportMissionId().isPresent() && shipment.status() == Shipment.Status.CARRYING) {
+            var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());
+            if (mission == null) throw new IllegalArgumentException("shipment lost its exact transport mission");
+            if (mission.stage() != TransportMission.Stage.UNLOADING) return true;
+        }
         if (state.actorMovements().containsKey(shipment.execution().actorId())) return true;
         var actor = shipment.execution().actorId();
         if (shipment.reception().isPresent()) return true;
@@ -54,9 +59,11 @@ public final class ShipmentProcess {
         if (!action.kind().equals(PROGRESS) || !action.id().equals(progress(action.subject(), action.dueAt().ticks()).id()))
             throw new IllegalArgumentException("shipment progress lacks its exact schedule");
         Shipment shipment = state.shipments().shipments().get(action.subject());
-        if (shipment == null || shipment.terminal())
+        if (shipment == null || shipment.terminal() && shipment.transportMissionId().isEmpty())
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         long now = Math.max(currentTick, action.dueAt().ticks());
+        if (shipment.terminal()) return List.of(new ProposedEvent(shipment.id(), new ScheduleEffect.Rescheduled(action.id(), progress(shipment.id(),
+                now + state.bootstrap().ruleset().cadence().terminalLogisticsReviewInterval()))));
         if (held(state, action)) throw new IllegalArgumentException("shipment awaits its exact custody boundary");
         var order = shipment.movementOrder();
         if (!order.arrivedAt(state.actorLocations().get(order.actorId()).supportingSurface())) {

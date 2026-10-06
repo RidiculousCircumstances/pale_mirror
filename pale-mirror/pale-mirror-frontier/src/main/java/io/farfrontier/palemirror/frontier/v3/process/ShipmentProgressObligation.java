@@ -29,6 +29,11 @@ public record ShipmentProgressObligation(SubjectId subject, ActorExecutionId exe
         long budget = ActorMovementProcess.maximumJourneyTicks();
         String fingerprint = shipment.status().name() + ":" + shipment.revision() + ":" + shipment.execution().generation()
                 + ":" + shipment.pendingPhysicalStep().isPresent() + ":" + shipment.reception().isPresent();
+        if (shipment.transportMissionId().isPresent()) {
+            var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());
+            var group = state.unitGroups().groups().get(mission.groupId());
+            fingerprint += ":" + mission.stage().name() + ":" + mission.revision() + ":" + group.revision() + ":" + group.phase().name();
+        }
         return new ShipmentProgressObligation(shipment.id(), shipment.execution(), shipment.revision(), fingerprint, budget, disposition, next);
     }
 }

@@ -22,8 +22,9 @@ final class ShipmentDeliveryNotifications {
         // Physical transport completion releases this resident independently of
         // buyer acceptance/payment. Let the ordinary activity owner clear the
         // service area now, rather than waiting until its distant periodic review.
-        if (shipment.terminal()) notifications.add(ResidentActivityProcess.wakeAfterActivity(
+        if (shipment.terminal() && shipment.transportMissionId().isEmpty()) notifications.add(ResidentActivityProcess.wakeAfterActivity(
                 shipment.execution().actorId(), atTick));
+        shipment.transportMissionId().ifPresent(id -> notifications.add(TransportMissionProcess.wake(id, atTick)));
         return List.copyOf(notifications);
     }
     private ShipmentDeliveryNotifications() { }

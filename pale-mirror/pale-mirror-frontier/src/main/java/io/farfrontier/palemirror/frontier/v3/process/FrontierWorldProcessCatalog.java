@@ -155,7 +155,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
     private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, LOGISTICS, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
-            HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES);
+            HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
+            UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
             Map.entry("physical-observation", new FrontierPhysicalProcessModule()),
             Map.entry("replica-custody", new FrontierReplicaCustodyProcessModule()),
@@ -169,6 +170,8 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("economy", new FrontierEconomyProcessModule()),
             Map.entry("goods-trade", new GoodsTradeProcessModule()),
             Map.entry("shipments", new ShipmentProcessModule()),
+            Map.entry("unit-groups", new UnitGroupProcessModule()),
+            Map.entry("transport-missions", new TransportMissionProcessModule()),
             Map.entry("resource-sites", new FrontierResourceSiteProcessModule()),
             Map.entry("hive", new FrontierHiveProcessModule()),
             Map.entry("infrastructure", new FrontierInfrastructureProcessModule()),
@@ -279,6 +282,8 @@ public final class FrontierWorldProcessCatalog {
                 }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return ShipmentProcess.held(state, action); }
             }),
+            Map.entry(UnitGroupProcess.PROGRESS, atExecutionTime((state, action, instant) -> UnitGroupProcess.plan(state, action, instant.ticks()))),
+            Map.entry(TransportMissionProcess.PROGRESS, atExecutionTime((state, action, instant) -> TransportMissionProcess.plan(state, action, instant.ticks()))),
             Map.entry(ActorMovementProcess.PROGRESS, new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
                                                           boolean autonomous) {
@@ -406,7 +411,7 @@ public final class FrontierWorldProcessCatalog {
                 descriptor("settlement-service-work", serviceWorkCommands(), serviceWorkSchedules(), SETTLEMENT_SERVICE_WORK,
                         emissions("settlement-service-work"), SETTLEMENT_SERVICE_WORK),
                 descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emissions("strategy"), STRATEGY),
-                GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR);
+                GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR, TransportMissionProcessModule.DESCRIPTOR);
     }
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }

@@ -97,7 +97,8 @@ final class FrontierReferenceClosure {
                 || state.companies().market().demands().containsKey(id) || state.companies().market().quotes().containsKey(id)
                 || state.companies().market().workOrders().containsKey(id)) return true;
         if (state.companies().goodsTrade().orders().containsKey(id) || state.companies().goodsTrade().contracts().containsKey(id)
-                || state.shipments().shipments().containsKey(id)) return true;
+                || state.shipments().shipments().containsKey(id) || state.shipments().missions().containsKey(id)
+                || state.unitGroups().groups().containsKey(id)) return true;
         // These fixed bootstrap/site collections have no separate subject index. Retain the
         // same accepted owner surface as the full recovery barrier without building its union.
         return state.bootstrap().hive().id().equals(id)

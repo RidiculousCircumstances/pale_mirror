@@ -5,8 +5,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Producer-declared provider context; a bare ID never selects navigation behavior. */
-public sealed interface ActorMovementContext permits ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg {
-    enum Provider { SERVICE_EXIT, SHIPMENT }
+public sealed interface ActorMovementContext permits ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg {
+    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP }
     Provider provider();
     record ServiceExit(SubjectId settlementId, SubjectId depotId) implements ActorMovementContext {
         @Override public Provider provider() { return Provider.SERVICE_EXIT; }
@@ -20,6 +20,13 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
         public ShipmentLeg {
             Objects.requireNonNull(shipmentId, "movement shipment");
             if (shipmentRevision < 1) throw new IllegalArgumentException("movement shipment revision is invalid");
+        }
+    }
+    record GroupLeg(SubjectId groupId, long groupRevision) implements ActorMovementContext {
+        @Override public Provider provider() { return Provider.GROUP; }
+        public GroupLeg {
+            Objects.requireNonNull(groupId);
+            if (groupRevision < 1) throw new IllegalArgumentException("group movement has an invalid revision");
         }
     }
 }

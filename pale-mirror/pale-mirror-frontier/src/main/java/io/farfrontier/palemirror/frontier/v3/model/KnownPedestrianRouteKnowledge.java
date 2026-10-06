@@ -251,6 +251,8 @@ public final class KnownPedestrianRouteKnowledge {
     public SurfaceAnchor supportAt(int x, int z) {
         return surveyed.at(x, z);
     }
+    /** Read-only known geometry; callers may choose semantic goals, not invent traversability. */
+    public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry() { return geometry; }
 
     static synchronized Set<BlockPosition> staticOccupancy(FrontierBootstrap bootstrap) {
         if (cachedBootstrap != bootstrap) {

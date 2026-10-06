@@ -49,6 +49,9 @@ final class ActorMovementStateCodec {
                     FrontierWorldStateCodec.writeString(output, leg.shipmentId().value());
                     output.writeLong(leg.shipmentRevision());
                 }
+                case ActorMovementContext.GroupLeg leg -> {
+                    output.writeByte(2); FrontierWorldStateCodec.writeString(output, leg.groupId().value()); output.writeLong(leg.groupRevision());
+                }
             }
             output.writeBoolean(movement.coldTravel().isPresent());
             if (movement.coldTravel().isPresent()) {
@@ -87,6 +90,7 @@ final class ActorMovementStateCodec {
                         new SubjectId(FrontierWorldStateCodec.readString(input)));
                 case 1 -> new ActorMovementContext.ShipmentLeg(
                         new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
+                case 2 -> new ActorMovementContext.GroupLeg(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
                 default -> throw new IllegalArgumentException("unknown actor movement provider tag");
             };
             ActorMovement movement = new ActorMovement(order, issuedAt, context, executionId);

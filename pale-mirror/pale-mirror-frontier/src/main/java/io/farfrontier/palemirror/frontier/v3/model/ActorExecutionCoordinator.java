@@ -37,19 +37,34 @@ public final class ActorExecutionCoordinator {
 
     /** Physical presence is not employment: ordinary presentation can yield to a new job. */
     public static WorkAdmission ordinaryWorkAdmission(FrontierWorldState state, SubjectId actorId) {
+        return workAdmission(state, actorId, false);
+    }
+    /** The declared group alone may reacquire a vacant participant reserved by its retained roster. */
+    public static WorkAdmission groupWorkAdmission(FrontierWorldState state, SubjectId actorId, SubjectId groupId) {
+        var group = state.unitGroups().groups().get(Objects.requireNonNull(groupId));
+        if (group == null || group.phase() == io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.CLOSED)
+            throw new IllegalArgumentException("group admission lacks its declared active roster");
+        group.member(actorId);
+        var assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
+        if (assignment.kind() != HumanAssignmentKind.GROUP_MEMBER || !assignment.ownerId().equals(java.util.Optional.of(groupId)))
+            return new Waiting(Wait.ASSIGNED_WORK);
+        return workAdmission(state, actorId, true);
+    }
+    private static WorkAdmission workAdmission(FrontierWorldState state, SubjectId actorId, boolean groupMember) {
         Objects.requireNonNull(state, "execution state"); Objects.requireNonNull(actorId, "actor");
         ActorLocation actor = state.actorLocations().get(actorId);
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || state.humanPopulation().resident(actorId) == null) return new Waiting(Wait.DEAD_OR_MISSING);
         if (state.humanPopulation().meals().containsKey(actorId)
                 || state.actorMovements().containsKey(actorId)) return new Waiting(Wait.SELF_CARE);
-        if (!HumanAssignmentProjection.compile(state).idle(actorId)) return new Waiting(Wait.ASSIGNED_WORK);
+        if (!groupMember && !HumanAssignmentProjection.compile(state).idle(actorId)) return new Waiting(Wait.ASSIGNED_WORK);
         if (sceneOwns(state, actorId)) return new Waiting(Wait.SCENE_AUTHORITY);
         if (carriesResource(state, actorId)) return new Waiting(Wait.RESOURCE_IN_HAND);
         AmbientActorLease ambient = state.ambientLeases().get(actorId);
         if (ambient == null || ambient.status() == AmbientLeaseStatus.CLOSED) return new Cold();
         if (ambient.status() != AmbientLeaseStatus.HOT) return new Waiting(Wait.AMBIENT_RECOVERY);
-        if (!ordinaryAmbientPurpose(ambient.goal())) return new Waiting(Wait.FOREIGN_AMBIENT_PURPOSE);
+        if (!ordinaryAmbientPurpose(ambient.goal()) && !(groupMember && ambient.goal() == AmbientGoalKind.ACTOR_MOVEMENT))
+            return new Waiting(Wait.FOREIGN_AMBIENT_PURPOSE);
         // handoffBody is historical evidence, never a completion predicate. The subsequent
         // scene admission references common inspection and closes this exact presentation epoch atomically.
         return new AmbientTransfer(actorId, ambient.revision());

@@ -9,7 +9,7 @@ import java.util.Map;
 /** Closed declaration-based dispatch; purpose is never discovered from an ID or job lookup. */
 public final class ActorMovementProviders {
     private static final Map<ActorMovementContext.Provider, ActorMovementProvider> PORTS = registry(
-            List.of(new ServiceExitMovementProvider(), new ShipmentMovementProvider()));
+            List.of(new ServiceExitMovementProvider(), new ShipmentMovementProvider(), new GroupMovementProvider()));
     public static Map<ActorMovementContext.Provider, ActorMovementProvider> registry(List<ActorMovementProvider> ports) {
         var result = new EnumMap<ActorMovementContext.Provider, ActorMovementProvider>(ActorMovementContext.Provider.class);
         for (var port : List.copyOf(ports))

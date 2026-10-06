@@ -7,6 +7,7 @@ public enum HumanAssignmentKind {
     FIELD_HARVEST,
     CARGO_TRANSPORT,
     COURIER,
+    GROUP_MEMBER,
     ESCORT,
     ROUTE_PATROL,
     SETTLEMENT_DEFENCE,

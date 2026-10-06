@@ -13,7 +13,8 @@ final class ActorMovementStateSupport {
     private ActorMovementStateSupport() { }
 
     static void validate(Map<SubjectId, ActorMovement> movements, Map<SubjectId, ActorLocation> actors,
-                         HumanPopulation people, ExactInventory inventory, ActorExecutionState executions, ShipmentState shipments) {
+                         HumanPopulation people, ExactInventory inventory, ActorExecutionState executions, ShipmentState shipments,
+                         io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState groups) {
         if (movements.size() > 4_096)
             throw new IllegalArgumentException("actor movement retention bound exceeded");
         for (var id : executions.current(ActorActivityKind.SERVICE_EXIT).values()) {
@@ -43,6 +44,15 @@ final class ActorMovementStateSupport {
                             || !shipment.execution().equals(entry.getValue().executionId())
                             || !shipment.movementOrder().equals(entry.getValue().order()))
                         throw new IllegalArgumentException("movement shipment leg lost its exact live declaration");
+                }
+                case ActorMovementContext.GroupLeg leg -> {
+                    var group = groups.groups().get(leg.groupId()); var movement = entry.getValue();
+                    if (group == null || group.phase() != io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.TRAVELLING
+                            || group.revision() != leg.groupRevision() || !movement.order().ownerId().equals(group.id())
+                            || movement.order().goalRevision() != group.revision() || movement.order().goalOrdinal() != group.goalOrdinal()
+                            || !movement.order().legalStations().equals(java.util.List.of(group.journey().orElseThrow().stations().get(entry.getKey()))))
+                        throw new IllegalArgumentException("group movement lost its exact formation declaration");
+                    group.member(entry.getKey());
                 }
             }
         }

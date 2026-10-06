@@ -13,6 +13,12 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 )
 final class FrontierArchitectureTest {
     @ArchTest
+    static final ArchRule group_coordination_does_not_inspect_mission_business = noClasses()
+            .that().haveSimpleName("UnitGroupProcess").or().haveSimpleName("GroupFormation")
+            .or().haveSimpleName("GroupMovementProvider").or().haveSimpleName("GroupMemberActivityCapability")
+            .should().dependOnClassesThat().haveNameMatching(".*\\.(Shipment|TransportMission|GoodsTradeContract|SupplyContract|RouteOperation)")
+            .because("mission Strategies own cargo, commercial and future combat policy; groups coordinate declared participants only");
+    @ArchTest
     static final ArchRule service_access_coordinator_does_not_inspect_family_work = noClasses()
             .that().haveSimpleName("ServiceAccessCoordinator")
             .should().dependOnClassesThat().haveNameMatching(

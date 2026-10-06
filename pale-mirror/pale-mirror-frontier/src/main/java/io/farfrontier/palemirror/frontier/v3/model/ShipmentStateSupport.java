@@ -9,6 +9,13 @@ public final class ShipmentStateSupport {
         return ShipmentServiceAccess.available(state, shipment);
     }
     public static FrontierWorldState dispatch(FrontierWorldState state, SubjectId subject, Shipment shipment) {
+        validateDispatch(state, subject, shipment);
+        var next = state.shipments().admit(shipment);
+        return ActorExecutionComposition.LIFECYCLE.prepareVacant(state, shipment.execution())
+                .commit(state, FrontierWorldStateUpdate.begin().shipments(next));
+    }
+    /** Validation contributes no partial shipment, execution or mission publication. */
+    public static void validateDispatch(FrontierWorldState state, SubjectId subject, Shipment shipment) {
         ShipmentAuthorizationComposition.validate(state, shipment, true);
         ShipmentEndpointComposition.validate(state, shipment.sender()); ShipmentEndpointComposition.validate(state, shipment.receiver());
         ClaimAllocation claim = state.inventory().fungibleResources().claims().get(shipment.authorization().claimId());
@@ -25,9 +32,6 @@ public final class ShipmentStateSupport {
                             .equals(new ResourceCustody.Container(shipment.receiver().containerId()))
                 || !ActorExecutionCoordinator.ordinaryWorkAdmission(state, shipment.execution().actorId()).permitted())
             throw new IllegalArgumentException("shipment has no authorized source allocation or available exact courier");
-        var next = state.shipments().admit(shipment);
-        return ActorExecutionComposition.LIFECYCLE.prepareVacant(state, shipment.execution())
-                .commit(state, FrontierWorldStateUpdate.begin().shipments(next));
     }
     public static void validateOrder(FrontierWorldState state, ActorContainerItemOrder order) {
         Shipment shipment = state.shipments().shipments().get(order.ownerId());
@@ -119,6 +123,9 @@ public final class ShipmentStateSupport {
         return state.withChanges(FrontierWorldStateUpdate.begin().shipments(state.shipments().retire(id, revision)));
     }
     public static boolean closedForRetirement(FrontierWorldState state, Shipment shipment) {
+        return shipment.transportMissionId().isEmpty() && cargoClosedForRetirement(state, shipment);
+    }
+    public static boolean cargoClosedForRetirement(FrontierWorldState state, Shipment shipment) {
         return shipment.terminal() && shipment.reception().isEmpty() && shipment.pendingPhysicalStep().isEmpty()
                 && state.physicalIntents().values().stream().noneMatch(i -> i.causeSubjectId().equals(shipment.id()))
                 && state.actorMovements().values().stream().noneMatch(m -> m.order().ownerId().equals(shipment.id()))

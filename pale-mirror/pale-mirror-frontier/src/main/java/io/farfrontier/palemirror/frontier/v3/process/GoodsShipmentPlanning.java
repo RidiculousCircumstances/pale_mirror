@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
+import io.farfrontier.palemirror.frontier.v3.model.group.TransportGroupMissionPort;
 import java.util.*;
 
 /** Seller-arranged dispatch port: trade decisions never own motion or a second cargo inventory. */
@@ -24,6 +25,8 @@ final class GoodsShipmentPlanning {
                 var courier = state.humanPopulation().residents().values().stream()
                         .filter(resident -> resident.settlementId().equals(seller.endpoint().settlementId())
                                 && resident.capability(HumanCapability.LOGISTICS) > 0
+                                && state.unitGroups().groups().values().stream().noneMatch(group -> group.phase() != io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.CLOSED
+                                    && group.members().stream().anyMatch(member -> member.actorId().equals(resident.id())))
                                 && ActorExecutionCoordinator.ordinaryWorkAdmission(state, resident.id()).permitted()
                                 && ResidentActivityCoordinator.mayStartOrdinaryWork(state, resident.id(), now))
                         .sorted(Comparator.comparingInt((ResidentProfile resident) -> resident.capability(HumanCapability.LOGISTICS)).reversed()
@@ -38,7 +41,44 @@ final class GoodsShipmentPlanning {
                         seller.endpoint(), buyer.endpoint(), source.id(), new SubjectId("custody:" + id.value().replace(':', '-')),
                         receiving, contract.itemKind(), claim.lotQuantities(), Shipment.Status.AWAITING_LOAD, 1);
                 if (!reachable(state, seller.endpoint(), buyer.endpoint(), id)) continue;
-                return ShipmentProcess.dispatch(state, seller.party().id(), shipment, now);
+                var missionId = new SubjectId("transport-mission:goods/" + claimId.value().replace(':', '-'));
+                var groupId = new SubjectId("unit-group:transport/" + claimId.value().replace(':', '-'));
+                shipment = shipment.withMission(missionId);
+                var members = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member>();
+                members.add(new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member(shipment.execution().actorId(),
+                        io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Role.CARRIER, ActorActivityKind.COURIER, shipment.id()));
+                var carrierId = shipment.execution().actorId();
+                // Initial non-combat accompaniment. Escort tactics are a separate future mission capability.
+                state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(seller.endpoint().settlementId())
+                        && !resident.id().equals(carrierId) && resident.capability(HumanCapability.LOGISTICS) > 0
+                        && state.unitGroups().groups().values().stream().noneMatch(existing -> existing.phase() != io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.CLOSED
+                            && existing.members().stream().anyMatch(member -> member.actorId().equals(resident.id())))
+                        && ActorExecutionCoordinator.ordinaryWorkAdmission(state, resident.id()).permitted()
+                        && ResidentActivityCoordinator.mayStartOrdinaryWork(state, resident.id(), now))
+                        .sorted(Comparator.comparingInt((ResidentProfile resident) -> resident.capability(HumanCapability.LOGISTICS)).reversed()
+                                .thenComparing(ResidentProfile::id)).findFirst().ifPresent(resident -> members.add(
+                            new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member(resident.id(),
+                                    io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Role.GUIDE, ActorActivityKind.GROUP_MEMBER, groupId)));
+                var group = new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup(groupId,
+                        new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Mission(
+                                io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.MissionKind.TRANSPORT, missionId), members,
+                        io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Formation.COLUMN,
+                        io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.READY, 1, 0, Optional.empty());
+                SurfaceAnchor home, destination;
+                try {
+                    home = TransportGroupMissionPort.rendezvous(state, seller.endpoint(), members.size());
+                    destination = TransportGroupMissionPort.rendezvous(state, buyer.endpoint(), members.size());
+                } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { continue; }
+                if (state.unitGroups().groups().size() >= io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS
+                        || state.shipments().shipments().size() >= ShipmentState.MAX_SHIPMENTS) return List.of();
+                var mission = new TransportMission(missionId, groupId, List.of(shipment.id()), seller.endpoint(), buyer.endpoint(),
+                        home, destination, TransportMission.Stage.LOADING, 1);
+                var admitted = new TransportMissionStarted(seller.party().id(), seller.party().kind(), mission, group, List.of(shipment));
+                TransportMissionProcess.admit(state, mission.id(), admitted);
+                return List.of(new ProposedEvent(mission.id(), admitted),
+                        new ProposedEvent(shipment.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(ShipmentProcess.progress(shipment.id(), now + 1))),
+                        new ProposedEvent(group.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(UnitGroupProcess.progress(group.id(), now + 1))),
+                        new ProposedEvent(mission.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(TransportMissionProcess.progress(mission.id(), now + 1))));
             }
         }
         return List.of();

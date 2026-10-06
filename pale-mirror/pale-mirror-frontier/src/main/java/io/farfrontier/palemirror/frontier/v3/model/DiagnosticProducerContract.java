@@ -55,6 +55,7 @@ public final class DiagnosticProducerContract {
         "frontier.goods_trade_claim_partitioned",
         "frontier.goods_trade_retired",
         "frontier.shipment_dispatched", "frontier.shipment_cold_transferred", "frontier.shipment_retired", "frontier.shipment_cargo_disposition_observed",
+        "frontier.unit_group_advanced", "frontier.transport_mission_started", "frontier.transport_mission_advanced", "frontier.transport_mission_retired",
         "frontier.shipment_hot_prepared", "frontier.shipment_hot_transferred", "frontier.shipment_hand_custody_observed", "frontier.shipment_dispatch_requested", "frontier.shipment_receipt_acknowledged",
         "frontier.cargo_cleanup_saved",
         "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared",

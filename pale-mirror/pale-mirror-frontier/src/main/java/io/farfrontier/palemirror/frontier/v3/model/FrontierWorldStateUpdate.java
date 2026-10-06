@@ -55,7 +55,8 @@ public final class FrontierWorldStateUpdate {
         DIAGNOSTIC_INCIDENTS,
         ACTOR_MOVEMENTS,
         ACTOR_EXECUTIONS,
-        SHIPMENTS
+        SHIPMENTS,
+        UNIT_GROUPS
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -89,6 +90,7 @@ public final class FrontierWorldStateUpdate {
     private Map<SubjectId, ActorMovement> actorMovements;
     private ActorExecutionState actorExecutions;
     private ShipmentState shipments;
+    private io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState unitGroups;
 
     private FrontierWorldStateUpdate() { }
 
@@ -142,6 +144,7 @@ public final class FrontierWorldStateUpdate {
                 case ACTOR_MOVEMENTS -> actorMovements(contribution.actorMovements);
                 case ACTOR_EXECUTIONS -> actorExecutions(contribution.actorExecutions);
                 case SHIPMENTS -> shipments(contribution.shipments);
+                case UNIT_GROUPS -> unitGroups(contribution.unitGroups);
             }
         }
         return this;
@@ -237,6 +240,9 @@ public final class FrontierWorldStateUpdate {
     public FrontierWorldStateUpdate shipments(ShipmentState next) {
         mark(Component.SHIPMENTS); shipments = require(next, "shipments"); return this;
     }
+    public FrontierWorldStateUpdate unitGroups(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState next) {
+        mark(Component.UNIT_GROUPS); unitGroups = require(next, "unit groups"); return this;
+    }
 
     Map<SubjectId, ActorLocation> actorLocations(FrontierWorldState state) { return changed(Component.ACTOR_LOCATIONS, actorLocations, state.actorLocations()); }
     Map<SubjectId, StructureCondition> structureConditions(FrontierWorldState state) { return changed(Component.STRUCTURE_CONDITIONS, structureConditions, state.structureConditions()); }
@@ -268,6 +274,9 @@ public final class FrontierWorldStateUpdate {
     Map<SubjectId, ActorMovement> actorMovements(FrontierWorldState state) { return changed(Component.ACTOR_MOVEMENTS, actorMovements, state.actorMovements()); }
     ActorExecutionState actorExecutions(FrontierWorldState state) { return changed(Component.ACTOR_EXECUTIONS, actorExecutions, state.actorExecutions()); }
     ShipmentState shipments(FrontierWorldState state) { return changed(Component.SHIPMENTS, shipments, state.shipments()); }
+    io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState unitGroups(FrontierWorldState state) {
+        return changed(Component.UNIT_GROUPS, unitGroups, state.unitGroups());
+    }
 
     private void mark(Component component) {
         if (!changed.add(component)) throw new IllegalStateException("state component is specified more than once: " + component);

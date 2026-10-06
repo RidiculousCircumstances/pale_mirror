@@ -35,7 +35,8 @@ class AutonomousGoodsTradeTest {
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
         var before = engine.canonicalState().state();
         assertTrue(before.companies().goodsTrade().orders().isEmpty()); assertTrue(before.shipments().shipments().isEmpty());
-        for (int boundary = 0; boundary < 120; boundary++) {
+        // Coordinated frame arrivals are additional real queue boundaries, not a single courier leg.
+        for (int boundary = 0; boundary < 2000; boundary++) {
             var current = engine.canonicalState().state();
             if (current.companies().goodsTrade().contracts().values().stream().anyMatch(GoodsTradeContract::fulfilled)) break;
             var next = engine.checkpoint().schedules().stream()

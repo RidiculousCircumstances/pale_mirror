@@ -26,7 +26,7 @@ public final class FrontierWireTags {
                     tag(19, ActorActivityKind.SETTLEMENT_SERVICE), tag(20, ActorActivityKind.MEDICAL_TREATMENT), tag(21, ActorActivityKind.TRANSIT),
                     tag(22, ActorActivityKind.SCOUT_PATROL), tag(23, ActorActivityKind.HIVE_TASK_ASSEMBLY), tag(24, ActorActivityKind.HIVE_TASK_RETURN),
                     tag(25, ActorActivityKind.OPERATION_ASSEMBLY), tag(26, ActorActivityKind.ENGINEERING_ASSEMBLY),
-                    tag(27, ActorActivityKind.ROUTE_INTERCEPTION), tag(28, ActorActivityKind.COURIER)),
+                    tag(27, ActorActivityKind.ROUTE_INTERCEPTION), tag(28, ActorActivityKind.COURIER), tag(29, ActorActivityKind.GROUP_MEMBER)),
             entry(ActorKind.class, tag(0, ActorKind.RESIDENT), tag(1, ActorKind.BIOFORM)),
             entry(ResidentMealResourceEffectObserved.Outcome.class,
                     tag(10, ResidentMealResourceEffectObserved.Outcome.TAKE_UNAPPLIED),
