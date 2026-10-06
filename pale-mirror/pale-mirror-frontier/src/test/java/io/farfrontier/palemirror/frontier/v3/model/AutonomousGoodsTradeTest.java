@@ -15,6 +15,21 @@ class AutonomousGoodsTradeTest {
     private static final SubjectId COMPANY = CompanyFoundationProcess.companyId(HOME);
     private static final SubjectId DEPOT = FrontierWorldState.depotId(HOME);
 
+    @Test void ordinaryCompanyFoundationPublishesAndExecutesItsParticipantReview() {
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:goods-company-foundation"), 47L);
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
+        for (int boundary = 0; boundary < 2000; boundary++) {
+            var participant = engine.canonicalState().state().companies().goodsTrade().participants().participants().get(COMPANY);
+            if (participant != null && participant.reviewRevision() > 0) break;
+            var next = engine.checkpoint().schedules().stream().sorted().findFirst().orElseThrow();
+            var result = engine.advanceTo(next.dueAt(), new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(128, 1024));
+            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
+        }
+        assertTrue(engine.canonicalState().state().companies().goodsTrade().participants().participants().get(COMPANY).reviewRevision() > 0);
+        assertTrue(engine.checkpoint().schedules().stream().anyMatch(action -> action.subject().equals(COMPANY)
+                && action.kind().equals(GoodsParticipantProcess.REVIEW)));
+    }
+
     @Test void autonomousQuotesDispatchAndCompleteThroughTheActualKernelQueue() {
         var configuration = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:autonomous-goods-kernel"), 41);
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);

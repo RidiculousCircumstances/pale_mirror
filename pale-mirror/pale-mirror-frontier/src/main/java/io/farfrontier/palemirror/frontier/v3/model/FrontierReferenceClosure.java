@@ -93,6 +93,7 @@ final class FrontierReferenceClosure {
                 || state.strategicPlans().tasks().containsKey(id) || state.strategicPlans().routePatrols().containsKey(id)
                 || state.strategicPlans().routeEngagements().containsKey(id)
                 || state.strategicPlans().settlementAssaults().containsKey(id)
+                || state.companies().companies().containsKey(id)
                 || state.companies().market().demands().containsKey(id) || state.companies().market().quotes().containsKey(id)
                 || state.companies().market().workOrders().containsKey(id)) return true;
         if (state.companies().goodsTrade().orders().containsKey(id) || state.companies().goodsTrade().contracts().containsKey(id)
