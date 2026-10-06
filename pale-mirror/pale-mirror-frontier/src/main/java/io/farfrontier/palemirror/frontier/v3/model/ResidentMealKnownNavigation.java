@@ -121,11 +121,12 @@ public final class ResidentMealKnownNavigation {
     /** Accept a current semantic leg without repeating search during WAL replay. */
     public static void requireMovementRoute(FrontierWorldState state, ResidentMeal meal, List<SurfaceAnchor> route) {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
-        var passages = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT
-                || value.kind() == StructureKind.WORKSHOP).map(value -> new KnownPedestrianRouteKnowledge.Passage(value,
-                    value.kind() == StructureKind.WORKSHOP ? KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS
-                            : KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)).toList();
-        KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), passages).requireRoute(route);
+        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
+                .findFirst().orElseThrow();
+        var continuation = new KnownPedestrianRouteKnowledge.SettlementPassage(settlement.id(),
+                new KnownPedestrianRouteKnowledge.Passage(depot,
+                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS));
+        PedestrianLocalDeparture.departure(state, route.getFirst(), List.of(continuation)).requireRoute(route);
         var port = SettlementServiceAccessPoints.depotPort(state, meal.settlementId());
         var end = route.getLast();
         if (meal.phase() == ResidentMeal.Phase.MOVE) {

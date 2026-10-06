@@ -12,6 +12,31 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void courtesyDepartureFromPrivateDepotStationHasTheSamePlanningAndReplayPermissions() throws Exception {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:r29-courtesy-meal"), 20260918065L));
+        var settlement = initial.bootstrap().settlements().get(6);
+        var actor = new SubjectId("resident:7-12");
+        var start = SurfaceAnchor.at(136, 64, 14);
+        var meal = testMeal(initial, settlement, actor, FrontierWorldState.depotId(settlement.id()), start);
+        var state = withMeal(initial.withActorBody(actor, start.standingBody()), meal);
+        var step = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
+                .planColdStep(state, actor, 90_596L).orElseThrow();
+        assertEquals(start, step.plannedRoute().orElseThrow().route().getFirst());
+        var codecs = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
+        var decoded = (ResidentMealColdStep) codecs.decode(step.type(), codecs.encode(step));
+        try (var empty = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
+             var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(empty)) {
+            var retained = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceColdStep(state, actor, decoded);
+            assertTrue(retained.humanPopulation().meals().get(actor).coldTravel().isPresent());
+            assertEquals(0, empty.pendingCount());
+        }
+        var damaged = state.recordPhysicalDelta(new PhysicalDelta(start.support(),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:departure-floor-loss"));
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
+                .reduceColdStep(damaged, actor, decoded));
+    }
+
     @Test void raisedWorkshopMealDepartureCanBeAcceptedAndReplayedWithoutInventingSupport() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:r28-workshop-meal"), 20260918065L));

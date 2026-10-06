@@ -7,9 +7,17 @@ public final class PedestrianLocalDeparture {
     private PedestrianLocalDeparture() { }
 
     public static KnownPedestrianRouteKnowledge departure(FrontierWorldState state, SurfaceAnchor start) {
-        var exits = exits(state, start);
-        return exits.isEmpty() ? KnownPedestrianRouteKnowledge.forFrontier(state)
-                : KnownPedestrianRouteKnowledge.forJourney(state, exits);
+        return departure(state, start, List.of());
+    }
+
+    /** Planning and receipt validation share actual exit and declared continuation permissions. */
+    public static KnownPedestrianRouteKnowledge departure(FrontierWorldState state, SurfaceAnchor start,
+            List<KnownPedestrianRouteKnowledge.SettlementPassage> continuation) {
+        var passages = new java.util.ArrayList<>(exits(state, start));
+        passages.addAll(continuation);
+        var declarations = passages.stream().distinct().toList();
+        return declarations.isEmpty() ? KnownPedestrianRouteKnowledge.forFrontier(state)
+                : KnownPedestrianRouteKnowledge.forJourney(state, declarations);
     }
 
     public static boolean publicPosition(FrontierWorldState state, SurfaceAnchor surface) {
