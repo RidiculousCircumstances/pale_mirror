@@ -176,6 +176,25 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("strategy", new FrontierStrategyProcessModule()));
     private static final PhysicalIntentLifecycleCapabilities PHYSICAL_LIFECYCLES =
             PhysicalIntentLifecycleCapabilities.compose(MODULES.values());
+    @FunctionalInterface
+    private interface ExecutionTimePlanner {
+        List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                io.farfrontier.palemirror.frontier.v3.api.SimInstant executionInstant);
+    }
+    /** An execution-time owner cannot silently inherit the deadline-only default. */
+    private static ScheduledPlanner atExecutionTime(ExecutionTimePlanner planner) {
+        return new ScheduledPlanner() {
+            @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                                      boolean autonomous) {
+                throw new IllegalArgumentException("scheduled planning requires its execution instant");
+            }
+            @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                                      boolean autonomous,
+                                                      io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
+                return planner.plan(state, action, currentInstant);
+            }
+        };
+    }
     private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
             Map.entry(HivePresenceProcess.INITIALIZE, new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomous) {
@@ -247,9 +266,9 @@ public final class FrontierWorldProcessCatalog {
                     return ResidentMealProcess.wakeDependencies(state, action);
                 }
             }),
-            Map.entry(GoodsTradeReceiptProcess.REVIEW, (state, action, autonomous) -> GoodsTradeReceiptProcess.plan(state, action)),
-            Map.entry(GoodsParticipantProcess.REVIEW, (state, action, autonomous) -> GoodsParticipantProcess.plan(state, action)),
-            Map.entry(GoodsParticipantWakeup.OPPORTUNITY, (state, action, autonomous) -> GoodsParticipantProcess.plan(state, action)),
+            Map.entry(GoodsTradeReceiptProcess.REVIEW, atExecutionTime(GoodsTradeReceiptProcess::plan)),
+            Map.entry(GoodsParticipantProcess.REVIEW, atExecutionTime(GoodsParticipantProcess::plan)),
+            Map.entry(GoodsParticipantWakeup.OPPORTUNITY, atExecutionTime(GoodsParticipantProcess::plan)),
             Map.entry(ShipmentProcess.PROGRESS, new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomous) {
                     return ShipmentProcess.plan(state, action, action.dueAt().ticks());

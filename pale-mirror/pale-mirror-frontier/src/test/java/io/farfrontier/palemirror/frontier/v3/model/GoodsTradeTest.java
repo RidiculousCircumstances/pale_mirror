@@ -179,7 +179,7 @@ class GoodsTradeTest {
                 new ShipmentReceiptAcknowledged(shipment.id(), pendingReception.revision(), pendingReception.reception().orElseThrow().id())));
         var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
         state = applyEvents(state, io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.plan(state,
-                io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.review(CONTRACT, state.shipments().shipments().get(shipment.id()).reception().orElseThrow().id(), 10)), 10, "goods-trade");
+                io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.review(CONTRACT, state.shipments().shipments().get(shipment.id()).reception().orElseThrow().id(), 10), new SimInstant(10)), 10, "goods-trade");
         assertEquals(beforeBuyer.minus(FixedScalar.whole(17)), state.inventory().economics().require(BUYER).balance());
         assertEquals(43, state.inventory().fungibleResources().claims().get(CLAIM).quantity());
         assertTrue(state.shipments().shipments().get(shipment.id()).reception().isEmpty());
@@ -196,7 +196,7 @@ class GoodsTradeTest {
         assertEquals(Shipment.Status.DELIVERED, state.shipments().shipments().get(shipment.id()).status());
         assertEquals(beforeBuyer.minus(FixedScalar.whole(17)), state.inventory().economics().require(BUYER).balance());
         state = applyEvents(state, io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.plan(state,
-                io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.review(CONTRACT, state.shipments().shipments().get(shipment.id()).reception().orElseThrow().id(), 20)), 20, "goods-trade");
+                io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.review(CONTRACT, state.shipments().shipments().get(shipment.id()).reception().orElseThrow().id(), 20), new SimInstant(20)), 20, "goods-trade");
         assertEquals(beforeBuyer.minus(FixedScalar.whole(60)), state.inventory().economics().require(BUYER).balance());
         assertTrue(state.companies().goodsTrade().contracts().get(CONTRACT).fulfilled());
         assertFalse(state.inventory().fungibleResources().accounts().containsKey(shipment.carriedAccountId()));
@@ -333,8 +333,19 @@ class GoodsTradeTest {
         }
         assertEquals(beforeBuyer, state.inventory().economics().require(BUYER).balance());
         assertEquals(SELLER, state.inventory().fungibleResources().lots().get(LOT).economicOwnerId());
-        state = applyEvents(state, io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.plan(state,
-                io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.review(CONTRACT, state.shipments().shipments().get(shipment.id()).reception().orElseThrow().id(), now)), now, "goods-trade");
+        long executedAt = Math.max(now + 59, state.companies().goodsTrade().orders().get(SELL_ORDER).expiresAtTick() + 1);
+        var receiptReview = io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.review(CONTRACT,
+                state.shipments().shipments().get(shipment.id()).reception().orElseThrow().id(), now);
+        var receiptEvents = FrontierWorldRuntimeDefinition.planScheduled(state, receiptReview, true, new SimInstant(executedAt));
+        assertTrue(receiptEvents.stream().map(ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::cast)
+                .allMatch(rescheduled -> rescheduled.replacement().dueAt().ticks() == executedAt + 1));
+        assertTrue(receiptEvents.stream().map(ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::cast)
+                .allMatch(created -> created.action().dueAt().ticks() == executedAt + 1));
+        state = applyEvents(state, receiptEvents, executedAt, "goods-trade");
         assertEquals(beforeBuyer.minus(FixedScalar.whole(60)), state.inventory().economics().require(BUYER).balance());
         assertTrue(state.companies().goodsTrade().contracts().get(CONTRACT).fulfilled());
     }

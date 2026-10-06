@@ -17,7 +17,11 @@ public final class GoodsTradeReceiptProcess {
         var action = review(contract, receipt, Math.addExact(atTick, 1));
         return new ProposedEvent(contract, new ScheduleEffect.Created(action));
     }
-    public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+    public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant executionInstant) {
+        Objects.requireNonNull(executionInstant, "goods receipt execution instant");
+        if (executionInstant.compareTo(action.dueAt()) < 0)
+            throw new IllegalArgumentException("goods receipt cannot execute before its due time");
+        long now = executionInstant.ticks();
         if (!action.kind().equals(REVIEW))
             throw new IllegalArgumentException("goods receipt review has a foreign schedule declaration");
         var cancelled = new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id()));
@@ -44,10 +48,10 @@ public final class GoodsTradeReceiptProcess {
                 var acknowledged = new ShipmentReceiptAcknowledged(shipment.id(), shipment.revision(), reception.id());
                 ShipmentStateSupport.acknowledge(GoodsTradeStateSupport.accept(state, contract.buyer().id(), receipt), shipment.id(), acknowledged);
                 var events = new ArrayList<>(List.of(new ProposedEvent(contract.buyer().id(), new GoodsTradeAccepted(receipt)),
-                        new ProposedEvent(shipment.id(), acknowledged), ShipmentProcess.wake(shipment.id(), action.dueAt().ticks()),
+                        new ProposedEvent(shipment.id(), acknowledged), ShipmentProcess.wake(shipment.id(), now),
                         cancelled));
-                events.addAll(GoodsParticipantWakeup.party(state, contract.buyer().id(), receipt.id().value(), action.dueAt().ticks()));
-                events.addAll(GoodsParticipantWakeup.party(state, contract.seller().id(), receipt.id().value(), action.dueAt().ticks()));
+                events.addAll(GoodsParticipantWakeup.party(state, contract.buyer().id(), receipt.id().value(), now));
+                events.addAll(GoodsParticipantWakeup.party(state, contract.seller().id(), receipt.id().value(), now));
                 return List.copyOf(events);
         }
         // A notice with no currently received allocation does not invent delivery or poll forever.

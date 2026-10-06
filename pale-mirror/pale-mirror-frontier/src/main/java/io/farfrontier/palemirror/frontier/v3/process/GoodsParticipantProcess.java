@@ -12,14 +12,18 @@ public final class GoodsParticipantProcess {
         return new ScheduledAction(new ScheduleId("schedule:goods-participant/" + party.value().replace(':', '-')),
                 new SimInstant(due), 0, party, REVIEW, 1);
     }
-    public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+    /** Due time orders the queue; only the supplied execution instant authorizes current trades. */
+    public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant executionInstant) {
+        Objects.requireNonNull(executionInstant, "goods review execution instant");
+        if (executionInstant.compareTo(action.dueAt()) < 0)
+            throw new IllegalArgumentException("goods participant review cannot execute before its due time");
         boolean periodic = action.kind().equals(REVIEW);
         if (periodic ? !action.id().equals(review(action.subject(), action.dueAt().ticks()).id())
                 : !action.kind().equals(GoodsParticipantWakeup.OPPORTUNITY) || !action.id().value().startsWith("schedule:goods-opportunity/"))
             throw new IllegalArgumentException("goods participant review has a foreign schedule");
         var participant = state.companies().goodsTrade().participants().participants().get(action.subject());
         if (participant == null) throw new IllegalArgumentException("goods review lost its exact declared participant");
-        long now = action.dueAt().ticks();
+        long now = executionInstant.ticks();
         var events = new ArrayList<ProposedEvent>();
         var retirement = closedRetirement(state, now);
         if (retirement.isPresent()) {

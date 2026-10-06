@@ -73,12 +73,58 @@ class AutonomousGoodsTradeTest {
         assertEquals(0, state.inventory().fungibleResources().totalQuantity(COMPANY, "minecraft:wheat"));
         assertTrue(state.shipments().shipments().isEmpty(), "same-container title transfer must not invent a cargo trip");
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
-        state = review(state, COMPANY, 800);
+        state = review(state, COMPANY, state.companies().goodsTrade().orders().get(contract.sellOrderId()).expiresAtTick() + 1);
         assertTrue(state.companies().goodsTrade().contracts().get(contract.id()).fulfilled());
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(HOME, "minecraft:wheat"));
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(COMPANY, "minecraft:wheat"));
         assertEquals(publicMoney.plus(FixedScalar.whole(64)), state.inventory().economics().require(HOME).balance());
         assertEquals(companyMoney.minus(FixedScalar.whole(64)), state.inventory().economics().require(COMPANY).balance());
+    }
+
+    @Test void delayedPeriodicAndOpportunityReviewsUseExecutionTimeAtTheOrderExpiryBoundary() {
+        var quoted = review(issue(companyFixture(), HOME, "minecraft:wheat", 64, "delayed-public-grain"), HOME, 400);
+        var sell = quoted.companies().goodsTrade().orders().values().stream()
+                .filter(order -> order.party().id().equals(HOME) && order.counterparty().id().equals(COMPANY)
+                        && order.side() == GoodsTradeOrder.Side.SELL && order.itemKind().equals("minecraft:wheat"))
+                .findFirst().orElseThrow();
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(quoted));
+        var rules = recovered.bootstrap().ruleset().goodsTrade();
+        for (boolean periodic : List.of(true, false)) {
+            var action = periodic ? GoodsParticipantProcess.review(COMPANY, 800)
+                    : ((ScheduleEffect.Created) GoodsParticipantWakeup.party(recovered, COMPANY,
+                            "delayed-review", 799).getFirst().payload()).action();
+            for (long executedAt : new long[]{sell.expiresAtTick(), sell.expiresAtTick() + 1}) {
+                // Exercise the registered dispatcher, not a helper that might bypass the lost clock.
+                var events = FrontierWorldRuntimeDefinition.planScheduled(recovered, action, true, new SimInstant(executedAt));
+                var next = apply(recovered, events, executedAt, "goods-trade");
+                assertEquals(executedAt, next.companies().goodsTrade().participants().participants().get(COMPANY).reviewedAtTick());
+                if (executedAt == sell.expiresAtTick()) {
+                    var contract = next.companies().goodsTrade().contracts().values().stream().findFirst().orElseThrow();
+                    assertEquals(sell.id(), contract.sellOrderId());
+                    assertEquals(64, contract.quantity(), "the declared inclusive expiry boundary remains valid");
+                } else {
+                    assertTrue(next.companies().goodsTrade().contracts().isEmpty(), "expired consent cannot authorize new business");
+                    assertTrue(next.inventory().economics().reservations().isEmpty());
+                    assertEquals(recovered.inventory().economics(), next.inventory().economics());
+                }
+                var placedOrders = events.stream().map(ProposedEvent::payload).filter(GoodsTradeOrderPlaced.class::isInstance)
+                        .map(GoodsTradeOrderPlaced.class::cast).toList();
+                assertFalse(placedOrders.isEmpty());
+                assertTrue(placedOrders.stream().allMatch(placed -> placed.order().expiresAtTick() == executedAt + rules.orderLifetime()));
+                var nextReviews = events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                        .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action)
+                        .filter(scheduled -> scheduled.kind().equals(GoodsParticipantProcess.REVIEW)).toList();
+                assertEquals(periodic ? 1 : 0, nextReviews.size());
+                if (periodic) assertEquals(executedAt + rules.reviewInterval(), nextReviews.getFirst().dueAt().ticks());
+            }
+        }
+    }
+
+    @Test void registeredGoodsReviewRejectsAnExecutionInstantBeforeItsDeadline() {
+        var state = companyFixture();
+        var action = GoodsParticipantProcess.review(COMPANY, 800);
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.planScheduled(
+                state, action, true, new SimInstant(799)));
     }
 
     @Test void unfundedOrUnknownDemandIsExplainedWithoutInventingAnOrderOrPayment() {
@@ -197,7 +243,8 @@ class AutonomousGoodsTradeTest {
     }
 
     private static FrontierWorldState review(FrontierWorldState state, SubjectId participant, long tick) {
-        return apply(state, GoodsParticipantProcess.plan(state, GoodsParticipantProcess.review(participant, tick)), tick, "goods-trade");
+        return apply(state, GoodsParticipantProcess.plan(state, GoodsParticipantProcess.review(participant, tick),
+                new SimInstant(tick)), tick, "goods-trade");
     }
 
     private static FrontierWorldState apply(FrontierWorldState state, List<ProposedEvent> events, long tick, String family) {
