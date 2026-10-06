@@ -222,6 +222,23 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                         command.scheduleBinding().map(io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding::action)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof ResourceSiteHarvestEffectReconciled reconciled) {
+            try {
+                var job = state.resourceSites().site(reconciled.recovery().siteId())
+                        .harvestJob(reconciled.recovery().jobId()).orElseThrow();
+                var binding = command.scheduleBinding().map(io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding::action)
+                        .orElseThrow(() -> new IllegalArgumentException("effect recovery lacks its retained due continuation"));
+                ResourceSiteHarvestProcess.requireDueContinuationBinding(job, binding, command.submittedAt().ticks());
+                if (!binding.id().equals(reconciled.applied().coldScheduleId())
+                        || binding.dueAt().ticks() != reconciled.applied().coldDueAt())
+                    throw new IllegalArgumentException("effect recovery has foreign continuation evidence");
+                ResourceSiteHarvestSceneReconciliation.reduceApplied(state, job.siteId(), reconciled);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.siteId(), reconciled),
+                        ResourceSiteHarvestProcess.advanceBoundContinuation(state, job, binding)));
+            } catch (IllegalArgumentException | IllegalStateException invalid) {
+                return FrontierWorldCommandPlanner.rejected(invalid.getMessage());
+            }
+        }
         if (command.payload() instanceof ResourceSiteHarvestSceneReconciled reconciled) {
             try {
                 ResourceSiteHarvestSceneReconciliation.reduce(state, reconciled.siteId(), reconciled);
@@ -518,6 +535,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestProgressed progressed -> ResourceSiteHarvestProcess.reduceProgressed(state, event.subject(), progressed);
             case ResourceSiteHarvestWorkAcknowledged acknowledged -> ResourceSiteHarvestAcceptanceProcess.acknowledge(state, event.subject(), acknowledged);
             case ResourceSiteHarvestSceneReconciled reconciled -> ResourceSiteHarvestSceneReconciliation.reduce(state, event.subject(), reconciled);
+            case ResourceSiteHarvestEffectReconciled reconciled -> ResourceSiteHarvestSceneReconciliation.reduceApplied(state, event.subject(), reconciled);
             case ResourceSiteHarvestHandProjected projected -> ResourceSiteHarvestProcess.reduceHandProjected(state, event.subject(), projected);
             case ResourceSiteHarvestHandRelease released -> ResourceSiteHarvestProcess.reduceHandRelease(state, event.subject(), released);
             case ResourceSiteHarvestSceneLeasePrepared prepared -> reduceHarvestScenePrepared(state, event.subject(), event, prepared);

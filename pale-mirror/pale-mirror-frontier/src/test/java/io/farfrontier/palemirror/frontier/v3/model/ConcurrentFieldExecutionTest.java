@@ -10,7 +10,7 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConcurrentFieldExecutionTest {
-    @Test void availableSecondFarmerJoinsTheExistingTaskThroughRegisteredSettlementPolicy() {
+    @Test void availableFarmersJoinTheExistingTaskThroughRegisteredSettlementPolicy() {
         var state = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial(126L));
         var site = new SubjectId("site:1-wheat-field");
         var settlement = new SubjectId("settlement:1");
@@ -57,11 +57,11 @@ class ConcurrentFieldExecutionTest {
         var initial = engine.checkpoint();
         requireActive(engine.advanceTo(wake.dueAt(), new WorkBudget(1, 64)).status());
         var jobs = engine.canonicalState().state().resourceSites().site(site).harvestJobs();
-        assertEquals(2, jobs.size());
+        assertEquals(3, jobs.size(), "registered settlement staffing restores its three agriculture permissions");
         assertEquals(started.job(), jobs.get(started.job().id()), "joining cannot rewrite the first execution");
         assertEquals(Set.of(task.id()), jobs.values().stream().map(ResourceSiteHarvestJob::taskId)
                 .collect(java.util.stream.Collectors.toSet()));
-        assertEquals(2, jobs.values().stream().map(ResourceSiteHarvestJob::target).distinct().count());
+        assertEquals(3, jobs.values().stream().map(ResourceSiteHarvestJob::target).distinct().count());
         var recovered = FrontierEngines.recoverCanonicalStateAccess(config,
                 new RecoveryImage(base.worldId(), Optional.of(new SnapshotRecord(initial, 0L)), journal));
         assertEquals(engine.canonicalState().state(), recovered.canonicalState().state());

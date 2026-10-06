@@ -8,14 +8,12 @@ import java.util.List;
 
 /** Semantic handoffs drive the journey; there is no per-cell courier tick or second body clock. */
 public final class ShipmentProcess {
-    public static final String PROGRESS = "frontier.shipment.progress";
+    public static final String PROGRESS = ShipmentContinuation.PROGRESS;
     public static ScheduledAction progress(SubjectId shipment, long atTick) {
-        return new ScheduledAction(new ScheduleId("schedule:shipment/" + shipment.value().replace(':', '/')),
-                new SimInstant(atTick), 12, shipment, PROGRESS, 1);
+        return ShipmentContinuation.at(shipment, atTick);
     }
     public static ProposedEvent wake(SubjectId shipment, long atTick) {
-        var action = progress(shipment, Math.addExact(atTick, 1));
-        return new ProposedEvent(shipment, new ScheduleEffect.Rescheduled(action.id(), action));
+        return ShipmentContinuation.wake(shipment, atTick);
     }
     public static List<ProposedEvent> dispatch(FrontierWorldState state, SubjectId sender, Shipment shipment, long atTick) {
         var events = new java.util.ArrayList<ProposedEvent>();

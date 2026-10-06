@@ -11,6 +11,69 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceSiteHarvestSceneReconciliationTest {
+    @ParameterizedTest @ValueSource(ints = {0, 1})
+    void alreadyAppliedIsolatedCropAndHandSettleOnceThroughRegisteredCommandAndWal(int preceding) {
+        var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
+        var state = preceding == 0 ? hot.state() : oneObservedCrop(hot);
+        var job = state.resourceSites().site(hot.site()).harvestJobs().values().stream()
+                .reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
+        state = ResourceSiteHarvestProcessTest.inspectGoal(state, hot.site(), job, hot.lease().id());
+        state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
+        job = state.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow();
+        state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
+                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));
+        state = state.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.CONFLICT);
+        var lease = state.sceneLeases().get(hot.lease().id());
+        var field = state.resourceSites().cycle(hot.site());
+        var address = new PhysicalStackAddress.ActorHand(job.workerId(), lease.members().getFirst().entityId());
+        var hand = new FungiblePhysicalObservation.Stack(address, "minecraft:wheat", preceding + 1);
+        long epoch = ActorBodyAuthority.current(state, job.workerId()).physicalEpoch();
+        long now = job.progress().work().orElseThrow().evaluatedAtTick() + 1;
+        var due = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.coldProgress(job, now);
+        var receipt = new ResourceSiteHarvestEffectReconciled(new ResourceSiteHarvestSceneReconciled(hot.site(), job.id(),
+                lease.id(), lease.revision(), epoch, state.actorLocations().get(job.workerId()).body(), hand),
+                new ResourceSiteHarvestProgressed(hot.site(), field.epoch(), job.id(), job.progress().completedCropSlots() + 1,
+                        field.layout().revision(), job.target().cellId(), job.target().generation(),
+                        ResourceFieldCycle.WorkOutcome.HARVESTED, due.id(), due.dueAt().ticks(), java.util.Optional.of(
+                        new ResourceSiteHarvestProgressed.HandObservation(address, lease.revision(), preceding + 1))));
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(receipt, codecs.decode(receipt.type(), codecs.encode(receipt)));
+        var isolated = state;
+        var staleEpoch = new ResourceSiteHarvestSceneReconciled(hot.site(), job.id(), lease.id(), lease.revision(), epoch + 1,
+                receipt.recovery().observedBody(), hand);
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestSceneReconciliation.reduceApplied(isolated,
+                hot.site(), new ResourceSiteHarvestEffectReconciled(staleEpoch, receipt.applied())));
+        var wrongGeneration = new ResourceSiteHarvestProgressed(hot.site(), field.epoch(), job.id(),
+                receipt.applied().completedCropSlots(), field.layout().revision(), job.target().cellId(), job.target().generation() + 1,
+                ResourceFieldCycle.WorkOutcome.HARVESTED, due.id(), due.dueAt().ticks(), receipt.applied().observedHand());
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestSceneReconciliation.reduceApplied(isolated,
+                hot.site(), new ResourceSiteHarvestEffectReconciled(receipt.recovery(), wrongGeneration)));
+        var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
+        var journal = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord>();
+        var config = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(), state,
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(now), base.commandPlanner(), base.scheduledPlanner(),
+                base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), java.util.List.of(due),
+                (io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter) (tx, durability) -> journal.add(tx), base.stateValidator());
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(config);
+        var initial = engine.checkpoint();
+        var id = new io.farfrontier.palemirror.frontier.v3.api.CommandId("test:effect-recovery");
+        var command = new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(2, id, initial.worldId(), initial.revision(),
+                initial.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(id), receipt,
+                java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding(initial.revision(), due)));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(command));
+        var after = engine.canonicalState().state();
+        var recovered = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.recoverCanonicalStateAccess(config,
+                new io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage(base.worldId(), java.util.Optional.of(
+                        new io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord(initial, 0)), journal));
+        assertEquals(after, recovered.canonicalState().state());
+        assertEquals(engine.checkpoint().schedules(), recovered.checkpoint().schedules());
+        assertEquals(preceding + 1, ResourceSiteHarvestCargo.quantity(after,
+                after.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow()));
+        assertEquals(state.actorLocations(), after.actorLocations());
+        assertTrue(after.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow().progress().acceptance().isPresent());
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestSceneReconciliation.reduceApplied(after, hot.site(), receipt));
+    }
     @Test void hotFullPartAtCapacitySettlesExactlyOnceAndRetainsTerminalRecoveryWithoutReplayingCells() {
         var fixture = ResourceSiteHarvestProcessTest.fullBatchAtDepotWithoutFutureCapacity();
         var job = fixture.job();

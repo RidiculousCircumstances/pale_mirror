@@ -33,6 +33,12 @@ public interface ActorActivityCapability {
     }
     FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long atTick);
     FrontierWorldState resume(FrontierWorldState state, ActorExecutionId execution, long atTick);
+    /** Notify the retained owner after its successor authority is installed. Never moves the body. */
+    default java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> continuationAfterResume(
+            FrontierWorldState state, ActorExecutionId successor, long atTick) {
+        validateReference(state, successor);
+        return java.util.List.of();
+    }
     /** Release owners retire their own ephemeral data before common authority changes. */
     FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution);
 }

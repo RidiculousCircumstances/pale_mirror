@@ -27,7 +27,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                     || state.resourceSites().hasPendingWorldChange(job.siteId())) continue;
             var cycle = state.resourceSites().cycle(job.siteId());
             if (!cycle.pendingPlayerBreaks().isEmpty()
-                    || !currentField(level, job, cycle)) continue;
+                    || !currentField(level, lease, job, cycle)) continue;
             var member = lease.members().getFirst();
             var entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob worker) || !worker.isAlive()
@@ -43,7 +43,9 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             if (reviewed.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT) continue;
             boolean unbound = state.inventory().fungibleResources().bindings().values().stream()
                     .noneMatch(binding -> binding.accountId().equals(job.actorAccountId()));
-            if (unbound && (job.progress().hasPendingCrop()
+            boolean firstApplied = job.progress().hasPendingCrop() && ResourceSiteHarvestCargo.quantity(state, job) == 0
+                    && ownedPending(FrontierV3ResourceSiteLedger.get(level), lease, job, cycle).isPresent();
+            if (unbound && !firstApplied && (job.progress().hasPendingCrop()
                     || FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()) != null
                     || FrontierV3ResourceSiteLedger.get(level).fieldHandProjection(job.siteId()) != null
                     || !FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), worker))) continue;
@@ -54,6 +56,28 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             var receipt = new ResourceSiteHarvestSceneReconciled(job.siteId(), job.id(), lease.id(), lease.revision(),
                     recoveryEpoch.getAsLong(),
                     observed.orElseThrow(), reviewed.stack().orElseThrow());
+            if (reviewed.stack().orElseThrow().quantity() == ResourceSiteHarvestCargo.quantity(state, job) + 1) {
+                var pending = ownedPending(FrontierV3ResourceSiteLedger.get(level), lease, job, cycle);
+                if (pending.isEmpty() || !pending.orElseThrow().handConfirmed()
+                        || pending.orElseThrow().completedSteps() != pending.orElseThrow().transition().steps().size()) continue;
+                var due = FrontierV3TraversalScheduleGate.dueBinding(runtime.executionView().orElseThrow(), job);
+                if (due.isEmpty()) continue;
+                var binding = due.orElseThrow();
+                var cell = cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id();
+                var applied = new ResourceSiteHarvestProgressed(job.siteId(), cycle.epoch(), job.id(),
+                        job.progress().completedCropSlots() + 1, cycle.layout().revision(), cell, job.target().generation(),
+                        ResourceFieldCycle.WorkOutcome.HARVESTED, binding.id(), binding.dueAt().ticks(),
+                        java.util.Optional.of(new ResourceSiteHarvestProgressed.HandObservation(
+                                (PhysicalStackAddress.ActorHand) receipt.observedHand().address(),
+                                lease.revision(), receipt.observedHand().quantity())));
+                var recovered = new ResourceSiteHarvestEffectReconciled(receipt, applied);
+                try { ResourceSiteHarvestSceneReconciliation.reduceApplied(state, job.siteId(), recovered); }
+                catch (IllegalArgumentException unresolved) { continue; }
+                FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_effect_reconciled", lease,
+                        FrontierV3CommandSubmission.submitBound(runtime, "resource-site-harvest-effect-reconciled",
+                                lease.id().value(), recovered, binding));
+                return true;
+            }
             try { ResourceSiteHarvestSceneReconciliation.reduce(state, job.siteId(), receipt); }
             catch (IllegalArgumentException unresolved) { continue; }
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_scene_reconciled", lease,
@@ -75,13 +99,38 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                 ? java.util.OptionalLong.of(recovery.authorityEpoch()) : java.util.OptionalLong.empty();
     }
 
-    private static boolean currentField(ServerLevel level, ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {
-        var claim = FrontierV3ResourceSiteLedger.get(level).fieldClaim(job.siteId());
+    static java.util.Optional<FrontierV3ResourceFieldWitness.Pending> ownedPending(
+            FrontierV3ResourceSiteLedger ledger, SceneLease lease, ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {
+        if (!job.progress().hasPendingCrop() || lease.members().size() != 1
+                || !(ledger.fieldClaim(job.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
+                || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || !owner.witness().matchesCycle(cycle))
+            return java.util.Optional.empty();
+        var cell = cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id();
+        return owner.witness().cell(cell).pending().filter(pending -> pending.canonicalSource().isEmpty()
+                && pending.causationId().equals(FrontierV3ResourceFieldWorkExecutor.cause(job, cycle, cell))
+                && cycle.physicalWorkTransition(cell).filter(pending.transition()::equals).isPresent()
+                && pending.handEffect().filter(hand -> hand.siteId().equals(job.siteId()) && hand.jobId().equals(job.id())
+                    && hand.actorId().equals(job.workerId()) && hand.entityId().equals(lease.members().getFirst().entityId())
+                    && hand.authorityEpoch() == lease.revision() && hand.beforeCount() == job.undeliveredYieldQuantity()).isPresent());
+    }
+
+    private static boolean currentField(ServerLevel level, SceneLease lease, ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {
+        var ledger = FrontierV3ResourceSiteLedger.get(level);
+        var claim = ledger.fieldClaim(job.siteId());
         if (!(claim instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                 || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
                 || !owner.witness().matchesCycle(cycle)) return false;
         for (var cell : cycle.layout().cells()) {
             var retained = owner.witness().cell(cell.id());
+            if (job.progress().hasPendingCrop()
+                    && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(cell.id())
+                    && ownedPending(ledger, lease, job, cycle).isPresent()) {
+                var review = FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), cell.id(),
+                        "harvest-effect-reconciliation");
+                if (retained.foreign().isPresent() || review.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
+                    return false;
+                continue; // This exact pending effect owns its physical prefix, not the old canonical mature crop.
+            }
             if (retained.pending().isPresent() || retained.foreign().isPresent()
                     || !retained.committed().equals(ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell.id())))
                     || FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), cell.id(),

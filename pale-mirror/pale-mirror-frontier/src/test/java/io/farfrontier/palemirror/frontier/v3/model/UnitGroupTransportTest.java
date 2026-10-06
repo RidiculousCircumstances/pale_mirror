@@ -68,7 +68,22 @@ class UnitGroupTransportTest {
         }
     }
     @Test void formationDeliveryPaymentReturnAndRetirementSurviveAnInFlightCheckpoint() {
-        var configuration = completeNeedClocks(FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:group-transport"), 41));
+        var resumedKinds = EnumSet.noneOf(ActorActivityKind.class);
+        var configuration = completeNeedClocks(FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:group-transport"), 41))
+                .withTransactionCommitter((transaction, durability) -> {
+                    for (var event : transaction.events()) if (event.payload() instanceof
+                            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed resumed) {
+                        var successor = resumed.successor();
+                        if (successor.activityKind() != ActorActivityKind.GROUP_MEMBER
+                                && successor.activityKind() != ActorActivityKind.COURIER) continue;
+                        resumedKinds.add(successor.activityKind());
+                        assertTrue(transaction.events().stream().map(FrontierEvent::payload)
+                                .filter(ScheduleEffect.Rescheduled.class::isInstance).map(ScheduleEffect.Rescheduled.class::cast)
+                                .anyMatch(wake -> wake.replacement().kind().equals(UnitGroupProcess.PROGRESS)
+                                        && wake.replacement().dueAt().ticks() == resumed.atTick() + 1),
+                                "actual post-meal resumption must wake its retained group in the same transaction");
+                    }
+                });
         var engine = FrontierEngines.createCanonicalStateAccess(configuration);
         UnitGroup admitted = null; boolean recovered = false, acceptedBeforeReturn = false, closed = false, nonflat = false;
         for (int boundary = 0; boundary < 4000; boundary++) {
@@ -147,6 +162,66 @@ class UnitGroupTransportTest {
         return new FrontierEngineConfiguration<>(base.worldId(), state, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(),
                 base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), schedules, base.transactionCommitter(),
                 base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter());
+    }
+
+    @Test void actualCarrierAndGuideMealsResumeTheirRetainedGroupWithoutWaitingForPeriodicReview() {
+        var base = completeNeedClocks(FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:group-meal-resume"), 41));
+        var initialEngine = FrontierEngines.createCanonicalStateAccess(base);
+        UnitGroup group = null;
+        for (int turn = 0; turn < 256; turn++) {
+            var state = initialEngine.canonicalState().state();
+            group = state.unitGroups().groups().values().stream().filter(candidate ->
+                    candidate.phase() == UnitGroup.Phase.TRAVELLING && candidate.members().stream()
+                            .allMatch(member -> state.actorExecutions().actors().get(member.actorId()).current().isPresent()))
+                    .findFirst().orElse(null);
+            if (group != null) break;
+            var due = initialEngine.checkpoint().schedules().stream()
+                    .filter(action -> !FrontierWorldRuntimeDefinition.scheduledHeld(state, action)).sorted().findFirst().orElseThrow();
+            var result = initialEngine.advanceTo(new SimInstant(Math.max(initialEngine.checkpoint().instant().ticks(), due.dueAt().ticks())),
+                    new WorkBudget(1, 1024));
+            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
+        }
+        assertNotNull(group);
+        var selected = group; var state = initialEngine.canonicalState().state(); var population = state.humanPopulation();
+        long now = initialEngine.checkpoint().instant().ticks();
+        var nutrition = new LinkedHashMap<>(population.nutrition());
+        for (var member : group.members()) nutrition.put(member.actorId(), new ResidentNutrition(ResidentNutritionStatus.HUNGRY,
+                state.bootstrap().ruleset().residentLife().eatBelowUnits() - 1, now, 0));
+        // Hungry travellers are the fixture precondition; all movement, consumption and resume outcomes remain registered.
+        state = state.withHumanPopulation(new HumanPopulation(population.households(), population.residents(), population.birthJobs(),
+                population.health(), population.quarantines(), population.migrations(), population.provisions(), nutrition,
+                population.medicalOperations(), population.schedules(), population.meals(), population.mealResourceObligations()));
+        var schedules = new ArrayList<>(initialEngine.checkpoint().schedules());
+        for (var member : group.members()) {
+            var review = ResidentActivityProcess.review(member.actorId(), now + 1);
+            schedules.removeIf(action -> action.id().equals(review.id())); schedules.add(review);
+            schedules.removeIf(action -> action.subject().equals(member.actorId()) && action.kind().equals(ResidentNeedProcess.REVIEW));
+            schedules.add(ResidentNeedProcess.review(member.actorId(), state.humanPopulation().nutrition(member.actorId())
+                    .nextThresholdTick(state.bootstrap().ruleset().residentLife(),
+                            state.humanPopulation().resident(member.actorId()).characteristics().effectiveMetabolismPermille(now))));
+        }
+        var resumed = EnumSet.noneOf(ActorActivityKind.class);
+        var config = new FrontierEngineConfiguration<>(base.worldId(), state, new SimInstant(now), base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), schedules,
+                (TransactionCommitter) (transaction, durability) -> {
+                    for (var event : transaction.events()) if (event.payload() instanceof
+                            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed result
+                            && selected.members().stream().anyMatch(member -> member.actorId().equals(result.successor().actorId()))) {
+                        resumed.add(result.successor().activityKind());
+                        assertTrue(transaction.events().stream().anyMatch(change -> change.payload() instanceof ScheduleEffect.Rescheduled wake
+                                && wake.replacement().equals(UnitGroupProcess.progress(selected.id(), result.atTick() + 1))),
+                                "meal completion must notify exact retained group in the resume transaction");
+                    }
+                }, base.stateValidator());
+        var engine = FrontierEngines.createCanonicalStateAccess(config);
+        for (int turn = 0; turn < 512 && resumed.size() < 2; turn++) {
+            var current = engine.canonicalState().state();
+            var due = engine.checkpoint().schedules().stream().filter(action -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, action))
+                    .sorted().findFirst().orElseThrow();
+            var result = engine.advanceTo(new SimInstant(Math.max(engine.checkpoint().instant().ticks(), due.dueAt().ticks())), new WorkBudget(1, 1024));
+            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
+        }
+        assertEquals(EnumSet.of(ActorActivityKind.COURIER, ActorActivityKind.GROUP_MEMBER), resumed);
     }
 
     @Test void forgedRoleDanglingMissionPrematureArrivalAndStaleEpochFailClosed() {

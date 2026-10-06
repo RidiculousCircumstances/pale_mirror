@@ -42,6 +42,12 @@ final class GroupMemberActivityCapability implements ActorActivityCapability {
         return state;
     }
     @Override public FrontierWorldState resume(FrontierWorldState state, ActorExecutionId execution, long tick) { validateReference(state, execution); return state; }
+    @Override public java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> continuationAfterResume(
+            FrontierWorldState state, ActorExecutionId successor, long tick) {
+        validateReference(state, successor);
+        state.actorExecutions().requireCurrent(successor);
+        return java.util.List.of(UnitGroupContinuation.wake(successor.activityOwnerId(), tick));
+    }
     @Override public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {
         throw new IllegalArgumentException("group purpose ends only through the group completion protocol");
     }

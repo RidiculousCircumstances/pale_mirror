@@ -18,6 +18,8 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLease
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandProjected;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneReconciled;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestEffectReconciled;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgressed;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
@@ -43,7 +45,36 @@ final class ResourceSiteHarvestScenePayloadCodecs {
     private static final int PARTICIPANT_LEASE_MARKER = 0xffe0;
     private ResourceSiteHarvestScenePayloadCodecs() { }
 
-    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(new PreparedCodec(), new HandoffCodec(), new PreparationAbortedCodec(), new HandProjectedCodec(), new HandReleaseCodec(), new ReconciledCodec())); }
+    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(new PreparedCodec(), new HandoffCodec(), new PreparationAbortedCodec(), new HandProjectedCodec(), new HandReleaseCodec(), new ReconciledCodec(), new EffectReconciledCodec())); }
+
+    private static final class EffectReconciledCodec implements PayloadCodec {
+        private final PayloadCodec recovery = new ReconciledCodec();
+        private final PayloadCodec applied = ResourceSitePayloadCodecs.harvestProgressed();
+        @Override public String type() { return "frontier.resource_site_harvest_effect_reconciled"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            var receipt = (ResourceSiteHarvestEffectReconciled) payload;
+            return FrontierWorldPayloadCodecs.encodeProduction(out -> {
+                write(out, recovery.encode(receipt.recovery()));
+                write(out, applied.encode(receipt.applied()));
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new ResourceSiteHarvestEffectReconciled(
+                    (ResourceSiteHarvestSceneReconciled) recovery.decode(read(in)),
+                    (ResourceSiteHarvestProgressed) applied.decode(read(in))));
+        }
+        private static void write(DataOutputStream out, byte[] bytes) throws IOException {
+            if (bytes.length < 1 || bytes.length > 4096) throw new IOException("unbounded harvest recovery evidence");
+            out.writeInt(bytes.length); out.write(bytes);
+        }
+        private static byte[] read(DataInputStream in) throws IOException {
+            int count = in.readInt();
+            if (count < 1 || count > 4096) throw new IOException("unbounded harvest recovery evidence");
+            byte[] bytes = in.readNBytes(count);
+            if (bytes.length != count) throw new IOException("truncated harvest recovery evidence");
+            return bytes;
+        }
+    }
 
     private static final class ReconciledCodec implements PayloadCodec {
         @Override public String type() { return "frontier.resource_site_harvest_scene_reconciled"; }

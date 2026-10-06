@@ -165,6 +165,8 @@ public final class ResidentActivityProcess {
             state = ActorExecutionComposition.LIFECYCLE.prepareResume(state, suspended, successor, execution.current(), now)
                     .commit(state, FrontierWorldStateUpdate.begin());
             events.add(new ProposedEvent(action.subject(), resumed));
+            events.addAll(ActorExecutionComposition.CAPABILITIES.require(successor.activityKind())
+                    .continuationAfterResume(state, successor, now));
         }
         FrontierWorldState selectedState = state;
         if (choice.kind() == ResidentActivityChoice.Kind.EAT

@@ -12,6 +12,24 @@ public final class ResourceSiteHarvestSceneReconciliation {
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject,
                                             ResourceSiteHarvestSceneReconciled receipt) {
+        return restore(state, subject, receipt, false);
+    }
+
+    public static FrontierWorldState reduceApplied(FrontierWorldState state, SubjectId subject,
+                                                  ResourceSiteHarvestEffectReconciled receipt) {
+        var observed = receipt.recovery();
+        var applied = receipt.applied();
+        var hand = applied.observedHand().orElseThrow();
+        if (!hand.address().equals(observed.observedHand().address())
+                || hand.authorityEpoch() != observed.leaseRevision()
+                || hand.quantity() != observed.observedHand().quantity()
+                || applied.outcome() != ResourceFieldCycle.WorkOutcome.HARVESTED)
+            throw new IllegalArgumentException("recovered crop and hand have different physical evidence");
+        return ResourceSiteHarvestProcess.reduceProgressed(restore(state, subject, observed, true), subject, applied);
+    }
+
+    private static FrontierWorldState restore(FrontierWorldState state, SubjectId subject,
+                                             ResourceSiteHarvestSceneReconciled receipt, boolean applied) {
         var lifecycle = state.resourceSites().site(receipt.siteId());
         var job = lifecycle.harvestJob(receipt.jobId()).orElseThrow(
                         () -> new IllegalArgumentException("harvest reconciliation has no active job"));
@@ -34,6 +52,8 @@ public final class ResourceSiteHarvestSceneReconciliation {
                 || !lease.members().getFirst().actorId().equals(job.workerId()))
             throw new IllegalArgumentException("harvest reconciliation lacks its exact isolated safe job checkpoint");
         var actor = state.actorLocations().get(job.workerId());
+        if (applied && !job.progress().hasPendingCrop())
+            throw new IllegalArgumentException("effect recovery has no exact pending crop");
         if (job.progress().hasPendingCrop()) {
             var cell = cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id();
             if (cycle.expectedWorkOutcome(cell) != ResourceFieldCycle.WorkOutcome.HARVESTED
@@ -45,17 +65,19 @@ public final class ResourceSiteHarvestSceneReconciliation {
         var account = state.inventory().fungibleResources().accounts().get(job.actorAccountId());
         var bindings = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(job.actorAccountId())).toList();
+        int carried = ResourceSiteHarvestCargo.quantity(state, job);
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !hand.actorId().equals(job.workerId()) || !hand.entityId().equals(lease.members().getFirst().entityId())
                 || !receipt.observedHand().itemKind().equals("minecraft:wheat")
-                || receipt.observedHand().quantity() != ResourceSiteHarvestCargo.quantity(state, job)
-                || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
-                || !account.claimQuantities().isEmpty() || bindings.size() > 1
-                || bindings.isEmpty() && job.progress().hasPendingCrop()
+                || receipt.observedHand().quantity() != Math.addExact(ResourceSiteHarvestCargo.quantity(state, job), applied ? 1 : 0)
+                || (account == null ? !applied || carried != 0 || !bindings.isEmpty()
+                        : !account.custody().equals(new ResourceCustody.Actor(job.workerId())) || !account.claimQuantities().isEmpty())
+                || bindings.size() > 1
+                || bindings.isEmpty() && job.progress().hasPendingCrop() && !(applied && carried == 0)
                 || !bindings.isEmpty() && (!bindings.getFirst().address().equals(hand)
                     || bindings.getFirst().authorityEpoch() != lease.revision()
                     || !bindings.getFirst().lotQuantities().equals(account.lotQuantities())
-                    || bindings.getFirst().quantity() != receipt.observedHand().quantity()))
+                    || bindings.getFirst().quantity() != ResourceSiteHarvestCargo.quantity(state, job)))
             throw new IllegalArgumentException("harvest reconciliation cannot replace its exact bound worker batch");
         SubjectId recoveryId = ActorBodyId.recoveryBindingId(job.workerId());
         var recovery = state.fencedRecovery().current().get(recoveryId);
@@ -68,6 +90,7 @@ public final class ResourceSiteHarvestSceneReconciliation {
         var leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.HOT));
         var restored = state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
+        if (applied) return restored; // The ordinary crop reducer settles the observed after-hand exactly once.
         // Admission can fail before the already-witnessed carried part gets its hand binding.
         // Use the ordinary exact projection reducer in this SAME recovery event: no second
         // resource issuer, no partially resumed scene and no replacement of an existing binding.

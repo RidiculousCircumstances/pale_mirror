@@ -75,6 +75,20 @@ final class ShipmentExecutionCapability implements ActorActivityCapability {
         validateReference(state, execution);
         return state; // The shipment replans its retained leg from the actor's actual post-meal position.
     }
+    @Override public java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> continuationAfterResume(
+            FrontierWorldState state, ActorExecutionId successor, long tick) {
+        validateReference(state, successor);
+        state.actorExecutions().requireCurrent(successor);
+        var shipment = state.shipments().shipments().get(successor.activityOwnerId());
+        var events = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent>();
+        events.add(ShipmentContinuation.wake(shipment.id(), tick));
+        shipment.transportMissionId().ifPresent(id -> {
+            var mission = state.shipments().missions().get(id);
+            if (mission == null) throw new IllegalArgumentException("resumed courier lost its retained mission");
+            events.add(UnitGroupContinuation.wake(mission.groupId(), tick));
+        });
+        return java.util.List.copyOf(events);
+    }
     @Override public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {
         throw new IllegalArgumentException("shipment must explicitly settle its transport obligation");
     }

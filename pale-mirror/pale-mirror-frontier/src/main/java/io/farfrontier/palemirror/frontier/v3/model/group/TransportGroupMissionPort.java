@@ -18,7 +18,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     @Override public void validate(FrontierWorldState state, UnitGroup group) {
         var mission = mission(state, group);
         validateDeclaration(state, mission, group, state.shipments().shipments());
-        validateExecutions(state, group);
+        validateExecutions(state.actorExecutions(), state.shipments(), group);
     }
     public static void validateDeclaration(FrontierWorldState state, TransportMission mission, UnitGroup group,
             java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Shipment> shipments) {
@@ -41,15 +41,20 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
         if (!carriers.equals(java.util.Set.copyOf(mission.shipmentIds())))
             throw new IllegalArgumentException("transport roster does not cover its exact shipments");
     }
-    private static void validateExecutions(FrontierWorldState state, UnitGroup group) {
+    static void validateExecutions(ActorExecutionState executions, ShipmentState shipments, UnitGroup group) {
         for (var member : group.members()) {
-            var retained = state.actorExecutions().actors().get(member.actorId());
+            var retained = executions.actors().get(member.actorId());
             if (retained == null) continue;
             for (var execution : java.util.stream.Stream.concat(retained.current().stream(), retained.suspended().stream()).toList()) {
                 if (execution.activityKind() != ActorActivityKind.GROUP_MEMBER) continue;
+                // A closed roster is history, not an exclusive claim on its former members.
+                // Still reject a retained execution of THIS closed group (including suspended work).
+                if (group.phase() == UnitGroup.Phase.CLOSED && !execution.activityOwnerId().equals(group.id())) continue;
                 if (!execution.activityOwnerId().equals(group.id()) || group.phase() == UnitGroup.Phase.CLOSED
-                        || member.role() == UnitGroup.Role.CARRIER && !state.shipments().shipments().get(member.activityOwnerId()).terminal())
-                    throw new IllegalArgumentException("group execution has a foreign or prematurely released participant responsibility");
+                        || member.role() == UnitGroup.Role.CARRIER && !shipments.shipments().get(member.activityOwnerId()).terminal())
+                    throw new IllegalArgumentException("group execution has a foreign or prematurely released participant responsibility: group="
+                            + group.id().value() + " phase=" + group.phase() + " actor=" + member.actorId().value()
+                            + " executionOwner=" + execution.activityOwnerId().value());
             }
         }
     }
