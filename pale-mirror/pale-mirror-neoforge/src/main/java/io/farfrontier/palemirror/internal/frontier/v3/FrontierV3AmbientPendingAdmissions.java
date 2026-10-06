@@ -48,6 +48,14 @@ final class FrontierV3AmbientPendingAdmissions {
         if (admissions.isEmpty()) ADMISSIONS.remove(runtime);
     }
 
+    /** A canceled join inserted nothing; withdraw only this exact temporary object. */
+    static boolean rejectJoin(FrontierV3ServerRuntime<?, ?> runtime, Entity entity) {
+        Map<UUID, Entity> admissions = ADMISSIONS.get(runtime);
+        if (admissions == null || !admissions.remove(entity.getUUID(), entity)) return false;
+        if (admissions.isEmpty()) ADMISSIONS.remove(runtime);
+        return true;
+    }
+
     /** Completes only common indexed body admission; activity recovery belongs to its owner. */
     static void reclaimProjected(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Map<UUID, Entity> admissions = ADMISSIONS.get(runtime);

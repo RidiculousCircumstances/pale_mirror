@@ -14,6 +14,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** Final unload observation, after vanilla removes even an already-hidden entity. */
 @Mixin(Entity.class)
 abstract class FrontierV3EntityDepartureMixin {
+    @Inject(method = "load", at = @At("RETURN"), require = 1)
+    private void frontierV3$observeLoadedBody(CompoundTag tag, CallbackInfo callback) {
+        FrontierV3BodyObservationSave.observeLoad((Entity) (Object) this, tag);
+    }
+
     @Inject(method = "saveWithoutId", at = @At("RETURN"), require = 1)
     private void frontierV3$observeSavedBody(CompoundTag tag, CallbackInfoReturnable<CompoundTag> callback) {
         FrontierV3BodyObservationSave.observe((Entity) (Object) this, callback.getReturnValue());

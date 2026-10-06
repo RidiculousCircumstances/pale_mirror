@@ -169,7 +169,7 @@ final class FrontierV3ActorBodyController {
         if (java.util.Objects.equals(JOINED_RESIDENCES.get(body), residence)) return;
         var receipt = ledger.bodyDeparture(declaration.actorId()).orElse(null);
         if (receipt != null) {
-            var actual = capture(level, state, body, false).orElse(null);
+            var actual = captureReturnedBody(level, state, body).orElse(null);
             if (actual == null) return;
             if (!receipt.current(state) || receipt.residenceGeneration() != actual.residenceGeneration()
                     || !receipt.identity().equals(actual.identity()) || !receipt.observed().equals(actual.observed())
@@ -196,6 +196,12 @@ final class FrontierV3ActorBodyController {
                 && ledger.knownBodyResidence(actor, body.getPersistentData().getLong(RESIDENCE_KEY));
     }
 
+    /** Returning a saved body proves lifetime/pose, never grounded work or goal arrival. */
+    static java.util.Optional<FrontierV3ActorBodyDeparture> captureReturnedBody(
+            ServerLevel level, FrontierWorldState state, Mob body) {
+        return capture(level, state, body, false);
+    }
+
     private static java.util.Optional<FrontierV3ActorBodyDeparture> capture(ServerLevel level, FrontierWorldState state,
                                                                           Mob body, boolean departing) {
         var declaration = (departing ? FrontierV3ActorCarrierComposition.declaredByUnloading(body)
@@ -217,14 +223,17 @@ final class FrontierV3ActorBodyController {
         // rather than waiting for an impossible landing or inventing an old support.
         // Live arrivals/inspection still require actual supported contact. COLD work
         // must establish its normal known route/station, independently of this receipt.
-        var position = departing ? java.util.Optional.of(FrontierV3BodyObservation.captureForDeparture(body).position())
-                : FrontierV3SupportedBodyCapture.observe(level, body);
-        if (position.isEmpty()) return java.util.Optional.empty();
+        // The same spatial observation is admissible on both sides of storage.
+        // Requiring support here cancels a saved airborne body before Minecraft
+        // can index it and apply gravity. Grounded execution/arrival remains
+        // independently fenced by inspectCurrent and semantic movement.
+        var position = departing ? FrontierV3BodyObservation.captureForDeparture(body).position()
+                : FrontierV3BodyObservationSave.returnedPosition(body);
         var off = body.getOffhandItem(); var main = body.getMainHandItem();
         if (!plainHand(off) || !plainHand(main)) return java.util.Optional.empty();
         var actor = state.actorLocations().get(declaration.actorId());
         return java.util.Optional.of(new FrontierV3ActorBodyDeparture(declaration.inactiveCarrier(), residence,
-                new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(declaration.actorId(), position.orElseThrow(),
+                new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(declaration.actorId(), position,
                     new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth()
                         * (double) io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE))),
                 actor.body(), actor.condition().health(), FrontierV3ActorBodyDeparture.execution(state, declaration.actorId()),

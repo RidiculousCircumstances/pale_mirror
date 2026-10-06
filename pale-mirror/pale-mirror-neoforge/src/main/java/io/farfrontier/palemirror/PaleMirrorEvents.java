@@ -190,6 +190,14 @@ public final class PaleMirrorEvents {
         }
     }
 
+    /** Withdraw canceled joins after the firewall and higher-priority listeners. */
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
+    public static void onEntityJoinCanceled(EntityJoinLevelEvent event) {
+        if (event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeRejectedJoin(level, event.getEntity());
+        }
+    }
+
     /** Legacy source runtime tracking hook; v3 certifies only final physical departure. */
     @SubscribeEvent
     public static void onEntityLeave(EntityLeaveLevelEvent event) {

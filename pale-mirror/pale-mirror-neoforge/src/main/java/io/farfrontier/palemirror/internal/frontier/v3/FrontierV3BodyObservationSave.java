@@ -12,6 +12,10 @@ import java.util.Optional;
 /** Entity-save witness of the same observation, bound to vanilla's exact serialized pose. */
 public final class FrontierV3BodyObservationSave {
     static final String KEY = "pm_v3_body_observation";
+    // Vanilla deserializes entity chunks off the server thread; join consumes
+    // this witness on the server thread. Values never retain their weak key.
+    private static final java.util.Map<Entity, LoadedPose> LOADED_POSES =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
     private FrontierV3BodyObservationSave() { }
 
     public static void observe(Entity entity, CompoundTag saved) {
@@ -19,6 +23,29 @@ public final class FrontierV3BodyObservationSave {
                 || !entity.getPersistentData().contains(FrontierV3ActorCarrierComposition.ACTOR_KEY, Tag.TAG_STRING)) return;
         var observation = FrontierV3BodyObservation.captureForDeparture(entity);
         saved.put(KEY, encode(observation, entity.getX(), entity.getY(), entity.getZ()));
+    }
+
+    /** Retain the existing save witness only for the exact loaded physical pose. */
+    public static void observeLoad(Entity entity, CompoundTag saved) {
+        LOADED_POSES.remove(entity);
+        if (!(entity instanceof Mob) || !(entity.level() instanceof ServerLevel)) return;
+        read(saved, entity.getX(), entity.getY(), entity.getZ()).ifPresent(position ->
+                LOADED_POSES.put(entity, new LoadedPose(entity.getX(), entity.getY(), entity.getZ(), position)));
+    }
+
+    static BodyPosition returnedPosition(Entity entity) {
+        var saved = LOADED_POSES.get(entity);
+        if (saved != null && saved.matches(entity.getX(), entity.getY(), entity.getZ())) return saved.position();
+        // A same-object live return has no deserialization witness. Observe its
+        // current pose; neither path certifies current support or work arrival.
+        LOADED_POSES.remove(entity);
+        return FrontierV3BodyObservation.capture(entity).position();
+    }
+
+    record LoadedPose(double x, double y, double z, BodyPosition position) {
+        boolean matches(double currentX, double currentY, double currentZ) {
+            return Double.compare(x, currentX) == 0 && Double.compare(y, currentY) == 0 && Double.compare(z, currentZ) == 0;
+        }
     }
 
     static CompoundTag encode(FrontierV3BodyObservation.Observation observation, double x, double y, double z) {

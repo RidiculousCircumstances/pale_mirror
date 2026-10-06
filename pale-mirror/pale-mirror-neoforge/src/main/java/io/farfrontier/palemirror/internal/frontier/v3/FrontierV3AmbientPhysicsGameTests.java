@@ -45,6 +45,78 @@ import java.util.Optional;
 public final class FrontierV3AmbientPhysicsGameTests {
     private FrontierV3AmbientPhysicsGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void savedAirborneReturnPassesJoinAndFallsWithoutGrantingStationArrival(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos support = helper.absolutePos(new BlockPos(2, 4, 2));
+        prepareFallArena(level, support);
+        Fixture fixture = fixture(support, helper.absolutePos(new BlockPos(5, 4, 2)));
+        var initial = ActorBodyAuthority.demand(fixture.state(), fixture.resident());
+        initial = ActorBodyAuthority.running(initial, ActorBodyAuthority.current(initial, fixture.resident()));
+        var runtime = runtime(level, initial);
+        var state = runtime.decodedState().orElseThrow();
+        var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, fixture.resident(),
+                FrontierV3AmbientActorExecutor.entityId(state, fixture.resident()),
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
+                ActorBodyAuthority.current(state, fixture.resident()).physicalEpoch());
+        var binding = FrontierV3ActorOwnerBinding.body(declaration);
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        helper.assertTrue(ledger.beginFirstAdmission(binding), "fixture retains exact initial lifetime");
+        helper.assertTrue(ledger.acknowledgeFirstAdmission(ledger.firstAdmission(fixture.resident()).orElseThrow(), binding),
+                "fixture has established physical history");
+        Villager savedBody = EntityType.VILLAGER.create(level);
+        if (savedBody == null) throw new IllegalStateException("test saved villager creation failed");
+        savedBody.setUUID(declaration.entityId());
+        binding.stamp(savedBody);
+        savedBody.getPersistentData().putLong(FrontierV3ActorBodyController.RESIDENCE_KEY, ledger.beginBodyResidence(declaration));
+        savedBody.setNoAi(true);
+        savedBody.setPos(support.getX() + .5, support.getY() + 4.0, support.getZ() + .5);
+        savedBody.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND,
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, 2));
+        var departure = FrontierV3ActorBodyController.captureReturnedBody(level, state, savedBody).orElseThrow(
+                () -> new IllegalStateException("the exact saved fixture body must have a capturable residence"));
+        helper.assertTrue(FrontierV3SupportedBodyCapture.observe(level, savedBody).isEmpty(), "returned pose is really airborne");
+        helper.assertTrue(ledger.recordBodyDeparture(departure), "fixture retains exact departure");
+        helper.assertTrue(ledger.fence(departure.identity(), declaration.epoch(), 0), "fixture retains inactive fence");
+        var saved = savedBody.saveWithoutId(new net.minecraft.nbt.CompoundTag());
+        Villager returned = EntityType.VILLAGER.create(level);
+        if (returned == null) throw new IllegalStateException("test returned villager creation failed");
+        returned.load(saved);
+        var proof = FrontierV3ServerLifecycle.observeSourceJoin(level, runtime, returned);
+        helper.assertTrue(proof.verifiedV3Carrier(), "the ordinary join composition recognizes an exact airborne return");
+        helper.assertTrue(!ledger.hasBodyDeparture(fixture.resident()) && !ledger.hasCarrier(fixture.resident()),
+                "only exact return proof consumes the old departure/fence");
+        helper.assertTrue(FrontierV3SupportedBodyCapture.observe(level, returned).isEmpty(),
+                "lifetime admission has not fabricated grounded work arrival");
+        helper.assertTrue(level.addFreshEntity(returned), "Minecraft indexes the returned body instead of canceling it");
+        for (int tick = 1; tick < 15; tick++) helper.runAtTickTime(tick, () ->
+                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(returned));
+        helper.runAtTickTime(16, () -> {
+            FrontierV3AmbientPendingAdmissions.reclaimProjected(runtime, runtime.decodedState().orElseThrow());
+            helper.assertTrue(level.getEntity(returned.getUUID()) == returned && returned.getY() < support.getY() + 4.0,
+                    "the same indexed identity falls under ordinary physics");
+            helper.assertTrue(FrontierV3AmbientPendingAdmissions.get(runtime, returned.getUUID()) == null,
+                    "indexed body confirmation ends the temporary join bridge");
+            returned.discard(); runtime.shutdown(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void canceledJoinWithdrawsOnlyItsExactPendingObject(GameTestHelper helper) {
+        var fixture = fixture(helper.absolutePos(new BlockPos(2, 4, 2)), helper.absolutePos(new BlockPos(5, 4, 2)));
+        var runtime = runtime(helper.getLevel(), fixture.state());
+        var retained = EntityType.VILLAGER.create(helper.getLevel());
+        var duplicate = EntityType.VILLAGER.create(helper.getLevel());
+        if (retained == null || duplicate == null) throw new IllegalStateException("join fixtures unavailable");
+        duplicate.setUUID(retained.getUUID());
+        FrontierV3AmbientPendingAdmissions.retain(runtime, retained, fixture.resident());
+        helper.assertTrue(!FrontierV3AmbientPendingAdmissions.rejectJoin(runtime, duplicate), "rejected duplicate cannot discard the incumbent");
+        helper.assertTrue(FrontierV3AmbientPendingAdmissions.get(runtime, retained.getUUID()) == retained, "incumbent survives");
+        helper.assertTrue(FrontierV3AmbientPendingAdmissions.rejectJoin(runtime, retained), "canceling the exact join clears its bridge");
+        helper.assertTrue(FrontierV3AmbientPendingAdmissions.get(runtime, retained.getUUID()) == null, "a never-indexed nonremoved object cannot linger");
+        runtime.shutdown(); helper.succeed();
+    }
+
     /**
      * A canonical actor has one exact body column.  A live occupant is a local physical
      * obstruction, not permission to place a second body, select an apron cell, or change the

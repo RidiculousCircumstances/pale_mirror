@@ -740,6 +740,14 @@ public final class FrontierV3ServerLifecycle {
             return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
         }
     }
+    /** Settle only a rejected pre-index join bridge; durable custody is not released. */
+    public static void observeRejectedJoin(ServerLevel level, Entity entity) {
+        var runtime = RUNTIMES.get(level.getServer());
+        if (runtime != null && FrontierV3AmbientPendingAdmissions.rejectJoin(runtime, entity)) {
+            PaleMirrorMod.LOGGER.warn("PMV3_BODY_JOIN_REJECTED entity={} actor={} reason=JOIN_CANCELED; temporary admission withdrawn, durable custody retained",
+                    entity.getUUID(), entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.ACTOR_KEY));
+        }
+    }
     public static boolean recognizesManagedCarrier(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
