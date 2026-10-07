@@ -7,6 +7,9 @@ Prior chronology: docs/archive/continuity-2026-10-07-before-addressed-planning.m
 ## Current assignment and source
 
 User authorized completing points4–5 on top of1–3, committing and deploying.
+Implemented/committed/deployed; final integration gates passed. No owned test task
+or client remains. Full-capacity historical-world startup admission is a recorded
+separate open issue; this deployment uses the user-approved fresh world.
 No push requested. User explicitly allows a fresh world; preserve R36 incident.
 Main implements receipt-pressure admission and explicit caravan pause diagnostics.
 Implementation /home/rd/proj/pm-f06r3-facility-lane-recovery, Gradle root pale-mirror/.
@@ -15,7 +18,7 @@ The204 preexisting WIP entries are the prior delivered expedition cut retained
 in the clean R36 snapshot; preserve and include dependency-closed source on commit.
 SA audit paused; ARC-001 adoption separate.
 
-## Live incident
+## Preserved R36 incident
 
 R36 QUARANTINED2026-10-07 18:23:08+05, revision24205/tick25610.
 Minecraft service alive, PM runtime unavailable and all PM progress frozen.
@@ -29,7 +32,7 @@ hold an advancing member. No measured steady TPS after quarantine; two previous
 overruns ~2s, no observed host-wide CPU/RAM exhaustion.
 Evidence implementation pale-mirror/build/expedition-r36-incident.json.
 
-## Current deployment underway / prior recovery
+## Current deployment / prior recovery
 
 Clean detached source45901af13054b4d77f9670c8ca64a077e813578c at
 /home/rd/proj/pm-planning-r38-release-20261007; focused29 kernel checks,
@@ -38,9 +41,9 @@ b2517b1329db366ef95cb30121d266bf5d4ceb3cbab4393cd1802953894db390393f43826e121fcb
 New world frontier-v3-planning-r39-20261007 selected, seed20260918065;
 service invocationf93e4f4fbdc04c1abee1ce862f7a2683, start1791383388.
 Fresh-world preflight/post-start PASS; wrapper3326007 listens25565.
-Pilot hold released, request1. Live summary740/revision1199 green; required and
+Pilot hold released, request1. Live summary3090/revision1557 green; required and
 inventory conflicts0. Receipts4094 available, physicalAdmissionHeld=false.
-Clearwater has two current LOADING missions; the new member view at882 explicitly
+Clearwater created five LOADING missions by1985; the new member view at882 explicitly
 reports LOAD_APPROACH_OR_TAKE, real COLD member pose, exact next movement1508.
 Evidence implementation build/planning-r39-deployment.json. No test client.
 No full live caravan trip, TPS speedup or HUMAN/M3 claim.
@@ -52,14 +55,15 @@ preserved R36 files. Fresh-world deployment accepted by user; old world retained
 
 R37 source83b41446 was installed (SHA512a30ec82b9cf4af5782436b456af0ebf87f85b84653d8a75c7c834fe5ef8227e1ff5fec32397f54e9d6a9a5da2ef9deae285c2c2c937feeeac9c2c33fc064adc1).
 Invocation573e2af7f9434747ab29677fd8a5d27d failed at startup19:26:04;
-service now inactive. Exact cause: recovery checks snapshot+WAL receipt union
+that failed invocation is inactive. Exact cause: recovery checks snapshot+WAL receipt union
 against4096 before applying expiry at the replayed instant. The active R36 count
 was4096, not proof that every historical snapshot receipt still belongs to it.
 Recovery follow-up45901af1 applies the shared live cutoff after verified replay,
 then checks active duplicates/capacity; no WAL edit, resource/time repair or limit bump.
 Kernel29 + guardrails PASS14s, including full snapshot + post-expiry WAL receipt.
-R38 focused recovery/package gates finished. R37 full gate still running17347;
-all360 required GameTests PASS, NeoForge check/package PASS; core tests remain.
+R38 focused recovery/package gates finished. R37 full guardrails/check/GameTest/
+build/package gate PASS12m2s, including all360 required GameTests; core and
+NeoForge check PASS. Unchanged integration reused for the focused R38 kernel fix.
 Incident snapshot/WAL and R36 JAR copied to build/r36-pre-r37-recovery/.
 R36 retention problem cannot be healed by silently skipping restart safety.
 
@@ -97,11 +101,10 @@ subscribing,5000 repeated signals -> one continuation, and usable alternative
 without spurious wait are covered. Existing broader transport tests passed in
 build/planning-addressed-second.log; no full confidence matrix/native trip rerun.
 Only subscribed unresolved route results register waits; discarded alternatives
-do not. All task Gradle invocations finished. Source/WIP preserved, no commit/push.
-Live R36 remains unchanged and quarantined until this authorized deployment.
+do not. These early source checks preceded the now-committed/deployed cut.
 No throughput/HUMAN acceptance claim.
 
-## Points4–5 implemented; deployment underway
+## Points4–5 implemented and deployed
 
 Read-only kernel retention capacity mirrors exact receipt expiry. Optional wakes
 are capped at8 per invocation and cannot consume the final quarter of receipt/
@@ -122,9 +125,9 @@ planning2/diagnostic34 are green; unchanged group checks reused after next-tick
 notification until release integration. Source committed83b41446 (231 files,
 including previously delivered expedition WIP); worktree clean, no push.
 Clean detached source /home/rd/proj/pm-planning-r37-release-20261007.
-guardrails/check/GameTest/build/package gate running there, session17347;
+guardrails/check/GameTest/build/package gate PASS12m2s there;
 log implementation pale-mirror/build/planning-r37-release-gates.log.
-Then authorized existing R36 restart/live progress inspection, not a new world.
+R36 restart attempts disclosed the preserved startup issue; approved R39 is live.
 
 ## Retained evidence and boundaries
 
