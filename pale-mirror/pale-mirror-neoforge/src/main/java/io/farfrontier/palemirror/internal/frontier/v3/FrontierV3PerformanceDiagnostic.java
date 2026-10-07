@@ -59,6 +59,14 @@ final class FrontierV3PerformanceDiagnostic {
                          FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
                          FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
                          List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests) {
+        return render(checkpoint, metrics, state, fastForwardRemaining, fastForwardTarget, fastForwardFailure,
+                outcome, sliceTelemetry, requests, null);
+    }
+    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+                         int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
+                         FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
+                         FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
+                         List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests, String planningPressure) {
         if (fastForwardRemaining < 0 || fastForwardRemaining > FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS) {
             throw new IllegalArgumentException("bounded fast-forward remainder");
         }
@@ -79,6 +87,7 @@ final class FrontierV3PerformanceDiagnostic {
                 .append(",\"stages\":[");
         appendStages(value, metrics.stages()); value.append("],\"queues\":["); appendQueues(value, metrics.queues()); value.append(']');
         if (state != null) value.append(",\"frontier\":").append(frontier(state, checkpoint));
+        if (planningPressure != null) value.append(",\"pedestrianPlanning\":").append(planningPressure);
         return FrontierV3DiagnosticJson.bounded("performance", "", checkpoint, value.append('}').toString());
     }
 

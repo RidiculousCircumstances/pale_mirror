@@ -12,21 +12,18 @@ final class UnitGroupPayloadCodecs {
     static PayloadCodecs groups() {
         return new PayloadCodecs(List.of(codec("frontier.unit_group_advanced", (out, payload) -> {
             var value = (UnitGroupAdvanced) payload; UnitGroupStateCodec.id(out, value.groupId()); out.writeLong(value.expectedRevision());
-            out.writeByte(switch (value.change()) { case START -> 1; case FRAME -> 2; case ARRIVE -> 3; case CLOSE -> 4; });
+            out.writeByte(switch (value.change()) { case START -> 1; case ARRIVE -> 3; case CLOSE -> 4; case STOP -> 5; });
             out.writeLong(value.goalOrdinal()); out.writeBoolean(value.journey().isPresent());
             if (value.journey().isPresent()) UnitGroupStateCodec.journey(out, value.journey().orElseThrow());
             out.writeBoolean(value.departureActor().isPresent()); if (value.departureActor().isPresent()) UnitGroupStateCodec.id(out, value.departureActor().orElseThrow());
         }, in -> {
             var id = UnitGroupStateCodec.id(in); long revision = in.readLong();
-            var change = switch (in.readUnsignedByte()) { case 1 -> UnitGroupAdvanced.Change.START; case 2 -> UnitGroupAdvanced.Change.FRAME; case 3 ->
-                    UnitGroupAdvanced.Change.ARRIVE; case 4 -> UnitGroupAdvanced.Change.CLOSE; default -> throw new IllegalArgumentException("unknown group transition tag"); };
+            var change = switch (in.readUnsignedByte()) { case 1 -> UnitGroupAdvanced.Change.START; case 3 ->
+                    UnitGroupAdvanced.Change.ARRIVE; case 4 -> UnitGroupAdvanced.Change.CLOSE; case 5 -> UnitGroupAdvanced.Change.STOP; default -> throw new IllegalArgumentException("unknown group transition tag"); };
             long ordinal = in.readLong(); var journey = in.readBoolean() ? Optional.of(UnitGroupStateCodec.journey(in)) : Optional.<UnitGroup.Journey>empty();
             var departure = in.readBoolean() ? Optional.of(UnitGroupStateCodec.id(in)) : Optional.<SubjectId>empty();
             return new UnitGroupAdvanced(id, revision, change, ordinal, journey, departure);
-        }), codec("frontier.unit_group_navigation_ready", (out, payload) -> {
-            var value = (UnitGroupNavigationReady) payload;
-            UnitGroupStateCodec.id(out, value.groupId()); out.writeLong(value.expectedRevision());
-        }, in -> new UnitGroupNavigationReady(UnitGroupStateCodec.id(in), in.readLong()))));
+        })));
     }
     static PayloadCodecs transport() {
         return new PayloadCodecs(List.of(codec("frontier.transport_mission_started", (out, payload) -> {

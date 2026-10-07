@@ -14,6 +14,7 @@ final class ActorItemSlotCodec {
             case ActorItemSlot.Pocket pocket -> { out.writeByte(1); out.writeByte(pocket.index()); }
             case ActorItemSlot.Hand hand -> { out.writeByte(2);
                 out.writeByte(switch (hand.hand()) { case MAIN -> 1; case OFF -> 2; }); }
+            case ActorItemSlot.AttachedStorage storage -> { out.writeByte(3); FrontierWorldPayloadCodecs.writeSubject(out, storage.containerId()); }
         }
     }
     static ActorItemSlot read(DataInputStream in) throws IOException {
@@ -22,6 +23,7 @@ final class ActorItemSlotCodec {
             case 2 -> new ActorItemSlot.Hand(switch (in.readUnsignedByte()) {
                 case 1 -> ActorContainerItemOrder.Hand.MAIN; case 2 -> ActorContainerItemOrder.Hand.OFF;
                 default -> throw new IllegalArgumentException("unknown actor inventory hand tag"); });
+            case 3 -> new ActorItemSlot.AttachedStorage(FrontierWorldPayloadCodecs.readSubject(in).value());
             default -> throw new IllegalArgumentException("unknown actor inventory slot tag");
         };
     }

@@ -42,7 +42,8 @@ class AutonomousGoodsTradeTest {
             if (current.companies().goodsTrade().contracts().values().stream().anyMatch(GoodsTradeContract::fulfilled)) break;
             var next = engine.checkpoint().schedules().stream()
                     .filter(action -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, action)).sorted().findFirst().orElseThrow();
-            var advance = engine.advanceTo(next.dueAt(), new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(128, 1024));
+            var advance = engine.advanceTo(new SimInstant(Math.max(engine.checkpoint().instant().ticks(), next.dueAt().ticks())),
+                    new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(128, 1024));
             assertEquals(EngineStatus.Kind.ACTIVE, advance.status().kind(), advance.status().failureDetail().orElse("active"));
         }
         var state = engine.canonicalState().state();

@@ -74,6 +74,7 @@ final class FrontierV3PhysicalExecutorRegistry {
 
     void tick(ServerLevel world, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         for (Definition definition : ordered) {
+            if (!runtime.commandAdmissionCapacity().orElseThrow().hasCausalHeadroom()) break;
             // Definitions presently represent one invocation.  A future multi-slice executor must
             // declare and consume its own bounded work units rather than adding a second tick call.
             try (FrontierExecutionMetrics.Span ignored = FrontierExecutionMetrics.safelyBegin(runtime.executionMetrics(), FrontierExecutionMetrics.Stage.PHYSICAL,

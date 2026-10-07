@@ -116,6 +116,7 @@ public final class ResidentMealResourceProcess {
         return switch (retained.inventorySlot()) {
             case ActorItemSlot.Pocket pocket -> new PhysicalStackAddress.ActorPocket(retained.residentId(), entity, pocket.index());
             case ActorItemSlot.Hand hand -> new PhysicalStackAddress.ActorHand(retained.residentId(), entity, hand.hand());
+            case ActorItemSlot.AttachedStorage ignored -> throw new IllegalArgumentException("retained meal food must belong to the eater's personal inventory");
         };
     }
 }

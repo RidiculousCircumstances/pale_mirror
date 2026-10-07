@@ -16,7 +16,7 @@ public record UnitGroup(SubjectId id, Mission mission, List<Member> members, For
     public enum MissionKind { TRANSPORT }
     public enum Role { CARRIER, ESCORT, GUIDE }
     public enum Formation { COLUMN }
-    public enum Phase { READY, TRAVELLING, AT_GOAL, CLOSED }
+    public enum Phase { READY, TRAVELLING, AT_GOAL, CLOSED, PAUSED }
     public record Mission(MissionKind kind, SubjectId id) {
         public Mission { Objects.requireNonNull(kind); Objects.requireNonNull(id); }
     }
@@ -40,11 +40,11 @@ public record UnitGroup(SubjectId id, Mission mission, List<Member> members, For
         Objects.requireNonNull(id); Objects.requireNonNull(mission); Objects.requireNonNull(formation);
         Objects.requireNonNull(phase); journey = Objects.requireNonNull(journey); members = List.copyOf(members);
         if (members.isEmpty() || members.size() > MAX_MEMBERS || revision < 1 || goalOrdinal < 0
-                || phase == Phase.READY && goalOrdinal != 0 || phase != Phase.READY && goalOrdinal == 0
+                || phase == Phase.READY && goalOrdinal != 0 || phase != Phase.READY && phase != Phase.CLOSED && goalOrdinal == 0
                 || members.stream().map(Member::actorId).distinct().count() != members.size()
                 || (phase == Phase.TRAVELLING) != journey.isPresent()
-                || journey.isPresent() && !journey.orElseThrow().stations().keySet().equals(
-                    members.stream().map(Member::actorId).collect(java.util.stream.Collectors.toUnmodifiableSet())))
+                || journey.isPresent() && !members.stream().map(Member::actorId).collect(java.util.stream.Collectors.toUnmodifiableSet())
+                    .containsAll(journey.orElseThrow().stations().keySet()))
             throw new IllegalArgumentException("group requires exact distinct roster, mission and legal journey phase");
     }
     public Member member(SubjectId actor) {
@@ -58,13 +58,6 @@ public record UnitGroup(SubjectId id, Mission mission, List<Member> members, For
             throw new IllegalArgumentException("group cannot overwrite an active or obsolete goal");
         return new UnitGroup(id, mission, members, formation, Phase.TRAVELLING, revision + 1, ordinal, Optional.of(next));
     }
-    public UnitGroup frame(Journey next) {
-        var previous = journey.orElseThrow();
-        if (phase != Phase.TRAVELLING || !next.destination().equals(previous.destination())
-                || !next.route().equals(previous.route()) || next.cursor() <= previous.cursor())
-            throw new IllegalArgumentException("group frame cannot replace its route or regress progress");
-        return new UnitGroup(id, mission, members, formation, phase, revision + 1, goalOrdinal, Optional.of(next));
-    }
     public UnitGroup arrived() {
         if (phase != Phase.TRAVELLING || journey.orElseThrow().cursor() != journey.orElseThrow().route().size() - 1
                 || !journey.orElseThrow().route().getLast().equals(journey.orElseThrow().destination()))
@@ -72,7 +65,11 @@ public record UnitGroup(SubjectId id, Mission mission, List<Member> members, For
         return new UnitGroup(id, mission, members, formation, Phase.AT_GOAL, revision + 1, goalOrdinal, Optional.empty());
     }
     public UnitGroup close() {
-        if (phase != Phase.AT_GOAL) throw new IllegalArgumentException("group must settle its journey before closing");
+        if (phase == Phase.CLOSED || phase == Phase.TRAVELLING) throw new IllegalArgumentException("group must release its journey before closing");
         return new UnitGroup(id, mission, members, formation, Phase.CLOSED, revision + 1, goalOrdinal, Optional.empty());
+    }
+    public UnitGroup stopJourney() {
+        if (phase != Phase.TRAVELLING) throw new IllegalArgumentException("only an active journey can acknowledge cancellation");
+        return new UnitGroup(id, mission, members, formation, Phase.PAUSED, revision + 1, goalOrdinal, Optional.empty());
     }
 }

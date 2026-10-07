@@ -26,6 +26,9 @@ test('versioned lifecycle barriers preserve an exact identity and a monotonic no
   const events = await readLifecycleBarriers(session);
   assert.equal(events.length, 12);
   assert.equal((await awaitLifecycleBarrier(session, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE, 50)).detail.assertions, 2);
+  assert.equal((await awaitLifecycleBarrier(session, LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, 600_000)).detail.segment, 1);
+  await assert.rejects(awaitLifecycleBarrier(session, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE, 600_000), /1\.\.300000ms/);
+  await assert.rejects(awaitLifecycleBarrier(session, LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, 3_600_001), /1\.\.3600000ms/);
   assert.equal((await openLifecycleBarrierSession(session.directory, session.identity)).identity.nonce, session.identity.nonce);
 });
 

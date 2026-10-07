@@ -26,7 +26,8 @@ final class FungibleActorOrderTransfer {
             throw new IllegalArgumentException("actor item order has stale source or destination custody");
         if (source.actorPresentation().isPresent() && !source.actorPresentation().equals(Optional.of(order.actorSlot())))
             throw new IllegalArgumentException("actor transfer has a foreign retained source presentation");
-        if (order.direction() == ActorContainerItemOrder.Direction.TAKE && existing == null)
+        if (order.direction() == ActorContainerItemOrder.Direction.TAKE && existing == null
+                && portion.destinationCustody() instanceof ResourceCustody.Actor)
             ActorCarriedResources.requireNewAccountCapacity(ledger, order.actorId(), portion.destinationAccountId());
         for (var entry : portion.lotQuantities().entrySet()) {
             ResourceLot lot = ledger.lots().get(entry.getKey());
@@ -48,8 +49,11 @@ final class FungibleActorOrderTransfer {
             FungibleResourceLedger.requireSubset(claim.lotQuantities(), portion.lotQuantities(), "delegated claim portion");
             claimed = Map.of(claimId, portion.quantity());
         } else {
-            if (!source.claimQuantities().isEmpty())
-                throw new IllegalArgumentException("unclaimed actor transfer cannot consume reserved stock");
+            var free = new java.util.HashMap<>(source.lotQuantities());
+            for (var claimId : source.claimQuantities().keySet()) ledger.claims().get(claimId).lotQuantities().forEach((lot, quantity) ->
+                    free.compute(lot, (ignored, available) -> available == null ? -quantity : available - quantity));
+            if (portion.lotQuantities().entrySet().stream().anyMatch(entry -> free.getOrDefault(entry.getKey(), 0) < entry.getValue()))
+                throw new IllegalArgumentException("unclaimed actor transfer consumes a reserved lot portion");
             claimed = Map.of();
         }
         FungibleResourceLedger.requireSubset(source.lotQuantities(), portion.lotQuantities(), "actor order source lots");
@@ -121,6 +125,7 @@ final class FungibleActorOrderTransfer {
                                     && hand.actorId().equals(actor.actorId()) && hand.hand() == declared.hand();
                             case ActorItemSlot.Pocket pocket -> stack.address() instanceof PhysicalStackAddress.ActorPocket address
                                     && address.actorId().equals(actor.actorId()) && address.slot() == pocket.index();
+                            case ActorItemSlot.AttachedStorage ignored -> false;
                         };
                 default -> false;
             };

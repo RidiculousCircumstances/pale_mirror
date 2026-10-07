@@ -32,6 +32,7 @@ final class ShipmentStateCodec {
         for (var e : value.lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) { id(out, e.getKey()); out.writeInt(e.getValue()); }
         status(out, value.status()); out.writeLong(value.revision());
         out.writeBoolean(value.transportMissionId().isPresent()); if (value.transportMissionId().isPresent()) id(out, value.transportMissionId().orElseThrow());
+        out.writeBoolean(value.mobileContainerId().isPresent()); if (value.mobileContainerId().isPresent()) id(out, value.mobileContainerId().orElseThrow());
         out.writeBoolean(value.pendingPhysicalStep().isPresent());
         if (value.pendingPhysicalStep().isPresent()) ShipmentPhysicalStepCodec.write(out, value.pendingPhysicalStep().orElseThrow());
         out.writeBoolean(value.reception().isPresent());
@@ -48,9 +49,10 @@ final class ShipmentStateCodec {
         for (int i = 0; i < n; i++) if (lots.putIfAbsent(id(in), in.readInt()) != null) throw new IllegalArgumentException("duplicate shipment lot");
         var status = status(in); long revision = in.readLong();
         var mission = in.readBoolean() ? Optional.of(id(in)) : Optional.<SubjectId>empty();
+        var mobile = in.readBoolean() ? Optional.of(id(in)) : Optional.<SubjectId>empty();
         var pending = in.readBoolean() ? Optional.of(ShipmentPhysicalStepCodec.read(in)) : Optional.<ShipmentPhysicalStep>empty();
         var reception = in.readBoolean() ? Optional.of(new ShipmentReception(id(in), id(in), lots(in))) : Optional.<ShipmentReception>empty();
-        return new Shipment(shipment, grant, execution, sender, receiver, source, carried, receiving, item, lots, status, revision, pending, reception, mission);
+        return new Shipment(shipment, grant, execution, sender, receiver, source, carried, receiving, item, lots, status, revision, pending, reception, mission, mobile);
     }
     static void lots(DataOutputStream out, Map<SubjectId, Integer> lots) throws IOException {
         out.writeInt(lots.size());

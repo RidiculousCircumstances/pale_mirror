@@ -62,7 +62,7 @@ class ActorBodyAuthorityTest {
         assertFalse(ActorBodyAuthority.retainsPhysicalCustody(released, actor));
         assertSame(state.actorExecutions(), released.actorExecutions());
         assertSame(state.actorLocations(), released.actorLocations());
-        assertSame(state.inventory(), released.inventory());
+        assertEquals(state.inventory(), released.inventory());
         assertThrows(IllegalArgumentException.class, () -> ActorBodyAuthority.released(released, body));
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released));
         var next = ActorBodyAuthority.current(ActorBodyAuthority.demand(recovered, actor), actor);

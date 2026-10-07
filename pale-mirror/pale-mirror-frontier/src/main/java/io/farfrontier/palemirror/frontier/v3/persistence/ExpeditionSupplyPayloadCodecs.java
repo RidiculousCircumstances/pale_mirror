@@ -22,6 +22,28 @@ final class ExpeditionSupplyPayloadCodecs {
             PhysicalObservationStackCodec.writeStacks(out, v.destination());
         }, in -> new ExpeditionSupplyHotLoaded(UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), ActorItemTransferStepCodec.read(in),
                 PhysicalObservationStackCodec.readStacks(in), PhysicalObservationStackCodec.readStacks(in))),
+        codec("frontier.expedition_replenishment_started", (out, p) -> {
+            var v = (ExpeditionReplenishmentStarted)p; UnitGroupStateCodec.id(out, v.missionId()); UnitResourceTransferCodec.write(out, v.transfer());
+        }, in -> new ExpeditionReplenishmentStarted(UnitGroupStateCodec.id(in), UnitResourceTransferCodec.read(in))),
+        codec("frontier.expedition_replenishment_cold_loaded", (out, p) -> {
+            var v = (ExpeditionReplenishmentColdLoaded)p; UnitGroupStateCodec.id(out, v.missionId()); UnitGroupStateCodec.id(out, v.claimId());
+        }, in -> new ExpeditionReplenishmentColdLoaded(UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in))),
+        codec("frontier.expedition_replenishment_hot_prepared", (out, p) -> {
+            var v = (ExpeditionReplenishmentHotPrepared)p; UnitGroupStateCodec.id(out, v.missionId()); UnitGroupStateCodec.id(out, v.claimId()); ActorItemTransferStepCodec.write(out, v.step());
+        }, in -> new ExpeditionReplenishmentHotPrepared(UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), ActorItemTransferStepCodec.read(in))),
+        codec("frontier.expedition_replenishment_hot_loaded", (out, p) -> {
+            var v = (ExpeditionReplenishmentHotLoaded)p; UnitGroupStateCodec.id(out, v.missionId()); UnitGroupStateCodec.id(out, v.claimId()); ActorItemTransferStepCodec.write(out, v.step());
+            PhysicalObservationStackCodec.writeStacks(out, v.remainingSource()); PhysicalObservationStackCodec.writeStacks(out, v.destination());
+        }, in -> new ExpeditionReplenishmentHotLoaded(UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), ActorItemTransferStepCodec.read(in),
+                PhysicalObservationStackCodec.readStacks(in), PhysicalObservationStackCodec.readStacks(in))),
+        codec("frontier.expedition_transfer_death_observed", (out, p) -> {
+            var v = (ExpeditionTransferDeathObserved)p; UnitGroupStateCodec.id(out, v.missionId()); UnitGroupStateCodec.id(out, v.claimId());
+            UnitGroupStateCodec.id(out, v.body().actorId()); out.writeLong(v.body().physicalEpoch());
+            ActorItemTransferStepCodec.write(out, v.step()); out.writeBoolean(v.applied());
+            PhysicalObservationStackCodec.writeStacks(out, v.source()); PhysicalObservationStackCodec.writeStacks(out, v.destination());
+        }, in -> new ExpeditionTransferDeathObserved(UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in),
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(UnitGroupStateCodec.id(in), in.readLong()),
+                ActorItemTransferStepCodec.read(in), in.readBoolean(), PhysicalObservationStackCodec.readStacks(in), PhysicalObservationStackCodec.readStacks(in))),
         codec("frontier.expedition_supply_replanned", (out, p) -> {
             var v = (ExpeditionSupplyReplanned)p; UnitGroupStateCodec.id(out, v.missionId()); out.writeLong(v.expectedRevision());
             ExpeditionSupplyLoadCodec.write(out, v.replacement());

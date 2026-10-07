@@ -476,8 +476,11 @@ final class FrontierV3DiagnosticJson {
         if (location == null) return unavailable("actor", id, checkpoint, "not_found");
         ResidentProfile resident = state.humanPopulation().resident(subject);
         Bioform bioform = bioform(state, subject).orElse(null);
-        String role = resident != null ? resident.profession().name() : bioform != null ? bioform.chassis().name() + "/" + bioform.assignment().name() : "UNKNOWN";
-        String owner = resident != null ? resident.settlementId().value() : bioform != null ? bioform.hiveId().value() : "";
+        var pack = state.transportFleet().assets().get(subject);
+        String role = resident != null ? resident.profession().name() : bioform != null ? bioform.chassis().name() + "/" + bioform.assignment().name()
+                : pack != null ? pack.kind().name() : "UNKNOWN";
+        String owner = resident != null ? resident.settlementId().value() : bioform != null ? bioform.hiveId().value()
+                : pack != null ? pack.homeSettlementId().value() : "";
         String nutrition = resident == null ? "" : state.humanPopulation().nutrition(subject).status().name();
         var assignment = resident == null ? null : HumanAssignmentProjection.compile(state).assignment(subject);
         String dutyPhase = harvestDutyPhase(state, subject, assignment);
@@ -488,9 +491,10 @@ final class FrontierV3DiagnosticJson {
         var lease = state.ambientLeases().get(subject);
         String ambientGoal = lease == null ? "NONE" : lease.goal().name();
         String goalPosition = lease == null ? "null" : position(lease.goalBody().supportingSurface().support());
-        return base("actor", id, checkpoint) + ",\"status\":\"ok\",\"actorKind\":\"" + (resident != null ? "RESIDENT" : "BIOFORM")
+        return base("actor", id, checkpoint) + ",\"status\":\"ok\",\"actorKind\":\"" + location.kind().name()
                 + "\",\"owner\":\"" + quote(owner) + "\",\"role\":\"" + role + "\",\"life\":\"" + location.condition().status()
-                + "\",\"healthRaw\":" + location.condition().health().raw() + ",\"position\":" + position(location.body())
+                + "\",\"healthRaw\":" + location.condition().health().raw() + ",\"position\":" + position(
+                    io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.bodyAt(state, subject, checkpoint.instant().ticks()))
                 + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""
                 + quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + quote(ambientGoal)
                 + "\",\"goalPosition\":" + goalPosition
@@ -668,7 +672,7 @@ final class FrontierV3DiagnosticJson {
         String replica = referenceCustody(state, subject);
         String canonicalCapacity = FrontierV3ContainerCapacityJson.render(state, subject);
         return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
-                + "\",\"surface\":\"" + surface.status() + "\",\"position\":" + position(surface.position()) + ",\"slotCount\":" + container.slotCount()
+                + "\",\"surface\":\"" + surface.status() + "\",\"position\":" + position(surface.position(state)) + ",\"slotCount\":" + container.slotCount()
                 + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied
                 + ",\"fungibleOccupiedCount\":" + fungibleBindings.size() + ",\"fungibleOccupied\":" + fungibleOccupied
                 + canonicalCapacity + replica + physical + "}";

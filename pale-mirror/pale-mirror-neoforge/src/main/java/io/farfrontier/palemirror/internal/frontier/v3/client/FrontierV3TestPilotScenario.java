@@ -393,6 +393,8 @@ final class FrontierV3TestPilotScenario {
                 && (diagnosticField.equals("firstCrop") || diagnosticField.equals("lastCrop") || diagnosticField.equals("boardPosition")
                 || diagnosticField.equals("terminalHarvest.terminalBody")))
                 || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"))
+                || (view.equals("actor") && (requiredId(reference, "id", "actor:") || requiredId(reference, "id", "resident:"))
+                    && diagnosticField.equals("position"))
                 || (view.equals("settlement") && requiredId(reference, "id", "settlement:")
                 && (diagnosticField.equals("farmAnchor") || diagnosticField.equals("routeSurface")))
                 || (view.equals("process") && requiredId(reference, "id", "job:")

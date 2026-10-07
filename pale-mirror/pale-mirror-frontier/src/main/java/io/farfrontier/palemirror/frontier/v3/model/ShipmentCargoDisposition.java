@@ -10,6 +10,7 @@ public final class ShipmentCargoDisposition {
     public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, ShipmentCargoDispositionObserved observed) {
         var shipment = state.shipments().shipments().get(observed.shipmentId());
         if (shipment == null || !subject.equals(shipment.id()) || shipment.status() != Shipment.Status.CARRYING
+                || shipment.mobileContainerId().isPresent()
                 || shipment.revision() != observed.expectedRevision() || shipment.pendingPhysicalStep().isPresent()
                 || shipment.reception().isPresent() || !shipment.execution().equals(observed.identity().execution())
                 || state.actorLocations().get(shipment.execution().actorId()).condition().status() != ActorLifeStatus.DEAD)

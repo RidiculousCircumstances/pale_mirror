@@ -7,6 +7,70 @@ import java.util.LinkedHashMap;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TransportFleetTest {
+    @Test void mobileStorageUsesTheRegisteredProjectionLeaseAndRetainsCargoAcrossRecovery() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:mobile-storage-custody"), 41,
+                FrontierRulesets.installed("frontier-v3-expedition-candidate-r1")));
+        var asset = state.transportFleet().assets().values().iterator().next();
+        var account = new SubjectId("custody:pack-test-goods");
+        var lot = new ResourceLot(new SubjectId("lot:pack-test-goods"), asset.homeSettlementId(),
+                "minecraft:wheat", 70, "test", java.util.List.of());
+        state = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources().issue(lot,
+                new CustodyAccount(account, new ResourceCustody.Container(asset.containerId()), java.util.Map.of(lot.id(), 70), java.util.Map.of()))));
+        assertTrue(ReferenceContainerCustody.isReferenceContainer(state, asset.containerId()));
+        assertEquals("container.mobile-storage", ReferenceContainerCustody.semanticKind(state, asset.containerId()));
+        assertEquals(MaterialContainerImage.Layout.BULK, ReferenceContainerCustody.layout(state, asset.containerId()));
+        assertEquals(64, ReferenceContainerCustody.expectedFungibleSlot(state, asset.containerId(), 0).orElseThrow().quantity());
+        assertEquals(6, ReferenceContainerCustody.expectedFungibleSlot(state, asset.containerId(), 1).orElseThrow().quantity());
+        var base = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(
+                state.bootstrap().worldId(), state.bootstrap().seed(), state.bootstrap().ruleset());
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(
+                new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
+                        state.bootstrap().worldId(), state, SimInstant.ZERO, base.commandPlanner(), base.scheduledPlanner(),
+                        base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(),
+                        java.util.List.of(), base.transactionCommitter()));
+        var before = state;
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, "mobile-prepare",
+                new PhysicalReplicaCustodyPayloads.ReferenceProjectionPrepared(asset.containerId(), 1, 0, "", "")));
+        var prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(before.actorLocations(), prepared.actorLocations());
+        assertEquals(before.inventory().fungibleResources(), prepared.inventory().fungibleResources());
+        assertEquals(ContainerSurfaceStatus.PREPARED, prepared.inventory().surfaces().get(asset.containerId()).status());
+        assertTrue(ReferenceContainerCustody.hasLiveCustody(prepared, asset.containerId()));
+        assertFalse(ReferenceContainerCustody.hasOperationalCustody(prepared, asset.containerId()));
+        assertEquals(java.util.Optional.of(asset.containerId()), ActorInventoryInteractionFences.pendingOwner(prepared, asset.actorId()));
+        assertTrue(ActorInventoryInteractionFences.pending(prepared, asset.actorId()));
+        var expected = prepared.replicaCustody().replicas().get(asset.containerId());
+        // Model receipt only, not a claim about native donkey inventory or body admission.
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, "mobile-confirm",
+                new PhysicalReplicaCustodyPayloads.ProjectionCustodyConfirmed(ReferenceContainerCustody.scopeId(asset.containerId()),
+                        1, expected.emittedCanonicalRevision(), expected.replicaRevision(), expected.fingerprint(), expected.provenance())));
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, "mobile-active",
+                new ContainerSurfaceTransition(asset.containerId(), ContainerSurfaceStatus.ACTIVE)));
+        var confirmed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(ReferenceContainerCustody.hasOperationalCustody(confirmed, asset.containerId()));
+        assertFalse(ActorInventoryInteractionFences.pending(confirmed, asset.actorId()),
+                "observed mobile storage may move with its body; a normal inventory lease is not a movement lock");
+        assertEquals(before.inventory().fungibleResources(), confirmed.inventory().fungibleResources());
+        var checkpoint = engine.checkpoint();
+        assertInstanceOf(CommandResult.Rejected.class, submit(engine, "mobile-double-prepare",
+                new PhysicalReplicaCustodyPayloads.ReferenceProjectionPrepared(asset.containerId(), 2, 0, "", "")));
+        assertArrayEquals(checkpoint.canonicalState(), engine.checkpoint().canonicalState());
+        var actors = new LinkedHashMap<>(before.actorLocations()); var body = actors.get(asset.actorId());
+        actors.put(asset.actorId(), new ActorLocation(body.body(), ActorCondition.dead(), body.kind()));
+        var lost = before.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+        assertTrue(ReferenceContainerCustody.blocksCanonicalUse(lost, asset.containerId()));
+        assertThrows(IllegalArgumentException.class, () -> ReferenceProjectionStateSupport.prepare(lost,
+                new PhysicalReplicaCustodyPayloads.ReferenceProjectionPrepared(asset.containerId(), 1, 0, "", ""), 1));
+    }
+
+    private static CommandResult submit(FrontierEngine<FrontierWorldProjection> engine,
+                                        String suffix, FrontierPayload payload) {
+        var checkpoint = engine.checkpoint(); var id = new CommandId("command:" + suffix);
+        return engine.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                CauseChain.root(id), payload));
+    }
+
     @Test void finiteBootstrapMobileLocationAndLossSurviveRecoveryWithoutReplacement() {
         var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:finite-pack-animals"), 41,
                 FrontierRulesets.installed("frontier-v3-expedition-candidate-r1"));

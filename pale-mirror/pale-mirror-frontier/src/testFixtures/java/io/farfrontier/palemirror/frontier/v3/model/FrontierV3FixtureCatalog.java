@@ -40,10 +40,12 @@ import java.util.function.BiFunction;
 public final class FrontierV3FixtureCatalog {
     private static final String RESOURCE = "frontier-v3-pilot-profiles.properties";
     /** Test-only catalog: an alternate immutable ruleset must be named here and in the profile file. */
-    private static final Map<String, FrontierRuleset> RULESETS = Map.of("production", FrontierRulesets.production());
+    private static final Map<String, FrontierRuleset> RULESETS = Map.of("production", FrontierRulesets.production(),
+            "expedition-candidate", FrontierRulesets.installed("frontier-v3-expedition-candidate-r1"));
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("goodsShipment", FrontierV3FixtureCatalog::goodsShipmentConfiguration),
+            Map.entry("expeditionProvisioning", FrontierV3FixtureCatalog::expeditionProvisioningConfiguration),
             Map.entry("residentMeal", FrontierV3FixtureCatalog::residentMealConfiguration),
             Map.entry("residentMealClaimedSource", FrontierV3FixtureCatalog::residentMealClaimedSourceConfiguration),
             Map.entry("residentMealAfterColdTake", FrontierV3FixtureCatalog::residentMealAfterColdTakeConfiguration),
@@ -112,6 +114,40 @@ public final class FrontierV3FixtureCatalog {
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousGoodsConfiguration(WorldId worldId, long seed) {
         return autonomousGoodsConfiguration(worldId, seed, FrontierRulesets.production());
+    }
+
+    /** Finite native preconditions only: no pre-created mission, cargo receipt or journey. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> expeditionProvisioningConfiguration(WorldId worldId, long seed) {
+        var base = autonomousGoodsConfiguration(worldId, seed, RULESETS.get("expedition-candidate"));
+        var state = base.initialState();
+        var resources = state.inventory().fungibleResources();
+        var population = state.humanPopulation();
+        for (var resident : state.humanPopulation().residents().values()) {
+            if (!resident.settlementId().equals(new SubjectId("settlement:1"))) continue;
+            population = population.withProfile(resident.withCharacteristics(resident.characteristics().withBaseMetabolism(4_000)));
+            for (int slot = 0; slot < 9; slot++) {
+                var suffix = resident.id().value().replace(':', '-') + "/" + slot;
+                var lot = new SubjectId("lot:expedition-fixture/" + suffix);
+                resources = resources.issue(new ResourceLot(lot, resident.settlementId(), "minecraft:stone", 64,
+                        "fixture:finite-personal-equipment", List.of()), new CustodyAccount(
+                        new SubjectId("custody:expedition-fixture/" + suffix), new ResourceCustody.Actor(resident.id()),
+                        Map.of(lot, 64), Map.of(), java.util.Optional.of(UnitInventoryPresentation.slots().get(slot))));
+            }
+        }
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(population));
+        // The narrow commerce fixture parks activity until48000. A native
+        // provisioning story must run the ordinary selector/need clocks now,
+        // otherwise loaded food cannot be eaten during its outbound journey.
+        var schedules = new ArrayList<>(base.initialSchedules().stream().filter(action ->
+                !action.kind().equals(ResidentActivityProcess.REVIEW)).toList());
+        for (var resident : state.humanPopulation().residents().values()) {
+            schedules.add(ResidentActivityProcess.review(resident.id(), 1));
+            schedules.add(ResidentNeedProcess.review(resident.id(),
+                    state.humanPopulation().nutrition(resident.id()).nextThresholdTick(state.bootstrap().ruleset().residentLife(),
+                            resident.characteristics().effectiveMetabolismPermille(0))));
+        }
+        return configured(worldId, state, SimInstant.ZERO, schedules);
     }
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousGoodsConfiguration(WorldId worldId, long seed,
                                                                                                                        FrontierRuleset rules) {

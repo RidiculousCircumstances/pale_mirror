@@ -237,7 +237,7 @@ final class FrontierV3ActorBodyController {
                     new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth()
                         * (double) io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE))),
                 actor.body(), actor.condition().health(), FrontierV3ActorBodyDeparture.execution(state, declaration.actorId()),
-                hand(off), hand(main)));
+                hand(off), hand(main), FrontierV3StoredAttachedStorage.capture(state, declaration.actorId(), body)));
     }
     private static boolean plainHand(net.minecraft.world.item.ItemStack stack) {
         return stack.isEmpty() || net.minecraft.world.item.ItemStack.isSameItemSameComponents(stack,
@@ -443,7 +443,7 @@ final class FrontierV3ActorBodyController {
             var receipt = new FrontierV3ActorBodyDeparture(inactive, saved.residenceGeneration(),
                     new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(body.actorId(), saved.body(), saved.health()),
                     actor.body(), actor.condition().health(), FrontierV3ActorBodyDeparture.execution(state, body.actorId()),
-                    saved.offhand(), saved.mainhand());
+                    saved.offhand(), saved.mainhand(), saved.attachedStorage());
             return saved.matches(receipt) ? java.util.Optional.of(receipt) : java.util.Optional.empty();
         } catch (IllegalArgumentException staleOrForeign) { return java.util.Optional.empty(); }
     }

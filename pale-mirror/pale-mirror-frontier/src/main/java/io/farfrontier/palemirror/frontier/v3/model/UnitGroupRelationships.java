@@ -16,17 +16,23 @@ final class UnitGroupRelationships {
             if (claim.purpose() != ClaimPurpose.EXPEDITION_SUPPLY) continue;
             var mission = state.shipments().missions().get(claim.claimantId());
             if (mission == null || mission.supplies().stream().flatMap(load -> load.allocations().stream())
-                    .noneMatch(a -> !a.loaded() && !a.withdrawn() && a.claimId().equals(claim.id())))
+                    .noneMatch(a -> !a.loaded() && !a.withdrawn() && a.claimId().equals(claim.id()))
+                        && mission.replenishment().filter(t -> t.claimId().equals(claim.id())).isEmpty())
                 throw new IllegalArgumentException("provisioning claim has no exact retained loading obligation");
         }
         for (var group : state.unitGroups().groups().values()) {
             var port = UnitGroupMissionPorts.require(group); port.validate(state, group);
+            group.journey().ifPresent(journey -> {
+                if (group.members().stream().anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE
+                        && !journey.stations().containsKey(member.actorId())))
+                    throw new IllegalArgumentException("active group journey omits a surviving participant's declared station");
+            });
             var owner = new SubjectEndpoint(EntityKind.UNIT_GROUP, group.id());
             var life = group.phase() == UnitGroup.Phase.CLOSED ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
             edges.add(declaredEdge(Kind.GROUP_MISSION, owner, owner,
                     new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, group.mission().id()), life, "group:" + group.id().value()));
             for (var member : group.members()) edges.add(declaredEdge(Kind.GROUP_MEMBER, owner, owner,
-                    new SubjectEndpoint(EntityKind.RESIDENT, member.actorId()), life, "group:" + group.id().value()));
+                    new SubjectEndpoint(EntityKind.ACTOR, member.actorId()), life, "group:" + group.id().value()));
         }
         for (var mission : state.shipments().missions().values()) {
             var group = state.unitGroups().groups().get(mission.groupId());
@@ -40,6 +46,8 @@ final class UnitGroupRelationships {
             var life = mission.stage() == TransportMission.Stage.COMPLETE ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
             edges.add(declaredEdge(Kind.TRANSPORT_GROUP, owner, owner,
                     new SubjectEndpoint(EntityKind.UNIT_GROUP, group.id()), life, "transport:" + mission.id().value()));
+            mission.transportAssetId().ifPresent(actor -> edges.add(declaredEdge(Kind.TRANSPORT_ASSET, owner, owner,
+                    new SubjectEndpoint(EntityKind.ACTOR, actor), life, "transport:" + mission.id().value())));
             for (var id : mission.shipmentIds()) {
                 var shipment = state.shipments().shipments().get(id);
                 if (shipment == null || !shipment.transportMissionId().equals(Optional.of(mission.id())))
@@ -55,6 +63,15 @@ final class UnitGroupRelationships {
                             new SubjectEndpoint(EntityKind.RESOURCE_ACCOUNT, a.sourceAccountId()), Lifecycle.ACTIVE, "supply:" + a.claimId().value()));
                 }
             });
+            mission.replenishment().ifPresent(t -> {
+                edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_CLAIM, owner, owner,
+                        new SubjectEndpoint(EntityKind.RESOURCE_CLAIM, t.claimId()), Lifecycle.ACTIVE, "refill:" + t.claimId().value()));
+                edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_SOURCE, owner, owner,
+                        new SubjectEndpoint(EntityKind.RESOURCE_ACCOUNT, t.sourceAccountId()), Lifecycle.ACTIVE, "refill:" + t.claimId().value()));
+            });
+            mission.replenishmentPurchase().ifPresent(p -> edges.add(declaredEdge(Kind.TRANSPORT_PURCHASE, owner, owner,
+                    new SubjectEndpoint(EntityKind.FINANCIAL_RESERVATION, p.payment().id()), Lifecycle.ACTIVE,
+                    "purchase:" + p.payment().id().value())));
         }
         for (var shipment : state.shipments().shipments().values()) if (shipment.transportMissionId().isPresent()) {
             var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());

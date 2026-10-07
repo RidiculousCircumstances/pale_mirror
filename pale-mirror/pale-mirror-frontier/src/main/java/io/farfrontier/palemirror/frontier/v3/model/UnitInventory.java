@@ -12,6 +12,13 @@ public final class UnitInventory {
         return ActorCarriedResources.accounts(resources, unit);
     }
 
+    /** Work custody is not personal stock even after a recipe has spent its input claim. */
+    public static List<CustodyAccount> personalAccounts(FrontierWorldState state, SubjectId unit) {
+        var cargo = ActorCarryCapabilities.workCargo(state, unit).map(ActorCarriedResources.Presentation::accountId);
+        return accounts(state.inventory().fungibleResources(), unit).stream()
+                .filter(account -> !cargo.equals(Optional.of(account.id()))).toList();
+    }
+
     /** Select only free owned stock; a commercial/work claim is never edible spare inventory. */
     public static Optional<FungibleResourceCustodySupport.LotSelection> select(
             FungibleResourceLedger resources, SubjectId unit, SubjectId owner, String kind, int quantity) {

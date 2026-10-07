@@ -13,6 +13,10 @@ public final class ExpeditionSupplyPlanning {
                                                             UnitGroup group, long now) {
         return walkingLoad(state, mission, group, now, 1, state.inventory().fungibleResources());
     }
+    /** Generic actual transport declaration; walkingLoad remains the existing source-level entry point. */
+    public static Optional<ExpeditionSupplyLoad> load(FrontierWorldState state, TransportMission mission, UnitGroup group, long now) {
+        return walkingLoad(state, mission, group, now);
+    }
     public static Optional<ExpeditionSupplyLoad> walkingLoad(FrontierWorldState state, TransportMission mission,
             UnitGroup group, long now, long revision, FungibleResourceLedger availableResources) {
         var rules = state.bootstrap().ruleset(); var life = rules.residentLife();
@@ -25,14 +29,14 @@ public final class ExpeditionSupplyPlanning {
             if (inputs.isEmpty()) return Optional.empty();
             var input = inputs.orElseThrow(); var free = input.freeSlots();
             int cargoSlots = input.roster().stream().mapToInt(ExpeditionProvisioning.Member::cargoStackSlots).sum();
-            var plan = ExpeditionProvisioning.plan(input.roster(), input.outward(), input.returning(), cargoSlots,
-                    resources.unclaimedQuantity(source.id(), mission.sender().settlementId(), food.itemKind()), false,
-                    food, life, rules.expedition());
-            if (!plan.feasible() || plan.transport() != ExpeditionProvisioning.Transport.WALKING) continue;
+            int foodAvailable = resources.unclaimedQuantity(source.id(), mission.sender().settlementId(), food.itemKind());
+            var plan = forecast(state, mission, group, input, food, foodAvailable);
+            if (!plan.feasible()) continue;
             var allocations = new ArrayList<ExpeditionSupplyLoad.Allocation>(); var targets = new LinkedHashMap<SubjectId, Integer>();
             boolean fits = true;
             for (var member : group.members()) {
-                var supply = plan.members().get(member.actorId()); targets.put(member.actorId(), supply.requiredFoodItems());
+                var supply = plan.members().get(member.actorId()); if (supply == null) continue;
+                targets.put(member.actorId(), supply.requiredFoodItems());
                 int remaining = supply.loadFoodItems(), index = 0;
                 while (remaining > 0) {
                     if (index >= free.get(member.actorId()).size()) { fits = false; break; }
@@ -49,9 +53,27 @@ public final class ExpeditionSupplyPlanning {
                 }
                 if (!fits) break;
             }
+            if (fits && plan.sharedFoodItems() > 0) {
+                var asset = state.transportFleet().require(mission.transportAssetId().orElseThrow());
+                var destination = FungibleResourceCustodySupport.accountAtContainer(state, asset.containerId()).map(CustodyAccount::id)
+                        .orElseGet(() -> ReferenceContainerCustody.scopeId(asset.containerId()));
+                int stocked = resources.accounts().containsKey(destination) ? resources.unclaimedQuantity(destination, mission.sender().settlementId(), food.itemKind()) : 0;
+                int remaining = Math.max(0, plan.sharedFoodItems() - stocked);
+                int index = 0;
+                while (remaining > 0) {
+                    int quantity = Math.min(64, remaining);
+                    var selected = FungibleResourceCustodySupport.selectAtAccount(resources, source.id(), mission.sender().settlementId(), food.itemKind(), quantity).orElseThrow();
+                    var claim = new SubjectId("claim:expedition/" + mission.id().value().replace(':', '-') + "/" + revision + "/shared/" + index++);
+                    var allocation = new ExpeditionSupplyLoad.Allocation(claim, asset.actorId(), source.id(), destination,
+                            new ActorItemSlot.AttachedStorage(asset.containerId()), selected.lotQuantities(), ExpeditionSupplyLoad.Outcome.RESERVED, Optional.empty());
+                    resources = reserve(resources, allocation, mission.id(), mission.sender().settlementId(), food.itemKind());
+                    allocations.add(allocation); remaining -= quantity;
+                }
+            }
             if (fits) {
                 try {
-                    var assembly = GroupFormation.stations(group, List.of(mission.homeRendezvous()), 0, knowledge);
+                    var living = group.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE).toList();
+                    var assembly = GroupFormation.stations(living, List.of(mission.homeRendezvous()), 0, knowledge, state.bootstrap().ruleset().expedition().formationSpacing());
                     return Optional.of(new ExpeditionSupplyLoad(food.itemKind(), plan.durationTicks(), now, targets, assembly, allocations, revision));
                 } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
             }
@@ -64,9 +86,20 @@ public final class ExpeditionSupplyPlanning {
         var life = state.bootstrap().ruleset().residentLife(); var food = life.foods().foods().get(foodKind);
         if (food == null) throw new IllegalArgumentException("forecast has no declared nutrition definition");
         return walkingInputs(state, mission, group, now, food, state.inventory().fungibleResources()).map(input ->
-                ExpeditionProvisioning.plan(input.roster(), input.outward(), input.returning(), input.roster().stream()
-                        .mapToInt(ExpeditionProvisioning.Member::cargoStackSlots).sum(), Integer.MAX_VALUE, false,
-                        food, life, state.bootstrap().ruleset().expedition()));
+                forecast(state, mission, group, input, food, Integer.MAX_VALUE));
+    }
+    private static ExpeditionProvisioning.Plan forecast(FrontierWorldState state, TransportMission mission, UnitGroup group,
+            WalkingInputs input, FoodCatalog.Food food, int foodAvailable) {
+        var rules = state.bootstrap().ruleset();
+        if (mission.transportAssetId().isPresent()) {
+            var asset = state.transportFleet().require(mission.transportAssetId().orElseThrow());
+            int cargoSlots = (int) group.members().stream().filter(m -> m.role() == UnitGroup.Role.CARRIER).count();
+            return ExpeditionProvisioning.planWithAsset(input.roster(), input.outward(), input.returning(), cargoSlots,
+                    foodAvailable == Integer.MAX_VALUE ? foodAvailable : Math.addExact(foodAvailable, ExpeditionSupplyAuthority.sharedFood(state, mission, food.itemKind())),
+                    asset.stackSlots(), food, rules.residentLife(), rules.expedition());
+        }
+        return ExpeditionProvisioning.plan(input.roster(), input.outward(), input.returning(), input.roster().stream()
+                .mapToInt(ExpeditionProvisioning.Member::cargoStackSlots).sum(), foodAvailable, false, food, rules.residentLife(), rules.expedition());
     }
     private record WalkingInputs(List<ExpeditionProvisioning.Member> roster, Map<SubjectId, List<ActorItemSlot>> freeSlots,
                                  long outward, long returning) { }
@@ -83,7 +116,10 @@ public final class ExpeditionSupplyPlanning {
         for (var member : group.members()) {
             var profile = state.humanPopulation().resident(member.actorId());
             var actor = state.actorLocations().get(member.actorId());
-            if (profile == null || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
+            if (actor == null) throw new IllegalArgumentException("provisioning roster lost its declared actor");
+            if (actor.condition().status() != ActorLifeStatus.ALIVE) continue;
+            if (actor.kind() == ActorKind.PACK_ANIMAL && mission.transportAssetId().equals(Optional.of(member.actorId()))) continue;
+            if (profile == null) return Optional.empty();
             var presentations = UnitInventoryPresentation.inventory(state, member.actorId());
             var used = new HashSet<>(presentations.values().stream().map(ActorCarriedResources.Presentation::slot).toList());
             var main = new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN);
@@ -102,7 +138,14 @@ public final class ExpeditionSupplyPlanning {
             roster.add(new ExpeditionProvisioning.Member(member.actorId(), nutrition.satietyUnits(), rate,
                     used.size() - (cargoAlreadyCounted ? 1 : 0), cargoSlots, personal, 0));
         }
-        return Optional.of(new WalkingInputs(List.copyOf(roster), Map.copyOf(free), outward, returning));
+        // Human losses cannot make a surviving, already identified autonomous
+        // carrier wait for nonexistent eaters. No food need is invented for the
+        // animal; its actual cargo capacity and living body remain mandatory.
+        boolean livingAsset = mission.transportAssetId().filter(id -> group.members().stream().anyMatch(member -> member.actorId().equals(id)))
+                .map(state.actorLocations()::get).filter(actor -> actor != null && actor.kind() == ActorKind.PACK_ANIMAL
+                    && actor.condition().status() == ActorLifeStatus.ALIVE).isPresent();
+        return roster.isEmpty() && !livingAsset ? Optional.empty()
+                : Optional.of(new WalkingInputs(List.copyOf(roster), Map.copyOf(free), outward, returning));
     }
     private static long edges(KnownPedestrianRouteKnowledge knowledge, SubjectId owner, SurfaceAnchor start, SurfaceAnchor end) {
         return knowledge.plannedPath(start, new MovementOrder(owner, owner, 1, 1, List.of(end),

@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture;
+import io.farfrontier.palemirror.frontier.v3.process.CompanyFoundationProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 import java.util.HashMap;
@@ -88,7 +89,9 @@ class FungibleProductionLifecycleTest {
         var completed = new FrontierWorldStateCodec().decode(recovered.checkpoint().canonicalState());
         assertFalse(completed.productionJobs().containsKey(f.job().id()));
         assertEquals(64, completed.inventory().fungibleResources().lots().get(f.job().outputItemId()).quantity());
-        assertEquals(FixedScalar.ONE, completed.inventory().economics().require(f.job().workerId()).balance());
+        assertEquals(f.state().inventory().economics().require(CompanyFoundationProcess.companyId(f.job().settlementId())).balance()
+                        .plus(f.state().companies().market().acceptedForJob(f.job().id()).orElseThrow().acceptedTotalPrice()),
+                completed.inventory().economics().require(CompanyFoundationProcess.companyId(f.job().settlementId())).balance());
         assertTrue(recovered.checkpoint().schedules().stream().noneMatch(action -> action.subject().equals(f.job().id())));
     }
 
@@ -171,7 +174,9 @@ class FungibleProductionLifecycleTest {
         assertFalse(complete.inventory().items().containsKey(f.job().outputItemId()));
         assertEquals(64, complete.inventory().fungibleResources().lots().get(f.job().outputItemId()).quantity());
         assertFalse(complete.inventory().fungibleResources().claims().containsKey(f.claim()));
-        assertEquals(FixedScalar.ONE, complete.inventory().economics().require(f.job().workerId()).balance());
+        assertEquals(f.state().inventory().economics().require(CompanyFoundationProcess.companyId(f.job().settlementId())).balance()
+                        .plus(f.state().companies().market().acceptedForJob(f.job().id()).orElseThrow().acceptedTotalPrice()),
+                complete.inventory().economics().require(CompanyFoundationProcess.companyId(f.job().settlementId())).balance());
         var order = complete.companies().market().workOrders().get(f.order());
         assertEquals(MarketWorkOrderStatus.FULFILLED, order.status());
         assertEquals(TerminalProductionReceipt.ResourceRepresentation.RESOURCE_LOT, order.terminalReceipt().orElseThrow().outputRepresentation());
@@ -238,7 +243,8 @@ class FungibleProductionLifecycleTest {
                 f.job().settlementId(), f.intent(), PhysicalIntentStatus.CONFIRMED, Optional.of(f.receipt(1L, "minecraft:wheat"))));
         assertEquals(f.job(), running.productionJobs().get(f.job().id()));
         assertEquals(64, running.inventory().fungibleResources().claims().get(f.claim()).quantity());
-        assertEquals(FixedScalar.ZERO, running.inventory().economics().require(f.job().workerId()).balance());
+        assertEquals(f.state().inventory().economics(), running.inventory().economics(),
+                "a rejected physical transformation must not pay the invoice beneficiary");
     }
 
     private static Fixture fixture() {

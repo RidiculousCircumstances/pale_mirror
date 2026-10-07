@@ -43,7 +43,7 @@ public final class FrontierPersistenceCodec {
     // Version 82 also retains the exact depot account declared by that producer.
     // Version 86 retains the bounded field segment and successor-slot reservation in harvest starts.
     // Fresh-world cutover: bakery station declarations change the canonical snapshot grammar.
-    private static final int VERSION = 104;
+    private static final int VERSION = 106;
     private static final int MAX_STATE_BYTES = 16 * 1024 * 1024;
     private static final int MAX_ENTRIES = 65_535;
 

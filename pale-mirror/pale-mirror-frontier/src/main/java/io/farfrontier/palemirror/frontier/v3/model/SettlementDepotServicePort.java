@@ -68,6 +68,11 @@ public record SettlementDepotServicePort(SubjectId settlementId, SubjectId depot
 
     /** The chest body is one block above this exact supported socket surface. */
     public BlockPosition containerPosition() { return socketSurface.support().offset(0, 1, 0); }
+    /** Freight meets an authored exterior station, not the one-body doorway throat. */
+    public SurfaceAnchor loadingSurface() {
+        return stations.stream().filter(station -> adjacent(station, exteriorApproach)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("depot lacks a declared exterior loading station"));
+    }
     public List<SurfaceAnchor> ownedAccessSurfaces() {
         java.util.ArrayList<SurfaceAnchor> owned = new java.util.ArrayList<>(); owned.add(serviceSurface); owned.addAll(stations);
         return List.copyOf(owned);

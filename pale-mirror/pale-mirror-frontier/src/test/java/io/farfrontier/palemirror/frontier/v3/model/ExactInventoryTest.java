@@ -14,6 +14,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExactInventoryTest {
+    @Test void exactEquipmentUsesDeclaredActorsRatherThanIdentityPrefixes() {
+        var actor = new SubjectId("actor:pack/settlement-1");
+        var item = new SubjectId("item:animal-equipment");
+        var inventory = new ExactInventory(Map.of(), Map.of(item, new ExactItemStack(item,
+                new SubjectId("settlement:one"), "minecraft:saddle", 1, new InventoryCustody.Actor(actor))),
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+        var locations = Map.of(actor, ActorLocation.standingOn(new SurfaceAnchor(new BlockPosition(0, 64, 0)), ActorKind.PACK_ANIMAL));
+        var world = new io.farfrontier.palemirror.frontier.v3.api.WorldId("test:equipment-registry");
+        assertDoesNotThrow(() -> FrontierWorldStateSupport.validateActorItemCustody(world, locations, inventory, FencedRecoveryState.empty()));
+        assertEquals(List.of(item), inventory.actorItems(actor).stream().map(ExactItemStack::id).toList());
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateSupport.validateActorItemCustody(
+                world, Map.of(), inventory, FencedRecoveryState.empty()), "unregistered actor custody still fails world validation");
+    }
+
     @Test void unboundColdStockAndReservationsExplainCapacityWithoutPhysicalBindings() {
         SubjectId container = new SubjectId("container:capacity"), owner = new SubjectId("settlement:one");
         var items = new java.util.LinkedHashMap<SubjectId, ExactItemStack>();
@@ -339,7 +353,8 @@ class ExactInventoryTest {
 
         assertEquals(new InventoryCustody.Actor(actor), equipped.items().get(item).custody());
         assertEquals(List.of(item), equipped.actorItems(actor).stream().map(ExactItemStack::id).toList());
-        assertThrows(IllegalArgumentException.class, () -> new InventoryCustody.Actor(new SubjectId("structure:armory")));
+        assertTrue(equipped.actorItems(new SubjectId("actor:pack/settlement-1")).isEmpty(),
+                "empty equipment lookup accepts any registered actor kind, not only resident/bioform prefixes");
     }
 
     @Test

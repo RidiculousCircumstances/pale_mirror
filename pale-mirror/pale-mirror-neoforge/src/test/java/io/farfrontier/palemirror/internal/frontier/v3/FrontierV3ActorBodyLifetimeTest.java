@@ -19,14 +19,24 @@ class FrontierV3ActorBodyLifetimeTest {
                 FrontierV3ActorDeathResourceComposition.Owner.RESIDENT_MEAL, noop);
         var service = new FrontierV3ActorDeathResourceComposition.Handler(
                 FrontierV3ActorDeathResourceComposition.Owner.SETTLEMENT_SERVICE, noop);
+        var expedition = new FrontierV3ActorDeathResourceComposition.Handler(
+                FrontierV3ActorDeathResourceComposition.Owner.EXPEDITION_TRANSFER, noop);
         var shipment = new FrontierV3ActorDeathResourceComposition.Handler(
                 FrontierV3ActorDeathResourceComposition.Owner.SHIPMENT, noop);
+        var personal = new FrontierV3ActorDeathResourceComposition.Handler(
+                FrontierV3ActorDeathResourceComposition.Owner.UNIT_INVENTORY, noop);
+        var attached = new FrontierV3ActorDeathResourceComposition.Handler(
+                FrontierV3ActorDeathResourceComposition.Owner.ATTACHED_STORAGE, noop);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal, meal)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal, service)));
-        assertEquals(java.util.List.of(equipment, meal, service, shipment),
-                FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal, service, shipment)));
+        var complete = java.util.List.of(equipment, meal, service, expedition, shipment, personal, attached);
+        assertEquals(complete, FrontierV3ActorDeathResourceComposition.closed(complete));
+        for (var absent : complete) {
+            assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(
+                    complete.stream().filter(handler -> handler != absent).toList()));
+        }
     }
     private static FrontierWorldState running() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:body-lifetime"), 91L));

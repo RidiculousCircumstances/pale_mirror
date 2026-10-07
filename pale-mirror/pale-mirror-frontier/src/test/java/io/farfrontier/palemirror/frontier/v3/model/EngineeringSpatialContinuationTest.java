@@ -90,10 +90,11 @@ class EngineeringSpatialContinuationTest {
         for (boolean repair : List.of(false, true)) for (var purpose : EngineeringJourneyPurpose.values()) {
             var state = journey(repair, purpose);
             var owner = owner(state, repair);
-            var actor = owner.assembly().orElseThrow().safeAdvances().getFirst();
+            var departure = departure(state, owner);
+            var actor = departure.actor();
             var before = owner.assembly().orElseThrow().members().get(actor);
             var stale = advanced(state, owner, owner.assembly().orElseThrow().advance(actor), Optional.empty());
-            var observed = detour(state, owner, actor);
+            var observed = departure.surface();
             var inventory = state.inventory();
             var executions = state.actorExecutions();
             state = AmbientLeaseStateProcess.prepare(state, AmbientActorProcess.nextLease(state, actor, new SimInstant(400L)));
@@ -255,15 +256,33 @@ class EngineeringSpatialContinuationTest {
         if (receipt instanceof RouteConstructionAssemblyAdvanced advanced) return RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER, advanced);
         return RouteMaintenanceStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER, (RouteMaintenanceAssemblyAdvanced) receipt);
     }
+    private record Departure(SubjectId actor, SurfaceAnchor surface) { }
+    private static Departure departure(FrontierWorldState state, EngineeringWorkOrder owner) {
+        for (var actor : owner.assembly().orElseThrow().safeAdvances()) {
+            try { return new Departure(actor, detour(state, owner, actor)); }
+            catch (IllegalStateException unavailable) { /* another crew member may occupy this actor's rejoin column */ }
+        }
+        throw new IllegalStateException("engineering fixture has no crew member with a clear rejoin: " + owner.assembly());
+    }
     private static SurfaceAnchor detour(FrontierWorldState state, EngineeringWorkOrder owner, SubjectId actor) {
         var member = owner.assembly().orElseThrow().members().get(actor);
         var knowledge = EngineeringJourneyKnowledge.view(state, owner);
-        for (int dx : List.of(-2, 2, -3, 3)) for (int dz : List.of(-2, 2, -3, 3)) {
+        // Prefer an already declared route surface: terrain supportAt may differ
+        // from the authored elevated road, especially on a return journey.
+        for (var position : member.corridor()) {
+            var surface = new SurfaceAnchor(position);
+            try {
+                if (EngineeringJourneyKnowledge.rejoin(state, owner, actor, surface).size() > 2) return surface;
+            } catch (IllegalArgumentException unavailable) { /* another known surface */ }
+        }
+        for (int radius = 1; radius <= 4; radius++) for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
+            if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) continue;
             var surface = knowledge.supportAt(member.currentSurface().x() + dx, member.currentSurface().z() + dz);
             try {
                 if (EngineeringJourneyKnowledge.rejoin(state, owner, actor, surface).size() > 2) return surface;
             } catch (IllegalArgumentException unavailable) { /* choose another known modeled detour */ }
         }
-        throw new IllegalStateException("engineering fixture has no known bounded detour");
+        throw new IllegalStateException("engineering fixture has no known bounded detour: " + owner.assembly().orElseThrow().purpose()
+                + " actor=" + actor + " member=" + member);
     }
 }

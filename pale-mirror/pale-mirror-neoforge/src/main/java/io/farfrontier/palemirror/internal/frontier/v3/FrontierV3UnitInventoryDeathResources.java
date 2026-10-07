@@ -18,7 +18,6 @@ import java.util.UUID;
 final class FrontierV3UnitInventoryDeathResources {
     private static final String RECEIPT = "pmv3_retired_inventory_drop_v1";
     private FrontierV3UnitInventoryDeathResources() { }
-    private record Source(ActorCarriedResources.Presentation presentation, ItemStack beforeLoot) { }
     static FrontierV3ActorDeathResourceComposition.AfterFatality prepare(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, ActorBodyId id) {
         var initial = runtime.decodedState().orElseThrow();
@@ -42,29 +41,34 @@ final class FrontierV3UnitInventoryDeathResources {
                             FrontierV3ActorResourceSlots.address(id.actorId(), body, placement.slot()), kind, quantity)));
         }
         initial = runtime.decodedState().orElseThrow();
-        var sources = UnitInventoryPresentation.inventory(initial, id.actorId()).values().stream()
-                .sorted(java.util.Comparator.comparing(ActorCarriedResources.Presentation::accountId))
-                .map(carry -> new Source(carry, FrontierV3ActorResourceSlots.get(body, carry.slot()).copy())).toList();
+        var beforeLoot = new java.util.HashMap<ActorItemSlot, ItemStack>();
+        for (var slot : FrontierV3ActorResourceSlots.supportedSlots(body)) beforeLoot.put(slot, FrontierV3ActorResourceSlots.get(body, slot).copy());
         return () -> {
+            // Earlier resource owners may just have confirmed an applied prepared take.
+            // Use the actual pre-loot slot snapshot, not only accounts known before settlement.
+            var sources = UnitInventoryPresentation.inventory(runtime.decodedState().orElseThrow(), id.actorId()).values().stream()
+                    .sorted(java.util.Comparator.comparing(ActorCarriedResources.Presentation::accountId)).toList();
             for (var source : sources) {
                 var state = runtime.decodedState().orElseThrow();
                 if (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
-                var account = state.inventory().fungibleResources().accounts().get(source.presentation().accountId());
+                var account = state.inventory().fungibleResources().accounts().get(source.accountId());
                 if (account == null || !account.claimQuantities().isEmpty()
                         || !account.custody().equals(new ResourceCustody.Actor(id.actorId()))) continue;
                 var bindings = state.inventory().fungibleResources().bindings().values().stream()
                         .filter(binding -> binding.accountId().equals(account.id())).toList();
                 if (bindings.size() != 1 || !bindings.getFirst().address().equals(
-                        FrontierV3ActorResourceSlots.address(id.actorId(), body, source.presentation().slot()))) continue;
+                        FrontierV3ActorResourceSlots.address(id.actorId(), body, source.slot()))) continue;
                 var binding = bindings.getFirst();
-                var actual = FrontierV3ActorResourceSlots.get(body, source.presentation().slot());
-                if (source.beforeLoot().isEmpty() && actual.isEmpty()) {
+                var actual = FrontierV3ActorResourceSlots.get(body, source.slot());
+                var original = beforeLoot.get(source.slot());
+                if (original == null) throw new IllegalStateException("declared personal resource slot has no native body capability: " + source.slot());
+                if (original.isEmpty() && actual.isEmpty()) {
                     submit(runtime, new UnitInventoryDispositionObserved(id, account.id(), binding.authorityEpoch(),
                             UnitInventoryDispositionObserved.Outcome.MISSING_BEFORE_LOOT, Optional.empty()));
                     continue;
                 }
                 var expected = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(binding.itemKind())), binding.quantity());
-                if (!ItemStack.matches(actual, expected) || !ItemStack.matches(actual, source.beforeLoot())) continue;
+                if (!ItemStack.matches(actual, expected) || !ItemStack.matches(actual, original)) continue;
                 var carrier = dropId(state, id, account.id(), binding.authorityEpoch());
                 if (level.getEntity(carrier) != null) continue; // Never replay insertion after an absent source.
                 var drop = new ItemEntity(level, body.getX(), body.getY() + 0.25D, body.getZ(), actual.copy());
@@ -74,7 +78,7 @@ final class FrontierV3UnitInventoryDeathResources {
                 drop.getPersistentData().putByteArray(RECEIPT,
                         io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs().encode(receipt));
                 if (!level.addFreshEntity(drop)) continue;
-                FrontierV3ActorResourceSlots.set(body, source.presentation().slot(), ItemStack.EMPTY);
+                FrontierV3ActorResourceSlots.set(body, source.slot(), ItemStack.EMPTY);
                 if (level.getEntity(carrier) == drop && !drop.isRemoved() && ItemStack.matches(drop.getItem(), expected))
                     submit(runtime, receipt);
             }

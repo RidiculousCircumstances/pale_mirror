@@ -53,9 +53,8 @@ class PhysicalIntentExplicitIdentityArchitectureTest {
                 "WAL and snapshot recovery must retain the exact closed role schema");
 
         String sceneExecutor = read(root.resolve("pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3SceneExecutor.java"));
-        assertTrue(sceneExecutor.contains("PhysicalIntentLifecycleOwner strikeOwner, PhysicalIntentLifecycleOwner explosionOwner")
-                        && sceneExecutor.contains("executeExplosion(level, runtime, state, lease, explosionOwner)")
-                        && sceneExecutor.contains("executeStrike(level, runtime, state, lease, strikeOwner)"),
+        assertTrue(sceneExecutor.contains("SceneLease lease, PhysicalIntentLifecycleOwner lifecycleOwner")
+                        && sceneExecutor.contains("executeStrike(level, runtime, state, lease, lifecycleOwner)"),
                 "scene dispatch must receive family-supplied owners rather than derive authority from its intent kind or scene state");
     }
 

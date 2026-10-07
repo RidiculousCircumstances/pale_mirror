@@ -15,7 +15,12 @@ record FrontierV3ActorBodyDeparture(FrontierV3ActorCarrierComposition.Declaratio
         SceneMemberPosition observed, BodyPosition canonicalBody, FixedScalar canonicalHealth,
         Optional<ActorExecutionId> executionAtCapture,
         Optional<FrontierV3ActorBodyDeparture.HandStack> offhand,
-        Optional<FrontierV3ActorBodyDeparture.HandStack> mainhand) {
+        Optional<FrontierV3ActorBodyDeparture.HandStack> mainhand, Optional<FrontierV3StoredAttachedStorage> attachedStorage) {
+    FrontierV3ActorBodyDeparture(FrontierV3ActorCarrierComposition.Declaration identity, long residenceGeneration,
+            SceneMemberPosition observed, BodyPosition canonicalBody, FixedScalar canonicalHealth, Optional<ActorExecutionId> execution,
+            Optional<HandStack> offhand, Optional<HandStack> mainhand) {
+        this(identity, residenceGeneration, observed, canonicalBody, canonicalHealth, execution, offhand, mainhand, Optional.empty());
+    }
     record HandStack(String itemKind, int quantity) {
         HandStack {
             if (itemKind == null || !itemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")
@@ -26,6 +31,7 @@ record FrontierV3ActorBodyDeparture(FrontierV3ActorCarrierComposition.Declaratio
         Objects.requireNonNull(identity); Objects.requireNonNull(observed);
         Objects.requireNonNull(canonicalBody); Objects.requireNonNull(canonicalHealth);
         Objects.requireNonNull(executionAtCapture); Objects.requireNonNull(offhand); Objects.requireNonNull(mainhand);
+        Objects.requireNonNull(attachedStorage);
         if (identity.representation() != FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER
                 || residenceGeneration < 1L || !identity.actorId().equals(observed.actorId())
                 || canonicalHealth.compareTo(FixedScalar.ZERO) <= 0
@@ -74,6 +80,7 @@ record FrontierV3ActorBodyDeparture(FrontierV3ActorCarrierComposition.Declaratio
             execution.putLong("generation", id.generation()); tag.put("execution", execution);
         });
         hand(tag, "offhand", offhand); hand(tag, "mainhand", mainhand);
+        attachedStorage.ifPresent(storage -> tag.put("attachedStorage", storage.save()));
         return tag;
     }
 
@@ -97,7 +104,8 @@ record FrontierV3ActorBodyDeparture(FrontierV3ActorCarrierComposition.Declaratio
         return new FrontierV3ActorBodyDeparture(identity, tag.getLong("residenceGeneration"),
                 new SceneMemberPosition(identity.actorId(), position(tag, "observed"), new FixedScalar(tag.getLong("health"))),
                 position(tag, "canonical"), new FixedScalar(tag.getLong("canonicalHealth")), execution,
-                hand(tag, "offhand"), hand(tag, "mainhand"));
+                hand(tag, "offhand"), hand(tag, "mainhand"), tag.contains("attachedStorage", Tag.TAG_COMPOUND)
+                    ? Optional.of(FrontierV3StoredAttachedStorage.load(tag.getCompound("attachedStorage"))) : Optional.empty());
     }
 
     private static void position(CompoundTag tag, String key, BodyPosition position) {

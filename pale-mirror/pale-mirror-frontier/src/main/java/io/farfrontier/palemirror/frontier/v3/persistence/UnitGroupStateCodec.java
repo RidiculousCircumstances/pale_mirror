@@ -29,7 +29,7 @@ final class UnitGroupStateCodec {
             out.writeByte(FrontierWireTags.tag(member.activityKind())); id(out, member.activityOwnerId());
         }
         switch (group.formation()) { case COLUMN -> out.writeByte(1); }
-        out.writeByte(switch (group.phase()) { case READY -> 1; case TRAVELLING -> 2; case AT_GOAL -> 3; case CLOSED -> 4; });
+        out.writeByte(switch (group.phase()) { case READY -> 1; case TRAVELLING -> 2; case AT_GOAL -> 3; case CLOSED -> 4; case PAUSED -> 5; });
         out.writeLong(group.revision()); out.writeLong(group.goalOrdinal()); out.writeBoolean(group.journey().isPresent());
         if (group.journey().isPresent()) journey(out, group.journey().orElseThrow());
     }
@@ -42,7 +42,7 @@ final class UnitGroupStateCodec {
         }
         var formation = switch (in.readUnsignedByte()) { case 1 -> UnitGroup.Formation.COLUMN; default -> throw new IllegalArgumentException("unknown formation tag"); };
         var phase = switch (in.readUnsignedByte()) { case 1 -> UnitGroup.Phase.READY; case 2 -> UnitGroup.Phase.TRAVELLING; case 3 -> UnitGroup.Phase.AT_GOAL; case 4 ->
-                UnitGroup.Phase.CLOSED; default -> throw new IllegalArgumentException("unknown group phase tag"); };
+                UnitGroup.Phase.CLOSED; case 5 -> UnitGroup.Phase.PAUSED; default -> throw new IllegalArgumentException("unknown group phase tag"); };
         long revision = in.readLong(), ordinal = in.readLong(); var journey = in.readBoolean() ? Optional.of(journey(in)) : Optional.<UnitGroup.Journey>empty();
         return new UnitGroup(id, mission, members, formation, phase, revision, ordinal, journey);
     }

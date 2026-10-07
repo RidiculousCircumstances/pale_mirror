@@ -46,10 +46,11 @@ class FrontierWorldStateTest {
     void initialStateOwnsEveryExactActorAndFunctionalStructure() {
         FrontierWorldState state = initial();
 
-        assertEquals(state.bootstrap().residentCount() + state.bootstrap().bioformCount(), state.actorLocations().size());
+        assertEquals(state.bootstrap().residentCount() + state.bootstrap().bioformCount()
+                + state.transportFleet().assets().size(), state.actorLocations().size());
         assertEquals(12 * StructureKind.values().length, state.structureConditions().size());
-        assertEquals(27, state.inventory().containers().size(),
-                "twelve depots, twelve declared bakery stations, two hive stores and maintenance storage");
+        assertEquals(27 + state.transportFleet().assets().size(), state.inventory().containers().size(),
+                "depots, bakery stations, hive stores, maintenance storage and exact mobile fleet containers");
         assertEquals(FrontierRouteNetwork.OWNER, state.inventory().containers().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER).ownerId());
         assertEquals(state.bootstrap().settlements().size() * EngineeringRecoveryTeam.MAX_MEMBERS, state.inventory().items().size());
         assertEquals(state.inventory().containers().keySet(), state.inventory().surfaces().keySet());
@@ -288,7 +289,8 @@ class FrontierWorldStateTest {
         var plan = FrontierGrayboxPlan.compile(baseline);
         GrayboxCell foundation = plan.cells().values().stream()
                 .filter(cell -> cell.semanticPart() == GrayboxSemanticPart.ROUTE_FOUNDATION)
-                .filter(cell -> plan.cells().get(new BlockPosition(cell.position().x(), cell.position().y() + 1, cell.position().z())) != null)
+                .filter(cell -> Optional.ofNullable(plan.cells().get(cell.position().offset(0, 1, 0)))
+                        .filter(above -> above.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE).isPresent())
                 .findFirst().orElseThrow();
         BlockPosition deckPosition = new BlockPosition(foundation.position().x(), foundation.position().y() + 1, foundation.position().z());
         GrayboxCell deck = plan.cells().get(deckPosition);

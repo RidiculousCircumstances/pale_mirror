@@ -150,7 +150,9 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
                     && !(containerEndpoint instanceof ContainerEndpoint.FungibleStation))
                 throw new IllegalArgumentException("fungible item order requires a container account, not a permanent slot");
             ResourceCustody.Container container = new ResourceCustody.Container(containerEndpoint.containerId());
-            ResourceCustody.Actor actor = new ResourceCustody.Actor(actorId);
+            ResourceCustody actor = actorSlot instanceof ActorItemSlot.AttachedStorage storage
+                    ? new ResourceCustody.Container(storage.containerId()) : new ResourceCustody.Actor(actorId);
+            if (actor.equals(container)) throw new IllegalArgumentException("actor storage and service endpoint must differ");
             if (direction == Direction.TAKE && (!container.equals(fungible.sourceCustody())
                     || !actor.equals(fungible.destinationCustody()))
                     || direction == Direction.PLACE && (!actor.equals(fungible.sourceCustody())

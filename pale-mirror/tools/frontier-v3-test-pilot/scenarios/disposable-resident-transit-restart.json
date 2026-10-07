@@ -33,7 +33,7 @@
   },
   "assertions": [
     { "after": 4, "view": "transit", "id": "resident:1-1", "expect": { "status": "ok", "journeyStatus": "EN_ROUTE", "routeIndex": 4, "current": { "x": -367, "y": 64, "z": -343 }, "ambientLease": "HOT" } },
-    { "after": 10, "view": "transit", "id": "resident:1-1", "expect": { "status": "ok", "journeyStatus": "EN_ROUTE", "origin": "settlement:1", "destination": "settlement:11", "ambientLease": "HOT" } },
+    { "after": 9, "view": "transit", "id": "resident:1-1", "expect": { "status": "ok", "journeyStatus": "EN_ROUTE", "origin": "settlement:1", "destination": "settlement:11", "ambientLease": "HOT" } },
     { "after": 10, "view": "trace", "id": "resident-transit:resident:1-1", "expect": { "status": "ok", "eventKind": "resident_transit_advanced", "subject": "resident:1-1" } }
   ]
 }

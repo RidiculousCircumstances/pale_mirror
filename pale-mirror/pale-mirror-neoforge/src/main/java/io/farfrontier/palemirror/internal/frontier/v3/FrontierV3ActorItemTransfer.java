@@ -71,6 +71,7 @@ final class FrontierV3ActorItemTransfer {
     static final class FungibleStep {
         private final ActorContainerItemOrder order;
         private final net.minecraft.world.Container chest;
+        private final net.minecraft.world.Container attached;
         private final net.minecraft.world.entity.Mob actor;
         private final UUID declaredBodyId;
         private final List<MaterialSourceSelection.Slice> source;
@@ -89,8 +90,14 @@ final class FrontierV3ActorItemTransfer {
         }
         FungibleStep(ActorContainerItemOrder order, FrontierV3PhysicalContainer container, net.minecraft.world.entity.Mob actor,
                      UUID declaredBodyId, List<MaterialSourceSelection.Slice> source, int destinationSlot, int destinationBefore) {
+            this(order, container, null, actor, declaredBodyId, source, destinationSlot, destinationBefore);
+        }
+        FungibleStep(ActorContainerItemOrder order, FrontierV3PhysicalContainer container, FrontierV3PhysicalContainer attachedContainer,
+                     net.minecraft.world.entity.Mob actor, UUID declaredBodyId, List<MaterialSourceSelection.Slice> source,
+                     int destinationSlot, int destinationBefore) {
             this.order = Objects.requireNonNull(order, "fungible actor order");
             this.chest = Objects.requireNonNull(container, "declared material container").inventory();
+            this.attached = attachedContainer == null ? null : attachedContainer.inventory();
             this.actor = Objects.requireNonNull(actor, "declared physical actor");
             this.declaredBodyId = Objects.requireNonNull(declaredBodyId, "declared scene body");
             this.source = List.copyOf(Objects.requireNonNull(source, "current source bindings"));
@@ -99,6 +106,9 @@ final class FrontierV3ActorItemTransfer {
             if (!(order.portion() instanceof ActorContainerItemOrder.Portion.Fungible portion)
                     || !actor.getUUID().equals(declaredBodyId)
                     || !order.containerEndpoint().containerId().equals(container.containerId())
+                    || order.actorSlot() instanceof io.farfrontier.palemirror.frontier.v3.model.ActorItemSlot.AttachedStorage storage
+                        && (attachedContainer == null || !storage.containerId().equals(attachedContainer.containerId()))
+                    || !(order.actorSlot() instanceof io.farfrontier.palemirror.frontier.v3.model.ActorItemSlot.AttachedStorage) && attachedContainer != null
                     || source.isEmpty() || source.stream().mapToInt(MaterialSourceSelection.Slice::moved).sum() != portion.quantity()
                     || source.stream().map(MaterialSourceSelection.Slice::address).distinct().count() != source.size()
                     || source.stream().map(MaterialSourceSelection.Slice::epoch).distinct().count() != 1)
@@ -106,54 +116,54 @@ final class FrontierV3ActorItemTransfer {
             ResourceLocation id = ResourceLocation.tryParse(portion.itemKind());
             this.item = id == null ? Items.AIR : BuiltInRegistries.ITEM.getOptional(id).orElse(Items.AIR);
             if (item == Items.AIR || destinationBefore < 0 || destinationBefore + portion.quantity() > item.getDefaultMaxStackSize()
-                    || order.direction() == ActorContainerItemOrder.Direction.TAKE && destinationBefore != 0)
+                    || order.direction() == ActorContainerItemOrder.Direction.TAKE && attached == null && destinationBefore != 0)
                 throw new IllegalArgumentException("fungible step has no stackable Minecraft item");
             boolean taking = order.direction() == ActorContainerItemOrder.Direction.TAKE;
             if (taking) {
-                if (destinationSlot != -1 || source.stream().anyMatch(slice -> !(slice.address() instanceof PhysicalStackAddress.ContainerSlot address)
+                if ((attached == null ? destinationSlot != -1 : destinationSlot < 0 || destinationSlot >= attached.getContainerSize())
+                        || source.stream().anyMatch(slice -> !(slice.address() instanceof PhysicalStackAddress.ContainerSlot address)
                         || !address.slot().containerId().equals(order.containerEndpoint().containerId())
                         || address.slot().slot() >= chest.getContainerSize()
                         || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation station
                         && address.slot().slot() != station.spec().outputSlot()))
                     throw new IllegalArgumentException("fungible TAKE has a foreign source slot");
-            } else if (source.size() != 1 || !source.getFirst().address().equals(
+            } else if ((attached == null ? source.size() != 1 || !source.getFirst().address().equals(
                     FrontierV3ActorResourceSlots.address(order.actorId(), actor, order.actorSlot()))
+                    : source.stream().anyMatch(slice -> !(slice.address() instanceof PhysicalStackAddress.ContainerSlot address)
+                        || !address.slot().containerId().equals(attachedContainer.containerId()) || address.slot().slot() >= attached.getContainerSize()))
                     || destinationSlot < 0 || destinationSlot >= chest.getContainerSize()
                     || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation station
                     && destinationSlot != station.spec().inputSlot()) {
-                throw new IllegalArgumentException("fungible PLACE has a foreign hand or destination port");
+                throw new IllegalArgumentException("fungible PLACE has a foreign declared actor resource source or destination port");
             }
         }
 
         boolean before() {
             if (!sourceMatches(false)) return false;
-            return order.direction() == ActorContainerItemOrder.Direction.TAKE
-                    ? held().isEmpty() : destinationBefore == 0 ? chest.getItem(destinationSlot).isEmpty() : plain(chest.getItem(destinationSlot), destinationBefore);
+            ItemStack target = destination();
+            return destinationBefore == 0 ? target.isEmpty() : plain(target, destinationBefore);
         }
 
         boolean after() {
             if (!sourceMatches(true)) return false;
-            return order.direction() == ActorContainerItemOrder.Direction.TAKE
-                    ? plain(held(), order.portion().quantity())
-                    : plain(chest.getItem(destinationSlot), destinationBefore + order.portion().quantity());
+            return plain(destination(), destinationBefore + order.portion().quantity());
         }
 
         boolean apply() {
             if (!before()) return false;
-            if (order.direction() == ActorContainerItemOrder.Direction.TAKE) {
-                for (MaterialSourceSelection.Slice slice : source) {
-                    int slot = ((PhysicalStackAddress.ContainerSlot) slice.address()).slot().slot();
-                    ItemStack stack = chest.getItem(slot);
-                    stack.shrink(slice.moved()); chest.setItem(slot, stack);
-                }
-                FrontierV3ActorResourceSlots.set(actor, order.actorSlot(), new ItemStack(item, order.portion().quantity()));
-            } else {
-                ItemStack held = held();
-                chest.setItem(destinationSlot, held.copyWithCount(destinationBefore + order.portion().quantity()));
-                FrontierV3ActorResourceSlots.set(actor, order.actorSlot(), held.getCount() == order.portion().quantity()
-                        ? ItemStack.EMPTY : held.copyWithCount(held.getCount() - order.portion().quantity()));
+            for (MaterialSourceSelection.Slice slice : source) {
+                int count = slice.before() - slice.moved();
+                ItemStack remaining = count == 0 ? ItemStack.EMPTY : new ItemStack(item, count);
+                if (slice.address() instanceof PhysicalStackAddress.ContainerSlot address) {
+                    sourceContainer(address).setItem(address.slot().slot(), remaining);
+                } else FrontierV3ActorResourceSlots.set(actor, order.actorSlot(), remaining);
             }
+            ItemStack result = new ItemStack(item, destinationBefore + order.portion().quantity());
+            if (order.direction() == ActorContainerItemOrder.Direction.PLACE) chest.setItem(destinationSlot, result);
+            else if (attached != null) attached.setItem(destinationSlot, result);
+            else FrontierV3ActorResourceSlots.set(actor, order.actorSlot(), result);
             chest.setChanged();
+            if (attached != null) attached.setChanged();
             return after();
         }
 
@@ -161,7 +171,7 @@ final class FrontierV3ActorItemTransfer {
             for (MaterialSourceSelection.Slice slice : source) {
                 int expected = slice.before() - (after ? slice.moved() : 0);
                 ItemStack actual = switch (slice.address()) {
-                    case PhysicalStackAddress.ContainerSlot address -> chest.getItem(address.slot().slot());
+                    case PhysicalStackAddress.ContainerSlot address -> sourceContainer(address).getItem(address.slot().slot());
                     case PhysicalStackAddress.ActorHand ignored -> held();
                     case PhysicalStackAddress.ActorPocket ignored -> held();
                     default -> throw new IllegalArgumentException("fungible step source is not a chest or actor hand");
@@ -177,6 +187,16 @@ final class FrontierV3ActorItemTransfer {
 
         private ItemStack held() {
             return FrontierV3ActorResourceSlots.get(actor, order.actorSlot());
+        }
+        private net.minecraft.world.Container sourceContainer(PhysicalStackAddress.ContainerSlot address) {
+            if (address.slot().containerId().equals(order.containerEndpoint().containerId())) return chest;
+            if (attached != null && order.actorSlot() instanceof io.farfrontier.palemirror.frontier.v3.model.ActorItemSlot.AttachedStorage storage
+                    && address.slot().containerId().equals(storage.containerId())) return attached;
+            throw new IllegalArgumentException("source address has no declared physical container port");
+        }
+        private ItemStack destination() {
+            return order.direction() == ActorContainerItemOrder.Direction.PLACE ? chest.getItem(destinationSlot)
+                    : attached == null ? held() : attached.getItem(destinationSlot);
         }
     }
 

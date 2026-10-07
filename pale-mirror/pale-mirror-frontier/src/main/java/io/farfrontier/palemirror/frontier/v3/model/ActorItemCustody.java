@@ -18,6 +18,7 @@ public final class ActorItemCustody {
         ExactInventory inventory = state.inventory();
         ContainerRecord container = inventory.containers().get(order.containerEndpoint().containerId());
         requireEndpoint(container, order);
+        requireAttachedStorage(state, order, false);
         if (order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot
                 || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation)
             order.requireCurrentStation(inventory);
@@ -63,6 +64,7 @@ public final class ActorItemCustody {
         ExactInventory inventory = state.inventory();
         ContainerRecord container = inventory.containers().get(order.containerEndpoint().containerId());
         requireEndpoint(container, order);
+        requireAttachedStorage(state, order, true);
         if (!(ReferenceContainerCustody.hasOperationalCustody(state, container.id())
                 || ReferenceContainerCustody.hasLiveCustody(state, container.id())
                 && ContainerPhysicalAuthorityComposition.pending(state, container.id()))
@@ -85,6 +87,27 @@ public final class ActorItemCustody {
         return preparation.ownerChanges().inventory(inventory.withFungibleResources(inventory.fungibleResources()
                 .transferActorOrderObservedStacks(preparation.order(), sourceEpoch, destinationEpoch, remainingSource, destination)));
     }
+    private static void requireAttachedStorage(FrontierWorldState state, ActorContainerItemOrder order, boolean observed) {
+        if (!(order.actorSlot() instanceof ActorItemSlot.AttachedStorage storage)) return;
+        var surface = state.inventory().surfaces().get(storage.containerId());
+        if (surface == null || !surface.location().equals(new ContainerLocation.Mobile(order.actorId()))
+                || ReferenceContainerCustody.blocksCanonicalUse(state, storage.containerId()))
+            throw new IllegalArgumentException("item order has no exact live body/storage attachment");
+        if (observed ? !ReferenceContainerCustody.hasOperationalCustody(state, storage.containerId())
+                    && !(ReferenceContainerCustody.hasLiveCustody(state, storage.containerId())
+                        && ContainerPhysicalAuthorityComposition.pending(state, storage.containerId()))
+                : ReferenceContainerCustody.hasLiveCustody(state, storage.containerId()))
+            throw new IllegalArgumentException("attached item storage has competing or unavailable physical custody");
+        // An observed prepared handoff already owns its destination reservation.
+        // Re-admitting it would treat that same slot as a competing reservation.
+        // The owner fences the receipt; exact post-layout binding and the inventory
+        // update still reject foreign contents and newly overcommitted capacity.
+        if (!observed && order.direction() == ActorContainerItemOrder.Direction.TAKE
+                && !ContainerStorageAdmission.receive(state, storage.containerId(), order.portion().itemKind(),
+                    order.portion().quantity(), java.util.Optional.empty()))
+            throw new IllegalArgumentException("attached storage has no capacity for the declared portion");
+    }
+
     private static void requireEndpoint(ContainerRecord container, ActorContainerItemOrder order) {
         if (container == null || order.portion() instanceof ActorContainerItemOrder.Portion.Exact exact
                 && !container.ownerId().equals(exact.item().economicOwnerId())) {

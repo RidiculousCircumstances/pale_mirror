@@ -28,6 +28,11 @@ final class FinancialBudgetRelationships {
                 throw new IllegalArgumentException("transport mission lost its exact treasury budget");
         });
         for (var purchase : state.inventory().economics().reservations().values()) purchase.budgetId().ifPresent(id -> {
+            var budget = state.inventory().economics().budgets().get(id);
+            var mission = budget == null ? null : state.shipments().missions().get(budget.ownerId());
+            if (mission == null || !purchase.reasonId().equals(mission.id())
+                    || mission.replenishmentPurchase().filter(p -> p.payment().equals(purchase)).isEmpty())
+                throw new IllegalArgumentException("budget purchase lost its exact retained mission receipt obligation");
             var source = new SubjectEndpoint(EntityKind.FINANCIAL_RESERVATION, purchase.id());
             edges.add(declaredEdge(Kind.RESERVATION_BUDGET, source, source,
                     new SubjectEndpoint(EntityKind.FINANCIAL_BUDGET, id), Lifecycle.ACTIVE, "purchase:" + purchase.id().value()));

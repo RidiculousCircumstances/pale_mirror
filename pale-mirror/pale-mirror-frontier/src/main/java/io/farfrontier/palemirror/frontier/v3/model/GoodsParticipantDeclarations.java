@@ -10,7 +10,7 @@ public final class GoodsParticipantDeclarations {
         var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
                 .reduce((left, right) -> { throw new IllegalArgumentException("ambiguous settlement depot"); }).orElseThrow();
         return new ShipmentEndpoint(ShipmentEndpoint.Kind.SETTLEMENT_DEPOT, settlement.id(), depot.id(),
-                FrontierWorldState.depotId(settlement.id()), SettlementDepotServicePort.forDepot(depot).serviceSurface());
+                FrontierWorldState.depotId(settlement.id()), SettlementDepotServicePort.forDepot(depot).loadingSurface());
     }
     public static GoodsParticipantState initial(FrontierBootstrap bootstrap) {
         var participants = GoodsParticipantState.empty();

@@ -80,6 +80,16 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
         var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.abortLoading());
         return new ShipmentState(shipments, next);
     }
+    public ShipmentState replaceReplenishment(TransportMission mission, java.util.Optional<UnitResourceTransfer> transfer) {
+        if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale replenishment predecessor");
+        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.withReplenishment(transfer));
+        return new ShipmentState(shipments, next);
+    }
+    public ShipmentState replaceReplenishment(TransportMission mission, java.util.Optional<UnitResourceTransfer> transfer, java.util.Optional<GoodsSpotPurchase> purchase) {
+        if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale replenishment predecessor");
+        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.withReplenishment(transfer, purchase));
+        return new ShipmentState(shipments, next);
+    }
     public ShipmentState retireMission(TransportMission mission) {
         if (!mission.equals(missions.get(mission.id())) || mission.stage() != TransportMission.Stage.COMPLETE)
             throw new IllegalArgumentException("only an exact completed mission may retire");

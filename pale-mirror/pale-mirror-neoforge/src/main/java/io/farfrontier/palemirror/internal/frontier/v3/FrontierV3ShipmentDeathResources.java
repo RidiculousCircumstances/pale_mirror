@@ -24,7 +24,7 @@ final class FrontierV3ShipmentDeathResources {
                 .or(() -> authority.suspended().filter(e -> e.activityKind() == ActorActivityKind.COURIER));
         if (execution.isEmpty()) return () -> { };
         var shipment = state.shipments().shipments().get(execution.orElseThrow().activityOwnerId());
-        if (shipment == null || shipment.status() != Shipment.Status.CARRYING || shipment.pendingPhysicalStep().isPresent()
+        if (shipment == null || shipment.mobileContainerId().isPresent() || shipment.status() != Shipment.Status.CARRYING || shipment.pendingPhysicalStep().isPresent()
                 || shipment.reception().isPresent()) return () -> { }; // Possibly applied endpoint effects retain their exact owner.
         ItemStack witness = body.getMainHandItem().copy();
         if (!witness.isEmpty() && !matches(witness, shipment)) return () -> { }; // Unclassified substitution is not fictional loss.

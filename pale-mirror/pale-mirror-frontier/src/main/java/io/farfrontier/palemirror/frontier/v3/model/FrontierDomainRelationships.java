@@ -29,7 +29,7 @@ public final class FrontierDomainRelationships {
         GOODS_ORDER, GOODS_CONTRACT, ECONOMIC_ACCOUNT, CONTAINER, SHIPMENT, UNIT_GROUP, TRANSPORT_MISSION,
         PRODUCTION_JOB, HIVE_GROWTH_JOB, RESOURCE_SITE, RESOURCE_HARVEST_JOB, RESIDENT, EXACT_ITEM, RESOURCE_LOT, RESOURCE_ACCOUNT,
         RESOURCE_CLAIM, PROVISION_CYCLE, PROVISION_ALLOCATION, SCENE_LEASE, AMBIENT_LEASE, CARRIER_EVIDENCE,
-        CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE
+        CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE, ACTOR
     }
 
     /** Stable semantic strings are deliberately independent from enum ordinal/wire ordering. */
@@ -37,6 +37,7 @@ public final class FrontierDomainRelationships {
         BUDGET_PAYER("budget-payer"), BUDGET_OWNER("budget-owner"), RESERVATION_BUDGET("reservation-budget"),
         GROUP_MEMBER("group-member"), GROUP_MISSION("group-mission"), TRANSPORT_GROUP("transport-group"),
         TRANSPORT_SHIPMENT("transport-shipment"), SHIPMENT_MISSION("shipment-mission"),
+        TRANSPORT_ASSET("transport-asset"), TRANSPORT_PURCHASE("transport-purchase"), SHIPMENT_STORAGE("shipment-storage"),
         TRANSPORT_SUPPLY_CLAIM("transport-supply-claim"), TRANSPORT_SUPPLY_SOURCE("transport-supply-source"),
         SHIPMENT_COURIER("shipment-courier"), SHIPMENT_SOURCE("shipment-source"), SHIPMENT_RECEIVER("shipment-receiver"),
         SHIPMENT_CLAIM("shipment-claim"), SHIPMENT_ACCOUNT("shipment-account"), SHIPMENT_CONTRACT("shipment-contract"),
@@ -95,9 +96,9 @@ public final class FrontierDomainRelationships {
         case BUDGET_PAYER, BUDGET_OWNER -> EntityKind.FINANCIAL_BUDGET;
         case RESERVATION_BUDGET -> EntityKind.FINANCIAL_RESERVATION;
         case GROUP_MEMBER, GROUP_MISSION -> EntityKind.UNIT_GROUP;
-        case TRANSPORT_GROUP, TRANSPORT_SHIPMENT, TRANSPORT_SUPPLY_CLAIM, TRANSPORT_SUPPLY_SOURCE -> EntityKind.TRANSPORT_MISSION;
+        case TRANSPORT_GROUP, TRANSPORT_SHIPMENT, TRANSPORT_SUPPLY_CLAIM, TRANSPORT_SUPPLY_SOURCE, TRANSPORT_ASSET, TRANSPORT_PURCHASE -> EntityKind.TRANSPORT_MISSION;
         case SHIPMENT_MISSION -> EntityKind.SHIPMENT;
-        case SHIPMENT_COURIER, SHIPMENT_SOURCE, SHIPMENT_RECEIVER, SHIPMENT_CLAIM, SHIPMENT_ACCOUNT, SHIPMENT_CONTRACT -> EntityKind.SHIPMENT;
+        case SHIPMENT_COURIER, SHIPMENT_SOURCE, SHIPMENT_RECEIVER, SHIPMENT_CLAIM, SHIPMENT_ACCOUNT, SHIPMENT_CONTRACT, SHIPMENT_STORAGE -> EntityKind.SHIPMENT;
         case GOODS_ORDER_PARTY, GOODS_ORDER_COUNTERPARTY, GOODS_ORDER_CONTAINER -> EntityKind.GOODS_ORDER;
         case GOODS_SELL_ORDER, GOODS_BUY_ORDER, GOODS_SOURCE_CONTAINER, GOODS_RECEIVER_CONTAINER,
                 GOODS_SELLER, GOODS_BUYER, GOODS_CLAIM, GOODS_RESERVATION -> EntityKind.GOODS_CONTRACT;
@@ -113,14 +114,15 @@ public final class FrontierDomainRelationships {
         case BUDGET_PAYER -> EntityKind.ECONOMIC_ACCOUNT;
         case BUDGET_OWNER -> EntityKind.TRANSPORT_MISSION;
         case RESERVATION_BUDGET -> EntityKind.FINANCIAL_BUDGET;
-        case GROUP_MEMBER -> EntityKind.RESIDENT;
+        case GROUP_MEMBER, TRANSPORT_ASSET -> EntityKind.ACTOR;
         case GROUP_MISSION, SHIPMENT_MISSION -> EntityKind.TRANSPORT_MISSION;
         case TRANSPORT_GROUP -> EntityKind.UNIT_GROUP;
         case TRANSPORT_SHIPMENT -> EntityKind.SHIPMENT;
         case TRANSPORT_SUPPLY_CLAIM -> EntityKind.RESOURCE_CLAIM;
         case TRANSPORT_SUPPLY_SOURCE -> EntityKind.RESOURCE_ACCOUNT;
-        case SHIPMENT_COURIER -> EntityKind.RESIDENT;
-        case SHIPMENT_SOURCE, SHIPMENT_RECEIVER -> EntityKind.CONTAINER;
+        case TRANSPORT_PURCHASE -> EntityKind.FINANCIAL_RESERVATION;
+        case SHIPMENT_COURIER -> EntityKind.ACTOR;
+        case SHIPMENT_SOURCE, SHIPMENT_RECEIVER, SHIPMENT_STORAGE -> EntityKind.CONTAINER;
         case SHIPMENT_CLAIM -> EntityKind.RESOURCE_CLAIM;
         case SHIPMENT_ACCOUNT -> EntityKind.RESOURCE_ACCOUNT;
         case SHIPMENT_CONTRACT -> EntityKind.GOODS_CONTRACT;
@@ -143,9 +145,9 @@ public final class FrontierDomainRelationships {
         case BUDGET_PAYER, BUDGET_OWNER -> EntityKind.FINANCIAL_BUDGET;
         case RESERVATION_BUDGET -> EntityKind.FINANCIAL_RESERVATION;
         case GROUP_MEMBER, GROUP_MISSION -> EntityKind.UNIT_GROUP;
-        case TRANSPORT_GROUP, TRANSPORT_SHIPMENT, TRANSPORT_SUPPLY_CLAIM, TRANSPORT_SUPPLY_SOURCE -> EntityKind.TRANSPORT_MISSION;
+        case TRANSPORT_GROUP, TRANSPORT_SHIPMENT, TRANSPORT_SUPPLY_CLAIM, TRANSPORT_SUPPLY_SOURCE, TRANSPORT_ASSET, TRANSPORT_PURCHASE -> EntityKind.TRANSPORT_MISSION;
         case SHIPMENT_MISSION -> EntityKind.SHIPMENT;
-        case SHIPMENT_COURIER, SHIPMENT_SOURCE, SHIPMENT_RECEIVER, SHIPMENT_CLAIM, SHIPMENT_ACCOUNT, SHIPMENT_CONTRACT -> EntityKind.SHIPMENT;
+        case SHIPMENT_COURIER, SHIPMENT_SOURCE, SHIPMENT_RECEIVER, SHIPMENT_CLAIM, SHIPMENT_ACCOUNT, SHIPMENT_CONTRACT, SHIPMENT_STORAGE -> EntityKind.SHIPMENT;
         case GOODS_ORDER_PARTY, GOODS_ORDER_COUNTERPARTY, GOODS_ORDER_CONTAINER -> EntityKind.GOODS_ORDER;
         case GOODS_SELL_ORDER, GOODS_BUY_ORDER, GOODS_SOURCE_CONTAINER, GOODS_RECEIVER_CONTAINER,
                 GOODS_SELLER, GOODS_BUYER, GOODS_CLAIM, GOODS_RESERVATION -> EntityKind.GOODS_CONTRACT;
@@ -212,8 +214,9 @@ public final class FrontierDomainRelationships {
     }
 
     private static final List<OwnerSurface> CURRENT_OWNER_SURFACES = List.of(
-            surface(Shipment.class, "id", "sourceAccountId", "carriedAccountId", "receivingAccountId", "lotQuantities", "transportMissionId"),
-            surface(TransportMission.class, "id", "groupId", "shipmentIds", "financialBudgetId"),
+            surface(Shipment.class, "id", "sourceAccountId", "carriedAccountId", "receivingAccountId", "lotQuantities", "transportMissionId", "mobileContainerId"),
+            surface(TransportMission.class, "id", "groupId", "shipmentIds", "financialBudgetId", "transportAssetId"),
+            surface(UnitResourceTransfer.class, "claimId", "actorId", "containerId", "sourceAccountId", "destinationAccountId", "sourceEconomicOwnerId", "lots"),
             surface(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad.class, "foodTargets", "assemblyStations"),
             surface(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad.Allocation.class,
                     "claimId", "actorId", "sourceAccountId", "destinationAccountId", "lots"),
@@ -420,10 +423,10 @@ public final class FrontierDomainRelationships {
     private static final List<ValidationFamily> VALIDATION_FAMILIES = List.of(
             new ValidationFamily(s -> List.of(s.inventory().economics(), s.shipments()),
                     (s, edges, incidents) -> FinancialBudgetRelationships.collect(s, edges)),
-            new ValidationFamily(s -> List.of(s.unitGroups(), s.shipments(), s.actorLocations(), s.actorExecutions(), s.actorMovements(), s.bootstrap(), s.inventory().fungibleResources()),
+            new ValidationFamily(s -> List.of(s.unitGroups(), s.shipments(), s.actorLocations(), s.actorExecutions(), s.actorMovements(), s.bootstrap(), s.inventory().fungibleResources(), s.transportFleet()),
                     (s, edges, incidents) -> UnitGroupRelationships.collect(s, edges)),
             new ValidationFamily(s -> List.of(s.shipments(), s.actorExecutions(), s.companies().goodsTrade(), s.inventory().containers(),
-                    s.inventory().fungibleResources(), s.bootstrap()), (s, edges, incidents) -> ShipmentRelationships.collect(s, edges)),
+                    s.inventory().fungibleResources(), s.bootstrap(), s.transportFleet(), s.actorLocations()), (s, edges, incidents) -> ShipmentRelationships.collect(s, edges)),
             new ValidationFamily(s -> List.of(s.companies().goodsTrade(), s.inventory().economics(), s.inventory().containers(),
                     s.inventory().fungibleResources()), (s, edges, incidents) -> GoodsTradeRelationships.collect(s, edges)),
             new ValidationFamily(s -> List.of(s.strategicPlans()), FrontierDomainRelationships::addStrategic),

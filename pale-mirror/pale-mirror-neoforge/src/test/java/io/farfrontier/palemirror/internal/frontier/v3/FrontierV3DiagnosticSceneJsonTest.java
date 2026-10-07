@@ -193,7 +193,7 @@ class FrontierV3DiagnosticSceneJsonTest {
         java.util.List<BlockPosition> waypoints = baseline.routeTopology().settlementWaypoints(baseline.bootstrap(), settlement);
         java.util.List<BlockPosition> bypass = java.util.List.of(waypoints.get(0), waypoints.get(1),
                 waypoints.get(1).offset(-10, 0, 0), waypoints.get(2).offset(-10, 0, 0),
-                waypoints.get(2), waypoints.get(3), waypoints.get(4));
+                waypoints.get(2), waypoints.get(3));
         java.util.List<BlockPosition> workCells = FrontierRouteNetwork.constructionCells(
                 baseline.bootstrap(), baseline.routeTopology(), settlement, bypass);
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:diagnostic-route"), settlement,

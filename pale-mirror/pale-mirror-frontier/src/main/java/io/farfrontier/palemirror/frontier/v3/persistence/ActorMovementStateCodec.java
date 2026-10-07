@@ -39,6 +39,12 @@ final class ActorMovementStateCodec {
             output.writeLong(movement.issuedAtTick());
             ActorExecutionStateCodec.writeId(output, movement.executionId());
             switch (movement.context()) {
+                case ActorMovementContext.ResourceAccessExit exit -> {
+                    output.writeByte(6);
+                    FrontierWorldStateCodec.writeString(output, exit.settlementId().value());
+                    FrontierWorldStateCodec.writeString(output, exit.depotId().value());
+                    FrontierWorldStateCodec.writeString(output, exit.executionOwnerId().value());
+                }
                 case ActorMovementContext.ServiceExit exit -> {
                     output.writeByte(0); // stable ServiceExit provider tag, never inferred from an ID
                     FrontierWorldStateCodec.writeString(output, exit.settlementId().value());
@@ -58,6 +64,9 @@ final class ActorMovementStateCodec {
                 }
                 case ActorMovementContext.ExpeditionAssembly assembly -> {
                     output.writeByte(4); FrontierWorldStateCodec.writeString(output, assembly.missionId().value());
+                }
+                case ActorMovementContext.ExpeditionReplenishment refill -> {
+                    output.writeByte(5); FrontierWorldStateCodec.writeString(output, refill.missionId().value());
                 }
             }
             output.writeBoolean(movement.coldTravel().isPresent());
@@ -101,6 +110,9 @@ final class ActorMovementStateCodec {
                 case 3 -> new ActorMovementContext.ExpeditionSupply(new SubjectId(FrontierWorldStateCodec.readString(input)),
                         new SubjectId(FrontierWorldStateCodec.readString(input)));
                 case 4 -> new ActorMovementContext.ExpeditionAssembly(new SubjectId(FrontierWorldStateCodec.readString(input)));
+                case 5 -> new ActorMovementContext.ExpeditionReplenishment(new SubjectId(FrontierWorldStateCodec.readString(input)));
+                case 6 -> new ActorMovementContext.ResourceAccessExit(new SubjectId(FrontierWorldStateCodec.readString(input)),
+                        new SubjectId(FrontierWorldStateCodec.readString(input)), new SubjectId(FrontierWorldStateCodec.readString(input)));
                 default -> throw new IllegalArgumentException("unknown actor movement provider tag");
             };
             ActorMovement movement = new ActorMovement(order, issuedAt, context, executionId);

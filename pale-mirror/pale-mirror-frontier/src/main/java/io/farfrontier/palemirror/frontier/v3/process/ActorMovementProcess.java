@@ -48,22 +48,7 @@ public final class ActorMovementProcess {
     }
 
     public static BodyPosition bodyAt(FrontierWorldState state, SubjectId actorId, long atTick) {
-        var physical = state.fencedRecovery().current().get(
-                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(actorId));
-        if (physical != null && (physical.phase() == FencedRecoveryPhase.RUNNING || physical.phase() == FencedRecoveryPhase.AMBIGUOUS))
-            return state.actorLocations().get(actorId).body();
-        ActorMovement movement = state.actorMovements().get(actorId);
-        if (movement != null && movement.coldTravel().isPresent()) {
-            TimedKnownRoute travel = movement.coldTravel().orElseThrow();
-            long safeTick = Math.min(atTick, travel.arrivalTick() - 1L);
-            int index = travel.indexAt(safeTick);
-            int barrier = firstKnownBarrier(state, travel);
-            if (barrier >= 0) index = Math.min(index, barrier - 1);
-            return BodyPosition.above(travel.route().get(index));
-        }
-        ActorLocation body = state.actorLocations().get(actorId);
-        if (body == null) throw new IllegalArgumentException("moving actor lacks canonical body");
-        return body.body();
+        return ActorMovementProjection.bodyAt(state, actorId, atTick);
     }
 
     public static boolean held(FrontierWorldState state, ScheduledAction action) {
@@ -164,7 +149,7 @@ public final class ActorMovementProcess {
             if (movement.coldTravel().isPresent() || actor.condition().status() != ActorLifeStatus.ALIVE
                     || !route.getFirst().equals(actor.supportingSurface()) || step.atTick() < movement.issuedAtTick())
                 throw new IllegalArgumentException("accepted route lacks its exact current departure");
-            ActorMovementProviders.require(movement).requireRoute(state, movement, route);
+            ActorMovementProviders.require(movement).requireColdRoute(state, movement, route, step.atTick());
         } else if ((movement.coldTravel().isEmpty() && actor.condition().status() == ActorLifeStatus.ALIVE
                 && !movement.order().arrivedAt(actor.supportingSurface()))
                 || !step.equals(coldStep(state, movement, step.atTick()).orElse(null)))
@@ -244,7 +229,7 @@ public final class ActorMovementProcess {
         MovementOrder order = movement.order();
         var provider = ActorMovementProviders.require(movement);
         List<SurfaceAnchor> route = provider.coldSegment(state, movement,
-                provider.route(state, movement, state.actorLocations().get(order.actorId()).supportingSurface()));
+                provider.route(state, movement, state.actorLocations().get(order.actorId()).supportingSurface()), now);
         return timedSegment(state, movement, route, now);
     }
 
@@ -254,17 +239,11 @@ public final class ActorMovementProcess {
         AmbientActorLease lease = state.ambientLeases().get(order.actorId());
         long epoch = lease == null ? 1L : Math.addExact(lease.revision(), 1L);
         return new TimedKnownRoute(ActorMovement.segmentOrder(order, route.getLast()), route,
-                now, COLD_TICKS_PER_EDGE, epoch);
+                now, ActorMovementProviders.require(movement).ticksPerEdge(state, movement), epoch);
     }
 
     private static int firstKnownBarrier(FrontierWorldState state, TimedKnownRoute travel) {
-        for (int index = 1; index < travel.route().size(); index++) {
-            BlockPosition support = travel.route().get(index).support();
-            if (state.physicalDeltas().containsKey(support)
-                    || state.physicalDeltas().containsKey(support.offset(0, 1, 0))
-                    || state.physicalDeltas().containsKey(support.offset(0, 2, 0))) return index;
-        }
-        return -1;
+        return ActorMovementProjection.firstKnownBarrier(state, travel);
     }
 
     public static boolean travelIntersects(ActorMovement movement, BlockPosition cell) {

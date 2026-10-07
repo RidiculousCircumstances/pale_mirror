@@ -11,10 +11,10 @@ public final class FrontierRulesets {
      * semantic checkpoint left a HOT farmer visibly pausing at every grid cell even though the
      * motion actuator was continuous.  Crop work remains a slower, distinct boundary.
      */
-    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r13", 16, 1L, 20L, 20L);
-    // Explicit opt-in during the connected expedition migration, never the production default.
+    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r14", 17, 1L, 20L, 20L);
+    // Named deterministic precondition profile; it shares the adopted production expedition policy.
     private static final FrontierRuleset EXPEDITION_CANDIDATE = ruleset("frontier-v3-expedition-candidate-r1", 17, 1L, 20L, 20L);
-    private static final FrontierRuleset TRADE_PLAYTEST = new FrontierRuleset("frontier-v3-trade-playtest-r2", 16,
+    private static final FrontierRuleset TRADE_PLAYTEST = new FrontierRuleset("frontier-v3-trade-playtest-r3", 17,
             PRODUCTION.cadence(), PRODUCTION.spatial(), PRODUCTION.rates(), PRODUCTION.facilityCapacity(),
             PRODUCTION.combat(), PRODUCTION.hiveCommand(), PRODUCTION.residentLife(),
             PRODUCTION.resourceHarvestColdTravelTicksPerEdge(), PRODUCTION.workCatalog(), PRODUCTION.goodsTrade(),

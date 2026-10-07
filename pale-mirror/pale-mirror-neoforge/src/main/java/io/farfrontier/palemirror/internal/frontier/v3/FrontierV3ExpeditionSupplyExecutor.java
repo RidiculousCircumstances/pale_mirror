@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.expedition.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.Mob;
 import java.util.*;
 
 /** Loaded provisioning executes the same generic actor/container interaction as ordinary work. */
@@ -14,6 +14,9 @@ final class FrontierV3ExpeditionSupplyExecutor {
     private FrontierV3ExpeditionSupplyExecutor() { }
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElse(null); if (state == null) return;
+        for (var mission : state.shipments().missions().values().stream().filter(m -> m.replenishment().isPresent())
+                .sorted(Comparator.comparing(TransportMission::id)).toList())
+            if (FrontierV3ExpeditionReplenishmentExecutor.progress(level, runtime, state, mission)) return;
         for (var mission : state.shipments().missions().values().stream().filter(m -> m.stage() == TransportMission.Stage.LOADING
                 && m.supplies().filter(load -> !load.complete()).isPresent()).sorted(Comparator.comparing(TransportMission::id)).toList())
             if (progress(level, runtime, state, mission)) return;
@@ -22,7 +25,7 @@ final class FrontierV3ExpeditionSupplyExecutor {
                                     FrontierWorldState state, TransportMission mission) {
         var load = mission.supplies().orElseThrow(); var a = load.next().orElseThrow(); var order = load.order(mission.id(), mission.sender(), a);
         var entity = level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(), a.actorId()));
-        if (!(entity instanceof Villager worker) || !worker.isAlive()
+        if (!(entity instanceof Mob worker) || !worker.isAlive()
                 || !FrontierV3ActorBodyController.recognizesRecordedBody(level, state, worker)
                 || state.actorMovements().containsKey(a.actorId()) || !FrontierV3SurfaceObservation.at(worker, order.station())) return false;
         var execution = ExpeditionSupplyAuthority.execution(state, mission, a); var lease = state.ambientLeases().get(a.actorId());
@@ -35,17 +38,24 @@ final class FrontierV3ExpeditionSupplyExecutor {
         if (!mission.equals(state.shipments().missions().get(mission.id()))) return false;
         var surface = state.inventory().surfaces().get(mission.sender().containerId());
         if (surface == null) return false;
-        var position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
-        if (!level.hasChunkAt(position)) return false;
-        var chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, position, mission.sender().containerId());
+        var physical = FrontierV3PhysicalContainer.loaded(level, state, mission.sender().containerId()).orElse(null);
+        var attached = a.slot() instanceof ActorItemSlot.AttachedStorage storage
+                ? FrontierV3PhysicalContainer.loaded(level, state, storage.containerId()).orElse(null) : null;
+        if (a.slot() instanceof ActorItemSlot.AttachedStorage && (attached == null
+                || ReferenceContainerCustody.blocksCanonicalUse(state, attached.containerId())
+                || !ReferenceContainerCustody.hasLiveCustody(state, attached.containerId()))) return false;
+        var chest = physical == null ? null : physical.inventory();
         if (chest == null || ReferenceContainerCustody.blocksCanonicalUse(state, mission.sender().containerId())
                 || !ReferenceContainerCustody.hasLiveCustody(state, mission.sender().containerId())) return false;
         var pending = a.pending().orElse(null);
         try {
             var source = pending == null ? MaterialSourceSelection.select(state.inventory().fungibleResources(), order) : pending.source();
+            var destination = attached == null || pending != null ? null : ExpeditionSupplyAuthority.destination(state, load, a).orElse(null);
+            if (attached != null && pending == null && destination == null) return false;
             var step = pending == null ? new ActorItemTransferStep(new ActorHotObservation(actuation.id(), lease.revision()),
-                    source, actuation.id().body().physicalEpoch()) : pending;
-            var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, chest, worker, worker.getUUID(), source, -1);
+                    source, ExpeditionSupplyAuthority.destinationEpoch(state, a, actuation.id().body().physicalEpoch()),
+                    destination == null ? -1 : destination.slot(), destination == null ? 0 : destination.before()) : pending;
+            var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, physical, attached, worker, worker.getUUID(), source, step.destinationSlot(), step.destinationBefore());
             if (pending == null) {
                 if (!ReferenceContainerCustody.hasOperationalCustody(state, mission.sender().containerId())
                         || !ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, a)) || !transfer.before()) return false;
@@ -56,12 +66,15 @@ final class FrontierV3ExpeditionSupplyExecutor {
             if (!transfer.after() && (!transfer.before() || !transfer.apply() || !transfer.after()))
                 throw new IllegalArgumentException("supply effect matches neither unapplied nor applied physical preimage");
             var layout = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, mission.sender().containerId());
-            var held = new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(a.actorId(), worker, a.slot()), load.foodKind(), a.quantity());
-            boolean accepted = submit(level, runtime, mission, new ExpeditionSupplyHotLoaded(mission.id(), a.claimId(), step, layout, List.of(held)));
+            var destinationLayout = attached == null ? List.of(new FungiblePhysicalObservation.Stack(
+                    FrontierV3ActorResourceSlots.address(a.actorId(), worker, a.slot()), load.foodKind(), a.quantity()))
+                    : FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(attached.inventory(), state, attached.containerId());
+            boolean accepted = submit(level, runtime, mission, new ExpeditionSupplyHotLoaded(mission.id(), a.claimId(), step, layout, destinationLayout));
             if (accepted) {
-                if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, mission.sender().containerId(), chest))
+                if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, mission.sender().containerId(), physical)
+                        || attached != null && !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, attached.containerId(), attached))
                     throw new IllegalStateException("supply transfer lacks its next container replica boundary");
-                FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), a.actorId(), worker);
+                if (attached == null) FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), a.actorId(), worker);
             }
             return accepted;
         } catch (IllegalArgumentException conflict) {

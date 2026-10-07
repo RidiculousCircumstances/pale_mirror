@@ -25,7 +25,12 @@ final class FrontierV3CommandSubmission {
 
     static CommandResult submitBound(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload,
                                      ScheduledAction binding) {
-        return requireAccepted(submitRaw(runtime, phase, id, payload, Optional.of(binding)));
+        return requireAccepted(submitResultBound(runtime, phase, id, payload, binding));
+    }
+
+    static CommandResult submitResultBound(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload,
+                                           ScheduledAction binding) {
+        return submitRaw(runtime, phase, id, payload, Optional.of(binding));
     }
 
     private static CommandResult requireAccepted(CommandResult result) {

@@ -11,9 +11,11 @@ public sealed interface ResidentFoodSource permits ResidentFoodSource.Depot, Res
             this(settlementId, containerId, accountId, ResidentMeal.CARRIED_PORTION_SLOT);
         }
         public Depot { Objects.requireNonNull(settlementId); Objects.requireNonNull(containerId); Objects.requireNonNull(accountId);
-            Objects.requireNonNull(portionSlot); }
+            Objects.requireNonNull(portionSlot);
+            if (portionSlot instanceof ActorItemSlot.AttachedStorage) throw new IllegalArgumentException("meal portion belongs to the eater, not attached storage"); }
     }
     record Personal(SubjectId actorId, SubjectId accountId, ActorItemSlot slot) implements ResidentFoodSource {
-        public Personal { Objects.requireNonNull(actorId); Objects.requireNonNull(accountId); Objects.requireNonNull(slot); }
+        public Personal { Objects.requireNonNull(actorId); Objects.requireNonNull(accountId); Objects.requireNonNull(slot);
+            if (slot instanceof ActorItemSlot.AttachedStorage) throw new IllegalArgumentException("personal food has no mobile container custody"); }
     }
 }

@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.*;
 import io.farfrontier.palemirror.frontier.v3.process.ProductionProcess;
+import io.farfrontier.palemirror.frontier.v3.process.CompanyFoundationProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 import java.util.List;
@@ -43,7 +44,9 @@ class ProductionPhysicalReleaseTest {
         assertFalse(completed.productionJobs().containsKey(f.job().id()));
         assertFalse(completed.inventory().items().containsKey(f.job().consumedItemId()));
         assertEquals(64, completed.inventory().items().get(f.job().outputItemId()).count());
-        assertEquals(FixedScalar.ONE, completed.inventory().economics().require(f.job().workerId()).balance());
+        assertEquals(f.state().inventory().economics().require(CompanyFoundationProcess.companyId(f.job().settlementId())).balance()
+                        .plus(f.order().acceptedTotalPrice()),
+                completed.inventory().economics().require(CompanyFoundationProcess.companyId(f.job().settlementId())).balance());
     }
 
     @Test void startedExactEffectCannotLoseItsCustodyThroughEitherReleaseEntryPoint() {

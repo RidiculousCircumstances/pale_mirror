@@ -12,6 +12,7 @@ final class GoodsShipmentPlanning {
     static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
         var retained = state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal())
                 .map(shipment -> shipment.execution().actorId())
+                .filter(id -> state.actorLocations().get(id).kind() == ActorKind.RESIDENT)
                 .filter(id -> state.humanPopulation().resident(id).settlementId().equals(home))
                 .collect(java.util.stream.Collectors.toSet());
         return new SettlementStaffingPort.Demand(ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS,
@@ -102,6 +103,37 @@ final class GoodsShipmentPlanning {
                                 ? Optional.empty() : Optional.of(new SubjectId("budget:" + missionId.value().replace(':', '-'))));
                 if (state.bootstrap().ruleset().schemaVersion() >= 17) {
                     var load = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyPlanning.walkingLoad(state, mission, group, now);
+                    if (load.isEmpty()) {
+                        var walkingMission = mission; var walkingGroup = group;
+                        boolean capacityNeedsAnimal = state.bootstrap().ruleset().residentLife().foods().foods().keySet().stream()
+                                .map(kind -> io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyPlanning.walkingForecast(state, walkingMission, walkingGroup, now, kind))
+                                .flatMap(Optional::stream).anyMatch(plan -> plan.transport() == io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionProvisioning.Transport.PACK_ANIMAL);
+                        if (!capacityNeedsAnimal) continue;
+                        var asset = state.transportFleet().assets().values().stream().filter(candidate ->
+                                io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAssetAdmission.available(state, candidate, seller.endpoint().settlementId()))
+                                .sorted(Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAsset::actorId)).findFirst();
+                        if (asset.isEmpty()) continue; // Real finite capacity, never spawn an animal for a job.
+                        var animal = asset.orElseThrow();
+                        var carried = FungibleResourceCustodySupport.accountAtContainer(state, animal.containerId()).map(CustodyAccount::id)
+                                .orElseGet(() -> ReferenceContainerCustody.scopeId(animal.containerId()));
+                        shipment = new Shipment(shipment.id(), shipment.authorization(), state.actorExecutions().next(animal.actorId(), ActorActivityKind.COURIER, shipment.id()),
+                                shipment.sender(), shipment.receiver(), shipment.sourceAccountId(), carried, shipment.receivingAccountId(), shipment.itemKind(),
+                                shipment.lotQuantities(), shipment.status(), shipment.revision(), shipment.pendingPhysicalStep(), shipment.reception(), shipment.transportMissionId(), Optional.of(animal.containerId()));
+                        var animalMembers = new ArrayList<io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member>();
+                        animalMembers.add(new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member(animal.actorId(),
+                                io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Role.CARRIER, ActorActivityKind.COURIER, shipment.id()));
+                        for (var member : members) animalMembers.add(new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member(member.actorId(),
+                                io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Role.GUIDE, ActorActivityKind.GROUP_MEMBER, groupId));
+                        group = new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup(group.id(), group.mission(), animalMembers,
+                                group.formation(), group.phase(), group.revision(), group.goalOrdinal(), group.journey());
+                        try {
+                            home = TransportGroupMissionPort.rendezvous(state, seller.endpoint(), animalMembers.size());
+                            destination = TransportGroupMissionPort.rendezvous(state, buyer.endpoint(), animalMembers.size());
+                        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { continue; }
+                        mission = new TransportMission(missionId, groupId, List.of(shipment.id()), seller.endpoint(), buyer.endpoint(),
+                                home, destination, TransportMission.Stage.LOADING, 1, mission.financialBudgetId()).withTransportAsset(animal.actorId());
+                        load = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyPlanning.load(state, mission, group, now);
+                    }
                     if (load.isEmpty()) continue;
                     mission = mission.withSupplies(load.orElseThrow());
                 }

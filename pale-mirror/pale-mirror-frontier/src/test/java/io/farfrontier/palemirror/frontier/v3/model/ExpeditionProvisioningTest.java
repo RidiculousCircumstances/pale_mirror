@@ -12,6 +12,17 @@ class ExpeditionProvisioningTest {
     private static final FoodCatalog.Food FOOD = LIFE.foods().require(FoodCatalog.BREAD);
     private static final ExpeditionRules RULES = ExpeditionRules.initial();
 
+    @Test void survivingActualAnimalDoesNotAcquireFoodNeedsForDeadHumanMembers() {
+        var plan = ExpeditionProvisioning.planWithAsset(List.of(), 500, 500, 1, 0, 15, FOOD, LIFE, RULES);
+        assertTrue(plan.feasible());
+        assertEquals(ExpeditionProvisioning.Transport.PACK_ANIMAL, plan.transport());
+        assertEquals(0, plan.foodToLoad());
+        assertEquals(ExpeditionProvisioning.Refusal.CAPACITY,
+                ExpeditionProvisioning.planWithAsset(List.of(), 500, 500, 16, 0, 15, FOOD, LIFE, RULES).refusal());
+        assertThrows(IllegalArgumentException.class, () -> ExpeditionProvisioning.plan(List.of(), 500, 500, 0,
+                0, false, FOOD, LIFE, RULES), "no surviving human or real asset means no expedition carrier");
+    }
+
     @Test void forecastCountsReturnAndMarginAndVariedMetabolismNotJustOutwardDistance() {
         var slow = new ExpeditionProvisioning.Member(CARRIER, LIFE.eatBelowUnits(), LIFE.metabolismMinPermille(), 0, 1);
         var fast = new ExpeditionProvisioning.Member(COMPANION, LIFE.eatBelowUnits(), LIFE.metabolismMaxPermille(), 0, 0);

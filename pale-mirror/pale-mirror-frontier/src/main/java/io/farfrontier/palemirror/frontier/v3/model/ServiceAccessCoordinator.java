@@ -39,9 +39,7 @@ public final class ServiceAccessCoordinator {
     public static java.util.Set<SubjectId> wakePoints(FrontierWorldState state, SubjectId actorId) {
         var points = new java.util.HashSet<SubjectId>();
         var movement = state.actorMovements().get(actorId);
-        if (movement != null && movement.context() instanceof
-                io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit exit)
-            points.add(exit.depotId());
+        if (movement != null) movement.context().clearancePoint().ifPresent(points::add);
         var actor = state.actorLocations().get(actorId);
         if (actor != null) state.bootstrap().settlements().stream()
                 .flatMap(settlement -> settlement.structures().stream())
@@ -59,9 +57,8 @@ public final class ServiceAccessCoordinator {
     public static boolean witnessedActorMovementExit(FrontierWorldState state,
                                                      io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement movement,
                                                      BodyPosition observedBody) {
-        if (!(movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit exit))
-            return false;
-        SubjectId depotId = exit.depotId();
+        if (movement.context().clearancePoint().isEmpty()) return false;
+        SubjectId depotId = movement.context().clearancePoint().orElseThrow();
         ActorLocation actor = state.actorLocations().get(movement.order().actorId());
         return actor != null && witnessedExit(boundary(state, depotId), actor.body(), observedBody);
     }
@@ -80,8 +77,7 @@ public final class ServiceAccessCoordinator {
                         .thenComparing(demand -> demand.identity().ownerId())).toList();
         boolean requestingSelfCare = ServiceAccessCapabilities.priority(requested) == ServiceAccessDemand.Priority.SELF_CARE;
         boolean departing = state.actorMovements().values().stream().anyMatch(movement ->
-                movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit exit
-                        && exit.depotId().equals(requested.pointId())
+                movement.context().clearancePoint().equals(Optional.of(requested.pointId()))
                         && !awaitingBody(state, movement.order().actorId())
                         && access.occupied(currentBody(state, movement.order().actorId()))
                         && (!requestingSelfCare || !movement.order().actorId().equals(requested.actorId())));

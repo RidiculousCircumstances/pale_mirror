@@ -128,6 +128,9 @@ public final class KnownPedestrianRouteKnowledge {
     public List<SurfaceAnchor> plannedPath(SurfaceAnchor start, MovementOrder order) {
         return KnownPedestrianNavigation.plannedRoute(geometryFrom(start), start, order);
     }
+    public List<SurfaceAnchor> plannedPath(SurfaceAnchor start, MovementOrder order, List<SurfaceAnchor> hint) {
+        return KnownPedestrianNavigation.plannedRoute(geometryFrom(start), start, order, hint);
+    }
     public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult> planningEvidence(SurfaceAnchor start, SurfaceAnchor target) {
         return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.peek(geometryFrom(start), start, target);
     }

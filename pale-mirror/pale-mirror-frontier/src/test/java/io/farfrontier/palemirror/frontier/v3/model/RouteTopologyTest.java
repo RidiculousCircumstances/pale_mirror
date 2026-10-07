@@ -115,7 +115,7 @@ class RouteTopologyTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-construction"), 94L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement);
         List<BlockPosition> replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0),
-                baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4));
+                baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3));
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:route-1"), settlement, replacement, 0, RouteConstructionStatus.BUILDING);
         FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project, java.util.Optional.empty());
         assertEquals(FrontierRouteNetwork.constructionCells(bootstrap, state.routeTopology(), settlement, replacement),
@@ -130,7 +130,7 @@ class RouteTopologyTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-construction-work"), 95L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement);
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:route-work"), settlement,
-                List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0), baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4)),
+                List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0), baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3)),
                 0, RouteConstructionStatus.BUILDING);
         SubjectId materialId = new SubjectId("item:route-work-concrete");
         FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project, java.util.Optional.empty()).withInventory(FrontierWorldState.initial(bootstrap).inventory());
@@ -202,7 +202,7 @@ class RouteTopologyTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-cutover"), 96L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement);
         List<BlockPosition> replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0), baseline.get(2).offset(-10, 0, 0),
-                baseline.get(2), baseline.get(3), baseline.get(4));
+                baseline.get(2), baseline.get(3));
         int required = FrontierRouteNetwork.constructionCells(bootstrap, RouteTopology.initial(), settlement, replacement).size();
         RouteConstruction ready = new RouteConstruction(new SubjectId("construction:cutover"), settlement, replacement, required, RouteConstructionStatus.READY);
         FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), ready, java.util.Optional.empty());
@@ -219,7 +219,7 @@ class RouteTopologyTest {
         Settlement settlement = bootstrap.settlements().getFirst();
         List<BlockPosition> baseline = state.routeTopology().settlementWaypoints(bootstrap, settlement.id());
         List<BlockPosition> replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0),
-                baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4));
+                baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3));
         ResidentProfile guard = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement.id()))
                 .filter(resident -> resident.profession() == ResidentProfession.SECURITY_WORKER).findFirst().orElseThrow();

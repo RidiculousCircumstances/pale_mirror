@@ -13,6 +13,7 @@ final class ActorItemTransferStepCodec {
             out.writeByte(slice.before()); out.writeByte(slice.moved()); out.writeLong(slice.epoch());
         }
         out.writeLong(step.destinationEpoch());
+        out.writeInt(step.destinationSlot()); out.writeInt(step.destinationBefore());
     }
     static ActorItemTransferStep read(DataInputStream in) throws IOException {
         var observation = ActorHotObservationCodec.read(in); int count = in.readUnsignedByte();
@@ -20,6 +21,6 @@ final class ActorItemTransferStepCodec {
         var slices = new ArrayList<MaterialSourceSelection.Slice>();
         for (int i = 0; i < count; i++) slices.add(new MaterialSourceSelection.Slice(
                 FungibleResourceStateCodec.readPhysicalAddress(in), in.readUnsignedByte(), in.readUnsignedByte(), in.readLong()));
-        return new ActorItemTransferStep(observation, slices, in.readLong());
+        return new ActorItemTransferStep(observation, slices, in.readLong(), in.readInt(), in.readInt());
     }
 }

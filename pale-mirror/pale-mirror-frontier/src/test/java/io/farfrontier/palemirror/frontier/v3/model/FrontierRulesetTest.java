@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierRulesetTest {
     @Test void tradePlaytestStockIsFinitePublicGenesisAndPinnedOnRecovery() {
-        var selected = FrontierRulesets.installed("frontier-v3-trade-playtest-r2");
+        var selected = FrontierRulesets.installed("frontier-v3-trade-playtest-r3");
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:trade-playtest"), 41L, selected));
         var seller = new SubjectId("settlement:7");
         assertEquals(320, SettlementFoodPolicy.breadStock(initial, seller));
@@ -30,6 +30,8 @@ class FrontierRulesetTest {
         assertEquals(320, SettlementFoodPolicy.breadStock(recovered, seller));
         assertEquals(64, SettlementFoodPolicy.breadStock(FrontierWorldState.initial(
                 FrontierBootstrapper.create(new WorldId("frontier:ordinary-stock"), 41L)), seller));
+        assertEquals(17, FrontierRulesets.production().schemaVersion());
+        assertEquals(12, initial.transportFleet().assets().size(), "adopted rules create a finite fleet, never dispatch-time animals");
         assertThrows(IllegalArgumentException.class, () -> FrontierRulesets.installed("unknown-rules"));
         assertThrows(IllegalArgumentException.class, () -> FrontierRulesets.require(selected.id(), selected.schemaVersion(), "wrong-digest"));
     }

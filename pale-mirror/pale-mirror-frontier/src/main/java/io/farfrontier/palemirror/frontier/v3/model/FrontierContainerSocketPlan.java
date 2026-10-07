@@ -17,6 +17,7 @@ public final class FrontierContainerSocketPlan {
 
     public static Optional<GrayboxCell> support(FrontierWorldState state, ContainerSurface surface) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(surface, "surface");
+        if (!surface.fixed()) return Optional.empty(); // An actor attachment has no structural block socket.
         BlockPosition position = new BlockPosition(surface.position().x(), surface.position().y() - 1, surface.position().z());
         if (state.physicalDeltas().containsKey(position)) return Optional.empty();
         if (surface.containerId().equals(FrontierRouteNetwork.MAINTENANCE_CONTAINER)) {

@@ -26,10 +26,10 @@ class FrontierPersistenceCodecTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:footprint-version"), 91L));
         var codec = new FrontierWorldStateCodec();
         var encoded = codec.encode(state);
-        assertEquals(258, Byte.toUnsignedInt(encoded[4]) * 256 + Byte.toUnsignedInt(encoded[5]));
+        assertEquals(FrontierStateSchema.VERSION, Byte.toUnsignedInt(encoded[4]) * 256 + Byte.toUnsignedInt(encoded[5]));
         assertEquals(state.bootstrap().worldId(), FrontierWorldSnapshotHeader.read(encoded).worldId());
         assertArrayEquals(encoded, codec.encode(codec.decode(encoded)));
-        for (int legacy = 177; legacy < 258; legacy++) {
+        for (int legacy = 177; legacy < FrontierStateSchema.VERSION; legacy++) {
             var old = encoded.clone(); old[4] = (byte) (legacy >>> 8); old[5] = (byte) legacy;
             var before = old.clone();
             org.junit.jupiter.api.Assertions.assertTrue(assertThrows(IllegalArgumentException.class,
@@ -67,8 +67,8 @@ class FrontierPersistenceCodecTest {
     void preCurrentEnvelopeAndTruncatedSnapshotsFailClosed() {
         byte[] encoded = FrontierPersistenceCodec.encodeSnapshot(new SnapshotRecord(new CheckpointImage(new WorldId("frontier:empty"), Revision.ZERO,
                 SimInstant.ZERO, new byte[0], List.of(), List.of()), 0L));
-        assertEquals(102, Byte.toUnsignedInt(encoded[4]));
-        for (int version : new int[]{74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 91, 92, 97, 98, 99, 100, 101}) {
+        assertEquals(106, Byte.toUnsignedInt(encoded[4]));
+        for (int version = 74; version < 106; version++) {
             byte[] oldEnvelope = encoded.clone(); oldEnvelope[4] = (byte) version;
             assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeSnapshot(oldEnvelope));
         }

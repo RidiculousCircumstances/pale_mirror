@@ -156,6 +156,11 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         return Optional.of(engine.executionView());
     }
 
+    Optional<io.farfrontier.palemirror.frontier.v3.api.CommandAdmissionCapacity> commandAdmissionCapacity() {
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        return Optional.of(engine.commandAdmissionCapacity());
+    }
+
     /** Returns the exact immutable state/revision/instant for an owning server-thread adapter. */
     Optional<FrontierCanonicalState<S>> canonicalState() {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();

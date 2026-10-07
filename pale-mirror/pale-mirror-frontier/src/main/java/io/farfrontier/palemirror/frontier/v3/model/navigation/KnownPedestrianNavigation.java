@@ -64,6 +64,40 @@ public final class KnownPedestrianNavigation {
         return route(geometry, start, order, true);
     }
 
+    /** Reuse supported accepted geometry; an advisory hint grants neither movement nor arrival. */
+    public static List<SurfaceAnchor> plannedRoute(PedestrianRouteGeometry geometry, SurfaceAnchor start,
+                                                  MovementOrder order, List<SurfaceAnchor> hint) {
+        Objects.requireNonNull(hint);
+        if (order.capability() != TraversalCapability.PEDESTRIAN)
+            throw new IllegalArgumentException("known pedestrian navigation cannot change actor capability");
+        if (hint.size() > TimedKnownRoute.MAX_SURFACES)
+            throw new IllegalArgumentException("known route hint exceeds bounded movement geometry");
+        List<SurfaceAnchor> best = null;
+        for (var target : order.legalStations()) {
+            int goal = hint.indexOf(target);
+            if (goal < 0) continue;
+            int join = -1;
+            long nearest = Long.MAX_VALUE;
+            for (int index = 0; index <= goal; index++) {
+                var candidate = hint.get(index);
+                long distance = Math.abs((long) start.x() - candidate.x()) + Math.abs((long) start.z() - candidate.z());
+                if ((distance == 0 && start.equals(candidate) || distance == 1 && Math.abs((long) start.y() - candidate.y()) <= 1)
+                        && distance < nearest) { join = index; nearest = distance; }
+            }
+            if (join < 0) continue;
+            var candidate = new java.util.ArrayList<SurfaceAnchor>();
+            if (!start.equals(hint.get(join))) candidate.add(start);
+            candidate.addAll(hint.subList(join, goal + 1));
+            if (candidate.size() > TimedKnownRoute.MAX_SURFACES) continue;
+            // A changed surface invalidates this optimization, not the semantic order.
+            if (candidate.stream().anyMatch(surface -> !geometry.bounds().contains(surface.support())
+                    || geometry.blocked(surface) || !surface.equals(geometry.supportAt(surface.x(), surface.z())))) continue;
+            if (candidate.size() > 1) new PedestrianRouteReceipt(candidate);
+            if (best == null || candidate.size() < best.size()) best = List.copyOf(candidate);
+        }
+        return best == null ? plannedRoute(geometry, start, order) : best;
+    }
+
     private static List<SurfaceAnchor> route(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order, boolean deferredPlanning) {
         Objects.requireNonNull(geometry); Objects.requireNonNull(start); Objects.requireNonNull(order);
         if (order.capability() != TraversalCapability.PEDESTRIAN)
@@ -73,10 +107,13 @@ public final class KnownPedestrianNavigation {
         List<SurfaceAnchor> best = null;
         PedestrianRouteResult deferred = null;
         PedestrianRouteResult failure = null;
+        var pendingRequests = new java.util.ArrayList<PedestrianRouteRequest>();
         for (SurfaceAnchor station : order.legalStations()) {
             if (!geometry.bounds().contains(station.support()) || geometry.blocked(station)) continue;
             PedestrianRouteResult result = deferredPlanning ? PedestrianRoutePlanning.query(geometry, start, station)
                     : PedestrianRoutePlanning.calculate(geometry, start, station);
+            if (result.status() == PedestrianRouteResult.Status.PLANNING)
+                pendingRequests.add(PedestrianRouteRequest.of(geometry, start, station));
             if (result.status() == PedestrianRouteResult.Status.FOUND) {
                 List<SurfaceAnchor> candidate = result.route();
                 if (best == null || candidate.size() < best.size()) best = candidate;
@@ -85,7 +122,10 @@ public final class KnownPedestrianNavigation {
                 if (result.status() != PedestrianRouteResult.Status.NO_PATH) deferred = result;
             }
         }
-        if (best == null && deferred != null) throw new RouteUnavailable(deferred.status(), deferred.reason());
+        if (best == null && deferred != null) {
+            pendingRequests.forEach(PedestrianRoutePlanning::await);
+            throw new RouteUnavailable(deferred.status(), deferred.reason());
+        }
         if (best == null) throw new RouteUnavailable(failure == null ? "NO_CLEAR_DECLARED_STATION"
                 : failure.reason() + "; start=" + start + "; goals=" + order.legalStations());
         return best;

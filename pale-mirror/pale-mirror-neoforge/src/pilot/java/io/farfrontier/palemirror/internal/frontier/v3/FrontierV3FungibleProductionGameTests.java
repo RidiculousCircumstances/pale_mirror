@@ -67,7 +67,7 @@ public final class FrontierV3FungibleProductionGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-production", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void actualLotOutputClosesJobPaymentAndReplicaBoundary(GameTestHelper helper) {
+    public static void actualLotOutputClosesPublicJobAndReplicaBoundary(GameTestHelper helper) {
         Fixture f = fixture(helper, "success");
         var runtime = FrontierV3ReferenceContainerCustodyGameTests.runtime(f.state().bootstrap().worldId(), f.state());
         var chest = FrontierV3ReferenceContainerCustodyGameTests.chest(helper, f.position(), f.depot());
@@ -85,7 +85,10 @@ public final class FrontierV3FungibleProductionGameTests {
         helper.assertTrue(!after.productionJobs().containsKey(f.job().id()), "registered confirmation retires the exact job");
         helper.assertTrue(after.inventory().fungibleResources().lots().get(f.job().outputItemId()).quantity() == 64,
                 "actual observed bread must be accounted as the declared lot");
-        helper.assertTrue(after.inventory().economics().require(f.job().workerId()).balance().equals(FixedScalar.ONE), "one completed job pays once");
+        helper.assertFalse(after.inventory().economics().accounts().containsKey(f.job().workerId()),
+                "communal production never manufactures a personal worker wallet");
+        helper.assertValueEqual(after.inventory().economics(), f.state().inventory().economics(),
+                "public output completion has no wage or private invoice");
         helper.assertTrue(after.replicaCustody().replicas().get(f.depot()).state() == PhysicalReplicaState.EXPECTED
                 && !ReferenceContainerCustody.hasLiveCustody(after, f.depot()), "confirmed output must close into its next replica boundary");
         helper.succeed();

@@ -35,7 +35,7 @@ class StrategicObjectiveProcessTest {
     }
 
     @Test
-    void fullDepotAllowsCapacityNeutralRecipeAndRetainsASelectedMarketDemand() {
+    void fullDepotAllowsCapacityNeutralRecipeAndRetainsCommunalProductionTask() {
         FrontierWorldState initial = initial("frontier:full-depot-bread-admission", 407L);
         SubjectId owner = initial.bootstrap().settlements().getFirst().id();
         List<ProposedEvent> selected = StrategicObjectiveProcess.plan(initial, StrategicObjectiveProcess.review(owner, 1, 60L));
@@ -48,14 +48,14 @@ class StrategicObjectiveProcessTest {
                 .filter(StrategicTaskPlanned.class::isInstance)
                 .map(StrategicTaskPlanned.class::cast).map(StrategicTaskPlanned::task)
                 .filter(value -> value.objectiveId().equals(objective.id())).findFirst().orElseThrow();
-        MarketDemand demand = selected.stream().map(ProposedEvent::payload)
-                .filter(MarketDemandOpened.class::isInstance)
-                .map(MarketDemandOpened.class::cast).map(MarketDemandOpened::demand)
-                .findFirst().orElseThrow();
+        assertTrue(selected.stream().anyMatch(event -> event.payload() instanceof
+                io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created created
+                && created.action().equals(ProductionProcess.start(task, 61L))));
+        assertTrue(selected.stream().noneMatch(event -> event.payload() instanceof MarketDemandOpened),
+                "communal production is not an optional company invoice");
         FrontierWorldState pending = StrategicObjectiveProcess.reduceTask(
                 StrategicObjectiveProcess.reduceObjective(initial, owner, new StrategicObjectiveSelected(objective)),
                 owner, new StrategicTaskPlanned(task));
-        pending = MarketClearingProcess.reduceOpened(pending, owner, new MarketDemandOpened(demand));
         SubjectId depot = FrontierWorldState.depotId(owner);
         ExactInventory inventory = pending.inventory();
         while (pending.withInventory(inventory).firstFreeContainerSlot(depot).isPresent()) {
@@ -69,11 +69,6 @@ class StrategicObjectiveProcessTest {
         assertTrue(StrategicObjectiveProcess.plan(full, StrategicObjectiveProcess.review(owner, 2, 61L)).stream()
                 .noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected value
                         && value.objective().kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD));
-        var clearing = MarketClearingProcess.clear(demand, 1, 160L);
-        List<ProposedEvent> waiting = MarketClearingProcess.plan(full, clearing);
-        assertEquals(1, waiting.size());
-        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class,
-                waiting.getFirst().payload());
         assertEquals(StrategicTaskStatus.PENDING, full.strategicPlans().tasks().get(task.id()).status());
         assertTrue(full.productionJobs().isEmpty());
     }
@@ -230,15 +225,20 @@ class StrategicObjectiveProcessTest {
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 1, 40L));
 
-        StrategicObjectiveSelected selected = assertInstanceOf(StrategicObjectiveSelected.class, planned.getFirst().payload());
+        StrategicObjectiveSelected selected = planned.stream().map(ProposedEvent::payload).filter(StrategicObjectiveSelected.class::isInstance)
+                .map(StrategicObjectiveSelected.class::cast).findFirst().orElseThrow();
         assertEquals(StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, selected.objective().kind()); assertEquals(nearby, selected.objective().infectionTarget().orElseThrow());
         state = StrategicObjectiveProcess.reduceObjective(state, settlement.id(), selected);
-        state = StrategicObjectiveProcess.reduceTask(state, settlement.id(), assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload()));
+        state = StrategicObjectiveProcess.reduceTask(state, settlement.id(), planned.stream().map(ProposedEvent::payload)
+                .filter(StrategicTaskPlanned.class::isInstance).map(StrategicTaskPlanned.class::cast)
+                .filter(value -> value.task().objectiveId().equals(selected.objective().id())).findFirst().orElseThrow());
         state = state.withInventory(foodInventory);
         List<ProposedEvent> activeReview = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 2, 240L));
-        StrategicTaskTransition preempted = assertInstanceOf(StrategicTaskTransition.class, activeReview.getFirst().payload());
+        StrategicTaskTransition preempted = activeReview.stream().map(ProposedEvent::payload).filter(StrategicTaskTransition.class::isInstance)
+                .map(StrategicTaskTransition.class::cast).findFirst().orElseThrow();
         assertEquals(StrategicTaskStatus.BLOCKED, preempted.status());
-        StrategicObjectiveSelected food = assertInstanceOf(StrategicObjectiveSelected.class, activeReview.get(1).payload());
+        StrategicObjectiveSelected food = activeReview.stream().map(ProposedEvent::payload).filter(StrategicObjectiveSelected.class::isInstance)
+                .map(StrategicObjectiveSelected.class::cast).findFirst().orElseThrow();
         assertEquals(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, food.objective().kind(),
                 "food must preempt containment that is still waiting on its separate infirmary reagent");
         assertTrue(state.strategicPlans().hasActiveObjective(settlement.id(), StrategicObjectiveLane.STRATEGIC));
@@ -281,14 +281,16 @@ class StrategicObjectiveProcessTest {
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 1, 60L));
 
-        StrategicObjectiveSelected selected = assertInstanceOf(StrategicObjectiveSelected.class, planned.getFirst().payload());
-        StrategicTaskPlanned task = assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload());
+        StrategicObjectiveSelected selected = planned.stream().map(ProposedEvent::payload).filter(StrategicObjectiveSelected.class::isInstance)
+                .map(StrategicObjectiveSelected.class::cast).findFirst().orElseThrow();
+        StrategicTaskPlanned task = planned.stream().map(ProposedEvent::payload).filter(StrategicTaskPlanned.class::isInstance)
+                .map(StrategicTaskPlanned.class::cast).filter(value -> value.task().objectiveId().equals(selected.objective().id())).findFirst().orElseThrow();
         assertEquals(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, selected.objective().kind());
         assertEquals(StrategicTaskKind.PRODUCE_BREAD, task.task().kind());
         assertEquals(List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), task.task().requirements());
-        assertTrue(planned.stream().map(ProposedEvent::payload).anyMatch(MarketDemandOpened.class::isInstance));
+        assertTrue(planned.stream().map(ProposedEvent::payload).noneMatch(MarketDemandOpened.class::isInstance));
         assertTrue(planned.stream().anyMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created created
-                && created.action().kind().equals("frontier.market.clear")));
+                && created.action().equals(ProductionProcess.start(task.task(), 61L))));
     }
 
     @Test

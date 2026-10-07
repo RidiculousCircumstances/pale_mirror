@@ -191,7 +191,13 @@ final class FrontierV3SceneDeparturePersistence {
                      long revision, long epoch, long residenceGeneration,
                      BodyPosition body, FixedScalar health,
                      Optional<FrontierV3ActorBodyDeparture.HandStack> offhand,
-                     Optional<FrontierV3ActorBodyDeparture.HandStack> mainhand) {
+                     Optional<FrontierV3ActorBodyDeparture.HandStack> mainhand,
+                     Optional<FrontierV3StoredAttachedStorage> attachedStorage) {
+        SavedBody(UUID id, String type, String actor, String kind, String owner, String representation,
+                  long revision, long epoch, long residenceGeneration, BodyPosition body, FixedScalar health,
+                  Optional<FrontierV3ActorBodyDeparture.HandStack> offhand, Optional<FrontierV3ActorBodyDeparture.HandStack> mainhand) {
+            this(id, type, actor, kind, owner, representation, revision, epoch, residenceGeneration, body, health, offhand, mainhand, Optional.empty());
+        }
         SavedBody(UUID id, String type, String actor, String kind, String owner, String representation,
                   long revision, long epoch, long residenceGeneration,
                   BodyPosition body, FixedScalar health, Optional<FrontierV3ActorBodyDeparture.HandStack> offhand) {
@@ -260,7 +266,8 @@ final class FrontierV3SceneDeparturePersistence {
                     tag.getLong(FrontierV3ActorCarrierComposition.EPOCH_KEY),
                     tag.getLong(FrontierV3ActorBodyController.RESIDENCE_KEY),
                     observedBody.orElseThrow(),
-                    new FixedScalar(Math.round((double) health * FixedScalar.SCALE)), offhand, mainhand));
+                    new FixedScalar(Math.round((double) health * FixedScalar.SCALE)), offhand, mainhand,
+                    FrontierV3StoredAttachedStorage.fromEntitySave(entity)));
         }
 
         boolean matches(FrontierV3SceneDeparture receipt) {
@@ -291,7 +298,8 @@ final class FrontierV3SceneDeparturePersistence {
                     && epoch == declaration.epoch() && residenceGeneration == receipt.residenceGeneration()
                     && type.equals(FrontierV3ActorCarrierFactory.entityType(declaration.kind()))
                     && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health())
-                    && offhand.equals(receipt.offhand()) && mainhand.equals(receipt.mainhand());
+                    && offhand.equals(receipt.offhand()) && mainhand.equals(receipt.mainhand())
+                    && attachedStorage.equals(receipt.attachedStorage());
         }
     }
 

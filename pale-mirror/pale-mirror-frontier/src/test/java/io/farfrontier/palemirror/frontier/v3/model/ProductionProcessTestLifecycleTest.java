@@ -741,10 +741,11 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         FrontierWorldState completed = PhysicalIntentLifecycleFixture.transition(running, prepared.settlementId(), prepared.intent(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         assertTrue(completed.productionJobs().isEmpty());
         assertEquals("minecraft:bread", completed.inventory().items().get(prepared.job().outputItemId()).itemKind());
-        assertEquals(FixedScalar.ONE, completed.inventory().economics().require(prepared.job().workerId()).balance());
-        assertEquals(FixedScalar.ONE, completed.inventory().economics().require(CompanyFoundationProcess.companyId(prepared.job().settlementId())).balance());
         MarketWorkOrder terminalOrder = completed.companies().market().workOrders().values().stream()
                 .filter(order -> order.jobId().equals(prepared.job().id())).findFirst().orElseThrow();
+        assertFalse(completed.inventory().economics().accounts().containsKey(prepared.job().workerId()));
+        assertEquals(running.inventory().economics().require(terminalOrder.sellerId()).balance().plus(terminalOrder.acceptedTotalPrice()),
+                completed.inventory().economics().require(terminalOrder.sellerId()).balance());
         assertEquals(MarketWorkOrderStatus.FULFILLED, terminalOrder.status());
         TerminalProductionReceipt terminalReceipt = terminalOrder.terminalReceipt().orElseThrow();
         assertEquals(prepared.job().id(), terminalReceipt.jobId());

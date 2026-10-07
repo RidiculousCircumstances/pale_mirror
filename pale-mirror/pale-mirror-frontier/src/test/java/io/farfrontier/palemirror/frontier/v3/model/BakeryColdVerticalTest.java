@@ -20,6 +20,26 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakeryColdVerticalTest {
+    private static void assertWorkOutputIsNotPersonalFood(FrontierWorldState state, ProductionJob job) {
+        var hungry = state.withHumanPopulation(state.humanPopulation().accrueHunger(job.workerId(), 27_000));
+        var workAccount = job.bakeryWork().orElseThrow().actorAccountId();
+        assertTrue(UnitInventory.personalAccounts(hungry, job.workerId()).stream()
+                .noneMatch(account -> account.id().equals(workAccount)), "recipe output remains work custody until delivery");
+        assertFalse(ResidentMealOpportunity.candidate(hungry, job.workerId(), 27_000)
+                .map(candidate -> candidate.foodSource() instanceof ResidentFoodSource.Personal personal
+                        && personal.accountId().equals(workAccount)).orElse(false));
+        var spareLot = new SubjectId("lot:bakery-personal-meal");
+        var spareAccount = new SubjectId("custody:bakery-personal-meal");
+        var resources = hungry.inventory().fungibleResources().issue(new ResourceLot(spareLot, job.settlementId(),
+                FoodCatalog.BREAD, 3, "fixture:personal-food-not-work-output", List.of()), new CustodyAccount(spareAccount,
+                new ResourceCustody.Actor(job.workerId()), java.util.Map.of(spareLot, 3), java.util.Map.of(),
+                Optional.of(new ActorItemSlot.Pocket(0))));
+        hungry = hungry.withInventory(hungry.inventory().withFungibleResources(resources));
+        var selected = ResidentMealOpportunity.candidate(hungry, job.workerId(), 27_000).orElseThrow();
+        assertEquals(spareAccount, ((ResidentFoodSource.Personal) selected.foodSource()).accountId());
+        assertEquals(job.outputCount(), resources.accounts().get(workAccount).lotQuantities().get(job.outputItemId()));
+    }
+
     @Test void retainedHotRouteFailureIsRetriedInColdWithoutClearingCustodyFailures() {
         FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
                 FrontierBootstrapper.create(new WorldId("frontier:bakery-route-recovery"), 41L)), StrategicTaskStatus.PENDING);
@@ -231,6 +251,7 @@ class BakeryColdVerticalTest {
         assertTrue(SettlementCommitmentComposition.ADMISSION.facilityAvailable(restoredStationRelease, job.facilityId()));
         assertFalse(HumanAssignmentProjection.compile(restoredStationRelease).idle(job.workerId()),
                 "station release must not release the worker or their output custody");
+        assertWorkOutputIsNotPersonalFood(restoredStationRelease, job);
         assertAnotherBakerCanStartAfterOutputRemoval(restoredStationRelease, task, job, due);
         assertTrue(BakeryKnownNavigation.path(state, state.productionJobs().get(job.id())).size() > 1);
         BakeryColdStep historicalMove = ProductionProcess.planCompletion(state,

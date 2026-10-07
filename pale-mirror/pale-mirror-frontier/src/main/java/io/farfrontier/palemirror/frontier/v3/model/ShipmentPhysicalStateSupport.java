@@ -8,6 +8,7 @@ public final class ShipmentPhysicalStateSupport {
     public static FrontierWorldState handCustody(FrontierWorldState state, SubjectId subject, ShipmentHandCustodyObserved observed) {
         Shipment shipment = state.shipments().shipments().get(observed.shipmentId());
         if (shipment == null || !subject.equals(shipment.id()) || shipment.status() != Shipment.Status.CARRYING
+                || shipment.mobileContainerId().isPresent()
                 || shipment.pendingPhysicalStep().isPresent() || !shipment.execution().equals(observed.identity().execution()))
             throw new IllegalArgumentException("shipment hand boundary has no exact carrying obligation");
         state.actorExecutions().requireRetained(shipment.execution());
@@ -49,44 +50,37 @@ public final class ShipmentPhysicalStateSupport {
     }
     public record Destination(int slot, int before, Map<SubjectId, Integer> lots) { }
     public static Optional<Destination> destination(FrontierWorldState state, Shipment shipment) {
-        if (shipment.status() != Shipment.Status.CARRYING || shipment.reception().isPresent()) return Optional.empty();
+        if (shipment.reception().isPresent() || shipment.terminal()) return Optional.empty();
+        if (shipment.status() == Shipment.Status.AWAITING_LOAD) return shipment.mobileContainerId().flatMap(container ->
+                ContainerMaterialDestination.selectWhole(state, container, shipment.itemKind(), shipment.lotQuantities(), Optional.empty()))
+                .map(d -> new Destination(d.slot(), d.before(), d.lots()));
         var container = shipment.receiver().containerId();
         int allowed = ShipmentStateSupport.coldTransferLots(state, shipment).values().stream().mapToInt(Integer::intValue).sum();
         if (allowed == 0) return Optional.empty();
-        var record = state.inventory().containers().get(container);
-        for (int slot = 0; slot < record.slotCount(); slot++) {
-            if (state.reservedContainerSlots(container).contains(slot)
-                    || state.inventory().occupiedSlots().containsKey(new InventoryCustody.ContainerSlot(container, slot))) continue;
-            var stack = ReferenceContainerCustody.expectedFungibleSlot(state, container, slot);
-            if (stack.isPresent() && !stack.orElseThrow().itemKind().equals(shipment.itemKind())) continue;
-            int before = stack.map(ReferenceContainerCustody.ProjectedFungibleSlot::quantity).orElse(0);
-            int take = Math.min(allowed, 64 - before);
-            if (take > 0) return Optional.of(new Destination(slot, before, ShipmentStateSupport.portion(shipment.lotQuantities(), take)));
-        }
-        return Optional.empty();
+        return ContainerMaterialDestination.select(state, container, shipment.itemKind(), shipment.lotQuantities(), allowed,
+                ShipmentAuthorizationComposition.capacityCompletionOwner(shipment)).map(d -> new Destination(d.slot(), d.before(), d.lots()));
     }
     public static FrontierWorldState prepare(FrontierWorldState state, SubjectId subject, ShipmentHotPrepared prepared) {
         Shipment shipment = require(state, subject, prepared.shipmentId(), prepared.step());
         if (shipment.pendingPhysicalStep().isPresent()) throw new IllegalArgumentException("shipment already retains a physical effect");
         var order = shipment.itemOrder(prepared.step().lotQuantities());
+        requireStorage(state, shipment);
         if (!ReferenceContainerCustody.hasOperationalCustody(state, order.containerEndpoint().containerId())
                 || !ShipmentServiceAccess.available(state, shipment))
             throw new IllegalArgumentException("shipment cannot prepare without current container custody and its service turn");
         if (!MaterialSourceSelection.select(state.inventory().fungibleResources(), order).equals(prepared.step().source()))
             throw new IllegalArgumentException("shipment effect source differs from current resource bindings");
-        if (shipment.status() == Shipment.Status.CARRYING && (prepared.step().source().size() != 1
+        if (shipment.status() == Shipment.Status.CARRYING && shipment.mobileContainerId().isEmpty() && (prepared.step().source().size() != 1
                 || !prepared.step().source().getFirst().address().equals(new PhysicalStackAddress.ActorHand(shipment.execution().actorId(),
                     io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), shipment.execution().actorId()),
                     ActorContainerItemOrder.Hand.MAIN))))
             throw new IllegalArgumentException("shipment unload has a foreign physical source hand");
-        long destinationEpoch = shipment.status() == Shipment.Status.AWAITING_LOAD
-                ? prepared.step().observation().actuation().body().physicalEpoch()
-                : state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(shipment.receiver().containerId())).authorityEpoch();
+        long destinationEpoch = destinationEpoch(state, shipment, prepared.step().observation().actuation().body().physicalEpoch());
+        boolean containerDestination = shipment.status() == Shipment.Status.CARRYING || shipment.mobileContainerId().isPresent();
         if (prepared.step().destinationEpoch() != destinationEpoch
-                || shipment.status() == Shipment.Status.CARRYING
-                    && (!destination(state, shipment).equals(Optional.of(new Destination(prepared.step().destinationSlot(), prepared.step().destinationBefore(), prepared.step().lotQuantities())))
-                        || !ContainerStorageAdmission.receive(state, shipment.receiver().containerId(), shipment.itemKind(), order.portion().quantity(),
-                            ShipmentAuthorizationComposition.capacityCompletionOwner(shipment))))
+                || !containerDestination && (prepared.step().destinationSlot() != -1 || prepared.step().destinationBefore() != 0)
+                || containerDestination && !destination(state, shipment).equals(Optional.of(new Destination(
+                    prepared.step().destinationSlot(), prepared.step().destinationBefore(), prepared.step().lotQuantities()))))
             throw new IllegalArgumentException("shipment effect has no exact available receiving surface");
         return state.withChanges(FrontierWorldStateUpdate.begin().shipments(state.shipments().replace(shipment, shipment.prepare(prepared.step()))));
     }
@@ -96,18 +90,20 @@ public final class ShipmentPhysicalStateSupport {
             throw new IllegalArgumentException("shipment physical receipt lacks its exact durable pre-effect declaration");
         var order = shipment.itemOrder(receipt.step().lotQuantities());
         // Generic custody validates full stock layouts; the owner also requires this exact body/port.
-        if (shipment.status() == Shipment.Status.AWAITING_LOAD) {
+        if (shipment.status() == Shipment.Status.AWAITING_LOAD && shipment.mobileContainerId().isEmpty()) {
             var hand = new PhysicalStackAddress.ActorHand(shipment.execution().actorId(),
                     io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), shipment.execution().actorId()),
                     ActorContainerItemOrder.Hand.MAIN);
             if (!receipt.destination().equals(List.of(new FungiblePhysicalObservation.Stack(hand, shipment.itemKind(), shipment.quantity()))))
                 throw new IllegalArgumentException("shipment pickup did not enter the declared physical courier hand");
         } else {
-            var target = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(shipment.receiver().containerId(), receipt.step().destinationSlot()));
+            var targetContainer = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.mobileContainerId().orElseThrow() : shipment.receiver().containerId();
+            var target = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(targetContainer, receipt.step().destinationSlot()));
             int remaining = shipment.quantity() - order.portion().quantity();
             var expectedHand = remaining == 0 ? List.<FungiblePhysicalObservation.Stack>of() : List.of(new FungiblePhysicalObservation.Stack(
                     receipt.step().source().getFirst().address(), shipment.itemKind(), remaining));
-            if (!receipt.remainingSource().equals(expectedHand) || receipt.destination().stream().noneMatch(stack -> stack.address().equals(target)
+            if (shipment.status() == Shipment.Status.CARRYING && shipment.mobileContainerId().isEmpty() && !receipt.remainingSource().equals(expectedHand)
+                    || receipt.destination().stream().noneMatch(stack -> stack.address().equals(target)
                     && stack.itemKind().equals(shipment.itemKind()) && stack.quantity() == receipt.step().destinationBefore() + order.portion().quantity()))
                 throw new IllegalArgumentException("shipment unload did not preserve its exact remaining hand and receiver portion");
         }
@@ -119,6 +115,19 @@ public final class ShipmentPhysicalStateSupport {
         if (replacement.terminal()) changes.actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(state,
                 shipment.execution().actorId(), shipment.execution().activityKind(), shipment.id()));
         return state.withChanges(changes);
+    }
+    public static long destinationEpoch(FrontierWorldState state, Shipment shipment, long bodyEpoch) {
+        if (shipment.status() == Shipment.Status.AWAITING_LOAD && shipment.mobileContainerId().isEmpty()) return bodyEpoch;
+        var container = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.mobileContainerId().orElseThrow() : shipment.receiver().containerId();
+        return state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container)).authorityEpoch();
+    }
+    private static void requireStorage(FrontierWorldState state, Shipment shipment) {
+        shipment.mobileContainerId().ifPresent(container -> {
+            var surface = state.inventory().surfaces().get(container);
+            if (surface == null || !surface.location().equals(new ContainerLocation.Mobile(shipment.execution().actorId()))
+                    || !ReferenceContainerCustody.hasOperationalCustody(state, container))
+                throw new IllegalArgumentException("shipment lacks its exact operational attached storage");
+        });
     }
     private static Shipment require(FrontierWorldState state, SubjectId subject, SubjectId id, ShipmentPhysicalStep step) {
         Shipment shipment = state.shipments().shipments().get(id);

@@ -77,7 +77,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
     private static void handoff(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         SceneMember member = lease.members().getFirst(); AmbientActorLease ambient = state.ambientLeases().get(member.actorId()); Entity entity = level.getEntity(member.entityId());
         if (ambient == null || ambient.status() != AmbientLeaseStatus.HOT || !(entity instanceof Mob body) || !body.isAlive()
-                || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)
+                || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), ActorKind.RESIDENT)
                 || !FrontierV3SemanticMovement.arrived(level, body, lease.memberBody(state.actorLocations(), member.actorId()).supportingSurface())) return;
         BodyPosition observed = FrontierV3SurfaceObservation.observedAt(body, lease.memberBody(state.actorLocations(), member.actorId()).supportingSurface());
         // Admission uses the owner-retained actual departure origin, not an old semantic cursor.

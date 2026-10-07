@@ -22,8 +22,8 @@ public record ShipmentPhysicalStep(Shipment.Status status, long shipmentRevision
                 || lotQuantities.values().stream().anyMatch(q -> q == null || q < 1 || q > 64)
                 || source.stream().mapToInt(MaterialSourceSelection.Slice::moved).sum() != lotQuantities.values().stream().mapToInt(Integer::intValue).sum()
                 || destinationBefore < 0 || destinationBefore + source.stream().mapToInt(MaterialSourceSelection.Slice::moved).sum() > 64
-                || status == Shipment.Status.AWAITING_LOAD && destinationBefore != 0
-                || status == Shipment.Status.AWAITING_LOAD && destinationSlot != -1
+                || destinationSlot < -1 || destinationSlot > 26
+                || destinationSlot == -1 && destinationBefore != 0
                 || status == Shipment.Status.CARRYING && (destinationSlot < 0 || destinationSlot > 26))
             throw new IllegalArgumentException("shipment physical step lacks bounded exact pre-effect evidence");
     }

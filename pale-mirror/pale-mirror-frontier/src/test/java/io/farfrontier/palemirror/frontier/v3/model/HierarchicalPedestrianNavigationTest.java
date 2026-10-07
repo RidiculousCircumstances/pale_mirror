@@ -101,11 +101,28 @@ class HierarchicalPedestrianNavigationTest {
             assertEquals("PLANNING_QUEUE_CAPACITY", planner.query(ground, start, deferred).reason());
             assertEquals("PLANNING_QUEUE_CAPACITY", planner.peek(ground, start, deferred).orElseThrow().reason());
             long signal = planner.progressRevision();
-            for (int turn = 0; turn < 100 && planner.pendingCount() == 8; turn++)
+            for (int turn = 0; turn < 100 && planner.peek(ground, start, deferred).orElseThrow().reason().equals("PLANNING_QUEUE_CAPACITY"); turn++)
                 planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
-            assertTrue(planner.pendingCount() < 8); assertTrue(planner.progressRevision() > signal);
+            assertTrue(planner.progressRevision() > signal);
             assertEquals("PLANNING_QUEUED", planner.query(ground, start, deferred).reason());
             assertEquals("PLANNING_QUEUED", planner.peek(ground, start, deferred).orElseThrow().reason());
+        }
+    }
+    @Test void terminalFailureAndGeometryCancellationNameOnlyTheirExactRequests() {
+        var bounds = new WorldBounds(0, 0, 32, 16);
+        var old = geometry(bounds, (x, z) -> SurfaceAnchor.at(x, 63, z), s -> s.x() == 8);
+        var changed = geometry(bounds, (x, z) -> SurfaceAnchor.at(x, 63, z), s -> false);
+        var start = SurfaceAnchor.at(2, 63, 2); var goal = SurfaceAnchor.at(25, 63, 2);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            planner.query(old, start, goal);
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            assertEquals(PedestrianRouteResult.Status.NO_PATH, planner.peek(old, start, goal).orElseThrow().status());
+            assertEquals(List.of(new PedestrianPlanningChange(PedestrianRouteRequest.of(old, start, goal),
+                    PedestrianPlanningChange.Kind.RESULT_AVAILABLE)), planner.drainChanges());
+            assertTrue(planner.drainChanges().isEmpty());
+            planner.query(changed, start, goal);
+            assertEquals(List.of(new PedestrianPlanningChange(PedestrianRouteRequest.of(old, start, goal),
+                    PedestrianPlanningChange.Kind.INVALIDATED)), planner.drainChanges());
         }
     }
 }

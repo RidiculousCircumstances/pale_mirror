@@ -11,7 +11,7 @@ import java.util.Optional;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReferenceMutationClosed;
 
 /**
- * Pure contract shared by depot, hive-store and explicitly declared production-station consumers.
+ * Pure custody contract shared by fixed stores, declared stations and mobile storage.
  *
  * <p>The original F0.2B depot/store families and explicitly declared production stations share
  * this physical boundary. A surface status is presentation history; only a live lease against
@@ -22,25 +22,47 @@ public final class ReferenceContainerCustody {
     private static final String DEPOT_KIND = "container.settlement-depot";
     private static final String HIVE_STORE_KIND = "container.hive-store";
     private static final String PRODUCTION_STATION_KIND = "container.production-station";
+    private static final String MOBILE_STORAGE_KIND = "container.mobile-storage";
 
     private ReferenceContainerCustody() { }
+
+    /** Confirmed body loss may release an attachment only after every resource owner has
+     * disposed its contents. It is not a saved-body departure or a new empty projection. */
+    public static boolean retiredEmptyAttachment(FrontierWorldState state, SubjectId containerId) {
+        var surface = state.inventory().surfaces().get(containerId);
+        if (surface == null || !(surface.location() instanceof ContainerLocation.Mobile mobile)
+                || state.actorLocations().get(mobile.actorId()).condition().status() != ActorLifeStatus.DEAD) return false;
+        var tombstone = state.fencedRecovery().tombstones().get(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(mobile.actorId()));
+        if (tombstone == null) return false;
+        ActorBodyAuthority.requireRetiredDeath(state, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(mobile.actorId(), tombstone.retiredEpoch()));
+        return state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody().equals(new ResourceCustody.Container(containerId)))
+                .allMatch(account -> account.lotQuantities().isEmpty() && account.claimQuantities().isEmpty())
+                && boundFungibleSlots(state, containerId).isEmpty()
+                && state.inventory().items().values().stream().noneMatch(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
+                    && slot.containerId().equals(containerId));
+    }
 
     public static boolean isReferenceContainer(FrontierWorldState state, SubjectId containerId) {
         Objects.requireNonNull(state, "world state"); Objects.requireNonNull(containerId, "container id");
         ContainerRecord container = state.inventory().containers().get(containerId);
         return state.bootstrap().settlements().stream().anyMatch(settlement -> FrontierWorldState.depotId(settlement.id()).equals(containerId))
                 || state.isHiveStore(containerId)
-                || container != null && container.productionStation().isPresent();
+                || container != null && container.productionStation().isPresent()
+                || state.inventory().surfaces().get(containerId) instanceof ContainerSurface surface
+                    && surface.location() instanceof ContainerLocation.Mobile;
     }
 
     public static String semanticKind(FrontierWorldState state, SubjectId containerId) {
         if (!isReferenceContainer(state, containerId)) throw new IllegalArgumentException("container is not an F0.2B reference scope");
         ContainerRecord container = state.inventory().containers().get(containerId);
+        if (state.inventory().surfaces().get(containerId).location() instanceof ContainerLocation.Mobile) return MOBILE_STORAGE_KIND;
         if (container != null && container.productionStation().isPresent()) return PRODUCTION_STATION_KIND;
         return state.isHiveStore(containerId) ? HIVE_STORE_KIND : DEPOT_KIND;
     }
 
-    /** The smallest physical authority scope is the exact owned chest, never its settlement or nest. */
+    /** The authority scope is the exact container, never its settlement or carrying body. */
     public static SubjectId scopeId(SubjectId containerId) {
         return new SubjectId("custody:" + Objects.requireNonNull(containerId, "container id").value().replace(':', '-'));
     }
@@ -76,7 +98,24 @@ public final class ReferenceContainerCustody {
      * eligible for ordinary COLD work.
      */
     public static boolean blocksCanonicalUse(FrontierWorldState state, SubjectId containerId) {
-        return isReferenceContainer(state, containerId) && hasConflict(state, containerId);
+        if (!isReferenceContainer(state, containerId)) return false;
+        var surface = state.inventory().surfaces().get(containerId);
+        if (surface.location() instanceof ContainerLocation.Mobile mobile
+                && state.actorLocations().get(mobile.actorId()).condition().status() != ActorLifeStatus.ALIVE)
+            return true; // Cargo disposition, not a free replacement animal, must close this owner.
+        return hasConflict(state, containerId);
+    }
+
+    /** A body's attached storage declares its own non-replayable projection fence. */
+    public static Optional<SubjectId> pendingOwnerForActor(FrontierWorldState state, SubjectId actorId) {
+        // The closed producer registry supplies the exact attachment relation in O(1).
+        // Body lifecycle must not discover it by scanning every store on every callback.
+        var attachment = state.transportFleet().assets().get(actorId);
+        if (attachment == null) return Optional.empty();
+        var lease = state.replicaCustody().custodyByScope().get(scopeId(attachment.containerId()));
+        return lease != null && (lease.status() == PhysicalCustodyLeaseStatus.PREPARING
+                || lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED)
+                ? Optional.of(lease.objectId()) : Optional.empty();
     }
 
     /** Releases a checkpointed scope together with its unstarted exact production actuators. */

@@ -95,7 +95,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
         SceneMember member = lease.members().getFirst(); AmbientActorLease ambient = state.ambientLeases().get(member.actorId());
         Entity entity = level.getEntity(member.entityId());
         if (ambient == null || ambient.status() != AmbientLeaseStatus.HOT || !(entity instanceof Mob body) || !body.isAlive()
-                || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)) return;
+                || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), ActorKind.RESIDENT)) return;
         // An unstarted traversal may rebase to this observed body. Once work has progressed,
         // the same hand-off must match its retained station and preserve the topology/cursor;
         // the reducer rejects drift rather than restarting work or teleporting the worker.

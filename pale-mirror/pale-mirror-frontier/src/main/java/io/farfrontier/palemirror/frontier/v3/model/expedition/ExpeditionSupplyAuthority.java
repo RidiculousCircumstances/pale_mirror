@@ -16,23 +16,28 @@ public final class ExpeditionSupplyAuthority {
         return UnitGroupMissionPorts.require(group).execution(state, group, group.member(allocation.actorId()));
     }
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId container) {
-        return state.shipments().missions().values().stream().filter(m -> m.sender().containerId().equals(container))
-                .flatMap(m -> m.supplies().stream()).flatMap(load -> load.allocations().stream()).anyMatch(a -> a.pending().isPresent());
+        return state.shipments().missions().values().stream().anyMatch(m -> m.supplies().stream().flatMap(load -> load.allocations().stream())
+                .anyMatch(a -> a.pending().isPresent() && (m.sender().containerId().equals(container)
+                    || a.slot() instanceof ActorItemSlot.AttachedStorage storage && storage.containerId().equals(container)))
+                || m.replenishment().filter(t -> t.containerId().equals(container) && t.pending().isPresent()).isPresent());
     }
     public static boolean pendingForActor(FrontierWorldState state, SubjectId actor) {
         return pendingOwnerForActor(state, actor).isPresent();
     }
     public static Optional<SubjectId> pendingOwnerForActor(FrontierWorldState state, SubjectId actor) {
         var owners = state.shipments().missions().values().stream().filter(mission -> mission.supplies().stream()
-                .flatMap(load -> load.allocations().stream()).anyMatch(a -> a.actorId().equals(actor) && a.pending().isPresent()))
+                .flatMap(load -> load.allocations().stream()).anyMatch(a -> a.actorId().equals(actor) && a.pending().isPresent())
+                || mission.replenishment().filter(t -> t.pending().isPresent() && (t.actorId().equals(actor)
+                    || state.inventory().surfaces().get(t.containerId()).location().equals(new ContainerLocation.Mobile(actor)))).isPresent())
                 .map(TransportMission::id).toList();
         if (owners.size() > 1) throw new IllegalArgumentException("actor has competing expedition load effects");
         return owners.stream().findFirst();
     }
     public static Set<ActorItemSlot> reservedSlots(FrontierWorldState state, SubjectId actor) {
-        return state.shipments().missions().values().stream().flatMap(m -> m.supplies().stream())
-                .flatMap(load -> load.allocations().stream()).filter(a -> !a.loaded() && !a.withdrawn() && a.actorId().equals(actor))
-                .map(ExpeditionSupplyLoad.Allocation::slot).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return state.shipments().missions().values().stream().flatMap(m -> java.util.stream.Stream.concat(
+                m.supplies().stream().flatMap(load -> load.allocations().stream()).filter(a -> !a.loaded() && !a.withdrawn() && a.actorId().equals(actor)).map(ExpeditionSupplyLoad.Allocation::slot),
+                m.replenishment().stream().filter(t -> t.actorId().equals(actor)).map(UnitResourceTransfer::slot)))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
     public static FungibleResourceLedger reserveDeclaration(FrontierWorldState state, TransportMission mission, UnitGroup group) {
         if (mission.supplies().isEmpty()) {
@@ -55,7 +60,8 @@ public final class ExpeditionSupplyAuthority {
                 || load.foodTargets().keySet().stream().anyMatch(actor -> state.actorMovements().containsKey(actor)
                     || state.humanPopulation().meals().containsKey(actor))) return Optional.empty();
         var group = state.unitGroups().groups().get(mission.groupId());
-        if (group.members().stream().anyMatch(member -> UnitGroupMissionPorts.require(group).execution(state, group, member).isEmpty()))
+        if (group.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE)
+                .anyMatch(member -> UnitGroupMissionPorts.require(group).execution(state, group, member).isEmpty()))
             return Optional.empty();
         return ExpeditionSupplyPlanning.walkingLoad(state, mission, group, now, Math.addExact(load.revision(), 1), released(state, load));
     }
@@ -82,17 +88,23 @@ public final class ExpeditionSupplyAuthority {
         return mission.supplies().map(load -> released(state, load)).orElse(state.inventory().fungibleResources());
     }
     public static void validate(FrontierWorldState state, TransportMission mission, UnitGroup group) {
+        ExpeditionReplenishmentAuthority.validate(state, mission);
         if (mission.supplies().isEmpty()) return;
         var load = mission.supplies().orElseThrow(); var resources = state.inventory().fungibleResources();
-        if (!load.foodTargets().keySet().equals(group.members().stream().map(UnitGroup.Member::actorId)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet())) || !state.bootstrap().ruleset().residentLife().foods().foods().containsKey(load.foodKind())
+        var residents = group.members().stream().map(UnitGroup.Member::actorId)
+                .filter(actor -> state.humanPopulation().resident(actor) != null)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var living = residents.stream().filter(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (!residents.containsAll(load.foodTargets().keySet()) || !load.foodTargets().keySet().containsAll(living)
+                || !state.bootstrap().ruleset().residentLife().foods().foods().containsKey(load.foodKind())
                 || mission.stage() != TransportMission.Stage.LOADING && !load.complete())
             throw new IllegalArgumentException("expedition lost its supply roster, food policy or departure gate");
         for (var a : load.allocations()) {
             var claim = resources.claims().get(a.claimId());
             if (a.loaded() || a.withdrawn()) {
                 if (claim != null) throw new IllegalArgumentException("loaded personal stock retains its provisioning claim");
-                if (a.withdrawn() && resources.accounts().containsKey(a.destinationAccountId()))
+                if (a.withdrawn() && !(a.slot() instanceof ActorItemSlot.AttachedStorage) && resources.accounts().containsKey(a.destinationAccountId()))
                     throw new IllegalArgumentException("withdrawn source promise invents loaded personal stock");
                 continue; // Account may have been eaten or exactly disposed; this is a historical receipt.
             }
@@ -102,7 +114,7 @@ public final class ExpeditionSupplyAuthority {
                     || claim.quantity() != a.quantity() || !claim.lotQuantities().equals(a.lots()) || account == null
                     || !account.custody().equals(new ResourceCustody.Container(mission.sender().containerId()))
                     || account.claimQuantities().getOrDefault(a.claimId(), 0) != a.quantity()
-                    || resources.accounts().containsKey(a.destinationAccountId()))
+                    || resources.accounts().containsKey(a.destinationAccountId()) && !(a.slot() instanceof ActorItemSlot.AttachedStorage))
                 throw new IllegalArgumentException("unloaded expedition stock lost its exact source reservation");
             a.pending().ifPresent(step -> {
                 state.actorExecutions().requireRetained(step.observation().actuation().execution());
@@ -118,8 +130,16 @@ public final class ExpeditionSupplyAuthority {
         if (!load.complete() || now < load.calculatedAtTick()) return false;
         var group = state.unitGroups().groups().get(mission.groupId());
         var fresh = ExpeditionSupplyPlanning.walkingForecast(state, mission, group, now, load.foodKind());
-        return fresh.filter(plan -> plan.feasible() && plan.transport() == ExpeditionProvisioning.Transport.WALKING
-                && plan.members().values().stream().allMatch(member -> member.existingFoodItems() >= member.requiredFoodItems())).isPresent();
+        return fresh.filter(plan -> plan.feasible() && plan.members().values().stream()
+                .allMatch(member -> member.existingFoodItems() >= member.carriedFoodItems())
+                && (plan.transport() == ExpeditionProvisioning.Transport.WALKING || mission.transportAssetId().isPresent()
+                    && sharedFood(state, mission, load.foodKind()) >= plan.sharedFoodItems())).isPresent();
+    }
+    public static int sharedFood(FrontierWorldState state, TransportMission mission, String foodKind) {
+        if (mission.transportAssetId().isEmpty()) return 0;
+        var asset = state.transportFleet().require(mission.transportAssetId().orElseThrow());
+        return FungibleResourceCustodySupport.accountAtContainer(state, asset.containerId()).map(account ->
+                state.inventory().fungibleResources().unclaimedQuantity(account.id(), mission.sender().settlementId(), foodKind)).orElse(0);
     }
     public static io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder assemblyOrder(TransportMission mission, SubjectId actor) {
         var station = mission.supplies().orElseThrow().assemblyStations().get(actor);
@@ -146,7 +166,10 @@ public final class ExpeditionSupplyAuthority {
                 || !ReferenceContainerCustody.hasOperationalCustody(state, mission.sender().containerId())
                 || !ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, a))
                 || !MaterialSourceSelection.select(state.inventory().fungibleResources(), order).equals(step.source())
-                || step.destinationEpoch() != step.observation().actuation().body().physicalEpoch())
+                || step.destinationEpoch() != destinationEpoch(state, a, step.observation().actuation().body().physicalEpoch())
+                || a.slot() instanceof ActorItemSlot.AttachedStorage && !destination(state, load, a).equals(Optional.of(
+                    new ContainerMaterialDestination(step.destinationSlot(), step.destinationBefore(), a.lots())))
+                || !(a.slot() instanceof ActorItemSlot.AttachedStorage) && (step.destinationSlot() != -1 || step.destinationBefore() != 0))
             throw new IllegalArgumentException("supply preparation lacks its exact physical source, body or service turn");
         step.observation().require(state, execution, lease.revision(), order.station().standingBody());
         return state.withChanges(FrontierWorldStateUpdate.begin().shipments(state.shipments().replaceSupplies(mission, load.replace(a, a.prepare(step)))));
@@ -165,13 +188,25 @@ public final class ExpeditionSupplyAuthority {
                     io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), a.actorId()), pocket.index());
             case ActorItemSlot.Hand hand -> new PhysicalStackAddress.ActorHand(a.actorId(),
                     io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), a.actorId()), hand.hand());
+            case ActorItemSlot.AttachedStorage storage -> new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(storage.containerId(), step.destinationSlot()));
         };
-        if (!destination.equals(List.of(new FungiblePhysicalObservation.Stack(address, load.foodKind(), a.quantity()))))
+        if (a.slot() instanceof ActorItemSlot.AttachedStorage
+                ? destination.stream().noneMatch(stack -> stack.equals(new FungiblePhysicalObservation.Stack(address, load.foodKind(), step.destinationBefore() + a.quantity())))
+                : !destination.equals(List.of(new FungiblePhysicalObservation.Stack(address, load.foodKind(), a.quantity()))))
             throw new IllegalArgumentException("supply receipt did not enter its exact personal slot");
         var inventory = ActorItemCustody.transferObserved(state, order, step.sourceEpoch(), step.destinationEpoch(), remainder, destination);
         inventory = inventory.withFungibleResources(
                 inventory.fungibleResources().releaseClaims(Set.of(a.claimId())));
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).shipments(state.shipments().replaceSupplies(mission, load.replace(a, a.confirmed()))));
+    }
+    public static Optional<ContainerMaterialDestination> destination(FrontierWorldState state, ExpeditionSupplyLoad load, ExpeditionSupplyLoad.Allocation allocation) {
+        if (!(allocation.slot() instanceof ActorItemSlot.AttachedStorage storage)) return Optional.empty();
+        if (!ReferenceContainerCustody.hasOperationalCustody(state, storage.containerId())) return Optional.empty();
+        return ContainerMaterialDestination.selectWhole(state, storage.containerId(), load.foodKind(), allocation.lots(), Optional.empty());
+    }
+    public static long destinationEpoch(FrontierWorldState state, ExpeditionSupplyLoad.Allocation allocation, long bodyEpoch) {
+        if (!(allocation.slot() instanceof ActorItemSlot.AttachedStorage storage)) return bodyEpoch;
+        return state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(storage.containerId())).authorityEpoch();
     }
     public static TransportMission requireLoading(FrontierWorldState state, SubjectId missionId, SubjectId claimId) {
         var mission = state.shipments().missions().get(missionId);

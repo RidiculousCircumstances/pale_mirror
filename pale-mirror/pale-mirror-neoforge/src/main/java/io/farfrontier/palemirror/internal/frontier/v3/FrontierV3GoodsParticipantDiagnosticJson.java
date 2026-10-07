@@ -37,8 +37,8 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                                     .sorted(java.util.Comparator.comparing(Shipment::id))
                                     .map(shipment -> string(shipment.id().value())).collect(Collectors.joining(","))
                                 + "]}").collect(Collectors.joining(","));
-        return "{\"schema\":1,\"view\":\"process\",\"revision\":" + checkpoint.revision().value()
-                + ",\"atTick\":" + checkpoint.instant().ticks() + ",\"status\":\"ok\",\"family\":\"frontier.goods-participant\""
+        return FrontierV3DiagnosticJson.base("process", participant.party().id().value(), checkpoint)
+                + ",\"status\":\"ok\",\"family\":\"frontier.goods-participant\""
                 + ",\"identity\":{\"participant\":" + string(participant.party().id().value()) + ",\"ownerKind\":" + string(participant.party().kind().name())
                 + ",\"policy\":" + string(participant.policy().name()) + ",\"container\":" + string(participant.endpoint().containerId().value()) + "}"
                 + ",\"reviewRevision\":" + participant.reviewRevision() + ",\"reviewedAtTick\":" + participant.reviewedAtTick()
@@ -46,7 +46,8 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                     .explain(view, state.bootstrap().ruleset().goodsTrade())) + ",\"availableMoneyRaw\":" + view.availableMoney().raw()
                 + ",\"nextReviewTick\":" + (reviews.isPresent() ? Long.toString(reviews.orElseThrow()) : "null")
                 + ",\"knownCounterparties\":[" + known + "],\"stocks\":[" + stocks
-                + "],\"orders\":[" + orders + "],\"contracts\":[" + contracts + "]}";
+                + "],\"orders\":[" + orders + "],\"contracts\":[" + contracts + "]"
+                + ",\"expeditions\":" + FrontierV3ExpeditionDiagnosticJson.render(checkpoint, state, participant) + "}";
     }
     private static String string(String value) { return "\"" + FrontierV3DiagnosticJson.quote(value) + "\""; }
     private FrontierV3GoodsParticipantDiagnosticJson() { }

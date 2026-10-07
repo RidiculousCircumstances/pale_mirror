@@ -38,7 +38,7 @@ final class FrontierV3PedestrianTraffic {
     static List<Body> goalOccupants(ServerLevel level, Mob actor,
             List<io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor> stations) {
         return stations.stream().flatMap(station -> level.getEntitiesOfClass(LivingEntity.class,
-                bodyAt(actor, new BlockPos(station.x(), station.y() + 1, station.z())),
+                stationBodyAt(actor, new BlockPos(station.x(), station.y() + 1, station.z())),
                 other -> other != actor && other.isAlive() && !other.isSpectator()).stream())
                 .map(other -> new Body(other.getUUID(), other.getBoundingBox())).distinct()
                 .sorted(java.util.Comparator.comparing(Body::id)).toList();
@@ -52,7 +52,7 @@ final class FrontierV3PedestrianTraffic {
         if (path == null || path.isDone()) return false;
         int end = Math.min(path.getNodeCount(), path.getNextNodeIndex() + nodes);
         for (int index = path.getNextNodeIndex(); index < end; index++) {
-            AABB body = bodyAt(actor, path.getNode(index).asBlockPos());
+            AABB body = nativeNodeBodyAt(actor, path.getNode(index).asBlockPos());
             if (!level.getEntitiesOfClass(LivingEntity.class, body,
                     other -> other != actor && other.isAlive() && !other.isSpectator()).isEmpty()) return true;
         }
@@ -73,7 +73,7 @@ final class FrontierV3PedestrianTraffic {
         for (int index = ordinary.getNextNodeIndex(); index < ordinary.getNodeCount(); index++) {
             var feet = ordinary.getNode(index).asBlockPos();
             passage.add(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(feet.getX(), feet.getY() - 1, feet.getZ()));
-            for (var other : level.getEntitiesOfClass(LivingEntity.class, bodyAt(actor, feet),
+            for (var other : level.getEntitiesOfClass(LivingEntity.class, nativeNodeBodyAt(actor, feet),
                     entity -> entity != actor && entity.isAlive() && !entity.isSpectator())) {
                 if (blockers.size() >= MAX_BODIES) return new Query(null, List.of(), List.of(), true);
                 blockers.putIfAbsent(other.getUUID(), new Body(other.getUUID(), other.getBoundingBox()));
@@ -96,7 +96,7 @@ final class FrontierV3PedestrianTraffic {
                 BlockPos feet = new BlockPos(x, y, z);
                 if (!level.hasChunkAt(feet) || !scope.permits(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(x, y - 1, z)))
                     return PathType.BLOCKED;
-                if (!feet.equals(origin) && bodies.stream().anyMatch(body -> body.intersects(bodyAt(mob, feet))))
+                if (!feet.equals(origin) && bodies.stream().anyMatch(body -> body.intersects(nativeNodeBodyAt(mob, feet))))
                     return PathType.BLOCKED;
                 return super.getPathTypeOfMob(context, x, y, z, mob);
             }
@@ -110,8 +110,15 @@ final class FrontierV3PedestrianTraffic {
         return new Query(detour, List.copyOf(blockers.values()), passage);
     }
 
-    private static AABB bodyAt(Mob actor, BlockPos feet) {
+    private static AABB stationBodyAt(Mob actor, BlockPos feet) {
         return actor.getBoundingBox().move(feet.getX() + 0.5D - actor.getX(),
                 feet.getY() - actor.getY(), feet.getZ() + 0.5D - actor.getZ());
+    }
+
+    /** Matches Path#getEntityPosAtNode; station centring is a separate final operation. */
+    private static AABB nativeNodeBodyAt(Mob actor, BlockPos feet) {
+        double offset = (int) (actor.getBbWidth() + 1.0F) * 0.5D;
+        return actor.getBoundingBox().move(feet.getX() + offset - actor.getX(),
+                feet.getY() - actor.getY(), feet.getZ() + offset - actor.getZ());
     }
 }

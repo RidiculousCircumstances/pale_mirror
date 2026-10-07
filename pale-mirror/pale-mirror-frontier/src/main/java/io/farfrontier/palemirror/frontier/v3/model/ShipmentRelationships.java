@@ -12,7 +12,8 @@ final class ShipmentRelationships {
         for (Shipment shipment : state.shipments().shipments().values()) {
             var owner = new SubjectEndpoint(EntityKind.SHIPMENT, shipment.id());
             Lifecycle life = shipment.terminal() ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
-            add(edges, Kind.SHIPMENT_COURIER, owner, EntityKind.RESIDENT, shipment.execution().actorId(), life);
+            add(edges, Kind.SHIPMENT_COURIER, owner, EntityKind.ACTOR, shipment.execution().actorId(), life);
+            shipment.mobileContainerId().ifPresent(id -> add(edges, Kind.SHIPMENT_STORAGE, owner, EntityKind.CONTAINER, id, life));
             add(edges, Kind.SHIPMENT_SOURCE, owner, EntityKind.CONTAINER, shipment.sender().containerId(), life);
             add(edges, Kind.SHIPMENT_RECEIVER, owner, EntityKind.CONTAINER, shipment.receiver().containerId(), life);
             if (!shipment.terminal()) {

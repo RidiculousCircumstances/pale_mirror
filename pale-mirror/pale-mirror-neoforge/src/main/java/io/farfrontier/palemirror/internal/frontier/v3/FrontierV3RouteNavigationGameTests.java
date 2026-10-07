@@ -28,6 +28,57 @@ public final class FrontierV3RouteNavigationGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void widePedestrianObservesBlockerAtActualNativeNodeOffset(GameTestHelper helper) {
+        floor(helper);
+        var level = helper.getLevel();
+        var animal = helper.spawnWithNoFreeWill(EntityType.DONKEY, new Vec3(2.5D, 1.0D, 3.5D));
+        var occupant = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(3.5D, 1.0D, 4.65D));
+        var target = anchor(helper, 5, 3);
+        var scope = new FrontierV3NavigationScope.ObservedWorld(bounds(helper));
+        helper.runAfterDelay(1, () -> {
+            FrontierV3BodyObservation.refreshGroundContact(level, animal);
+            var query = FrontierV3PedestrianTraffic.query(level, animal,
+                    new BlockPos(target.x(), target.y() + 1, target.z()), scope);
+            helper.assertTrue(query.blockers().stream().anyMatch(body -> body.id().equals(occupant.getUUID())),
+                    "traffic must inspect the wide body's native-node offset, not the narrow station centre: " + query);
+            helper.assertTrue(FrontierV3PhysicalPathPolicy.reject(level, query.path(), scope).isEmpty(),
+                    "the same provider must find the available physical detour");
+            animal.discard(); occupant.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 110)
+    public static void chestAnimalFollowsRaisedAdvisoryApronWithoutChangingItsGoal(GameTestHelper helper) {
+        floor(helper);
+        var level = helper.getLevel();
+        for (int z = 1; z <= 6; z++) level.setBlock(helper.absolutePos(new BlockPos(3, 1, z)), Blocks.STONE.defaultBlockState(), 3);
+        var animal = helper.spawnWithNoFreeWill(EntityType.DONKEY, new Vec3(3.5D, 2.0D, 2.5D));
+        var start = helper.absolutePos(new BlockPos(3, 1, 2));
+        var target = SurfaceAnchor.at(start.getX(), start.getY(), start.getZ() + 3);
+        var hint = IntStream.rangeClosed(0, 3).mapToObj(offset ->
+                SurfaceAnchor.at(start.getX(), start.getY(), start.getZ() + offset)).toList();
+        var goal = FrontierV3GoalNavigation.Goal.routed(order(target), hint, bounds(helper));
+        helper.runAfterDelay(1, () -> {
+            for (int turn = 0; turn < 180 && !FrontierV3SemanticMovement.arrived(level, animal, target); turn++) {
+                var result = FrontierV3GoalNavigation.pursue(level, animal, goal);
+                helper.assertTrue(result.status() == FrontierV3GoalNavigation.Status.IN_PROGRESS,
+                        "same pedestrian provider must support the actual animal footprint: " + result + "; body=" + animal.position());
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(animal);
+                animal.aiStep();
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, animal, target),
+                    "the animal must physically reach the declared supported station: " + animal.position()
+                            + "; target=" + target + "; support=" + FrontierV3BodyObservation.capture(animal)
+                            + "; semantic=" + FrontierV3SemanticMovement.at(level, animal, target)
+                            + "; nativeDone=" + animal.getNavigation().isDone()
+                            + "; control=" + FrontierV3MinecraftGoalNavigation.observation(animal));
+            FrontierV3GoalNavigation.stop(animal); animal.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void enclosedPedestrianReportsLivingBlockersAndReachabilityUsesTheSameTrafficPolicy(GameTestHelper helper) {
         floor(helper);
         var level = helper.getLevel();

@@ -114,13 +114,18 @@ final class FrontierV3MinecraftGoalNavigation {
                 return new Result(Status.BLOCKED, "minecraft-path-stalled",
                         Optional.of(FrontierV3GoalNavigation.BlockReason.PATH_STALLED));
             }
+            if (settleObservedStation(level, actor, current)) {
+                // Native graph nodes offset their wanted point for wide bodies.
+                // Once exact support/clearance is physically observed, finish at
+                // the semantic station centre even if that last native node is
+                // not marked done. Retain this same provider permission/control.
+                actor.getNavigation().stop();
+                ACTIVE.put(actor, current.refreshed(level.getGameTime(), permission));
+                return new Result(Status.IN_PROGRESS, "minecraft-final-station-settling");
+            }
             if (activePath != null && !actor.getNavigation().isDone()) {
                 ACTIVE.put(actor, current.refreshed(level.getGameTime(), permission));
                 return new Result(Status.IN_PROGRESS, "minecraft-path-active");
-            }
-            if (settleObservedStation(level, actor, current)) {
-                ACTIVE.put(actor, current.refreshed(level.getGameTime(), permission));
-                return new Result(Status.IN_PROGRESS, "minecraft-final-station-settling");
             }
             stopPath(actor);
         } else if (current != null) {
@@ -352,8 +357,7 @@ final class FrontierV3MinecraftGoalNavigation {
                            Optional<MovementOrder> order, FrontierV3GoalNavigation.ProviderPermission permission, long refreshedAt,
                            long lastProgressAt, Vec3 lastProgressPosition, Path progressPath, double bestRemaining) {
         private Control observed(Path path, Vec3 position, long tick) {
-            if (path == null) return this;
-            double remaining = remainingDistance(path, position);
+            double remaining = path == null ? goalDistance(position, target) : remainingDistance(path, position);
             // A legal building detour can initially move AWAY from the final goal.
             // Progress is actual planar displacement along the accepted path, not
             // decreasing straight-line goal distance or mere path recomputation.

@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { createConnection } from 'node:net';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defaultPilotProfile, jfrCaptureRequest, loadScenario, pilotCrashBoundary, restartSegments } from './scenario.mjs';
+import { defaultPilotProfile, jfrCaptureRequest, loadScenario, pilotCrashBoundary, restartSegments, scenarioDeadlineMs } from './scenario.mjs';
 import { requestRconCommand, requestRconQuery, requestRconSaveFlush, requestRconStop } from './rcon.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
@@ -275,7 +275,7 @@ try {
     // missing client lifecycle transition.
     const preparedClient = await awaitLifecycleBarrierFromPilot(LifecycleBarrier.PREPARED_CLIENT_READY, 300_000, persistentPilot,
       (entry) => entry.detail.segment === 'before_restart');
-    await awaitLifecycleBarrierFromPilot(LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, 300_000, persistentPilot,
+    await awaitLifecycleBarrierFromPilot(LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, scenarioDeadlineMs(recovery.before), persistentPilot,
       (entry) => entry.detail.segment === 'before_restart');
     await awaitLifecycleBarrierFromPilot(LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, 300_000, persistentPilot,
       (entry) => entry.detail.segment === 'before_restart');

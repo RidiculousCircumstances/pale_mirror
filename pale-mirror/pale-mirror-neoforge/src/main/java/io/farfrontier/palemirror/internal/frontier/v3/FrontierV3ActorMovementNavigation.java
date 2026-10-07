@@ -14,10 +14,12 @@ import java.util.WeakHashMap;
 /** Physical execution of the same actor goal that remains canonical through COLD/HOT. */
 final class FrontierV3ActorMovementNavigation {
     private record Route(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId actuation,
-                         long leaseRevision, long goalRevision, RouteTopology topology,
+                         long leaseRevision, MovementOrder order, RouteTopology topology,
                          Map<BlockPosition, PhysicalDelta> physicalDeltas, List<SurfaceAnchor> waypoints) { }
     private static final Map<Mob, Route> ROUTES = new WeakHashMap<>();
-    private static final Map<Mob, String> BLOCKED = new WeakHashMap<>();
+    private record Wait(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution,
+                        MovementOrder order, String reason) { }
+    private static final Map<Mob, Wait> BLOCKED = new WeakHashMap<>();
 
     private FrontierV3ActorMovementNavigation() { }
 
@@ -33,17 +35,26 @@ final class FrontierV3ActorMovementNavigation {
         provider.validate(state, movement);
         var actuation = FrontierV3AmbientActuation.capture(state, runtime, body, lease, movement.executionId()).orElse(null);
         if (actuation == null || !actuation.current(body)) return;
+        long tick = runtime.calendarInstant().orElseThrow();
+        var permission = provider.movementPermission(state, movement, FrontierV3SurfaceObservation.observedBody(body).supportingSurface(), tick,
+                FrontierV3ActorPositionView.observed(level, state, tick));
+        if (!permission.allowed()) {
+            blocked(body, movement, "permission:" + permission.reason() + ":peer="
+                    + permission.waitingFor().map(value -> value.value()).orElse("none"));
+            FrontierV3GoalNavigation.stop(body, actuation);
+            return;
+        }
         Route route = ROUTES.get(body);
         if (route == null || !route.actuation().equals(actuation.id()) || route.leaseRevision() != lease.revision()
-                || route.goalRevision() != movement.order().goalRevision()
+                || !route.order().equals(movement.order())
                 || route.topology() != state.routeTopology() || route.physicalDeltas() != state.physicalDeltas()) {
             try {
-                route = new Route(actuation.id(), lease.revision(), movement.order().goalRevision(), state.routeTopology(), state.physicalDeltas(),
+                route = new Route(actuation.id(), lease.revision(), movement.order(), state.routeTopology(), state.physicalDeltas(),
                         provider.route(state, movement,
                                 FrontierV3SurfaceObservation.observedBody(body).supportingSurface()));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                if (unavailable.status() != PedestrianRouteResult.Status.PLANNING)
-                    blocked(body, movement, "known_route:" + unavailable.status() + ":" + unavailable.getMessage());
+                blocked(body, movement, "known_route:" + unavailable.status()
+                        + (unavailable.status() == PedestrianRouteResult.Status.PLANNING ? "" : ":" + unavailable.getMessage()));
                 FrontierV3GoalNavigation.stop(body, actuation);
                 return;
             }
@@ -67,8 +78,18 @@ final class FrontierV3ActorMovementNavigation {
     }
 
     private static void blocked(Mob body, ActorMovement movement, String reason) {
-        if (!reason.equals(BLOCKED.put(body, reason)))
+        var wait = new Wait(movement.executionId(), movement.order(), reason);
+        if (!wait.equals(BLOCKED.put(body, wait)))
             PaleMirrorMod.LOGGER.warn("Actor movement route waits actor={} goal={} reason={}",
                     movement.order().actorId().value(), movement.order().goalRevision(), reason);
+    }
+    /** Exact current-goal observation only; never drives movement or starts a search. */
+    static java.util.Optional<String> waitReason(ServerLevel level, FrontierWorldState state, ActorMovement movement) {
+        var entity = level.getEntity(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(
+                state.bootstrap().worldId(), movement.order().actorId()));
+        if (!(entity instanceof Mob body)) return java.util.Optional.empty();
+        var wait = BLOCKED.get(body);
+        return wait != null && wait.execution().equals(movement.executionId()) && wait.order().equals(movement.order())
+                ? java.util.Optional.of(wait.reason()) : java.util.Optional.empty();
     }
 }

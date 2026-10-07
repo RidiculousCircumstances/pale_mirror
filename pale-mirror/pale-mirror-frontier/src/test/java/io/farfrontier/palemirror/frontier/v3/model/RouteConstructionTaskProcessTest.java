@@ -75,7 +75,7 @@ class RouteConstructionTaskProcessTest {
     }
 
     @Test
-    void conflictedExactMaintenanceMakesTheConfirmedBypassTaskActionable() {
+    void conflictedExactMaintenanceDoesNotReleaseItsRetainedCrewByChangingOnlyTheStatus() {
         FrontierWorldState damaged = stateWithConfirmedPatrol();
         RouteMaintenanceStarted admitted = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteMaintenanceStarted.class::isInstance)
@@ -88,16 +88,14 @@ class RouteConstructionTaskProcessTest {
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> result = RouteConstructionProcess.planStart(state,
                 RouteConstructionProcess.start(construction, 200L));
 
+        assertFalse(result.stream().anyMatch(event -> event.payload() instanceof RouteConstructionStarted),
+                "a status-only conflict cannot transfer an engineering execution to another project");
+        var executions = state.actorExecutions();
+        assertTrue(failed.engineeringTeam().orElseThrow().memberIds().stream().allMatch(member ->
+                executions.actors().get(member).current().orElseThrow().activityOwnerId().equals(failed.id())));
         assertTrue(result.stream().anyMatch(event -> event.payload() instanceof StrategicTaskTransition transition
-                && transition.taskId().equals(construction.id()) && transition.status() == StrategicTaskStatus.ACTIVE));
-        RouteConstructionStarted planned = result.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
-                .filter(RouteConstructionStarted.class::isInstance).map(RouteConstructionStarted.class::cast).findFirst().orElseThrow();
-        assertTrue(FrontierRouteNetwork.isPassable(state.bootstrap(), planned.project().waypoints(), state.physicalDeltas()),
-                "the replacement must be compiled around the retained physical scar, not treat conflict as a repaired road");
-        HumanAssignmentProjection beforeReplan = HumanAssignmentProjection.compile(state);
-        assertTrue(planned.project().team().orElseThrow().memberIds().stream().noneMatch(member ->
-                        beforeReplan.assignment(member).active()),
-                "a conflicted repair releases its same people before the replacement project may claim them");
+                && transition.status() == StrategicTaskStatus.BLOCKED),
+                "a bypass without an admissible crew must report its blocked task, not invent a release");
     }
 
     @Test

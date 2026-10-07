@@ -36,7 +36,7 @@ public final class ReferenceSurfaceRecovery {
             throw new IllegalArgumentException("surface verification has a stale or foreign recovery epoch");
         var inventory = state.inventory();
         var surfaces = new java.util.HashMap<>(inventory.surfaces());
-        surfaces.put(id, new ContainerSurface(id, surface.position(), ContainerSurfaceStatus.ACTIVE));
+        surfaces.put(id, new ContainerSurface(id, surface.location(), ContainerSurfaceStatus.ACTIVE));
         var verified = new ExactInventory(inventory.containers(), inventory.items(), inventory.cargo(),
                 inventory.playerItems(), inventory.worldCarrierItems(), inventory.conflicts(), surfaces,
                 inventory.economics(), inventory.fungibleResources());

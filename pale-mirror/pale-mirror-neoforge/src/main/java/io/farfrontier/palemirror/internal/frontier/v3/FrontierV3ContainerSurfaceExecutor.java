@@ -203,7 +203,7 @@ final class FrontierV3ContainerSurfaceExecutor {
      * complete old physical snapshot to retained evidence and durably emitted the next one.
      * It is deliberately package-private so no generic surface lifecycle can use it.
      */
-    static boolean replaceCanonicalSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+    static boolean replaceCanonicalSlots(net.minecraft.world.Container chest, FrontierWorldState state, SubjectId containerId) {
         Optional<List<ItemStack>> planned = plannedCanonicalSlots(state, containerId, chest.getContainerSize());
         if (planned.isEmpty()) return false;
         for (int slot = 0; slot < chest.getContainerSize(); slot++) chest.setItem(slot, planned.orElseThrow().get(slot));
@@ -211,7 +211,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         return matchesCanonicalSlots(chest, state, containerId);
     }
 
-    static boolean matchesCanonicalSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+    static boolean matchesCanonicalSlots(net.minecraft.world.Container chest, FrontierWorldState state, SubjectId containerId) {
         if (state.inventory().containers().get(containerId) == null) return false;
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ExactItemStack expected = state.inventory().itemAt(containerId, slot).orElse(null);
@@ -238,7 +238,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         return true;
     }
 
-    static List<FungiblePhysicalObservation.Stack> observedFungibleSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+    static List<FungiblePhysicalObservation.Stack> observedFungibleSlots(net.minecraft.world.Container chest, FrontierWorldState state, SubjectId containerId) {
         List<FungiblePhysicalObservation.Stack> observed = new java.util.ArrayList<>();
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             if (state.inventory().itemAt(containerId, slot).isPresent()) continue;
@@ -251,7 +251,7 @@ final class FrontierV3ContainerSurfaceExecutor {
     }
 
     /** Fungible layout bytes carry kind/count only; modified item components cannot be erased into that evidence. */
-    static boolean hasForeignFungibleComponents(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+    static boolean hasForeignFungibleComponents(net.minecraft.world.Container chest, FrontierWorldState state, SubjectId containerId) {
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             if (state.inventory().itemAt(containerId, slot).isPresent()) continue;
             ItemStack actual = chest.getItem(slot);
@@ -261,7 +261,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         return false;
     }
 
-    private static boolean matchesFungibleSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+    private static boolean matchesFungibleSlots(net.minecraft.world.Container chest, FrontierWorldState state, SubjectId containerId) {
         if (hasForeignFungibleComponents(chest, state, containerId)) return false;
         FungibleResourceLedger resources = state.inventory().fungibleResources();
         List<io.farfrontier.palemirror.frontier.v3.model.CustodyAccount> accounts = resources.accounts().values().stream()
@@ -395,6 +395,15 @@ final class FrontierV3ContainerSurfaceExecutor {
     static Readiness readiness(ServerLevel level, FrontierWorldState state, SubjectId containerId) {
         ContainerSurface surface = state.inventory().surfaces().get(containerId);
         if (surface == null) return new Readiness("UNKNOWN_CONTAINER", "", "", "", "", "", "", false, false, 0, 0);
+        if (!surface.fixed()) {
+            var physical = FrontierV3PhysicalContainer.inspect(level, state, containerId).orElse(null);
+            if (physical == null) return new Readiness("BODY_UNAVAILABLE", "NOT_APPLICABLE_MOBILE", "",
+                    "", "", "", "", false, false, 0, 0);
+            var demand = FrontierV3PhysicalDemand.readiness(level, physical.position());
+            return new Readiness("LOADED", "NOT_APPLICABLE_MOBILE", "", "", physical.declared() ? "OWNED" : "UNTAGGED",
+                    matchesCanonicalSlots(physical.inventory(), state, containerId) ? "CURRENT" : "MISMATCH", "",
+                    demand.ordinaryPlayerNearby(), demand.presentationDemand(), demand.eligibleObserverCount(), demand.presentationObserverCount());
+        }
         BlockPos target = position(surface);
         // For the F0.2B reference scopes an evicted-ticking chunk retained in the server's
         // serialization cache is prior replica evidence, not a physical custody candidate.

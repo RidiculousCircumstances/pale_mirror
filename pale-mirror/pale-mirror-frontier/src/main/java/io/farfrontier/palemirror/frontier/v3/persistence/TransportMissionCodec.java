@@ -16,6 +16,12 @@ final class TransportMissionCodec {
         if (value.financialBudgetId().isPresent()) UnitGroupStateCodec.id(out, value.financialBudgetId().orElseThrow());
         out.writeBoolean(value.supplies().isPresent());
         if (value.supplies().isPresent()) ExpeditionSupplyLoadCodec.write(out, value.supplies().orElseThrow());
+        out.writeBoolean(value.transportAssetId().isPresent());
+        if (value.transportAssetId().isPresent()) UnitGroupStateCodec.id(out, value.transportAssetId().orElseThrow());
+        out.writeBoolean(value.replenishment().isPresent());
+        if (value.replenishment().isPresent()) UnitResourceTransferCodec.write(out, value.replenishment().orElseThrow());
+        out.writeBoolean(value.replenishmentPurchase().isPresent());
+        if (value.replenishmentPurchase().isPresent()) GoodsSpotPurchaseCodec.write(out, value.replenishmentPurchase().orElseThrow());
     }
     static TransportMission read(DataInputStream in) throws IOException {
         var id = UnitGroupStateCodec.id(in); var group = UnitGroupStateCodec.id(in);
@@ -24,7 +30,10 @@ final class TransportMissionCodec {
         return new TransportMission(id, group, shipments, ShipmentStateCodec.endpoint(in), ShipmentStateCodec.endpoint(in),
                 UnitGroupStateCodec.surface(in), UnitGroupStateCodec.surface(in), stage(in), in.readLong(),
                 in.readBoolean() ? java.util.Optional.of(UnitGroupStateCodec.id(in)) : java.util.Optional.empty(),
-                in.readBoolean() ? java.util.Optional.of(ExpeditionSupplyLoadCodec.read(in)) : java.util.Optional.empty());
+                in.readBoolean() ? java.util.Optional.of(ExpeditionSupplyLoadCodec.read(in)) : java.util.Optional.empty(),
+                in.readBoolean() ? java.util.Optional.of(UnitGroupStateCodec.id(in)) : java.util.Optional.empty(),
+                in.readBoolean() ? java.util.Optional.of(UnitResourceTransferCodec.read(in)) : java.util.Optional.empty(),
+                in.readBoolean() ? java.util.Optional.of(GoodsSpotPurchaseCodec.read(in)) : java.util.Optional.empty());
     }
     static void stage(DataOutputStream out, TransportMission.Stage stage) throws IOException {
         out.writeByte(switch (stage) { case LOADING -> 1; case OUTBOUND -> 2; case UNLOADING -> 3; case RETURNING -> 4; case COMPLETE -> 5; });

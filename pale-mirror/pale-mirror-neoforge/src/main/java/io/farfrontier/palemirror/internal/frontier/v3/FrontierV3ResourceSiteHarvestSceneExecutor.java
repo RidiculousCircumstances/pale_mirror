@@ -237,7 +237,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             if (ambient == null || ambient.status() == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED) continue;
             if (ambient.status() != io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT) return;
             Entity entity = level.getEntity(member.entityId());
-            if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)) return;
+            if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(),
+                    io.farfrontier.palemirror.frontier.v3.model.ActorKind.RESIDENT)) return;
             if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
             var supported = FrontierV3SupportedBodyCapture.observe(level, body);
             if (supported.isEmpty()) return;

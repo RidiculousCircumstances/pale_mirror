@@ -12,7 +12,10 @@ final class ExpeditionSupplyLoadCodec {
         out.writeByte(load.foodTargets().size());
         for (var entry : new TreeMap<>(load.foodTargets()).entrySet()) {
             UnitGroupStateCodec.id(out, entry.getKey()); out.writeInt(entry.getValue());
-            UnitGroupStateCodec.surface(out, load.assemblyStations().get(entry.getKey()));
+        }
+        out.writeByte(load.assemblyStations().size());
+        for (var entry : new TreeMap<>(load.assemblyStations()).entrySet()) {
+            UnitGroupStateCodec.id(out, entry.getKey()); UnitGroupStateCodec.surface(out, entry.getValue());
         }
         out.writeInt(load.allocations().size());
         for (var a : load.allocations()) {
@@ -31,8 +34,10 @@ final class ExpeditionSupplyLoadCodec {
         for (int i = 0; i < count; i++) {
             var actor = UnitGroupStateCodec.id(in);
             if (targets.put(actor, in.readInt()) != null) throw new IllegalArgumentException("duplicate supply roster member");
-            assembly.put(actor, UnitGroupStateCodec.surface(in));
         }
+        int stations = in.readUnsignedByte(); if (stations < 1 || stations > 32) throw new IllegalArgumentException("invalid supply assembly roster size");
+        for (int i = 0; i < stations; i++) if (assembly.put(UnitGroupStateCodec.id(in), UnitGroupStateCodec.surface(in)) != null)
+            throw new IllegalArgumentException("duplicate supply assembly station actor");
         int size = UnitGroupStateCodec.count(in, 320); var allocations = new ArrayList<ExpeditionSupplyLoad.Allocation>();
         for (int i = 0; i < size; i++) allocations.add(new ExpeditionSupplyLoad.Allocation(
                 UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in),

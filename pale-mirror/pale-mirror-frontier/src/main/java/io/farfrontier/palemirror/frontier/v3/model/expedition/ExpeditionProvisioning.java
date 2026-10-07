@@ -45,7 +45,7 @@ public final class ExpeditionProvisioning {
         public Plan {
             Objects.requireNonNull(foodKind); Objects.requireNonNull(transport); Objects.requireNonNull(refusal);
             members = Map.copyOf(members);
-            if (members.isEmpty() || durationTicks < 0 || sharedFoodItems < 0 || cargoStackSlots < 0
+            if (members.isEmpty() && transport != Transport.PACK_ANIMAL || durationTicks < 0 || sharedFoodItems < 0 || cargoStackSlots < 0
                     || members.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().actorId())))
                 throw new IllegalArgumentException("invalid expedition provisioning plan");
         }
@@ -59,10 +59,26 @@ public final class ExpeditionProvisioning {
     public static Plan plan(List<Member> roster, long outboundEdges, long returnEdges,
                             int cargoStackSlots, int availableFood, boolean animalAvailable,
                             FoodCatalog.Food food, FrontierRuleset.ResidentLife life, ExpeditionRules policy) {
-        if (roster.isEmpty() || roster.size() > 32 || cargoStackSlots < 0 || availableFood < 0
+        return plan(roster, outboundEdges, returnEdges, cargoStackSlots, availableFood, animalAvailable,
+                food, life, policy, false, policy.packAnimalStackSlots());
+    }
+    /** A chosen real transport asset owns cargo capacity, never a fictitious resident's pockets. */
+    public static Plan planWithAsset(List<Member> roster, long outboundEdges, long returnEdges,
+            int cargoStackSlots, int availableFood, int actualAssetSlots,
+            FoodCatalog.Food food, FrontierRuleset.ResidentLife life, ExpeditionRules policy) {
+        if (actualAssetSlots < 1) throw new IllegalArgumentException("provisioning lacks an actual transport capacity");
+        return plan(roster, outboundEdges, returnEdges, cargoStackSlots, availableFood, true,
+                food, life, policy, true, actualAssetSlots);
+    }
+    private static Plan plan(List<Member> roster, long outboundEdges, long returnEdges,
+            int cargoStackSlots, int availableFood, boolean animalAvailable,
+            FoodCatalog.Food food, FrontierRuleset.ResidentLife life, ExpeditionRules policy,
+            boolean carriedByAnimal, int actualAssetSlots) {
+        if (roster.isEmpty() && !carriedByAnimal || roster.size() > 32 || cargoStackSlots < 0 || availableFood < 0
                 || roster.stream().map(Member::actorId).distinct().count() != roster.size())
             throw new IllegalArgumentException("invalid expedition load inputs");
-        if (roster.stream().mapToInt(Member::cargoStackSlots).reduce(0, Math::addExact) != cargoStackSlots)
+        if (!carriedByAnimal && roster.stream().mapToInt(Member::cargoStackSlots).reduce(0, Math::addExact) != cargoStackSlots
+                || carriedByAnimal && roster.stream().anyMatch(member -> member.cargoStackSlots() != 0))
             throw new IllegalArgumentException("cargo capacity must belong to the declared actual carriers");
         long duration = policy.plannedDuration(outboundEdges, returnEdges);
         var supplies = new LinkedHashMap<SubjectId, PersonalSupply>();
@@ -84,7 +100,7 @@ public final class ExpeditionProvisioning {
             walkingFoodFits &= Math.addExact(foodSlots, member.cargoStackSlots()) <= freeSlots;
             supplies.put(member.actorId(), new PersonalSupply(member.actorId(), required, required, existing));
         }
-        Transport transport = walkingFoodFits ? Transport.WALKING : Transport.PACK_ANIMAL;
+        Transport transport = walkingFoodFits && !carriedByAnimal ? Transport.WALKING : Transport.PACK_ANIMAL;
         int shared = 0;
         if (transport == Transport.PACK_ANIMAL) {
             for (var member : roster) {
@@ -101,7 +117,7 @@ public final class ExpeditionProvisioning {
         Refusal refusal = Math.addExact(shared, supplies.values().stream().mapToInt(PersonalSupply::loadFoodItems)
                 .reduce(0, Math::addExact)) > availableFood
                 ? Refusal.FOOD_STOCK : transport == Transport.PACK_ANIMAL && !animalAvailable
-                ? Refusal.NO_TRANSPORT : transport == Transport.PACK_ANIMAL && animalSlots > policy.packAnimalStackSlots()
+                ? Refusal.NO_TRANSPORT : transport == Transport.PACK_ANIMAL && animalSlots > Math.min(policy.packAnimalStackSlots(), actualAssetSlots)
                 ? Refusal.CAPACITY : Refusal.NONE;
         return new Plan(food.itemKind(), duration, supplies, shared, cargoStackSlots, transport, refusal);
     }

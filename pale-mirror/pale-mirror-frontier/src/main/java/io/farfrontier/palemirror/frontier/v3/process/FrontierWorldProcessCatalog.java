@@ -34,6 +34,8 @@ public final class FrontierWorldProcessCatalog {
         }
         default boolean held(FrontierWorldState state, ScheduledAction action) { return false; }
         default Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return Set.of(); }
+        default void restorePlanningWait(FrontierWorldState state, ScheduledAction action,
+                io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) { }
     }
 
     private static final Set<String> KERNEL = types(
@@ -162,6 +164,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("goods-trade", new GoodsTradeProcessModule()),
             Map.entry("shipments", new ShipmentProcessModule()),
             Map.entry("unit-groups", new UnitGroupProcessModule()),
+            Map.entry("pedestrian-planning", new PedestrianPlanningProcessModule()),
             Map.entry("transport-missions", new TransportMissionProcessModule()),
             Map.entry("unit-inventory", new UnitInventoryProcessModule()),
             Map.entry("expedition-supplies", new ExpeditionSupplyProcessModule()),
@@ -186,6 +189,22 @@ public final class FrontierWorldProcessCatalog {
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
                                                       io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
                 return planner.plan(state, action, currentInstant);
+            }
+        };
+    }
+    /** Explicit producer capability; recovery does not preview unrelated growth/birth/recipe clocks. */
+    private static ScheduledPlanner withPlanningRecovery(ScheduledPlanner delegate) {
+        return new ScheduledPlanner() {
+            @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) { return delegate.plan(state, action); }
+            @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                    io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) { return delegate.plan(state, action, instant); }
+            @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return delegate.held(state, action); }
+            @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return delegate.wakeDependencies(state, action); }
+            @Override public void restorePlanningWait(FrontierWorldState state, ScheduledAction action,
+                    io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
+                // This is a read-only owner preview; its events never enter the engine.
+                PedestrianPlanningContinuations.restore(action, () -> delegate.plan(state, action,
+                        new io.farfrontier.palemirror.frontier.v3.api.SimInstant(Math.max(instant.ticks(), action.dueAt().ticks()))));
             }
         };
     }
@@ -221,7 +240,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry(DefenderEquipmentProcess.REVIEW_ACTION, (state, action) -> DefenderEquipmentProcess.plan(state, action)),
             Map.entry(DefenderEquipmentReturnProcess.REVIEW_ACTION, (state, action) -> DefenderEquipmentReturnProcess.plan(state, action)),
             Map.entry(ResidentNeedProcess.REVIEW, (state, action) -> ResidentNeedProcess.plan(state, action)),
-            Map.entry(ResidentActivityProcess.REVIEW, new ScheduledPlanner() {
+            Map.entry(ResidentActivityProcess.REVIEW, withPlanningRecovery(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ResidentActivityProcess.plan(state, action);
                 }
@@ -235,8 +254,8 @@ public final class FrontierWorldProcessCatalog {
                 @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
                     return ResidentActivityProcess.wakeDependencies(state, action.subject());
                 }
-            }),
-            Map.entry(ResidentMealProcess.PROGRESS, new ScheduledPlanner() {
+            })),
+            Map.entry(ResidentMealProcess.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ResidentMealProcess.planProgress(state, action);
                 }
@@ -250,11 +269,11 @@ public final class FrontierWorldProcessCatalog {
                 @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
                     return ResidentMealProcess.wakeDependencies(state, action);
                 }
-            }),
+            })),
             Map.entry(GoodsTradeReceiptProcess.REVIEW, atExecutionTime(GoodsTradeReceiptProcess::plan)),
-            Map.entry(GoodsParticipantProcess.REVIEW, atExecutionTime(GoodsParticipantProcess::plan)),
-            Map.entry(GoodsParticipantWakeup.OPPORTUNITY, atExecutionTime(GoodsParticipantProcess::plan)),
-            Map.entry(ShipmentProcess.PROGRESS, new ScheduledPlanner() {
+            Map.entry(GoodsParticipantProcess.REVIEW, withPlanningRecovery(atExecutionTime(GoodsParticipantProcess::plan))),
+            Map.entry(GoodsParticipantWakeup.OPPORTUNITY, withPlanningRecovery(atExecutionTime(GoodsParticipantProcess::plan))),
+            Map.entry(ShipmentProcess.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ShipmentProcess.plan(state, action, action.dueAt().ticks());
                 }
@@ -263,10 +282,10 @@ public final class FrontierWorldProcessCatalog {
                     return ShipmentProcess.plan(state, action, currentInstant.ticks());
                 }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return ShipmentProcess.held(state, action); }
-            }),
-            Map.entry(UnitGroupProcess.PROGRESS, atExecutionTime((state, action, instant) -> UnitGroupProcess.plan(state, action, instant.ticks()))),
-            Map.entry(TransportMissionProcess.PROGRESS, atExecutionTime((state, action, instant) -> TransportMissionProcess.plan(state, action, instant.ticks()))),
-            Map.entry(ActorMovementProcess.PROGRESS, new ScheduledPlanner() {
+            })),
+            Map.entry(UnitGroupProcess.PROGRESS, withPlanningRecovery(atExecutionTime((state, action, instant) -> UnitGroupProcess.plan(state, action, instant.ticks())))),
+            Map.entry(TransportMissionProcess.PROGRESS, withPlanningRecovery(atExecutionTime((state, action, instant) -> TransportMissionProcess.plan(state, action, instant.ticks())))),
+            Map.entry(ActorMovementProcess.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ActorMovementProcess.plan(state, action, action.dueAt().ticks());
                 }
@@ -277,7 +296,7 @@ public final class FrontierWorldProcessCatalog {
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                     return ActorMovementProcess.held(state, action);
                 }
-            }),
+            })),
             Map.entry("frontier.market.clear", (state, action) -> MarketClearingProcess.plan(state, action)),
             Map.entry("frontier.resource_site.growth", new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
@@ -376,7 +395,8 @@ public final class FrontierWorldProcessCatalog {
                         emissions("settlement-service-work"), SETTLEMENT_SERVICE_WORK),
                 descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emissions("strategy"), STRATEGY),
                 GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR,
-                TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR);
+                TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
+                PedestrianPlanningProcessModule.DESCRIPTOR);
     }
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }
@@ -474,11 +494,24 @@ public final class FrontierWorldProcessCatalog {
         String processId = registry.requireScheduledOwner(action.kind());
         ScheduledPlanner planner = SCHEDULED_PLANNERS.get(action.kind());
         if (planner == null) throw new IllegalStateException("registered scheduled kind has no planner: " + action.kind());
-        List<ProposedEvent> planned = planner.plan(state, action, currentInstant);
-        List<ProposedEvent> result = planned.isEmpty()
-                ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())))
-                : planned;
-        return registry.validateEmissions(processId, result);
+        return PedestrianPlanningContinuations.plan(action, () -> {
+            List<ProposedEvent> planned = planner.plan(state, action, currentInstant);
+            List<ProposedEvent> result = planned.isEmpty()
+                    ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id()))) : planned;
+            return registry.validateEmissions(processId, result);
+        });
+    }
+
+    /** Rebuild volatile dependencies once on runtime admission, without committing or replaying domain effects. */
+    public static void restorePlanningWaits(DeterministicProcessRegistry registry, FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView view) {
+        for (var action : view.schedules()) {
+            registry.requireScheduledOwner(action.kind());
+            var planner = SCHEDULED_PLANNERS.get(action.kind());
+            if (planner == null) throw new IllegalStateException("restored continuation has no declared planner");
+            if (!planner.held(state, action))
+                planner.restorePlanningWait(state, action, view.instant());
+        }
     }
 
     public static boolean scheduledHeld(DeterministicProcessRegistry registry, FrontierWorldState state, ScheduledAction action) {

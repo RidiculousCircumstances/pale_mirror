@@ -34,6 +34,15 @@ public final class ActorExecutionLifecycle {
             return prepared.withChanges(Objects.requireNonNull(ownedUpdate).merge(resumptionChanges).actorExecutions(executions));
         }
     }
+    /** Read-only admission uses the same ownership policy as prepareVacant, not family data absence. */
+    public boolean mayAdmitVacant(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId) {
+        var actor = state.actorLocations().get(actorId);
+        var retained = state.actorExecutions().actors().get(actorId);
+        return actor != null && actor.condition().status() == ActorLifeStatus.ALIVE
+                && (retained == null || retained.suspended().isEmpty()
+                    && (retained.current().isEmpty() || capabilities.require(retained.current().orElseThrow().activityKind())
+                        .interruption() == ActorActivityCapability.Interruption.RELEASE));
+    }
     public Transition prepareVacant(FrontierWorldState state, ActorExecutionId successor) {
         capabilities.require(successor.activityKind());
         var actor = state.actorLocations().get(successor.actorId());

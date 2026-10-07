@@ -28,6 +28,15 @@ final class ActorMovementStateSupport {
                     || !actors.containsKey(entry.getKey()) || people.meals().containsKey(entry.getKey()))
                 throw new IllegalArgumentException("actor movement must bind one exact actor without a competing meal owner");
             switch (entry.getValue().context()) {
+                case ActorMovementContext.ResourceAccessExit exit -> {
+                    var movement = entry.getValue(); var container = inventory.containers().get(exit.depotId());
+                    if (container == null || !container.ownerId().equals(exit.settlementId())
+                            || !FrontierWorldState.depotId(exit.settlementId()).equals(exit.depotId())
+                            || !movement.executionId().activityOwnerId().equals(exit.executionOwnerId())
+                            || !movement.order().ownerId().equals(exit.executionOwnerId())
+                            || movement.order().capability() != TraversalCapability.PEDESTRIAN)
+                        throw new IllegalArgumentException("resource clearance lost its declared access point or retained caller");
+                }
                 case ActorMovementContext.ServiceExit exit -> {
                     ResidentProfile resident = people.resident(entry.getKey());
                     if (entry.getValue().executionId().activityKind() != ActorActivityKind.SERVICE_EXIT
@@ -75,6 +84,13 @@ final class ActorMovementStateSupport {
                     var group = groups.groups().get(mission.groupId());
                     if (group == null || !group.member(entry.getKey()).activityOwnerId().equals(movement.executionId().activityOwnerId()))
                         throw new IllegalArgumentException("assembly movement has foreign participant authority");
+                }
+                case ActorMovementContext.ExpeditionReplenishment refill -> {
+                    var mission = shipments.missions().get(refill.missionId()); var movement = entry.getValue();
+                    var transfer = mission == null ? null : mission.replenishment().orElse(null);
+                    if (transfer == null || transfer.pending().isPresent() || !transfer.execution().equals(movement.executionId())
+                            || !transfer.order(mission.id(), mission.revision()).movementOrder().equals(movement.order()))
+                        throw new IllegalArgumentException("replenishment movement lost its retained stock instruction");
                 }
             }
         }

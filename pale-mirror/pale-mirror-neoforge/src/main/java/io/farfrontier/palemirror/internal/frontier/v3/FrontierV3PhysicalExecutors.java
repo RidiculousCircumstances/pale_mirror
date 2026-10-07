@@ -42,7 +42,8 @@ final class FrontierV3PhysicalExecutors {
             // before the generic surface audit: the latter only knows the older canonical
             // layout and would otherwise mark the source CONFLICT, permanently hiding the
             // one recoverable player departure.
-            executor("fungible-resource-observation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-delivery", "expedition-supplies"), "fungible-resource-custody-observation", FrontierV3FungibleResourceObservationExecutor::tick),
+            executor("fungible-resource-observation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
+                    Set.of("resource-site-delivery", "expedition-supplies"), "fungible-resource-custody-observation", FrontierV3FungibleResourceObservationExecutor::tick),
             // The generic audit has two independently durable predecessors: a
             // RUNNING production receipt and a fungible HOT handoff recovered
             // from physical storage.  Keep both graph edges explicit so a

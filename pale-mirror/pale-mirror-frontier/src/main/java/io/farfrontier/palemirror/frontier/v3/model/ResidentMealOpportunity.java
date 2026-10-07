@@ -79,9 +79,10 @@ public final class ResidentMealOpportunity {
         int wanted = state.humanPopulation().nutrition(residentId).accrueThrough(atTick, rules,
                 resident.characteristics().effectiveMetabolismPermille(atTick)).nutritionWanted(rules);
         var resources = state.inventory().fungibleResources();
-        for (var carry : UnitInventoryPresentation.inventory(state, residentId).values().stream()
-                .sorted(java.util.Comparator.comparing(ActorCarriedResources.Presentation::accountId)).toList()) {
-            if (!resources.accounts().get(carry.accountId()).claimQuantities().isEmpty()) continue;
+        var presentation = UnitInventoryPresentation.inventory(state, residentId);
+        for (var account : UnitInventory.personalAccounts(state, residentId)) {
+            if (!account.claimQuantities().isEmpty()) continue;
+            var carry = presentation.get(account.id());
             for (var food : new java.util.TreeMap<>(rules.foods().foods()).values()) {
                 int quantity = food.portionFor(wanted, resources.unclaimedQuantity(carry.accountId(), resident.settlementId(), food.itemKind()));
                 if (quantity == 0) continue;

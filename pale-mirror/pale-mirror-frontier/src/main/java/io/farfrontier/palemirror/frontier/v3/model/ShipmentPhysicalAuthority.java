@@ -6,13 +6,15 @@ import java.util.*;
 public final class ShipmentPhysicalAuthority {
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId container) {
         return state.shipments().shipments().values().stream().anyMatch(shipment -> shipment.pendingPhysicalStep().isPresent()
-                && shipment.itemOrder().containerEndpoint().containerId().equals(container));
+                && (shipment.itemOrder().containerEndpoint().containerId().equals(container)
+                    || shipment.mobileContainerId().equals(Optional.of(container))));
     }
     public static Set<Integer> reservedSlots(FrontierWorldState state, SubjectId container) {
         var result = new HashSet<Integer>();
         for (Shipment shipment : state.shipments().shipments().values()) {
             var step = shipment.pendingPhysicalStep().orElse(null);
-            if (step != null && shipment.status() == Shipment.Status.CARRYING && shipment.receiver().containerId().equals(container))
+            if (step != null && (shipment.status() == Shipment.Status.CARRYING && shipment.receiver().containerId().equals(container)
+                    || shipment.status() == Shipment.Status.AWAITING_LOAD && shipment.mobileContainerId().equals(Optional.of(container))))
                 result.add(step.destinationSlot());
         }
         return Set.copyOf(result);

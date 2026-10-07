@@ -9,6 +9,7 @@ import java.util.Objects;
 public final class PedestrianRoutePlanning {
     private static final PedestrianRoutePlanner DIRECT = new CachedDirectPlanner();
     private static PedestrianRoutePlanner current = DIRECT;
+    private static final ThreadLocal<java.util.LinkedHashSet<PedestrianRouteRequest>> observations = new ThreadLocal<>();
     private PedestrianRoutePlanning() { }
 
     public static synchronized AutoCloseable bind(PedestrianRoutePlanner planner) {
@@ -23,6 +24,27 @@ public final class PedestrianRoutePlanning {
         PedestrianRoutePlanner planner;
         synchronized (PedestrianRoutePlanning.class) { planner = current; }
         return planner.query(geometry, start, target);
+    }
+
+    /** The consumer declares a dependency only when an unresolved calculation actually prevents its result. */
+    public static void await(PedestrianRouteRequest request) {
+        var observation = observations.get();
+        if (observation != null) observation.add(Objects.requireNonNull(request));
+    }
+
+    /** Captures declared pending dependencies of this caller, not diagnostics or unused alternatives. */
+    public static <T> Observation<T> observe(java.util.function.Supplier<T> calculation) {
+        var previous = observations.get();
+        var requests = new java.util.LinkedHashSet<PedestrianRouteRequest>();
+        observations.set(requests);
+        try { return new Observation<>(calculation.get(), java.util.List.copyOf(requests)); }
+        finally {
+            if (previous == null) observations.remove();
+            else { previous.addAll(requests); observations.set(previous); }
+        }
+    }
+    public record Observation<T>(T result, java.util.List<PedestrianRouteRequest> requests) {
+        public Observation { requests = java.util.List.copyOf(requests); }
     }
 
     /** Read retained evidence without starting a search. */

@@ -253,9 +253,48 @@ class GoodsTradeTest {
         ShipmentStateSupport.validateOrder(resumed, resumed.shipments().shipments().get(shipment.id()).itemOrder());
     }
     @Test void hotPickupIsFencedReplaySafeAndSavedDepartureKeepsExactCargo() {
-        var state = reserved(); var shipment = shipment(state); var actor = shipment.execution().actorId();
+        hotPickup(false);
+    }
+    @Test void preparedMobilePickupMergesAnExistingStackWithoutReadmittingItsOwnReservedSlot() {
+        hotPickup(true);
+    }
+    private static void hotPickup(boolean mobile) {
+        var state = reserved(); var initialShipment = shipment(state);
+        var asset = state.transportFleet().assets().values().stream().filter(value -> value.homeSettlementId().equals(SELLER)).findFirst().orElseThrow();
+        var actor = mobile ? asset.actorId() : initialShipment.execution().actorId();
+        var mobileId = asset.containerId(); var mobileAccount = ReferenceContainerCustody.scopeId(mobileId);
+        var spareLot = id("lot:pickup-spare");
+        if (mobile) {
+            var inventory = state.inventory();
+            var stocked = inventory.fungibleResources().issue(new ResourceLot(spareLot, SELLER, initialShipment.itemKind(), 4,
+                    "fixture:pickup-spare", List.of()), new CustodyAccount(mobileAccount, new ResourceCustody.Container(mobileId),
+                    Map.of(spareLot, 4), Map.of()));
+            state = state.withInventory(inventory.withFungibleResources(stocked));
+        }
+        var missionId = id("mission:pickup-boundary"); var groupId = id("group:pickup-boundary");
+        var shipment = mobile ? new Shipment(initialShipment.id(), initialShipment.authorization(), state.actorExecutions().next(actor,
+                initialShipment.execution().activityKind(), initialShipment.id()), initialShipment.sender(), initialShipment.receiver(),
+                initialShipment.sourceAccountId(), initialShipment.carriedAccountId(), initialShipment.receivingAccountId(), initialShipment.itemKind(),
+                initialShipment.lotQuantities(), initialShipment.status(), initialShipment.revision()).withMobileStorage(mobileId, mobileAccount)
+                .withMission(missionId) : initialShipment;
         state = atStation(state, actor, shipment.sender().station());
-        state = shipmentFact(state, SELLER, new ShipmentDispatched(shipment));
+        // Prepared physical-boundary fixture. Full finite-asset/mission admission is
+        // separately exercised by ExpeditionSupplyFlowTest, not claimed by this setup.
+        if (mobile) {
+            var mission = new TransportMission(missionId, groupId, List.of(shipment.id()), shipment.sender(), shipment.receiver(),
+                    shipment.sender().station(), shipment.receiver().station(), TransportMission.Stage.LOADING, 1).withTransportAsset(actor);
+            var group = new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup(groupId,
+                    new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Mission(
+                            io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.MissionKind.TRANSPORT, missionId),
+                    List.of(new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member(actor,
+                            io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Role.CARRIER,
+                            shipment.execution().activityKind(), shipment.id())),
+                    io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Formation.COLUMN,
+                    io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.READY, 1, 0, java.util.Optional.empty());
+            state = ActorExecutionComposition.LIFECYCLE.prepareVacant(state, shipment.execution()).commit(state,
+                    FrontierWorldStateUpdate.begin().shipments(state.shipments().admit(shipment).admitMission(mission))
+                            .transportFleet(state.transportFleet().reserve(actor, missionId)).unitGroups(state.unitGroups().admit(group)));
+        } else state = shipmentFact(state, SELLER, new ShipmentDispatched(shipment));
         state = ModeledActorBodyFacts.present(state, actor);
         var lease = new AmbientActorLease(actor, state.actorLocations().get(actor).body(), new SimInstant(0), 1,
                 AmbientLeaseStatus.HOT, AmbientGoalKind.WORK, state.actorLocations().get(actor).body());
@@ -269,32 +308,62 @@ class GoodsTradeTest {
         var address = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(SOURCE, 0));
         resources = resources.rebind(SOURCE_ACCOUNT, 7, FungiblePhysicalObservation.bind(resources, SOURCE_ACCOUNT, 7,
                 List.of(new FungiblePhysicalObservation.Stack(address, shipment.itemKind(), 64))));
+        var mobileAddress = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(mobileId, 0));
+        if (mobile) {
+            var mobileRecord = PhysicalReplicaRecord.expected(mobileId, ReferenceContainerCustody.semanticKind(state, mobileId), 8,
+                    ReferenceContainerCustody.canonicalFingerprint(state, mobileId), ReferenceContainerCustody.provenance(mobileId));
+            custody = custody.declare(mobileRecord).observe(mobileId, 8, 1, mobileRecord.fingerprint(), mobileRecord.provenance(), 8)
+                    .acquire(new PhysicalCustodyLease(mobileAccount, mobileId, ReferenceContainerCustody.PROVIDER_ID,
+                            8, 8, 2, PhysicalCustodyLeaseStatus.ACQUIRED, null));
+            resources = resources.rebind(mobileAccount, 8, FungiblePhysicalObservation.bind(resources, mobileAccount, 8,
+                    List.of(new FungiblePhysicalObservation.Stack(mobileAddress, shipment.itemKind(), 4))));
+        }
         state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody).inventory(state.inventory().withFungibleResources(resources)));
         var identity = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(ActorBodyAuthority.current(state, actor), shipment.execution());
         var step = new ShipmentPhysicalStep(shipment.status(), shipment.revision(),
                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(identity, lease.revision()),
-                MaterialSourceSelection.select(resources, shipment.itemOrder()), -1, identity.body().physicalEpoch(), shipment.lotQuantities(), 0);
+                MaterialSourceSelection.select(resources, shipment.itemOrder()), mobile ? 0 : -1,
+                mobile ? 8 : identity.body().physicalEpoch(), shipment.lotQuantities(), mobile ? 4 : 0);
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(actor,
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), actor),
                 ActorContainerItemOrder.Hand.MAIN), shipment.itemKind(), 60);
         var receipt = new ShipmentHotTransferred(shipment.id(), step,
-                List.of(new FungiblePhysicalObservation.Stack(address, shipment.itemKind(), 4)), List.of(hand));
+                List.of(new FungiblePhysicalObservation.Stack(address, shipment.itemKind(), 4)), mobile
+                ? List.of(new FungiblePhysicalObservation.Stack(mobileAddress, shipment.itemKind(), 64)) : List.of(hand));
         var unprepared = state;
         assertThrows(IllegalArgumentException.class, () -> shipmentFact(unprepared, shipment.id(), receipt));
         state = shipmentFact(state, shipment.id(), new ShipmentHotPrepared(shipment.id(), step));
         assertFalse(ActorSpatialCourtesy.assess(state, shipment.execution()).ready(),
                 "courtesy cannot displace a carrier during an unresolved physical pickup");
         assertTrue(ContainerPhysicalAuthorityComposition.pending(state, SOURCE));
+        if (mobile) {
+            assertTrue(state.reservedContainerSlots(mobileId).contains(0));
+            assertFalse(ContainerStorageAdmission.receive(state, mobileId, shipment.itemKind(), 60, java.util.Optional.empty()),
+                    "fresh admission must still reject the slot held by the prepared handoff");
+        }
         var prepared = state;
         assertThrows(IllegalArgumentException.class, () -> ModeledActorBodyFacts.unloaded(prepared, actor));
         var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        if (mobile) {
+            var restored = state;
+            var falseLayout = new ShipmentHotTransferred(shipment.id(), step, receipt.remainingSource(),
+                    List.of(new FungiblePhysicalObservation.Stack(mobileAddress, shipment.itemKind(), 63)));
+            assertThrows(IllegalArgumentException.class, () -> shipmentFact(restored, shipment.id(), falseLayout));
+        }
         state = shipmentFact(state, shipment.id(), receipt);
         assertEquals(Shipment.Status.CARRYING, state.shipments().shipments().get(shipment.id()).status());
         assertTrue(ActorSpatialCourtesy.assess(state, shipment.execution()).ready());
         assertEquals(SELLER, state.inventory().fungibleResources().lots().get(LOT).economicOwnerId());
-        assertEquals(Map.of(LOT, 60), state.inventory().fungibleResources().accounts().get(shipment.carriedAccountId()).lotQuantities());
+        assertEquals(mobile ? Map.of(LOT, 60, spareLot, 4) : Map.of(LOT, 60),
+                state.inventory().fungibleResources().accounts().get(shipment.carriedAccountId()).lotQuantities());
         var committed = state;
         assertThrows(IllegalArgumentException.class, () -> shipmentFact(committed, shipment.id(), receipt));
+        if (mobile) {
+            assertEquals(Map.of(CLAIM, 60), state.inventory().fungibleResources().accounts().get(mobileAccount).claimQuantities());
+            assertTrue(state.reservedContainerSlots(mobileId).isEmpty());
+            assertEquals(state, codec.decode(codec.encode(state)));
+            return;
+        }
         assertThrows(IllegalArgumentException.class, () -> ModeledActorBodyFacts.unloaded(committed, actor));
         assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.release(
                 io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.transition(committed, actor, AmbientLeaseStatus.DRAINING),

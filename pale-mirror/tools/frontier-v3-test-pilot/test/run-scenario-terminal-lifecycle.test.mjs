@@ -11,3 +11,9 @@ test('terminal lifecycle close is fenced by the published segment journal rather
   assert.match(runner, /awaitLifecycleBarrier\(lifecycle, LifecycleBarrier\.TERMINAL_ASSERTION_COMPLETE, 300_000/,
     'the close token cannot precede terminal assertion publication');
 });
+
+test('restart supervisor preserves the first segment declared action windows', async () => {
+  const runner = await readFile(new URL('../src/run-isolated-scenario.mjs', import.meta.url), 'utf8');
+  assert.match(runner, /awaitLifecycleBarrierFromPilot\(LifecycleBarrier\.SCENARIO_SEGMENT_COMPLETE, scenarioDeadlineMs\(recovery\.before\), persistentPilot/,
+    'the supervisor cannot time out before the bounded client action budget');
+});

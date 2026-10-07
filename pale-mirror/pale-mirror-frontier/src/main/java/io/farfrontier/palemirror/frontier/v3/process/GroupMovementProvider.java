@@ -34,7 +34,9 @@ public final class GroupMovementProvider implements ActorMovementProvider {
                 : ActorExecutionComposition.LIFECYCLE.prepareVacant(state, movement.executionId()).commit(state, update);
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
-        var group = group(state, movement); return UnitGroupMissionPorts.require(group).knowledge(state, group).plannedPath(start, movement.order());
+        var group = group(state, movement);
+        return UnitGroupMissionPorts.require(group).knowledge(state, group).plannedPath(start, movement.order(),
+                group.journey().orElseThrow().route());
     }
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         var group = group(state, movement); UnitGroupMissionPorts.require(group).knowledge(state, group).requireRoute(route);
@@ -43,6 +45,28 @@ public final class GroupMovementProvider implements ActorMovementProvider {
     }
     @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement); return List.copyOf(route.subList(0, Math.min(route.size(), TimedKnownRoute.MAX_SURFACES)));
+    }
+    @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {
+        var group = group(state, movement);
+        return io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.segment(state, group,
+                movement.order().actorId(), coldSegment(state, movement, route), tick);
+    }
+    @Override public void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {
+        var group = group(state, movement); UnitGroupMissionPorts.require(group).knowledge(state, group).requireRoute(route);
+        if (route.size() > TimedKnownRoute.MAX_SURFACES
+                || !io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.permits(state, group,
+                    movement.order().actorId(), route.getLast(), tick))
+            throw new IllegalArgumentException("group COLD leg exceeds its current elastic formation envelope");
+    }
+    @Override public long ticksPerEdge(FrontierWorldState state, ActorMovement movement) {
+        var group = group(state, movement); return UnitGroupMissionPorts.require(group).travelPolicy(state, group).ticksPerEdge();
+    }
+    @Override public MovementPermission movementPermission(FrontierWorldState state, ActorMovement movement, SurfaceAnchor actual, long tick,
+                                       ActorPositionView positions) {
+        var group = group(state, movement);
+        var mission = UnitGroupMissionPorts.require(group).movementPermission(state, group);
+        return mission.allowed() ? io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assess(
+                state, group, movement.order().actorId(), actual, positions) : mission;
     }
     @Override public ActorExecutionState arrivalAuthority(FrontierWorldState state, ActorMovement movement) { validate(state, movement); return state.actorExecutions(); }
     @Override public Optional<BodyPosition> interruptionCheckpoint(FrontierWorldState state, ActorMovement movement, long tick) {

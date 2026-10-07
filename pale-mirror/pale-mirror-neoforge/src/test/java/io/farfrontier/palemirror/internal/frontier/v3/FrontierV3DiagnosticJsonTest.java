@@ -68,6 +68,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class FrontierV3DiagnosticJsonTest {
 
     @Test
+    void expeditionParticipantUsesTheCommonPilotEnvelopeWithoutMutatingItsFiniteFixture() {
+        var configuration = FrontierV3FixtureCatalog.configuration("expedition-provisioning",
+                new WorldId("frontier:expedition-diagnostic-envelope"), 41L);
+        var engine = FrontierEngines.create(configuration);
+        var checkpoint = engine.checkpoint(); var state = configuration.initialState();
+        var json = JsonParser.parseString(FrontierV3DiagnosticJson.render("process", "settlement:1",
+                checkpoint, state, Optional.empty()).substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals("process", json.get("kind").getAsString());
+        assertEquals("settlement:1", json.get("id").getAsString());
+        assertEquals(0, json.get("instant").getAsLong());
+        assertEquals(0, json.getAsJsonObject("expeditions").get("activeMissions").getAsInt());
+        assertEquals(0, json.getAsJsonObject("expeditions").get("reservedAnimals").getAsInt());
+        assertEquals(12, state.transportFleet().assets().size());
+        assertEquals(checkpoint, engine.checkpoint());
+    }
+
+    @Test
     void authored65CellHarvestDiagnosticReportsItsSemanticGoalAndYield() {
         var configuration = FrontierV3FixtureCatalog.configuration("resource-site-harvest-65",
                 new WorldId("frontier:diagnostic-65-cell-field"), 125L);
@@ -788,7 +805,8 @@ class FrontierV3DiagnosticJsonTest {
         String scene = FrontierV3DiagnosticJson.render("scene", candidate.assaultId().value(), checkpoint, hot, Optional.empty());
 
         assertTrue(scene.contains("\"status\":\"ok\"") && scene.contains("\"sceneKind\":\"SETTLEMENT_ASSAULT\""));
-        assertTrue(scene.contains("\"operation\":\"\"") && scene.contains("\"assault\":\"" + candidate.assaultId().value() + "\""));
+        assertFalse(scene.contains("\"operation\":"), "retired hive-supply operations have no diagnostic field");
+        assertTrue(scene.contains("\"assault\":\"" + candidate.assaultId().value() + "\""));
         var spatial = com.google.gson.JsonParser.parseString(scene.substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
         var retainedAssault = hot.strategicPlans().settlementAssaults().get(candidate.assaultId());
         assertEquals(retainedAssault.march().spatialRevision(), spatial.get("marchSpatialRevision").getAsLong());
@@ -922,7 +940,8 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(scene.contains("\"status\":\"ok\"") && scene.contains("\"sceneKind\":\"ENGINEERING_WORKSITE\""));
         assertTrue(scene.contains("\"project\":\"" + project.id().value() + "\"")
-                && scene.contains("\"operation\":\"\"") && scene.contains("\"assault\":\"\""));
+                && scene.contains("\"assault\":\"\""));
+        assertFalse(scene.contains("\"operation\":"), "retired hive-supply operations have no diagnostic field");
         runtime.shutdown();
     }
 

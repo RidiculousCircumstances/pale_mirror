@@ -196,7 +196,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
             if (ambient == null || ambient.status() == AmbientLeaseStatus.CLOSED) continue;
             if (ambient.status() != AmbientLeaseStatus.HOT) return;
             Entity entity = level.getEntity(member.entityId());
-            if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)) return;
+            if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), ActorKind.RESIDENT)) return;
             if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
             BodyPosition observed = FrontierV3BodyObservation.position(body);
             captures.add(new SceneMemberPosition(member.actorId(), observed,

@@ -4,7 +4,8 @@ import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3PilotCrashHooks;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.Container;
+import net.minecraft.core.BlockPos;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Coerce;
@@ -23,7 +24,7 @@ abstract class FrontierV3FungiblePlayerCrashWindowMixin {
                     + "(Lio/farfrontier/palemirror/internal/frontier/v3/FrontierV3ServerRuntime;Ljava/lang/String;Ljava/lang/String;"
                     + "Lio/farfrontier/palemirror/frontier/v3/api/FrontierPayload;)Lio/farfrontier/palemirror/frontier/v3/api/CommandResult;"), require = 1)
     private static void stopAfterVisiblePlayerDeparture(ServerLevel level, @Coerce Object runtime, FrontierWorldState state,
-                                                        CustodyAccount account, ChestBlockEntity chest, long epoch,
+                                                        CustodyAccount account, Container inventory, BlockPos position, long epoch,
                                                         CallbackInfoReturnable<Boolean> ignored) {
         FrontierV3PilotCrashHooks.afterVisibleFungiblePlayerDeparture(level, runtime, account);
     }

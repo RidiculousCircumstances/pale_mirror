@@ -18,6 +18,8 @@ public record CustodyAccount(SubjectId id, ResourceCustody custody, Map<SubjectI
         actorPresentation = Objects.requireNonNull(actorPresentation, "declared actor presentation");
         if (actorPresentation.isPresent() && !(custody instanceof ResourceCustody.Actor))
             throw new IllegalArgumentException("personal presentation requires actor custody");
+        if (actorPresentation.orElse(null) instanceof ActorItemSlot.AttachedStorage)
+            throw new IllegalArgumentException("attached storage must retain container custody, not personal presentation");
     }
 
     public CustodyAccount withQuantities(Map<SubjectId, Integer> lots, Map<SubjectId, Integer> claims) {

@@ -12,7 +12,8 @@ final class ExpeditionSupplyProcess {
     private ExpeditionSupplyProcess() { }
     static boolean assembled(FrontierWorldState state, TransportMission mission) {
         var load = mission.supplies().orElseThrow();
-        return load.complete() && load.assemblyStations().entrySet().stream().allMatch(entry ->
+        return load.complete() && load.assemblyStations().entrySet().stream()
+                .filter(entry -> state.actorLocations().get(entry.getKey()).condition().status() == ActorLifeStatus.ALIVE).allMatch(entry ->
                 state.actorLocations().get(entry.getKey()).supportingSurface().equals(entry.getValue())
                         && !state.actorMovements().containsKey(entry.getKey())
                         && !state.humanPopulation().meals().containsKey(entry.getKey()));
@@ -30,6 +31,7 @@ final class ExpeditionSupplyProcess {
         }
         for (var member : group.members()) {
             var actor = member.actorId();
+            if (state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE) continue;
             if (load.allocations().stream().anyMatch(a -> a.actorId().equals(actor) && !a.loaded())
                     || state.actorMovements().containsKey(actor) || state.humanPopulation().meals().containsKey(actor)
                     || load.complete() && mission.shipmentIds().stream().map(state.shipments().shipments()::get)
@@ -70,8 +72,9 @@ final class ExpeditionSupplyProcess {
         } else if (permitted && ActorExecutionCoordinator.coldAvailable(state, a.actorId())
                 && !ReferenceContainerCustody.hasLiveCustody(state, mission.sender().containerId())
                 && !ReferenceContainerCustody.blocksCanonicalUse(state, mission.sender().containerId())) {
-            ExpeditionSupplyAuthority.coldLoaded(state, mission.id(), a.claimId());
+            var received = ExpeditionSupplyAuthority.coldLoaded(state, mission.id(), a.claimId());
             events.add(new ProposedEvent(mission.id(), new ExpeditionSupplyColdLoaded(mission.id(), a.claimId())));
+            events.addAll(ExpeditionSupplyProcessModule.loadingContinuations(received, mission.id(), now));
         }
     }
 }

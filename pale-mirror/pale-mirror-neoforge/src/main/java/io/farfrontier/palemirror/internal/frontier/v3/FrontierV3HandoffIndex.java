@@ -39,8 +39,14 @@ final class FrontierV3HandoffIndex {
         var index = INDEXES.computeIfAbsent(level, ignored -> new FrontierV3HandoffIndex());
         if (index.surfaces != surfaces) {
             var owners = new HashMap<ChunkPos, List<SubjectId>>();
-            surfaces.forEach((id, surface) -> owners.computeIfAbsent(
-                    new ChunkPos(surface.position().x() >> 4, surface.position().z() >> 4), ignored -> new ArrayList<>()).add(id));
+            // Chunk terrain presentation owns fixed sockets only. A mobile container
+            // belongs to exact body admission; indexing it at a saved pose would both
+            // become stale as it moves and make chunk delivery depend on body insertion.
+            surfaces.forEach((id, surface) -> {
+                if (surface.fixed()) owners.computeIfAbsent(
+                        new ChunkPos(surface.position().x() >> 4, surface.position().z() >> 4),
+                        ignored -> new ArrayList<>()).add(id);
+            });
             index.containerOwners = freeze(owners);
             index.surfaces = surfaces;
         }

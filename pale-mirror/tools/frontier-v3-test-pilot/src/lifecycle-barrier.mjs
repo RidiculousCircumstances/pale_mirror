@@ -195,7 +195,12 @@ export function validateLifecycleBarrierRecords(entries, expectedIdentity) {
 /** Bounded waiter for one exact acknowledgement. Absence is failure, never inferred progress. */
 export async function awaitLifecycleBarrier(session, barrier, timeoutMs, predicate = () => true) {
   requireBarrier(barrier);
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300_000) throw new Error('lifecycle barrier timeout must be 1..300000ms');
+  // A segment comprises several bounded actions; it is not one connection/save
+  // handshake. The scenario composer supplies its sum (with a one-hour ceiling).
+  // All individual lifecycle transitions retain their five-minute ceiling.
+  const maximum = barrier === LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE ? 3_600_000 : 300_000;
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > maximum)
+    throw new Error(`lifecycle barrier timeout must be 1..${maximum}ms`);
   if (typeof predicate !== 'function') throw new Error('lifecycle barrier predicate must be a function');
   const deadline = Date.now() + timeoutMs;
   while (Date.now() <= deadline) {

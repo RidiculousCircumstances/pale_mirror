@@ -294,6 +294,11 @@ final class FrontierV3AmbientActorExecutor {
     }
     private static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody,
                                       FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPositionProvider) {
+        return materialize(level, state, actorId, canonicalBody, standingPositionProvider, body -> true);
+    }
+    private static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody,
+                                      FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPositionProvider,
+                                      java.util.function.Predicate<Mob> resourceProjection) {
         FrontierV3ActorCarrierComposition.requireRole(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY,
                 FrontierV3ActorCarrierComposition.Role.ADOPTER);
         if (!state.actorLocations().containsKey(actorId)) return Result.CONFLICT;
@@ -331,7 +336,7 @@ final class FrontierV3AmbientActorExecutor {
                                     || !FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)
                                     || !FrontierV3ResidentMealHandProjection.prepareAmbientNew(state, actorId, body)) return false;
                             FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
-                            return true;
+                            return resourceProjection.test(body);
                         }));
         return switch (result) {
             case APPLIED -> Result.APPLIED;
@@ -372,7 +377,8 @@ final class FrontierV3AmbientActorExecutor {
                     FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(existing), ledger)) return Result.CONFLICT;
             return materialize(level, state, actorId, canonicalBody, standingPositionProvider);
         }
-        return materialize(level, state, actorId, canonicalBody, standingPositionProvider);
+        return materialize(level, state, actorId, canonicalBody, standingPositionProvider,
+                body -> FrontierV3ReferenceContainerCustodyExecutor.initializeAttachment(level, runtime, actorId, body));
     }
     static UUID entityId(FrontierWorldState state, SubjectId actorId) { return io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId); }
     static FrontierV3ActorCarrierComposition.Declaration carrierDeclaration(FrontierWorldState state, SubjectId actorId, UUID entityId, FrontierV3ActorCarrierComposition.Representation representation, long epoch) {
@@ -531,9 +537,6 @@ final class FrontierV3AmbientActorExecutor {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(bioform -> bioform.id().equals(actorId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("not a canonical Frontier v3 bioform: " + actorId));
-    }
-    static boolean owned(Entity entity, SubjectId actorId, boolean bioform) {
-        return owned(entity, actorId, bioform ? ActorKind.BIOFORM : ActorKind.RESIDENT);
     }
     static boolean owned(Entity entity, SubjectId actorId, ActorKind kind) {
         return !entity.isRemoved() && actorId.value().equals(entity.getPersistentData().getString(ACTOR_KEY))

@@ -17,6 +17,9 @@ public interface FrontierEngine<P extends FrontierProjection> {
     /** Ordinary execution reads must not request serialized persistence state. */
     FrontierExecutionView executionView();
 
+    /** Read-only current retention capacity; expired receipts count exactly as at command admission. */
+    CommandAdmissionCapacity commandAdmissionCapacity();
+
     /** Read-only next due instant for bounded background drivers; it never exposes mutable schedule state. */
     Optional<SimInstant> nextScheduledInstantAfter(SimInstant instant);
 

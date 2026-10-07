@@ -600,6 +600,7 @@ public final class ResidentMealProcess {
         return switch (meal.inventorySlot()) {
             case ActorItemSlot.Pocket pocket -> new PhysicalStackAddress.ActorPocket(meal.residentId(), entity, pocket.index());
             case ActorItemSlot.Hand hand -> new PhysicalStackAddress.ActorHand(meal.residentId(), entity, hand.hand());
+            case ActorItemSlot.AttachedStorage ignored -> throw new IllegalArgumentException("a meal must enter the eater's personal inventory before consumption");
         };
     }
 

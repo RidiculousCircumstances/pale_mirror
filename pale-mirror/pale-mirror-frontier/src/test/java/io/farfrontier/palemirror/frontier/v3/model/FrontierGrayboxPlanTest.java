@@ -5,9 +5,28 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierGrayboxPlanTest {
+    @Test void freightEndpointsUseDeclaredExteriorStationsWithClearWideBodyFootprints() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:wide-freight-stations"), 41L));
+        var plan = FrontierGrayboxPlan.compile(state);
+        for (var settlement : state.bootstrap().settlements()) {
+            var endpoint = GoodsParticipantDeclarations.endpoint(settlement);
+            var depot = settlement.structures().stream().filter(s -> s.id().equals(endpoint.facilityId())).findFirst().orElseThrow();
+            var port = SettlementDepotServicePort.forDepot(depot);
+            assertEquals(port.loadingSurface(), endpoint.station());
+            assertTrue(port.ownedAccessSurfaces().contains(endpoint.station()));
+            var support = endpoint.station().support();
+            assertNotNull(plan.cells().get(support), "the authored loading point needs a materialized support");
+            // A 1.4-wide centred body touches all nine columns, not just its feet cell.
+            for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) for (int dy = 1; dy <= 2; dy++)
+                assertNull(plan.cells().get(support.offset(dx, dy, dz)),
+                        "freight clearance cannot intersect a depot doorway corner: " + endpoint);
+        }
+    }
     @Test
     void activeEngineeringWorksiteHasExactTemporaryFloorsAndTheirLossConflictsOnlyThatProject() {
         FrontierWorldState state = FrontierV3FixtureCatalog.engineeringWorksiteConfiguration(
@@ -202,11 +221,15 @@ class FrontierGrayboxPlanTest {
     }
 
     @Test
-    void everyBootstrapContainerHasOnePlannedProvenanceSupportSocket() {
+    void everyFixedBootstrapContainerHasOnePlannedProvenanceSupportSocketAndMobileHasNone() {
         FrontierWorldState state = initial();
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
 
         state.inventory().surfaces().values().forEach(surface -> {
+            if (!surface.fixed()) {
+                assertTrue(FrontierContainerSocketPlan.support(state, surface).isEmpty());
+                return;
+            }
             GrayboxCell support = FrontierContainerSocketPlan.support(state, surface).orElseThrow();
             assertEquals(support, plan.cells().get(support.position()), "socket must be part of the immutable graybox plan: " + surface.containerId());
             assertEquals(null, plan.cells().get(surface.position()),

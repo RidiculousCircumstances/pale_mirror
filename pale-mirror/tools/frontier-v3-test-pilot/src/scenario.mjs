@@ -262,7 +262,7 @@ export function validateScenario(scenario) {
           || !Number.isInteger(action.sampleEveryTicks) || action.sampleEveryTicks < 1 || action.sampleEveryTicks > 20
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 180_000
           || (action.nameContains !== undefined && (typeof action.nameContains !== 'string' || !action.nameContains || action.nameContains.length > 72))
-          || (action.workerId !== undefined && !requiredId(action.workerId, 'resident:'))
+          || (action.workerId !== undefined && !requiredId(action.workerId, 'resident:') && !requiredId(action.workerId, 'actor:'))
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
           || (action.anchor !== undefined && !validPosition(action.anchor)))) {
         throw new Error('observe_entity_motion needs one bounded locally rendered entity and exact sampling window');
@@ -530,6 +530,7 @@ function validResolvablePosition(value) {
     && ((reference.view === 'site' && requiredId(reference.id, 'site:')
       && ['firstCrop', 'lastCrop', 'boardPosition', 'terminalHarvest.terminalBody'].includes(reference.field))
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
+      || (reference.view === 'actor' && (requiredId(reference.id, 'actor:') || requiredId(reference.id, 'resident:')) && reference.field === 'position')
       || (reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
         && ['farmAnchor', 'routeSurface'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'job:')

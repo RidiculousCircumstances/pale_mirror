@@ -10,6 +10,7 @@ final class TransportMissionProcessModule implements FrontierWorldProcessModule 
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("transport-missions", Set.of(),
             Set.of(TransportMissionProcess.PROGRESS), TYPES, Set.of("frontier.transport_mission_started", "frontier.transport_mission_advanced", "frontier.transport_mission_retired",
                     "frontier.unit_group_advanced", "frontier.expedition_supply_cold_loaded", "frontier.expedition_supply_replanned", "frontier.actor_movement_started",
+                    "frontier.expedition_replenishment_started", "frontier.expedition_replenishment_cold_loaded",
                     "kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled"), TYPES);
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {

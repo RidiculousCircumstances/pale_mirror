@@ -192,7 +192,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             if (ambient.status() != AmbientLeaseStatus.HOT) return;
             Entity body = level.getEntity(member.entityId());
             if (!(body instanceof Mob mob) || !mob.isAlive()
-                    || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), bioform(state, member.actorId()))) return;
+                    || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), state.actorLocations().get(member.actorId()).kind())) return;
             if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, mob)) return;
             captures.add(new SceneMemberPosition(member.actorId(), at(body), fixed(mob.getHealth())));
         }

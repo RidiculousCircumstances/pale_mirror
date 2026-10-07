@@ -70,7 +70,7 @@ class ResidentFoodPortionTest {
         assertEquals(500, state.humanPopulation().nutrition(resident).satietyUnits());
         assertEquals(0, state.inventory().fungibleResources().totalQuantity(started.meal().settlementId(), FOOD));
         assertTrue(state.inventory().fungibleResources().claims().isEmpty());
-        assertTrue(ResidentMealOpportunity.find(state, resident, 96_004L).isEmpty());
+        assertTrue(ResidentMealOpportunity.find(state, resident, tick).isEmpty());
     }
 
     @Test void hotMultiSlotPortionFencesAndRetiresTheExactAmountOnlyOnce() {

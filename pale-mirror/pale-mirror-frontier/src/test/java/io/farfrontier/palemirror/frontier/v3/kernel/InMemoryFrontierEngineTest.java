@@ -40,6 +40,22 @@ class InMemoryFrontierEngineTest {
     private static final WorldId WORLD = new WorldId("frontier:test-world");
     private static final SubjectId SUBJECT = new SubjectId("settlement:test");
 
+    @Test void admissionPressureIsReadOnlyAndCountsExpiryAtTheSameBoundaryAsSubmit() {
+        var engine = engine(List.of(), false);
+        for (int i = 0; i < 8; i++) assertInstanceOf(CommandResult.Accepted.class,
+                engine.submit(command("command:pressure-" + i, new Revision(i), 1)));
+        var full = engine.checkpoint();
+        assertEquals(0, engine.commandAdmissionCapacity().availableCommands());
+        assertEquals(0, engine.commandAdmissionCapacity().optionalCommands(8));
+        assertEquals(full, engine.checkpoint(), "pressure inspection must not compact receipts or write state");
+        engine.compact(engine.canonicalState().revision());
+        engine.advanceTo(new SimInstant(100), new WorkBudget(1, 1));
+        assertEquals(0, engine.commandAdmissionCapacity().availableReceipts(), "receipt cutoff is inclusive");
+        engine.advanceTo(new SimInstant(101), new WorkBudget(1, 1));
+        assertEquals(8, engine.commandAdmissionCapacity().availableReceipts());
+        assertEquals(6, engine.commandAdmissionCapacity().optionalCommands(8), "optional work preserves the final quarter");
+    }
+
     @Test
     void commandTransactionIsAtomicAndStaleOrDuplicateInputChangesNothing() {
         InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(), false);

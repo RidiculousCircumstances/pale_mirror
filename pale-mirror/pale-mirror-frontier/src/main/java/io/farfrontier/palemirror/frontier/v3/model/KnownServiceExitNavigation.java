@@ -85,6 +85,14 @@ public final class KnownServiceExitNavigation {
         ActorLocation actor = state.actorLocations().get(order.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("service exit has no living actor body");
+        if (ActorExecutionCoordinator.coldAvailable(state, order.actorId())) {
+            var excluded = ServiceDestinationClaims.forImmediateExit(state, order.actorId());
+            var available = order.legalStations().stream().filter(target -> !excluded.contains(target)).toList();
+            if (available.isEmpty()) throw new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable(
+                    "service clearance region is currently occupied or reserved");
+            order = new MovementOrder(order.ownerId(), order.actorId(), order.goalOrdinal(), order.goalRevision(), available,
+                    order.capability(), order.arrivalPolicy());
+        }
         if (order.legalStations().contains(start)) return List.of(start);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
         SettlementStructure depot = settlement.structures().stream()

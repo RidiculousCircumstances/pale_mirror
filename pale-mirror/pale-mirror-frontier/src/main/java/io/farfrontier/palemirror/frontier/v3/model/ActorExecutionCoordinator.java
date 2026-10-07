@@ -37,6 +37,11 @@ public final class ActorExecutionCoordinator {
 
     /** Physical presence is not employment: ordinary presentation can yield to a new job. */
     public static WorkAdmission ordinaryWorkAdmission(FrontierWorldState state, SubjectId actorId) {
+        if (state.humanPopulation().resident(actorId) == null) return new Waiting(Wait.DEAD_OR_MISSING);
+        return workAdmission(state, actorId, false);
+    }
+    /** Generic declared actors have the same body/effect admission, without inventing a resident profile. */
+    public static WorkAdmission declaredActorWorkAdmission(FrontierWorldState state, SubjectId actorId) {
         return workAdmission(state, actorId, false);
     }
     /** The declared group alone may reacquire a vacant participant reserved by its retained roster. */
@@ -45,19 +50,23 @@ public final class ActorExecutionCoordinator {
         if (group == null || group.phase() == io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.CLOSED)
             throw new IllegalArgumentException("group admission lacks its declared active roster");
         group.member(actorId);
-        var assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
-        if (assignment.kind() != HumanAssignmentKind.GROUP_MEMBER || !assignment.ownerId().equals(java.util.Optional.of(groupId)))
-            return new Waiting(Wait.ASSIGNED_WORK);
+        if (state.actorLocations().get(actorId).kind() == ActorKind.RESIDENT) {
+            var assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
+            if (assignment.kind() != HumanAssignmentKind.GROUP_MEMBER || !assignment.ownerId().equals(java.util.Optional.of(groupId)))
+                return new Waiting(Wait.ASSIGNED_WORK);
+        }
         return workAdmission(state, actorId, true);
     }
     private static WorkAdmission workAdmission(FrontierWorldState state, SubjectId actorId, boolean groupMember) {
         Objects.requireNonNull(state, "execution state"); Objects.requireNonNull(actorId, "actor");
         ActorLocation actor = state.actorLocations().get(actorId);
-        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
-                || state.humanPopulation().resident(actorId) == null) return new Waiting(Wait.DEAD_OR_MISSING);
+        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) return new Waiting(Wait.DEAD_OR_MISSING);
+        if (!ActorExecutionComposition.LIFECYCLE.mayAdmitVacant(state, actorId)) return new Waiting(Wait.ASSIGNED_WORK);
         if (state.humanPopulation().meals().containsKey(actorId)
                 || state.actorMovements().containsKey(actorId)) return new Waiting(Wait.SELF_CARE);
-        if (!groupMember && !HumanAssignmentProjection.compile(state).idle(actorId)) return new Waiting(Wait.ASSIGNED_WORK);
+        if (!groupMember && (actor.kind() == ActorKind.RESIDENT ? !HumanAssignmentProjection.compile(state).idle(actorId)
+                : state.unitGroups().groups().values().stream().anyMatch(g -> g.phase() != io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.CLOSED
+                    && g.members().stream().anyMatch(m -> m.actorId().equals(actorId))))) return new Waiting(Wait.ASSIGNED_WORK);
         if (sceneOwns(state, actorId)) return new Waiting(Wait.SCENE_AUTHORITY);
         if (carriesResource(state, actorId)) return new Waiting(Wait.RESOURCE_IN_HAND);
         AmbientActorLease ambient = state.ambientLeases().get(actorId);
@@ -138,7 +147,7 @@ public final class ActorExecutionCoordinator {
 
     private static boolean carriesResource(FrontierWorldState state, SubjectId actorId) {
         return state.inventory().fungibleResources().accounts().values().stream().anyMatch(account ->
-                account.custody().equals(new ResourceCustody.Actor(actorId)));
+                account.custody().equals(new ResourceCustody.Actor(actorId)) && !account.claimQuantities().isEmpty());
     }
 
     /** Switch presentation scopes after common inspection; never transfer the physical body or write its pose. */

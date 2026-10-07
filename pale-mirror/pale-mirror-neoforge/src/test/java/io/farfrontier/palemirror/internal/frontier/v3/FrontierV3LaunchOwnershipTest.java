@@ -20,9 +20,9 @@ class FrontierV3LaunchOwnershipTest {
         String property = "pale_mirror.frontier_v3.ruleset";
         String prior = System.getProperty(property);
         try {
-            System.setProperty(property, "frontier-v3-trade-playtest-r2");
+            System.setProperty(property, "frontier-v3-trade-playtest-r3");
             var selected = FrontierV3ServerLifecycle.initialConfiguration(new WorldId("frontier:trade-selector"), 41L);
-            assertEquals("frontier-v3-trade-playtest-r2", selected.initialState().bootstrap().ruleset().id());
+            assertEquals("frontier-v3-trade-playtest-r3", selected.initialState().bootstrap().ruleset().id());
             assertTrue(selected.initialState().shipments().shipments().isEmpty());
             System.setProperty(property, "not-installed");
             assertThrows(IllegalArgumentException.class, () -> FrontierV3ServerLifecycle.initialConfiguration(new WorldId("frontier:bad-selector"), 41L));

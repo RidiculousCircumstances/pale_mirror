@@ -124,7 +124,8 @@ final class FrontierV3EquipmentIssueExecutor {
     private static Villager resident(ServerLevel level, FrontierWorldState state, SubjectId residentId) {
         if (state.ambientLeases().get(residentId) == null || state.ambientLeases().get(residentId).status() != AmbientLeaseStatus.HOT) return null;
         var body = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, residentId));
-        return body instanceof Villager villager && FrontierV3AmbientActorExecutor.owned(villager, residentId, false) ? villager : null;
+        return body instanceof Villager villager && FrontierV3AmbientActorExecutor.owned(villager, residentId,
+                io.farfrontier.palemirror.frontier.v3.model.ActorKind.RESIDENT) ? villager : null;
     }
 
     private static boolean sourceMatches(ChestBlockEntity chest, Target target) {

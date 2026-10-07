@@ -6,6 +6,14 @@ import java.util.List;
 final class ExpeditionSupplyForfeitureOwner implements FungibleClaimForfeitureOwner {
     @Override public void validate(FrontierWorldState before, ClaimAllocation claim, FungibleResourceHandoffObserved observation) {
         var mission = before.shipments().missions().get(claim.claimantId());
+        if (mission != null && mission.replenishment().filter(t -> t.claimId().equals(claim.id())).isPresent()) {
+            var transfer = mission.replenishment().orElseThrow();
+            if (claim.purpose() != ClaimPurpose.EXPEDITION_SUPPLY || transfer.pending().isPresent()
+                    || !transfer.sourceAccountId().equals(observation.sourceAccountId()) || !transfer.lots().equals(claim.lotQuantities())
+                    || !transfer.sourceEconomicOwnerId().equals(claim.economicOwnerId()) || !transfer.itemKind().equals(claim.itemKind()))
+                throw new IllegalArgumentException("source change cannot bypass prepared personal replenishment");
+            return;
+        }
         if (claim.purpose() != ClaimPurpose.EXPEDITION_SUPPLY || mission == null || mission.stage() != TransportMission.Stage.LOADING
                 || mission.supplies().isEmpty() || !claim.economicOwnerId().equals(mission.sender().settlementId()))
             throw new IllegalArgumentException("withdrawn supply claim lacks its exact loading owner");
@@ -16,15 +24,20 @@ final class ExpeditionSupplyForfeitureOwner implements FungibleClaimForfeitureOw
     }
     @Override public FungibleForfeitureSettlement settle(FrontierWorldState before, List<ClaimAllocation> claims,
                                                         FungibleForfeitureSettlement transaction) {
-        var shipments = transaction.shipments();
+        var shipments = transaction.shipments(); var inventory = transaction.inventory();
         for (var claim : claims) {
             if (transaction.inventory().fungibleResources().claims().containsKey(claim.id()))
                 throw new IllegalArgumentException("supply withdrawal precedes its accounted physical release");
             var mission = shipments.missions().get(claim.claimantId());
+            if (mission.replenishment().filter(t -> t.claimId().equals(claim.id())).isPresent()) {
+                if (mission.replenishmentPurchase().isPresent()) inventory = GoodsSpotPurchaseAuthority.cancel(inventory, mission.replenishmentPurchase().orElseThrow());
+                shipments = shipments.replaceReplenishment(mission, java.util.Optional.empty());
+                continue;
+            }
             var load = mission.supplies().orElseThrow();
             var allocation = load.allocations().stream().filter(a -> a.claimId().equals(claim.id())).findFirst().orElseThrow();
             shipments = shipments.replaceSupplies(mission, load.replace(allocation, allocation.sourceWithdrawn()));
         }
-        return transaction.withShipments(shipments, transaction.executions(), transaction.movements());
+        return transaction.withTrade(inventory, transaction.companies()).withShipments(shipments, transaction.executions(), transaction.movements());
     }
 }

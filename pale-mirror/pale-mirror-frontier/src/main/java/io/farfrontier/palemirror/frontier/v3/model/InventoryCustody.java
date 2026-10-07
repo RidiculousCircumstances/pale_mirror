@@ -14,13 +14,10 @@ public sealed interface InventoryCustody permits InventoryCustody.ContainerSlot,
     public record Player(UUID playerId) implements InventoryCustody { public Player { Objects.requireNonNull(playerId, "player id"); } }
     /** A loaded Minecraft carrier with one retained UUID; it is never an untracked item entity. */
     public record WorldCarrier(UUID carrierId) implements InventoryCustody { public WorldCarrier { Objects.requireNonNull(carrierId, "world carrier id"); } }
-    /** Exact worn/carried equipment held by one canonical resident or bioform. */
+    /** Exact worn/carried equipment. World validation resolves this ID through the actor registry. */
     public record Actor(SubjectId actorId) implements InventoryCustody {
         public Actor {
             Objects.requireNonNull(actorId, "equipment actor id");
-            if (!actorId.value().startsWith("resident:") && !actorId.value().startsWith("bioform:")) {
-                throw new IllegalArgumentException("actor custody must name one canonical actor");
-            }
         }
     }
 }

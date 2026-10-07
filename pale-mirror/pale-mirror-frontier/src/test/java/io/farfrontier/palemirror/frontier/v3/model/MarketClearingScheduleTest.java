@@ -44,7 +44,7 @@ class MarketClearingScheduleTest {
         assertEquals(1, planned.size());
         ScheduleEffect.Created retry = assertInstanceOf(ScheduleEffect.Created.class, planned.getFirst().payload());
         assertEquals("frontier.market.clear", retry.action().kind());
-        assertEquals(43_000L + pending.bootstrap().ruleset().cadence().resourceHarvestRetryInterval(),
+        assertEquals(43_000L + pending.bootstrap().ruleset().cadence().marketRetryInterval(),
                 retry.action().dueAt().ticks());
         assertEquals(demand.id(), retry.action().subject());
     }

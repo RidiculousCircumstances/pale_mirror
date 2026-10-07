@@ -157,14 +157,15 @@ class FrontierV3FixtureCatalogTest {
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
             assertTrue(profile.provider().length() > 0);
-            assertEquals("production", profile.rulesetId());
+            assertTrue(java.util.Set.of("production", "expedition-candidate").contains(profile.rulesetId()));
             assertTrue(profile.sourceProfile().length() > 0);
             assertTrue(profile.requiredAssertion().length() > 0);
             String world = "frontier:catalog-" + profile.id();
             var configuration = FrontierV3FixtureCatalog.configuration(profile.id(), new WorldId(world), 41L);
             assertEquals(world, configuration.worldId().value());
-            assertEquals(FrontierRulesets.production(), configuration.initialState().bootstrap().ruleset(),
-                    "a fixture may vary canonical state, but it must not silently vary production balance rules");
+            assertEquals(profile.rulesetId().equals("production") ? FrontierRulesets.production()
+                    : FrontierRulesets.installed("frontier-v3-expedition-candidate-r1"), configuration.initialState().bootstrap().ruleset(),
+                    "a fixture must use its explicitly declared immutable ruleset");
         }
     }
 

@@ -31,7 +31,7 @@ final class FrontierV3AmbientActorReservationHandoff {
         Entity body = level.getEntity(FrontierV3AmbientActorExecutor.entityId(selection.state(), selection.actorId()));
         return switch (selection.effect()) {
             case DRAIN_HOT -> body instanceof Mob mob && FrontierV3AmbientActorExecutor.owned(mob, selection.actorId(),
-                    FrontierV3AmbientActorExecutor.bioform(selection.state(), selection.actorId()))
+                    selection.state().actorLocations().get(selection.actorId()).kind())
                     ? FrontierV3AmbientActorExecutor.drainForAdmission(runtime, mob) : Optional.empty();
             case ABANDON_PREPARED -> {
                 var lease = selection.state().ambientLeases().get(selection.actorId());

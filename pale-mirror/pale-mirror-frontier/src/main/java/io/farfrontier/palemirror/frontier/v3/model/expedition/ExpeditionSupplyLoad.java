@@ -51,24 +51,34 @@ public record ExpeditionSupplyLoad(String foodKind, long forecastDurationTicks, 
             if (outcome != Outcome.RESERVED || pending.isPresent()) throw new IllegalArgumentException("supply source cannot withdraw an applied or prepared interaction");
             return new Allocation(claimId, actorId, sourceAccountId, destinationAccountId, slot, lots, Outcome.SOURCE_WITHDRAWN, Optional.empty());
         }
+        Allocation unappliedAfterDeath() {
+            if (outcome != Outcome.RESERVED || pending.isEmpty()) throw new IllegalArgumentException("death settlement has no prepared allocation");
+            return new Allocation(claimId, actorId, sourceAccountId, destinationAccountId, slot, lots, Outcome.SOURCE_WITHDRAWN, Optional.empty());
+        }
     }
     public ExpeditionSupplyLoad {
         Objects.requireNonNull(foodKind); foodTargets = Map.copyOf(foodTargets); assemblyStations = Map.copyOf(assemblyStations); allocations = List.copyOf(allocations);
-        if (foodTargets.isEmpty() || foodTargets.size() > 32 || forecastDurationTicks < 0 || calculatedAtTick < 0 || revision < 1
+        if (assemblyStations.isEmpty() || foodTargets.size() > 32 || assemblyStations.size() > 32 || forecastDurationTicks < 0 || calculatedAtTick < 0 || revision < 1
                 || foodTargets.values().stream().anyMatch(q -> q == null || q < 0 || q > 640)
                 || allocations.size() > 320 || allocations.stream().map(Allocation::claimId).distinct().count() != allocations.size()
-                || allocations.stream().map(Allocation::destinationAccountId).distinct().count() != allocations.size()
                 || allocations.stream().filter(a -> a.pending().isPresent()).count() > 1
-                || !assemblyStations.keySet().equals(foodTargets.keySet())
+                || !assemblyStations.keySet().containsAll(foodTargets.keySet())
                 || assemblyStations.values().stream().distinct().count() != assemblyStations.size())
             throw new IllegalArgumentException("invalid retained expedition loading plan");
-        for (var allocation : allocations) if (!foodTargets.containsKey(allocation.actorId()))
+        for (var allocation : allocations) if (!assemblyStations.containsKey(allocation.actorId())
+                || !(allocation.slot() instanceof ActorItemSlot.AttachedStorage) && !foodTargets.containsKey(allocation.actorId()))
             throw new IllegalArgumentException("supply allocation names a foreign participant");
         for (var actor : foodTargets.keySet()) {
-            var owned = allocations.stream().filter(a -> a.actorId().equals(actor)).toList();
+            var owned = allocations.stream().filter(a -> a.actorId().equals(actor) && !(a.slot() instanceof ActorItemSlot.AttachedStorage)).toList();
             if (owned.stream().map(Allocation::slot).distinct().count() != owned.size()
                     || owned.stream().mapToInt(Allocation::quantity).sum() > foodTargets.get(actor))
                 throw new IllegalArgumentException("supply loading promises overlap a personal slot or exceed its target");
+        }
+        var destinations = new java.util.HashMap<SubjectId, Allocation>();
+        for (var a : allocations) {
+            var other = destinations.putIfAbsent(a.destinationAccountId(), a);
+            if (other != null && (!(a.slot() instanceof ActorItemSlot.AttachedStorage) || !a.slot().equals(other.slot()) || !a.actorId().equals(other.actorId())))
+                throw new IllegalArgumentException("supply allocations alias unrelated destination accounts");
         }
     }
     public Optional<Allocation> next() { return allocations.stream().filter(a -> a.outcome() == Outcome.RESERVED).findFirst(); }
@@ -87,7 +97,8 @@ public record ExpeditionSupplyLoad(String foodKind, long forecastDurationTicks, 
         if (ordinal < 0 || allocation.loaded()) throw new IllegalArgumentException("supply order lacks a current loading obligation");
         return new ActorContainerItemOrder(owner, allocation.actorId(), ActorContainerItemOrder.Direction.TAKE,
                 new ActorContainerItemOrder.Portion.Fungible(allocation.sourceAccountId(), new ResourceCustody.Container(source.containerId()),
-                        allocation.destinationAccountId(), new ResourceCustody.Actor(allocation.actorId()), Optional.of(allocation.claimId()), foodKind,
+                        allocation.destinationAccountId(), allocation.slot() instanceof ActorItemSlot.AttachedStorage storage
+                            ? new ResourceCustody.Container(storage.containerId()) : new ResourceCustody.Actor(allocation.actorId()), Optional.of(allocation.claimId()), foodKind,
                         allocation.lots()), new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(source.containerId()), source.station(),
                 allocation.slot(), ordinal + 1L, revision);
     }

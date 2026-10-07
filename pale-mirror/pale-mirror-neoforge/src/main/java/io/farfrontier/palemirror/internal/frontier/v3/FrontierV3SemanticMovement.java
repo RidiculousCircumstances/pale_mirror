@@ -39,13 +39,16 @@ final class FrontierV3SemanticMovement {
 
     static boolean arrived(ServerLevel level, Mob worker, SurfaceAnchor surface) {
         if (at(level, worker, surface) != SemanticTraversalArrival.Disposition.ARRIVED) return false;
-        // A supported feet cell is a position fact, not proof that a pedestrian has
-        // cleared the preceding station. Stop only when its complete horizontal
-        // footprint fits the goal column; otherwise a follower cannot enter the
-        // vacated cell even though the leader has nominally "arrived".
+        // A supported feet cell is not proof of final centering. Small pedestrians
+        // must clear the preceding column; wider bodies cannot fit a one-block
+        // column at all. Require their centre near the station instead, retaining
+        // the exact observed support and collision proof above. Occupied physical
+        // volumes remain the shared traffic provider's responsibility.
         AABB footprint = worker.getBoundingBox();
-        return footprint.minX >= surface.x() && footprint.maxX <= surface.x() + 1.0D
-                && footprint.minZ >= surface.z() && footprint.maxZ <= surface.z() + 1.0D;
+        double xTolerance = Math.max(0.125D, (1.0D - footprint.getXsize()) / 2.0D);
+        double zTolerance = Math.max(0.125D, (1.0D - footprint.getZsize()) / 2.0D);
+        return Math.abs(worker.getX() - (surface.x() + .5D)) <= xTolerance
+                && Math.abs(worker.getZ() - (surface.z() + .5D)) <= zTolerance;
     }
 
     static boolean targetIsNavigable(ServerLevel level, Mob worker, SurfaceAnchor surface) {

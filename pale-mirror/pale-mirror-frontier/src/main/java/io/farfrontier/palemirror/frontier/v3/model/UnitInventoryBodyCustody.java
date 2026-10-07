@@ -28,6 +28,7 @@ public final class UnitInventoryBodyCustody {
         return switch (placement.slot()) {
             case ActorItemSlot.Pocket pocket -> new PhysicalStackAddress.ActorPocket(placement.actorId(), entity, pocket.index());
             case ActorItemSlot.Hand hand -> new PhysicalStackAddress.ActorHand(placement.actorId(), entity, hand.hand());
+            case ActorItemSlot.AttachedStorage ignored -> throw new IllegalArgumentException("attached storage is container custody, not a personal stack");
         };
     }
     /** Called only by the common body owner's already-observed, save-fenced natural departure. */

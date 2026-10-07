@@ -12,6 +12,15 @@ import java.util.*;
 public final class ExpeditionSupplyMovementProvider implements ActorMovementProvider {
     @Override public ActorMovementContext.Provider key() { return ActorMovementContext.Provider.EXPEDITION_SUPPLY; }
     private TransportMission mission(FrontierWorldState state, ActorMovement movement) {
+        if (movement.context() instanceof ActorMovementContext.ExpeditionReplenishment refill) {
+            var mission = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.require(state, refill.missionId());
+            var transfer = mission.replenishment().orElseThrow();
+            if (transfer.pending().isPresent() || !transfer.execution().equals(movement.executionId())
+                    || !transfer.order(mission.id(), mission.revision()).movementOrder().equals(movement.order()))
+                throw new IllegalArgumentException("replenishment movement lost its exact stock instruction or execution");
+            state.actorExecutions().requireCurrent(transfer.execution());
+            return mission;
+        }
         if (movement.context() instanceof ActorMovementContext.ExpeditionAssembly assembly) {
             var mission = state.shipments().missions().get(assembly.missionId());
             if (mission == null || mission.stage() != TransportMission.Stage.LOADING || mission.supplies().isEmpty()

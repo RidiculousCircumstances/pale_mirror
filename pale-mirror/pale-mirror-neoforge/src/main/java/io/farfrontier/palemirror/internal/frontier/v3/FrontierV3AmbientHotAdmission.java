@@ -26,7 +26,7 @@ final class FrontierV3AmbientHotAdmission {
         if (lease == null || lease.status() != AmbientLeaseStatus.PREPARED) return;
         Entity admitted = level.getEntity(FrontierV3AmbientActorExecutor.entityId(current, actorId));
         if (!(admitted instanceof Mob admittedBody)
-                || !FrontierV3AmbientActorExecutor.owned(admittedBody, actorId, FrontierV3AmbientActorExecutor.bioform(current, actorId))) return;
+                || !FrontierV3AmbientActorExecutor.owned(admittedBody, actorId, current.actorLocations().get(actorId).kind())) return;
         var supported = FrontierV3BodyObservation.capture(admittedBody).supportedBody();
         if (supported.isEmpty()) return;
         var bodyId = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(current, actorId);
@@ -41,7 +41,7 @@ final class FrontierV3AmbientHotAdmission {
         lease = current.ambientLeases().get(actorId);
         Entity entity = level.getEntity(FrontierV3AmbientActorExecutor.entityId(current, actorId));
         if (lease == null || lease.status() != AmbientLeaseStatus.HOT || !(entity instanceof Mob body)
-                || !FrontierV3AmbientActorExecutor.owned(body, actorId, FrontierV3AmbientActorExecutor.bioform(current, actorId))) return;
+                || !FrontierV3AmbientActorExecutor.owned(body, actorId, current.actorLocations().get(actorId).kind())) return;
         if (!arm) { FrontierV3AmbientActorExecutor.holdForPreLeaseHandoff(body); return; }
         FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, body, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, current, actorId, FrontierV3AmbientActorExecutor.bioform(current, actorId));

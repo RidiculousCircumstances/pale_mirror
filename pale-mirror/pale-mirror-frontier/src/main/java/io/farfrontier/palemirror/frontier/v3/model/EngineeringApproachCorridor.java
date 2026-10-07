@@ -121,31 +121,24 @@ final class EngineeringApproachCorridor {
     }
 
     /**
-     * One local approach retains only its own bounded column observations.  It must not compile
-     * the full materialized three-wide route footprint merely to decide whether its candidate
-     * crosses a route deck: that footprint is a projection product, not navigation authority.
-     * The declared analytic graph resolves each encountered column once, including absence.
+     * Reuse the common indexed authored-ground policy. A route-only analytic
+     * centreline misses the local settlement floors and the road's side columns,
+     * producing corridors that cannot be rejoined by the common navigator.
      */
     private static final class SurfaceIndex {
-        private final FrontierBootstrap bootstrap;
-        private final RouteTopology topology;
-        private final Map<Long, java.util.Optional<BlockPosition>> columns;
+        private final BoundedPedestrianApproach.SurveyedSurface surveyed;
 
-        private SurfaceIndex(FrontierBootstrap bootstrap, RouteTopology topology) {
-            this.bootstrap = Objects.requireNonNull(bootstrap, "approach bootstrap");
-            this.topology = Objects.requireNonNull(topology, "approach route topology");
-            this.columns = new java.util.HashMap<>();
+        private SurfaceIndex(BoundedPedestrianApproach.SurveyedSurface surveyed) {
+            this.surveyed = Objects.requireNonNull(surveyed, "shared approach ground");
         }
 
         static SurfaceIndex compile(FrontierWorldState state) {
-            return new SurfaceIndex(state.bootstrap(), state.routeTopology());
+            return new SurfaceIndex(KnownPedestrianGround.forFrontier(state));
         }
 
         java.util.Optional<BlockPosition> at(int x, int z) {
-            return columns.computeIfAbsent(key(x, z), ignored -> FrontierRouteNetwork.surfaceAt(bootstrap, topology, x, z));
+            return java.util.Optional.ofNullable(surveyed.at(x, z)).map(SurfaceAnchor::support);
         }
-
-        private static long key(int x, int z) { return ((long) x << 32) ^ (z & 0xffff_ffffL); }
     }
 
     private static boolean traversable(WorldBounds bounds, Set<BlockPosition> bodyGeometry, Set<BlockPosition> occupiedFloors, BlockPosition floor) {

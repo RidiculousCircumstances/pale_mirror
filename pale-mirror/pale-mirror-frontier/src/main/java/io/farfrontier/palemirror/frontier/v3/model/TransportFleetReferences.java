@@ -22,10 +22,18 @@ final class TransportFleetReferences {
             asset.missionId().ifPresent(id -> {
                 var mission = shipments.missions().get(id);
                 if (mission == null || mission.stage() == TransportMission.Stage.COMPLETE
+                        || !mission.transportAssetId().equals(java.util.Optional.of(asset.actorId()))
                         || !mission.sender().settlementId().equals(asset.homeSettlementId()))
                     throw new IllegalArgumentException("transport asset has a dangling mission reservation");
             });
         }
+        for (var mission : shipments.missions().values()) mission.transportAssetId().ifPresent(actor -> {
+            var asset = fleet.require(actor);
+            if (!asset.homeSettlementId().equals(mission.sender().settlementId())
+                    || mission.stage() != TransportMission.Stage.COMPLETE && !asset.missionId().equals(java.util.Optional.of(mission.id()))
+                    || mission.stage() == TransportMission.Stage.COMPLETE && asset.missionId().equals(java.util.Optional.of(mission.id())))
+                throw new IllegalArgumentException("transport mission lost its exact finite-asset reservation");
+        });
         for (var surface : inventory.surfaces().values()) {
             if (surface.location() instanceof ContainerLocation.Mobile mobile) {
                 var asset = fleet.assets().get(mobile.actorId());

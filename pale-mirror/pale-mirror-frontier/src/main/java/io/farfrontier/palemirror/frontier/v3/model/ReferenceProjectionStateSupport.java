@@ -13,7 +13,8 @@ public final class ReferenceProjectionStateSupport {
     public static FrontierWorldState prepare(FrontierWorldState state, ReferenceProjectionPrepared request, long revision) {
         SubjectId containerId = request.containerId();
         if (!ReferenceContainerCustody.isReferenceContainer(state, containerId)
-                || ReferenceContainerCustody.hasLiveCustody(state, containerId)) {
+                || ReferenceContainerCustody.hasLiveCustody(state, containerId)
+                || ReferenceContainerCustody.blocksCanonicalUse(state, containerId)) {
             throw new IllegalArgumentException("reference projection requires a known container without live custody");
         }
         ContainerSurface surface = state.inventory().surfaces().get(containerId);

@@ -125,7 +125,8 @@ public final class FrontierV3ServerLifecycle {
                                         CheckpointImage checkpoint, FrontierWorldState state) {
         return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(), state,
                 FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
-                FAST_FORWARD_OUTCOMES.get(server), FAST_FORWARD_SLICE_TELEMETRY.get(server), fastForwardRequests(server));
+                FAST_FORWARD_OUTCOMES.get(server), FAST_FORWARD_SLICE_TELEMETRY.get(server), fastForwardRequests(server),
+                FrontierV3PedestrianPlanning.diagnostic(runtime));
     }
     static FrontierV3PilotSceneDemandSnapshot pilotSceneDemandSnapshot(ServerLevel level, SubjectId assaultId) {
         Objects.requireNonNull(level, "pilot demand level");
@@ -435,6 +436,9 @@ public final class FrontierV3ServerLifecycle {
     }
     static void runObservedPhysicalTurn(ServerLevel physicalWorld,
                                         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        // Regain causal batch headroom before a physical turn. Canonical time still advances
+        // in the ordinary tick branch, so recovered receipt pressure can expire naturally.
+        if (!runtime.commandAdmissionCapacity().orElseThrow().hasCausalHeadroom()) return;
         for (ServerPlayer player : physicalWorld.players()) {
             FrontierV3GrayboxExecutor.observePlayerIngress(runtime,
                     new net.minecraft.world.level.ChunkPos(player.blockPosition()));

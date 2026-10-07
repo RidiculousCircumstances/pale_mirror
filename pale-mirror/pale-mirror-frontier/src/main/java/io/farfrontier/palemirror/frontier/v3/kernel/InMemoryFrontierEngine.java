@@ -312,6 +312,16 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         return schedules.nextDueAfter(after);
     }
 
+    @Override
+    public io.farfrontier.palemirror.frontier.v3.api.CommandAdmissionCapacity commandAdmissionCapacity() {
+        requireOwnerThread();
+        long oldest = safeOldestReceiptInstant();
+        int retained = (int) receipts.values().stream().filter(receipt -> receipt.submittedAt().ticks() >= oldest).count();
+        return new io.farfrontier.palemirror.frontier.v3.api.CommandAdmissionCapacity(
+                limits.maxReceipts() - retained, limits.maxReceipts(),
+                limits.maxTransactions() - transactions.size(), limits.maxTransactions());
+    }
+
     @Override public Optional<SimInstant> nextExecutionBoundary() {
         requireOwnerThread();
         return schedules.nextExecutionBoundary();

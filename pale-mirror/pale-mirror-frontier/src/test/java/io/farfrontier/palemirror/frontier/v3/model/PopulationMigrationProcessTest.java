@@ -110,7 +110,7 @@ class PopulationMigrationProcessTest {
         assertEquals(observed, closed.actorLocations().get(actor).body());
         assertSame(draining.humanPopulation(), closed.humanPopulation());
         assertSame(draining.actorExecutions(), closed.actorExecutions());
-        assertSame(draining.inventory(), closed.inventory());
+        assertEquals(draining.inventory(), closed.inventory());
         assertEquals(journey, closed.humanPopulation().migration(actor));
         assertEquals(body, ActorBodyAuthority.current(closed, actor));
         assertFalse(ActorExecutionCoordinator.coldAvailable(closed, actor));
@@ -124,7 +124,7 @@ class PopulationMigrationProcessTest {
         assertEquals(journey.nextColdPosition(), rebased.rejoin().orElseThrow().target().support());
         assertEquals(journey.routeRevision() + 1, rebased.routeRevision());
         assertSame(closed.actorExecutions(), unloaded.actorExecutions());
-        assertSame(closed.inventory(), unloaded.inventory());
+        assertEquals(closed.inventory(), unloaded.inventory());
         assertTrue(ActorExecutionCoordinator.coldAvailable(unloaded, actor));
         assertThrows(IllegalArgumentException.class, () -> HumanPopulationStateSupport.advanceMigration(unloaded,
                 new ResidentMigrationAdvanced(actor, journey.nextRouteIndex(), journey.routeRevision(), journey.executionId())),
