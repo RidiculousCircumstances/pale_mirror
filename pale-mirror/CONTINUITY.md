@@ -10,11 +10,14 @@ User authorized completing points4–5 on top of1–3, committing and deploying.
 Implemented/committed/deployed; final integration gates passed. R39 subsequently
 quarantined at19:49:52. Latest user authorized a reasoned fix; shared shipment HOT
 preparation admission is now implemented, verified, committed and deployed as R40
-in the SAME R39 world. PM runtime active/green, ticks advance, conflicts0.
+in the SAME R39 world. R40 then quarantined20:21:49; user authorized systemic fix
+and deployment. Root cause confirmed: vanilla villager pockets lose slot addresses
+on serialization/reload. R41 indexed physical pockets implemented/verified/committed;
+deployed to fresh R41 world; startup proof PASS, PM active/green and ticks advance.
 No push requested. No owned test task or client remains. R36 historical full-capacity
 startup admission remains a separate OPEN issue. Do not claim that incident recovered.
 Implementation /home/rd/proj/pm-f06r3-facility-lane-recovery, Gradle root pale-mirror/.
-Branch feat/baker-carry-orders-20260926, HEAD21d9509a, implementation worktree clean.
+Branch feat/baker-carry-orders-20260926, HEAD3f17fe24, implementation worktree clean.
 SA audit paused; ARC-001 adoption separate.
 
 ## Preserved R36 incident
@@ -54,21 +57,70 @@ GoodsTrade/service/diagnostic/package verification PASS45s (44 frontier/47 adapt
 0 failures). Clean R40 package+guardrails PASS10s; unchanged R37 integration reused.
 The contention setup is isolated unit evidence, not a native meal/service scenario.
 
-CURRENT deployment: clean detached21d9509a2a587143c390eccea0b53b382b599523 at
+Historical R40 artifact (quarantined, now stopped): clean detached21d9509a2a587143c390eccea0b53b382b599523 at
 /home/rd/proj/pm-shipment-r40-release-20261007; SHA512
 21e42a15b26afd0f54890db63a892a7644da523b004c8c6419006563d628c3341f03dfc434bd49a8d90cb299e0a295dae1f2dff6136b10bbdda5c8ce6844da0f.
 Runtime /home/rd/far-frontier-server; far-frontier-v3-live.service,
 invocation5ab36792792a463aadfb1478d0e9db8b, wrapper3416158, start1791386297.
 World frontier-v3-planning-r39-20261007, seed20260918065 retained WITHOUT reset/WAL edits.
 Publish/install/preflight/post-start PASS; ready20:18:27, PM started20:18:31+05.
-Initial canonical hold released. Latest summary15136/tick25403 green,
+Initial canonical hold released. Historical early summary15136/tick25403 green,
 required/inventory conflicts0; receipt capacity3781 available, physicalAdmissionHeld=false.
-No fresh quarantine or overload warning observed. No players online at20:20 check.
-Incident shipment is retained AWAITING_LOAD/UNKNOWN_AFTER_RESTART; loaded-world
-recovery and native service contention/delivery are NOT yet observed. Ordinary
-player revisit must resolve that physical recovery fence; do not fake custody.
+No overload warning observed. Player rd joined20:21:36. Original failing shipment
+actually prepared18153 and observed18158 at20:21:37 after incumbent access cleared18150;
+thus fresh admission/pickup progressed natively (NOT terminal delivery acceptance).
+NEW incident20:21:49.630: confirmed carried resource differs from physical inventory,
+ActorCarryProjection.rememberConfirmed:40 <- AmbientActorExecutor.release:638 <-
+drainAfterDemandHysteresis:777. Exact failing actor/account/slot not in exception;
+Physical producer now CONFIRMED by snapshot/WAL and saved entity:
+resident:7-17/entity88699eef-46e7-315f-b756-d949fe9c6374 closed at18913/tick27167,
+body240/64/13. Remaining personal bread account is explicitly Pocket[1], qty1,
+no active meal; saved vanilla Inventory has one bread without any slot index.
+Saved witness names separate bread accounts in Pocket[0]/Pocket[1]. Vanilla
+SimpleContainer.createTag omits addresses/holes; fromTag uses addItem and merges
+equal stacks. An earlier reload therefore compacted the addresses; after the
+first portion was consumed, the remaining bread was not at its declared slot.
+Ambient closure also committed CLOSED before its carry postcondition could fail.
+At incident PM summary runtime_unavailable,
+RCON list responds with rd online; service/PID/invocation unchanged.
+Chunk symptom source connection CONFIRMED: ChunkPresentationMixin filters packet
+batch with ServerLifecycle.chunkPresentationReady:425; selected v3 physical world
+with absent/inactive runtime returns false. Quarantine removes runtime, so all
+new frontier chunk packets remain pending. This is not a client-texture diagnosis
+or proven vanilla worldgen deadlock. Current request is diagnosis only: no code
+change/restart/reset during the original check. Latest user subsequently authorized fix/deploy.
 Evidence implementation pale-mirror/build/shipment-r40-deployment.json.
-No full-live/TPS-speedup/HUMAN/M3 claim. Next: observe loaded-world recovery on visit.
+No full-live/TPS-speedup/HUMAN/M3 claim.
+
+## R41 indexed-pocket repair
+
+Commit3f17fe245898d3b90470caf5953634625caf76aa: sole physical adapter saves/restores
+actual managed resident pockets as explicit format1 and8 ordered slots including
+empties; no canonical projection, compaction, duplicate vanilla Inventory authority,
+family-specific food logic or inferred historical repair. Ordinary villagers retain
+vanilla persistence. Missing/foreign/malformed managed schema fails visibly.
+Ambient release now validates carry BEFORE publishing closure; error names exact
+actor/entity/account/slot/expected/actual. Chunk readiness safety not bypassed.
+Actual native save/load/consume-hole/unload/reload plus negative/vanilla control
+PASS:16 body-lifetime GameTests (build/pocket-r41-native.log), gate30s.
+First broad adapter check finished2m55s:645 tests/1 failure, erroneous fixture selected
+"not bioform" and could supply pack donkey as resident. Three selectors now use
+explicit ActorKind.RESIDENT. Unchanged passing checks reused, corrected affected
+8 admission +1 presentation checks PASS30s with guardrails/package, not another
+unchanged year-simulation campaign. Evidence build/pocket-r41-final.log and
+build/pocket-r41-first-test-results/. Canonical architecture responsibility recorded.
+Clean detached /home/rd/proj/pm-pockets-r41-release-20261007 package+guardrails PASS10s.
+Installed SHA512a4c24f3ee9519ad29b3e519d26455c8535e20f7e558893f845fb138dbcd812b030c0951baf61dc9227443c76dced29e592ac149bac34abe460e069523b638353.
+Fresh selected frontier-v3-pockets-r41-20261007, seed20260918065; R39 retained for
+identified physical-storage diagnosis, no WAL/world repair. Publisher/installer/
+fresh-world preflight PASS. Started1791387453, invocation1ed920c367bd4ace8944cc3428db1157.
+Startup verification PASS: wrapper3458317/Java3458349, ready20:37:44+05,
+PM started20:37:45. Initial hold released20:38:06; latest1153/tick328 green,
+required/inventory conflicts0. No fresh quarantine/overload warning observed;
+no player online. First immediate verify preceded listening port; subsequent fresh
+exact checksum/world/process/log verification passed, no extra restart.
+Evidence build/pocket-r41-incident.json. No current full-pack live/native caravan
+terminal or HUMAN/M3 acceptance claim. No push requested; no owned client.
 
 Historical R38/R39 deployment before this repair:
 
