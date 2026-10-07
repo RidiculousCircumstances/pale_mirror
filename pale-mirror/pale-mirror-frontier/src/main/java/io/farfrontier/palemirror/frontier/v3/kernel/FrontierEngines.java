@@ -57,13 +57,17 @@ public final class FrontierEngines {
         List<ScheduledAction> schedules = snapshot == null ? configuration.initialSchedules() : snapshot.checkpoint().schedules();
         List<CommandReceipt> receipts = new java.util.ArrayList<>(snapshot == null ? List.of() : snapshot.checkpoint().receipts());
         image.walTail().stream().map(TransactionRecord::acceptedCommandReceipt).flatMap(java.util.Optional::stream).forEach(receipts::add);
+
+        TransactionReplayer.ReplayResult<S> replay = TransactionReplayer.replayFrom(configuration.worldId(), state, revision, instant,
+                schedules, image.walTail(), configuration.reducer(), configuration.stateCodec(), configuration.stateValidator());
+        // Snapshot receipts may expire while the WAL adds new ones. Bound the recovered
+        // active window, not the historical union, using the same cutoff as live submission.
+        long oldest = InMemoryFrontierEngine.oldestReceiptInstant(replay.instant(), configuration.limits().receiptWindowTicks());
+        receipts.removeIf(receipt -> receipt.submittedAt().ticks() < oldest);
         if (receipts.stream().map(CommandReceipt::commandId).distinct().count() != receipts.size()) {
             throw new IllegalArgumentException("recovery contains duplicate command receipts");
         }
         if (receipts.size() > configuration.limits().maxReceipts()) throw new IllegalStateException("recovery checkpoint exceeds bounded receipt retention");
-
-        TransactionReplayer.ReplayResult<S> replay = TransactionReplayer.replayFrom(configuration.worldId(), state, revision, instant,
-                schedules, image.walTail(), configuration.reducer(), configuration.stateCodec(), configuration.stateValidator());
         return InMemoryFrontierEngine.recovered(configuration, replay, receipts, image.walTail());
     }
 }

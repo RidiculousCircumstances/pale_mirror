@@ -527,7 +527,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     }
 
     private long safeOldestReceiptInstant() {
-        long window = limits.receiptWindowTicks();
+        return oldestReceiptInstant(instant, limits.receiptWindowTicks());
+    }
+
+    static long oldestReceiptInstant(SimInstant instant, long window) {
         return instant.ticks() < window ? 0L : instant.ticks() - window;
     }
 

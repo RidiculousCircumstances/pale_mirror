@@ -621,6 +621,27 @@ class InMemoryFrontierEngineTest {
     }
 
     @Test
+    void recoveryExpiresSnapshotReceiptsAtTheReplayedWalInstantBeforeCheckingCapacity() {
+        var uninterrupted = engine(List.of(), false);
+        for (int i = 0; i < 8; i++) assertInstanceOf(CommandResult.Accepted.class,
+                uninterrupted.submit(command("command:retained-" + i, new Revision(i), 1)));
+        var snapshot = uninterrupted.checkpoint();
+        uninterrupted.compact(snapshot.revision());
+        uninterrupted.advanceTo(new SimInstant(101), new WorkBudget(1, 1));
+        var id = new CommandId("command:after-expiry");
+        var command = new FrontierCommand(1, id, WORLD, uninterrupted.executionView().revision(),
+                new SimInstant(101), SUBJECT, CauseChain.root(id), new Delta(1));
+        assertInstanceOf(CommandResult.Accepted.class, uninterrupted.submit(command));
+        var tail = uninterrupted.transactions();
+        var recovered = FrontierEngines.recover(configuration(),
+                new RecoveryImage(WORLD, Optional.of(new SnapshotRecord(snapshot, 1L)), tail));
+        assertEquals(uninterrupted.checkpoint(), recovered.checkpoint());
+        assertEquals(1, recovered.checkpoint().receipts().size());
+        assertEquals(7, recovered.commandAdmissionCapacity().availableReceipts());
+        assertRejected(recovered.submit(command), RejectionCode.DUPLICATE_COMMAND);
+    }
+
+    @Test
     void engineFactoryRecoversVerifiedCheckpointAndWalWithoutStartingFresh() {
         InMemoryFrontierEngine<Counter, CounterProjection> uninterrupted = engine(List.of(), false);
         assertInstanceOf(CommandResult.Accepted.class, uninterrupted.submit(command("command:checkpoint-one", Revision.ZERO, 2)));
