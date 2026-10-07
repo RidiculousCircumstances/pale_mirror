@@ -59,7 +59,8 @@ public final class FungiblePhysicalObservation {
         return allocateClaims(ledger, accountId, bindings);
     }
 
-    /** Rebuilds intangible claim columns against the exact retained lot layout, preserving stack IDs and addresses. */
+    /** Extends pinned allocations without moving an already admitted physical source.
+     * A genuinely new observed layout has no retained columns and allocates them afresh. */
     static List<PhysicalStackBinding> allocateClaims(FungibleResourceLedger ledger, SubjectId accountId,
                                                      List<PhysicalStackBinding> layout) {
         CustodyAccount account = ledger.accounts().get(accountId);
@@ -68,9 +69,39 @@ public final class FungiblePhysicalObservation {
         List<Map<SubjectId, Integer>> allocated = new ArrayList<>();
         List<Map<SubjectId, Integer>> occupiedLots = new ArrayList<>();
         for (var ignored : ordered) { allocated.add(new HashMap<>()); occupiedLots.add(new HashMap<>()); }
+        var retainedPins = new java.util.HashSet<SubjectId>();
         for (var claimId : account.claimQuantities().keySet().stream().sorted().toList()) {
             ClaimAllocation claim = ledger.claims().get(claimId);
             if (claim == null || claim.lotQuantities().isEmpty()) continue;
+            int retained = ordered.stream().mapToInt(binding -> binding.claimQuantities().getOrDefault(claimId, 0)).sum();
+            if (retained == 0) continue;
+            if (retained != account.claimQuantities().get(claimId))
+                throw new IllegalArgumentException("retained pinned claim has an incomplete physical allocation");
+            Map<SubjectId, Integer> remaining = new HashMap<>(claim.lotQuantities());
+            for (int i = 0; i < ordered.size(); i++) {
+                PhysicalStackBinding binding = ordered.get(i);
+                int count = binding.claimQuantities().getOrDefault(claimId, 0);
+                if (count == 0) continue;
+                int needed = count;
+                for (var lotId : remaining.keySet().stream().sorted().toList()) {
+                    int available = binding.lotQuantities().getOrDefault(lotId, 0)
+                            - occupiedLots.get(i).getOrDefault(lotId, 0);
+                    int take = Math.min(needed, Math.min(remaining.get(lotId), available));
+                    if (take <= 0) continue;
+                    occupiedLots.get(i).merge(lotId, take, Integer::sum);
+                    remaining.put(lotId, remaining.get(lotId) - take);
+                    needed -= take;
+                }
+                if (needed != 0) throw new IllegalArgumentException("retained pinned claim changed its physical lot source");
+                allocated.get(i).put(claimId, count);
+            }
+            if (remaining.values().stream().anyMatch(quantity -> quantity != 0))
+                throw new IllegalArgumentException("retained pinned claim omitted its exact lot portion");
+            retainedPins.add(claimId);
+        }
+        for (var claimId : account.claimQuantities().keySet().stream().sorted().toList()) {
+            ClaimAllocation claim = ledger.claims().get(claimId);
+            if (claim == null || claim.lotQuantities().isEmpty() || retainedPins.contains(claimId)) continue;
             for (var portion : claim.lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
                 int remaining = portion.getValue();
                 for (int i = 0; i < ordered.size() && remaining > 0; i++) {

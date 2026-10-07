@@ -70,4 +70,25 @@ class MaterialSourceSelectionTest {
         return new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
                 new InventoryCustody.ContainerSlot(CONTAINER, slot)), "minecraft:wheat", quantity);
     }
+
+    @Test
+    void newEarlierPinnedReservationCannotMoveAPreparedMealsSource() {
+        var lot = new ResourceLot(LOT, OWNER, "minecraft:wheat", 128, "stock", List.of());
+        var cold = new FungibleResourceLedger(Map.of(LOT, lot), Map.of(),
+                Map.of(ACCOUNT, new CustodyAccount(ACCOUNT, new ResourceCustody.Container(CONTAINER),
+                        Map.of(LOT, 128), Map.of())), Map.of());
+        var hot = cold.rebind(ACCOUNT, 16L, FungiblePhysicalObservation.bind(cold, ACCOUNT, 16L,
+                List.of(stack(0, 64), stack(1, 64))));
+        var meal = new ClaimAllocation(new SubjectId("claim:z-meal"), new SubjectId("resident:selection"),
+                OWNER, lot.itemKind(), 1, Map.of(LOT, 1), ClaimPurpose.EXTERNAL_RESERVATION);
+        var reserved = hot.reserveBound(meal, ACCOUNT, 16L);
+        var prepared = MaterialSourceSelection.select(reserved, ACCOUNT, lot.itemKind(), 1, Optional.of(meal.id()));
+        var shipment = new ClaimAllocation(new SubjectId("claim:a-shipment"), new SubjectId("shipment:selection"),
+                OWNER, lot.itemKind(), 64, Map.of(LOT, 64), ClaimPurpose.EXTERNAL_RESERVATION);
+        var extended = reserved.reserveBound(shipment, ACCOUNT, 16L);
+        assertEquals(prepared, MaterialSourceSelection.select(extended, ACCOUNT, lot.itemKind(), 1, Optional.of(meal.id())));
+        assertEquals(64, MaterialSourceSelection.select(extended, ACCOUNT, lot.itemKind(), 64,
+                Optional.of(shipment.id())).stream().mapToInt(MaterialSourceSelection.Slice::moved).sum());
+        assertEquals(reserved.accounts().get(ACCOUNT).lotQuantities(), extended.accounts().get(ACCOUNT).lotQuantities());
+    }
 }
