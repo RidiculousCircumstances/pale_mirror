@@ -7,15 +7,14 @@ Prior chronology: docs/archive/continuity-2026-10-07-before-addressed-planning.m
 ## Current assignment and source
 
 User authorized completing points4–5 on top of1–3, committing and deploying.
-Implemented/committed/deployed; final integration gates passed. No owned test task
-or client remains. Full-capacity historical-world startup admission is a recorded
-separate open issue; this deployment uses the user-approved fresh world.
-No push requested. User explicitly allows a fresh world; preserve R36 incident.
-Main implements receipt-pressure admission and explicit caravan pause diagnostics.
+Implemented/committed/deployed; final integration gates passed. R39 subsequently
+quarantined at19:49:52. Latest user authorized a reasoned fix; shared shipment HOT
+preparation admission is now implemented, verified, committed and deployed as R40
+in the SAME R39 world. PM runtime active/green, ticks advance, conflicts0.
+No push requested. No owned test task or client remains. R36 historical full-capacity
+startup admission remains a separate OPEN issue. Do not claim that incident recovered.
 Implementation /home/rd/proj/pm-f06r3-facility-lane-recovery, Gradle root pale-mirror/.
-Branch feat/baker-carry-orders-20260926, HEAD45901af1 (recovery follow-up to83b41446).
-The204 preexisting WIP entries are the prior delivered expedition cut retained
-in the clean R36 snapshot; preserve and include dependency-closed source on commit.
+Branch feat/baker-carry-orders-20260926, HEAD21d9509a, implementation worktree clean.
 SA audit paused; ARC-001 adoption separate.
 
 ## Preserved R36 incident
@@ -33,6 +32,45 @@ overruns ~2s, no observed host-wide CPU/RAM exhaustion.
 Evidence implementation pale-mirror/build/expedition-r36-incident.json.
 
 ## Current deployment / prior recovery
+
+Historical R39 quarantine (superseded by R40 healthy restart):
+Failure at revision10937: executor:shipment-transfer-prepared-r10937 rejected by
+policy: shipment cannot prepare without current container custody and its service turn.
+Exact emitter FrontierV3ShipmentPhysicalExecutor.progress:89; domain guard
+ShipmentPhysicalStateSupport.prepare:67–70 requires custody AND service access.
+Static mismatch: executor checks operational custody before prepare but omits
+ShipmentServiceAccess.available; command requires both. Exact failing shipment/
+access state now confirmed by read-only replay at10937/tick23450: shipment
+4442a5361c67101437e515a7ca4c2f5f, resident:7-21, at source134/65/15,
+custody=true, service=false, no pending effect or movement, supplies complete.
+Incumbent resident:7-14 is CLEAR_ACCESS at134/65/13, service=true.
+Root cause: HOT producer bypassed the service turn guard, not receipt exhaustion.
+Fix committed21d9509a: family-owned PreparationAdmission (READY/WAITING_FOR_CUSTODY/
+WAITING_FOR_SERVICE) shared by adapter and command guard. Only a fresh effect
+waits; a retained prepared effect completes under its original fence. Diagnostics
+reuse that typed reason, not a second decision. No schema or custody-owner change.
+Focused HOT pickup/mobile/occupied-turn checks PASS9s + guardrails; broader
+GoodsTrade/service/diagnostic/package verification PASS45s (44 frontier/47 adapter,
+0 failures). Clean R40 package+guardrails PASS10s; unchanged R37 integration reused.
+The contention setup is isolated unit evidence, not a native meal/service scenario.
+
+CURRENT deployment: clean detached21d9509a2a587143c390eccea0b53b382b599523 at
+/home/rd/proj/pm-shipment-r40-release-20261007; SHA512
+21e42a15b26afd0f54890db63a892a7644da523b004c8c6419006563d628c3341f03dfc434bd49a8d90cb299e0a295dae1f2dff6136b10bbdda5c8ce6844da0f.
+Runtime /home/rd/far-frontier-server; far-frontier-v3-live.service,
+invocation5ab36792792a463aadfb1478d0e9db8b, wrapper3416158, start1791386297.
+World frontier-v3-planning-r39-20261007, seed20260918065 retained WITHOUT reset/WAL edits.
+Publish/install/preflight/post-start PASS; ready20:18:27, PM started20:18:31+05.
+Initial canonical hold released. Latest summary15136/tick25403 green,
+required/inventory conflicts0; receipt capacity3781 available, physicalAdmissionHeld=false.
+No fresh quarantine or overload warning observed. No players online at20:20 check.
+Incident shipment is retained AWAITING_LOAD/UNKNOWN_AFTER_RESTART; loaded-world
+recovery and native service contention/delivery are NOT yet observed. Ordinary
+player revisit must resolve that physical recovery fence; do not fake custody.
+Evidence implementation pale-mirror/build/shipment-r40-deployment.json.
+No full-live/TPS-speedup/HUMAN/M3 claim. Next: observe loaded-world recovery on visit.
+
+Historical R38/R39 deployment before this repair:
 
 Clean detached source45901af13054b4d77f9670c8ca64a077e813578c at
 /home/rd/proj/pm-planning-r38-release-20261007; focused29 kernel checks,
