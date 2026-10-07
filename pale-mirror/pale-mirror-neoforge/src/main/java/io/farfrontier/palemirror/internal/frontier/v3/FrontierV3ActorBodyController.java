@@ -99,7 +99,7 @@ final class FrontierV3ActorBodyController {
                 && FrontierV3NativeBodyResidence.reconcile(level, living)) {
             // Native visibility may close immediately; durable absence does not.
             // Do not fabricate a receipt or skip the existing save/sync/read fence.
-            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_BODY_RESIDENCY_DRAIN actor={} epoch={} column={} reason=NATIVE_INACCESSIBLE_TERRAIN",
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_BODY_RESIDENCY_DRAIN actor={} epoch={} column={} reason=NATIVE_INACTIVE_ENTITY_COLUMN",
                     actor.value(), ActorBodyAuthority.current(state, actor).physicalEpoch(), living.chunkPosition());
             return;
         }

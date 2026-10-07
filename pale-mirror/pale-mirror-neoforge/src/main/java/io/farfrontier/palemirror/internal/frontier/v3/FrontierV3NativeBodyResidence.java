@@ -11,10 +11,13 @@ final class FrontierV3NativeBodyResidence {
     private FrontierV3NativeBodyResidence() { }
 
     /**
-     * A late resident can remain indexed after its terrain holder became inaccessible.
+     * A resident can remain indexed in the non-ticking, terrain-visible halo, or after
+     * its terrain holder became inaccessible. Loaded blocks are not a ticking body.
      * Queue the ordinary native store/unload pass again; its existing write, sync and
      * removal observations remain the only evidence that can release common custody.
-     * Neither observer absence nor presentation closure can authorize this operation.
+     * The visible halo is eligible only outside every observer's HOT radius and only
+     * when vanilla grants no entity ticks. This hides entity residency, not terrain;
+     * vanilla restores it on the ordinary ENTITY_TICKING status transition.
      */
     static boolean reconcile(ServerLevel level, Mob body) {
         ChunkPos column = body.chunkPosition();
@@ -22,14 +25,27 @@ final class FrontierV3NativeBodyResidence {
         var holder = source.chunkMap.getVisibleChunkIfPresent(column.toLong());
         FullChunkStatus status = holder == null ? FullChunkStatus.INACCESSIBLE
                 : ChunkLevel.fullStatus(holder.getTicketLevel());
-        if (!needsNativeUnload(source.getChunkNow(column.x, column.z) != null, status)) return false;
+        boolean terrainPresent = source.getChunkNow(column.x, column.z) != null;
+        boolean entityTicking = level.isPositionEntityTicking(body.blockPosition());
+        boolean observed = FrontierV3SceneDemand.observerWithinColumn(level, column,
+                FrontierV3SceneDemand.RADIUS_BLOCKS);
+        if (!needsNativeUnload(terrainPresent, status, entityTicking, observed)) return false;
         var manager = ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3ServerEntityManagerAccessor) level)
                 .frontierV3$getEntityManager();
+        io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
+                "PMV3_NATIVE_RESIDENCY_HANDOFF entity={} column={} terrainPresent={} holderStatus={} entityTicking={} observed={}",
+                body.getUUID(), column, terrainPresent, status, entityTicking, observed);
         manager.updateChunkStatus(column, FullChunkStatus.INACCESSIBLE);
         return true;
     }
 
     static boolean needsNativeUnload(boolean terrainPresent, FullChunkStatus holderStatus) {
         return !terrainPresent && holderStatus == FullChunkStatus.INACCESSIBLE;
+    }
+
+    static boolean needsNativeUnload(boolean terrainPresent, FullChunkStatus holderStatus,
+                                     boolean entityTicking, boolean observed) {
+        return needsNativeUnload(terrainPresent, holderStatus)
+                || terrainPresent && holderStatus != FullChunkStatus.ENTITY_TICKING && !entityTicking && !observed;
     }
 }

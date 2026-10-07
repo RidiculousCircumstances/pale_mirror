@@ -14,4 +14,19 @@ class FrontierV3NativeBodyResidenceTest {
         for (var status : FullChunkStatus.values()) if (status != FullChunkStatus.INACCESSIBLE)
             assertFalse(FrontierV3NativeBodyResidence.needsNativeUnload(false, status));
     }
+
+    @Test void loadedNonTickingHaloCanUseTheSameNativeSaveUnloadProtocol() {
+        assertTrue(FrontierV3NativeBodyResidence.needsNativeUnload(true, FullChunkStatus.FULL, false, false));
+        assertTrue(FrontierV3NativeBodyResidence.needsNativeUnload(true, FullChunkStatus.BLOCK_TICKING, false, false));
+        assertTrue(FrontierV3NativeBodyResidence.needsNativeUnload(false, FullChunkStatus.INACCESSIBLE, false, false));
+    }
+
+    @Test void anObserverOrNativeTickingPreventsColumnEviction() {
+        for (var status : FullChunkStatus.values()) {
+            assertFalse(FrontierV3NativeBodyResidence.needsNativeUnload(true, status, false, true));
+            assertFalse(FrontierV3NativeBodyResidence.needsNativeUnload(true, status, true, false));
+        }
+        assertFalse(FrontierV3NativeBodyResidence.needsNativeUnload(true, FullChunkStatus.ENTITY_TICKING, false, false));
+        assertFalse(FrontierV3NativeBodyResidence.needsNativeUnload(false, FullChunkStatus.FULL, false, false));
+    }
 }

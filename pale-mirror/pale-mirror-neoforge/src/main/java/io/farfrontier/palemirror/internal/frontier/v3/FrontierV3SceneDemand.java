@@ -52,6 +52,16 @@ final class FrontierV3SceneDemand {
                 .anyMatch(player -> retainedPositions.stream().anyMatch(position -> player.blockPosition().closerThan(position, radiusBlocks)));
     }
 
+    /** A native unload stores the whole entity column, so protect its nearest edge, not one NPC. */
+    static boolean observerWithinColumn(ServerLevel level, net.minecraft.world.level.ChunkPos column, int radiusBlocks) {
+        return level.players().stream().filter(player -> !player.isSpectator()).anyMatch(player -> {
+            double x = Math.clamp(player.getX(), column.getMinBlockX(), column.getMinBlockX() + 16.0);
+            double z = Math.clamp(player.getZ(), column.getMinBlockZ(), column.getMinBlockZ() + 16.0);
+            double dx = player.getX() - x, dz = player.getZ() - z;
+            return dx * dx + dz * dz <= (double) radiusBlocks * radiusBlocks;
+        });
+    }
+
     /** Filters the whole inventory before the service owner selects a turn. */
     static <Candidate> List<Candidate> demandedCandidates(ServerLevel level, List<Candidate> candidates,
                                                          Function<Candidate, BlockPosition> demandAnchor) {

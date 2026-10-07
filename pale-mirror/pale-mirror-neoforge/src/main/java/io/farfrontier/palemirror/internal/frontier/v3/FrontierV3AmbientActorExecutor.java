@@ -709,7 +709,7 @@ final class FrontierV3AmbientActorExecutor {
                 || !FrontierV3SurfaceObservation.at(body, lease.handoffBody().supportingSurface())) return false;
         return release(runtime, body).isPresent();
     }
-    /** Releases an exact ambient hand-off only once Minecraft has unloaded its whole chunk. */
+    /** Releases only a saved absent entity residency; visible terrain is not a live body. */
     static boolean releaseUnloadedReservedColdContinuation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                     FrontierWorldState state, SubjectId actorId,
                                                                     AmbientActorLease lease) {
@@ -718,7 +718,7 @@ final class FrontierV3AmbientActorExecutor {
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var receipt = FrontierV3AmbientDepartureObserver.recordedDeparture(state, actorId, ledger).orElse(null);
         if (receipt == null || !ledger.savedAmbientDeparture(receipt) || ledger.hasDepartureConflict(actorId)
-                || level.hasChunkAt(minecraftBody(receipt.observed().body()))) return false;
+                || level.areEntitiesLoaded(new ChunkPos(minecraftBody(receipt.observed().body())).toLong())) return false;
         if (!FrontierV3ActorBodyController.checkpointSavedDeparture(level, runtime, actorId)) return false;
         state = runtime.decodedState().orElseThrow();
         var release = new AmbientLeaseReleased(actorId, receipt.observed().body(), receipt.observed().health());
