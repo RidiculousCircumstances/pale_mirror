@@ -10,6 +10,48 @@ import java.util.Optional;
 public final class ServiceAccessCoordinator {
     private ServiceAccessCoordinator() { }
 
+    /** Bulk/group events can move several actors even when their subject is not an actor. */
+    public static java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
+        var actors = new java.util.HashSet<SubjectId>();
+        changedActors(previous.actorLocations(), next.actorLocations(), actors);
+        changedActors(previous.actorMovements(), next.actorMovements(), actors);
+        changedActors(previous.ambientLeases(), next.ambientLeases(), actors);
+        var points = new java.util.HashSet<SubjectId>();
+        for (SubjectId actor : actors) {
+            points.addAll(wakePoints(previous, actor));
+            points.addAll(wakePoints(next, actor));
+        }
+        return java.util.Set.copyOf(points);
+    }
+
+    private static <T> void changedActors(java.util.Map<SubjectId, T> previous,
+                                         java.util.Map<SubjectId, T> next, java.util.Set<SubjectId> actors) {
+        if (previous == next) return;
+        previous.forEach((id, value) -> { if (!Objects.equals(value, next.get(id))) actors.add(id); });
+        next.forEach((id, value) -> { if (!previous.containsKey(id)) actors.add(id); });
+    }
+
+    /**
+     * Address an actor's actual service footprint, not their home settlement.
+     * Both sides of a transition are needed: completing an exit removes its
+     * context and can leave the body outside the point it just released.
+     */
+    public static java.util.Set<SubjectId> wakePoints(FrontierWorldState state, SubjectId actorId) {
+        var points = new java.util.HashSet<SubjectId>();
+        var movement = state.actorMovements().get(actorId);
+        if (movement != null && movement.context() instanceof
+                io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit exit)
+            points.add(exit.depotId());
+        var actor = state.actorLocations().get(actorId);
+        if (actor != null) state.bootstrap().settlements().stream()
+                .flatMap(settlement -> settlement.structures().stream())
+                .filter(structure -> structure.kind() == StructureKind.DEPOT)
+                .map(SettlementDepotServicePort::forDepot)
+                .filter(port -> port.accessBoundary().occupied(actor.body()))
+                .forEach(port -> points.add(FrontierWorldState.depotId(port.settlementId())));
+        return java.util.Set.copyOf(points);
+    }
+
     public static ServiceAccessBoundary boundary(FrontierWorldState state, SubjectId pointId) {
         return port(state, pointId).accessBoundary();
     }

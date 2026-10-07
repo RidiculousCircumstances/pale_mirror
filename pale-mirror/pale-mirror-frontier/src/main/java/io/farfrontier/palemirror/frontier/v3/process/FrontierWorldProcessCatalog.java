@@ -559,6 +559,9 @@ public final class FrontierWorldProcessCatalog {
         boolean custodyChanged = previous.replicaCustody() != next.replicaCustody();
         boolean sceneChanged = previous.sceneLeases() != next.sceneLeases();
         if (accessChanged || stockChanged || custodyChanged || sceneChanged || surfaceChanged) keys.add(event.subject());
+        if (accessChanged || sceneChanged) {
+            keys.addAll(ServiceAccessCoordinator.wakePoints(previous, next));
+        }
         if (surfaceChanged) next.inventory().surfaces().forEach((id, surface) -> {
             if (!surface.equals(previous.inventory().surfaces().get(id))) keys.add(id);
         });
@@ -618,6 +621,7 @@ public final class FrontierWorldProcessCatalog {
             ResidentProfile resident = state.humanPopulation().resident(member.actorId());
             if (resident != null) {
                 keys.add(resident.id());
+                keys.addAll(ServiceAccessCoordinator.wakePoints(state, resident.id()));
                 keys.add(FrontierWorldState.depotId(resident.settlementId()));
             }
         }

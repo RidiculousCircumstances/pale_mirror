@@ -31,7 +31,7 @@ public final class ResidentMealProcess {
                 || meal.phase() != ResidentMeal.Phase.MOVE || meal.coldTravel().isPresent()
                 || ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId()))
             return java.util.Set.of();
-        return java.util.Set.of(meal.residentId(), meal.depotId());
+        return java.util.Set.of(meal.residentId(), meal.depotId(), meal.settlementId());
     }
 
     /** Read-only COLD projection; never grants a physical lease or consumes a meal effect. */

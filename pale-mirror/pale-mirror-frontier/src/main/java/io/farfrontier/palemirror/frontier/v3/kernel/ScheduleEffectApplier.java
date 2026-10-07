@@ -22,7 +22,8 @@ final class ScheduleEffectApplier {
             // still fences it; only explicit canonical holds may be bypassed at admission.
             ScheduledAction head = schedules.head(action -> action.id().equals(consumed.scheduleId()) || !held.test(action));
             if (head == null || !head.id().equals(consumed.scheduleId())) {
-                throw new IllegalStateException("schedule consumption is not the due queue head: " + consumed.scheduleId().value());
+                throw new IllegalStateException("schedule consumption is not the due queue head: "
+                        + consumed.scheduleId().value() + "; eligible head=" + head);
             }
             require(schedules.cancel(head.id()), head.id());
         } else {
