@@ -20,6 +20,23 @@ public final class TransportMissionProcess {
     public static ProposedEvent wake(SubjectId mission, long tick) {
         return TransportMissionContinuation.wake(mission, tick);
     }
+    public static boolean held(FrontierWorldState state, ScheduledAction action) {
+        var mission = state.shipments().missions().get(action.subject());
+        return mission != null && mission.stage() == TransportMission.Stage.LOADING
+                && mission.replenishment().isEmpty() && mission.supplies().isPresent()
+                && mission.shipmentIds().stream().anyMatch(id -> !state.shipments().shipments().get(id).terminal())
+                && ExpeditionSupplyProcess.serviceHeld(state, mission);
+    }
+    /** The existing queue owns parking and recovery; transport supplies its exact dependency addresses. */
+    public static java.util.Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
+        var mission = state.shipments().missions().get(action.subject());
+        if (mission == null) return java.util.Set.of(action.subject());
+        var keys = new java.util.HashSet<SubjectId>();
+        keys.add(mission.id()); keys.add(mission.groupId()); keys.add(mission.sender().containerId());
+        var group = state.unitGroups().groups().get(mission.groupId());
+        group.members().forEach(member -> keys.add(member.actorId()));
+        return java.util.Set.copyOf(keys);
+    }
     public static FrontierWorldState admit(FrontierWorldState state, SubjectId subject, TransportMissionStarted value, long now) {
         var mission = value.mission(); var group = value.group();
         if (state.inventory().economics().require(value.senderId()).ownerKind() != value.senderKind())

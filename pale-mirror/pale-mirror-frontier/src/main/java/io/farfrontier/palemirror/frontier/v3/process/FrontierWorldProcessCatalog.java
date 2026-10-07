@@ -284,7 +284,21 @@ public final class FrontierWorldProcessCatalog {
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return ShipmentProcess.held(state, action); }
             })),
             Map.entry(UnitGroupProcess.PROGRESS, withPlanningRecovery(atExecutionTime((state, action, instant) -> UnitGroupProcess.plan(state, action, instant.ticks())))),
-            Map.entry(TransportMissionProcess.PROGRESS, withPlanningRecovery(atExecutionTime((state, action, instant) -> TransportMissionProcess.plan(state, action, instant.ticks())))),
+            Map.entry(TransportMissionProcess.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+                    return TransportMissionProcess.plan(state, action, action.dueAt().ticks());
+                }
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                        io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
+                    return TransportMissionProcess.plan(state, action, currentInstant.ticks());
+                }
+                @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
+                    return TransportMissionProcess.held(state, action);
+                }
+                @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
+                    return TransportMissionProcess.wakeDependencies(state, action);
+                }
+            })),
             Map.entry(ActorMovementProcess.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ActorMovementProcess.plan(state, action, action.dueAt().ticks());

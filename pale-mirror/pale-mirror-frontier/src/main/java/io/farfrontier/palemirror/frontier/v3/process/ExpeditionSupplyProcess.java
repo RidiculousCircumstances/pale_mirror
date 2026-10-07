@@ -10,6 +10,31 @@ import java.util.*;
 /** One loading continuation through ordinary movement and custody, without a second scheduler. */
 final class ExpeditionSupplyProcess {
     private ExpeditionSupplyProcess() { }
+    /** Park only an addressed access wait, never a route search or independent assembly work. */
+    static boolean serviceHeld(FrontierWorldState state, TransportMission mission) {
+        var load = mission.supplies().orElseThrow();
+        if (load.needsReplan() || load.next().isEmpty()) return false;
+        var allocation = load.next().orElseThrow();
+        if (allocation.pending().isPresent() || ServiceAccessCoordinator.available(state,
+                ExpeditionSupplyServiceAccess.identity(mission, allocation))) return false;
+        var group = state.unitGroups().groups().get(mission.groupId());
+        return group.members().stream().noneMatch(member -> assemblyNeeded(state, mission, member));
+    }
+
+    private static boolean assemblyNeeded(FrontierWorldState state, TransportMission mission,
+            io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member member) {
+        var actor = member.actorId(); var load = mission.supplies().orElseThrow();
+        if (state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE
+                || load.allocations().stream().anyMatch(a -> a.actorId().equals(actor) && !a.loaded())
+                || state.actorMovements().containsKey(actor) || state.humanPopulation().meals().containsKey(actor)
+                || load.complete() && mission.shipmentIds().stream().map(state.shipments().shipments()::get)
+                    .anyMatch(shipment -> shipment.execution().actorId().equals(actor) && shipment.status() == Shipment.Status.AWAITING_LOAD))
+            return false;
+        var group = state.unitGroups().groups().get(mission.groupId());
+        return !ExpeditionSupplyAuthority.assemblyOrder(mission, actor).arrivedAt(state.actorLocations().get(actor).supportingSurface())
+                && io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupMissionPorts.require(group)
+                    .execution(state, group, member).isPresent();
+    }
     static boolean assembled(FrontierWorldState state, TransportMission mission) {
         var load = mission.supplies().orElseThrow();
         return load.complete() && load.assemblyStations().entrySet().stream()
@@ -31,11 +56,7 @@ final class ExpeditionSupplyProcess {
         }
         for (var member : group.members()) {
             var actor = member.actorId();
-            if (state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE) continue;
-            if (load.allocations().stream().anyMatch(a -> a.actorId().equals(actor) && !a.loaded())
-                    || state.actorMovements().containsKey(actor) || state.humanPopulation().meals().containsKey(actor)
-                    || load.complete() && mission.shipmentIds().stream().map(state.shipments().shipments()::get)
-                        .anyMatch(shipment -> shipment.execution().actorId().equals(actor) && shipment.status() == Shipment.Status.AWAITING_LOAD)) continue;
+            if (!assemblyNeeded(state, mission, member)) continue;
             var order = ExpeditionSupplyAuthority.assemblyOrder(mission, actor);
             var position = state.actorLocations().get(actor).supportingSurface();
             if (order.arrivedAt(position)) continue;
@@ -50,7 +71,8 @@ final class ExpeditionSupplyProcess {
         }
         load.next().ifPresent(a -> collect(state, mission, load, a, now, events));
         events.add(new ProposedEvent(mission.id(), new ScheduleEffect.Rescheduled(action.id(), TransportMissionProcess.progress(mission.id(),
-                now + (events.isEmpty() ? state.bootstrap().ruleset().cadence().transportReviewInterval() : 1)))));
+                now + (events.isEmpty() && !serviceHeld(state, mission)
+                    ? state.bootstrap().ruleset().cadence().transportReviewInterval() : 1)))));
         return List.copyOf(events);
     }
     private static void collect(FrontierWorldState state, TransportMission mission,
