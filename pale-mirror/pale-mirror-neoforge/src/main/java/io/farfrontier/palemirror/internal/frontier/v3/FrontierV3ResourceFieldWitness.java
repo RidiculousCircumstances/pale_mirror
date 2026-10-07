@@ -289,11 +289,26 @@ final class FrontierV3ResourceFieldWitness {
                 || !ResourceFieldPhysicalSurface.Condition.of(accepted.cell(change.cellId())).equals(change.after()))
             throw new IllegalArgumentException("world field change lacks its accepted and observed postcondition");
         Cell prior = cell(change.cellId());
-        if (prior.pending().isPresent() || prior.foreign().isPresent()
-                || !prior.committed().equals(change.before()) && !prior.committed().equals(change.after()))
+        if (!admitsWorldObservation(change.cellId(), change.before(), change.after())
+                && !(prior.pending().isEmpty() && prior.foreign().isEmpty()
+                && prior.committed().equals(change.after())))
             throw new IllegalArgumentException("world field change has a foreign physical predecessor");
         return prior.committed().equals(change.after()) ? this
                 : replace(change.cellId(), new Cell(change.after(), Optional.empty(), Optional.empty()));
+    }
+
+    /** A lagging projection can observe later biology, never infer harvest, loss or yield. */
+    boolean admitsWorldObservation(ResourceFieldLayout.CellId id,
+                                   ResourceFieldPhysicalSurface.Condition canonicalBefore,
+                                   ResourceFieldPhysicalSurface.Condition actualAfter) {
+        Cell prior = cell(id);
+        if (prior.pending().isPresent() || prior.foreign().isPresent()) return false;
+        if (prior.committed().equals(canonicalBefore)) return true;
+        return prior.committed().soil() == ResourceFieldCycle.Soil.FARMLAND
+                && prior.committed().crop() == ResourceFieldCycle.Crop.GROWING
+                && canonicalBefore.equalsOrGrowsFrom(prior.committed())
+                && actualAfter.equalsOrGrowsFrom(canonicalBefore)
+                && actualAfter.growthStage() > canonicalBefore.growthStage();
     }
 
     /** Exact foreign NBT remains outside the owned-surface condition until observed clearance. */

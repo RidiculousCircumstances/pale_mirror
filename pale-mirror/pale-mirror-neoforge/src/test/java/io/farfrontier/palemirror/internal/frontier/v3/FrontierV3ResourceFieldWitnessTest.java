@@ -21,6 +21,42 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ResourceFieldWitnessTest {
+    @Test void growthBeyondCanonicalTargetRecoversEvenWhenItsPhysicalProjectionWasLagging() {
+        var projected = ResourceFieldCycle.seeded(SITE, layout(), 1).advanceGrowth(FIRST);
+        var witness = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.fromCycle(projected));
+        var canonical = projected;
+        for (int i = 0; i < 4; i++) canonical = canonical.advanceGrowth(FIRST);
+        var actual = canonical.advanceGrowth(FIRST);
+        var before = ResourceFieldPhysicalSurface.Condition.of(canonical.cell(FIRST));
+        var after = ResourceFieldPhysicalSurface.Condition.of(actual.cell(FIRST));
+        assertTrue(witness.admitsWorldObservation(FIRST, before, after));
+        var observed = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved(SITE, 1,
+                layout().revision(), FIRST, before, after,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Change.CROP_GROWN,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Source.WORLD, "world:recovered-growth");
+        var change = FrontierV3ResourceFieldWorldChangeWitness.read(
+                new FrontierV3ResourceFieldWorldChangeWitness(observed).write());
+        var retained = FrontierV3ResourceFieldWitness.read(witness.write());
+        var physical = new FrontierV3ResourceFieldObservation.Owned(after);
+        var unchangedCanonical = canonical;
+        assertThrows(IllegalArgumentException.class, () -> retained.acknowledgeWorldChange(change, unchangedCanonical, physical));
+        var recovered = retained.acknowledgeWorldChange(change, actual, physical);
+        assertEquals(after, recovered.cell(FIRST).committed());
+        assertEquals(0, actual.harvestedCount(), "biological growth never awards farmer work or resources");
+        assertEquals(1, retained.cell(FIRST).committed().growthStage());
+    }
+
+    @Test void laggingProjectionCannotTreatCropLossOrRegrowthAsMonotonicBiology() {
+        var projected = ResourceFieldCycle.seeded(SITE, layout(), 1).advanceGrowth(FIRST);
+        var witness = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.fromCycle(projected));
+        var canonical = projected.advanceGrowth(FIRST).advanceGrowth(FIRST);
+        var before = ResourceFieldPhysicalSurface.Condition.of(canonical.cell(FIRST));
+        assertFalse(witness.admitsWorldObservation(FIRST, before, BARE));
+        assertFalse(witness.admitsWorldObservation(FIRST, before, PLANTED));
+        assertFalse(witness.admitsWorldObservation(FIRST, before, DIRT));
+        assertFalse(witness.admitsWorldObservation(FIRST, before, before));
+    }
+
     @Test void observedBiologyRecoveryCannotUseAFabricatedWorldReview() {
         var cycle = ResourceFieldCycle.seeded(SITE, layout(), 1);
         var witness = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.fromCycle(cycle));

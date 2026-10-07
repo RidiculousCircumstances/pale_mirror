@@ -204,13 +204,14 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
                 || !owner.witness().matchesCycle(cycle)) return false;
         var claim = owner.witness().cell(cellId);
         var before = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cellId));
-        if (claim.pending().isPresent() || claim.foreign().isPresent() || !claim.committed().equals(before))
-            return false; // A lagging COLD projection or an in-flight effect is not world damage.
+        if (claim.pending().isPresent() || claim.foreign().isPresent()) return false;
         var reading = FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(cellId),
                 "world-field-change-candidate");
         if (!(reading instanceof FrontierV3ResourceFieldObservation.Owned owned)) return false;
         var change = classify(before, owned.condition());
         if (change == null) return false; // Foreign/unknown or another owner's transition: fail closed.
+        if (!owner.witness().admitsWorldObservation(cellId, before, owned.condition()))
+            return false; // Projection lag is not damage; growth beyond its target is real biology.
         var checkpoint = runtime.canonicalState().orElseThrow();
         String cause = "world:field-cell-" + siteId.value() + "-e" + cycle.epoch() + "-c" + cellId.value()
                 + "-r" + checkpoint.revision().value();

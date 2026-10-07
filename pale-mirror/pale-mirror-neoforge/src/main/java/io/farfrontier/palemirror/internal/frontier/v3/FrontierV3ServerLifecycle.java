@@ -176,6 +176,7 @@ public final class FrontierV3ServerLifecycle {
     }
     private static void startConfigured(MinecraftServer server,
                                         io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
+        FrontierV3NativeFieldOwnership.forget(server);
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         FrontierV3PerformanceMetrics metrics = new FrontierV3PerformanceMetrics();
         FrontierFileStore store = new FrontierFileStore(server.getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs());
@@ -446,6 +447,7 @@ public final class FrontierV3ServerLifecycle {
             FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
             if (runtime != null) releaseRuntime(server, runtime);
         } finally {
+            FrontierV3NativeFieldOwnership.forget(server);
             io.farfrontier.palemirror.internal.calendar.MinecraftCalendarPresentation.detach(server);
             FrontierV3DiagnosticTrace.forget(server);
             clearFastForwardState(server);
@@ -453,6 +455,7 @@ public final class FrontierV3ServerLifecycle {
     }
     private static void releaseRuntime(MinecraftServer server,
                                        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        FrontierV3NativeFieldOwnership.retain(server, runtime);
         RUNTIMES.remove(server, runtime);
         releaseRuntime(runtime);
         FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server);
@@ -870,9 +873,7 @@ public final class FrontierV3ServerLifecycle {
     }
     public static boolean blocksNativeCropGrowth(ServerLevel level, BlockPos position) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null
-                && FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(runtime, level, position);
+        return FrontierV3NativeFieldOwnership.blocksCropGrowth(level, position);
     }
     /** Routes prepare/confirmed phases; the field owner alone decides whether this is an external change. */
     public static void observeFieldBlockWrite(ServerLevel level, BlockPos position,
@@ -884,9 +885,7 @@ public final class FrontierV3ServerLifecycle {
 
     /** Cancels only vanilla soil reversion in an active exact managed field footprint. */
     public static boolean blocksNativeSoilReversion(ServerLevel level, BlockPos position) {
-        var runtime = RUNTIMES.get(level.getServer());
-        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null
-                && FrontierV3ResourceSiteExecutor.blocksNativeSoilReversion(runtime, level, position);
+        return FrontierV3NativeFieldOwnership.blocksSoilReversion(level, position);
     }
     /** Observes any soil mutation not covered by the managed-soil protection policy. */
     public static void observeFarmlandReversion(ServerLevel level, BlockPos position,
@@ -916,9 +915,7 @@ public final class FrontierV3ServerLifecycle {
     /** Restores an exact owned crop only when another listener forced native growth past the pre-event fence. */
     public static boolean restoreNativeCropGrowthPostcondition(ServerLevel level, BlockPos position) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null
-                && FrontierV3ResourceSiteExecutor.restoreNativeGrowthPostcondition(runtime, level, position);
+        return FrontierV3NativeFieldOwnership.restoreCropGrowth(level, position);
     }
     static boolean normalDemandLossReleased(MinecraftServer server) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);

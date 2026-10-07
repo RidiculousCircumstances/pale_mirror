@@ -204,6 +204,18 @@ final class FrontierV3ResourceSiteExecutor {
         return declaredSoilCell && claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE;
     }
 
+    /** Passive protection of retained ownership after its execution runtime has been released. */
+    static boolean blocksNativeSoilReversion(ServerLevel level, FrontierV3ResourceSiteLedger ledger,
+                                              ResourceSite site, BlockPos position) {
+        if (!level.getBlockState(position).is(Blocks.FARMLAND)
+                || site.layout().soilAt(canonical(position)).isEmpty()) return false;
+        var claim = ledger.siteClaim(site.id());
+        if (claim instanceof FrontierV3ResourceSiteLedger.CellSiteClaim cell)
+            return cell.claim().status() != FrontierV3ResourceSiteLedger.Status.CONFLICT;
+        return claim instanceof FrontierV3ResourceSiteLedger.LegacySiteClaim legacy
+                && blocksNativeSoilReversion(legacy.claim(), true);
+    }
+
     static boolean blocksNativeCropGrowth(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level, BlockPos position) {
         FrontierWorldState state = runtime.stateForNativeGrowthFence().orElse(null); if (state == null) return false;
         Target target = target(state, position); if (target == null || target.site().layout().cropAt(canonical(position)).isEmpty()) return false;
