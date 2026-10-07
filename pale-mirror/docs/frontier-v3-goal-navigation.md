@@ -7,6 +7,76 @@ certified by this document. The field worker is the first adoption vertical.
 
 ## Decision
 
+### Hierarchical known-route planning (2026-10-06, accepted, implementation in progress)
+
+Long-distance goals and local service/field approaches enter one reusable
+geometry-only planner. Activities supply explicit goals, capability and legal
+facility/task scope; they do not select search radii or own obstacle rules.
+Connected regions and witnessed traversable portals form the coarse graph.
+Local refinement uses the same known support, clearance and grade rules;
+neighbouring tile coordinates alone never prove a connection. Roads may inform
+geometry/cost, but are not the only admissible route. Unknown geometry is not
+silently declared traversable. No fixed 1024-block search radius defines the
+semantic maximum journey distance.
+
+Search has explicit bounded work slices and bounded request/cache memory.
+PLANNING, unreachable geometry, missing knowledge and exhausted safety budget
+are distinct outcomes. Equivalent immutable-geometry/start/goal/capability/scope
+queries reuse derived success/failure evidence; actor/permit occupancy remains
+current and independent. Geometry changes invalidate affected derived knowledge.
+A failed search is not restarted at the movement cadence without a changed
+dependency or explicit transient retry policy. Derived caches own no body,
+resource, access permission or domain outcome.
+
+A completed plan can be accepted only under the exact current producer-declared
+execution/goal and geometry view. The canonical transition retains its travel
+checkpoint; reducer and WAL recovery validate the retained legal route rather
+than rerunning an asynchronous search. Interrupted planning/results cannot
+overwrite a newer goal. HOT uses bounded physical legs through the existing
+shared Minecraft provider, and COLD advances the same goal from route/time
+checkpoints without physical chunk loading or per-cell WAL history. Arrival at
+a route intermediate cannot complete the activity's semantic goal.
+
+Resident meals and shipments are the initial connected consumers. Meal policy
+still owns food authorization/selection, service coordination owns short access,
+and generic routing owns distant travel. No courier-only teleport, meal-only
+radius enlargement or parallel movement controller is an admissible repair.
+
+Implementation boundary (2026-10-06): `PedestrianRouteGeometry` supplies an immutable
+world view; `PedestrianRegion` computes real connected components within 16×16
+regions; `HierarchicalPedestrianSearch` searches witnessed border portals and
+refines an adjacent support route. `CooperativePedestrianPlanner` bounds requests,
+cached routes/components and work per advance, fairly rotating pending searches.
+The server owns this calculation lifetime and advances one bounded slice per
+ordinary physical turn, including fast-forward turns; no worker owns Minecraft,
+canonical time or domain writes. A geometry revision cancels obsolete pending
+queries. Repeated same-view rejection is a cached result, not another full search.
+Synchronous isolated calculations and remaining local owners use the same search,
+not the removed local-versus-journey radius split; their conversion to deferred
+admission is not claimed by this cut.
+
+Meals, trade reachability and shipment movement request deferred planning. Query
+readiness is not access permission or arrival. Initial COLD movement events carry
+`PedestrianRouteReceipt`; exact execution/goal/phase/departure and current legal
+geometry are checked before retaining a `TimedKnownRoute`. Recovery consumes that
+receipt without needing a warmed calculation cache. The actual retained departure
+may refine only its own column by at most one support level, preserving the
+existing witnessed-start rule; this is not permission to invent remote support or
+clear an observed obstruction. HOT retains the existing shared native leg follower.
+
+Safety bounds remain explicit: 4,096 surveyed regions / 16,384 components per
+search, 65,535 route supports, eight pending requests, 128 completed results and
+131,072 retained result supports; the shared component cache retains 2,048 regions.
+Budget exhaustion is `SAFETY_LIMIT`, not a global impossibility proof. Durable
+movement legs remain capped at 4,096 supports. Shipments checkpoint bounded
+prefixes under the original goal; intermediate arrival does not unload cargo.
+Meals currently explain `MEAL_LEG_RETENTION_LIMIT` rather than accepting a longer
+durable leg. This is sufficient for the current 1,024×1,024 world and the focused
+3,000-block router fixture, not a claim of unlimited-world meal integration.
+Changing event wire shape explicitly advances persistence envelope 97→98; disposable
+test worlds use a fresh schema, not compatibility repair. Source/component checks
+and live diagnostic deployment are distinct from full-pack product acceptance.
+
 ### UAE execution authority (2026-10-03, adoption in progress)
 
 PM-UAE001 separates the current actor execution from movement goal identity and
@@ -95,6 +165,17 @@ The path is ephemeral, may be recalculated after a real local obstruction and
 is validated against hard scope, not an advisory route stripe. A path that exits
 a true restriction is not an authorized detour. A different capability (swimming, flying, rail) requires a
 declared provider, never an implicit fallback.
+For pedestrian station arrival, the common provider distinguishes an observed
+support cell from a settled goal: the body's complete horizontal footprint must
+fit the named goal column before its path stops. Merely entering that cell can
+leave the preceding station occupied and deadlock a following unit. This is a
+shared physical arrival rule, not patrol, warehouse or recipe policy; common body
+inspection still records the actual supported position without snapping it.
+Minecraft's completed path node is not this semantic arrival. After native
+node tolerance ends a path on the named support, the same authorized provider
+uses Minecraft MoveControl to settle inside that station, checking physical
+clearance and retaining the original no-progress deadline. It cannot award
+arrival, select another goal, teleport, or activate a parallel locomotion owner.
 The envelope names *support blocks*, not feet blocks: a pedestrian's declared
 one-block grade latitude includes support one block below or above the current
 support where real collision and headroom permit it. A lower-floor detour is
@@ -317,3 +398,65 @@ NeoForge tests and native local-navigation, field-turns and harvest-support
 slices passed. Full field/depot and restart carriers, client smoothness,
 obstruction/clearance and hard-crash recovery remain separate acceptance
 obligations; no source-only pass proves them.
+
+## Addressed calculation wakes (2026-10-07)
+
+The R36 incident exhausted4096 retained command receipts;2834 were group-wide
+navigation-ready notifications. Global calculation progress must not broadcast
+durable commands to every LOADING/UNLOADING/refill group.
+
+Each volatile calculation key contains immutable geometry/version, departure and
+target. The producing scheduled process observes its own actual pending queries
+and binds them to its exact declared successor ScheduledAction. A separate derived
+index routes completion, negative result and invalidation only to these waiters,
+coalescing repeated signals per continuation before admission. Peek/diagnostics
+never register requests. A queued calculation resumes when an existing slot opens;
+capacity changes are not broadcasts to unrelated owners.
+
+The closed pedestrian-planning command owner requires an exact engine schedule
+binding and can only move that retained continuation's due time. Its original
+registered process still owns every decision, movement receipt and resource
+effect. Already-due, replaced or cancelled continuations need no wake command.
+Technical results and subscriptions are rebuildable memory, not WAL history.
+Only ordinary canonical scheduling/owner outcomes remain durable.
+
+Restart reconstructs dependencies once through explicitly registered
+calculation-bearing producers. Owner previews may evaluate their retained review
+at its due instant, but their proposed events are discarded: no world clock,
+actor, resource or assignment is advanced. Real reconsideration runs normally at
+the current canonical instant. Recovery does not replay movement or wake all
+caravans merely because they share a mission stage.
+
+Points4–5 extend the same contract: kernel-owned read-only retention capacity
+counts expiry exactly as submission does, without checkpoint serialization or
+receipt mutation. Optional wakes have a safety ceiling of8 commands per server
+invocation and preserve the final quarter of both command-receipt and transaction
+capacity for causal work. Completion-order coalesced waiters remain pending until
+accepted. Capacity rejection defers optional work; identity/invariant failures
+remain explicit. A physical turn/stage waits for quarter-capacity causal batch
+headroom before starting; ordinary canonical time remains runnable, so old
+receipts expire naturally.
+The capacity view is not an atomic reservation for an arbitrary physical batch.
+Recovery evaluates receipt retention at the verified replay's final instant,
+using the same inclusive expiry cutoff as live admission. A snapshot plus WAL
+can legally contain more historical receipts than the active-window ceiling;
+expired receipts must not prevent recovery. Active duplicate/capacity violations
+still fail explicitly. This changes neither WAL contents nor domain state.
+
+An accepted wake schedules normal reconsideration on the next canonical tick;
+it never executes a world outcome inside notification submission or produces a
+tick-zero owner review. Already-due/next-tick owners require no optional command.
+
+One typed MovementPermission supplies both navigation gating and explanation:
+allowed, inactive participant, spatial/progress formation stretch with exact peer,
+mission stop, pending refill or food-stock requirement. The mission Strategy owns
+mission reasons; the generic cohesion mechanism owns formation reasons. Group
+diagnostics combine observed current HOT bodies and retained COLD projections,
+read only cached route evidence, and report loading/refill service waits.
+Native path holds retain their separate reason. Performance reports pending/
+ready-deferred waits and admission capacity. Diagnostics never start searches,
+declare arrival or repair the world. A normal explained hold is not itself proof
+of a hang; correlate repeated observations with the existing progress obligation.
+
+Focused source/kernel/restart verification is not a live TPS, full-trip,
+player/HUMAN or M3 acceptance claim.
