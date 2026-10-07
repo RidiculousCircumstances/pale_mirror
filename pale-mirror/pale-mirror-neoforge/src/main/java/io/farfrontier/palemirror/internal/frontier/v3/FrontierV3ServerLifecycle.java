@@ -431,6 +431,7 @@ public final class FrontierV3ServerLifecycle {
                 && FrontierV3HotHandoff.inspect(level, runtime, chunk).presentable();
     }
     static void runPhysicalTurn(ServerLevel physicalWorld, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        FrontierV3NativeBodyResidence.restore(physicalWorld);
         FrontierV3PhysicalExecutors.registry().tick(Objects.requireNonNull(physicalWorld, "physical world"),
                 Objects.requireNonNull(runtime, "runtime"));
     }

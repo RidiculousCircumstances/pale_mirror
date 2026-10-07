@@ -18,6 +18,8 @@ class FrontierV3NativeBodyResidenceTest {
     @Test void loadedNonTickingHaloCanUseTheSameNativeSaveUnloadProtocol() {
         assertTrue(FrontierV3NativeBodyResidence.needsNativeUnload(true, FullChunkStatus.FULL, false, false));
         assertTrue(FrontierV3NativeBodyResidence.needsNativeUnload(true, FullChunkStatus.BLOCK_TICKING, false, false));
+        assertTrue(FrontierV3NativeBodyResidence.needsNativeUnload(true, FullChunkStatus.ENTITY_TICKING, false, false),
+                "view-distance tickets do not override vanilla's independent simulation-distance range");
         assertTrue(FrontierV3NativeBodyResidence.needsNativeUnload(false, FullChunkStatus.INACCESSIBLE, false, false));
     }
 
@@ -26,7 +28,13 @@ class FrontierV3NativeBodyResidenceTest {
             assertFalse(FrontierV3NativeBodyResidence.needsNativeUnload(true, status, false, true));
             assertFalse(FrontierV3NativeBodyResidence.needsNativeUnload(true, status, true, false));
         }
-        assertFalse(FrontierV3NativeBodyResidence.needsNativeUnload(true, FullChunkStatus.ENTITY_TICKING, false, false));
         assertFalse(FrontierV3NativeBodyResidence.needsNativeUnload(false, FullChunkStatus.FULL, false, false));
+    }
+
+    @Test void returnUsesRealTickingRangeWithoutWaitingForANominalHolderTransition() {
+        assertTrue(FrontierV3NativeBodyResidence.needsNativeRestore(true, FullChunkStatus.ENTITY_TICKING, true));
+        assertFalse(FrontierV3NativeBodyResidence.needsNativeRestore(true, FullChunkStatus.ENTITY_TICKING, false));
+        assertFalse(FrontierV3NativeBodyResidence.needsNativeRestore(false, FullChunkStatus.ENTITY_TICKING, true));
+        assertFalse(FrontierV3NativeBodyResidence.needsNativeRestore(true, FullChunkStatus.BLOCK_TICKING, true));
     }
 }

@@ -8,6 +8,8 @@ import net.minecraft.world.level.ChunkPos;
 
 /** Bridge to vanilla residency, not a body remover or a canonical custody writer. */
 final class FrontierV3NativeBodyResidence {
+    /** Ephemeral native visibility overrides only; neither body nor COLD permission is retained here. */
+    private static final java.util.Map<ServerLevel, java.util.Set<Long>> HIDDEN_COLUMNS = new java.util.WeakHashMap<>();
     private FrontierV3NativeBodyResidence() { }
 
     /**
@@ -16,8 +18,10 @@ final class FrontierV3NativeBodyResidence {
      * Queue the ordinary native store/unload pass again; its existing write, sync and
      * removal observations remain the only evidence that can release common custody.
      * The visible halo is eligible only outside every observer's HOT radius and only
-     * when vanilla grants no entity ticks. This hides entity residency, not terrain;
-     * vanilla restores it on the ordinary ENTITY_TICKING status transition.
+     * when vanilla's independent simulation-distance tracker grants no entity ticks.
+     * Holder status alone is insufficient: view tickets can retain ENTITY_TICKING
+     * outside that range. This hides entity residency, not terrain. Restore handles
+     * the symmetric return even when the holder never changes its nominal status.
      */
     static boolean reconcile(ServerLevel level, Mob body) {
         ChunkPos column = body.chunkPosition();
@@ -26,10 +30,14 @@ final class FrontierV3NativeBodyResidence {
         FullChunkStatus status = holder == null ? FullChunkStatus.INACCESSIBLE
                 : ChunkLevel.fullStatus(holder.getTicketLevel());
         boolean terrainPresent = source.getChunkNow(column.x, column.z) != null;
-        boolean entityTicking = level.isPositionEntityTicking(body.blockPosition());
+        boolean entityTicking = source.chunkMap.getDistanceManager().inEntityTickingRange(column.toLong());
         boolean observed = FrontierV3SceneDemand.observerWithinColumn(level, column,
                 FrontierV3SceneDemand.RADIUS_BLOCKS);
         if (!needsNativeUnload(terrainPresent, status, entityTicking, observed)) return false;
+        var hidden = HIDDEN_COLUMNS.computeIfAbsent(level, ignored -> new java.util.HashSet<>());
+        if (hidden.size() >= FrontierV3AmbientPendingAdmissions.MAX_ENTRIES && !hidden.contains(column.toLong()))
+            throw new IllegalStateException("native residency override capacity exceeded");
+        hidden.add(column.toLong());
         var manager = ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3ServerEntityManagerAccessor) level)
                 .frontierV3$getEntityManager();
         io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
@@ -39,6 +47,33 @@ final class FrontierV3NativeBodyResidence {
         return true;
     }
 
+    /** Native return can precede UUID indexing; never depend on finding the unloaded body. */
+    static void restore(ServerLevel level) {
+        var hidden = HIDDEN_COLUMNS.get(level);
+        if (hidden == null) return;
+        var source = level.getChunkSource();
+        var manager = ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3ServerEntityManagerAccessor) level)
+                .frontierV3$getEntityManager();
+        hidden.removeIf(encoded -> {
+            var column = new ChunkPos(encoded);
+            var holder = source.chunkMap.getVisibleChunkIfPresent(encoded);
+            var status = holder == null ? FullChunkStatus.INACCESSIBLE : ChunkLevel.fullStatus(holder.getTicketLevel());
+            boolean present = source.getChunkNow(column.x, column.z) != null;
+            // Vanilla now owns the inaccessible column and its next ordinary visibility transition.
+            if (!present && status == FullChunkStatus.INACCESSIBLE) return true;
+            if (!needsNativeRestore(present, status, source.chunkMap.getDistanceManager().inEntityTickingRange(encoded)))
+                return false;
+            manager.updateChunkStatus(column, status);
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_NATIVE_RESIDENCY_RETURN column={} holderStatus={} entityTickingRange=true", column, status);
+            return true;
+        });
+        if (hidden.isEmpty()) HIDDEN_COLUMNS.remove(level);
+    }
+
+    static boolean needsNativeRestore(boolean terrainPresent, FullChunkStatus holderStatus, boolean entityTickingRange) {
+        return terrainPresent && holderStatus == FullChunkStatus.ENTITY_TICKING && entityTickingRange;
+    }
+
     static boolean needsNativeUnload(boolean terrainPresent, FullChunkStatus holderStatus) {
         return !terrainPresent && holderStatus == FullChunkStatus.INACCESSIBLE;
     }
@@ -46,6 +81,6 @@ final class FrontierV3NativeBodyResidence {
     static boolean needsNativeUnload(boolean terrainPresent, FullChunkStatus holderStatus,
                                      boolean entityTicking, boolean observed) {
         return needsNativeUnload(terrainPresent, holderStatus)
-                || terrainPresent && holderStatus != FullChunkStatus.ENTITY_TICKING && !entityTicking && !observed;
+                || terrainPresent && !entityTicking && !observed;
     }
 }
