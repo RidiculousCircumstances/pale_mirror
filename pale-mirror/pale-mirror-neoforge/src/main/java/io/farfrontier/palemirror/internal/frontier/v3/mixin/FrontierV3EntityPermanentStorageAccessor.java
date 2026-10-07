@@ -13,4 +13,5 @@ public interface FrontierV3EntityPermanentStorageAccessor {
     @Accessor("permanentStorage") EntityPersistentStorage<?> frontierV3$getPermanentStorage();
     /** Existing sections include hidden bodies awaiting vanilla's final entity write. */
     @Accessor("sectionStorage") EntitySectionStorage<Entity> frontierV3$getSectionStorage();
+    @Accessor("chunksToUnload") it.unimi.dsi.fastutil.longs.LongSet frontierV3$getChunksToUnload();
 }

@@ -54,14 +54,33 @@ final class FrontierV3NativeBodyResidence {
         var source = level.getChunkSource();
         var manager = ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3ServerEntityManagerAccessor) level)
                 .frontierV3$getEntityManager();
+        var storage = (io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3EntityPermanentStorageAccessor) manager;
+        var sections = storage.frontierV3$getSectionStorage();
         hidden.removeIf(encoded -> {
             var column = new ChunkPos(encoded);
             var holder = source.chunkMap.getVisibleChunkIfPresent(encoded);
             var status = holder == null ? FullChunkStatus.INACCESSIBLE : ChunkLevel.fullStatus(holder.getTicketLevel());
             boolean present = source.getChunkNow(column.x, column.z) != null;
+            boolean ticking = source.chunkMap.getDistanceManager().inEntityTickingRange(encoded);
+            var lateBodies = sections.getExistingSectionsInChunk(encoded).flatMap(section -> section.getEntities())
+                    .filter(entity -> !entity.isRemoved() && entity.shouldBeSaved()).toList();
+            if (needsNativeRedrain(!lateBodies.isEmpty(), ticking,
+                    FrontierV3SceneDemand.observerWithinColumn(level, column, FrontierV3SceneDemand.RADIUS_BLOCKS))) {
+                // Moving into an already-hidden section stops tracking, but vanilla's
+                // onMove does not requeue a column whose previous unload completed.
+                // A UUID-index-only probe cannot discover this retained object.
+                if (!storage.frontierV3$getChunksToUnload().contains(encoded)) {
+                    lateBodies.forEach(entity ->
+                        io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
+                                "PMV3_NATIVE_RESIDENCY_LATE_ARRIVAL entity={} column={} position={} queuedForNativeStore=true",
+                                entity.getUUID(), column, entity.position()));
+                    manager.updateChunkStatus(column, FullChunkStatus.INACCESSIBLE);
+                }
+                return false;
+            }
             // Vanilla now owns the inaccessible column and its next ordinary visibility transition.
             if (!present && status == FullChunkStatus.INACCESSIBLE) return true;
-            if (!needsNativeRestore(present, status, source.chunkMap.getDistanceManager().inEntityTickingRange(encoded)))
+            if (!needsNativeRestore(present, status, ticking))
                 return false;
             manager.updateChunkStatus(column, status);
             io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_NATIVE_RESIDENCY_RETURN column={} holderStatus={} entityTickingRange=true", column, status);
@@ -72,6 +91,10 @@ final class FrontierV3NativeBodyResidence {
 
     static boolean needsNativeRestore(boolean terrainPresent, FullChunkStatus holderStatus, boolean entityTickingRange) {
         return terrainPresent && holderStatus == FullChunkStatus.ENTITY_TICKING && entityTickingRange;
+    }
+
+    static boolean needsNativeRedrain(boolean retainedBodies, boolean entityTickingRange, boolean observed) {
+        return retainedBodies && !entityTickingRange && !observed;
     }
 
     static boolean needsNativeUnload(boolean terrainPresent, FullChunkStatus holderStatus) {
