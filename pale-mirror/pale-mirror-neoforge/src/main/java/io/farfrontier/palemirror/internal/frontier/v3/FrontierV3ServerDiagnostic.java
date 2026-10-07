@@ -29,7 +29,8 @@ final class FrontierV3ServerDiagnostic {
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         if ("field_physical".equals(view)) return FrontierV3DiagnosticJson.bounded(view, id, checkpoint,
                 FrontierV3ResourceFieldPhysicalDiagnostic.render(checkpoint, state,
-                        FrontierV3ResourceSiteLedger.get(FrontierV3PhysicalWorld.require(server)), id));
+                        FrontierV3ResourceSiteLedger.get(FrontierV3PhysicalWorld.require(server)), id,
+                        FrontierV3PhysicalWorld.require(server), runtime));
         if ("settlement_population".equals(view)) {
             try {
                 io.farfrontier.palemirror.frontier.v3.api.SubjectId settlementId = new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id);

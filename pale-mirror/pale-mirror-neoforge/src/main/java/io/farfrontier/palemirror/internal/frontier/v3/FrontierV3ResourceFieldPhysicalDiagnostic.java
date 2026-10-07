@@ -9,7 +9,9 @@ final class FrontierV3ResourceFieldPhysicalDiagnostic {
     private FrontierV3ResourceFieldPhysicalDiagnostic() { }
 
     static String render(CheckpointImage checkpoint, FrontierWorldState state,
-                         FrontierV3ResourceSiteLedger ledger, String id) {
+                         FrontierV3ResourceSiteLedger ledger, String id,
+                         net.minecraft.server.level.ServerLevel level,
+                         FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         SubjectId siteId;
         try { siteId = new SubjectId(id); }
         catch (IllegalArgumentException invalid) {
@@ -36,6 +38,21 @@ final class FrontierV3ResourceFieldPhysicalDiagnostic {
                     + (ledger.fieldWorldChange(siteId) != null)
                     + ",\"foreignChangePending\":" + (ledger.fieldForeignChange(siteId) != null) + "}";
         var first = cycle.layout().cells().getFirst().id();
+        String mismatch = "null";
+        int mismatches = 0;
+        for (var cell : cycle.layout().cells()) {
+            var retained = owner.witness().cell(cell.id());
+            var target = io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell.id()));
+            if (retained.pending().isEmpty() && retained.committed().equals(target)) continue;
+            mismatches++;
+            if (!mismatch.equals("null")) continue;
+            var reading = FrontierV3ResourceFieldObservation.read(level, cell, "diagnostic:field-mismatch");
+            mismatch = "{\"cell\":" + cell.id().value()
+                    + ",\"committed\":\"" + FrontierV3DiagnosticJson.quote(retained.committed().toString())
+                    + "\",\"canonical\":\"" + FrontierV3DiagnosticJson.quote(target.toString())
+                    + "\",\"physical\":\"" + FrontierV3DiagnosticJson.quote(reading.toString())
+                    + "\",\"pending\":" + retained.pending().isPresent() + "}";
+        }
         var firstClaim = owner.witness().cell(first);
         var committed = firstClaim.committed();
         var canonical = cycle.cell(first);
@@ -62,6 +79,10 @@ final class FrontierV3ResourceFieldPhysicalDiagnostic {
                 + "\",\"crop\":\"" + canonical.crop().name()
                 + "\",\"stage\":" + canonical.growthStage() + "}"
                 + foreign
+                + ",\"projectionLoaded\":" + FrontierV3ResourceSiteExecutor.loaded(level, state.resourceSite(siteId))
+                + ",\"projectionDemanded\":" + FrontierV3GrayboxExecutor.resourceSiteProjectionDemanded(runtime, level, state.resourceSite(siteId))
+                + ",\"restartPending\":" + FrontierV3ResourceSiteExecutor.RECOVERY_SITES.getOrDefault(runtime, java.util.Set.of()).contains(siteId)
+                + ",\"mismatchedCells\":" + mismatches + ",\"firstMismatch\":" + mismatch
                 + ",\"worldChangePending\":" + (ledger.fieldWorldChange(siteId) != null)
                 + ",\"foreignChangePending\":" + (ledger.fieldForeignChange(siteId) != null) + "}";
     }
