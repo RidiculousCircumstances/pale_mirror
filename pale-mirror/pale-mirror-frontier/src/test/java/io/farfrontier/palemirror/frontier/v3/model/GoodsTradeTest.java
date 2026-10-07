@@ -258,7 +258,13 @@ class GoodsTradeTest {
     @Test void preparedMobilePickupMergesAnExistingStackWithoutReadmittingItsOwnReservedSlot() {
         hotPickup(true);
     }
+    @Test void hotPickupWaitsForBusyServiceAndContinuesAfterTheIncumbentClears() {
+        hotPickup(false, true);
+    }
     private static void hotPickup(boolean mobile) {
+        hotPickup(mobile, false);
+    }
+    private static void hotPickup(boolean mobile, boolean busyService) {
         var state = reserved(); var initialShipment = shipment(state);
         var asset = state.transportFleet().assets().values().stream().filter(value -> value.homeSettlementId().equals(SELLER)).findFirst().orElseThrow();
         var actor = mobile ? asset.actorId() : initialShipment.execution().actorId();
@@ -332,6 +338,40 @@ class GoodsTradeTest {
                 ? List.of(new FungiblePhysicalObservation.Stack(mobileAddress, shipment.itemKind(), 64)) : List.of(hand));
         var unprepared = state;
         assertThrows(IllegalArgumentException.class, () -> shipmentFact(unprepared, shipment.id(), receipt));
+        assertEquals(ShipmentPhysicalStateSupport.PreparationAdmission.READY,
+                ShipmentPhysicalStateSupport.preparationAdmission(state, shipment));
+        if (busyService) {
+            // Arbitration fixture: a different resident has eaten but still occupies the
+            // service throat. This is not a synthetic receipt or full meal acceptance.
+            var visitor = state.humanPopulation().residents().values().stream()
+                    .filter(r -> r.settlementId().equals(SELLER) && !r.id().equals(actor))
+                    .map(ResidentProfile::id).sorted().findFirst().orElseThrow();
+            var claim = id("claim:shipment-service-incumbent");
+            var meal = new ResidentMeal(visitor, SELLER, SOURCE, shipment.sender().station(), SOURCE_ACCOUNT,
+                    id("custody:shipment-service-incumbent"), new FoodPortion(FoodCatalog.BREAD, 1_000,
+                        Map.of(id("lot:shipment-service-incumbent"), 1)), claim, java.util.Optional.empty(),
+                    ResidentMeal.Phase.CLEAR_ACCESS, 0, java.util.Optional.empty(),
+                    new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(visitor,
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, claim, 1));
+            var blocked = atStation(state, visitor, shipment.sender().station());
+            blocked = blocked.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(blocked.humanPopulation().withMeal(meal))
+                    .actorExecutions(blocked.actorExecutions().begin(meal.executionId(), meal.executionId().generation() - 1)));
+            assertEquals(ShipmentPhysicalStateSupport.PreparationAdmission.WAITING_FOR_SERVICE,
+                    ShipmentPhysicalStateSupport.preparationAdmission(blocked, shipment));
+            var rejected = blocked;
+            assertThrows(IllegalArgumentException.class, () -> ShipmentPhysicalStateSupport.prepare(rejected,
+                    shipment.id(), new ShipmentHotPrepared(shipment.id(), step)));
+            assertTrue(blocked.shipments().shipments().get(shipment.id()).pendingPhysicalStep().isEmpty());
+            assertEquals(state.inventory(), blocked.inventory(), "waiting cannot move or lose cargo");
+            var port = ServiceAccessCoordinator.port(blocked, SOURCE);
+            state = atStation(blocked, visitor, unprepared.actorLocations().get(visitor).supportingSurface());
+            assertTrue(port.accessBoundary().cleared(state.actorLocations().get(visitor).body()));
+            assertEquals(ShipmentPhysicalStateSupport.PreparationAdmission.READY,
+                    ShipmentPhysicalStateSupport.preparationAdmission(state, shipment));
+            // Continue the existing fully valid receipt/recovery fixture; the isolated
+            // occupancy setup above did not pretend to create a real food claim.
+            state = unprepared;
+        }
         state = shipmentFact(state, shipment.id(), new ShipmentHotPrepared(shipment.id(), step));
         assertFalse(ActorSpatialCourtesy.assess(state, shipment.execution()).ready(),
                 "courtesy cannot displace a carrier during an unresolved physical pickup");

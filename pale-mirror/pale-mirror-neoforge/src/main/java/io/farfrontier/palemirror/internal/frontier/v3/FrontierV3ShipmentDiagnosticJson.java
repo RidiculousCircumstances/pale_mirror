@@ -17,13 +17,17 @@ final class FrontierV3ShipmentDiagnosticJson {
         var contract = state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId());
         var obligation = ShipmentProgressObligation.describe(state, shipment);
         var mission = shipment.transportMissionId().map(state.shipments().missions()::get);
+        var admission = lease != null && lease.status() == AmbientLeaseStatus.HOT
+                && !shipment.terminal() && shipment.reception().isEmpty() && movement == null
+                ? ShipmentPhysicalStateSupport.preparationAdmission(state, shipment) : null;
         String phase = shipment.status().name();
         String wait = shipment.terminal() ? "TERMINAL" : shipment.reception().isPresent() ? "RECEIVER_ACKNOWLEDGEMENT"
                 : shipment.pendingPhysicalStep().isPresent() ? "PHYSICAL_EFFECT_RECEIPT"
                 : state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE ? "COURIER_CASUALTY"
                 : state.actorExecutions().actors().get(actor).suspended().filter(shipment.execution()::equals).isPresent() ? "HIGHER_PRIORITY_ACTIVITY"
                 : movement != null ? "JOURNEY" : mission.filter(value -> value.stage() == TransportMission.Stage.OUTBOUND).isPresent()
-                    ? "GROUP_COORDINATION" : shipment.status() == Shipment.Status.CARRYING
+                    ? "GROUP_COORDINATION" : admission != null && admission != ShipmentPhysicalStateSupport.PreparationAdmission.READY
+                    ? admission.name() : shipment.status() == Shipment.Status.CARRYING
                     && ShipmentStateSupport.coldTransferLots(state, shipment).isEmpty() ? "RECEIVER_CAPACITY" : "ENDPOINT_HANDOFF";
         String schedules = checkpoint.schedules().stream().filter(s -> s.subject().equals(shipment.id()) || s.subject().equals(actor))
                 .sorted().limit(8).map(s -> "{\"id\":" + string(s.id().value()) + ",\"kind\":" + string(s.kind())

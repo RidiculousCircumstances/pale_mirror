@@ -5,6 +5,19 @@ import java.util.*;
 
 /** Transport's durable resource effects. Common bodies alone record pose; ledgers alone move stock. */
 public final class ShipmentPhysicalStateSupport {
+    public enum PreparationAdmission { READY, WAITING_FOR_CUSTODY, WAITING_FOR_SERVICE }
+
+    /** Read-only start gate shared by the HOT adapter and the authoritative command owner. */
+    public static PreparationAdmission preparationAdmission(FrontierWorldState state, Shipment shipment) {
+        var container = shipment.itemOrder().containerEndpoint().containerId();
+        if (!ReferenceContainerCustody.hasOperationalCustody(state, container)
+                || shipment.mobileContainerId().filter(attached ->
+                    !ReferenceContainerCustody.hasOperationalCustody(state, attached)).isPresent())
+            return PreparationAdmission.WAITING_FOR_CUSTODY;
+        return ShipmentServiceAccess.available(state, shipment)
+                ? PreparationAdmission.READY : PreparationAdmission.WAITING_FOR_SERVICE;
+    }
+
     public static FrontierWorldState handCustody(FrontierWorldState state, SubjectId subject, ShipmentHandCustodyObserved observed) {
         Shipment shipment = state.shipments().shipments().get(observed.shipmentId());
         if (shipment == null || !subject.equals(shipment.id()) || shipment.status() != Shipment.Status.CARRYING
@@ -65,9 +78,11 @@ public final class ShipmentPhysicalStateSupport {
         if (shipment.pendingPhysicalStep().isPresent()) throw new IllegalArgumentException("shipment already retains a physical effect");
         var order = shipment.itemOrder(prepared.step().lotQuantities());
         requireStorage(state, shipment);
-        if (!ReferenceContainerCustody.hasOperationalCustody(state, order.containerEndpoint().containerId())
-                || !ShipmentServiceAccess.available(state, shipment))
-            throw new IllegalArgumentException("shipment cannot prepare without current container custody and its service turn");
+        var admission = preparationAdmission(state, shipment);
+        if (admission != PreparationAdmission.READY)
+            throw new IllegalArgumentException("shipment cannot prepare: " + admission + " shipment="
+                    + shipment.id().value() + " actor=" + shipment.execution().actorId().value()
+                    + " container=" + order.containerEndpoint().containerId().value());
         if (!MaterialSourceSelection.select(state.inventory().fungibleResources(), order).equals(prepared.step().source()))
             throw new IllegalArgumentException("shipment effect source differs from current resource bindings");
         if (shipment.status() == Shipment.Status.CARRYING && shipment.mobileContainerId().isEmpty() && (prepared.step().source().size() != 1

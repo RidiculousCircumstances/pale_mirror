@@ -65,6 +65,10 @@ final class FrontierV3ShipmentPhysicalExecutor {
         if (chest == null || !ReferenceContainerCustody.hasLiveCustody(state, container)
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container)) return false;
         var pending = shipment.pendingPhysicalStep().orElse(null);
+        // A busy service turn is ordinary waiting, not permission to submit a forbidden
+        // physical transaction. Retained prepared effects finish under their original fence.
+        if (pending == null && ShipmentPhysicalStateSupport.preparationAdmission(state, shipment)
+                != ShipmentPhysicalStateSupport.PreparationAdmission.READY) return false;
         ShipmentPhysicalStep step;
         try {
             boolean containerDestination = shipment.status() == Shipment.Status.CARRYING || attached != null;
@@ -83,8 +87,6 @@ final class FrontierV3ShipmentPhysicalExecutor {
                     lots, destination == null ? 0 : destination.before()) : pending;
             var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, physical, attached, worker, worker.getUUID(), source, destinationSlot, step.destinationBefore());
             if (pending == null) {
-                if (!ReferenceContainerCustody.hasOperationalCustody(state, container)
-                        || attached != null && !ReferenceContainerCustody.hasOperationalCustody(state, attached.containerId())) return false;
                 if (!transfer.before()) return conflict(runtime, shipment, container, "prepared source does not match its physical preimage");
                 return accepted(level, runtime, shipment, "shipment-transfer-prepared", new ShipmentHotPrepared(shipment.id(), step));
             }
