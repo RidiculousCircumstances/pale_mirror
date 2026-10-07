@@ -29,6 +29,7 @@ class FrontierV3ActorAdoptionPersistenceTest {
         tag.putString(ACTOR_KEY, ACTOR.value()); tag.putString(KIND_KEY, LIVE.kind().name());
         tag.putString(OWNER_KEY, LIVE.owner().name()); tag.putString(REPRESENTATION_KEY, LIVE.representation().name());
         tag.putLong(REVISION_KEY, LIVE.authorityRevision()); tag.putLong(EPOCH_KEY, LIVE.epoch());
+        tag.putLong(FrontierV3ActorBodyController.RESIDENCE_KEY, 1L);
         entity.put("NeoForgeData", tag); return entity;
     }
     private static CompoundTag column(ChunkPos chunk, CompoundTag entity) {
@@ -162,6 +163,38 @@ class FrontierV3ActorAdoptionPersistenceTest {
         assertFalse(FrontierV3ActorAdoptionPersistence.matchesSaved(pending, wrongEntity));
         var stale = entity(); stale.getCompound("NeoForgeData").putLong(EPOCH_KEY, 2L);
         assertFalse(FrontierV3ActorAdoptionPersistence.matchesSaved(pending, stale));
+    }
+
+    @Test void exactSavedIncarnationCanConfirmAfterNativeUnloadButNotAfterResidenceChanges() {
+        for (long currentResidence : new long[]{7L, 8L}) {
+            var ledger = ledger();
+            var saved = entity();
+            saved.getCompound("NeoForgeData").putLong(FrontierV3ActorBodyController.RESIDENCE_KEY, 7L);
+            var batch = new FrontierV3ActorAdoptionPersistence.Batch();
+            var written = new CompletableFuture<Void>(); var synced = new CompletableFuture<Void>();
+            batch.observe(CHUNK, column(CHUNK, saved), written, ledger);
+            var ticket = batch.complete(true, () -> synced).orElseThrow();
+            assertEquals(0, batch.acknowledgeSaved(ticket, ledger,
+                    (declaration, residence) -> declaration.equals(LIVE) && residence == currentResidence,
+                    ledger::permitsRecordedOwner));
+            written.complete(null); synced.complete(null);
+            // No live-body predicate: this is positive stored identity evidence,
+            // not authority to create a replacement or release body custody.
+            assertEquals(currentResidence == 7L ? 1 : 0, batch.acknowledgeSaved(ticket, ledger,
+                    (declaration, residence) -> declaration.equals(LIVE) && residence == currentResidence,
+                    ledger::permitsRecordedOwner));
+            assertEquals(currentResidence != 7L, ledger.pendingAdoption(ACTOR).isPresent());
+        }
+    }
+
+    @Test void savedDeclarationWithoutResidenceDoesNotConfirmAdoption() {
+        var ledger = ledger(); var saved = entity();
+        saved.getCompound("NeoForgeData").remove(FrontierV3ActorBodyController.RESIDENCE_KEY);
+        var batch = new FrontierV3ActorAdoptionPersistence.Batch();
+        batch.observe(CHUNK, column(CHUNK, saved), CompletableFuture.completedFuture(null), ledger);
+        var ticket = batch.complete(true, () -> CompletableFuture.completedFuture(null)).orElseThrow();
+        assertEquals(0, batch.acknowledgeSaved(ticket, ledger, (declaration, residence) -> true, ledger::permitsRecordedOwner));
+        assertTrue(ledger.pendingAdoption(ACTOR).isPresent());
     }
     @Test void olderPhysicalImageAndLateCallbackCannotRetireTheCurrentReconstruction() {
         var ledger = ledger();

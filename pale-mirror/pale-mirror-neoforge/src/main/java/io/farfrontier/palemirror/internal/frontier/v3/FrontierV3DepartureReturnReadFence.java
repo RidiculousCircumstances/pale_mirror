@@ -18,11 +18,27 @@ final class FrontierV3DepartureReturnReadFence {
     private FrontierV3DepartureReturnReadFence() { }
 
     static CompletableFuture<Optional<CompoundTag>> observeRead(ServerLevel level, ChunkPos chunk,
-                                                                 CompletableFuture<Optional<CompoundTag>> source) {
+            CompletableFuture<Optional<CompoundTag>> source, java.util.concurrent.Executor deserializer) {
         if (!FrontierV3PhysicalWorld.isPhysical(level)) return source;
         PENDING_READS.reserve(level, chunk);
+        return beforeDeserialize(source, deserializer, raw -> {
+            try { fenceBeforeVanillaLoad(level, chunk, raw.orElse(null)); }
+            catch (RuntimeException publicationFailure) {
+                PaleMirrorMod.LOGGER.error("Entity return-read fence could not be published chunk={}; vanilla load held", chunk, publicationFailure);
+                throw publicationFailure;
+            }
+        }, () -> PENDING_READS.release(level, chunk));
+    }
+
+    /** The native flush must be able to execute the fence and subsequent deserialization. */
+    static CompletableFuture<Optional<CompoundTag>> beforeDeserialize(
+            CompletableFuture<Optional<CompoundTag>> source, java.util.concurrent.Executor deserializer,
+            java.util.function.Consumer<Optional<CompoundTag>> publish, Runnable release) {
         var result = new CompletableFuture<Optional<CompoundTag>>();
-        source.whenComplete((raw, failure) -> level.getServer().execute(() -> {
+        source.whenComplete((raw, failure) -> deserializer.execute(() -> {
+            // Use EntityStorage's own server-thread mailbox. Its flush drains
+            // this mailbox while saveAll retries pending loads. A separate
+            // server.execute task cannot run inside that synchronous save loop.
             // EntityStorage deserializes only after this dependent future completes.
             try {
                 if (failure != null) {
@@ -30,14 +46,13 @@ final class FrontierV3DepartureReturnReadFence {
                     return;
                 }
                 try {
-                    fenceBeforeVanillaLoad(level, chunk, raw.orElse(null));
+                    publish.accept(raw);
                     result.complete(raw);
                 } catch (RuntimeException publicationFailure) {
-                    PaleMirrorMod.LOGGER.error("Entity return-read fence could not be published chunk={}; vanilla load held", chunk, publicationFailure);
                     result.completeExceptionally(publicationFailure);
                 }
             } finally {
-                PENDING_READS.release(level, chunk);
+                release.run();
             }
         }));
         return result;

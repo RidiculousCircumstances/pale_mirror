@@ -834,14 +834,16 @@ public final class FrontierV3ServerLifecycle {
         catch (RuntimeException failure) {
             PaleMirrorMod.LOGGER.error("Scene raw departure publication failed; custody remains unresolved", failure);
         }
-        // A positive completed store is not global save/adoption/cleanup absence evidence.
+        // These are positive exact-incarnation writes, not global absence proofs.
+        FrontierV3ActorAdoptionPersistence.completeSavePass(level, runtime, true, synchronize);
         FrontierV3SceneDeparturePersistence.confirmRecordedDepartures(level, runtime, synchronize);
     }
 
     public static java.util.concurrent.CompletableFuture<java.util.Optional<net.minecraft.nbt.CompoundTag>> observeEntityChunkRead(
             ServerLevel level, net.minecraft.world.level.ChunkPos chunk,
-            java.util.concurrent.CompletableFuture<java.util.Optional<net.minecraft.nbt.CompoundTag>> read) {
-        var fenced = FrontierV3DepartureReturnReadFence.observeRead(level, chunk, read);
+            java.util.concurrent.CompletableFuture<java.util.Optional<net.minecraft.nbt.CompoundTag>> read,
+            java.util.concurrent.Executor deserializer) {
+        var fenced = FrontierV3DepartureReturnReadFence.observeRead(level, chunk, read, deserializer);
         return fenced;
     }
     private static boolean stopping(MinecraftServer server) {

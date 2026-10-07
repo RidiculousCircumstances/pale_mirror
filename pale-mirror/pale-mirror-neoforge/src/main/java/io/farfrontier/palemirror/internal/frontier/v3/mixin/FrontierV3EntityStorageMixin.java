@@ -29,12 +29,13 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
     @Shadow @Final private ServerLevel level;
     @Shadow @Final private SimpleRegionStorage simpleRegionStorage;
     @Shadow @Final private LongSet emptyChunks;
+    @Shadow @Final private net.minecraft.util.thread.ProcessorMailbox<Runnable> entityDeserializerQueue;
 
     @Inject(method = "loadEntities", at = @At("HEAD"), require = 1)
     private void frontierV3$observeCachedRead(ChunkPos chunk,
             CallbackInfoReturnable<CompletableFuture<ChunkEntities<Entity>>> callback) {
         if (emptyChunks.contains(chunk.toLong())) {
-            FrontierV3ServerLifecycle.observeEntityChunkRead(level, chunk, CompletableFuture.completedFuture(Optional.empty()));
+            FrontierV3ServerLifecycle.observeEntityChunkRead(level, chunk, CompletableFuture.completedFuture(Optional.empty()), entityDeserializerQueue::tell);
         }
     }
 
@@ -43,7 +44,7 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
         if (entities.isEmpty() && emptyChunks.contains(entities.getPos().toLong())) {
             // Vanilla elides this write. Observe its cached empty state as a read,
             // never as a new successful write that could waive an earlier IO failure.
-            FrontierV3ServerLifecycle.observeEntityChunkRead(level, entities.getPos(), CompletableFuture.completedFuture(Optional.empty()));
+            FrontierV3ServerLifecycle.observeEntityChunkRead(level, entities.getPos(), CompletableFuture.completedFuture(Optional.empty()), entityDeserializerQueue::tell);
         }
     }
 
@@ -84,6 +85,6 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
     @Redirect(method = "loadEntities", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/level/chunk/storage/SimpleRegionStorage;read(Lnet/minecraft/world/level/ChunkPos;)Ljava/util/concurrent/CompletableFuture;"), require = 1)
     private CompletableFuture<Optional<CompoundTag>> frontierV3$observeRead(SimpleRegionStorage storage, ChunkPos chunk) {
-        return FrontierV3ServerLifecycle.observeEntityChunkRead(level, chunk, storage.read(chunk));
+        return FrontierV3ServerLifecycle.observeEntityChunkRead(level, chunk, storage.read(chunk), entityDeserializerQueue::tell);
     }
 }

@@ -148,7 +148,20 @@ final class FrontierV3ActorBodyController {
         var state = runtime.decodedState().orElse(null);
         if (state == null) return false;
         var receipt = capture(level, state, body, true).orElse(null);
-        return receipt != null && FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).recordBodyDeparture(receipt);
+        var declaration = FrontierV3ActorCarrierComposition.declaredByUnloading(body).orElse(null);
+        if (receipt == null) {
+            if (declaration != null) io.farfrontier.palemirror.PaleMirrorMod.LOGGER.error(
+                    "PMV3_BODY_DEPARTURE_REJECTED actor={} entity={} reason=CAPTURE_UNAVAILABLE epoch={} residence={} position={} indexed={}",
+                    declaration.actorId(), body.getUUID(), declaration.epoch(),
+                    body.getPersistentData().getLong(RESIDENCE_KEY), body.position(), level.getEntity(body.getUUID()) != null);
+            return false;
+        }
+        boolean recorded = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).recordBodyDeparture(receipt);
+        io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
+                "PMV3_BODY_DEPARTURE_OBSERVED actor={} entity={} epoch={} residence={} position={} recorded={}",
+                receipt.identity().actorId(), body.getUUID(), receipt.identity().epoch(),
+                receipt.residenceGeneration(), receipt.observed().body(), recorded);
+        return recorded;
     }
 
     static void observeJoin(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

@@ -42,11 +42,20 @@ final class FrontierV3ActorAdoptionPersistence {
             var state = runtime.decodedState().orElse(null);
             if (state == null) return;
             var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-            index.batch.acknowledge(ticket, ledger, declaration ->
-                    FrontierV3ActorCarrierComposition.owns(level.getEntity(declaration.entityId()), declaration), binding -> {
+            int acknowledged = index.batch.acknowledgeSaved(ticket, ledger, (declaration, residence) -> {
+                if (!state.actorLocations().containsKey(declaration.actorId())) return false;
+                var current = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, declaration.actorId());
+                return current.physicalEpoch() == declaration.epoch()
+                        && ledger.currentBodyResidence(declaration.actorId(), residence);
+            }, binding -> {
                 var body = level.getEntity(binding.declaration().entityId());
-                return body != null && FrontierV3ActorOwnerBinding.from(body).filter(binding::equals).isPresent();
+                // A positive write may finish after vanilla hides or unloads
+                // this incarnation. A foreign indexed body still vetoes it;
+                // absence alone grants neither reconstruction nor COLD custody.
+                return body == null ? ledger.permitsRecordedOwner(binding)
+                        : FrontierV3ActorOwnerBinding.from(body).filter(binding::equals).isPresent();
             });
+            if (acknowledged > 0) ledger.persist(level, state.bootstrap().worldId());
         }));
     }
 
@@ -73,7 +82,7 @@ final class FrontierV3ActorAdoptionPersistence {
     static final class Batch {
         private static final int MAX_CANDIDATES = 4_096;
         private final FrontierV3EntitySaveBatch writes = new FrontierV3EntitySaveBatch();
-        private final Map<Long, List<SaveCandidate>> candidates = new HashMap<>();
+        private final Map<Long, List<SavedCandidate>> candidates = new HashMap<>();
         private boolean overflowed;
 
         void observe(ChunkPos chunk, CompoundTag data, CompletableFuture<Void> written,
@@ -88,7 +97,14 @@ final class FrontierV3ActorAdoptionPersistence {
                     .filter(value -> value.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING)
                     .map(FirstCandidate::new);
             var selected = java.util.stream.Stream.concat(transfers, births)
-                    .filter(value -> value.matchesSaved(entities.get(value.declaration().entityId()))).toList();
+                    .filter(value -> value.matchesSaved(entities.get(value.declaration().entityId())))
+                    .filter(value -> {
+                        var tags = entities.get(value.declaration().entityId()).getCompound("NeoForgeData");
+                        return tags.contains(FrontierV3ActorBodyController.RESIDENCE_KEY, Tag.TAG_LONG)
+                                && tags.getLong(FrontierV3ActorBodyController.RESIDENCE_KEY) > 0L;
+                    })
+                    .map(value -> new SavedCandidate(value, entities.get(value.declaration().entityId())
+                            .getCompound("NeoForgeData").getLong(FrontierV3ActorBodyController.RESIDENCE_KEY))).toList();
             if (selected.size() + candidates.values().stream().mapToInt(List::size).sum() > MAX_CANDIDATES) {
                 overflowed = true; candidates.clear(); return;
             }
@@ -100,8 +116,8 @@ final class FrontierV3ActorAdoptionPersistence {
             var selected = candidates.values().stream().flatMap(List::stream).toList();
             // Two stored appearances are ambiguity, never a successful adoption.
             var counts = new HashMap<SaveCandidate, Integer>();
-            selected.forEach(value -> counts.merge(value, 1, Integer::sum));
-            var unique = selected.stream().filter(value -> counts.get(value) == 1).toList();
+            selected.forEach(value -> counts.merge(value.receipt(), 1, Integer::sum));
+            var unique = selected.stream().filter(value -> counts.get(value.receipt()) == 1).toList();
             return writes.completePass(complete, unique.isEmpty()
                     ? () -> CompletableFuture.completedFuture(null) : synchronize)
                     .map(ticket -> new Ticket(ticket, unique));
@@ -110,11 +126,18 @@ final class FrontierV3ActorAdoptionPersistence {
         int acknowledge(Ticket ticket, FrontierV3AmbientCarrierLedger ledger,
                         Predicate<FrontierV3ActorCarrierComposition.Declaration> currentBody,
                         Predicate<FrontierV3ActorOwnerBinding> currentOwner) {
+            return acknowledgeSaved(ticket, ledger, (declaration, residence) -> currentBody.test(declaration), currentOwner);
+        }
+
+        int acknowledgeSaved(Ticket ticket, FrontierV3AmbientCarrierLedger ledger,
+                java.util.function.BiPredicate<FrontierV3ActorCarrierComposition.Declaration, Long> currentIncarnation,
+                Predicate<FrontierV3ActorOwnerBinding> currentOwner) {
             if (!writes.accept(ticket.write())) return 0;
             candidates.clear();
             int count = 0;
-            for (var candidate : ticket.candidates()) {
-                if (currentBody.test(candidate.declaration()) && candidate.matchesCurrentOwner(currentOwner)
+            for (var saved : ticket.candidates()) {
+                var candidate = saved.receipt();
+                if (currentIncarnation.test(candidate.declaration(), saved.residence()) && candidate.matchesCurrentOwner(currentOwner)
                         && candidate.acknowledge(ledger)) count++;
             }
             return count;
@@ -140,7 +163,8 @@ final class FrontierV3ActorAdoptionPersistence {
         public FrontierV3ActorCarrierComposition.Declaration declaration() { return adoption.admitted(); }
         public boolean acknowledge(FrontierV3AmbientCarrierLedger ledger) { return ledger.acknowledgeAdoption(adoption, adoption.admittedBinding()); }
     }
-    record Ticket(FrontierV3EntitySaveBatch.Ticket write, List<SaveCandidate> candidates) {
+    private record SavedCandidate(SaveCandidate receipt, long residence) { }
+    record Ticket(FrontierV3EntitySaveBatch.Ticket write, List<SavedCandidate> candidates) {
         Ticket { candidates = List.copyOf(candidates); }
         CompletableFuture<Void> saved() { return write.saved(); }
     }
