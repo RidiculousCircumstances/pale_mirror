@@ -6,7 +6,7 @@ import net.minecraft.server.level.ServerLevel;
 import java.util.stream.Collectors;
 import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3DiagnosticJson.quote;
 
-/** Opt-in explanation of the same read-only readiness proof used by admission and presentation. */
+/** Shows admitted presentation separately from the current interaction/recovery checks. */
 final class FrontierV3HotHandoffDiagnostic {
     private FrontierV3HotHandoffDiagnostic() { }
     static String render(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -19,6 +19,7 @@ final class FrontierV3HotHandoffDiagnostic {
                 + "\",\"status\":\"" + check.status().name() + "\",\"reason\":\"" + quote(check.reason()) + "\"}")
                 .collect(Collectors.joining(","));
         return base.substring(0, base.length() - 1) + ",\"handoffRevision\":" + review.revision()
+                + ",\"presentationReady\":" + FrontierV3GrayboxExecutor.presentationReady(runtime, visibility.chunk(), () -> review)
                 + ",\"dynamicReady\":" + review.ready() + ",\"dynamicPresentable\":" + review.presentable()
                 + ",\"handoffChecks\":[" + checks + "]}";
     }

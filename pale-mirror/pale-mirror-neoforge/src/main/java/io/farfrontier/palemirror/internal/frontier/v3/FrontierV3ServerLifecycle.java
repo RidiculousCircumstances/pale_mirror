@@ -427,8 +427,8 @@ public final class FrontierV3ServerLifecycle {
         var runtime = RUNTIMES.get(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         FrontierV3GrayboxExecutor.observePlayerIngress(runtime, chunk);
-        return FrontierV3GrayboxExecutor.staticVisibilityComplete(runtime, chunk)
-                && FrontierV3HotHandoff.inspect(level, runtime, chunk).presentable();
+        return FrontierV3GrayboxExecutor.presentationReady(runtime, chunk,
+                () -> FrontierV3HotHandoff.inspect(level, runtime, chunk));
     }
     static void runPhysicalTurn(ServerLevel physicalWorld, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         FrontierV3NativeBodyResidence.restore(physicalWorld);

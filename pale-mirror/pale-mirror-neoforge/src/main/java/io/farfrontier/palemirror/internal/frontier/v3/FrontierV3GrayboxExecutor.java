@@ -61,7 +61,18 @@ final class FrontierV3GrayboxExecutor {
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.Set<ChunkPos>> PLAYER_INGRESS = new IdentityHashMap<>();
     enum ProjectionResult { APPLIED, CURRENT, CONFLICT, DEFERRED }
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
-    private enum FirstVisibility { PENDING, STATIC_CURRENT, READY, BLOCKED }
+    enum FirstVisibility {
+        PENDING, STATIC_CURRENT, READY, BLOCKED;
+
+        /** A loaded image is admitted once; later operations cannot hide its terrain. */
+        boolean presentable(java.util.function.Supplier<FrontierV3HotHandoff.Review> initialHandoff) {
+            return switch (this) {
+                case PENDING -> false;
+                case STATIC_CURRENT -> initialHandoff.get().presentable();
+                case READY, BLOCKED -> true; // A classified conflict must be visible, never executable.
+            };
+        }
+    }
     private record FirstVisibilityRecord(FirstVisibility status, long revision, int cells) { }
     record FirstVisibilitySnapshot(ChunkPos chunk, String status, long revision, int cells) {
         static FirstVisibilitySnapshot unavailable() { return new FirstVisibilitySnapshot(null, "INVALID", -1L, 0); }
@@ -439,6 +450,11 @@ final class FrontierV3GrayboxExecutor {
     static boolean staticVisibilityComplete(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
         FirstVisibilityRecord visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
         return visibility == null || visibility.status() == FirstVisibility.STATIC_CURRENT || visibility.status() == FirstVisibility.READY;
+    }
+    static boolean presentationReady(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk,
+                                     java.util.function.Supplier<FrontierV3HotHandoff.Review> initialHandoff) {
+        var visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
+        return visibility != null && visibility.status().presentable(initialHandoff);
     }
     static FirstVisibilitySnapshot firstVisibility(FrontierV3ServerRuntime<?, ?> runtime, String id) {
         String[] parts = Objects.requireNonNull(id, "first visibility id").split(",", -1);
