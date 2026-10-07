@@ -41,7 +41,8 @@ public final class UnitInventoryBodyCustody {
     static FungibleResourceLedger departureResources(FrontierWorldState state, ActorBodyId body) {
         var resources = state.inventory().fungibleResources(); var next = resources;
         for (var account : UnitInventory.accounts(resources, body.actorId())) {
-            if (!account.claimQuantities().isEmpty()) continue; // Declared resource owners settle their own fences.
+            // A reservation survives HOT/COLD; it is not an independent physical body.
+            // Registered activity checkpoints have already settled their pending effects.
             var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
             if (bindings.isEmpty()) continue;
             var presentation = UnitInventoryPresentation.inventory(state, body.actorId()).get(account.id());

@@ -739,11 +739,9 @@ final class FrontierV3AmbientActorExecutor {
     }
     /** Common preflight for both loaded projection closure and saved departure. */
     static boolean releaseEligible(FrontierWorldState state, AmbientLeaseReleased release) {
-        ResidentMeal meal = state.humanPopulation().meals().get(release.actorId());
-        // A departure pose alone does not prove a physical food-hand reconciliation.
-        if (meal != null && (meal.pendingPhysicalStep().isPresent()
-                || state.inventory().fungibleResources().bindings().values().stream()
-                    .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId())))) return false;
+        // Projection closure is not body/resource release. Saved departure retains
+        // bindings until the common body owner retires them atomically with custody.
+        // The registered activity owner alone checks its outstanding effects.
         try {
             var draining = state.ambientLeases().get(release.actorId()).status() == AmbientLeaseStatus.DRAINING
                     ? state : io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.transition(

@@ -10,7 +10,12 @@ final class MealActivityCapability implements ActorActivityCapability {
         if (state.humanPopulation().meals().get(execution.actorId()).pendingPhysicalStep().isPresent())
             throw new IllegalArgumentException("ambient meal has an unresolved physical effect");
     }
-    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return ActorActivityBodyCheckpoint.usesActorLocation(); }
+    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
+        return request -> {
+            validateAmbientRelease(request.expectedState(), request.execution());
+            return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
+        };
+    }
     @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
     @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
         return Optional.of((state, execution, tick) -> {

@@ -52,6 +52,28 @@ class UnitInventoryDispositionTest {
         assertEquals(resources.accounts().get(fixture.account()), cold.inventory().fungibleResources().accounts().get(fixture.account()));
         assertEquals(new ActorItemSlot.Pocket(3), UnitInventoryPresentation.inventory(cold, actor).get(fixture.account()).slot());
     }
+    @Test void savedDepartureReleasesPhysicalBindingsWithoutSpendingReservedPersonalStock() {
+        var fixture = dyingInventory(); var state = fixture.state(); var actor = fixture.body().actorId();
+        var resources = state.inventory().fungibleResources();
+        var account = resources.accounts().get(fixture.account());
+        var lot = account.lotQuantities().keySet().iterator().next();
+        var claim = new ClaimAllocation(new SubjectId("claim:personal-reservation"), actor,
+                state.humanPopulation().resident(actor).settlementId(), "minecraft:cobblestone", 2,
+                Map.of(lot, 2), ClaimPurpose.EXTERNAL_RESERVATION);
+        resources = resources.reserveBound(claim, account.id(), 1L);
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        var location = state.actorLocations().get(actor);
+        var receipt = new ActorBodyUnloaded(fixture.body(), location.body(), location.condition().health(),
+                location.body(), location.condition().health(), state.actorExecutions().actors().get(actor).current());
+        var cold = ActorBodyAuthority.unloaded(state, receipt);
+        assertFalse(ActorBodyAuthority.retainsPhysicalCustody(cold, actor));
+        assertEquals(resources.accounts(), cold.inventory().fungibleResources().accounts());
+        assertEquals(resources.claims(), cold.inventory().fungibleResources().claims());
+        assertEquals(resources.lots(), cold.inventory().fungibleResources().lots());
+        assertTrue(cold.inventory().fungibleResources().bindings().isEmpty());
+        assertEquals(cold, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(cold)));
+        assertThrows(IllegalArgumentException.class, () -> ActorBodyAuthority.unloaded(cold, receipt));
+    }
     @Test void exactDeathDropPreservesTitleAndQuantityAndRejectsReplayAndForeignEpoch() {
         var fixture = dyingInventory(); var alive = fixture.state(); var actor = fixture.body().actorId();
         var receipt = new UnitInventoryDispositionObserved(fixture.body(), fixture.account(), 1,
