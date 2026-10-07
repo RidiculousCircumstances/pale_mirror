@@ -749,6 +749,10 @@ public final class FrontierV3ServerLifecycle {
         if (runtime != null && FrontierV3AmbientPendingAdmissions.rejectJoin(runtime, entity)) {
             PaleMirrorMod.LOGGER.warn("PMV3_BODY_JOIN_REJECTED entity={} actor={} reason=JOIN_CANCELED; temporary admission withdrawn, durable custody retained",
                     entity.getUUID(), entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.ACTOR_KEY));
+        } else if (entity.getPersistentData().contains(FrontierV3ActorCarrierComposition.ACTOR_KEY)) {
+            PaleMirrorMod.LOGGER.error("PMV3_BODY_JOIN_REJECTED entity={} actor={} reason=HISTORICAL_JOIN_CANCELED runtime={}",
+                    entity.getUUID(), entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.ACTOR_KEY),
+                    runtime == null ? "ABSENT" : runtime.status().kind());
         }
     }
     public static boolean recognizesManagedCarrier(ServerLevel level, Entity entity) {

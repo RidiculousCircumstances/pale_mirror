@@ -170,11 +170,19 @@ final class FrontierV3ActorBodyController {
         var receipt = ledger.bodyDeparture(declaration.actorId()).orElse(null);
         if (receipt != null) {
             var actual = captureReturnedBody(level, state, body).orElse(null);
-            if (actual == null) return;
-            if (!receipt.current(state) || receipt.residenceGeneration() != actual.residenceGeneration()
-                    || !receipt.identity().equals(actual.identity()) || !receipt.observed().equals(actual.observed())
-                    || !receipt.offhand().equals(actual.offhand()) || !receipt.mainhand().equals(actual.mainhand())
-                    || !ledger.resumeBodyDeparture(receipt)) return;
+            String rejection = actual == null ? "RETURN_CAPTURE_UNAVAILABLE"
+                    : !receipt.current(state) ? "DEPARTURE_NOT_CURRENT"
+                    : receipt.residenceGeneration() != actual.residenceGeneration() ? "RESIDENCE_MISMATCH"
+                    : !receipt.identity().equals(actual.identity()) ? "IDENTITY_MISMATCH"
+                    : !receipt.observed().equals(actual.observed()) ? "OBSERVATION_MISMATCH"
+                    : !receipt.offhand().equals(actual.offhand()) || !receipt.mainhand().equals(actual.mainhand()) ? "HAND_MISMATCH"
+                    : !ledger.resumeBodyDeparture(receipt) ? "LEDGER_RETURN_CONFLICT" : null;
+            if (rejection != null) {
+                io.farfrontier.palemirror.PaleMirrorMod.LOGGER.error(
+                        "PMV3_BODY_RETURN_REJECTED actor={} entity={} reason={} expected={} actual={}",
+                        declaration.actorId(), body.getUUID(), rejection, receipt, actual);
+                return;
+            }
         }
         // Private first/reconstruction insertion already reserved this residency.
         if (ledger.pendingAdoption(declaration.actorId()).isPresent()
