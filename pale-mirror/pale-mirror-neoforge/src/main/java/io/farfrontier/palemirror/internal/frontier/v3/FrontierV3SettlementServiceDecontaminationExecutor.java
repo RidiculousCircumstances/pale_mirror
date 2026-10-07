@@ -68,7 +68,7 @@ final class FrontierV3SettlementServiceDecontaminationExecutor {
         if (target.markers().stream().anyMatch(position -> !level.hasChunkAt(position))) return;
         if (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) { inspectRecovered(level, runtime, intent, target); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target); return; }
-        if (!beforeMatches(level, target) || !FrontierV3CargoHandoffExecutor.exactMatch(target.worker().getItemBySlot(EquipmentSlot.MAINHAND), target.material())) {
+        if (!beforeMatches(level, target) || !FrontierV3ExactItemPresentation.exactMatch(target.worker().getItemBySlot(EquipmentSlot.MAINHAND), target.material())) {
             unknown(runtime, intent.id(), "precondition-conflict"); return;
         }
         var actuation = FrontierV3ActorActuation.capture(state, target.worker(),
@@ -106,7 +106,7 @@ final class FrontierV3SettlementServiceDecontaminationExecutor {
     }
 
     private static boolean applyOne(ServerLevel level, Target target) {
-        if (!beforeMatches(level, target) || !FrontierV3CargoHandoffExecutor.exactMatch(target.worker().getItemBySlot(EquipmentSlot.MAINHAND), target.material())) return false;
+        if (!beforeMatches(level, target) || !FrontierV3ExactItemPresentation.exactMatch(target.worker().getItemBySlot(EquipmentSlot.MAINHAND), target.material())) return false;
         if (!replace(level, target.markers(), target.remainingRaw() == 0L ? Blocks.AIR.defaultBlockState()
                 : FrontierV3InfectionOverlayExecutor.material(target.resultStage().orElseThrow()))) return false;
         FrontierV3InfectionOverlayLedger ledger = FrontierV3InfectionOverlayLedger.get(level);
@@ -139,7 +139,7 @@ final class FrontierV3SettlementServiceDecontaminationExecutor {
         if (target == null || target.markers().stream().anyMatch(position -> !level.hasChunkAt(position))) return () -> { };
         if (consumed(target.worker().getMainHandItem(), target.material()) && afterMatches(level, target))
             return () -> confirm(runtime, intent, target);
-        if (FrontierV3CargoHandoffExecutor.exactMatch(target.worker().getMainHandItem(), target.material()) && beforeMatches(level, target))
+        if (FrontierV3ExactItemPresentation.exactMatch(target.worker().getMainHandItem(), target.material()) && beforeMatches(level, target))
             return () -> {
                 if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFLICTED, Optional.empty(), "death-unapplied"))
                     throw new IllegalStateException("positively unperformed service endpoint could not be abandoned");
@@ -152,7 +152,7 @@ final class FrontierV3SettlementServiceDecontaminationExecutor {
         return target.markers().stream().allMatch(position -> level.getBlockState(position).equals(FrontierV3InfectionOverlayExecutor.material(target.resultStage().orElseThrow())));
     }
     private static boolean consumed(ItemStack held, ExactItemStack material) {
-        return material.count() == 1 ? held.isEmpty() : held.getCount() == material.count() - 1 && FrontierV3CargoHandoffExecutor.itemId(held).equals(Optional.of(material.id()));
+        return material.count() == 1 ? held.isEmpty() : held.getCount() == material.count() - 1 && FrontierV3ExactItemPresentation.itemId(held).equals(Optional.of(material.id()));
     }
     private static boolean replace(ServerLevel level, List<BlockPos> positions, net.minecraft.world.level.block.state.BlockState next) {
         for (BlockPos position : positions) if (!level.setBlock(position, next, 3)) return false;

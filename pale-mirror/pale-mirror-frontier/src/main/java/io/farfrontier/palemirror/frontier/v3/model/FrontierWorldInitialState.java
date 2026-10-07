@@ -25,6 +25,9 @@ final class FrontierWorldInitialState {
                 actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(bioform.position()), ActorKind.BIOFORM));
             }
         });
+        var fleet = TransportFleetBootstrap.initial(bootstrap);
+        fleet.assets().values().forEach(asset -> actors.put(asset.actorId(),
+                ActorLocation.standingOn(asset.homeStation(), ActorKind.PACK_ANIMAL)));
         Map<SubjectId, StructureCondition> structures = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> structures.put(structure.id(), StructureCondition.INTACT)));
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
@@ -37,6 +40,12 @@ final class FrontierWorldInitialState {
                 }));
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container -> containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27))));
         containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27));
+        fleet.assets().values().forEach(asset -> containers.put(asset.containerId(),
+                new ContainerRecord(asset.containerId(), asset.homeSettlementId(), asset.stackSlots())));
+        var surfaces = new LinkedHashMap<>(ContainerSurfaceManifest.initial(bootstrap));
+        fleet.assets().values().forEach(asset -> surfaces.put(asset.containerId(),
+                new ContainerSurface(asset.containerId(), new ContainerLocation.Mobile(asset.actorId()),
+                        ContainerSurfaceStatus.UNMATERIALIZED)));
         SubjectId firstDepot = FrontierWorldState.depotId(bootstrap.settlements().getFirst().id()); Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
         FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(new ResourceLot(wheat, bootstrap.settlements().getFirst().id(), "minecraft:wheat", 64,
@@ -80,11 +89,14 @@ final class FrontierWorldInitialState {
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();
         bootstrap.hive().seedNests().forEach(nest -> seedInfection(infection, InfectionCell.at(nest.anchor())));
         return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of(), Map.of(), Map.of(),
-                ContainerSurfaceManifest.initial(bootstrap), EconomicLedger.bootstrap(bootstrap), resources),
-                Map.of(), Map.of(), Map.of(), Map.of(), LogisticsHistory.empty(), Map.of(), Map.of(), Map.of(), colony,
-                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), RouteTopology.initial(), StrategicPlanState.initial(bootstrap), population,
-                CompanyRegistry.empty().withGoodsTrade(GoodsTradeState.empty().withParticipants(GoodsParticipantDeclarations.initial(bootstrap))),
-                ResourceSiteState.initial(bootstrap), PhysicalReplicaCustodyState.empty());
+                surfaces, EconomicLedger.bootstrap(bootstrap),
+                        resources), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), colony, Map.of(), Map.of(), Map.of(),
+                        Map.of(), Map.of(), RouteTopology.initial(), StrategicPlanState.initial(bootstrap), population,
+                        CompanyRegistry.empty().withGoodsTrade(GoodsTradeState.empty().withParticipants(GoodsParticipantDeclarations.initial(bootstrap))),
+                        ResourceSiteState.initial(bootstrap), PhysicalReplicaCustodyState.empty(),
+                        DeferredAftermathState.empty(), FencedRecoveryState.empty(), DiagnosticIncidentIndex.empty(),
+                        Map.of(), io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState.empty(),
+                        ShipmentState.empty(), io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.empty(), fleet);
     }
 
     private static Map<SubjectId, BioformLifecycle> initialBioformLifecycles(FrontierBootstrap bootstrap) {

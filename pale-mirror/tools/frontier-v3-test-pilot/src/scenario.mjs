@@ -19,7 +19,7 @@ const VISIT_TIMEOUT_MS = 120_000;
 const INSPECT_TIMEOUT_MS = 30_000;
 const PILOT_CATALOG = resolve(dirname(new URL(import.meta.url).pathname), '../../../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties');
 const { profiles: PILOT_PROFILES, defaultProfile: PILOT_DEFAULT_PROFILE } = loadPilotProfiles(PILOT_CATALOG);
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'move_within_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'observe_harvest_semantics', 'assert_complete_resource_site', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'observe_entity_motion', 'observe_settlement_population', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit', 'visit_operation', 'look_operation']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'move_within_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'observe_harvest_semantics', 'assert_complete_resource_site', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'observe_entity_motion', 'observe_settlement_population', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -203,18 +203,6 @@ export function validateScenario(scenario) {
           || !Number.isInteger(action.settleMs) || action.settleMs < 0 || action.settleMs > 120_000
           || !validDemandHandshake(action.demandHandshake) || (action.demandHandshake !== undefined && action.settleMs !== 0))) {
         throw new Error('visit needs a namespaced dimension, block position and settleMs 0..120000');
-      }
-      if (action.type === 'visit_operation' && (!requiredId(action.operationId, 'operation:') || !validDimension(action.dimension)
-          || (action.anchor !== undefined && !['travelCurrent', 'travelCargo'].includes(action.anchor))
-          || !validPosition(action.offset) || Math.abs(action.offset.x) > 32 || Math.abs(action.offset.y) > 8 || Math.abs(action.offset.z) > 32
-          || !Number.isInteger(action.settleMs) || action.settleMs < 0 || action.settleMs > 120_000
-          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
-        throw new Error('visit_operation needs a bounded operation-relative ordinary visit');
-      }
-      if (action.type === 'look_operation' && (!requiredId(action.operationId, 'operation:')
-          || (action.anchor !== undefined && !['travelCurrent', 'travelCargo'].includes(action.anchor))
-          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
-        throw new Error('look_operation needs a current read-only operation anchor');
       }
       if (action.type === 'assert_fixture' && (!Array.isArray(action.checks) || action.checks.length < 1 || action.checks.length > 16
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000
@@ -483,7 +471,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'field_physical', 'settlement', 'settlement_population', 'resident_life', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
+  return ['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'field_physical', 'settlement', 'settlement_population', 'resident_life', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
     && typeof value.id === 'string' && (['summary', 'performance', 'projection_work', 'aftermath'].includes(value.view) || Boolean(value.id));
 }
 

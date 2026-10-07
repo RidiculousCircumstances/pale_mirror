@@ -85,7 +85,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots);
         nextLots.put(next.id(), next);
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
-        nextAccounts.put(accountId, new CustodyAccount(accountId, account.custody(), Map.of(next.id(), next.quantity()), Map.of()));
+        nextAccounts.put(accountId, account.withQuantities(Map.of(next.id(), next.quantity()), Map.of()));
         return new FungibleResourceLedger(nextLots, claims, nextAccounts, bindings);
     }
 
@@ -134,7 +134,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots);
         nextLots.put(next.id(), next);
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
-        nextAccounts.put(accountId, new CustodyAccount(accountId, account.custody(), Map.of(next.id(), next.quantity()), Map.of()));
+        nextAccounts.put(accountId, account.withQuantities(Map.of(next.id(), next.quantity()), Map.of()));
         Map<SubjectId, PhysicalStackBinding> nextBindings = new HashMap<>(bindings);
         nextBindings.put(old.id(), replacement);
         return new FungibleResourceLedger(nextLots, claims, nextAccounts, nextBindings);
@@ -266,7 +266,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         }
         Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); nextClaims.remove(claimId);
         Map<SubjectId, Integer> nextQuantities = new HashMap<>(account.claimQuantities()); nextQuantities.remove(claimId);
-        return withAccount(new CustodyAccount(account.id(), account.custody(), account.lotQuantities(), nextQuantities), nextClaims, bindings);
+        return withAccount(account.withQuantities(account.lotQuantities(), nextQuantities), nextClaims, bindings);
     }
 
     /** Releases named allocations across their current HOT layout after an observed physical loss. */
@@ -279,7 +279,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>();
         accounts.forEach((id, account) -> {
             Map<SubjectId, Integer> accountClaims = new HashMap<>(account.claimQuantities()); claimIds.forEach(accountClaims::remove);
-            nextAccounts.put(id, new CustodyAccount(account.id(), account.custody(), account.lotQuantities(), accountClaims));
+            nextAccounts.put(id, account.withQuantities(account.lotQuantities(), accountClaims));
         });
         Map<SubjectId, PhysicalStackBinding> nextBindings = new HashMap<>();
         bindings.forEach((id, binding) -> {
@@ -303,7 +303,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), lotQuantities);
         Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), claimQuantities);
         if (remainingLots.isEmpty()) next.remove(from.id());
-        else next.put(from.id(), new CustodyAccount(from.id(), from.custody(), remainingLots, remainingClaims));
+        else next.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
         next.put(to.id(), accountWithAdded(to, lotQuantities, claimQuantities));
         return new FungibleResourceLedger(lots, claims, next, withoutBindingsFor(from.id()));
     }
@@ -370,7 +370,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), destination.lotQuantities());
         Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), destination.claimQuantities());
         if (remainingLots.isEmpty()) next.remove(from.id());
-        else next.put(from.id(), new CustodyAccount(from.id(), from.custody(), remainingLots, remainingClaims));
+        else next.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
         next.put(destination.id(), destination);
         return new FungibleResourceLedger(lots, claims, next, withoutBindingsFor(from.id()));
     }
@@ -387,7 +387,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), lotQuantities);
         Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), claimQuantities);
         if (remainingLots.isEmpty()) next.remove(from.id());
-        else next.put(from.id(), new CustodyAccount(from.id(), from.custody(), remainingLots, remainingClaims));
+        else next.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
         next.put(to.id(), accountWithAdded(to, lotQuantities, claimQuantities));
         return new FungibleResourceLedger(lots, claims, next, bindings);
     }
@@ -532,7 +532,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         }
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
         if (remainingLots.isEmpty()) nextAccounts.remove(from.id());
-        else nextAccounts.put(from.id(), new CustodyAccount(from.id(), from.custody(), remainingLots, remainingClaims));
+        else nextAccounts.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
         nextAccounts.put(destination.id(), destination);
         Map<SubjectId, PhysicalStackBinding> nextBindings = withoutBindingsFor(from.id());
         for (PhysicalStackBinding binding : remainingSource) {
@@ -630,7 +630,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         }
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
         if (remainingLots.isEmpty()) nextAccounts.remove(from.id());
-        else nextAccounts.put(from.id(), new CustodyAccount(from.id(), from.custody(), remainingLots, remainingClaims));
+        else nextAccounts.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
         nextAccounts.put(destination.id(), finalDestination);
         Map<SubjectId, PhysicalStackBinding> nextBindings = withoutBindingsFor(from.id());
         if (destinationExists) nextBindings = withoutBindingsFor(nextBindings, destination.id());
@@ -650,7 +650,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         }
         Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots); nextLots.put(sourceLotId, source.withQuantity(source.quantity() - quantity)); nextLots.put(child.id(), child);
         Map<SubjectId, Integer> nextQuantities = new HashMap<>(account.lotQuantities()); nextQuantities.merge(sourceLotId, -quantity, Integer::sum); nextQuantities.put(child.id(), quantity);
-        return withAccount(new CustodyAccount(account.id(), account.custody(), nextQuantities, account.claimQuantities()), claims, bindings, nextLots);
+        return withAccount(account.withQuantities(nextQuantities, account.claimQuantities()), claims, bindings, nextLots);
     }
 
     /** Merges two co-located interchangeable lots into fresh bounded lineage without changing any allocation. */
@@ -666,7 +666,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         }
         Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots); nextLots.remove(leftId); nextLots.remove(rightId); nextLots.put(merged.id(), merged);
         Map<SubjectId, Integer> nextQuantities = new HashMap<>(account.lotQuantities()); nextQuantities.remove(leftId); nextQuantities.remove(rightId); nextQuantities.put(merged.id(), merged.quantity());
-        return withAccount(new CustodyAccount(account.id(), account.custody(), nextQuantities, account.claimQuantities()), claims, bindings, nextLots);
+        return withAccount(account.withQuantities(nextQuantities, account.claimQuantities()), claims, bindings, nextLots);
     }
 
     /** Replaces only one account's current HOT stack layout after a matching fenced observation. */
@@ -736,7 +736,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, Integer> nextLotsAtAccount = subtract(account.lotQuantities(), lotQuantities); Map<SubjectId, Integer> nextClaimsAtAccount = subtract(account.claimQuantities(), claimQuantities);
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
         if (nextLotsAtAccount.isEmpty()) nextAccounts.remove(account.id());
-        else nextAccounts.put(account.id(), new CustodyAccount(account.id(), account.custody(), nextLotsAtAccount, nextClaimsAtAccount));
+        else nextAccounts.put(account.id(), account.withQuantities(nextLotsAtAccount, nextClaimsAtAccount));
         Map<SubjectId, PhysicalStackBinding> nextBindings = new HashMap<>(bindings);
         bindings.values().stream().filter(binding -> binding.accountId().equals(account.id())).map(PhysicalStackBinding::id).forEach(nextBindings::remove);
         return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, nextBindings);
@@ -815,7 +815,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         nextAccountLots.put(output.id(), output.quantity());
         Map<SubjectId, Integer> nextAccountClaims = subtract(account.claimQuantities(), inputClaims);
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
-        nextAccounts.put(account.id(), new CustodyAccount(account.id(), account.custody(), nextAccountLots, nextAccountClaims));
+        nextAccounts.put(account.id(), account.withQuantities(nextAccountLots, nextAccountClaims));
         return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, bindings);
     }
 
@@ -870,7 +870,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         }
         Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); nextClaims.put(claim.id(), claim);
         Map<SubjectId, Integer> quantities = new HashMap<>(account.claimQuantities()); quantities.put(claim.id(), claim.quantity());
-        return new Reservation(new CustodyAccount(account.id(), account.custody(), account.lotQuantities(), quantities), nextClaims);
+        return new Reservation(account.withQuantities(account.lotQuantities(), quantities), nextClaims);
     }
     private FungibleResourceLedger withAccount(CustodyAccount account, Map<SubjectId, ClaimAllocation> nextClaims, Map<SubjectId, PhysicalStackBinding> nextBindings) { return withAccount(account, nextClaims, nextBindings, lots); }
     private FungibleResourceLedger withAccount(CustodyAccount account, Map<SubjectId, ClaimAllocation> nextClaims, Map<SubjectId, PhysicalStackBinding> nextBindings, Map<SubjectId, ResourceLot> nextLots) {
@@ -904,7 +904,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     private static CustodyAccount accountWithAdded(CustodyAccount account, Map<SubjectId, Integer> lots, Map<SubjectId, Integer> claims) {
         Map<SubjectId, Integer> nextLots = new HashMap<>(account.lotQuantities()); lots.forEach((id, quantity) -> nextLots.merge(id, quantity, Integer::sum));
         Map<SubjectId, Integer> nextClaims = new HashMap<>(account.claimQuantities()); claims.forEach((id, quantity) -> nextClaims.merge(id, quantity, Integer::sum));
-        return new CustodyAccount(account.id(), account.custody(), nextLots, nextClaims);
+        return account.withQuantities(nextLots, nextClaims);
     }
     private void requireClaimsCoveredByLots(Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities,
                                             String operation) {

@@ -42,7 +42,7 @@ public final class FrontierV3FungibleProductionGameTests {
             var chest = FrontierV3ReferenceContainerCustodyGameTests.chest(helper, local.position(), local.depot());
             for (int slot = 0; slot < chest.getContainerSize(); slot++) {
                 var exact = remote.state().inventory().itemAt(local.depot(), slot).orElse(null);
-                if (exact != null) chest.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(exact));
+                if (exact != null) chest.setItem(slot, FrontierV3ExactItemPresentation.materializedStack(exact));
             }
             chest.setItem(0, new ItemStack(Items.WHEAT, 64));
             FrontierV3ProductionTransformationExecutor.tick(helper.getLevel(), runtime);
@@ -73,7 +73,7 @@ public final class FrontierV3FungibleProductionGameTests {
         var chest = FrontierV3ReferenceContainerCustodyGameTests.chest(helper, f.position(), f.depot());
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             var exact = f.state().inventory().itemAt(f.depot(), slot).orElse(null);
-            if (exact != null) chest.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(exact));
+            if (exact != null) chest.setItem(slot, FrontierV3ExactItemPresentation.materializedStack(exact));
         }
         chest.setItem(0, new ItemStack(Items.WHEAT, 64));
         var layout = FungibleProductionLayout.plan(f.state(), f.job());
@@ -116,7 +116,7 @@ public final class FrontierV3FungibleProductionGameTests {
         SubjectId settlement = new SubjectId("settlement:1"), depot = FrontierWorldState.depotId(settlement);
         BlockPos position = helper.absolutePos(new BlockPos(2, 2, 2));
         var origin = initial.inventory().surfaces().get(depot).position();
-        var state = FrontierWorldState.initial(FrontierV3CargoLoadingGameTests.translatedBootstrap(bootstrap,
+        var state = FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(bootstrap,
                 position.getX() - origin.x(), position.getY() - origin.y(), position.getZ() - origin.z()));
         return prepareEffect(state, 1, suffix);
     }

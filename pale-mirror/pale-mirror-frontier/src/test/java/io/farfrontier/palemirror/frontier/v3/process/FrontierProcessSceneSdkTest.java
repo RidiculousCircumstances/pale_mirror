@@ -124,7 +124,7 @@ class FrontierProcessSceneSdkTest {
         assertEquals(1, FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST.definition().limits().maxActors(),
                 "the reference process must retain an explicit per-family actor ceiling");
         assertNotEquals(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST.definition().limits(),
-                FrontierDurationProcessDriverRegistry.Family.ROUTE_OPERATION.definition().limits(),
+                FrontierDurationProcessDriverRegistry.Family.SETTLEMENT_ASSAULT.definition().limits(),
                 "a broad execution archetype must not silently supply every family's limits");
     }
 

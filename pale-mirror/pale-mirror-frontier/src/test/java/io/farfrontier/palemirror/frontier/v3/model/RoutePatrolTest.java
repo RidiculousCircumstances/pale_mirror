@@ -24,14 +24,11 @@ class RoutePatrolTest {
     }
 
     @Test
-    void newRouteOwnersCannotCreateAnUnderstrengthPatrolOrCargoEscort() {
+    void newRouteOwnersCannotCreateAnUnderstrengthPatrol() {
         SubjectId task = new SubjectId("task:understrength");
         assertThrows(IllegalArgumentException.class, () -> new RouteUnitManifest(RouteUnitManifest.idFor(RouteUnitKind.PATROL, task), task,
                 RouteUnitKind.PATROL, List.of(new RouteUnitMember(new SubjectId("resident:guard"), RouteUnitDuty.PATROL_LEADER)),
                 new SubjectId("resident:guard"), false));
-        SubjectId operation = new SubjectId("operation:understrength");
-        assertThrows(IllegalArgumentException.class, () -> new RouteUnitManifest(RouteUnitManifest.idFor(RouteUnitKind.CARGO_ESCORT, operation), operation,
-                RouteUnitKind.CARGO_ESCORT, List.of(new RouteUnitMember(new SubjectId("resident:crew"), RouteUnitDuty.CARGO_CREW),
-                        new RouteUnitMember(new SubjectId("resident:guard"), RouteUnitDuty.ESCORT)), new SubjectId("resident:guard"), false));
+
     }
 }

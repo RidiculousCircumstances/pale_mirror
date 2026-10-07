@@ -7,7 +7,6 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultBattlefield;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.monster.Zombie;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -80,7 +79,7 @@ final class FrontierV3AmbientCarrierRecognition {
                 && FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY.name().equals(carrier.owner())
                 && FrontierV3ActorCarrierComposition.Representation.LIVE_BODY.name().equals(carrier.representation())
                 && carrier.authorityRevision() == 0L && carrier.epoch() == epoch
-                && carrier.ownedBy(actorId, FrontierV3AmbientActorExecutor.bioform(state, actorId));
+                && carrier.ownedBy(actorId, location.kind());
     }
 
     private static SubjectId actorId(ManagedCarrier carrier) {
@@ -88,20 +87,22 @@ final class FrontierV3AmbientCarrierRecognition {
     }
 
     /** Exact read-only facts adapted from a joining Minecraft entity. */
-    record ManagedCarrier(UUID entityId, String actorId, boolean removed, boolean bioform, String kind,
-                          String owner, String representation, long authorityRevision, long epoch) {
+    record ManagedCarrier(UUID entityId, String actorId, boolean removed, String kind,
+                          String owner, String representation, long authorityRevision, long epoch, String physicalType) {
         ManagedCarrier {
             Objects.requireNonNull(entityId, "entity id"); Objects.requireNonNull(actorId, "actor id"); Objects.requireNonNull(kind, "kind");
             Objects.requireNonNull(owner, "owner tag"); Objects.requireNonNull(representation, "representation tag");
+            Objects.requireNonNull(physicalType, "observed entity type");
         }
         static ManagedCarrier from(Entity entity) {
             Objects.requireNonNull(entity, "entity");
             return new ManagedCarrier(entity.getUUID(), entity.getPersistentData().getString(FrontierV3AmbientActorExecutor.ACTOR_KEY), entity.isRemoved(),
-                    entity instanceof Zombie, entity.getPersistentData().getString(FrontierV3AmbientActorExecutor.KIND_KEY),
+                    entity.getPersistentData().getString(FrontierV3AmbientActorExecutor.KIND_KEY),
                     entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.OWNER_KEY),
                     entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.REPRESENTATION_KEY),
                     exactLong(entity.getPersistentData(), FrontierV3ActorCarrierComposition.REVISION_KEY),
-                    exactLong(entity.getPersistentData(), FrontierV3ActorCarrierComposition.EPOCH_KEY));
+                    exactLong(entity.getPersistentData(), FrontierV3ActorCarrierComposition.EPOCH_KEY),
+                    net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString());
         }
         private static long exactLong(net.minecraft.nbt.CompoundTag tag, String key) {
             // Revision zero is explicit body authority, not the missing-NBT default.
@@ -109,13 +110,16 @@ final class FrontierV3AmbientCarrierRecognition {
         }
         boolean matches(FrontierV3ActorCarrierComposition.Declaration declaration) {
             return !removed && entityId.equals(declaration.entityId()) && actorId.equals(declaration.actorId().value())
-                    && kind.equals(declaration.kind().name()) && owner.equals(declaration.owner().name())
+                    && kind.equals(declaration.kind().name())
+                    && physicalType.equals(FrontierV3ActorCarrierFactory.entityType(declaration.kind()))
+                    && owner.equals(declaration.owner().name())
                     && representation.equals(declaration.representation().name())
                     && authorityRevision == declaration.authorityRevision() && epoch == declaration.epoch();
         }
-        boolean ownedBy(SubjectId expectedActor, boolean expectedBioform) {
-            return !removed && expectedActor.value().equals(actorId) && bioform == expectedBioform
-                    && (expectedBioform ? "BIOFORM" : "RESIDENT").equals(kind);
+        boolean ownedBy(SubjectId expectedActor, io.farfrontier.palemirror.frontier.v3.model.ActorKind expectedKind) {
+            return !removed && expectedActor.value().equals(actorId)
+                    && expectedKind.name().equals(kind)
+                    && FrontierV3ActorCarrierFactory.entityType(expectedKind).equals(physicalType);
         }
     }
 }

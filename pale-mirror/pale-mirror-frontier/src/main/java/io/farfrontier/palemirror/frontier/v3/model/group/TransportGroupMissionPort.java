@@ -9,6 +9,10 @@ import java.util.Optional;
 /** Transport policy is outside the generic roster, formation and movement algorithms. */
 public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     @Override public UnitGroup.MissionKind kind() { return UnitGroup.MissionKind.TRANSPORT; }
+    @Override public boolean permitsHomeFood(FrontierWorldState state, UnitGroup group) {
+        var mission = mission(state, group);
+        return mission.stage() == TransportMission.Stage.LOADING || mission.stage() == TransportMission.Stage.COMPLETE;
+    }
     public static TransportMission mission(FrontierWorldState state, UnitGroup group) {
         var mission = state.shipments().missions().get(group.mission().id());
         if (group.mission().kind() != UnitGroup.MissionKind.TRANSPORT || mission == null || !mission.groupId().equals(group.id()))
@@ -60,7 +64,11 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     }
     @Override public KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, UnitGroup group) {
         validate(state, group); var mission = mission(state, group);
-        return KnownPedestrianRouteKnowledge.forJourney(state, List.of(passage(state, mission.sender()), passage(state, mission.receiver())));
+        return knowledgeForEndpoints(state, mission.sender(), mission.receiver());
+    }
+    public static KnownPedestrianRouteKnowledge knowledgeForEndpoints(FrontierWorldState state,
+            ShipmentEndpoint sender, ShipmentEndpoint receiver) {
+        return KnownPedestrianRouteKnowledge.forJourney(state, List.of(passage(state, sender), passage(state, receiver)));
     }
     private static KnownPedestrianRouteKnowledge.SettlementPassage passage(FrontierWorldState state, ShipmentEndpoint endpoint) {
         ShipmentEndpointComposition.validate(state, endpoint);

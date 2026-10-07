@@ -71,8 +71,8 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             ledger = FrontierV3ResourceSiteLedger.load(ledger.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
             FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 7);
             helper.assertTrue(FrontierV3ResourceSiteHarvestExecutor.apply(level, ledger, site, chest, second), "second output has its own receipt");
-            helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(4), first), "first physical output is not replaced");
-            helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(5), second), "second physical output is exact");
+            helper.assertTrue(FrontierV3ExactItemPresentation.exactMatch(chest.getItem(4), first), "first physical output is not replaced");
+            helper.assertTrue(FrontierV3ExactItemPresentation.exactMatch(chest.getItem(5), second), "second physical output is exact");
             helper.assertTrue(FrontierV3ResourceSiteHarvestExecutor.completePostcondition(level, site, ledger, chest, second), "second terminal receipt is reconcilable");
             helper.assertFalse(FrontierV3ResourceSiteHarvestExecutor.apply(level, ledger, site, chest, second), "retry must not mint output again");
             helper.succeed();
@@ -118,7 +118,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             helper.assertTrue(chest != null && FrontierV3ResourceSiteHarvestExecutor.apply(level, ledger, site, chest, output),
                     "one receipt writes one exact tagged output stack without unbounded regrowth");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 64)
-                            && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(4), output),
+                            && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(4), output),
                     "the terminal AIR cursor and depot retain the exact 64-wheat receipt until bounded regrowth");
             FrontierV3ResourceSiteLedger.NativeGrowthFence nativeFence = new FrontierV3ResourceSiteLedger.NativeGrowthFence(
                     "crop-grow-pre", site.cropSlots().getFirst(), 0, ResourceSiteLifecycle.MATURE_STAGE);

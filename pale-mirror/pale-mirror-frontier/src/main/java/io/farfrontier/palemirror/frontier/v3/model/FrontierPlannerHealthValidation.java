@@ -12,7 +12,6 @@ final class FrontierPlannerHealthValidation {
 
     static void validate(FrontierBootstrap bootstrap, HumanPopulation population, StrategicPlanState plans,
                          RouteTopology topology, HiveColony colony, Map<SubjectId, ActorLocation> actors,
-                         Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts,
                          FencedRecoveryState bodyRecovery) {
         Set<SubjectId> settlements = bootstrap.settlements().stream().map(Settlement::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -20,26 +19,12 @@ final class FrontierPlannerHealthValidation {
             throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
         }
         plans.validate(bootstrap, topology, population);
-        validateActorClaims(population, plans, operations, contracts);
-        FrontierRouteEngagementSupport.validate(bootstrap, colony, actors, operations, plans, bodyRecovery);
+        validateActorClaims(population, plans);
         FrontierSettlementAssaultSupport.validate(bootstrap, colony, population, actors, plans);
     }
 
     /** Exact COLD authority remains exclusive even when only a route patrol plan has changed. */
-    private static void validateActorClaims(HumanPopulation population, StrategicPlanState plans,
-                                            Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts) {
-        Set<SubjectId> operationParticipants = new HashSet<>();
-        for (RouteOperation operation : operations.values()) {
-            if (!FrontierWorldStateSupport.retainsParticipantClaim(contracts, operation)) continue;
-            for (SubjectId participant : operation.participantIds()) {
-                if (!operationParticipants.add(participant)) throw new IllegalArgumentException("resident cannot be assigned to multiple active route operations");
-                boolean patrolClaim = plans.routePatrols().values().stream()
-                        .anyMatch(patrol -> patrol.active() && patrol.memberIds().contains(participant));
-                if (population.migrations().containsKey(participant) || patrolClaim) {
-                    throw new IllegalArgumentException("active route operation participant cannot retain a competing migration or patrol claim");
-                }
-            }
-        }
+    private static void validateActorClaims(HumanPopulation population, StrategicPlanState plans) {
         for (ResidentMigrationJourney journey : population.migrations().values()) {
             boolean patrolClaim = plans.routePatrols().values().stream()
                     .anyMatch(patrol -> patrol.active() && patrol.memberIds().contains(journey.residentId()));

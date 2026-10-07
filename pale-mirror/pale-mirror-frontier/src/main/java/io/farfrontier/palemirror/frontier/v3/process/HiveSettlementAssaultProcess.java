@@ -385,7 +385,6 @@ public final class HiveSettlementAssaultProcess {
         boolean declaredAssault = currentAssault != null && execution != null && execution.activityOwnerId().equals(currentAssault.id());
         return (declaredAssault || HivePhysiologySupport.availableForIndependentOperation(state, id))
                 && ActorExecutionCoordinator.coldAvailable(state, id)
-                && state.strategicPlans().routeEngagements().values().stream().noneMatch(value -> value.status() != RouteEngagementStatus.RESOLVED && value.attackerIds().contains(id))
                 && state.strategicPlans().settlementAssaults().values().stream().noneMatch(value -> !value.equals(currentAssault)
                 && value.status() != SettlementAssaultStatus.RESOLVED && value.attackerIds().contains(id));
     }
@@ -455,7 +454,7 @@ public final class HiveSettlementAssaultProcess {
         return new SettlementAssaultResolved(assault.id(), outcome, HiveReturnExecutionAuthority.planResolution(state, assault),
                 SettlementAssaultExecutionAuthority.current(state, assault));
     }
-    private static FixedScalar damage(FrontierWorldState state, SubjectId actor) { return RouteEngagementCombatRules.damage(state, actor); }
+    private static FixedScalar damage(FrontierWorldState state, SubjectId actor) { return FrontierCombatRules.damage(state, actor); }
     private static List<BlockPosition> approach(FrontierWorldState state, BlockPosition start, BlockPosition end) {
         if (start.equals(end)) return List.of(start);
         long dx = (long) end.x() - start.x(), dy = (long) end.y() - start.y(), dz = (long) end.z() - start.z();

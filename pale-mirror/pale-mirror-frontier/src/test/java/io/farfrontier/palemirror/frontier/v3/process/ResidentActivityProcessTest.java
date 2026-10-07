@@ -242,7 +242,7 @@ class ResidentActivityProcessTest {
         assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(restocked, action),
                 "stock change makes the same retained exact due action runnable");
 
-        var planned = FrontierWorldRuntimeDefinition.planScheduled(restocked, action, true, new SimInstant(50_000L));
+        var planned = FrontierWorldRuntimeDefinition.planScheduled(restocked, action, new SimInstant(50_000L));
         ResidentMealStarted started = assertInstanceOf(ResidentMealStarted.class, planned.getFirst().payload());
         assertEquals(50_000L, started.meal().startedAtTick(),
                 "a held wake must not create a meal before the bread actually existed");

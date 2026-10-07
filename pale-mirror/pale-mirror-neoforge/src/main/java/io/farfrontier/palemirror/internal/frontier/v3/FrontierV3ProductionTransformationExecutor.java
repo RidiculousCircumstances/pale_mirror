@@ -55,8 +55,8 @@ final class FrontierV3ProductionTransformationExecutor {
         if (!level.hasChunkAt(position)) return;
         if (ReferenceContainerCustody.isReferenceContainer(state, target.slot().containerId())
                 && !ReferenceContainerCustody.hasOperationalCustody(state, target.slot().containerId())) return;
-        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
-                new FrontierV3CargoHandoffExecutor.StoreTarget(position, target.slot().containerId()));
+        ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,
+                new FrontierV3ExactItemPresentation.StoreTarget(position, target.slot().containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }
         executeEffect(intent.status(), new EffectTurn() {
             @Override public boolean inputPresent() { return matchesInput(chest, target); }
@@ -102,14 +102,14 @@ final class FrontierV3ProductionTransformationExecutor {
     }
 
     static boolean matchesInput(ChestBlockEntity chest, ProductionTransformationStateSupport.Target target) {
-        return FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.slot().slot()), target.input());
+        return FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.slot().slot()), target.input());
     }
     static boolean matchesOutput(ChestBlockEntity chest, ProductionTransformationStateSupport.Target target) {
-        return FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.slot().slot()), target.output());
+        return FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.slot().slot()), target.output());
     }
     static boolean replace(ChestBlockEntity chest, ProductionTransformationStateSupport.Target target) {
         if (!matchesInput(chest, target)) return false;
-        ItemStack output = FrontierV3CargoHandoffExecutor.materializedStack(target.output());
+        ItemStack output = FrontierV3ExactItemPresentation.materializedStack(target.output());
         chest.setItem(target.slot().slot(), output); chest.setChanged(); return matchesOutput(chest, target);
     }
     private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,

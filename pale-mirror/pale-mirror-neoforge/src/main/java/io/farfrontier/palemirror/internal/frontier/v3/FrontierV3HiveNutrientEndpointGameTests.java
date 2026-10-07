@@ -26,12 +26,12 @@ public final class FrontierV3HiveNutrientEndpointGameTests {
         ChestBlockEntity source = (ChestBlockEntity) level.getBlockEntity(sourcePosition), target = (ChestBlockEntity) level.getBlockEntity(targetPosition);
         ExactItemStack nutrient = new ExactItemStack(new SubjectId("item:hive-nutrient-endpoint-game-test"), new SubjectId("hive:frontier"), "minecraft:rotten_flesh", 64,
                 new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0));
-        source.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(nutrient));
+        source.setItem(0, FrontierV3ExactItemPresentation.materializedStack(nutrient));
         helper.assertTrue(FrontierV3HiveNutrientEndpointExecutor.removeExact(source, 0, nutrient), "only the owned exact source stack may depart after durable RUNNING");
         helper.assertTrue(source.getItem(0).isEmpty(), "source restart inspection sees the deliberate exact empty slot");
         helper.assertTrue(FrontierV3HiveNutrientEndpointExecutor.insertExact(target, 0, nutrient), "the same tagged stack enters its named empty destination slot");
-        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(target.getItem(0), nutrient), "arrival retains the canonical item identity");
-        target.setItem(1, FrontierV3CargoHandoffExecutor.materializedStack(nutrient));
+        helper.assertTrue(FrontierV3ExactItemPresentation.exactMatch(target.getItem(0), nutrient), "arrival retains the canonical item identity");
+        target.setItem(1, FrontierV3ExactItemPresentation.materializedStack(nutrient));
         helper.assertTrue(!FrontierV3HiveNutrientEndpointExecutor.insertExact(target, 1, nutrient), "a foreign/nonempty target slot is conflict evidence and is never overwritten");
         helper.succeed();
     }

@@ -73,20 +73,6 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             try { return new CommandPlan.Accepted(ProductionProcess.planMaterializedInputDeparture(state, destroyed.itemId(), observation)); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
-        if (command.payload() instanceof CargoCarrierReleased released) {
-            SceneLease lease = state.sceneLeases().get(released.leaseId());
-            if (lease == null || !FrontierSceneBehaviors.isLogistics(lease)
-                    || !FrontierSceneBehaviors.logistics(lease).cargoId().equals(released.cargoId())
-                    || lease.status() != SceneLeaseStatus.HOT) {
-                return FrontierWorldCommandPlanner.rejected("cargo carrier release lacks one HOT matching scene lease");
-            }
-            if (!CargoCarrierIdentity.id(lease).equals(released.carrierId())) {
-                return FrontierWorldCommandPlanner.rejected("cargo carrier identity is not canonical for its scene");
-            }
-            RouteOperation operation = state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId());
-            if (operation == null) return FrontierWorldCommandPlanner.rejected("cargo carrier release has no owning operation");
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released)));
-        }
         if (command.payload() instanceof InventoryConflictObserved observed) {
             InventoryConflict conflict = observed.conflict();
             ContainerRecord container = state.inventory().containers().get(conflict.containerId());
@@ -119,7 +105,6 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             case FungibleStackBindingsReleased released -> FrontierWorldPhysicalObservationProcess.reduceFungibleBindingRelease(state, event.subject(), released);
             case ExactItemCustodyChanged changed -> reduceCustodyChanged(state, event.subject(), changed);
             case ExactItemDestroyed destroyed -> reduceDestroyed(state, event.subject(), destroyed);
-            case CargoCarrierReleased released -> reduceCarrierReleased(state, event.subject(), released);
             case InventoryConflictObserved observed -> reduceInventoryConflict(state, event.subject(), observed);
             case ContainerSurfaceTransition transition -> ContainerSurfaceProcess.reduce(state, event.subject(), transition);
             default -> throw new IllegalArgumentException("physical process does not own event: " + event.payload().type());
@@ -176,13 +161,6 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs));
     }
 
-    private static FrontierWorldState reduceCarrierReleased(FrontierWorldState state, SubjectId subject, CargoCarrierReleased released) {
-        SceneLease lease = state.sceneLeases().get(released.leaseId());
-        RouteOperation operation = lease == null || !FrontierSceneBehaviors.isLogistics(lease)
-                ? null : state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId());
-        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("cargo carrier release lacks its owning settlement");
-        return state.releaseCargoCarrier(released);
-    }
 
     private static FrontierWorldState reduceInventoryConflict(FrontierWorldState state, SubjectId subject, InventoryConflictObserved observed) {
         InventoryConflict conflict = observed.conflict();

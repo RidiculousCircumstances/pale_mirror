@@ -12,8 +12,7 @@ import java.util.Objects;
  * canonical state.  The process layer alone turns it into command/event
  * payloads, which keeps model policy free of process-package dependencies.</p>
  */
-public sealed interface SceneContinuation permits SceneContinuation.None, SceneContinuation.ResumeOperation,
-        SceneContinuation.FailOperation, SceneContinuation.ResumeEngagement, SceneContinuation.ResumeSettlementAssault,
+public sealed interface SceneContinuation permits SceneContinuation.None, SceneContinuation.ResumeSettlementAssault,
         SceneContinuation.FinalizeProductionWork, SceneContinuation.ResumeProductionCompletion,
         SceneContinuation.ResumeRoutePatrol, SceneContinuation.BlockRoutePatrol,
         SceneContinuation.ResumeResourceSiteHarvest {
@@ -21,9 +20,6 @@ public sealed interface SceneContinuation permits SceneContinuation.None, SceneC
 
     enum Kind {
         NONE,
-        RESUME_OPERATION,
-        FAIL_OPERATION,
-        RESUME_ENGAGEMENT,
         RESUME_SETTLEMENT_ASSAULT,
         FINALIZE_PRODUCTION_WORK,
         RESUME_PRODUCTION_COMPLETION,
@@ -36,23 +32,6 @@ public sealed interface SceneContinuation permits SceneContinuation.None, SceneC
         @Override public Kind kind() { return Kind.NONE; }
     }
 
-    record ResumeOperation(SubjectId operationId, long dueAt) implements SceneContinuation {
-        public ResumeOperation { Objects.requireNonNull(operationId, "operation id"); }
-        @Override public Kind kind() { return Kind.RESUME_OPERATION; }
-    }
-
-    record FailOperation(SubjectId operationId, String reason) implements SceneContinuation {
-        public FailOperation {
-            Objects.requireNonNull(operationId, "operation id");
-            if (reason == null || reason.isBlank()) throw new IllegalArgumentException("operation failure reason");
-        }
-        @Override public Kind kind() { return Kind.FAIL_OPERATION; }
-    }
-
-    record ResumeEngagement(SubjectId engagementId, long dueAt) implements SceneContinuation {
-        public ResumeEngagement { Objects.requireNonNull(engagementId, "engagement id"); }
-        @Override public Kind kind() { return Kind.RESUME_ENGAGEMENT; }
-    }
 
     record ResumeSettlementAssault(SubjectId assaultId, long dueAt) implements SceneContinuation {
         public ResumeSettlementAssault { Objects.requireNonNull(assaultId, "assault id"); }

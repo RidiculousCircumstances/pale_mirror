@@ -246,10 +246,15 @@ class FrontierReadabilityPlanTest {
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:1-harvest"), settlement.id(),
                 StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, java.util.Optional.empty(), java.util.Optional.of(site.id()),
                 1, StrategicObjectiveStatus.ACTIVE);
-        StrategicTask task = new StrategicTask(new SubjectId("task:1-harvest"), objective.id(), settlement.id(),
-                StrategicTaskKind.HARVEST_RESOURCE_SITE, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.of(site.id()),
+        StrategicTask task = new StrategicTask(new SubjectId("task:1-harvest"),
+                objective.id(),
+                settlement.id(),
+                StrategicTaskKind.HARVEST_RESOURCE_SITE,
+                java.util.Optional.empty(),
+                java.util.Optional.of(site.id()),
                 java.util.List.of(StrategicTaskRequirement.ACTIVE_FARM, StrategicTaskRequirement.AVAILABLE_FARMER,
-                        StrategicTaskRequirement.FREE_DEPOT_SLOT), java.util.List.of(),
+                        StrategicTaskRequirement.FREE_DEPOT_SLOT),
+                java.util.List.of(),
                 StrategicTaskStatus.PENDING);
         FrontierWorldState pending = state.withResourceSites(matureReadyField(state, site))
                 .withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
@@ -349,7 +354,7 @@ class FrontierReadabilityPlanTest {
         deltas.put(lost, new PhysicalDelta(lost, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), java.util.Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "test route loss"));
         FrontierWorldState damaged = state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
-                state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
+                state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
                 state.structureDamage(), deltas, state.ambientLeases());
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(damaged).boards().get(FrontierRouteNetwork.OWNER);
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());

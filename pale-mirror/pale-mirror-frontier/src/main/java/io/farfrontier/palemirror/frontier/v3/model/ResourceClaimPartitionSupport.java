@@ -26,7 +26,7 @@ final class ResourceClaimPartitionSupport {
         var accountClaims = new HashMap<>(account.claimQuantities());
         accountClaims.put(claim.id(), claim.quantity() - partition.quantity()); accountClaims.put(partition.childClaimId(), partition.quantity());
         var accounts = new HashMap<>(ledger.accounts());
-        accounts.put(account.id(), new CustodyAccount(account.id(), account.custody(), account.lotQuantities(), accountClaims));
+        accounts.put(account.id(), account.withQuantities(account.lotQuantities(), accountClaims));
         return FungibleBindingRepartition.retainLayout(ledger, ledger.lots(), claims, accounts, account.id());
     }
 }

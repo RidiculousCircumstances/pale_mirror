@@ -104,7 +104,7 @@ public record FungibleResourceHandoffObserved(SubjectId sourceAccountId, Custody
         }
         if (releasedClaimIds.isEmpty()) return this;
         return new FungibleResourceHandoffObserved(sourceAccountId,
-                new CustodyAccount(destinationAccount.id(), destinationAccount.custody(), destinationAccount.lotQuantities(), Map.of()),
+                destinationAccount.withQuantities(destinationAccount.lotQuantities(), Map.of()),
                 sourceEpoch, destinationEpoch, lotQuantities, Map.of(), without(releasedClaimIds, remainingSource),
                 without(releasedClaimIds, destinationBindings), java.util.Set.of(), playerSaveFence, java.util.Optional.empty());
     }

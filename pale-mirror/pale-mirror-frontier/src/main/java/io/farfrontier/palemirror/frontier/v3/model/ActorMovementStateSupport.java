@@ -54,6 +54,28 @@ final class ActorMovementStateSupport {
                         throw new IllegalArgumentException("group movement lost its exact formation declaration");
                     group.member(entry.getKey());
                 }
+                case ActorMovementContext.ExpeditionSupply supply -> {
+                    var mission = shipments.missions().get(supply.missionId()); var movement = entry.getValue();
+                    if (mission == null || mission.stage() != TransportMission.Stage.LOADING || mission.supplies().isEmpty())
+                        throw new IllegalArgumentException("supply movement lost its exact loading mission");
+                    var load = mission.supplies().orElseThrow(); var allocation = load.allocations().stream()
+                            .filter(a -> a.claimId().equals(supply.claimId())).findFirst().orElseThrow();
+                    var group = groups.groups().get(mission.groupId());
+                    if (!allocation.claimId().equals(supply.claimId()) || !allocation.actorId().equals(entry.getKey())
+                            || allocation.loaded() || allocation.pending().isPresent() || !load.order(mission.id(), mission.sender(), allocation).movementOrder().equals(movement.order())
+                            || group == null || !group.member(entry.getKey()).activityOwnerId().equals(movement.executionId().activityOwnerId()))
+                        throw new IllegalArgumentException("supply movement lost its exact order or participant authority");
+                }
+                case ActorMovementContext.ExpeditionAssembly assembly -> {
+                    var mission = shipments.missions().get(assembly.missionId()); var movement = entry.getValue();
+                    if (mission == null || mission.stage() != TransportMission.Stage.LOADING || mission.supplies().isEmpty()
+                            || !io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.assemblyOrder(mission, entry.getKey()).equals(movement.order())
+                            || mission.supplies().orElseThrow().allocations().stream().anyMatch(a -> a.actorId().equals(entry.getKey()) && !a.loaded()))
+                        throw new IllegalArgumentException("assembly movement lost its exact provisioned participant");
+                    var group = groups.groups().get(mission.groupId());
+                    if (group == null || !group.member(entry.getKey()).activityOwnerId().equals(movement.executionId().activityOwnerId()))
+                        throw new IllegalArgumentException("assembly movement has foreign participant authority");
+                }
             }
         }
     }

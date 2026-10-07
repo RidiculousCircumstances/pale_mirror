@@ -165,7 +165,7 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
         }
         if (item.custody() instanceof InventoryCustody.WorldCarrier source) {
             Entity carrier = carriers.get(source.carrierId());
-            boolean exactDrop = carrier instanceof ItemEntity drop && FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), item);
+            boolean exactDrop = carrier instanceof ItemEntity drop && FrontierV3ExactItemPresentation.exactMatch(drop.getItem(), item);
             boolean exactCart = carrier instanceof MinecartChest cart && contains(cart, item, source.carrierId());
             return exactDrop || exactCart ? Optional.of(new ItemCandidate(item.id(), source, carrier.blockPosition().asLong())) : Optional.empty();
         }
@@ -173,8 +173,8 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
     }
     private static boolean contains(MinecartChest cart, ExactItemStack item, UUID carrierId) {
         for (int slot = 0; slot < cart.getContainerSize(); slot++) {
-            if (FrontierV3CargoHandoffExecutor.exactMatch(cart.getItem(slot), item)
-                    && FrontierV3CargoHandoffExecutor.worldCarrierId(cart.getItem(slot)).filter(carrierId::equals).isPresent()) return true;
+            if (FrontierV3ExactItemPresentation.exactMatch(cart.getItem(slot), item)
+                    && FrontierV3ExactItemPresentation.worldCarrierId(cart.getItem(slot)).filter(carrierId::equals).isPresent()) return true;
         }
         return false;
     }

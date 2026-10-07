@@ -7,6 +7,12 @@ import java.util.Optional;
 /** Group participation retains purpose across self-care; individual UAE remains the sole actuator owner. */
 final class GroupMemberActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.GROUP_MEMBER; }
+    @Override public boolean permitsHomeFood(FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution);
+        var group = state.unitGroups().groups().get(execution.activityOwnerId());
+        return io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupMissionPorts.require(group)
+                .permitsHomeFood(state, group);
+    }
     @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
     @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return new ActorMovementBodyCheckpoint(); }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { validateReference(state, execution); }

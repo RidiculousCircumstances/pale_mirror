@@ -13,6 +13,8 @@ final class ShipmentServiceAccess implements ServiceAccessCapability {
         var result = new ArrayList<ServiceAccessDemand>();
         for (Shipment shipment : state.shipments().shipments().values()) {
             if (shipment.terminal()) continue;
+            if (shipment.transportMissionId().map(state.shipments().missions()::get)
+                    .flatMap(TransportMission::supplies).filter(load -> !load.complete()).isPresent()) continue;
             boolean occupied = ServiceAccessCoordinator.occupies(state, boundary, shipment.execution().actorId());
             SubjectId target = shipment.status() == Shipment.Status.AWAITING_LOAD
                     ? shipment.sender().containerId() : shipment.receiver().containerId();

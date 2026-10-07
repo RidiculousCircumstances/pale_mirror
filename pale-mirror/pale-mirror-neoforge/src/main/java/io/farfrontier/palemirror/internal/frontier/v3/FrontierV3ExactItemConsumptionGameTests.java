@@ -32,10 +32,10 @@ public final class FrontierV3ExactItemConsumptionGameTests {
         SubjectId container = new SubjectId("container:exact-consumption-game-test"), itemId = new SubjectId("item:exact-consumption-game-test");
         ExactItemStack item = new ExactItemStack(itemId, new SubjectId("organ:west-store"), "minecraft:rotten_flesh", 64, new InventoryCustody.ContainerSlot(container, 0));
         FrontierV3ExactItemConsumptionExecutor.Target target = new FrontierV3ExactItemConsumptionExecutor.Target(item, container, 0, chestPosition, 64);
-        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(item));
+        chest.setItem(0, FrontierV3ExactItemPresentation.materializedStack(item));
         helper.assertTrue(FrontierV3ExactItemConsumptionExecutor.consume(chest, target), "the identity-tagged canonical stack is physically consumed");
         helper.assertTrue(FrontierV3ExactItemConsumptionExecutor.consumed(chest, target), "an empty exact slot is an inspectable restart postcondition");
-        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(item)); chest.getItem(0).shrink(1);
+        chest.setItem(0, FrontierV3ExactItemPresentation.materializedStack(item)); chest.getItem(0).shrink(1);
         helper.assertTrue(!FrontierV3ExactItemConsumptionExecutor.consume(chest, target), "an altered stack is conflict evidence and is never consumed");
         helper.succeed();
     }

@@ -43,17 +43,15 @@ final class FrontierWorldConfigurationFactory {
         return registry;
     }
 
-    static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> create(FrontierBootstrap bootstrap,
-                                                                                            boolean autonomousInterception) {
+    static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> create(FrontierBootstrap bootstrap) {
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         ScheduledActionPlanner<FrontierWorldState> scheduler = new ScheduledActionPlanner<>() {
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
-                return FrontierWorldRuntimeDefinition.planScheduled(state, action, autonomousInterception);
+                return FrontierWorldRuntimeDefinition.planScheduled(state, action);
             }
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
                                                       SimInstant currentInstant) {
-                return FrontierWorldRuntimeDefinition.planScheduled(state, action, autonomousInterception,
-                        currentInstant);
+                return FrontierWorldRuntimeDefinition.planScheduled(state, action, currentInstant);
             }
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                 return FrontierWorldRuntimeDefinition.scheduledHeld(state, action);

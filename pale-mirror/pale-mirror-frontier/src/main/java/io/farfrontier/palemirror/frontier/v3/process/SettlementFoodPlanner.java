@@ -27,11 +27,17 @@ final class SettlementFoodPlanner implements SettlementOperationPlanner {
         SubjectId id = new SubjectId("task:food-expansion-" + WorkOpportunityIdentity.digest(
                 objective.id().value() + "|" + cause.value()));
         if (state.strategicPlans().tasks().containsKey(id)) return java.util.List.of();
-        var task = new StrategicTask(id, objective.id(), settlement.id(), StrategicTaskKind.PRODUCE_BREAD,
-                Optional.empty(), Optional.empty(), Optional.empty(),
+        var task = new StrategicTask(id,
+                objective.id(),
+                settlement.id(),
+                StrategicTaskKind.PRODUCE_BREAD,
+                Optional.empty(),
+                Optional.empty(),
                 StrategicOperationSpecifications.requirements(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD),
-                java.util.List.of(), StrategicTaskStatus.PENDING, Optional.empty(),
-                objective.authorityId(), objective.authorityEpoch());
+                java.util.List.of(),
+                StrategicTaskStatus.PENDING,
+                objective.authorityId(),
+                objective.authorityEpoch());
         var projected = state.withStrategicPlans(state.strategicPlans().addTask(task));
         var admission = ProductionProcess.planStart(projected, ProductionProcess.start(task, atTick));
         if (admission.stream().noneMatch(event -> event.payload() instanceof ProductionStarted))

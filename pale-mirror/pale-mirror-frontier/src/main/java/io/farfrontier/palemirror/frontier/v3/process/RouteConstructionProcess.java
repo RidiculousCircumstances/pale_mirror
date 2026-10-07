@@ -69,7 +69,7 @@ public final class RouteConstructionProcess {
             return List.of(new ProposedEvent(SYSTEM, new ScheduleEffect.Created(start(task,
                     Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().routeConstructionScanInterval())))));
         }
-        if (state.routeTopology().supplyPassable(state.bootstrap(), settlement.id())) {
+        if (state.routeTopology().routePassable(state.bootstrap(), settlement.id())) {
             // A retry may arrive after its same-cell repair completed.  There is then no
             // remaining damaged route to replace, so the pending bypass task ends visibly
             // without inventing a second topology.
@@ -245,7 +245,7 @@ public final class RouteConstructionProcess {
      * arbitrary player road or a Minecraft pathfinding result into canonical topology.
      */
     private static Optional<RouteConstruction> candidate(FrontierWorldState state, Settlement settlement) {
-        List<BlockPosition> current = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
+        List<BlockPosition> current = state.routeTopology().settlementWaypoints(state.bootstrap(), settlement.id());
         BlockPosition origin = current.getFirst(), destination = current.getLast();
         BlockPosition detourEgress = origin.offset(-36, 0, 0);
         for (int laneOffset : DETOUR_LANE_OFFSETS) {
@@ -323,7 +323,7 @@ public final class RouteConstructionProcess {
 
     private static Optional<List<BlockPosition>> acceptedWorkCells(FrontierWorldState state, SubjectId settlementId, List<BlockPosition> route) {
         try {
-            RouteTopology topology = state.routeTopology().replaceSupplyRoute(state.bootstrap(), settlementId, route);
+            RouteTopology topology = state.routeTopology().replaceSettlementRoute(state.bootstrap(), settlementId, route);
             List<BlockPosition> workCells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), settlementId, route);
             if (!FrontierRouteNetwork.isPassable(state.bootstrap(), route, state.physicalDeltas()) || workCells.isEmpty()
                     || FrontierGrayboxPlan.compile(state.withRouteTopology(topology)).cells().isEmpty()) return Optional.empty();
@@ -342,7 +342,7 @@ public final class RouteConstructionProcess {
     }
 
     private static boolean routeContains(FrontierWorldState state, SubjectId settlementId, BlockPosition position) {
-        return FrontierRouteNetwork.containsOperationSurfaceCell(state.routeTopology().supplyWaypoints(state.bootstrap(), settlementId), position);
+        return FrontierRouteNetwork.containsOperationSurfaceCell(state.routeTopology().settlementWaypoints(state.bootstrap(), settlementId), position);
     }
 
     public static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {

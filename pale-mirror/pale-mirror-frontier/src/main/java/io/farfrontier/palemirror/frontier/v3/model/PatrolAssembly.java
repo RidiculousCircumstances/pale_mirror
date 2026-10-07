@@ -104,7 +104,7 @@ public record PatrolAssembly(Map<SubjectId, Member> members) {
             topology = Objects.requireNonNull(topology, "patrol assembly topology");
             if (topology.edges().stream().anyMatch(edge -> edge.kind() != TraversalKind.PEDESTRIAN
                     || !edge.capabilities().contains(TraversalCapability.PEDESTRIAN)) || topology.linearCorridorSurfaces().size() < 2
-                    || topology.linearCorridorSurfaces().size() > OperationTravel.MAX_CELLS) {
+                    || topology.linearCorridorSurfaces().size() > TraversalTopology.MAX_NODES) {
                 throw new IllegalArgumentException("patrol assembly requires bounded pedestrian topology");
             }
             if (cursor < 0 || cursor >= topology.linearCorridorSurfaces().size()) {

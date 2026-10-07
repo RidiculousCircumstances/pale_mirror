@@ -50,7 +50,7 @@ public final class FrontierV3AmbientMotionGameTests {
         var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:common-indexed-admission"), 91L);
         var actor = new SubjectId("resident:1-1");
         var origin = base.initialState().actorLocations().get(actor).body();
-        var bootstrap = FrontierV3CargoLoadingGameTests.translatedBootstrap(base.initialState().bootstrap(),
+        var bootstrap = FrontierV3BootstrapGameTestFixtures.translatedBootstrap(base.initialState().bootstrap(),
                 feet.getX() - origin.x(), feet.getY() - origin.y(), feet.getZ() - origin.z());
         var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(bootstrap), new EphemeralStore(), 10_000);
         var initial = state(runtime);
@@ -188,7 +188,7 @@ public final class FrontierV3AmbientMotionGameTests {
                 FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "a fresh actor body must materialize only its one canonical identity");
         Villager body = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(equipped, resident));
-        helper.assertTrue(body != null && FrontierV3CargoHandoffExecutor.exactMatch(
+        helper.assertTrue(body != null && FrontierV3ExactItemPresentation.exactMatch(
                         body.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND), exactTool),
                 "canonical engineering-tool custody must survive fresh COLD/restart materialization as the same tagged physical stack");
         body.discard(); FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
@@ -325,7 +325,7 @@ public final class FrontierV3AmbientMotionGameTests {
         BlockPos feet = helper.absolutePos(new BlockPos(12, 8, 12));
         var original = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:hot-scout-cursor"), 91L);
         var from = original.initialState().actorLocations().get(scout).body();
-        var config = FrontierWorldRuntimeDefinition.configuration(FrontierV3CargoLoadingGameTests.translatedBootstrap(
+        var config = FrontierWorldRuntimeDefinition.configuration(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(
                 original.initialState().bootstrap(), feet.getX() - from.x(), feet.getY() - from.y(), feet.getZ() - from.z()));
         var store = new EphemeralStore();
         initializeAdmission(level, config, store);

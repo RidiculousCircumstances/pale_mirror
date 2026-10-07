@@ -31,7 +31,7 @@ public final class FrontierV3ActorCarryGameTests {
         helper.getLevel().setBlockAndUpdate(position, Blocks.CHEST.defaultBlockState());
         var chest = (ChestBlockEntity) helper.getLevel().getBlockEntity(position);
         SubjectId container = new SubjectId("container:portable-resource-test");
-        chest.getPersistentData().putString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY, container.value());
+        chest.getPersistentData().putString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY, container.value());
         chest.setItem(4, new ItemStack(Items.BREAD, 8));
         Villager actor = EntityType.VILLAGER.create(helper.getLevel());
         if (actor == null) throw new IllegalStateException("native carry test has no actor body");

@@ -15,21 +15,6 @@ class FrontierV3TestPilotScenarioTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse(
                 declaration.replace("\"field\": \"actorBody\"", "\"field\": \"undeclaredPosition\"")));
     }
-    @Test
-    void operationVisitHonorsItsDeclaredAnchorAndRejectsUnknownOnes() {
-        var action = JsonParser.parseString("""
-                {"type":"visit_operation","operationId":"operation:supply-1-18",
-                "dimension":"pale_mirror:frontier_graybox","offset":{"x":10,"y":0,"z":-10},
-                "settleMs":500,"timeoutMs":30000}
-                """).getAsJsonObject();
-        assertEquals("travelCurrent", FrontierV3PilotSemanticAnchors.visitAnchor(action));
-        action.addProperty("anchor", "travelCargo");
-        assertEquals("travelCargo", FrontierV3PilotSemanticAnchors.visitAnchor(action));
-        assertEquals(1, FrontierV3TestPilotScenario.parse("{\"schema\":1,\"actions\":[" + action + "]}").actionCount());
-        action.addProperty("anchor", "unknown");
-        assertThrows(IllegalArgumentException.class, () -> FrontierV3PilotSemanticAnchors.visitAnchor(action));
-        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("{\"schema\":1,\"actions\":[" + action + "]}"));
-    }
 
     @Test
     void crossDimensionVisitAlwaysBindsTheExactPlayerAsTheTeleportExecutor() {
@@ -381,20 +366,6 @@ class FrontierV3TestPilotScenarioTest {
                 "nameContains":"HIVE","maxDistance":129,"timeoutMs":30000}]}"""));
     }
 
-    @Test
-    void acceptsAReadOnlyOperationRelativeCameraAndLocalEntityPresentationProof() {
-        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
-                {"schema":1,"actions":[
-                {"type":"visit_operation","operationId":"operation:supply-1-2","dimension":"pale_mirror:frontier_graybox",
-                "offset":{"x":10,"y":1,"z":-10},"settleMs":1000,"timeoutMs":30000},
-                {"type":"look_operation","operationId":"operation:supply-1-2","anchor":"travelCargo","timeoutMs":30000},
-                {"type":"assert_visible_entity","entityType":"minecraft:text_display","nameContains":"CARAVAN",
-                "maxDistance":64,"maxAngleDeg":50,"timeoutMs":30000}]}""");
-        assertEquals(3, parsed.actionCount());
-        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
-                {"schema":1,"actions":[{"type":"visit_operation","operationId":"operation:supply-1-2",
-                "dimension":"pale_mirror:frontier_graybox","offset":{"x":33,"y":1,"z":0},"settleMs":1000,"timeoutMs":30000}]}"""));
-    }
 
     @Test
     void permitsOneBoundedOrdinaryBlockPlacementWithoutWorldCommandAuthority() {

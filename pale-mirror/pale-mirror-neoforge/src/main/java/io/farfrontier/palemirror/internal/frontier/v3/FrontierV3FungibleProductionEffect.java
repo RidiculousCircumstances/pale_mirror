@@ -75,7 +75,7 @@ final class FrontierV3FungibleProductionEffect {
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ItemStack actual = chest.getItem(slot);
             ExactItemStack exact = state.inventory().itemAt(layout.containerId(), slot).orElse(null);
-            if (exact != null) { if (!FrontierV3CargoHandoffExecutor.exactMatch(actual, exact)) return false; continue; }
+            if (exact != null) { if (!FrontierV3ExactItemPresentation.exactMatch(actual, exact)) return false; continue; }
             var resource = expected.get(slot);
             if (resource == null) { if (!actual.isEmpty()) return false; continue; }
             ItemStack requested = stack(resource);

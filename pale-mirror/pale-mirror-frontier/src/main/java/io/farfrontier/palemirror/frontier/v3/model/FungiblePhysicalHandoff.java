@@ -104,7 +104,7 @@ public final class FungiblePhysicalHandoff {
             destinationBindings.add(binding.id().equals(destinationBinding.id()) ? new PhysicalStackBinding(binding.id(), binding.accountId(),
                     binding.address(), binding.authorityEpoch(), binding.itemKind(), finalLots, finalClaims, binding.playerSaveFence()) : binding);
         }
-        return new FungibleResourceHandoffObserved(source.id(), new CustodyAccount(destination.id(), destination.custody(),
+        return new FungibleResourceHandoffObserved(source.id(), destination.withQuantities(
                 add(destination.lotQuantities(), sourceBinding.lotQuantities()), add(destination.claimQuantities(), sourceBinding.claimQuantities())),
                 sourceEpoch, destinationEpoch, sourceBinding.lotQuantities(), sourceBinding.claimQuantities(), remainingSource, destinationBindings);
     }

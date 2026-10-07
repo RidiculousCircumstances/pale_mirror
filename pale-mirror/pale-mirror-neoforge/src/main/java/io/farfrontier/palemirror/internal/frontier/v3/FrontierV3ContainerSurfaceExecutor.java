@@ -68,6 +68,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         FrontierWorldState state = state(runtime);
         if (state == null) return;
         state.inventory().surfaces().values().stream()
+                .filter(ContainerSurface::fixed)
                 .filter(surface -> surface.status() == ContainerSurfaceStatus.UNMATERIALIZED
                         || surface.status() == ContainerSurfaceStatus.PREPARED)
                 .sorted(Comparator.comparing(ContainerSurface::containerId))
@@ -149,6 +150,7 @@ final class FrontierV3ContainerSurfaceExecutor {
     private static void auditOneActiveSurface(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                               FrontierWorldState state) {
         var active = state.inventory().surfaces().values().stream()
+                .filter(ContainerSurface::fixed)
                 .filter(surface -> surface.status() == ContainerSurfaceStatus.ACTIVE)
                 .filter(surface -> !ReferenceContainerCustody.isReferenceContainer(state, surface.containerId()))
                 .sorted(Comparator.comparing(ContainerSurface::containerId)).toList();
@@ -169,8 +171,8 @@ final class FrontierV3ContainerSurfaceExecutor {
         if (!level.getBlockState(target).isAir() || level.getBlockState(target.below()).isAir()) return null;
         if (!level.setBlock(target, Blocks.CHEST.defaultBlockState(), 3)) return null;
         if (!(level.getBlockEntity(target) instanceof ChestBlockEntity chest)) return null;
-        if (!chest.getPersistentData().getString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY).isBlank() || !chest.isEmpty()) return null;
-        chest.getPersistentData().putString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY, containerId.value());
+        if (!chest.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY).isBlank() || !chest.isEmpty()) return null;
+        chest.getPersistentData().putString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY, containerId.value());
         chest.getPersistentData().putString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY,
                 ReferenceContainerCustody.provenance(containerId));
         chest.setChanged();
@@ -179,7 +181,7 @@ final class FrontierV3ContainerSurfaceExecutor {
 
     static ChestBlockEntity activeChest(ServerLevel level, BlockPos target, SubjectId containerId) {
         if (!(level.getBlockEntity(target) instanceof ChestBlockEntity chest)) return null;
-        return containerId.value().equals(chest.getPersistentData().getString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY)) ? chest : null;
+        return containerId.value().equals(chest.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY)) ? chest : null;
     }
 
     static boolean writeCanonicalSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
@@ -213,7 +215,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         if (state.inventory().containers().get(containerId) == null) return false;
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ExactItemStack expected = state.inventory().itemAt(containerId, slot).orElse(null);
-            if (expected != null && !FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), expected)) return false;
+            if (expected != null && !FrontierV3ExactItemPresentation.exactMatch(chest.getItem(slot), expected)) return false;
         }
         return matchesFungibleSlots(chest, state, containerId);
     }
@@ -230,7 +232,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ExactItemStack expected = state.inventory().itemAt(containerId, slot).orElse(null);
             if (expected == null ? chest.getItem(slot).isEmpty()
-                    : FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), expected)) continue;
+                    : FrontierV3ExactItemPresentation.exactMatch(chest.getItem(slot), expected)) continue;
             if (!pendingProductionOutputAt(state, containerId, slot, chest.getItem(slot))) return false;
         }
         return true;
@@ -301,7 +303,7 @@ final class FrontierV3ContainerSurfaceExecutor {
                 if (id == null || !BuiltInRegistries.ITEM.containsKey(id)
                         || BuiltInRegistries.ITEM.get(id) == net.minecraft.world.item.Items.AIR
                         || item.count() > BuiltInRegistries.ITEM.get(id).getDefaultMaxStackSize()) return Optional.empty();
-                planned.set(slot, FrontierV3CargoHandoffExecutor.materializedStack(item));
+                planned.set(slot, FrontierV3ExactItemPresentation.materializedStack(item));
             }
         }
         FungibleResourceLedger resources = state.inventory().fungibleResources();
@@ -379,7 +381,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         try {
             ProductionTransformationStateSupport.Target target = ProductionTransformationStateSupport.target(state, intent);
             return target.slot().containerId().equals(containerId) && target.slot().slot() == slot
-                    && FrontierV3CargoHandoffExecutor.exactMatch(physical, target.output());
+                    && FrontierV3ExactItemPresentation.exactMatch(physical, target.output());
         } catch (IllegalArgumentException ignored) {
             // A broken canonical intent never grants a physical exception to the drift audit.
             return false;
@@ -425,9 +427,9 @@ final class FrontierV3ContainerSurfaceExecutor {
     private static String firstMismatch(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ExactItemStack expected = state.inventory().itemAt(containerId, slot).orElse(null); ItemStack actual = chest.getItem(slot);
-            if (expected == null ? actual.isEmpty() : FrontierV3CargoHandoffExecutor.exactMatch(actual, expected)) continue;
+            if (expected == null ? actual.isEmpty() : FrontierV3ExactItemPresentation.exactMatch(actual, expected)) continue;
             CustomData data = actual.get(DataComponents.CUSTOM_DATA);
-            String actualId = data == null ? "" : data.copyTag().getString(FrontierV3CargoHandoffExecutor.ITEM_ID_KEY);
+            String actualId = data == null ? "" : data.copyTag().getString(FrontierV3ExactItemPresentation.ITEM_ID_KEY);
             return "slot=" + slot + ";expected=" + (expected == null ? "EMPTY" : expected.id().value() + "/" + expected.itemKind() + "/" + expected.count())
                     + ";actual=" + (actual.isEmpty() ? "EMPTY" : BuiltInRegistries.ITEM.getKey(actual.getItem()) + "/" + actual.getCount() + "/" + actualId);
         }

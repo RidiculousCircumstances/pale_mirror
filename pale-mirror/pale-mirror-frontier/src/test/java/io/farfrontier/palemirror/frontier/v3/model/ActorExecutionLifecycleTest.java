@@ -119,7 +119,7 @@ class ActorExecutionLifecycleTest {
         assertThrows(IllegalArgumentException.class, () -> new ActorActivityCapabilities(
                 Set.of(ActorActivityKind.PRODUCTION), List.of(capability)));
         var harvestOnly = new ActorActivityCapabilities(Set.of(ActorActivityKind.FIELD_HARVEST), List.of(capability));
-        assertThrows(IllegalArgumentException.class, () -> harvestOnly.require(ActorActivityKind.LOGISTICS));
+        assertThrows(IllegalArgumentException.class, () -> harvestOnly.require(ActorActivityKind.GROUP_MEMBER));
     }
 
     @Test void farmerMealKeepsTheJobAndRecoveryContinuationAndSelectionAloneResumesIt() {
@@ -233,7 +233,7 @@ class ActorExecutionLifecycleTest {
                         admitted, id, body, position.offset(1, 0, 0)), FrontierWorldStateUpdate.begin()));
         for (var port : invalid) {
             var lifecycle = new ActorExecutionLifecycle(new ActorActivityCapabilities(Set.of(ActorActivityKind.PRESENCE),
-                    List.of(checkpointCapability(owner, port))));
+                    List.of(checkpointCapability(owner, port))), (basis, execution) -> java.util.Optional.empty());
             assertThrows(IllegalArgumentException.class, () -> lifecycle.checkpointBodyDeparture(admitted, body, position));
         }
         assertEquals(body, ActorBodyAuthority.current(admitted, actor));

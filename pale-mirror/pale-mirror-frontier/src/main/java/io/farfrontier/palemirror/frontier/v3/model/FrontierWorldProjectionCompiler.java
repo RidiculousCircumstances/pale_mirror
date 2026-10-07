@@ -19,7 +19,6 @@ public final class FrontierWorldProjectionCompiler {
                 .filter(id -> state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE).count();
         return new FrontierWorldProjection(worldId, revision, instant, bootstrap.canonicalSha256(), bootstrap.settlements().size(),
                 residents, bioforms, state.infection().size(), state.inventory().items().size(), state.productionJobs().size(),
-                state.operations().size(),
                 (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED).count(),
                 (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).count(),
                 (int) state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED).count(),

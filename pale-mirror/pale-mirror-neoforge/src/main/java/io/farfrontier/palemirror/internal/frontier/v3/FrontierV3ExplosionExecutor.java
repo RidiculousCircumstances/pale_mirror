@@ -156,7 +156,7 @@ final class FrontierV3ExplosionExecutor {
         if (source instanceof InventoryCustody.WorldCarrier carrier) {
             Entity actual = level.getEntity(carrier.carrierId());
             if (actual instanceof ItemEntity drop && !drop.isRemoved()) {
-                ledger.resolveItem(ready, FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), item)
+                ledger.resolveItem(ready, FrontierV3ExactItemPresentation.exactMatch(drop.getItem(), item)
                         ? ExplosionItemImpact.Outcome.RETAINED : ExplosionItemImpact.Outcome.CONFLICT);
                 return;
             }
@@ -166,10 +166,10 @@ final class FrontierV3ExplosionExecutor {
             }
             if (actual != null && !actual.isRemoved()) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.CONFLICT); return; }
             List<ItemEntity> drops = level.getEntitiesOfClass(ItemEntity.class, new AABB(position).inflate(16.0D), drop ->
-                    FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), item)
-                            && FrontierV3CargoHandoffExecutor.worldCarrierId(drop.getItem()).filter(carrier.carrierId()::equals).isPresent());
+                    FrontierV3ExactItemPresentation.exactMatch(drop.getItem(), item)
+                            && FrontierV3ExactItemPresentation.worldCarrierId(drop.getItem()).filter(carrier.carrierId()::equals).isPresent());
             if (drops.size() == 1) {
-                ItemEntity drop = drops.getFirst(); ItemStack stack = drop.getItem(); FrontierV3CargoHandoffExecutor.bindWorldCarrier(stack, drop.getUUID()); drop.setItem(stack);
+                ItemEntity drop = drops.getFirst(); ItemStack stack = drop.getItem(); FrontierV3ExactItemPresentation.bindWorldCarrier(stack, drop.getUUID()); drop.setItem(stack);
                 move(runtime, item.id(), source, new InventoryCustody.WorldCarrier(drop.getUUID())); ledger.resolveItem(ready, ExplosionItemImpact.Outcome.TRANSFERRED); return;
             }
             if (drops.size() > 1) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.CONFLICT); return; }
@@ -177,12 +177,12 @@ final class FrontierV3ExplosionExecutor {
         }
         InventoryCustody.ContainerSlot slot = (InventoryCustody.ContainerSlot) source;
         if (level.getBlockEntity(position) instanceof ChestBlockEntity chest && slot.slot() < chest.getContainerSize()
-                && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot.slot()), item)) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.RETAINED); return; }
-        List<ItemEntity> carriers = level.getEntitiesOfClass(ItemEntity.class, new AABB(position).inflate(16.0D), entity -> FrontierV3CargoHandoffExecutor.exactMatch(entity.getItem(), item));
+                && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(slot.slot()), item)) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.RETAINED); return; }
+        List<ItemEntity> carriers = level.getEntitiesOfClass(ItemEntity.class, new AABB(position).inflate(16.0D), entity -> FrontierV3ExactItemPresentation.exactMatch(entity.getItem(), item));
         List<Player> holders = level.players().stream().filter(player -> FrontierV3InventoryObservationExecutor.hasExactItem(player, item)).map(player -> (Player) player).toList();
         if (carriers.size() + holders.size() != 1) { ledger.resolveItem(ready, carriers.isEmpty() && holders.isEmpty() ? destroy(runtime, item.id(), source, "explosion") : ExplosionItemImpact.Outcome.CONFLICT); return; }
         if (!carriers.isEmpty()) {
-            ItemEntity carrier = carriers.getFirst(); ItemStack stack = carrier.getItem(); FrontierV3CargoHandoffExecutor.bindWorldCarrier(stack, carrier.getUUID()); carrier.setItem(stack);
+            ItemEntity carrier = carriers.getFirst(); ItemStack stack = carrier.getItem(); FrontierV3ExactItemPresentation.bindWorldCarrier(stack, carrier.getUUID()); carrier.setItem(stack);
             move(runtime, item.id(), source, new InventoryCustody.WorldCarrier(carrier.getUUID())); ledger.resolveItem(ready, ExplosionItemImpact.Outcome.TRANSFERRED); return;
         }
         move(runtime, item.id(), source, new InventoryCustody.Player(holders.getFirst().getUUID())); ledger.resolveItem(ready, ExplosionItemImpact.Outcome.TRANSFERRED);
@@ -193,8 +193,8 @@ final class FrontierV3ExplosionExecutor {
     }
     private static boolean contains(MinecartChest cart, io.farfrontier.palemirror.frontier.v3.model.ExactItemStack item, java.util.UUID carrierId) {
         for (int slot = 0; slot < cart.getContainerSize(); slot++) {
-            if (FrontierV3CargoHandoffExecutor.exactMatch(cart.getItem(slot), item)
-                    && FrontierV3CargoHandoffExecutor.worldCarrierId(cart.getItem(slot)).filter(carrierId::equals).isPresent()) return true;
+            if (FrontierV3ExactItemPresentation.exactMatch(cart.getItem(slot), item)
+                    && FrontierV3ExactItemPresentation.worldCarrierId(cart.getItem(slot)).filter(carrierId::equals).isPresent()) return true;
         }
         return false;
     }

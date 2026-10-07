@@ -40,8 +40,6 @@ public final class PhysicalIntentRoleBinding {
     @Override public boolean equals(Object other) { return other instanceof PhysicalIntentRoleBinding binding && schema == binding.schema && roles.equals(binding.roles) && scene.equals(binding.scene); }
     @Override public int hashCode() { return Objects.hash(schema, roles, scene); }
 
-    public static PhysicalIntentRoleBinding cargoHandoff(SubjectId operation, SubjectId cargo) { return bind(PhysicalIntentRoleSchema.CARGO_HANDOFF, map(PhysicalIntentSubjectRole.LOGISTICS_OPERATION, operation,
-            PhysicalIntentSubjectRole.CARGO, cargo)); }
     public static PhysicalIntentRoleBinding structuralRepair(SubjectId structure, SubjectId material) { return bind(PhysicalIntentRoleSchema.STRUCTURAL_REPAIR, map(PhysicalIntentSubjectRole.STRUCTURE, structure,
             PhysicalIntentSubjectRole.MATERIAL, material)); }
     public static PhysicalIntentRoleBinding routeConstruction(SubjectId route, SubjectId project, SubjectId cargo, SubjectId material) { return bind(PhysicalIntentRoleSchema.ROUTE_CONSTRUCTION,
@@ -51,8 +49,6 @@ public final class PhysicalIntentRoleBinding {
     public static PhysicalIntentRoleBinding serviceDecontamination(SubjectId work, SubjectId worker, SubjectId item) { return bind(PhysicalIntentRoleSchema.SERVICE_DECONTAMINATION,
             map(PhysicalIntentSubjectRole.SETTLEMENT_SERVICE_WORK, work, PhysicalIntentSubjectRole.WORKER, worker, PhysicalIntentSubjectRole.INPUT_ITEM, item)); }
     public static PhysicalIntentRoleBinding explosion(SubjectId bomber, SubjectId engagement) { return bind(PhysicalIntentRoleSchema.EXPLOSION, map(PhysicalIntentSubjectRole.BOMBER, bomber, PhysicalIntentSubjectRole.ENGAGEMENT, engagement)); }
-    public static PhysicalIntentRoleBinding routeSceneStrike(SubjectId attacker, SubjectId target, SceneLeaseId lease, long revision) { return new PhysicalIntentRoleBinding(PhysicalIntentRoleSchema.ROUTE_SCENE_STRIKE,
-            map(PhysicalIntentSubjectRole.ATTACKER, attacker, PhysicalIntentSubjectRole.TARGET, target), java.util.Optional.of(new PhysicalSceneBinding(lease, revision))); }
     public static PhysicalIntentRoleBinding assaultSceneStrike(SubjectId attacker, SubjectId target, SceneLeaseId lease, long revision) { return new
             PhysicalIntentRoleBinding(PhysicalIntentRoleSchema.ASSAULT_SCENE_STRIKE, map(PhysicalIntentSubjectRole.ATTACKER, attacker, PhysicalIntentSubjectRole.TARGET, target), java.util.Optional.of(new PhysicalSceneBinding(lease, revision))); }
     public static PhysicalIntentRoleBinding hiveGrowthConsumption(SubjectId job, SubjectId item) { return bind(PhysicalIntentRoleSchema.HIVE_GROWTH_CONSUMPTION, map(PhysicalIntentSubjectRole.HIVE_GROWTH_JOB, job,
@@ -72,8 +68,6 @@ public final class PhysicalIntentRoleBinding {
     }
     public static PhysicalIntentRoleBinding production(SubjectId job, SubjectId input, SubjectId output) { return bind(PhysicalIntentRoleSchema.PRODUCTION, map(PhysicalIntentSubjectRole.PRODUCTION_JOB, job,
             PhysicalIntentSubjectRole.INPUT_ITEM, input, PhysicalIntentSubjectRole.OUTPUT_ITEM, output)); }
-    public static PhysicalIntentRoleBinding cargoLoading(SubjectId contract, SubjectId cargo, SubjectId sourceItem) { return bind(PhysicalIntentRoleSchema.CARGO_LOADING, map(PhysicalIntentSubjectRole.CONTRACT, contract,
-            PhysicalIntentSubjectRole.CARGO, cargo, PhysicalIntentSubjectRole.SOURCE_ITEM, sourceItem)); }
     public static PhysicalIntentRoleBinding routeConstructionLoading(SubjectId route, SubjectId project, SubjectId cargo, SubjectId cargoItem, SubjectId sourceItem) { return
             bind(PhysicalIntentRoleSchema.ROUTE_CONSTRUCTION_LOADING, map(PhysicalIntentSubjectRole.ROUTE, route, PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT, project, PhysicalIntentSubjectRole.CARGO, cargo,
             PhysicalIntentSubjectRole.CARGO_ITEM, cargoItem, PhysicalIntentSubjectRole.SOURCE_ITEM, sourceItem)); }

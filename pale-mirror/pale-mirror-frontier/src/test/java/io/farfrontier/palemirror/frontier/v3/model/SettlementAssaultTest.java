@@ -49,9 +49,9 @@ class SettlementAssaultTest {
                 StrategicTaskKind.ASSAULT_SETTLEMENT, Optional.empty(),
                 List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD, StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER), List.of(), StrategicTaskStatus.ACTIVE);
         SettlementAssault assault = assault(task, List.of(new SubjectId("bioform:west-0")), List.of(new SubjectId("resident:1-1")));
-        StrategicPlanState plans = new StrategicPlanState(Map.of(objective.id(), objective), Map.of(task.id(), task), Map.of(), Map.of(),
-                SettlementInfectionKnowledge.empty(), HiveOperationKnowledge.empty(), HiveTerritoryKnowledge.empty(), HiveSettlementKnowledge.empty(),
-                HiveDoctrineState.initial(), Map.of(assault.id(), assault));
+        StrategicPlanState plans = new StrategicPlanState(Map.of(objective.id(), objective),
+                Map.of(task.id(), task), Map.of(), SettlementInfectionKnowledge.empty(), HiveTerritoryKnowledge.empty(),
+                HiveSettlementKnowledge.empty(), HiveDoctrineState.initial(), Map.of(assault.id(), assault));
 
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         StrategicPlanStateCodec.write(new DataOutputStream(bytes), plans);
@@ -59,9 +59,9 @@ class SettlementAssaultTest {
 
         assertEquals(assault, restored.settlementAssaults().get(assault.id()));
         assertEquals(assault.sighting().settlementAnchor(), restored.settlementAssaults().get(assault.id()).settlementAnchor());
-        assertThrows(IllegalArgumentException.class, () -> new StrategicPlanState(Map.of(objective.id(), objective), Map.of(), Map.of(), Map.of(),
-                SettlementInfectionKnowledge.empty(), HiveOperationKnowledge.empty(), HiveTerritoryKnowledge.empty(), HiveSettlementKnowledge.empty(),
-                HiveDoctrineState.initial(), Map.of(assault.id(), assault)));
+        assertThrows(IllegalArgumentException.class, () -> new StrategicPlanState(Map.of(objective.id(),
+                objective), Map.of(), Map.of(), SettlementInfectionKnowledge.empty(), HiveTerritoryKnowledge.empty(),
+                HiveSettlementKnowledge.empty(), HiveDoctrineState.initial(), Map.of(assault.id(), assault)));
     }
 
     @Test void refusesDuplicateDefendersAndAResolvedStateWithoutAnOutcome() {
@@ -99,11 +99,10 @@ class SettlementAssaultTest {
         PhysicalIntent intent = strike(state, lease, cause, attacker, target);
         SubjectId hive = assault.hiveId();
         FrontierWorldState hot = state;
-        var wrongFamily = new PhysicalIntent(intent.id(), intent.kind(), intent.status(), cause,
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, target, lease.id(), lease.revision()),
-                intent.origin(), 0, intent.postcondition(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
-        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(hot, hive, wrongFamily),
-                "an exact scene identity cannot authorize a foreign lifecycle family");
+        assertThrows(IllegalArgumentException.class, () -> new PhysicalIntent(intent.id(), intent.kind(), intent.status(), cause,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(attacker, target, lease.id(), lease.revision()),
+                intent.origin(), 0, intent.postcondition(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK),
+                "a foreign lifecycle family is rejected at typed intent construction");
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(hot, hive, strike(hot, lease,
                 SettlementAssaultCauseIdentity.strike(assault.id(), attackers.getLast(), assault.nextStrikeEpoch()), attackers.getLast(), target)),
                 "a lease member who is not the COLD-selected attacker must not manufacture a HOT cause");

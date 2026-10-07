@@ -12,6 +12,13 @@ import static io.farfrontier.palemirror.frontier.v3.model.FrontierDomainRelation
 final class UnitGroupRelationships {
     private UnitGroupRelationships() { }
     static void collect(FrontierWorldState state, List<Edge> edges) {
+        for (var claim : state.inventory().fungibleResources().claims().values()) {
+            if (claim.purpose() != ClaimPurpose.EXPEDITION_SUPPLY) continue;
+            var mission = state.shipments().missions().get(claim.claimantId());
+            if (mission == null || mission.supplies().stream().flatMap(load -> load.allocations().stream())
+                    .noneMatch(a -> !a.loaded() && !a.withdrawn() && a.claimId().equals(claim.id())))
+                throw new IllegalArgumentException("provisioning claim has no exact retained loading obligation");
+        }
         for (var group : state.unitGroups().groups().values()) {
             var port = UnitGroupMissionPorts.require(group); port.validate(state, group);
             var owner = new SubjectEndpoint(EntityKind.UNIT_GROUP, group.id());
@@ -28,6 +35,7 @@ final class UnitGroupRelationships {
                     || group.phase() == UnitGroup.Phase.CLOSED && mission.stage() != TransportMission.Stage.RETURNING
                         && mission.stage() != TransportMission.Stage.COMPLETE)
                 throw new IllegalArgumentException("transport mission lost its exact group or legal closing boundary");
+            io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.validate(state, mission, group);
             var owner = new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, mission.id());
             var life = mission.stage() == TransportMission.Stage.COMPLETE ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
             edges.add(declaredEdge(Kind.TRANSPORT_GROUP, owner, owner,
@@ -39,6 +47,14 @@ final class UnitGroupRelationships {
                 edges.add(declaredEdge(Kind.TRANSPORT_SHIPMENT, owner, owner,
                         new SubjectEndpoint(EntityKind.SHIPMENT, id), life, "transport:" + mission.id().value()));
             }
+            mission.supplies().ifPresent(load -> {
+                for (var a : load.allocations()) if (!a.loaded() && !a.withdrawn()) {
+                    edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_CLAIM, owner, owner,
+                            new SubjectEndpoint(EntityKind.RESOURCE_CLAIM, a.claimId()), Lifecycle.ACTIVE, "supply:" + a.claimId().value()));
+                    edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_SOURCE, owner, owner,
+                            new SubjectEndpoint(EntityKind.RESOURCE_ACCOUNT, a.sourceAccountId()), Lifecycle.ACTIVE, "supply:" + a.claimId().value()));
+                }
+            });
         }
         for (var shipment : state.shipments().shipments().values()) if (shipment.transportMissionId().isPresent()) {
             var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());

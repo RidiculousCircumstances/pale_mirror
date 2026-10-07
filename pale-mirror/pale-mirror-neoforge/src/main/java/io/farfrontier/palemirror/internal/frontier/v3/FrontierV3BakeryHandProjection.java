@@ -50,7 +50,7 @@ final class FrontierV3BakeryHandProjection {
             ExactItemStack item = state.inventory().items().get(work.phase() == BakeryWorkState.Phase.STATION_LOAD
                     ? job.consumedItemId() : job.outputItemId());
             if (item == null || !item.custody().equals(new InventoryCustody.Actor(job.workerId()))) return false;
-            held = FrontierV3CargoHandoffExecutor.materializedStack(item);
+            held = FrontierV3ExactItemPresentation.materializedStack(item);
         } else {
             CustodyAccount account = state.inventory().fungibleResources().accounts().get(work.actorAccountId());
             if (account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
@@ -84,7 +84,7 @@ final class FrontierV3BakeryHandProjection {
             ExactItemStack item = state.inventory().items().get(work.phase() == BakeryWorkState.Phase.STATION_LOAD
                     ? job.consumedItemId() : job.outputItemId());
             return item != null && item.custody().equals(new InventoryCustody.Actor(job.workerId()))
-                    && FrontierV3CargoHandoffExecutor.exactMatch(observed, item);
+                    && FrontierV3ExactItemPresentation.exactMatch(observed, item);
         }
         String kind = work.phase() == BakeryWorkState.Phase.STATION_LOAD ? "minecraft:wheat" : "minecraft:bread";
         Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(kind));

@@ -20,6 +20,6 @@ final class FrontierV3SettlementIngressGeometry {
         Settlement settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst().orElse(null);
         if (settlement == null) return Optional.empty();
         return settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.FARM).findFirst()
-                .map(farm -> new Value(farm.anchor(), FrontierRouteNetwork.supplyWaypoints(state.bootstrap(), settlementId).getFirst()));
+                .map(farm -> new Value(farm.anchor(), FrontierRouteNetwork.settlementWaypoints(state.bootstrap(), settlementId).getFirst()));
     }
 }

@@ -19,7 +19,7 @@ import java.util.Optional;
 
 /** Read-only scene diagnosis; it has no materialization, movement or canonical mutation authority. */
 final class FrontierV3SceneReadiness {
-    record Value(String bodies, String carrier, String serviceDemand, String serviceMotion, String serviceInput, List<String> members) {
+    record Value(String bodies, String serviceDemand, String serviceMotion, String serviceInput, List<String> members) {
         Value { members = List.copyOf(members); }
     }
 
@@ -30,9 +30,7 @@ final class FrontierV3SceneReadiness {
     }
 
     static Value forLease(ServerLevel level, FrontierWorldState state, SceneLease lease) {
-        String carrier = FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease)
-                ? FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name() : "NOT_APPLICABLE";
-        return new Value(bodyReadiness(level, state, lease), carrier, serviceDemand(level, state, lease),
+        return new Value(bodyReadiness(level, state, lease), serviceDemand(level, state, lease),
                 serviceMotion(level, state, lease), serviceInput(level, state, lease), observedMembers(level, lease));
     }
 

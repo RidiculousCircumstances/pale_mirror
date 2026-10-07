@@ -16,25 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class HumanAssignmentProjectionTest {
-    @Test
-    void supplyOperationOwnsTheSameExactTransportAndEscortAssignmentsAcrossRecovery() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
-                new WorldId("frontier:human-assignment"), 91L));
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state).orElseThrow();
 
-        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
-        assertFalse(operation.unit().legacyUnderstrength());
-        assertEquals(3, operation.participantIds().size());
-        assertEquals(HumanAssignmentKind.CARGO_TRANSPORT, assignments.assignment(operation.unit().cargoCrewId()).kind());
-        assertEquals(operation.id(), assignments.assignment(operation.unit().cargoCrewId()).ownerId().orElseThrow());
-        var escorts = operation.unit().members().stream().filter(member -> member.duty() == RouteUnitDuty.ESCORT).toList();
-        assertEquals(2, escorts.size());
-        escorts.forEach(member -> assertEquals(HumanAssignmentKind.ESCORT, assignments.assignment(member.residentId()).kind()));
-        FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
-        assertEquals(assignments, HumanAssignmentProjection.compile(restored));
-        assertEquals(operation.unit(), restored.operations().get(operation.id()).unit());
-    }
 
     @Test
     void idleAssignmentCannotClaimAnOwner() {

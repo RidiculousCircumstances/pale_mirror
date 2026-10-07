@@ -6,7 +6,6 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
@@ -52,22 +51,6 @@ final class FrontierV3SceneReleaseExecutor {
             return; // Re-read the resulting authority next turn before releasing any body.
         }
         if (FrontierV3SceneReleaseReadiness.awaitingEntityStorage(level, state, lease)) return;
-        boolean hasCargoCarrier = FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease);
-        RouteOperation operation = hasCargoCarrier ? state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId()) : null;
-        boolean interrupted = hasCargoCarrier && operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
-        // Release requires current physical evidence, never a historical HOT sample.
-        if (hasCargoCarrier && !interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
-            var ledger = FrontierV3CargoDepartureLedger.get(level, state.bootstrap().worldId());
-            var id = FrontierV3CargoCarrierExecutor.id(lease);
-            var receipt = ledger.observation(id);
-            if (level.getEntity(id) != null || ledger.conflicted(id) || receipt.isEmpty()
-                    || !FrontierV3CargoCarrierExecutor.currentDeparture(state, lease, receipt.orElseThrow(), level.registryAccess())) {
-                conflict(level, runtime, state, lease, "release-carrier-unavailable"); return;
-            }
-            // The unload callback alone is not proof that vanilla saved the cart. Wait
-            // for the exact entity-region write and synchronization before cold custody.
-            if (!ledger.savedObservation(receipt.orElseThrow())) return;
-        }
         List<SceneMemberPosition> positions = new ArrayList<>();
         List<SceneMember> departedMembers = new ArrayList<>();
         var releasePolicy = FrontierV3SceneBehaviorRegistry.releaseFailurePolicy(lease.cause().kind());
@@ -113,7 +96,6 @@ final class FrontierV3SceneReleaseExecutor {
             releasePolicy.conflict(level, runtime, state, lease, rejected.reason()); return;
         }
         var payload = ((FrontierV3SceneReleaseEffects.Ready) effects).payload();
-        if (!FrontierV3CargoDepartureObserver.prepareRelease(level, state, lease)) return;
         CommandResult result = releaseLoaded(runtime, lease, binding, payload);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released", lease, result);
         if (result instanceof CommandResult.Accepted) {

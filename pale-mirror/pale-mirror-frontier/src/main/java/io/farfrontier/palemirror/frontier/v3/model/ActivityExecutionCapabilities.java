@@ -18,10 +18,8 @@ public final class ActivityExecutionCapabilities {
             registration(HumanAssignmentKind.FIELD_HARVEST, FrontierResourceSiteHarvestSceneSupport::executionCheckpoint,
                     ResourceSiteHarvestLabour::pause, ResourceSiteHarvestLabour::workStatsChanged,
                     FrontierResourceSiteHarvestSceneSupport::waitingForServiceResource),
-            delegated(HumanAssignmentKind.CARGO_TRANSPORT, ActorActivityKind.OPERATION_ASSEMBLY, ActorActivityKind.LOGISTICS),
             delegated(HumanAssignmentKind.COURIER, ActorActivityKind.COURIER),
             new GroupAssignmentCapability(),
-            delegated(HumanAssignmentKind.ESCORT, ActorActivityKind.OPERATION_ASSEMBLY, ActorActivityKind.LOGISTICS),
             delegated(HumanAssignmentKind.ROUTE_PATROL, ActorActivityKind.ROUTE_PATROL),
             delegated(HumanAssignmentKind.SETTLEMENT_DEFENCE, ActorActivityKind.SETTLEMENT_ASSAULT),
             delegated(HumanAssignmentKind.ENGINEERING_RECOVERY, ActorActivityKind.ENGINEERING_ASSEMBLY, ActorActivityKind.ENGINEERING_WORK),
@@ -45,6 +43,9 @@ public final class ActivityExecutionCapabilities {
 
     public static ResidentWorkYield assess(FrontierWorldState state, HumanAssignment assignment) {
         return CURRENT.evaluate(state, assignment);
+    }
+    public static boolean permitsHomeFood(FrontierWorldState state, HumanAssignment assignment) {
+        return CURRENT.capabilities.get(assignment.kind()).permitsHomeFood(state, assignment);
     }
     public static boolean waitingForServiceResource(FrontierWorldState state, HumanAssignment assignment) {
         CURRENT.evaluate(state, assignment); // validate exact current assignment and owner checkpoint
@@ -73,6 +74,8 @@ public final class ActivityExecutionCapabilities {
     ResidentWorkYield evaluate(FrontierWorldState state, HumanAssignment assignment) {
         if (!HumanAssignmentProjection.compile(state).assignment(assignment.residentId()).equals(assignment))
             throw new IllegalArgumentException("checkpoint requested for a foreign current assignment");
+        if (ActorInventoryInteractionFences.pending(state, assignment.residentId()))
+            return new ActivityExecutionCheckpoint(state, assignment, ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT).validate(state, assignment);
         return Objects.requireNonNull(capabilities.get(assignment.kind()).checkpoint(state, assignment),
                 "owner checkpoint").validate(state, assignment);
     }
@@ -80,7 +83,7 @@ public final class ActivityExecutionCapabilities {
     /** Assignment adapter delegates to the registered UAE owner, not a kind-wide safety hold. */
     private static ActivityExecutionCapability delegated(HumanAssignmentKind kind, ActorActivityKind... activityKinds) {
         Set<ActorActivityKind> declared = Set.of(activityKinds);
-        return registration(kind, (state, assignment) -> {
+        var delegate = registration(kind, (state, assignment) -> {
             var retained = state.actorExecutions().actors().get(assignment.residentId());
             var current = retained == null ? java.util.Optional.<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId>empty()
                     : retained.current();
@@ -98,6 +101,29 @@ public final class ActivityExecutionCapabilities {
                     .orElse(ResidentWorkYield.Status.READY);
             return new ActivityExecutionCheckpoint(state, assignment, status);
         });
+        return new ActivityExecutionCapability() {
+            @Override public HumanAssignmentKind kind() { return kind; }
+            @Override public ActivityExecutionCheckpoint checkpoint(FrontierWorldState state, HumanAssignment assignment) {
+                return delegate.checkpoint(state, assignment);
+            }
+            @Override public FrontierWorldState pauseLabour(FrontierWorldState state, HumanAssignment assignment, long tick) {
+                return delegate.pauseLabour(state, assignment, tick);
+            }
+            @Override public List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> workStatsChanged(
+                    FrontierWorldState state, HumanAssignment assignment, long tick) {
+                return delegate.workStatsChanged(state, assignment, tick);
+            }
+            @Override public boolean permitsHomeFood(FrontierWorldState state, HumanAssignment assignment) {
+                var retained = state.actorExecutions().actors().get(assignment.residentId());
+                if (retained == null) return false;
+                var execution = java.util.stream.Stream.concat(retained.current().stream(), retained.suspended().stream())
+                        .filter(value -> declared.contains(value.activityKind())
+                                && assignment.ownerId().equals(java.util.Optional.of(value.activityOwnerId())))
+                        .findFirst().orElse(null);
+                return execution != null && ActorExecutionComposition.CAPABILITIES.require(execution.activityKind())
+                        .permitsHomeFood(state, execution);
+            }
+        };
     }
 
     static ActivityExecutionCapability registration(HumanAssignmentKind kind,

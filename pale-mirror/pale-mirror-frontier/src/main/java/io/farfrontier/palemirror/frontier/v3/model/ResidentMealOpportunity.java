@@ -9,10 +9,10 @@ import java.util.Optional;
 public final class ResidentMealOpportunity {
     private ResidentMealOpportunity() { }
 
-    public record Source(SubjectId depotId, SurfaceAnchor clearingSurface,
+    public record Source(ResidentFoodSource foodSource, SurfaceAnchor clearingSurface,
                          FungibleResourceCustodySupport.LotSelection selection, FoodPortion portion) {
         public Source {
-            Objects.requireNonNull(depotId, "meal depot");
+            Objects.requireNonNull(foodSource, "meal food source");
             Objects.requireNonNull(clearingSurface, "meal clearing surface");
             Objects.requireNonNull(selection, "meal resource selection");
             Objects.requireNonNull(portion, "meal food portion");
@@ -22,10 +22,10 @@ public final class ResidentMealOpportunity {
     }
 
     /** Cheap economic eligibility; geometry is planned only for an actual meal admission. */
-    public record Candidate(SubjectId depotId, FungibleResourceCustodySupport.LotSelection selection,
+    public record Candidate(ResidentFoodSource foodSource, FungibleResourceCustodySupport.LotSelection selection,
                             FoodPortion portion) {
         public Candidate {
-            Objects.requireNonNull(depotId, "meal candidate depot");
+            Objects.requireNonNull(foodSource, "meal candidate food source");
             Objects.requireNonNull(selection, "meal candidate selection");
             Objects.requireNonNull(portion, "meal candidate portion");
             if (!selection.lotQuantities().equals(portion.lotQuantities()))
@@ -33,7 +33,7 @@ public final class ResidentMealOpportunity {
         }
     }
 
-    public enum Wait { RESIDENT_STATE, CONTAINER_CUSTODY, SERVICE_ACCESS, FOOD_STOCK }
+    public enum Wait { RESIDENT_STATE, CONTAINER_CUSTODY, SERVICE_ACCESS, FOOD_STOCK, MISSION_SUPPLY, INVENTORY_CAPACITY }
 
     /** The food owner explains source refusal; the scheduler never inspects resource semantics. */
     public record CandidateAdmission(Optional<Candidate> candidate, Optional<Wait> pending) {
@@ -53,9 +53,13 @@ public final class ResidentMealOpportunity {
     }
 
     public static Optional<Source> find(FrontierWorldState state, SubjectId residentId, long atTick) {
-        return candidate(state, residentId, atTick).flatMap(candidate ->
-                ServiceAccessCoordinator.mealClearingSurface(state, residentId).map(clearing ->
-                        new Source(candidate.depotId(), clearing, candidate.selection(), candidate.portion())));
+        return candidate(state, residentId, atTick).flatMap(candidate -> {
+            if (candidate.foodSource() instanceof ResidentFoodSource.Personal)
+                return Optional.of(new Source(candidate.foodSource(), state.actorLocations().get(residentId).supportingSurface(),
+                        candidate.selection(), candidate.portion()));
+            return ServiceAccessCoordinator.mealClearingSurface(state, residentId).map(clearing ->
+                    new Source(candidate.foodSource(), clearing, candidate.selection(), candidate.portion()));
+        });
     }
 
     public static Optional<Candidate> candidate(FrontierWorldState state, SubjectId residentId, long atTick) {
@@ -71,6 +75,27 @@ public final class ResidentMealOpportunity {
         ActorLocation body = state.actorLocations().get(residentId);
         if (body == null || body.condition().status() != ActorLifeStatus.ALIVE)
             return CandidateAdmission.waiting(Wait.RESIDENT_STATE);
+        var rules = state.bootstrap().ruleset().residentLife();
+        int wanted = state.humanPopulation().nutrition(residentId).accrueThrough(atTick, rules,
+                resident.characteristics().effectiveMetabolismPermille(atTick)).nutritionWanted(rules);
+        var resources = state.inventory().fungibleResources();
+        for (var carry : UnitInventoryPresentation.inventory(state, residentId).values().stream()
+                .sorted(java.util.Comparator.comparing(ActorCarriedResources.Presentation::accountId)).toList()) {
+            if (!resources.accounts().get(carry.accountId()).claimQuantities().isEmpty()) continue;
+            for (var food : new java.util.TreeMap<>(rules.foods().foods()).values()) {
+                int quantity = food.portionFor(wanted, resources.unclaimedQuantity(carry.accountId(), resident.settlementId(), food.itemKind()));
+                if (quantity == 0) continue;
+                var selection = FungibleResourceCustodySupport.selectAtAccount(resources, carry.accountId(),
+                        resident.settlementId(), food.itemKind(), quantity).orElseThrow();
+                return new CandidateAdmission(Optional.of(new Candidate(
+                        new ResidentFoodSource.Personal(residentId, carry.accountId(), carry.slot()), selection,
+                        new FoodPortion(food.itemKind(), food.nutritionPerItem(), selection.lotQuantities()))), Optional.empty());
+            }
+        }
+        if (!ActivityExecutionCapabilities.permitsHomeFood(state, HumanAssignmentProjection.compile(state).assignment(residentId)))
+            return CandidateAdmission.waiting(Wait.MISSION_SUPPLY);
+        var portionSlot = UnitInventoryPresentation.freeSlot(state, residentId);
+        if (portionSlot.isEmpty()) return CandidateAdmission.waiting(Wait.INVENTORY_CAPACITY);
         SubjectId depot = FrontierWorldState.depotId(resident.settlementId());
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot))
             return CandidateAdmission.waiting(Wait.CONTAINER_CUSTODY);
@@ -78,9 +103,6 @@ public final class ResidentMealOpportunity {
             return CandidateAdmission.waiting(Wait.SERVICE_ACCESS);
         var account = FungibleResourceCustodySupport.accountAtContainer(state, depot).orElse(null);
         if (account == null) return CandidateAdmission.waiting(Wait.FOOD_STOCK);
-        var rules = state.bootstrap().ruleset().residentLife();
-        int wanted = state.humanPopulation().nutrition(residentId).accrueThrough(atTick, rules,
-                resident.characteristics().effectiveMetabolismPermille(atTick)).nutritionWanted(rules);
         // Stable item-kind ordering is selection policy, never implicit resource identity.
         for (var food : new java.util.TreeMap<>(rules.foods().foods()).values()) {
             int available = state.inventory().fungibleResources().unclaimedQuantity(account.id(),
@@ -89,7 +111,8 @@ public final class ResidentMealOpportunity {
             if (quantity == 0) continue;
             var selection = FungibleResourceCustodySupport.selectAtContainer(state, depot,
                     resident.settlementId(), food.itemKind(), quantity).orElseThrow();
-            return new CandidateAdmission(Optional.of(new Candidate(depot, selection,
+            return new CandidateAdmission(Optional.of(new Candidate(new ResidentFoodSource.Depot(resident.settlementId(),
+                    depot, account.id(), portionSlot.orElseThrow()), selection,
                     new FoodPortion(food.itemKind(), food.nutritionPerItem(), selection.lotQuantities()))), Optional.empty());
         }
         return CandidateAdmission.waiting(Wait.FOOD_STOCK);

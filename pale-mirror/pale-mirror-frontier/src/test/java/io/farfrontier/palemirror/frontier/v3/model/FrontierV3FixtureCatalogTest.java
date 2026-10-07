@@ -274,7 +274,7 @@ class FrontierV3FixtureCatalogTest {
     void steppedRouteFixtureCompilesOneBoundedTwoBlockRiseAndItsProviderOwnedFootings() {
         FrontierWorldState state = FrontierV3FixtureCatalog.steppedRouteConfiguration(new WorldId("frontier:stepped-route-fixture"), 41L).initialState();
         SubjectId settlement = state.bootstrap().settlements().getFirst().id();
-        TraversalTopology topology = state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement);
+        TraversalTopology topology = state.routeTopology().settlementTraversalTopology(state.bootstrap(), settlement);
 
         assertEquals(4L, topology.edges().stream().filter(edge -> edge.grade() == 1).count());
         assertEquals(1, topology.edges().stream().mapToInt(TraversalTopology.Edge::grade).max().orElseThrow());

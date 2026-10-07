@@ -211,7 +211,7 @@ class GoodsTradeTest {
         var retry = io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.plan(state,
                 io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(shipment.id(), 11), 11);
         var next = (io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled) retry.getFirst().payload();
-        assertEquals(11 + state.bootstrap().ruleset().cadence().terminalLogisticsReviewInterval(), next.replacement().dueAt().ticks());
+        assertEquals(11 + state.bootstrap().ruleset().cadence().transportReviewInterval(), next.replacement().dueAt().ticks());
         assertEquals(43, state.shipments().shipments().get(shipment.id()).quantity());
         resources = state.inventory().fungibleResources().destroy(RECEIVER_ACCOUNT, Map.of(filler, 43), Map.of());
         state = state.withInventory(state.inventory().withFungibleResources(resources));
@@ -363,7 +363,7 @@ class GoodsTradeTest {
         long executedAt = Math.max(now + 59, state.companies().goodsTrade().orders().get(SELL_ORDER).expiresAtTick() + 1);
         var receiptReview = io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.review(CONTRACT,
                 state.shipments().shipments().get(shipment.id()).reception().orElseThrow().id(), now);
-        var receiptEvents = FrontierWorldRuntimeDefinition.planScheduled(state, receiptReview, true, new SimInstant(executedAt));
+        var receiptEvents = FrontierWorldRuntimeDefinition.planScheduled(state, receiptReview, new SimInstant(executedAt));
         assertTrue(receiptEvents.stream().map(ProposedEvent::payload)
                 .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::isInstance)
                 .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::cast)

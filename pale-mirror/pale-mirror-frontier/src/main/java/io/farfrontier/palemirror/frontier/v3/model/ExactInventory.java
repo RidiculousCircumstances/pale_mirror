@@ -520,28 +520,6 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     }
 
     /** Moves every exact cargo item into observed receiver slots and removes the completed batch. */
-    public ExactInventory completeCargoHandoff(SubjectId cargoId, List<CargoHandoffPlacement> placements) {
-        CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "cargo id"));
-        if (batch == null) throw new IllegalArgumentException("completed cargo is absent: " + cargoId.value());
-        List<SubjectId> observedItems = placements.stream().map(CargoHandoffPlacement::itemId).sorted().toList();
-        if (!observedItems.equals(batch.itemIds().stream().sorted().toList())) {
-            throw new IllegalArgumentException("cargo hand-off observation does not place every exact cargo item");
-        }
-        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
-        for (CargoHandoffPlacement placement : placements) {
-            ExactItemStack item = nextItems.get(placement.itemId());
-            if (item == null || !item.custody().equals(new InventoryCustody.Cargo(cargoId))) {
-                throw new IllegalArgumentException("handoff item is not in its exact cargo batch: " + placement.itemId().value());
-            }
-            ContainerRecord receiver = containers.get(placement.receiverSlot().containerId());
-            if (receiver == null) throw new IllegalArgumentException("handoff receiver container is unknown");
-            nextItems.put(item.id(), new ExactItemStack(item.id(), receiver.ownerId(), item.itemKind(), item.count(), placement.receiverSlot()));
-        }
-        Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
-        nextCargo.remove(cargoId);
-        return admitNoNewContainerOvercommit(new ExactInventory(containers, nextItems, nextCargo, playerItems,
-                worldCarrierItems, conflicts, surfaces, economics, fungibleResources));
-    }
 
     /** Exact and fungible custody share one world-carrier ownership predicate. */
     public boolean hasWorldCarrierCustody(UUID carrierId) {
@@ -841,5 +819,27 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 }
             }
         }
+    }
+    public ExactInventory completeCargoHandoff(SubjectId cargoId, List<CargoHandoffPlacement> placements) {
+        CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "cargo id"));
+        if (batch == null) throw new IllegalArgumentException("completed cargo is absent: " + cargoId.value());
+        List<SubjectId> observedItems = placements.stream().map(CargoHandoffPlacement::itemId).sorted().toList();
+        if (!observedItems.equals(batch.itemIds().stream().sorted().toList())) {
+            throw new IllegalArgumentException("cargo hand-off observation does not place every exact cargo item");
+        }
+        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
+        for (CargoHandoffPlacement placement : placements) {
+            ExactItemStack item = nextItems.get(placement.itemId());
+            if (item == null || !item.custody().equals(new InventoryCustody.Cargo(cargoId))) {
+                throw new IllegalArgumentException("handoff item is not in its exact cargo batch: " + placement.itemId().value());
+            }
+            ContainerRecord receiver = containers.get(placement.receiverSlot().containerId());
+            if (receiver == null) throw new IllegalArgumentException("handoff receiver container is unknown");
+            nextItems.put(item.id(), new ExactItemStack(item.id(), receiver.ownerId(), item.itemKind(), item.count(), placement.receiverSlot()));
+        }
+        Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
+        nextCargo.remove(cargoId);
+        return admitNoNewContainerOvercommit(new ExactInventory(containers, nextItems, nextCargo, playerItems,
+                worldCarrierItems, conflicts, surfaces, economics, fungibleResources));
     }
 }

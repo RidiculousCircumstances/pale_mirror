@@ -43,6 +43,7 @@ public record PhysicalIntentRetirementProof(
     public static String entityKindTag(FrontierDomainRelationships.EntityKind kind) { return "rel.entity." + switch (kind) {
         case OBJECTIVE -> "objective"; case TASK -> "task"; case MARKET_DEMAND -> "market-demand"; case MARKET_QUOTE -> "market-quote";
         case MARKET_ORDER -> "market-order"; case FINANCIAL_RESERVATION -> "financial-reservation"; case PRODUCTION_JOB -> "production-job";
+        case FINANCIAL_BUDGET -> "financial-budget";
         case GOODS_ORDER -> "goods-order"; case GOODS_CONTRACT -> "goods-contract";
         case ECONOMIC_ACCOUNT -> "economic-account"; case CONTAINER -> "container";
         case SHIPMENT -> "shipment";
@@ -52,8 +53,8 @@ public record PhysicalIntentRetirementProof(
         case RESOURCE_SITE -> "resource-site"; case RESOURCE_HARVEST_JOB -> "resource-harvest-job"; case RESIDENT -> "resident";
         case EXACT_ITEM -> "exact-item"; case RESOURCE_LOT -> "resource-lot"; case RESOURCE_ACCOUNT -> "resource-account"; case RESOURCE_CLAIM -> "resource-claim";
         case PROVISION_CYCLE -> "provision-cycle"; case PROVISION_ALLOCATION -> "provision-allocation"; case SCENE_LEASE -> "scene-lease";
-        case AMBIENT_LEASE -> "ambient-lease"; case CARRIER_EVIDENCE -> "carrier-evidence"; case SUPPLY_CONTRACT -> "supply-contract";
-        case ROUTE_OPERATION -> "route-operation"; case CARGO -> "cargo"; case SERVICE_WORK -> "service-work";
+        case AMBIENT_LEASE -> "ambient-lease"; case CARRIER_EVIDENCE -> "carrier-evidence";
+        case CARGO -> "cargo"; case SERVICE_WORK -> "service-work";
         case HIVE_MOBILIZATION -> "hive-mobilization"; case BIOFORM -> "bioform"; case STRUCTURE -> "structure"; }; }
     public static FrontierDomainRelationships.EntityKind entityKindFromTag(String tag) {
         for (FrontierDomainRelationships.EntityKind kind : FrontierDomainRelationships.EntityKind.values()) if (entityKindTag(kind).equals(tag)) return kind;

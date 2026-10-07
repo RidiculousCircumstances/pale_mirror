@@ -214,13 +214,16 @@ public final class ActorBodyAuthority {
     /** The physical owner supplies absence only after its exact durable carrier fence. */
     public static FrontierWorldState released(FrontierWorldState state, ActorBodyId body) {
         requireLiving(state, body.actorId());
+        if (ActorInventoryInteractionFences.pending(state, body.actorId()))
+            throw new IllegalArgumentException("body release retains a prepared inventory interaction");
         var phase = require(state, body).phase();
         if (phase != FencedRecoveryPhase.RUNNING && phase != FencedRecoveryPhase.PREPARED)
             throw new IllegalArgumentException("body absence requires an exact unambiguous incarnation");
         var checkpoint = phase == FencedRecoveryPhase.RUNNING
                 ? ActorExecutionComposition.LIFECYCLE.checkpointBodyDeparture(state, body,
                     state.actorLocations().get(body.actorId()).body()) : FrontierWorldStateUpdate.begin();
-        return state.withChanges(checkpoint.fencedRecovery(
+        return state.withChanges(checkpoint.inventory(state.inventory().withFungibleResources(
+                UnitInventoryBodyCustody.departureResources(state, body))).fencedRecovery(
                 state.fencedRecovery().revokeToCold(ActorBodyId.recoveryBindingId(body.actorId()), body.physicalEpoch())));
     }
     /** Physical facts do not complete, pause or replace an activity or a resource operation. */
@@ -237,6 +240,8 @@ public final class ActorBodyAuthority {
         var binding = require(state, observed.body());
         if (binding.phase() != FencedRecoveryPhase.RUNNING && binding.phase() != FencedRecoveryPhase.AMBIGUOUS)
             throw new IllegalArgumentException("observed body unload requires an actually admitted incarnation");
+        if (ActorInventoryInteractionFences.pending(state, observed.body().actorId()))
+            throw new IllegalArgumentException("body unload retains a prepared inventory interaction");
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observed.observedBody().supportingSurface().support());
         var actors = new java.util.LinkedHashMap<>(state.actorLocations());
         actors.put(observed.body().actorId(), new ActorLocation(observed.observedBody(),
@@ -244,7 +249,8 @@ public final class ActorBodyAuthority {
         // Exact saved-absence evidence may resolve body ambiguity, never a resource effect.
         // There is no published RUNNING intermediate or permission to actuate a saved body.
         var checkpoint = ActorExecutionComposition.LIFECYCLE.checkpointBodyDeparture(state, observed.body(), observed.observedBody());
-        return state.withChanges(checkpoint.actorLocations(actors).fencedRecovery(
+        return state.withChanges(checkpoint.actorLocations(actors).inventory(state.inventory().withFungibleResources(
+                UnitInventoryBodyCustody.departureResources(state, observed.body()))).fencedRecovery(
                 state.fencedRecovery().retireObservedBodyAbsence(binding.bindingId(),
                     observed.body().physicalEpoch(), observed.body().actorId())));
     }

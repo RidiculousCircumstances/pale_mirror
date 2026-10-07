@@ -24,10 +24,6 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                     ReferenceSurfaceRecovery.verify(state, verified);
                     yield accepted(verified.containerId(), verified);
                 }
-                case CargoCleanupSaved saved -> {
-                    state.fencedRecovery().acknowledgeCargoCleanupSaved(saved.retirement());
-                    yield accepted(saved.retirement().cargoId(), saved);
-                }
                 case ReplicaDeclared declared -> { state.replicaCustody().declare(declared.replica()); yield accepted(declared.replica().objectId(), declared); }
                 case ReplicaEmitted emitted -> { state.replicaCustody().emit(emitted.objectId(), emitted.expectedCanonicalRevision(), emitted.expectedReplicaRevision(),
                         emitted.emittedCanonicalRevision(), emitted.fingerprint(), emitted.provenance()); yield accepted(emitted.objectId(), emitted); }
@@ -90,10 +86,6 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                 case ReferenceSurfaceVerified verified -> {
                     if (!event.subject().equals(verified.containerId())) throw new IllegalArgumentException("surface verification has a foreign subject");
                     yield ReferenceSurfaceRecovery.verify(state, verified);
-                }
-                case CargoCleanupSaved saved -> {
-                    if (!event.subject().equals(saved.retirement().cargoId())) throw new IllegalArgumentException("cargo cleanup has a foreign subject");
-                    yield replaceRecovery(state, state.fencedRecovery().acknowledgeCargoCleanupSaved(saved.retirement()));
                 }
                 case ReplicaDeclared declared -> replace(state, state.replicaCustody().declare(declared.replica()));
                 case ReplicaEmitted emitted -> replace(state, state.replicaCustody().emit(emitted.objectId(), emitted.expectedCanonicalRevision(), emitted.expectedReplicaRevision(),

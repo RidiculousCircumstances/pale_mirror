@@ -17,6 +17,7 @@ final class FrontierV3ActorFirstAdmissionBootstrap {
         initial.humanPopulation().residents().values().forEach(resident -> add(permits, initial, resident.id(), ActorKind.RESIDENT));
         initial.bootstrap().hive().bioforms().forEach(bioform -> add(permits, initial, bioform.id(), ActorKind.BIOFORM));
         initial.hiveColony().spawnedBioforms().values().forEach(bioform -> add(permits, initial, bioform.id(), ActorKind.BIOFORM));
+        initial.transportFleet().assets().values().forEach(asset -> add(permits, initial, asset.actorId(), ActorKind.PACK_ANIMAL));
         if (!permits.keySet().equals(initial.actorLocations().keySet()))
             throw new IllegalStateException("initial actor identities do not match the declared canonical rosters");
         if (!ledger.registerFirstAdmissions(java.util.List.copyOf(permits.values())))

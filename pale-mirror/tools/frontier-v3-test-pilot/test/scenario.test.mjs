@@ -200,13 +200,9 @@ test('a demand-bound visit has no client-local settle completion and names its e
 });
 
 test('native pilot permits only named isolated development profiles', () => {
-  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'scene-return' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'settlement-assault' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'hive-nutrient-transfer' } }));
-  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'hot-scout-sighting' } }));
-  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'hot-scout-intercept' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'hot-scout-patrol-recovery' } }));
-  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'operation-assembly' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'hive-mobilization' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'settlement-provision' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'health-quarantine' } }));
@@ -215,6 +211,16 @@ test('native pilot permits only named isolated development profiles', () => {
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'production-worker-death' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'stepped-route' } }));
   assert.throws(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'arbitrary-fixture' } }), /profile/);
+});
+
+test('retired hive-supply profiles and operation actions are rejected', () => {
+  for (const profile of ['uncontested-supply', 'autonomous-supply-interception', 'hot-scene-strike',
+    'scene-return', 'hot-scout-sighting', 'hot-scout-intercept', 'operation-assembly']) {
+    assert.throws(() => validateScenario({ ...scenario, server: { ...scenario.server, profile } }), /profile/);
+  }
+  for (const type of ['visit_operation', 'look_operation']) {
+    assert.throws(() => validateScenario({ ...scenario, actions: [{ type, operation: 'operation:retired' }] }), /action/);
+  }
 });
 
 test('native pilot permits one ordinary bounded block placement as causal evidence', () => {
@@ -432,9 +438,9 @@ test('runner does not let an earlier matching diagnostic satisfy a later action-
 });
 
 test('an action-bound assertion retains its own diagnostic when a later action reads the same object', () => {
-  const assertion = { after: 4, view: 'operation', id: 'operation:supply-1-2' };
-  const cold = { actionStep: 4, value: { kind: 'operation', id: 'operation:supply-1-2', hiveEngagement: { status: 'COLD_COMBAT' } } };
-  const hot = { actionStep: 6, value: { kind: 'operation', id: 'operation:supply-1-2', hiveEngagement: { status: 'HOT' } } };
+  const assertion = { after: 4, view: 'process', id: 'job:site-harvest-1-wheat-field-1' };
+  const cold = { actionStep: 4, value: { kind: 'process', id: 'job:site-harvest-1-wheat-field-1', status: 'COLD' } };
+  const hot = { actionStep: 6, value: { kind: 'process', id: 'job:site-harvest-1-wheat-field-1', status: 'HOT' } };
   assert.equal(diagnosticForAssertion([cold, hot], assertion), cold);
 });
 

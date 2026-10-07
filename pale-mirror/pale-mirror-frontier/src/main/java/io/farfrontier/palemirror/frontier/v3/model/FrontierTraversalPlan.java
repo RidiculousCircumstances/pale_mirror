@@ -32,7 +32,7 @@ public record FrontierTraversalPlan(Map<TraversalTopologyId, TraversalTopology> 
         Map<TraversalTopologyId, TraversalTopology> topologies = new LinkedHashMap<>();
         Map<SubjectId, FacilityBinding> facilities = new LinkedHashMap<>();
         for (Settlement settlement : state.bootstrap().settlements()) {
-            TraversalTopology supply = state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement.id());
+            TraversalTopology supply = state.routeTopology().settlementTraversalTopology(state.bootstrap(), settlement.id());
             put(topologies, supply.id(), supply);
             TraversalTopology circulation = SettlementLocalCirculation.topology(settlement);
             put(topologies, circulation.id(), circulation);

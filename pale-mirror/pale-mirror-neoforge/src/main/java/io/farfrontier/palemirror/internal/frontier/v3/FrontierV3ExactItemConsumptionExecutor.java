@@ -76,7 +76,7 @@ final class FrontierV3ExactItemConsumptionExecutor {
         if (!level.hasChunkAt(target.chestPosition())) return;
         if (ReferenceContainerCustody.isReferenceContainer(state, target.containerId())
                 && !ReferenceContainerCustody.hasOperationalCustody(state, target.containerId())) return;
-        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level, new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.containerId()));
+        ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level, new FrontierV3ExactItemPresentation.StoreTarget(target.chestPosition(), target.containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
             inspectRunning(runtime, intent, target, chest); return;
@@ -117,8 +117,8 @@ final class FrontierV3ExactItemConsumptionExecutor {
         if (!level.hasChunkAt(target.chestPosition())) return;
         if (ReferenceContainerCustody.isReferenceContainer(state, target.containerId())
                 && !ReferenceContainerCustody.hasOperationalCustody(state, target.containerId())) return;
-        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
-                new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.containerId()));
+        ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,
+                new FrontierV3ExactItemPresentation.StoreTarget(target.chestPosition(), target.containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "fungible-chest-conflict"); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
             if (fungibleConsumed(chest, target)) confirmFungible(runtime, intent, target, chest);
@@ -156,14 +156,14 @@ final class FrontierV3ExactItemConsumptionExecutor {
 
     static boolean consume(ChestBlockEntity chest, Target target) {
         ItemStack stack = chest.getItem(target.slot());
-        if (!FrontierV3CargoHandoffExecutor.exactMatch(stack, target.item())) return false;
+        if (!FrontierV3ExactItemPresentation.exactMatch(stack, target.item())) return false;
         stack.shrink(target.count()); chest.setItem(target.slot(), stack); chest.setChanged(); return true;
     }
 
     /** Restart predicate: the same identity tag with exactly the expected remainder is the only success. */
     static boolean consumed(ChestBlockEntity chest, Target target) {
         ItemStack stack = chest.getItem(target.slot()); int remainder = target.item().count() - target.count();
-        return remainder == 0 ? stack.isEmpty() : FrontierV3CargoHandoffExecutor.exactMatch(stack, new ExactItemStack(
+        return remainder == 0 ? stack.isEmpty() : FrontierV3ExactItemPresentation.exactMatch(stack, new ExactItemStack(
                 target.item().id(), target.item().economicOwnerId(), target.item().itemKind(), remainder, target.item().custody()));
     }
 

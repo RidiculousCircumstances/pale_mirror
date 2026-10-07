@@ -36,29 +36,25 @@ final class FrontierV3StoredEntityInspection {
     }
 
     static Snapshot select(CompoundTag raw, ChunkPos chunk, Set<UUID> targets, HolderLookup.Provider registries) {
-        if (!FrontierV3CargoCleanupPersistence.matchesStoredChunk(raw, chunk))
+        if (!FrontierV3StoredEntityInventory.matchesStoredChunk(raw, chunk))
             throw new IllegalStateException("misplaced stored entity chunk");
-        var entities = FrontierV3CargoCleanupPersistence.serializedEntities(raw)
+        var entities = FrontierV3StoredEntityInventory.serializedEntities(raw)
                 .orElseThrow(() -> new IllegalStateException("invalid stored entity inventory"));
         var actors = new HashMap<UUID, FrontierV3SceneDeparturePersistence.SavedBody>();
-        var cargo = new HashMap<UUID, FrontierV3CargoDeparturePersistence.SavedCart>();
         var present = new java.util.HashSet<UUID>();
         for (var id : targets) {
             var entity = entities.get(id);
             if (entity == null) continue;
             present.add(id);
             FrontierV3SceneDeparturePersistence.SavedBody.from(entity).ifPresent(body -> actors.put(id, body));
-            FrontierV3CargoDeparturePersistence.SavedCart.from(entity, registries)
-                    .ifPresent(cart -> cargo.put(id, cart));
         }
-        return new Snapshot(Set.copyOf(present), Map.copyOf(actors), Map.copyOf(cargo));
+        return new Snapshot(Set.copyOf(present), Map.copyOf(actors));
     }
 
     record Snapshot(Set<UUID> present,
-                    Map<UUID, FrontierV3SceneDeparturePersistence.SavedBody> actors,
-                    Map<UUID, FrontierV3CargoDeparturePersistence.SavedCart> cargo) {
+                    Map<UUID, FrontierV3SceneDeparturePersistence.SavedBody> actors) {
         Snapshot {
-            present = Set.copyOf(present); actors = Map.copyOf(actors); cargo = Map.copyOf(cargo);
+            present = Set.copyOf(present); actors = Map.copyOf(actors);
         }
 
         boolean matches(FrontierV3SceneDeparture receipt) {
@@ -67,11 +63,6 @@ final class FrontierV3StoredEntityInspection {
             return present.contains(id) && body != null && body.matches(receipt);
         }
 
-        boolean matches(FrontierV3CargoDeparture receipt) {
-            var id = receipt.entityId();
-            var cart = cargo.get(id);
-            return present.contains(id) && cart != null && cart.matches(receipt);
-        }
     }
 
     record StampedSnapshot(Snapshot snapshot, long writeEpoch) {

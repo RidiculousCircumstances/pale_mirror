@@ -52,8 +52,8 @@ final class FrontierV3StructuralRepairExecutor {
         if (origin == null || !FrontierV3PhysicalDemand.exists(level, new BlockPos(origin.x(), origin.y(), origin.z()))) return;
         Target target = target(state, intent);
         if (target == null || !level.hasChunkAt(target.position()) || !level.hasChunkAt(target.chestPosition())) return;
-        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
-                new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.containerId()));
+        ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,
+                new FrontierV3ExactItemPresentation.StoreTarget(target.chestPosition(), target.containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target, chest); return; }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
@@ -67,7 +67,7 @@ final class FrontierV3StructuralRepairExecutor {
                                        PhysicalIntent intent, Target target, ChestBlockEntity chest) {
         ItemStack stack = chest.getItem(target.slot());
         boolean itemConsumed = target.material().count() == 1 ? stack.isEmpty()
-                : stack.getCount() == target.material().count() - 1 && FrontierV3CargoHandoffExecutor.itemId(stack).equals(Optional.of(target.material().id()));
+                : stack.getCount() == target.material().count() - 1 && FrontierV3ExactItemPresentation.itemId(stack).equals(Optional.of(target.material().id()));
         if (itemConsumed && level.getBlockState(target.position()).equals(FrontierV3GrayboxExecutor.material(target.cell().material()))) {
             confirm(level, runtime, intent, target, chest);
         } else unknown(runtime, intent.id(), "restart-postcondition-conflict");
@@ -93,7 +93,7 @@ final class FrontierV3StructuralRepairExecutor {
     static boolean applyOne(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos position, GrayboxCell cell,
                             ChestBlockEntity chest, int slot, ExactItemStack material) {
         ItemStack stack = chest.getItem(slot);
-        if (!FrontierV3CargoHandoffExecutor.exactMatch(stack, material) || !level.getBlockState(position).isAir()) return false;
+        if (!FrontierV3ExactItemPresentation.exactMatch(stack, material) || !level.getBlockState(position).isAir()) return false;
         if (!level.setBlock(position, FrontierV3GrayboxExecutor.material(cell.material()), 3)) return false;
         stack.shrink(1); chest.setItem(slot, stack); chest.setChanged();
         ledger.repaired(position, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());

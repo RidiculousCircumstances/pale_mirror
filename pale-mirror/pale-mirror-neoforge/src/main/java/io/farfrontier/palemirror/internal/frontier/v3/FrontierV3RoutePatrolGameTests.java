@@ -211,7 +211,7 @@ public final class FrontierV3RoutePatrolGameTests {
         WorldId world = new WorldId("frontier:route-patrol-game-test-" + scenario);
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 811L);
         FrontierWorldState source = base.initialState(); Settlement sourceSettlement = source.bootstrap().settlements().getFirst();
-        BlockPosition sourceOrigin = source.routeTopology().supplyTraversalTopology(source.bootstrap(), sourceSettlement.id())
+        BlockPosition sourceOrigin = source.routeTopology().settlementTraversalTopology(source.bootstrap(), sourceSettlement.id())
                 .linearCorridorSurfaces().getFirst().support();
         BlockPos localOrigin = helper.absolutePos(new BlockPos(2, 8, 2));
         FrontierBootstrap bootstrap = translatedBootstrap(source.bootstrap(), localOrigin.getX() - sourceOrigin.x(),
@@ -223,9 +223,15 @@ public final class FrontierV3RoutePatrolGameTests {
         SubjectId objectiveId = new SubjectId("objective:route-patrol-game-test-" + scenario), taskId = new SubjectId("task:route-patrol-game-test-" + scenario);
         StrategicObjective objective = new StrategicObjective(objectiveId, settlement.id(), StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
-        StrategicTask task = new StrategicTask(taskId, objectiveId, settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
-                Optional.empty(), Optional.empty(), Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(),
-                StrategicTaskStatus.ACTIVE, Optional.empty());
+        StrategicTask task = new StrategicTask(taskId,
+                objectiveId,
+                settlement.id(),
+                StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
+                Optional.empty(),
+                Optional.empty(),
+                List.of(StrategicTaskRequirement.AVAILABLE_GUARD),
+                List.of(),
+                StrategicTaskStatus.ACTIVE);
         RouteUnitManifest unit = RouteUnitManifest.patrol(taskId, leader, List.of(scout));
         // The test's loaded template cell receives a translated complete fresh-world topology,
         // never a local replacement route. Admission and the COLD assembly remain production

@@ -13,10 +13,10 @@ public record ActorMovement(MovementOrder order, long issuedAtTick,
         coldTravel = Objects.requireNonNull(coldTravel, "actor movement COLD travel");
         Objects.requireNonNull(context, "actor movement provider context");
         Objects.requireNonNull(executionId, "actor movement execution authority");
-        // A group owns formation goals while its mission port retains the participant's exact cargo purpose.
-        // The publication/recovery barrier validates that nominal delegation against the complete roster.
-        boolean delegatedGroupGoal = context instanceof ActorMovementContext.GroupLeg leg && leg.groupId().equals(order.ownerId());
-        if (!executionId.actorId().equals(order.actorId()) || !delegatedGroupGoal && !executionId.activityOwnerId().equals(order.ownerId()))
+        // The context declares delegation; the registered provider and closure barrier validate it.
+        // This common value knows neither a trade workflow nor any concrete group's business rules.
+        var goalOwner = context.delegatedGoalOwner().orElse(executionId.activityOwnerId());
+        if (!executionId.actorId().equals(order.actorId()) || !goalOwner.equals(order.ownerId()))
             throw new IllegalArgumentException("movement has foreign execution actor or owner");
         if (issuedAtTick < 0L || coldTravel.isPresent() && (
                 !sameGoalIdentity(coldTravel.orElseThrow().order(), order)

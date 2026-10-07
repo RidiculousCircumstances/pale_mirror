@@ -15,14 +15,12 @@ class HivePresenceProcessTest {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:hive-presence-deferred"), 93L);
         var state = configuration.initialState();
         var action = HivePresenceProcess.initialize(state.bootstrap().hive().id());
-        var planned = FrontierWorldProcessCatalog.planScheduled(FrontierWorldRuntimeDefinition.processRegistry(),
-                state, action, true, new SimInstant(5L));
+        var planned = FrontierWorldProcessCatalog.planScheduled(FrontierWorldRuntimeDefinition.processRegistry(), state, action, new SimInstant(5L));
         assertTrue(planned.stream().map(ProposedEvent::payload).filter(ActorPresenceStarted.class::isInstance)
                 .map(ActorPresenceStarted.class::cast).allMatch(value -> value.atTick() == 5L));
         applyPresence(state, planned);
         var review = StrategicObjectiveProcess.review(state.bootstrap().hive().id(), 1, 2L);
-        var reviewed = FrontierWorldProcessCatalog.planScheduled(FrontierWorldRuntimeDefinition.processRegistry(),
-                state, review, true, new SimInstant(5L));
+        var reviewed = FrontierWorldProcessCatalog.planScheduled(FrontierWorldRuntimeDefinition.processRegistry(), state, review, new SimInstant(5L));
         assertTrue(reviewed.stream().map(ProposedEvent::payload).filter(ActorPresenceStarted.class::isInstance)
                 .map(ActorPresenceStarted.class::cast).allMatch(value -> value.atTick() == 5L));
         applyPresence(state, reviewed);
@@ -44,7 +42,7 @@ class HivePresenceProcessTest {
         assertEquals(1L, configuration.initialSchedules().stream().filter(value -> value.kind().equals(action.kind())).count());
         var registry = FrontierWorldRuntimeDefinition.processRegistry();
         assertEquals("hive", registry.requireScheduledOwner(action.kind()));
-        var planned = FrontierWorldProcessCatalog.planScheduled(registry, before, action, true);
+        var planned = FrontierWorldProcessCatalog.planScheduled(registry, before, action);
         var keys = planned.stream().map(ProposedEvent::payload).filter(ActorPresenceStarted.class::isInstance)
                 .map(ActorPresenceStarted.class::cast).map(value -> value.execution().actorId()).sorted().toList();
         var expected = before.bootstrap().hive().bioforms().stream()
@@ -133,16 +131,14 @@ class HivePresenceProcessTest {
         assertEquals(ActorActivityKind.SCOUT_PATROL, current.activityKind());
         assertEquals(presence.generation() + 1L, current.generation());
         assertTrue(HivePresenceProcess.planFree(active, active.bootstrap().hive().id(), 2L).isEmpty());
-        var review = StrategicObjectiveProcess.plan(active,
-                StrategicObjectiveProcess.review(active.bootstrap().hive().id(), 1, 2L));
+        var review = StrategicObjectiveProcess.plan(active, StrategicObjectiveProcess.review(active.bootstrap().hive().id(), 1, 2L));
         assertTrue(review.stream().noneMatch(value -> value.payload() instanceof ActorPresenceStarted));
         assertThrows(IllegalArgumentException.class, () -> applyPresence(active,
                 List.of(new ProposedEvent(scout.id(), new ActorPresenceStarted(presence, 1L)))));
         var guard = before.bootstrap().hive().bioforms().stream().filter(Bioform::isDefender)
                 .filter(value -> HivePhysiologySupport.initiallyDeployed(before.bootstrap().hive(), value))
                 .findFirst().orElseThrow();
-        assertTrue(StrategicObjectiveProcess.plan(before,
-                StrategicObjectiveProcess.review(before.bootstrap().hive().id(), 1, 2L)).stream()
+        assertTrue(StrategicObjectiveProcess.plan(before, StrategicObjectiveProcess.review(before.bootstrap().hive().id(), 1, 2L)).stream()
                 .anyMatch(value -> value.payload() instanceof ActorPresenceStarted candidate
                         && candidate.execution().actorId().equals(guard.id())));
     }

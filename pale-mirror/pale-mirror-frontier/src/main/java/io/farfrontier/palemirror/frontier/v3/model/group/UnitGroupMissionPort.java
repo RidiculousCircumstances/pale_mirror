@@ -7,6 +7,7 @@ import java.util.Optional;
 
 /** Mission-owned policy supplied to generic coordination; no concrete jobs inside the coordinator. */
 public interface UnitGroupMissionPort {
+    boolean permitsHomeFood(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState state, UnitGroup group);
     UnitGroup.MissionKind kind();
     void validate(FrontierWorldState state, UnitGroup group);
     KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, UnitGroup group);

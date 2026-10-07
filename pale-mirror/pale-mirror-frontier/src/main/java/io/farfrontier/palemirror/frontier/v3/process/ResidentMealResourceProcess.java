@@ -22,17 +22,16 @@ public final class ResidentMealResourceProcess {
         var ledger = state.inventory().fungibleResources();
         var bindings = ledger.bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(retained.actorAccountId())).toList();
-        var address = new PhysicalStackAddress.ActorPocket(subject,
-                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), subject),
-                ResidentMeal.CARRIED_PORTION_SLOT.index());
+        var address = inventoryAddress(state, retained);
         if (bindings.size() != 1 || bindings.getFirst().authorityEpoch() != observed.sourceEpoch()
                 || !bindings.getFirst().address().equals(address)
-                || !bindings.getFirst().lotQuantities().equals(retained.portion().lotQuantities())
+                || !bindings.getFirst().lotQuantities().equals(ledger.accounts().get(retained.actorAccountId()).lotQuantities())
                 || !bindings.getFirst().claimQuantities().equals(Map.of(retained.claimId(), retained.portion().quantity())))
             throw new IllegalArgumentException("portion disposition does not match its original physical pocket fence");
         ledger = switch (observed.outcome()) {
             case MISSING_BEFORE_LOOT -> ledger.destroyObserved(retained.actorAccountId(), observed.sourceEpoch(),
-                    retained.portion().lotQuantities(), Map.of(retained.claimId(), retained.portion().quantity()), List.of());
+                    ledger.accounts().get(retained.actorAccountId()).lotQuantities(),
+                    Map.of(retained.claimId(), retained.portion().quantity()), List.of());
             case WORLD_DROP -> ledger.releaseClaims(Set.of(retained.claimId())).releaseObservedActorAccountToWorld(
                     retained.actorAccountId(), subject,
                     io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), subject),
@@ -72,9 +71,7 @@ public final class ResidentMealResourceProcess {
             }
             case TAKE_APPLIED -> {
                 requireSource(state, retained);
-                var hand = new PhysicalStackAddress.ActorPocket(subject,
-                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(
-                                state.bootstrap().worldId(), subject), ResidentMeal.CARRIED_PORTION_SLOT.index());
+                var hand = inventoryAddress(state, retained);
                 if (observed.destination().size() != 1 || !observed.destination().getFirst().address().equals(hand)
                         || !observed.destination().getFirst().itemKind().equals(retained.portion().itemKind())
                         || observed.destination().getFirst().quantity() != retained.portion().quantity())
@@ -85,12 +82,12 @@ public final class ResidentMealResourceProcess {
                                 new ResourceCustody.Actor(subject), Optional.of(retained.claimId()),
                                 retained.portion().itemKind(), retained.portion().lotQuantities()),
                         new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(retained.depotId()),
-                        state.actorLocations().get(subject).supportingSurface(), ResidentMeal.CARRIED_PORTION_SLOT,
+                        state.actorLocations().get(subject).supportingSurface(), retained.inventorySlot(),
                         FrontierWireTags.tag(ResidentMeal.Phase.TAKE), 1L);
                 ledger = ActorItemCustody.transferObserved(state, order, observed.step().sourceEpoch(),
                         observed.step().destinationEpoch(), observed.remainingSource(), observed.destination()).fungibleResources();
                 var portion = new ResidentMealResourceObligation(retained.executionId(), retained.body(),
-                        retained.settlementId(), retained.depotId(), retained.sourceAccountId(), retained.actorAccountId(),
+                        retained.settlementId(), retained.source(), retained.actorAccountId(),
                         retained.portion(), ResidentMealResourceObligation.CustodyState.ACTOR_PORTION,
                         Optional.empty(), retained.retiredAtTick());
                 people = people.settleMealResources(retained, Optional.of(portion));
@@ -99,7 +96,7 @@ public final class ResidentMealResourceProcess {
                 if (retained.custodyState() != ResidentMealResourceObligation.CustodyState.ACTOR_CONSUMPTION_PENDING)
                     throw new IllegalArgumentException("retired consumption lacks its exact held food fence");
                 ledger = ledger.destroyObserved(retained.actorAccountId(), observed.step().sourceEpoch(),
-                        retained.portion().lotQuantities(), Map.of(retained.claimId(), retained.portion().quantity()), List.of());
+                        retained.portion().lotQuantities(), Map.of(retained.claimId(), retained.portion().quantity()), observed.remainingSource());
                 people = people.settleMealResources(retained, Optional.empty());
             }
         }
@@ -113,5 +110,12 @@ public final class ResidentMealResourceProcess {
                 || !ReferenceContainerCustody.hasLiveCustody(state, retained.depotId())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, retained.depotId()))
             throw new IllegalArgumentException("retired take lacks its exact available physical source");
+    }
+    public static PhysicalStackAddress inventoryAddress(FrontierWorldState state, ResidentMealResourceObligation retained) {
+        var entity = io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), retained.residentId());
+        return switch (retained.inventorySlot()) {
+            case ActorItemSlot.Pocket pocket -> new PhysicalStackAddress.ActorPocket(retained.residentId(), entity, pocket.index());
+            case ActorItemSlot.Hand hand -> new PhysicalStackAddress.ActorHand(retained.residentId(), entity, hand.hand());
+        };
     }
 }

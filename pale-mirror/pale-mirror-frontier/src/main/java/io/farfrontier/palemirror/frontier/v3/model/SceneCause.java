@@ -6,7 +6,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
  * <p>A lease is an execution mechanism, not an operation category. Each cause must be
  * validated by its owning domain before it may be prepared.</p>
  */
-public sealed interface SceneCause permits LogisticsSceneCause, SettlementAssaultSceneCause, EngineeringWorkSceneCause, MedicalTreatmentSceneCause,
+public sealed interface SceneCause permits SettlementAssaultSceneCause, EngineeringWorkSceneCause, MedicalTreatmentSceneCause,
         ResourceSiteHarvestSceneCause, ProductionWorkSceneCause, SettlementServiceWorkSceneCause, RoutePatrolSceneCause {
     SceneCauseKind kind();
     default void validateLeaseStatus(SceneLeaseStatus status) { }

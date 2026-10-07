@@ -46,7 +46,7 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
         ExactItemStack first = exactWeapon(runtime); SubjectId firstActor = ((InventoryCustody.Actor) first.custody()).actorId();
         helper.setBlock(new BlockPos(2, 7, 0), Blocks.STONE.defaultBlockState());
         Villager firstBody = body(level, state(runtime), firstActor, helper.absolutePos(new BlockPos(2, 8, 0)));
-        firstBody.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(first)); level.addFreshEntity(firstBody);
+        firstBody.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3ExactItemPresentation.materializedStack(first)); level.addFreshEntity(firstBody);
         helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, firstBody, firstActor), "the exact actor-held stack must be accounted before the managed body dies");
         ExactItemStack released = state(runtime).inventory().items().get(first.id());
         helper.assertTrue(released.custody() instanceof InventoryCustody.WorldCarrier, "the same canonical stack must become one world carrier");
@@ -58,7 +58,7 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
         // The physical postcondition is the one local, UUID-bound exact stack, not index timing.
         helper.runAfterDelay(5, () -> {
             helper.assertTrue(level.getEntitiesOfClass(ItemEntity.class, firstBody.getBoundingBox().inflate(2.0D),
-                            drop -> firstCarrier.carrierId().equals(drop.getUUID()) && FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), first)).size() == 1,
+                            drop -> firstCarrier.carrierId().equals(drop.getUUID()) && FrontierV3ExactItemPresentation.exactMatch(drop.getItem(), first)).size() == 1,
                     "one tagged physical drop proves the matching hand was released instead of recreated");
             runtime.shutdown();
             FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> changedRuntime =
@@ -69,7 +69,7 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
             secondBody.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance()); level.addFreshEntity(secondBody);
             helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, changedRuntime, secondBody, secondActor), "a changed physical hand is still an accounted equipment outcome");
             helper.assertTrue(!state(changedRuntime).inventory().items().containsKey(second.id()), "a missing exact hand is destroyed rather than replaced or dropped");
-            helper.assertTrue(level.getEntitiesOfClass(ItemEntity.class, secondBody.getBoundingBox().inflate(2.0D), drop -> FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), second)).isEmpty(),
+            helper.assertTrue(level.getEntitiesOfClass(ItemEntity.class, secondBody.getBoundingBox().inflate(2.0D), drop -> FrontierV3ExactItemPresentation.exactMatch(drop.getItem(), second)).isEmpty(),
                     "a changed hand cannot manufacture an exact physical drop");
             changedRuntime.shutdown(); helper.succeed();
         });

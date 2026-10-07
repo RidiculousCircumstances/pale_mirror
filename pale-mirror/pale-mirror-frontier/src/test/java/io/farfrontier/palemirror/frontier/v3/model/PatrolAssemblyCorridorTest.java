@@ -18,7 +18,7 @@ class PatrolAssemblyCorridorTest {
         RouteUnitManifest unit = RouteUnitManifest.patrol(new SubjectId("task:patrol-ingress"), candidates.getFirst().id(), List.of(candidates.get(1).id()));
 
         PatrolAssembly assembly = PatrolAssemblyCorridor.compile(state, unit.ownerId(), settlement, unit);
-        TraversalTopology route = state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement.id());
+        TraversalTopology route = state.routeTopology().settlementTraversalTopology(state.bootstrap(), settlement.id());
         PatrolAssembly.Member leader = assembly.members().get(unit.leaderId());
         SubjectId scoutId = unit.memberIds().stream().filter(id -> !id.equals(unit.leaderId())).findFirst().orElseThrow();
         PatrolAssembly.Member scout = assembly.members().get(scoutId);
@@ -34,9 +34,9 @@ class PatrolAssemblyCorridorTest {
     void retainsAnAlreadyBlockedFirstInspectionEdgeForThePatrolConflictOwner() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:patrol-ingress-blocked"), 41L));
         Settlement settlement = initial.bootstrap().settlements().getFirst();
-        TraversalTopology route = initial.routeTopology().supplyTraversalTopology(initial.bootstrap(), settlement.id());
+        TraversalTopology route = initial.routeTopology().settlementTraversalTopology(initial.bootstrap(), settlement.id());
         TraversalEdgeId edge = route.edges().getFirst().id();
-        FrontierWorldState blocked = initial.withRouteTopology(new RouteTopology(initial.routeTopology().replacementSupplyRoutes(),
+        FrontierWorldState blocked = initial.withRouteTopology(new RouteTopology(initial.routeTopology().replacementRoutes(),
                 java.util.Map.of(settlement.id(), java.util.Map.of(edge, TraversalAvailability.BLOCKED))));
         List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(blocked, settlement.id(), ResidentProfession.SECURITY_WORKER);
         RouteUnitManifest unit = RouteUnitManifest.patrol(new SubjectId("task:patrol-ingress-blocked"), candidates.getFirst().id(), List.of(candidates.get(1).id()));

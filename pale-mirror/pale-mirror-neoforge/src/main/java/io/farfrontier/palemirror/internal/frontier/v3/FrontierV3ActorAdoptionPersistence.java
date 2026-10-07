@@ -56,10 +56,7 @@ final class FrontierV3ActorAdoptionPersistence {
     static boolean matchesSaved(FrontierV3ActorCarrierComposition.Declaration declaration, CompoundTag entity) {
         if (entity == null || !entity.hasUUID("UUID") || !declaration.entityId().equals(entity.getUUID("UUID"))
                 || !entity.contains("NeoForgeData", Tag.TAG_COMPOUND)) return false;
-        String expectedEntity = switch (declaration.kind()) {
-            case RESIDENT -> "minecraft:villager";
-            case BIOFORM -> "minecraft:zombie";
-        };
+        String expectedEntity = FrontierV3ActorCarrierFactory.entityType(declaration.kind());
         if (!expectedEntity.equals(entity.getString("id"))) return false;
         var tag = entity.getCompound("NeoForgeData");
         return declaration.actorId().value().equals(tag.getString(FrontierV3ActorCarrierComposition.ACTOR_KEY))
@@ -83,8 +80,8 @@ final class FrontierV3ActorAdoptionPersistence {
                      FrontierV3AmbientCarrierLedger ledger) {
             writes.record(chunk.toLong(), written);
             candidates.remove(chunk.toLong());
-            if (overflowed || writes.overflowed() || !FrontierV3CargoCleanupPersistence.matchesStoredChunk(data, chunk)) return;
-            var entities = FrontierV3CargoCleanupPersistence.serializedEntities(data).orElse(null);
+            if (overflowed || writes.overflowed() || !FrontierV3StoredEntityInventory.matchesStoredChunk(data, chunk)) return;
+            var entities = FrontierV3StoredEntityInventory.serializedEntities(data).orElse(null);
             if (entities == null) return;
             var transfers = ledger.pendingAdoptions().stream().map(AdoptionCandidate::new).map(value -> (SaveCandidate) value);
             var births = ledger.firstAdmissions().stream()

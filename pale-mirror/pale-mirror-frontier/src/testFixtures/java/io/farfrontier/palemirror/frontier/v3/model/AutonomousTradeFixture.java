@@ -6,7 +6,10 @@ import java.util.*;
 /** Finite initial stock only. The registered participants must create orders, contracts and dispatch themselves. */
 final class AutonomousTradeFixture {
     static FrontierWorldState initial(WorldId world, long seed) {
-        var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, seed));
+        return initial(world, seed, FrontierRulesets.production());
+    }
+    static FrontierWorldState initial(WorldId world, long seed, FrontierRuleset rules) {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, seed, rules));
         var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
         var view = GoodsParticipantView.read(state, seller);
         var commodity = state.bootstrap().ruleset().goodsTrade().policies().get(seller.policy()).stream()

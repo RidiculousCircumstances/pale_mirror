@@ -26,7 +26,7 @@ final class FrontierV3ResidentMealDeathResources {
         var meal = state.humanPopulation().meals().get(id.actorId());
         if (meal == null || !(body instanceof Villager)
                 || !ActorBodyAuthority.current(state, id.actorId()).equals(id)) return () -> { };
-        ItemStack beforeLoot = FrontierV3ActorResourceSlots.get(body, ResidentMeal.CARRIED_PORTION_SLOT).copy();
+        ItemStack beforeLoot = FrontierV3ActorResourceSlots.get(body, meal.inventorySlot()).copy();
         var preparedEffect = prepareEffect(level, runtime, body, id, state, meal);
         // The indexed dying body is the positive source witness. An absent corpse after
         // loot/unload is deliberately not accepted by this port.
@@ -42,14 +42,20 @@ final class FrontierV3ResidentMealDeathResources {
         if (meal.pendingPhysicalStep().isEmpty()) return () -> { };
         Villager worker = (Villager) body;
         var step = meal.pendingPhysicalStep().orElseThrow();
-        var actual = FrontierV3ActorResourceSlots.get(body, ResidentMeal.CARRIED_PORTION_SLOT);
+        var actual = FrontierV3ActorResourceSlots.get(body, meal.inventorySlot());
         if (step.phase() == ResidentMeal.Phase.CONSUME) {
             // This is LivingDeathEvent at the head of die(), BEFORE loot/removal. It is not
             // an empty corpse/lookup observed after disappearance. A nonempty pocket proves
             // no consumption and remains a separate carried-resource obligation.
-            if (!actual.isEmpty()) return () -> { };
+            var held = FrontierV3ResidentMealItems.heldPortion(state, meal);
+            int remainingCount = held.quantity() - meal.portion().quantity();
+            if (remainingCount == 0 ? !actual.isEmpty() : actual.getCount() != remainingCount
+                    || !ItemStack.isSameItemSameComponents(actual, FrontierV3ResidentMealItems.stack(held))) return () -> { };
+            var remainder = remainingCount == 0 ? List.<FungiblePhysicalObservation.Stack>of()
+                    : List.of(new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(
+                            meal.residentId(), worker, meal.inventorySlot()), held.itemKind(), remainingCount));
             var receipt = new ResidentMealResourceEffectObserved(id, meal.executionId(), step,
-                    ResidentMealResourceEffectObserved.Outcome.CONSUMPTION_APPLIED, List.of(), List.of());
+                    ResidentMealResourceEffectObserved.Outcome.CONSUMPTION_APPLIED, remainder, List.of());
             return () -> submit(level, runtime, receipt);
         }
         var surface = state.inventory().surfaces().get(meal.depotId());
@@ -71,7 +77,7 @@ final class FrontierV3ResidentMealDeathResources {
                     ResidentMealResourceEffectObserved.Outcome.TAKE_UNAPPLIED, source, List.of());
         } else if (transfer.after() && FrontierV3ResidentMealItems.matches(actual, meal.portion())) {
             var held = new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(
-                    meal.residentId(), worker, ResidentMeal.CARRIED_PORTION_SLOT), meal.portion().itemKind(), meal.portion().quantity());
+                    meal.residentId(), worker, meal.inventorySlot()), meal.portion().itemKind(), meal.portion().quantity());
             receipt = new ResidentMealResourceEffectObserved(id, meal.executionId(), step,
                     ResidentMealResourceEffectObserved.Outcome.TAKE_APPLIED, source, List.of(held));
         } else return () -> { }; // Ambiguous evidence stays local; never rewrite a chest/pocket.
@@ -91,17 +97,19 @@ final class FrontierV3ResidentMealDeathResources {
                 || retained.custodyState() == ResidentMealResourceObligation.CustodyState.SOURCE_TAKE_PENDING) return;
         var bindings = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(retained.actorAccountId())).toList();
-        var expectedPocket = FrontierV3ActorResourceSlots.address(id.actorId(), body, ResidentMeal.CARRIED_PORTION_SLOT);
+        var expectedPocket = FrontierV3ActorResourceSlots.address(id.actorId(), body, retained.inventorySlot());
         if (bindings.size() != 1 || !bindings.getFirst().address().equals(expectedPocket)
-                || !bindings.getFirst().lotQuantities().equals(retained.portion().lotQuantities())) return;
-        var actual = FrontierV3ActorResourceSlots.get(body, ResidentMeal.CARRIED_PORTION_SLOT);
+                || !bindings.getFirst().lotQuantities().equals(state.inventory().fungibleResources().accounts()
+                        .get(retained.actorAccountId()).lotQuantities())) return;
+        var stock = new FoodPortion(retained.portion().itemKind(), retained.portion().nutritionPerItem(), bindings.getFirst().lotQuantities());
+        var actual = FrontierV3ActorResourceSlots.get(body, retained.inventorySlot());
         if (beforeLoot.isEmpty() && actual.isEmpty()) {
             submitDisposition(level, runtime, new ResidentMealPortionDispositionObserved(id, retained.executionId(),
                     bindings.getFirst().authorityEpoch(), ResidentMealPortionDispositionObserved.Outcome.MISSING_BEFORE_LOOT,
                     Optional.empty()));
             return;
         }
-        if (!FrontierV3ResidentMealItems.matches(beforeLoot, retained.portion())
+        if (!FrontierV3ResidentMealItems.matches(beforeLoot, stock)
                 || !ItemStack.matches(beforeLoot, actual)) return;
         UUID carrier = dropId(state, retained);
         // The already durable retired obligation is the before-effect fence. Never repeat
@@ -115,9 +123,9 @@ final class FrontierV3ResidentMealDeathResources {
         drop.getPersistentData().putByteArray(DROP_RECEIPT_KEY,
                 io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs().encode(receipt));
         if (!level.addFreshEntity(drop)) return; // Source remains intact; no fictional drop receipt.
-        FrontierV3ActorResourceSlots.set(body, ResidentMeal.CARRIED_PORTION_SLOT, ItemStack.EMPTY);
+        FrontierV3ActorResourceSlots.set(body, retained.inventorySlot(), ItemStack.EMPTY);
         if (level.getEntity(carrier) != drop || drop.isRemoved()
-                || !FrontierV3ResidentMealItems.matches(drop.getItem(), retained.portion())) return;
+                || !FrontierV3ResidentMealItems.matches(drop.getItem(), stock)) return;
         submitDisposition(level, runtime, receipt);
     }
 
@@ -128,8 +136,11 @@ final class FrontierV3ResidentMealDeathResources {
         for (var retained : state.humanPopulation().mealResourceObligations().values()) {
             if (retained.custodyState() == ResidentMealResourceObligation.CustodyState.SOURCE_TAKE_PENDING) continue;
             UUID carrier = dropId(state, retained);
+            var account = state.inventory().fungibleResources().accounts().get(retained.actorAccountId());
+            if (account == null) continue;
+            var stock = new FoodPortion(retained.portion().itemKind(), retained.portion().nutritionPerItem(), account.lotQuantities());
             if (!(level.getEntity(carrier) instanceof ItemEntity drop) || drop.isRemoved()
-                    || !FrontierV3ResidentMealItems.matches(drop.getItem(), retained.portion())
+                    || !FrontierV3ResidentMealItems.matches(drop.getItem(), stock)
                     || !drop.getPersistentData().contains(DROP_RECEIPT_KEY, net.minecraft.nbt.Tag.TAG_BYTE_ARRAY)) continue;
             ResidentMealPortionDispositionObserved receipt;
             try {

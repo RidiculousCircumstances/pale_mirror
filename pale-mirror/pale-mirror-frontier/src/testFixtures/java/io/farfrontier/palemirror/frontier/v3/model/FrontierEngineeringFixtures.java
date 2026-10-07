@@ -25,7 +25,7 @@ final class FrontierEngineeringFixtures {
     }
 
     private static RouteConstruction fixtureDetourProject(FrontierWorldState state, Settlement settlement) {
-        List<BlockPosition> baseline = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
+        List<BlockPosition> baseline = state.routeTopology().settlementWaypoints(state.bootstrap(), settlement.id());
         BlockPosition origin = baseline.getFirst(), destination = baseline.getLast();
         BlockPosition egress = origin.offset(-36, 0, 0), lane = egress.offset(0, 0, 60);
         List<BlockPosition> detour = List.of(origin, egress, lane, new BlockPosition(-300, lane.y(), lane.z()),

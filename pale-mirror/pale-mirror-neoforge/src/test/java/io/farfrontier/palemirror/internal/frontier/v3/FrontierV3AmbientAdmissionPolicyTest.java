@@ -401,9 +401,9 @@ class FrontierV3AmbientAdmissionPolicyTest {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state, List.of(), store);
         try {
             FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(
-                    FrontierV3AmbientActorExecutor.entityId(state, ambientResident), ambientResident.value(), false, false, "RESIDENT",
+                    FrontierV3AmbientActorExecutor.entityId(state, ambientResident), ambientResident.value(), false, "RESIDENT",
                     "ACTOR_BODY", "LIVE_BODY", 0L,
-                    io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, ambientResident).physicalEpoch());
+                    io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, ambientResident).physicalEpoch(), "minecraft:villager");
             assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.NOT_MANAGED, true,
                     "an absent projection must fail closed through the same lifecycle/firewall composition");
             FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
@@ -501,9 +501,9 @@ class FrontierV3AmbientAdmissionPolicyTest {
 
             FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
             FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(
-                    FrontierV3AmbientActorExecutor.entityId(nutrientReplacement, resident), resident.value(), false, false, "RESIDENT",
+                    FrontierV3AmbientActorExecutor.entityId(nutrientReplacement, resident), resident.value(), false, "RESIDENT",
                     "ACTOR_BODY", "LIVE_BODY", 0L,
-                    io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(nutrientReplacement, resident).physicalEpoch());
+                    io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(nutrientReplacement, resident).physicalEpoch(), "minecraft:villager");
             assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED, false,
                     "the installed nutrient replacement must retain the exact joining body through the ordinary runtime provider and firewall");
             FrontierV3GrayboxExecutor.admissionProvider(runtime, nutrientReplacement).orElseThrow()

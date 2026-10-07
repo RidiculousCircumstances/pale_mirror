@@ -183,8 +183,8 @@ class FrontierV3ActorBodyLifetimeTest {
         batch.observe(chunk, stored, write);
         var ticket = batch.complete(true, () -> java.util.concurrent.CompletableFuture.completedFuture(null), ledger).orElseThrow();
         assertEquals(java.util.List.of(first), ticket.bodies());
-        assertArrayEquals(new boolean[] {true, false}, FrontierV3DepartureReturnReadFence.fenceStoredInventory(
-                chunk, stored, ledger, FrontierV3CargoDepartureLedger.emptyForTest()));
+        assertTrue(FrontierV3DepartureReturnReadFence.fenceStoredInventory(
+                chunk, stored, ledger));
         assertTrue(ledger.returnRead(actor));
         assertTrue(ledger.recordBodyDeparture(first), "duplicate callback remains idempotent, not a new unload");
         assertFalse(ledger.confirmSavedBodyDeparture(first), "duplicate callback cannot withdraw the load fence");

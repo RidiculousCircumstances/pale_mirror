@@ -67,18 +67,7 @@ public record RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitMan
     public static TraversalTopology inspectionTopology(FrontierWorldState state, StrategicTask task, Settlement settlement) {
         Objects.requireNonNull(state, "patrol inspection state"); Objects.requireNonNull(task, "patrol inspection task");
         Objects.requireNonNull(settlement, "patrol inspection settlement");
-        if (task.operationTarget().isEmpty()) return state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement.id());
-        RouteOperation operation = state.operations().get(task.operationTarget().orElseThrow());
-        BlockPosition observation = task.operationObservationPosition().orElseThrow(() -> new IllegalArgumentException("operation-backed patrol lacks observation"));
-        if (operation == null || !operation.settlementId().equals(settlement.id())
-                || (operation.stage() != OperationStage.FAILED && operation.stage() != OperationStage.INTERRUPTED)
-                || !FrontierRouteNetwork.containsOperationSurfaceCell(operation.route(), observation)
-                || !state.physicalDeltas().containsKey(observation)) {
-            throw new IllegalArgumentException("operation-backed patrol cause is no longer canonical");
-        }
-        List<BlockPosition> route = FrontierRouteNetwork.expandWaypoints(operation.route());
-        return TraversalTopology.corridor(new TraversalTopologyId("topology:patrol-inspection:" + task.id().value()), revision(route), operation.id(),
-                TraversalKind.PEDESTRIAN, java.util.Set.of(TraversalCapability.PEDESTRIAN), route.stream().map(SurfaceAnchor::new).toList());
+        return state.routeTopology().settlementTraversalTopology(state.bootstrap(), settlement.id());
     }
 
     public RoutePatrol {

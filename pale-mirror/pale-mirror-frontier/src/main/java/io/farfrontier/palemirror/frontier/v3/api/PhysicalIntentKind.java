@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.api;
 
 /** Stable semantic category used to select one bounded NeoForge physical executor. */
 public enum PhysicalIntentKind {
-    CARGO_HANDOFF,
     STRUCTURAL_REPAIR,
     ROUTE_CONSTRUCTION,
     DECONTAMINATION,
@@ -17,7 +16,6 @@ public enum PhysicalIntentKind {
     /** One exact owned input stack becomes one named exact output stack in its physical slot. */
     PRODUCTION_TRANSFORMATION,
     /** One exact active-depot stack leaves its physical slot before becoming a named cargo batch. */
-    CARGO_LOADING,
     /** One exact maintenance stack leaves its owned chest before becoming a COLD route-work cargo. */
     ROUTE_CONSTRUCTION_MATERIAL_LOADING,
     /** One exact active hive STORE stack leaves its owned chest before entering the organ network. */
@@ -37,7 +35,6 @@ public enum PhysicalIntentKind {
 
     public int wireTag() {
         return switch (this) {
-            case CARGO_HANDOFF -> 0;
             case STRUCTURAL_REPAIR -> 1;
             case ROUTE_CONSTRUCTION -> 2;
             case DECONTAMINATION -> 3;
@@ -47,7 +44,6 @@ public enum PhysicalIntentKind {
             case RESOURCE_SITE_PREPARATION -> 7;
             case RESOURCE_SITE_HARVEST -> 8;
             case PRODUCTION_TRANSFORMATION -> 9;
-            case CARGO_LOADING -> 10;
             case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> 11;
             case HIVE_NUTRIENT_DEPARTURE -> 12;
             case HIVE_NUTRIENT_ARRIVAL -> 13;

@@ -142,6 +142,7 @@ public final class ResidentMealKnownNavigation {
 
     /** Side pockets keep simultaneous approaches off the single-file exit route. */
     public static boolean atWaitingPocket(FrontierWorldState state, ResidentMeal meal) {
+        if (meal.portable()) return false;
         ActorLocation actor = state.actorLocations().get(meal.residentId());
         if (actor == null) return false;
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());

@@ -35,34 +35,30 @@ final class FrontierV3SceneBehaviorRegistry {
                         SettlementAssault assault = FrontierSceneBehaviors.settlementAssault(lease) == null ? null
                                 : state.strategicPlans().settlementAssaults().get(FrontierSceneBehaviors.settlementAssault(lease).assaultId());
                         return assault == null || attacker == null ? null : SettlementAssaultCauseIdentity.strike(assault.id(), attacker, epoch);
-                    }, false,
+                    },
                     FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.SETTLEMENT_ASSAULT)),
             new Behavior(SceneCauseKind.ENGINEERING_WORKSITE, FrontierV3EngineeringWorkSceneExecutor::tick,
-                    (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
+                    (state, lease, attacker, epoch) -> null, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.ENGINEERING_WORKSITE)),
             new Behavior(SceneCauseKind.MEDICAL_TREATMENT, FrontierV3MedicalTreatmentSceneExecutor::tick,
-                    (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
+                    (state, lease, attacker, epoch) -> null, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.MEDICAL_TREATMENT)),
             new Behavior(SceneCauseKind.RESOURCE_SITE_HARVEST, FrontierV3ResourceSiteHarvestSceneExecutor::tick,
-                    (state, lease, attacker, epoch) -> null, false, FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition,
+                    (state, lease, attacker, epoch) -> null, FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition,
                     Optional.of(FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition), "HARVEST_STATION_OBSTRUCTED", ReleaseFailurePolicy.HARVEST_CUSTODY,
                     FrontierV3ResourceSiteHarvestSceneExecutor::releaseBinding,
                     FrontierV3HarvestSceneReleaseBarrier::ready, new FrontierV3HarvestSceneReleaseEffects()),
             new Behavior(SceneCauseKind.PRODUCTION_WORK, FrontierV3ProductionWorkSceneExecutor::tick,
-                    (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
+                    (state, lease, attacker, epoch) -> null, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.of(FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE,
                     FrontierV3ProductionWorkSceneExecutor::releaseReady, new FrontierV3ProductionSceneReleaseEffects()),
             new Behavior(SceneCauseKind.SERVICE_WORK, FrontierV3SettlementServiceWorkSceneExecutor::tick,
-                    (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
+                    (state, lease, attacker, epoch) -> null, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.SERVICE_WORK)),
             new Behavior(SceneCauseKind.ROUTE_PATROL, FrontierV3RoutePatrolSceneExecutor::tick,
-                    (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.ROUTE_PATROL)),
-            new Behavior(SceneCauseKind.LOGISTICS, FrontierV3SceneExecutor::tickLogistics,
-                    (state, lease, attacker, epoch) -> FrontierSceneBehaviors.logistics(lease).engagementId().isPresent() ? FrontierSceneBehaviors.logistics(lease).operationId() : null, true,
-                    FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.LOGISTICS))));
+                    (state, lease, attacker, epoch) -> null, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
+                    Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.ROUTE_PATROL))));
 
     private final List<Behavior> ordered;
 
@@ -83,8 +79,6 @@ final class FrontierV3SceneBehaviorRegistry {
     }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state != null) FrontierV3SceneExecutor.cleanClosedBodies(level, state);
         CURRENT.tickAll(level, runtime);
     }
 
@@ -104,12 +98,6 @@ final class FrontierV3SceneBehaviorRegistry {
         throw new IllegalStateException("unregistered NeoForge scene cause: " + lease.cause().kind());
     }
 
-    static boolean hasCargoCarrier(SceneLease lease) {
-        for (Behavior behavior : CURRENT.ordered) {
-            if (behavior.kind() == lease.cause().kind()) return behavior.hasCargoCarrier();
-        }
-        throw new IllegalStateException("unregistered NeoForge scene cause: " + lease.cause().kind());
-    }
 
     /** Recovery and ordinary lifecycle release use the same family-owned continuation policy. */
     static Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> releaseBinding(
@@ -196,8 +184,7 @@ final class FrontierV3SceneBehaviorRegistry {
                     FrontierWorldState state, SceneLease lease, String reason);
     }
 
-    record Behavior(SceneCauseKind kind, Tick tick, StrikeCause strikeCause, boolean hasCargoCarrier,
-                    StandingPositionProvider standingPositionProvider, Optional<StandingPositionProvider> preLeaseStandingPositionProvider,
+    record Behavior(SceneCauseKind kind, Tick tick, StrikeCause strikeCause,                     StandingPositionProvider standingPositionProvider, Optional<StandingPositionProvider> preLeaseStandingPositionProvider,
                     String standingUnavailableReason, ReleaseFailurePolicy releaseFailurePolicy, ReleaseBinding releaseBinding,
                     ReleaseBarrier releaseBarrier, FrontierV3SceneReleaseEffects releaseEffects) {
         Behavior {

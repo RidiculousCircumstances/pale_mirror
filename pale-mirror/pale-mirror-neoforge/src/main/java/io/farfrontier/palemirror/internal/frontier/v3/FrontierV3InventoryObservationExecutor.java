@@ -51,7 +51,7 @@ final class FrontierV3InventoryObservationExecutor {
         for (StoreChest store : stores(state)) {
             if (!level.hasChunkAt(store.position())) continue;
             if (!(level.getBlockEntity(store.position()) instanceof ChestBlockEntity chest)
-                    || !store.containerId().value().equals(chest.getPersistentData().getString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY))) continue;
+                    || !store.containerId().value().equals(chest.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY))) continue;
             if (observeOne(level, runtime, state, hopperCarriers, store, chest)) return;
         }
     }
@@ -64,11 +64,11 @@ final class FrontierV3InventoryObservationExecutor {
             ItemStack actual = chest.getItem(slot);
             if (canonical.isPresent()) {
                 ExactItemStack expected = canonical.orElseThrow();
-                if (FrontierV3CargoHandoffExecutor.exactMatch(actual, expected)) continue;
+                if (FrontierV3ExactItemPresentation.exactMatch(actual, expected)) continue;
                 List<ItemEntity> carriers = nearbyCarriers(level, chest.getBlockPos(), expected);
                 if (actual.isEmpty() && carriers.size() == 1) {
                     ItemEntity carrier = carriers.getFirst();
-                    FrontierV3CargoHandoffExecutor.bindWorldCarrier(carrier.getItem(), carrier.getUUID());
+                    FrontierV3ExactItemPresentation.bindWorldCarrier(carrier.getItem(), carrier.getUUID());
                     carrier.setItem(carrier.getItem());
                     submit(runtime, expected.id(), custody, new InventoryCustody.WorldCarrier(carrier.getUUID()));
                     return true;
@@ -93,8 +93,8 @@ final class FrontierV3InventoryObservationExecutor {
                 return true;
             }
             if (actual.isEmpty()) continue;
-            Optional<SubjectId> taggedItem = FrontierV3CargoHandoffExecutor.itemId(actual);
-            if (taggedItem.isEmpty() || FrontierV3CargoHandoffExecutor.pendingIngress(actual) && !state.inventory().items().containsKey(taggedItem.orElseThrow())) {
+            Optional<SubjectId> taggedItem = FrontierV3ExactItemPresentation.itemId(actual);
+            if (taggedItem.isEmpty() || FrontierV3ExactItemPresentation.pendingIngress(actual) && !state.inventory().items().containsKey(taggedItem.orElseThrow())) {
                 deposit(runtime, state, store.containerId(), slot, actual);
                 chest.setChanged();
                 return true;
@@ -117,30 +117,30 @@ final class FrontierV3InventoryObservationExecutor {
 
     private static Optional<ExactItemStack> playerOwnedExact(FrontierWorldState state, ItemStack stack) {
         return state.inventory().items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.Player)
-                .filter(item -> FrontierV3CargoHandoffExecutor.exactMatch(stack, item)).findFirst();
+                .filter(item -> FrontierV3ExactItemPresentation.exactMatch(stack, item)).findFirst();
     }
     private static Optional<ExactItemStack> worldCarrierOwnedExact(FrontierWorldState state, ItemStack stack) {
-        Optional<java.util.UUID> carrierId = FrontierV3CargoHandoffExecutor.worldCarrierId(stack);
+        Optional<java.util.UUID> carrierId = FrontierV3ExactItemPresentation.worldCarrierId(stack);
         if (carrierId.isEmpty()) return Optional.empty();
         InventoryCustody.WorldCarrier custody = new InventoryCustody.WorldCarrier(carrierId.orElseThrow());
         return state.inventory().items().values().stream().filter(item -> item.custody().equals(custody))
-                .filter(item -> FrontierV3CargoHandoffExecutor.exactMatch(stack, item)).findFirst();
+                .filter(item -> FrontierV3ExactItemPresentation.exactMatch(stack, item)).findFirst();
     }
     private static List<ItemEntity> nearbyCarriers(ServerLevel level, BlockPos source, ExactItemStack expected) {
-        return level.getEntitiesOfClass(ItemEntity.class, new AABB(source).inflate(4.0D), entity -> FrontierV3CargoHandoffExecutor.exactMatch(entity.getItem(), expected))
+        return level.getEntitiesOfClass(ItemEntity.class, new AABB(source).inflate(4.0D), entity -> FrontierV3ExactItemPresentation.exactMatch(entity.getItem(), expected))
                 .stream().sorted(Comparator.comparing(ItemEntity::getUUID)).toList();
     }
     private static List<HopperCandidate> nearbyHoppers(ServerLevel level, BlockPos source, ExactItemStack expected) {
         return java.util.stream.Stream.of(source.above(), source.below(), source.north(), source.south(), source.east(), source.west())
                 .filter(level::hasChunkAt).map(level::getBlockEntity).filter(HopperBlockEntity.class::isInstance).map(HopperBlockEntity.class::cast)
                 .flatMap(hopper -> java.util.stream.IntStream.range(0, hopper.getContainerSize()).mapToObj(slot -> new HopperCandidate(hopper, slot, hopper.getItem(slot))))
-                .filter(candidate -> FrontierV3CargoHandoffExecutor.exactMatch(candidate.stack(), expected))
+                .filter(candidate -> FrontierV3ExactItemPresentation.exactMatch(candidate.stack(), expected))
                 .sorted(Comparator.comparingLong(candidate -> candidate.hopper().getBlockPos().asLong())).toList();
     }
     static HopperCarrierBinding bindHopperCarrier(FrontierV3HopperCarrierLedger ledger, HopperBlockEntity hopper, int slot) {
         ItemStack stack = hopper.getItem(slot);
         if (stack.isEmpty()) throw new IllegalArgumentException("cannot bind an empty hopper slot");
-        Optional<UUID> stackCarrier = FrontierV3CargoHandoffExecutor.worldCarrierId(stack);
+        Optional<UUID> stackCarrier = FrontierV3ExactItemPresentation.worldCarrierId(stack);
         UUID id = hopper.getPersistentData().hasUUID(HOPPER_CARRIER_ID_KEY) ? hopper.getPersistentData().getUUID(HOPPER_CARRIER_ID_KEY) : null;
         if (id == null) {
             if (stackCarrier.isPresent()) return new HopperCarrierBinding(stackCarrier.orElseThrow(), HopperCarrierStatus.CONFLICT);
@@ -151,7 +151,7 @@ final class FrontierV3InventoryObservationExecutor {
         if (!ledger.claim(id, hopper.getBlockPos())) return new HopperCarrierBinding(id, HopperCarrierStatus.CONFLICT);
         boolean current = stackCarrier.isPresent();
         hopper.getPersistentData().putUUID(HOPPER_CARRIER_ID_KEY, id);
-        if (!current) { FrontierV3CargoHandoffExecutor.bindWorldCarrier(stack, id); hopper.setItem(slot, stack); }
+        if (!current) { FrontierV3ExactItemPresentation.bindWorldCarrier(stack, id); hopper.setItem(slot, stack); }
         hopper.setChanged(); return new HopperCarrierBinding(id, current ? HopperCarrierStatus.CURRENT : HopperCarrierStatus.APPLIED);
     }
     private static List<ServerPlayer> playersHolding(ServerLevel level, ExactItemStack expected) {
@@ -159,12 +159,13 @@ final class FrontierV3InventoryObservationExecutor {
     }
     static boolean hasExactItem(ServerPlayer player, ExactItemStack expected) {
         for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
-            if (FrontierV3CargoHandoffExecutor.exactMatch(player.getInventory().getItem(slot), expected)) return true;
+            if (FrontierV3ExactItemPresentation.exactMatch(player.getInventory().getItem(slot), expected)) return true;
         }
         return false;
     }
     private static List<StoreChest> stores(FrontierWorldState state) {
-        return state.inventory().surfaces().values().stream().filter(surface -> surface.status() == ContainerSurfaceStatus.ACTIVE)
+        return state.inventory().surfaces().values().stream().filter(surface -> surface.fixed())
+                .filter(surface -> surface.status() == ContainerSurfaceStatus.ACTIVE)
                 // F0.2B reference scopes own their complete physical evidence through the
                 // replica/custody adapter.  Treating a player move there as ordinary inventory
                 // custody would first mutate canonical slots and then make that drift appear to
@@ -191,10 +192,10 @@ final class FrontierV3InventoryObservationExecutor {
      * stack. A tagged-but-unknown stack without the pending marker remains visible conflict evidence.
      */
     private static void deposit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId container, int slot, ItemStack actual) {
-        SubjectId itemId = FrontierV3CargoHandoffExecutor.itemId(actual).orElseGet(() -> {
+        SubjectId itemId = FrontierV3ExactItemPresentation.itemId(actual).orElseGet(() -> {
             SubjectId created = new SubjectId("item:ingress-" + UUID.randomUUID());
-            FrontierV3CargoHandoffExecutor.bindExactItemId(actual, created);
-            FrontierV3CargoHandoffExecutor.markPendingIngress(actual);
+            FrontierV3ExactItemPresentation.bindExactItemId(actual, created);
+            FrontierV3ExactItemPresentation.markPendingIngress(actual);
             return created;
         });
         String kind = BuiltInRegistries.ITEM.getKey(actual.getItem()).toString();
@@ -202,7 +203,7 @@ final class FrontierV3InventoryObservationExecutor {
         if (target == null) throw new IllegalArgumentException("physical deposit targets an unknown exact container");
         ExactItemStack deposited = new ExactItemStack(itemId, target.ownerId(), kind, actual.getCount(), new InventoryCustody.ContainerSlot(container, slot));
         FrontierV3CommandSubmission.submit(runtime, "resource-deposit", itemId.value(), new ResourceDeposited(deposited));
-        FrontierV3CargoHandoffExecutor.clearPendingIngress(actual);
+        FrontierV3ExactItemPresentation.clearPendingIngress(actual);
     }
     private static void recordConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId subject,
                                        SubjectId container, int slot, InventoryDiagnosticProducer producer) {

@@ -35,13 +35,13 @@ public final class FrontierV3EquipmentIssueGameTests {
         SubjectId container = new SubjectId("container:equipment-issue-game-test"), itemId = new SubjectId("item:equipment-issue-game-test");
         ExactItemStack sword = new ExactItemStack(itemId, new SubjectId("settlement:northwatch"), "minecraft:iron_sword", 1,
                 new InventoryCustody.ContainerSlot(container, 0));
-        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(sword));
+        chest.setItem(0, FrontierV3ExactItemPresentation.materializedStack(sword));
         FrontierV3EquipmentIssueExecutor.Target target = new FrontierV3EquipmentIssueExecutor.Target(new SubjectId("assault:equipment-issue-game-test"),
                 new SubjectId("resident:equipment-issue-game-test"), sword, new InventoryCustody.ContainerSlot(container, 0), position);
         helper.assertTrue(FrontierV3EquipmentIssueExecutor.handOff(chest, resident, target), "the exact tagged depot stack moves to the empty named hand");
-        helper.assertTrue(chest.getItem(0).isEmpty() && FrontierV3CargoHandoffExecutor.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), sword),
+        helper.assertTrue(chest.getItem(0).isEmpty() && FrontierV3ExactItemPresentation.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), sword),
                 "restart inspection can prove one empty source and the same exact hand stack");
-        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(sword)); resident.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance());
+        chest.setItem(0, FrontierV3ExactItemPresentation.materializedStack(sword)); resident.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance());
         helper.assertTrue(!FrontierV3EquipmentIssueExecutor.handOff(chest, resident, target), "a nonempty hand is conflict evidence and is never overwritten");
         helper.assertTrue(FrontierV3EquipmentIssueExecutor.commandId("running", new Revision(9_876L)).value()
                         .equals("executor:equipment-issue-running-r9876"),

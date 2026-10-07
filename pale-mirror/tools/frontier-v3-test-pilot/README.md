@@ -14,15 +14,13 @@ offline-mode operator identity for the declared pilot. A run never shares its
 world directory with the deployment server or another scenario.
 
 An isolated scenario may additionally declare a `server.profile` of
-`hot-scene-strike`, `settlement-assault`, `defender-equipment`, `defender-equipment-return`, `engineering-equipment`, `hive-growth`, `hive-mobilization`, `hive-nutrient-transfer`,
-`scene-return`, `hot-scout-sighting`, `hot-scout-intercept`, `hot-scout-patrol-recovery`, `health-quarantine`,
+`settlement-assault`, `defender-equipment`, `defender-equipment-return`, `engineering-equipment`, `hive-growth`, `hive-mobilization`, `hive-nutrient-transfer`,
+`hot-scout-patrol-recovery`, `health-quarantine`,
 `resident-transit` or `route-maintenance-cold-source-fairness`. These fail-closed development fixtures are available
-only to the named disposable pilot runner. `hot-scene-strike` selects a
-deterministic canonical HOT engagement. `hive-growth` stops the real
+only to the named disposable pilot runner. `hive-growth` stops the real
 twelve-settlement schedule at a durable exact-biomass receipt, so an ordinary
 visit to the owned chest must cause the named organ, bioform and infection
-advance. `scene-return` exposes one real COLD route continuation, while
-`health-quarantine` begins with a contaminated infirmary and requires the
+advance. `health-quarantine` begins with a contaminated infirmary and requires the
 ordinary first strategic review to create the exact exposure and quarantine
 facts. `hive-nutrient-transfer` prepares two absent hive STORE endpoints: a real
 `hive-mobilization` begins with exactly one already selected waking group but

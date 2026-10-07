@@ -84,33 +84,28 @@ final class FrontierV3DepartureReturnReadFence {
     static void fenceBeforeVanillaLoad(ServerLevel level, ChunkPos chunk, CompoundTag raw) {
         var world = FrontierV3PhysicalWorld.WORLD_ID;
         var actors = FrontierV3AmbientCarrierLedger.get(level, world);
-        var cargo = FrontierV3CargoDepartureLedger.get(level, world);
-        boolean[] changed = fenceStoredInventory(chunk, raw, actors, cargo);
+        boolean changed = fenceStoredInventory(chunk, raw, actors);
         // A failed publication fails the dependent vanilla read: otherwise an
         // unjournaled returned body could move while an old saved departure
         // still looks eligible to a later no-load recovery after a crash.
-        if (changed[0]) actors.persist(level, world);
-        if (changed[1]) cargo.persist(level, world);
+        if (changed) actors.persist(level, world);
     }
 
-    static boolean[] fenceStoredInventory(ChunkPos chunk, CompoundTag raw,
-                                          FrontierV3AmbientCarrierLedger actors,
-                                          FrontierV3CargoDepartureLedger cargo) {
+    static boolean fenceStoredInventory(ChunkPos chunk, CompoundTag raw,
+                                          FrontierV3AmbientCarrierLedger actors) {
         var actorReceipts = actors.departures().stream().filter(receipt ->
                 inChunk(receipt.observed().body().x(), receipt.observed().body().z(), chunk)).toList();
-        var cargoReceipts = cargo.observations().stream().filter(receipt ->
-                inChunk(receipt.body().x(), receipt.body().z(), chunk)).toList();
         var bodyReceipts = actors.bodyDepartures().stream().filter(receipt ->
                 inChunk(receipt.observed().body().x(), receipt.observed().body().z(), chunk)).toList();
         var ambientReceipts = actors.ambientDepartures().stream().filter(receipt ->
                 inChunk(receipt.observed().body().x(), receipt.observed().body().z(), chunk)).toList();
-        if (actorReceipts.isEmpty() && bodyReceipts.isEmpty() && ambientReceipts.isEmpty() && cargoReceipts.isEmpty())
-            return new boolean[] {false, false};
-        if (!FrontierV3CargoCleanupPersistence.matchesStoredChunk(raw, chunk))
+        if (actorReceipts.isEmpty() && bodyReceipts.isEmpty() && ambientReceipts.isEmpty())
+            return false;
+        if (!FrontierV3StoredEntityInventory.matchesStoredChunk(raw, chunk))
             throw new IllegalStateException("misplaced stored entity chunk during return fencing");
-        var entities = FrontierV3CargoCleanupPersistence.serializedEntities(raw)
+        var entities = FrontierV3StoredEntityInventory.serializedEntities(raw)
                 .orElseThrow(() -> new IllegalStateException("invalid stored entity inventory during return fencing"));
-        boolean actorReturn = false, cargoReturn = false;
+        boolean actorReturn = false;
         for (var receipt : bodyReceipts) {
             if (entities.containsKey(receipt.identity().entityId())) actorReturn |= actors.markBodyReturnRead(receipt);
         }
@@ -121,10 +116,7 @@ final class FrontierV3DepartureReturnReadFence {
             if (entities.containsKey(receipt.carrier().identity().entityId()))
                 actorReturn |= actors.markReturnRead(receipt);
         }
-        for (var receipt : cargoReceipts) {
-            if (entities.containsKey(receipt.entityId())) cargoReturn |= cargo.markReturnRead(receipt.entityId());
-        }
-        return new boolean[] {actorReturn, cargoReturn};
+        return actorReturn;
     }
 
     private static boolean inChunk(int x, int z, ChunkPos chunk) {

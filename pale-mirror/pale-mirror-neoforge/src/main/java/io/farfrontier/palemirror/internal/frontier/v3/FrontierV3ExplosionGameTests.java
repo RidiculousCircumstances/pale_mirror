@@ -49,12 +49,12 @@ public final class FrontierV3ExplosionGameTests {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:explosion-world-drop"), 91L));
         var expected = initial.inventory().items().get(itemId); InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) expected.custody();
         java.util.UUID carrierId = java.util.UUID.fromString("00000000-0000-0000-0000-000000000079");
-        var physical = FrontierV3CargoHandoffExecutor.materializedStack(expected); FrontierV3CargoHandoffExecutor.bindWorldCarrier(physical, carrierId);
+        var physical = FrontierV3ExactItemPresentation.materializedStack(expected); FrontierV3ExactItemPresentation.bindWorldCarrier(physical, carrierId);
         ItemEntity drop = new ItemEntity(level, position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D,
                 physical); drop.setUUID(carrierId);
         InventoryCustody.WorldCarrier carrier = new InventoryCustody.WorldCarrier(carrierId);
-        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), expected), "the physical drop retains its exact stack tag");
-        helper.assertValueEqual(FrontierV3CargoHandoffExecutor.worldCarrierId(drop.getItem()).orElseThrow(), carrierId,
+        helper.assertTrue(FrontierV3ExactItemPresentation.exactMatch(drop.getItem(), expected), "the physical drop retains its exact stack tag");
+        helper.assertValueEqual(FrontierV3ExactItemPresentation.worldCarrierId(drop.getItem()).orElseThrow(), carrierId,
                 "the physical drop retains its exact world-carrier tag");
         FrontierWorldState state = initial.withInventory(initial.inventory().moveObservedItem(itemId, source, carrier));
         PhysicalIntentId intent = new PhysicalIntentId("intent:managed-explosion-world-drop-test"); FrontierV3ManagedExplosionLedger ledger = FrontierV3ManagedExplosionLedger.get(level);

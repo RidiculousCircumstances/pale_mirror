@@ -35,6 +35,8 @@ final class FungibleResourceStateCodec {
         for (CustodyAccount account : ledger.accounts().values().stream().sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
             writeString(output, account.id().value()); writeResourceCustody(output, account.custody()); writeQuantities(output, account.lotQuantities());
             writeQuantities(output, account.claimQuantities());
+            output.writeBoolean(account.actorPresentation().isPresent());
+            if (account.actorPresentation().isPresent()) ActorItemSlotCodec.write(output, account.actorPresentation().orElseThrow());
         }
         writeCount(output, ledger.bindings().size());
         for (PhysicalStackBinding binding : ledger.bindings().values().stream().sorted(Comparator.comparing(PhysicalStackBinding::id)).toList()) {
@@ -61,7 +63,8 @@ final class FungibleResourceStateCodec {
         }
         Map<SubjectId, CustodyAccount> accounts = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); CustodyAccount account = new CustodyAccount(id, readResourceCustody(input), readQuantities(input), readQuantities(input));
+            SubjectId id = new SubjectId(readString(input)); CustodyAccount account = new CustodyAccount(id, readResourceCustody(input), readQuantities(input), readQuantities(input),
+                    input.readBoolean() ? java.util.Optional.of(ActorItemSlotCodec.read(input)) : java.util.Optional.empty());
             if (accounts.put(id, account) != null) throw new IllegalArgumentException("duplicate custody account id");
         }
         Map<SubjectId, PhysicalStackBinding> bindings = new LinkedHashMap<>();

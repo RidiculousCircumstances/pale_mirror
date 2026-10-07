@@ -82,14 +82,6 @@ final class FrontierV3ServerDiagnostic {
             } catch (IllegalArgumentException ignored) {
             }
         }
-        java.util.Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness = java.util.Optional.empty();
-        if ("operation".equals(view)) {
-            try {
-                assemblyReadiness = FrontierV3OperationAssemblyDiagnostic.readiness(FrontierV3PhysicalWorld.require(server), state,
-                        new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id));
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
         java.util.Optional<FrontierV3ContainerSurfaceExecutor.Readiness> containerReadiness = java.util.Optional.empty();
         if ("container".equals(view)) {
             try {
@@ -115,7 +107,7 @@ final class FrontierV3ServerDiagnostic {
             }
         }
         return FrontierV3DiagnosticJson.render(view, id, checkpoint, state,
-                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness, sceneReadiness, assemblyReadiness,
+                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness, sceneReadiness,
                 containerReadiness, equipmentIssueReadiness, equipmentReturnReadiness);
     }
 }

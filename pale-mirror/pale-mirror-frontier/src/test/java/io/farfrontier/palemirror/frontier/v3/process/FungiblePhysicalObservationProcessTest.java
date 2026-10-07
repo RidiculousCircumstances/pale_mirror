@@ -363,7 +363,7 @@ class FungiblePhysicalObservationProcessTest {
         var wrongClaims = new java.util.HashMap<>(active.inventory().fungibleResources().claims());
         ClaimAllocation actual = wrongClaims.get(claimId);
         wrongClaims.put(claimId, new ClaimAllocation(actual.id(), actual.claimantId(), actual.economicOwnerId(),
-                actual.itemKind(), actual.quantity(), actual.lotQuantities(), ClaimPurpose.SUPPLY_CONTRACT));
+                actual.itemKind(), actual.quantity(), actual.lotQuantities(), ClaimPurpose.EXTERNAL_RESERVATION));
         FungibleResourceLedger actualResources = active.inventory().fungibleResources();
         FrontierWorldState misdeclared = active.withInventory(active.inventory().withFungibleResources(new FungibleResourceLedger(
                 actualResources.lots(), wrongClaims, actualResources.accounts(), actualResources.bindings())));

@@ -17,47 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class FrontierV3ScenePresentationTest {
-    @Test
-    void derivesRoleAndFungibleCargoNamesWithoutLeakingCanonicalIds(@TempDir Path directory) {
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierV3FixtureCatalog.operationAssemblyConfiguration(new WorldId("frontier:scene-presentation"), 71L),
-                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
-        FrontierWorldState state = runtime.decodedState().orElseThrow();
-        var operation = state.operations().values().iterator().next();
-        var resident = state.bootstrap().settlements().stream().flatMap(value -> value.residents().stream())
-                .filter(value -> value.id().equals(operation.participantIds().getFirst())).findFirst().orElseThrow();
-        var profile = state.humanPopulation().resident(resident.id());
-        var settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(resident.settlementId())).findFirst().orElseThrow();
-        var cargo = state.inventory().cargo().get(operation.cargoId());
-        var cargoAccount = state.inventory().fungibleResources().accounts().values().stream()
-                .filter(value -> value.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.ResourceCustody.Cargo carried
-                        && carried.cargoId().equals(cargo.id()))
-                .findFirst().orElseThrow();
-        var lot = cargoAccount.lotQuantities().keySet().stream().map(state.inventory().fungibleResources().lots()::get).findFirst().orElseThrow();
 
-        String residentName = FrontierSceneLabels.actor(state, resident.id(), false);
-        String bioformName = FrontierSceneLabels.actor(state, state.bootstrap().hive().bioforms().getFirst().id(), true);
-        String cargoName = FrontierSceneLabels.cargo(state, cargo);
-
-        assertEquals(settlement.displayName() + " " + profile.profession().name().replace('_', ' '), residentName);
-        var firstBioform = state.bootstrap().hive().bioforms().getFirst();
-        assertEquals("HIVE " + firstBioform.chassis().name().replace('_', ' ') + " · " + firstBioform.assignment().name().replace('_', ' '), bioformName);
-        assertEquals(settlement.displayName().toUpperCase(java.util.Locale.ROOT) + " CARAVAN\n"
-                + lot.itemKind().substring(lot.itemKind().indexOf(':') + 1).replace('_', ' ').toUpperCase(java.util.Locale.ROOT)
-                + " ×" + cargoAccount.lotQuantities().values().stream().mapToInt(Integer::intValue).sum(), cargoName);
-        assertFalse(residentName.contains(resident.id().value()) || cargoName.contains(cargo.id().value()),
-                "canonical IDs belong in diagnostics, not a player's in-world scene");
-    }
-
-    @Test
-    void rendersAnUnknownTestActorAsASafeGenericRoleRatherThanItsTechnicalId(@TempDir Path directory) {
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierV3FixtureCatalog.operationAssemblyConfiguration(new WorldId("frontier:scene-presentation-negative"), 72L),
-                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
-
-        assertEquals("FRONTIER RESIDENT", FrontierSceneLabels.actor(runtime.decodedState().orElseThrow(),
-                new io.farfrontier.palemirror.frontier.v3.api.SubjectId("resident:missing"), false));
-    }
 
     @Test
     void keepsAmbientCivilianNameplatesQuietButMakesAMobilizedDefenderReadable(@TempDir Path directory) {

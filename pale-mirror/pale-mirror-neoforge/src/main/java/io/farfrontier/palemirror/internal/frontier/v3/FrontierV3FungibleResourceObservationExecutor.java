@@ -46,11 +46,13 @@ final class FrontierV3FungibleResourceObservationExecutor {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
         if (FrontierV3ResidentMealDeathResources.reconcileOneDrop(level, runtime, state)) return;
+        if (FrontierV3UnitInventoryDeathResources.reconcileOneDrop(level, runtime, state)) return;
+        if (FrontierV3UnitInventoryPhysicalCustody.bindOne(level, runtime, state)) return;
         if (FrontierV3DepotClickExecutor.reconcileOne(level, runtime, state)) return;
         // This is deliberately before ordinary return/departure observation: only an exact
         // canonical-first fence without its later persisted player witness is reversible.
         if (FrontierV3PlayerCustodyRecovery.reconcileOne(level, runtime, state)) return;
-        if (observeOneCargoCarrierDeparture(level, runtime, state)) return;
+        if (observeOneWorldContainerDeparture(level, runtime, state)) return;
         if (observeOneWorldPickup(level, runtime, state)) return;
         for (CustodyAccount account : state.inventory().fungibleResources().accounts().values().stream()
                 .filter(value -> value.custody() instanceof ResourceCustody.Container)
@@ -59,7 +61,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
             if (FrontierV3DepotClickLedger.get(level).pending(custody.containerId()) != null) continue;
             if (FrontierV3ContainerEffectFence.pending(level, state, custody.containerId())) continue;
             ContainerSurface surface = state.inventory().surfaces().get(custody.containerId());
-            if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) continue;
+            if (surface == null || !surface.fixed() || surface.status() != ContainerSurfaceStatus.ACTIVE) continue;
             BlockPos position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
             if (!level.hasChunkAt(position) || !level.shouldTickBlocksAt(position)
                     || !(level.getBlockEntity(position) instanceof ChestBlockEntity chest)) continue;
@@ -215,11 +217,11 @@ final class FrontierV3FungibleResourceObservationExecutor {
     }
 
     /**
-     * A released logistics cart is the physical carrier for the same account, not a second
+     * A declared world container is the physical carrier for the same account, not a second
      * inventory.  Its only admitted ordinary departure is one unambiguous player stack whose
      * quantity exactly explains the cart slot's observed reduction.
      */
-    private static boolean observeOneCargoCarrierDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    private static boolean observeOneWorldContainerDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                            FrontierWorldState state) {
         for (CustodyAccount source : state.inventory().fungibleResources().accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.WorldCarrier)

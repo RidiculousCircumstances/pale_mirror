@@ -10,8 +10,10 @@ import java.util.Objects;
 /** Exclusive transitions; strategies own checkpoints and labour, callers own successor data. */
 public final class ActorExecutionLifecycle {
     private final ActorActivityCapabilities capabilities;
-    public ActorExecutionLifecycle(ActorActivityCapabilities capabilities) {
+    private final ActorExecutionEffectFence effects;
+    public ActorExecutionLifecycle(ActorActivityCapabilities capabilities, ActorExecutionEffectFence effects) {
         this.capabilities = Objects.requireNonNull(capabilities);
+        this.effects = Objects.requireNonNull(effects);
     }
     /** Minted only after the exact owner has acknowledged its checkpoint. */
     public static final class Transition {
@@ -63,7 +65,7 @@ public final class ActorExecutionLifecycle {
         if (capability.interruption() == ActorActivityCapability.Interruption.RELEASE)
             return releaseAndBegin(state, current, successor, capability);
         capability.validateReference(state, current);
-        var checkpoint = Objects.requireNonNull(capability.checkpoint(state, current));
+        var checkpoint = checkpoint(state, current, capability);
         checkpoint.validate(state, current);
         if (!capability.supportsContinuation() || !checkpoint.ready() || retained.suspended().isPresent())
             throw new IllegalArgumentException("execution owner has not released a safe bounded continuation");
@@ -100,7 +102,7 @@ public final class ActorExecutionLifecycle {
                 if (capability.interruption() != ActorActivityCapability.Interruption.RELEASE)
                     throw new IllegalArgumentException("group participant has an unreleased owner");
                 capability.validateReference(prepared, current);
-                var checkpoint = Objects.requireNonNull(capability.checkpoint(prepared, current));
+                var checkpoint = checkpoint(prepared, current, capability);
                 checkpoint.validate(prepared, current);
                 if (!checkpoint.ready()) throw new IllegalArgumentException("group participant has unfinished effects");
                 prepared = Objects.requireNonNull(capability.release(prepared, current));
@@ -124,7 +126,7 @@ public final class ActorExecutionLifecycle {
             executions.requireCurrent(current);
             var capability = capabilities.require(current.activityKind());
             capability.validateReference(state, current);
-            var checkpoint = Objects.requireNonNull(capability.checkpoint(state, current));
+            var checkpoint = checkpoint(state, current, capability);
             checkpoint.validate(state, current);
             if (capability.interruption() != ActorActivityCapability.Interruption.TERMINAL_ONLY || !checkpoint.ready())
                 throw new IllegalArgumentException("group owner has not acknowledged its terminal boundary");
@@ -143,7 +145,7 @@ public final class ActorExecutionLifecycle {
     private Transition releaseAndBegin(FrontierWorldState state, ActorExecutionId current,
                                         ActorExecutionId successor, ActorActivityCapability capability) {
         capability.validateReference(state, current);
-        var checkpoint = Objects.requireNonNull(capability.checkpoint(state, current));
+        var checkpoint = checkpoint(state, current, capability);
         checkpoint.validate(state, current);
         if (!checkpoint.ready()) throw new IllegalArgumentException("release owner has unfinished obligations");
         var released = Objects.requireNonNull(capability.release(state, current));
@@ -172,7 +174,7 @@ public final class ActorExecutionLifecycle {
             if (passive.interruption() != ActorActivityCapability.Interruption.RELEASE)
                 throw new IllegalArgumentException("resume cannot displace an active owner without acknowledgement");
             passive.validateReference(state, current);
-            var checkpoint = Objects.requireNonNull(passive.checkpoint(state, current));
+            var checkpoint = checkpoint(state, current, passive);
             checkpoint.validate(state, current);
             if (!checkpoint.ready()) throw new IllegalArgumentException("resume predecessor retains unfinished effects");
             prepared = Objects.requireNonNull(passive.release(state, current));
@@ -266,6 +268,13 @@ public final class ActorExecutionLifecycle {
             }
         }
         return new ActorDeathConsequences.Settlement(state, acknowledged, ownedRetirements);
+    }
+    private ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId execution,
+                                               ActorActivityCapability capability) {
+        var pending = Objects.requireNonNull(effects.pendingOwner(state, execution));
+        if (pending.isPresent()) return new ActorActivityCheckpoint(state, execution,
+                pending.map(owner -> new ActorActivityCheckpoint.Wait(ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION, owner)));
+        return Objects.requireNonNull(capability.checkpoint(state, execution));
     }
     /** Release-only owners have no retained work; other families acknowledge death separately. */
     public Transition preparePassiveDeath(FrontierWorldState state, SubjectId actor, ActorExecutionState ownedRetirements) {

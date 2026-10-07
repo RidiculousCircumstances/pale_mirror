@@ -108,8 +108,7 @@ final class HumanPopulationStateCodec {
             FrontierWorldStateCodec.writeString(output, obligation.body().actorId().value());
             output.writeLong(obligation.body().physicalEpoch());
             FrontierWorldStateCodec.writeString(output, obligation.settlementId().value());
-            FrontierWorldStateCodec.writeString(output, obligation.depotId().value());
-            FrontierWorldStateCodec.writeString(output, obligation.sourceAccountId().value());
+            ResidentFoodSourceCodec.write(output, obligation.source());
             FrontierWorldStateCodec.writeString(output, obligation.actorAccountId().value());
             writeFoodPortion(output, obligation.portion());
             output.writeByte(FrontierWireTags.tag(obligation.custodyState()));
@@ -267,14 +266,13 @@ final class HumanPopulationStateCodec {
             var body = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(
                     new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
             var settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
-            var depot = new SubjectId(FrontierWorldStateCodec.readString(input));
-            var source = new SubjectId(FrontierWorldStateCodec.readString(input));
+            var source = ResidentFoodSourceCodec.read(input);
             var held = new SubjectId(FrontierWorldStateCodec.readString(input));
             var portion = readFoodPortion(input);
             var custody = FrontierWireTags.require(ResidentMealResourceObligation.CustodyState.class, input.readUnsignedByte());
             var pending = input.readBoolean() ? java.util.Optional.of(readMealPhysicalStep(input))
                     : java.util.Optional.<ResidentMealPhysicalStep>empty();
-            var obligation = new ResidentMealResourceObligation(execution, body, settlement, depot, source, held,
+            var obligation = new ResidentMealResourceObligation(execution, body, settlement, source, held,
                     portion, custody, pending, input.readLong());
             if (obligations.put(obligation.residentId(), obligation) != null)
                 throw new IllegalArgumentException("duplicate retired meal resource obligation");
@@ -286,9 +284,8 @@ final class HumanPopulationStateCodec {
     static void writeMeal(DataOutputStream output, ResidentMeal meal) throws IOException {
         FrontierWorldStateCodec.writeString(output, meal.residentId().value());
         FrontierWorldStateCodec.writeString(output, meal.settlementId().value());
-        FrontierWorldStateCodec.writeString(output, meal.depotId().value());
+        ResidentFoodSourceCodec.write(output, meal.source());
         FrontierWorldStateCodec.writePosition(output, meal.clearingSurface().support());
-        FrontierWorldStateCodec.writeString(output, meal.sourceAccountId().value());
         FrontierWorldStateCodec.writeString(output, meal.actorAccountId().value());
         writeFoodPortion(output, meal.portion());
         FrontierWorldStateCodec.writeString(output, meal.claimId().value());
@@ -357,9 +354,8 @@ final class HumanPopulationStateCodec {
     static ResidentMeal readMeal(DataInputStream input) throws IOException {
         SubjectId resident = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
-        SubjectId depot = new SubjectId(FrontierWorldStateCodec.readString(input));
+        var source = ResidentFoodSourceCodec.read(input);
         SurfaceAnchor clearing = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input));
-        SubjectId source = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input));
         FoodPortion portion = readFoodPortion(input);
         SubjectId claim = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -375,8 +371,9 @@ final class HumanPopulationStateCodec {
         }
         java.util.Optional<ResidentMealPhysicalStep> pending = java.util.Optional.empty();
         if (input.readBoolean()) pending = java.util.Optional.of(readMealPhysicalStep(input));
-        ResidentMeal meal = new ResidentMeal(resident, settlement, depot, clearing, source, actor, portion,
-                claim, retained, FrontierWireTags.require(ResidentMeal.Phase.class, phase), started, wait, pending, executionId);
+        ResidentMeal meal = new ResidentMeal(resident, settlement, source, clearing, actor, portion,
+                claim, retained, FrontierWireTags.require(ResidentMeal.Phase.class, phase), started, wait, pending,
+                java.util.Optional.empty(), executionId);
         if (!input.readBoolean()) return meal;
         long departedAt = input.readLong(), ticksPerEdge = input.readLong(), epoch = input.readLong();
         int length = FrontierWorldStateCodec.readCount(input);

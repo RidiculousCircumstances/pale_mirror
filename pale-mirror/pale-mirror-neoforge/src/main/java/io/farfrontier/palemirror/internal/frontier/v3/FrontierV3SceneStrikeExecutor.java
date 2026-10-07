@@ -28,18 +28,11 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
-import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
-import io.farfrontier.palemirror.frontier.v3.model.OperationFront;
 import io.farfrontier.palemirror.frontier.v3.model.ActorDirective;
-import io.farfrontier.palemirror.frontier.v3.model.OperationTravelAdvanced;
-import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
-import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
-import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseHandoff;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
@@ -79,18 +72,18 @@ final class FrontierV3SceneStrikeExecutor {
 
     static void executeStrike(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease,
                               PhysicalIntentLifecycleOwner lifecycleOwner) {
-        boolean settlementAssault = FrontierSceneBehaviors.isSettlementAssault(lease);
+        if (!FrontierSceneBehaviors.isSettlementAssault(lease)) throw new IllegalArgumentException("strike requires an assault scene");
         List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream).toList();
-        SettlementAssault assault = settlementAssault ? state.strategicPlans().settlementAssaults().get(FrontierSceneBehaviors.settlementAssault(lease).assaultId()) : null;
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(FrontierSceneBehaviors.settlementAssault(lease).assaultId());
         long strikeEpoch = assault == null ? 0L : SettlementAssaultCauseIdentity.hotEpoch(assault, state.physicalIntents().values());
-        FrontierV3SettlementAssaultSceneExecutor.StrikePair pair = settlementAssault && assault != null
+        FrontierV3SettlementAssaultSceneExecutor.StrikePair pair = assault != null
                 ? FrontierV3SettlementAssaultSceneExecutor.currentStrikePair(assault, strikeEpoch).orElse(null) : null;
         SubjectId sceneCause = FrontierV3SceneBehaviorRegistry.strikeCause(state, lease,
                 pair == null ? null : pair.attackerId(), strikeEpoch);
         Optional<PhysicalIntent> pending = state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
                 && intent.lifecycleOwner() == lifecycleOwner && intent.status() != PhysicalIntentStatus.CONFIRMED)
                 .filter(intent -> io.farfrontier.palemirror.frontier.v3.model.SceneStrikeStateSupport.boundTo(lease, intent))
-                .filter(intent -> !settlementAssault || FrontierV3SettlementAssaultReceiptBinding.belongsToLease(state, lease, intent))
+                .filter(intent -> FrontierV3SettlementAssaultReceiptBinding.belongsToLease(state, lease, intent))
                 .min(Comparator.comparing(PhysicalIntent::id));
         if (pending.filter(intent -> intent.status() == PhysicalIntentStatus.CONFLICTED).isPresent()) {
             if (lease.status() == SceneLeaseStatus.HOT) submit(runtime, "scene-strike-drain", lease.id().value(),
@@ -104,30 +97,19 @@ final class FrontierV3SceneStrikeExecutor {
             if (sceneCause == null || lease.status() == SceneLeaseStatus.DRAINING) return;
             List<Body> attackers;
             List<Body> targets;
-            if (!settlementAssault) {
-                boolean hiveTurn = confirmedStrikeCount(state, sceneCause) % 2L == 0L;
-                final boolean genericHiveTurn = hiveTurn;
-                attackers = bodies.stream().filter(body -> genericHiveTurn ? body.bioform() : !body.bioform() && residentGuard(state, body.member().actorId())).toList();
-                targets = bodies.stream().filter(body -> genericHiveTurn ? !body.bioform() : body.bioform()).toList();
-            } else {
+            {
                 attackers = bodies.stream().filter(body -> body.member().actorId().equals(pair.attackerId())).toList();
                 targets = bodies.stream().filter(body -> body.member().actorId().equals(pair.targetId())).toList();
             }
             if (attackers.isEmpty() || targets.isEmpty()) return;
-            Body attacker = settlementAssault ? attackers.getFirst() : attackers.stream().min(Comparator.comparing(body -> body.member().actorId())).orElseThrow();
-            Body target = settlementAssault ? targets.getFirst() : targets.stream().min(Comparator.comparingDouble((Body body) -> attacker.entity().distanceToSqr(body.entity()))
-                    .thenComparing(body -> body.member().actorId())).orElseThrow();
+            Body attacker = attackers.getFirst();
+            Body target = targets.getFirst();
             if (attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
 
-            PhysicalIntentId intentId = settlementAssault
-                    ? FrontierV3SettlementAssaultReceiptBinding.intentId(state, lease, sceneCause)
-                    : new PhysicalIntentId("intent:scene-strike-" + state.bootstrap().worldId().value().replace(':', '-') + "-"
-                    + sceneCause.value().replace(':', '-') + "-r" + lease.revision() + "-s" + confirmedStrikeCount(state, sceneCause));
+            PhysicalIntentId intentId = FrontierV3SettlementAssaultReceiptBinding.intentId(state, lease, sceneCause);
             String key = intentId.value().substring("intent:scene-strike-".length());
             PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                    sceneCause, settlementAssault
-                            ? PhysicalIntentRoleBinding.assaultSceneStrike(attacker.member().actorId(), target.member().actorId(), lease.id(), lease.revision())
-                            : PhysicalIntentRoleBinding.routeSceneStrike(attacker.member().actorId(), target.member().actorId(), lease.id(), lease.revision()), position(attacker.entity()), 0,
+                    sceneCause, PhysicalIntentRoleBinding.assaultSceneStrike(attacker.member().actorId(), target.member().actorId(), lease.id(), lease.revision()), position(attacker.entity()), 0,
                     PhysicalPostcondition.SCENE_STRIKE_OBSERVED, lifecycleOwner);
             submit(runtime, "scene-strike-prepare", key, new PhysicalIntentPrepared(intent)); return;
         }

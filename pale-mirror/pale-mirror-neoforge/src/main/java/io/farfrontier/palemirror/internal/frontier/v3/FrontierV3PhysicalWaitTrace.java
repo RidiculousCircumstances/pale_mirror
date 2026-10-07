@@ -34,7 +34,7 @@ final class FrontierV3PhysicalWaitTrace {
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
         var boundary = ServiceAccessCoordinator.boundary(state, depot);
         String meals = state.humanPopulation().meals().values().stream()
-                .filter(meal -> meal.depotId().equals(depot)).sorted(java.util.Comparator.comparing(ResidentMeal::residentId))
+                .filter(meal -> !meal.portable() && meal.depotId().equals(depot)).sorted(java.util.Comparator.comparing(ResidentMeal::residentId))
                 .limit(8).map(meal -> meal.residentId().value() + ":" + meal.phase() + ":occupies="
                     + boundary.occupied(state.actorLocations().get(meal.residentId()).body())
                     + ":ambient=" + state.ambientLeases().get(meal.residentId()))

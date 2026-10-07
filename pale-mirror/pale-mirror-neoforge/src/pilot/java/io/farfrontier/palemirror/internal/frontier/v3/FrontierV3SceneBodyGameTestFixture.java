@@ -20,20 +20,6 @@ import java.util.List;
 final class FrontierV3SceneBodyGameTestFixture {
     private FrontierV3SceneBodyGameTestFixture() { }
 
-    static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> start(
-            GameTestHelper helper, WorldId world, long seed, FrontierStore store) {
-        var source = FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, seed);
-        var handoff = source.initialState().coldEngagementSceneCandidates().getFirst().handoffPosition();
-        var support = helper.absolutePos(BlockPos.ZERO);
-        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration =
-                FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(FrontierV3CargoLoadingGameTests.translatedBootstrap(
-                        source.initialState().bootstrap(), support.getX() - handoff.x(),
-                        support.getY() - handoff.y(), support.getZ() - handoff.z()));
-        var ledger = FrontierV3AmbientCarrierLedger.get(helper.getLevel(), world);
-        FrontierV3ActorFirstAdmissionBootstrap.initialize(ledger, configuration.initialState(), store.recover(world),
-                () -> ledger.persist(helper.getLevel(), world));
-        return FrontierV3ServerRuntime.start(configuration, store, 20_000);
-    }
 
     static List<Entity> materializeAndObserve(GameTestHelper helper,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
@@ -52,7 +38,7 @@ final class FrontierV3SceneBodyGameTestFixture {
         var source = FrontierV3FixtureCatalog.settlementAssaultConfiguration(world, seed);
         var handoff = source.initialState().coldSettlementAssaultSceneCandidates().getFirst().handoffPosition();
         var support = helper.absolutePos(BlockPos.ZERO);
-        return FrontierV3FixtureCatalog.settlementAssaultConfiguration(FrontierV3CargoLoadingGameTests.translatedBootstrap(
+        return FrontierV3FixtureCatalog.settlementAssaultConfiguration(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(
                 source.initialState().bootstrap(), support.getX() - handoff.x(),
                 support.getY() - handoff.y(), support.getZ() - handoff.z()));
     }

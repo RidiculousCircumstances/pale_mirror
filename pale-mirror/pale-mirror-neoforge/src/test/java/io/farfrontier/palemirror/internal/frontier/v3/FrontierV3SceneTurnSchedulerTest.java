@@ -40,15 +40,14 @@ class FrontierV3SceneTurnSchedulerTest {
             }
             FrontierV3SceneTurnScheduler.forget(null);
             var visited = new ArrayList<String>();
-            FrontierV3SceneTurnScheduler.runInventory(null, inventory, SceneCauseKind.LOGISTICS,
+            FrontierV3SceneTurnScheduler.runInventory(null, inventory, SceneCauseKind.SETTLEMENT_ASSAULT,
                     scene -> visited.add(scene.id().value()), () -> false);
             assertEquals(List.of(id(causes.getFirst(), "a")), visited, "forget resets only ephemeral service order");
         } finally { FrontierV3SceneTurnScheduler.forget(null); }
     }
 
     private static List<SceneCause> causes() {
-        return List.of(new LogisticsSceneCause(new SubjectId("operation:test"), new SubjectId("cargo:test"), Optional.empty(), new BlockPosition(0, 0, 0), CargoProjectionRetirement.Disposition.REMOVE_PROJECTION),
-                new SettlementAssaultSceneCause(new SubjectId("assault:test"), new SubjectId("settlement:1")),
+        return List.of(new SettlementAssaultSceneCause(new SubjectId("assault:test"), new SubjectId("settlement:1")),
                 new EngineeringWorkSceneCause(new SubjectId("project:test"), 0),
                 new MedicalTreatmentSceneCause(new SubjectId("medical:test")),
                 new ResourceSiteHarvestSceneCause(new SubjectId("site:harvest-test"), new SubjectId("job:site-harvest-test")),

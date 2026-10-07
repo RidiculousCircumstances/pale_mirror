@@ -105,8 +105,8 @@ final class FrontierV3SceneDeparturePersistence {
             writes.record(chunk.toLong(), written);
             var replaced = candidates.remove(chunk.toLong());
             if (replaced != null) candidateCount -= replaced.size();
-            if (overflowed || writes.overflowed() || !FrontierV3CargoCleanupPersistence.matchesStoredChunk(data, chunk)) return;
-            var entities = FrontierV3CargoCleanupPersistence.serializedEntities(data).orElse(null);
+            if (overflowed || writes.overflowed() || !FrontierV3StoredEntityInventory.matchesStoredChunk(data, chunk)) return;
+            var entities = FrontierV3StoredEntityInventory.serializedEntities(data).orElse(null);
             if (entities == null) return;
             var selected = new ArrayList<SavedBody>();
             for (var entity : entities.values()) {
@@ -269,8 +269,7 @@ final class FrontierV3SceneDeparturePersistence {
                     && kind.equals(declaration.kind().name()) && owner.equals(declaration.owner().name())
                     && representation.equals("LIVE_BODY") && revision == declaration.authorityRevision()
                     && epoch == declaration.epoch() && residenceGeneration == receipt.residenceGeneration()
-                    && type.equals(declaration.kind() == ActorKind.RESIDENT
-                        ? "minecraft:villager" : "minecraft:zombie")
+                    && type.equals(FrontierV3ActorCarrierFactory.entityType(declaration.kind()))
                     && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health())
                     && (receipt.offhand().isEmpty() || receipt.offhand().equals(offhand))
                     && (receipt.mainhand().isEmpty() || receipt.mainhand().equals(mainhand));
@@ -281,7 +280,7 @@ final class FrontierV3SceneDeparturePersistence {
                     && kind.equals(declaration.kind().name()) && owner.equals(declaration.owner().name())
                     && representation.equals("LIVE_BODY") && revision == declaration.authorityRevision()
                     && epoch == declaration.epoch() && residenceGeneration == receipt.residenceGeneration()
-                    && type.equals(declaration.kind() == ActorKind.RESIDENT ? "minecraft:villager" : "minecraft:zombie")
+                    && type.equals(FrontierV3ActorCarrierFactory.entityType(declaration.kind()))
                     && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health());
         }
         boolean matches(FrontierV3ActorBodyDeparture receipt) {
@@ -290,7 +289,7 @@ final class FrontierV3SceneDeparturePersistence {
                     && kind.equals(declaration.kind().name()) && owner.equals(declaration.owner().name())
                     && representation.equals("LIVE_BODY") && revision == declaration.authorityRevision()
                     && epoch == declaration.epoch() && residenceGeneration == receipt.residenceGeneration()
-                    && type.equals(declaration.kind() == ActorKind.RESIDENT ? "minecraft:villager" : "minecraft:zombie")
+                    && type.equals(FrontierV3ActorCarrierFactory.entityType(declaration.kind()))
                     && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health())
                     && offhand.equals(receipt.offhand()) && mainhand.equals(receipt.mainhand());
         }

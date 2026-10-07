@@ -12,6 +12,8 @@ public final class FrontierRulesets {
      * motion actuator was continuous.  Crop work remains a slower, distinct boundary.
      */
     private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r13", 16, 1L, 20L, 20L);
+    // Explicit opt-in during the connected expedition migration, never the production default.
+    private static final FrontierRuleset EXPEDITION_CANDIDATE = ruleset("frontier-v3-expedition-candidate-r1", 17, 1L, 20L, 20L);
     private static final FrontierRuleset TRADE_PLAYTEST = new FrontierRuleset("frontier-v3-trade-playtest-r2", 16,
             PRODUCTION.cadence(), PRODUCTION.spatial(), PRODUCTION.rates(), PRODUCTION.facilityCapacity(),
             PRODUCTION.combat(), PRODUCTION.hiveCommand(), PRODUCTION.residentLife(),
@@ -30,6 +32,7 @@ public final class FrontierRulesets {
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.of(PRODUCTION.id(), PRODUCTION, TRADE_PLAYTEST.id(), TRADE_PLAYTEST,
+            EXPEDITION_CANDIDATE.id(), EXPEDITION_CANDIDATE,
             PREVIOUS_PRODUCTION_R6.id(), PREVIOUS_PRODUCTION_R6,
             PREVIOUS_PRODUCTION_R4.id(), PREVIOUS_PRODUCTION_R4,
             PREVIOUS_PRODUCTION_R3.id(), PREVIOUS_PRODUCTION_R3,
@@ -63,11 +66,11 @@ public final class FrontierRulesets {
     private static FrontierRuleset ruleset(String id, int schemaVersion, long resourceHarvestTraversalInterval,
                                            long routePatrolStepInterval, long coldTravelTicksPerEdge) {
         return new FrontierRuleset(id, schemaVersion,
-                new FrontierRuleset.Cadence(1L, 3_000L, resourceHarvestTraversalInterval, 200L, 24_000L, 400L, 24_000L, 200L, 24_000L, 24_000L,
-                        1_200L, 20L, 1_200L, 400L, 24_000L, 600L, 100L, 20L, 800L, 100L, 20L, 20L, 20L,
-                        routePatrolStepInterval, 6_000L, 200L, 200L, 100L, 800L, 900L, 1_000L, 2_000L, 6_000L, 1_000L,
-                        8_000L, 8_100L, 1_600L, 20L, 3_200L, 100L, 2_400L, 2_400L),
-                new FrontierRuleset.Spatial(160, 160, 96, 32, 48, 64, 128, 16, 16, 64, 12),
+                new FrontierRuleset.Cadence(1L, 3_000L, resourceHarvestTraversalInterval, 200L,
+                        24_000L, 400L, 24_000L, 200L, 24_000L, 24_000L, 1_200L, 20L, 1_200L, 400L, 24_000L, 600L, 100L,
+                        20L, 800L, 20L, 20L, routePatrolStepInterval, 6_000L, 200L, 200L, 100L, 800L, 900L, 1_000L, 2_000L,
+                        6_000L, 1_000L, 8_000L, 1_600L, 20L, 3_200L, 100L, 2_400L, 2_400L),
+                new FrontierRuleset.Spatial(160, 160, 32, 48, 64, 128, 16, 64, 12),
                 new FrontierRuleset.Rates(new FixedScalar(125_000L), new FixedScalar(250_000L), FixedScalar.whole(100L), FixedScalar.whole(2L)),
                 new FrontierRuleset.FacilityCapacity(48, 16, 4, 8, 4, 2, 3, 1),
                 new FrontierRuleset.Combat(FixedScalar.whole(4), FixedScalar.whole(2), FixedScalar.whole(6), FixedScalar.whole(3), FixedScalar.ONE),

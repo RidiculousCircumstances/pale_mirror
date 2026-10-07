@@ -32,7 +32,7 @@ final class FrontierV3SettlementServiceDeathResources {
             var after = runtime.decodedState().orElseThrow();
             var item = after.inventory().items().get(work.inputItemId());
             if (item == null || !item.custody().equals(new InventoryCustody.Actor(id.actorId()))) return;
-            if (possiblyConsumed && !FrontierV3CargoHandoffExecutor.exactMatch(body.getMainHandItem(), item)) {
+            if (possiblyConsumed && !FrontierV3ExactItemPresentation.exactMatch(body.getMainHandItem(), item)) {
                 // An absent hand plus incomplete endpoint evidence is NOT observed destruction:
                 // it may be a consumed reagent. Keep the exact unresolved resource/effect visible.
                 LOGGER.warn("PMV3 service-death resource unresolved world={} work={} actor={} bodyEpoch={} item={} endpoint={}",

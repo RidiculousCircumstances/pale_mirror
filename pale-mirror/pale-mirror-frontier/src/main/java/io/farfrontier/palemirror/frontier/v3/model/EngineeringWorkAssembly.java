@@ -88,7 +88,7 @@ public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<Sub
         public Member(List<BlockPosition> corridor, int cursor) { this(corridor, cursor, 1L, Optional.empty()); }
         public Member {
             corridor = List.copyOf(Objects.requireNonNull(corridor, "engineering assembly corridor"));
-            if (corridor.isEmpty() || corridor.size() > OperationTravel.MAX_CELLS || cursor < 0 || cursor >= corridor.size()) {
+            if (corridor.isEmpty() || corridor.size() > TraversalTopology.MAX_NODES || cursor < 0 || cursor >= corridor.size()) {
                 throw new IllegalArgumentException("engineering assembly corridor/cursor is out of bounds");
             }
             for (int index = 1; index < corridor.size(); index++) {

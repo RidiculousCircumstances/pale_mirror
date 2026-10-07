@@ -1,5 +1,19 @@
 # Pale Mirror Frontier v3 implementation plan
 
+## Hive-supply retirement — 2026-10-07
+
+The obsolete settlement-to-hive bread-supply feature is removed, not disabled.
+Its SupplyContract, RouteOperation, OperationAssembly, OperationTravel,
+interception, cart, payload and fixture families are not current implementation
+requirements. Historical paragraphs below cannot authorize restoring them.
+Current inter-settlement trade uses GoodsTradeContract, Shipment,
+TransportMission and UnitGroup with generic resource custody, UAE and navigation.
+Independent hive physiology, assault and internal nutrient transport remain.
+State schema 258 and persistence envelope 102 reject old disposable worlds.
+The canonical current plan and execution authority are maintained in
+`/home/rd/proj/pm-governance/pale-mirror/`; this checkout copy is not a second
+workflow authority.
+
 Status: approved execution plan for the target contract in
 [`frontier-v3-contract.md`](frontier-v3-contract.md).
 
@@ -805,15 +819,7 @@ remains present because breadth, balance and product comprehension are not done.
   compile `UNAVAILABLE`, `IMPROVISED`, `DEGRADED` or `READY`. COLD settlement
   combat consumes that same fact, so a lost weapon reduces the same person's
   output and a lost leader degrades surviving members without a replacement.
-  The next role owner correction is `V3-AUD-017`: `RoutePatrol` and
-  `RouteOperation` embed a shared immutable exact-unit manifest instead of a
-  global roster. New patrols are one leader plus one-to-three scouts; a named
-  cargo crew is distinct from its two-to-four exact escorts. Schema-82 routes
-  may retain only an explicit understrength legacy formation until their
-  ordinary terminal outcome, never a hydrated or invented replacement. The
-  subsequent expansion must add real engineering/recovery and medical/
-  evacuation operation/equipment owners before it introduces sapper or medic
-  labels.
+  Current patrols retain an immutable exact-unit manifest with one leader and one-to-three scouts. Current goods transport retains its exact roster and cargo/escort roles in UnitGroup; it does not reuse the removed hive-supply RouteOperation, cargo-crew or interception family. No old-world compatibility formation is required for that removed feature. Engineering/recovery and medical owners remain separate from transport roles.
 - The first engineering/recovery owner is now route reconstruction: each new
   `RouteConstruction` embeds one immutable one-to-four-person local
   `EngineeringRecoveryTeam`, and those same exact people derive exclusive

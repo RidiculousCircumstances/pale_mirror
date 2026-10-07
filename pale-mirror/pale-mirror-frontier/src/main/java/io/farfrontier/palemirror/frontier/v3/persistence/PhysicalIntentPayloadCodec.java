@@ -65,7 +65,7 @@ final class PhysicalIntentPayloadCodec {
         Optional<PhysicalContainerSlot> target = input.readBoolean()
                 ? Optional.of(new PhysicalContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte())) : Optional.empty();
         Optional<PhysicalDeltaSemanticTarget> semanticTarget = input.readBoolean() ? Optional.of(PhysicalDeltaPayloadCodecs.readTarget(input)) : Optional.empty();
-        if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length) {
+        if (status >= PhysicalIntentStatus.values().length) {
             throw new IllegalArgumentException("unknown physical intent enum value");
         }
         PhysicalIntentLifecycleOwner lifecycleOwner = PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldPayloadCodecs.readString(input));

@@ -15,39 +15,45 @@ final class FrontierV3ActorCarryProjection {
     private FrontierV3ActorCarryProjection() { }
 
     static boolean prepareNew(FrontierWorldState state, SubjectId actorId, Mob body) {
-        var declaration = ActorCarryCapabilities.workCargo(state, actorId);
-        if (declaration.isEmpty()) return true;
-        var carry = declaration.orElseThrow();
+        var declarations = declarations(state, actorId);
         var ledger = state.inventory().fungibleResources();
-        if (ledger.bindings().values().stream().anyMatch(binding -> binding.accountId().equals(carry.accountId()))
-                || !FrontierV3ActorResourceSlots.get(body, carry.slot()).isEmpty()) return false;
-        ItemStack expected = stack(ledger, carry);
-        if (expected.isEmpty()) return false;
+        for (var carry : declarations) {
+            if (ledger.bindings().values().stream().anyMatch(binding -> binding.accountId().equals(carry.accountId()))
+                    || !FrontierV3ActorResourceSlots.get(body, carry.slot()).isEmpty() || stack(ledger, carry).isEmpty()) return false;
+        }
         // A genuinely new body is persisted with its inventory and witness together, not as a second live replica.
-        FrontierV3ActorResourceSlots.set(body, carry.slot(), expected);
+        for (var carry : declarations) FrontierV3ActorResourceSlots.set(body, carry.slot(), stack(ledger, carry));
         rememberConfirmed(state, actorId, body);
         return true;
     }
 
     static boolean matches(FrontierWorldState state, SubjectId actorId, Mob body) {
-        var carry = ActorCarryCapabilities.workCargo(state, actorId);
-        return carry.isEmpty() || matches(state.inventory().fungibleResources(), carry.orElseThrow(), body);
+        var meal = state.humanPopulation().meals().get(actorId);
+        return declarations(state, actorId).stream().allMatch(carry -> meal != null && meal.portable()
+                && carry.accountId().equals(meal.actorAccountId())
+                ? FrontierV3ResidentMealHandProjection.matchesAmbient(state, actorId, body)
+                : matches(state.inventory().fungibleResources(), carry, body));
     }
 
     /** Only a confirmed scene-resource release or new-body admission may record this proof. */
     static void rememberConfirmed(FrontierWorldState state, SubjectId actorId, Mob body) {
-        ActorCarryCapabilities.workCargo(state, actorId).ifPresent(carry -> {
-            if (!matches(state.inventory().fungibleResources(), carry, body))
-                throw new IllegalArgumentException("confirmed carried resource differs from physical inventory");
-            body.getPersistentData().putString(WITNESS, signature(state.inventory().fungibleResources(), carry));
-        });
+        if (!matches(state, actorId, body)) throw new IllegalArgumentException("confirmed carried resource differs from physical inventory");
+        body.getPersistentData().putString(WITNESS, declarations(state, actorId).stream()
+                .map(carry -> signature(state.inventory().fungibleResources(), carry)).collect(java.util.stream.Collectors.joining(";")));
     }
 
     static boolean witnessed(FrontierWorldState state, SubjectId actorId, Mob body) {
-        var carry = ActorCarryCapabilities.workCargo(state, actorId);
-        return carry.isPresent() && matches(state.inventory().fungibleResources(), carry.orElseThrow(), body)
-                && body.getPersistentData().getString(WITNESS)
-                    .equals(signature(state.inventory().fungibleResources(), carry.orElseThrow()));
+        var declarations = declarations(state, actorId);
+        return !declarations.isEmpty() && matches(state, actorId, body) && body.getPersistentData().getString(WITNESS)
+                .equals(declarations.stream().map(carry -> signature(state.inventory().fungibleResources(), carry))
+                        .collect(java.util.stream.Collectors.joining(";")));
+    }
+
+    private static java.util.List<ActorCarriedResources.Presentation> declarations(FrontierWorldState state, SubjectId actor) {
+        var meal = state.humanPopulation().meals().get(actor);
+        return UnitInventoryPresentation.inventory(state, actor).values().stream()
+                .filter(carry -> meal == null || meal.portable() || !carry.accountId().equals(meal.actorAccountId()))
+                .sorted(java.util.Comparator.comparing(ActorCarriedResources.Presentation::accountId)).toList();
     }
 
     private static boolean matches(FungibleResourceLedger ledger, ActorCarriedResources.Presentation carry, Mob body) {

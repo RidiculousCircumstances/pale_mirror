@@ -97,7 +97,7 @@ class AutonomousGoodsTradeTest {
                             "delayed-review", 799).getFirst().payload()).action();
             for (long executedAt : new long[]{sell.expiresAtTick(), sell.expiresAtTick() + 1}) {
                 // Exercise the registered dispatcher, not a helper that might bypass the lost clock.
-                var events = FrontierWorldRuntimeDefinition.planScheduled(recovered, action, true, new SimInstant(executedAt));
+                var events = FrontierWorldRuntimeDefinition.planScheduled(recovered, action, new SimInstant(executedAt));
                 var next = apply(recovered, events, executedAt, "goods-trade");
                 assertEquals(executedAt, next.companies().goodsTrade().participants().participants().get(COMPANY).reviewedAtTick());
                 if (executedAt == sell.expiresAtTick()) {
@@ -125,8 +125,7 @@ class AutonomousGoodsTradeTest {
     @Test void registeredGoodsReviewRejectsAnExecutionInstantBeforeItsDeadline() {
         var state = companyFixture();
         var action = GoodsParticipantProcess.review(COMPANY, 800);
-        assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.planScheduled(
-                state, action, true, new SimInstant(799)));
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.planScheduled(state, action, new SimInstant(799)));
     }
 
     @Test void unfundedOrUnknownDemandIsExplainedWithoutInventingAnOrderOrPayment() {
@@ -158,7 +157,7 @@ class AutonomousGoodsTradeTest {
         assertEquals(StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION,
                 SettlementManagementComposition.MANAGEMENT.decide(state,
                         FrontierWorldStateSupport.settlement(state.bootstrap(), HOME)).selected().orElseThrow().kind());
-        var planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(HOME, 1, 200), false);
+        var planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(HOME, 1, 200));
         var task = planned.stream().map(ProposedEvent::payload).filter(StrategicTaskPlanned.class::isInstance)
                 .map(StrategicTaskPlanned.class::cast).findFirst().orElseThrow().task();
         state = apply(state, planned, 200, "strategy");

@@ -30,12 +30,9 @@ public final class FrontierWorldRuntimeDefinition {
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, FrontierRuleset ruleset) {
         return configuration(FrontierBootstrapper.create(worldId, seed, ruleset));
     }
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, boolean autonomousInterception) {
-        return FrontierWorldConfigurationFactory.create(FrontierBootstrapper.create(worldId, seed), autonomousInterception);
-    }
     /** Explicit fresh-world manifest; its field geometry is persisted and pinned at recovery. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(FrontierBootstrap bootstrap) {
-        return FrontierWorldConfigurationFactory.create(bootstrap, true);
+        return FrontierWorldConfigurationFactory.create(bootstrap);
     }
     public static PayloadCodecs payloadCodecs() { return PAYLOAD_CODECS; }
     public static boolean scheduledHeld(FrontierWorldState state, ScheduledAction action) {
@@ -62,16 +59,11 @@ public final class FrontierWorldRuntimeDefinition {
         return FrontierWorldCommandPlanner.plan(state, command, PROCESS_REGISTRY, PHYSICAL_EXECUTOR);
     }
     public static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action) {
-        return planScheduled(state, action, true);
+        return planScheduled(state, action, action.dueAt());
     }
     public static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action,
-                                                                                                      boolean autonomousInterception) {
-        return planScheduled(state, action, autonomousInterception, action.dueAt());
-    }
-    public static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action,
-                                                                                                      boolean autonomousInterception,
                                                                                                       io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
-        return FrontierWorldProcessCatalog.planScheduled(PROCESS_REGISTRY, state, action, autonomousInterception, currentInstant);
+        return FrontierWorldProcessCatalog.planScheduled(PROCESS_REGISTRY, state, action, currentInstant);
     }
     public static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
         return FrontierWorldEventReducer.reduce(state, event, PROCESS_REGISTRY);

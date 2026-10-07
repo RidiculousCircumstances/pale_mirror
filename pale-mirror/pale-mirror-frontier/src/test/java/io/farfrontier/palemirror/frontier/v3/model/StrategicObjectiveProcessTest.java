@@ -38,8 +38,7 @@ class StrategicObjectiveProcessTest {
     void fullDepotAllowsCapacityNeutralRecipeAndRetainsASelectedMarketDemand() {
         FrontierWorldState initial = initial("frontier:full-depot-bread-admission", 407L);
         SubjectId owner = initial.bootstrap().settlements().getFirst().id();
-        List<ProposedEvent> selected = StrategicObjectiveProcess.plan(initial,
-                StrategicObjectiveProcess.review(owner, 1, 60L));
+        List<ProposedEvent> selected = StrategicObjectiveProcess.plan(initial, StrategicObjectiveProcess.review(owner, 1, 60L));
         StrategicObjective objective = selected.stream().map(ProposedEvent::payload)
                 .filter(StrategicObjectiveSelected.class::isInstance)
                 .map(StrategicObjectiveSelected.class::cast).map(StrategicObjectiveSelected::objective)
@@ -138,8 +137,7 @@ class StrategicObjectiveProcessTest {
 
         FrontierWorldState legacyBlocked = StrategicObjectiveProcess.reduceTaskTransition(withSpace, settlement.id(),
                 new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED));
-        List<ProposedEvent> recovered = StrategicObjectiveProcess.plan(legacyBlocked,
-                StrategicObjectiveProcess.review(settlement.id(), 2, 10_200L));
+        List<ProposedEvent> recovered = StrategicObjectiveProcess.plan(legacyBlocked, StrategicObjectiveProcess.review(settlement.id(), 2, 10_200L));
         assertTrue(recovered.stream().anyMatch(event -> event.payload() instanceof StrategicObjectiveSelected selected
                 && selected.objective().kind() == StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE));
     }
@@ -307,8 +305,7 @@ class StrategicObjectiveProcessTest {
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         assertTrue(SettlementFoodPolicy.exportableFungibleBread(state, settlement.id()).isPresent());
 
-        List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state,
-                StrategicObjectiveProcess.review(settlement.id(), 1, 60L));
+        List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 1, 60L));
 
         assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected),
                 "surplus alone cannot authorize an invented shipment to the hive");
@@ -337,8 +334,7 @@ class StrategicObjectiveProcessTest {
         assertEquals(64, SettlementFoodPolicy.breadStock(state, settlement.id()));
         assertEquals(64, SettlementFoodPolicy.reserveCoverageBread(state, settlement.id()));
         assertEquals(0, SettlementFoodPolicy.coldUsableBread(state, settlement.id()));
-        List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state,
-                StrategicObjectiveProcess.review(settlement.id(), 1, 60L));
+        List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 1, 60L));
         assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected selected
                 && selected.objective().kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD),
                 "a physically bound but current depot stack must not fabricate a bread shortage");
@@ -381,62 +377,6 @@ class StrategicObjectiveProcessTest {
         assertTrue(!compacted.objectives().containsKey(new SubjectId("objective:retained-1")) && compacted.objectives().containsKey(new SubjectId("objective:next")));
     }
 
-    @Test
-    void retentionCompactionKeepsACompletedProductionTaskReferencedByAnotherTerminalObjective() {
-        SubjectId owner = new SubjectId("settlement:1");
-        StrategicObjective production = new StrategicObjective(new SubjectId("objective:source"), owner,
-                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.COMPLETED);
-        StrategicTask produced = new StrategicTask(new SubjectId("task:source"), production.id(), owner, StrategicTaskKind.PRODUCE_BREAD,
-                java.util.Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.COMPLETED);
-        StrategicObjective delivery = new StrategicObjective(new SubjectId("objective:delivery"), owner,
-                StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, java.util.Optional.empty(), 2, StrategicObjectiveStatus.COMPLETED);
-        StrategicTask prepared = new StrategicTask(new SubjectId("task:delivery-prepare"), delivery.id(), owner, StrategicTaskKind.PREPARE_BREAD_CARGO,
-                java.util.Optional.empty(), List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO), List.of(produced.id()), StrategicTaskStatus.COMPLETED);
-        StrategicTask delivered = new StrategicTask(new SubjectId("task:delivery-deliver"), delivery.id(), owner, StrategicTaskKind.DELIVER_BREAD_TO_HIVE,
-                java.util.Optional.empty(), List.of(StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE, StrategicTaskRequirement.AVAILABLE_HAULER,
-                StrategicTaskRequirement.AVAILABLE_GUARD), List.of(prepared.id()), StrategicTaskStatus.COMPLETED);
-        Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>();
-        objectives.put(production.id(), production); objectives.put(delivery.id(), delivery);
-        for (int ordinal = 3; ordinal <= StrategicPlanState.MAX_OBJECTIVES; ordinal++) {
-            StrategicObjective filler = new StrategicObjective(new SubjectId("objective:retention-filler-" + ordinal), owner,
-                    StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), ordinal, StrategicObjectiveStatus.COMPLETED);
-            objectives.put(filler.id(), filler);
-        }
-        StrategicPlanState full = new StrategicPlanState(objectives, Map.of(produced.id(), produced, prepared.id(), prepared, delivered.id(), delivered), Map.of(), Map.of());
-
-        StrategicPlanState compacted = full.addObjective(new StrategicObjective(new SubjectId("objective:retention-next"), owner,
-                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), StrategicPlanState.MAX_OBJECTIVES + 1, StrategicObjectiveStatus.ACTIVE));
-
-        assertTrue(compacted.objectives().containsKey(production.id()));
-        assertTrue(compacted.tasks().containsKey(produced.id()));
-        assertTrue(compacted.objectives().containsKey(new SubjectId("objective:retention-next")));
-        assertEquals(StrategicPlanState.MAX_OBJECTIVES, compacted.objectives().size());
-    }
-
-    @Test
-    void retentionCompactionKeepsTheProspectiveBreadPredecessorUntilTheSameTransactionAddsDeliveryTasks() {
-        SubjectId owner = new SubjectId("settlement:1");
-        StrategicObjective production = new StrategicObjective(new SubjectId("objective:future-source"), owner,
-                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.COMPLETED);
-        StrategicTask produced = new StrategicTask(new SubjectId("task:future-source"), production.id(), owner, StrategicTaskKind.PRODUCE_BREAD,
-                java.util.Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.COMPLETED);
-        Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>(); objectives.put(production.id(), production);
-        InfectionCell target = new InfectionCell(0, 0);
-        for (int ordinal = 2; ordinal <= StrategicPlanState.MAX_OBJECTIVES; ordinal++) {
-            StrategicObjective filler = new StrategicObjective(new SubjectId("objective:future-filler-" + ordinal), owner,
-                    StrategicObjectiveKind.HIVE_EXPAND_INFECTION, java.util.Optional.of(target), ordinal, StrategicObjectiveStatus.COMPLETED);
-            objectives.put(filler.id(), filler);
-        }
-        StrategicPlanState full = new StrategicPlanState(objectives, Map.of(produced.id(), produced), Map.of(), Map.of());
-
-        StrategicPlanState compacted = full.addObjective(new StrategicObjective(new SubjectId("objective:future-delivery"), owner,
-                StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, java.util.Optional.empty(), StrategicPlanState.MAX_OBJECTIVES + 1,
-                StrategicObjectiveStatus.ACTIVE));
-
-        assertTrue(compacted.objectives().containsKey(production.id()));
-        assertTrue(compacted.tasks().containsKey(produced.id()),
-                "the new delivery task is reduced after its objective and must retain this exact predecessor");
-    }
 
     @Test
     void scheduledWorldWorkPersistsOneUtilityPlanPerEligibleSide() {
@@ -457,39 +397,6 @@ class StrategicObjectiveProcessTest {
                 .values().stream().allMatch(values -> values.size() == 1));
     }
 
-    @Test
-    void anInterceptWakeWithoutDurableScoutKnowledgeCannotCreateAnOmniscientAttack() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
-                new WorldId("frontier:strategic-interrupt"), 91L));
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()); SubjectId hive = state.bootstrap().hive().id();
-        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-
-        HiveOperationKnowledge.Sighting untrusted = new HiveOperationKnowledge.Sighting(operation.id(), new SubjectId("bioform:west-1"),
-                operation.currentPosition(), 100L);
-        List<ProposedEvent> planned = StrategicObjectiveProcess.planOpportunity(state, StrategicObjectiveProcess.interceptOpportunity(hive, untrusted, 100L));
-
-        assertEquals(1, planned.size());
-        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled.class, planned.getFirst().payload());
-        assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected));
-    }
-
-    @Test
-    void anOlderInterceptWakeCannotRetargetToANewerSightingOfTheSameCaravan() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
-                new WorldId("frontier:strategic-interrupt-retarget"), 91L));
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()); SubjectId hive = state.bootstrap().hive().id();
-        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        HiveOperationKnowledge.Sighting older = new HiveOperationKnowledge.Sighting(operation.id(), new SubjectId("bioform:west-1"), operation.currentPosition(), 100L);
-        HiveOperationKnowledge.Sighting replacement = new HiveOperationKnowledge.Sighting(operation.id(), older.scoutId(), operation.currentPosition().offset(4, 0, 0), 101L);
-        state = state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(HiveOperationKnowledge.empty().observe(older).observe(replacement)));
-
-        List<ProposedEvent> planned = StrategicObjectiveProcess.planOpportunity(state, StrategicObjectiveProcess.interceptOpportunity(hive, older, 102L));
-
-        assertEquals(1, planned.size());
-        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled.class, planned.getFirst().payload());
-        assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected),
-                "a newer fact may schedule its own wake-up but never retarget an already queued one");
-    }
 
     @Test
     void localInfectionObservationPersistsBeforeContainmentSelectionAndClearsWhenAbsent() {

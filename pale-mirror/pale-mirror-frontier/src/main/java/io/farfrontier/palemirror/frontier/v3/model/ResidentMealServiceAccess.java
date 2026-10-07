@@ -11,7 +11,7 @@ public final class ResidentMealServiceAccess implements ServiceAccessCapability 
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var port = ServiceAccessCoordinator.port(state, pointId);
         var boundary = port.accessBoundary();
-        return state.humanPopulation().meals().values().stream().filter(meal -> meal.depotId().equals(pointId))
+        return state.humanPopulation().meals().values().stream().filter(meal -> !meal.portable() && meal.depotId().equals(pointId))
                 .map(meal -> new ServiceAccessDemand(identity(pointId, meal.residentId()), priority(),
                         ServiceAccessCoordinator.occupies(state, boundary, meal.residentId()) ? ServiceAccessDemand.Presence.OCCUPIED
                                 : committedEntrance(meal, boundary) ? ServiceAccessDemand.Presence.ENTERING
@@ -47,6 +47,7 @@ public final class ResidentMealServiceAccess implements ServiceAccessCapability 
                 ServiceAccessCoordinator.boundary(state, meal.depotId()), actor.body(), observedBody);
     }
     public static boolean cleared(FrontierWorldState state, ResidentMeal meal, BodyPosition body) {
+        if (meal.portable()) return body.equals(state.actorLocations().get(meal.residentId()).body());
         return body.equals(meal.clearingSurface().standingBody())
                 && ServiceAccessCoordinator.boundary(state, meal.depotId()).cleared(body);
     }

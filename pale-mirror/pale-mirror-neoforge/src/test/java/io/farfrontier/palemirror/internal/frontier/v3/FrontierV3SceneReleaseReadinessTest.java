@@ -54,32 +54,5 @@ class FrontierV3SceneReleaseReadinessTest {
         assertTrue(FrontierV3SceneExecutor.entityStorageReady(true, true));
     }
 
-    @Test
-    void cargoLookupDoesNotDecodeAnUnrelatedHotWorkerSceneAsLogistics() {
-        var hot = LEASE.withStatus(SceneLeaseStatus.HOT);
-        assertTrue(FrontierV3CargoCarrierExecutor.activeLease(List.of(hot), lease -> {
-            throw new AssertionError("cargo inspection must never receive a worker scene");
-        }).isEmpty(),
-                "a cargo observer must not ask a production scene for a logistics cause");
-    }
 
-    @Test
-    void absentCargoWaitsForRetainedAndCurrentStorageButEvidenceIsAlwaysInspected() {
-        var state = FrontierV3FixtureCatalog.routeSceneReturnConfiguration(new WorldId("frontier:cargo-readiness"), 41L).initialState();
-        var operation = state.operations().values().iterator().next();
-        var travel = operation.activeTravel().orElseThrow();
-        var current = travel.cargoAnchor().surface().support();
-        var retained = new BlockPosition(current.x() + 32, current.y(), current.z());
-        var lease = SceneLease.atExactPositions(new SceneLeaseId("lease:cargo-readiness"), state.bootstrap().worldId(),
-                operation.id(), operation.cargoId(), operation.currentPosition(), retained, new SimInstant(0), 1,
-                SceneLeaseStatus.DRAINING, Optional.empty(), operation.participantIds().stream()
-                        .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))).toList());
-        assertTrue(FrontierV3SceneReleaseReadiness.awaitingCargoStorage(state, lease, id -> false, current::equals));
-        assertTrue(FrontierV3SceneReleaseReadiness.awaitingCargoStorage(state, lease, id -> false, retained::equals));
-        assertFalse(FrontierV3SceneReleaseReadiness.awaitingCargoStorage(state, lease, id -> false, support -> true));
-        assertFalse(FrontierV3SceneReleaseReadiness.awaitingCargoStorage(state, lease, id -> true,
-                support -> { throw new AssertionError("available evidence belongs to validation, not a storage wait"); }));
-        assertFalse(FrontierV3SceneReleaseReadiness.awaitingCargoStorage(STATE, LEASE,
-                id -> { throw new AssertionError("a worker scene has no cargo"); }, support -> false));
-    }
 }

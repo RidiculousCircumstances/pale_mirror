@@ -8,6 +8,12 @@ import java.util.List;
 /** A roster reservation is not unfinished labour: vacant members may eat while waiting. */
 final class GroupAssignmentCapability implements ActivityExecutionCapability {
     @Override public HumanAssignmentKind kind() { return HumanAssignmentKind.GROUP_MEMBER; }
+    @Override public boolean permitsHomeFood(FrontierWorldState state, HumanAssignment assignment) {
+        var group = state.unitGroups().groups().get(assignment.ownerId().orElseThrow());
+        group.member(assignment.residentId());
+        return io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupMissionPorts.require(group)
+                .permitsHomeFood(state, group);
+    }
     @Override public ActivityExecutionCheckpoint checkpoint(FrontierWorldState state, HumanAssignment assignment) {
         var group = state.unitGroups().groups().get(assignment.ownerId().orElseThrow());
         if (assignment.kind() != kind() || group == null || group.phase() == UnitGroup.Phase.CLOSED)

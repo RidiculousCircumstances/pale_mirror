@@ -77,7 +77,7 @@ final class PhysicalIntentStateCodec {
             Optional<DiagnosticTuple> diagnostic = input.readBoolean() ? Optional.of(readDiagnostic(input)) : Optional.empty();
             PhysicalIntent intent = new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status), cause,
                     PhysicalIntentRoleBinding.decode(schema, roles, scene), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget, lifecycleOwner, diagnostic);
-            if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length || intents.put(id, intent) != null) {
+            if (status >= PhysicalIntentStatus.values().length || intents.put(id, intent) != null) {
                 throw new IllegalArgumentException("invalid or duplicate physical intent");
             }
         }

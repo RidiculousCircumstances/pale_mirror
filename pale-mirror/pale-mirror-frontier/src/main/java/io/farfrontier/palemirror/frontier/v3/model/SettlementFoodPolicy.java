@@ -78,7 +78,7 @@ public final class SettlementFoodPolicy {
                 .filter(entry -> {
                     ClaimAllocation claim = state.inventory().fungibleResources().claims().get(entry.getKey());
                     return claim.economicOwnerId().equals(settlementId) && claim.itemKind().equals(BREAD)
-                            && (claim.purpose() == ClaimPurpose.GOODS_TRADE || claim.purpose() == ClaimPurpose.SUPPLY_CONTRACT);
+                            && (claim.purpose() == ClaimPurpose.GOODS_TRADE);
                 }).mapToInt(java.util.Map.Entry::getValue).reduce(0, Math::addExact);
         return Math.subtractExact(Math.addExact(exact, fungible), outgoing);
     }
@@ -145,8 +145,7 @@ public final class SettlementFoodPolicy {
     public static boolean hasUnconfirmedPhysicalCustody(FrontierWorldState state, SubjectId itemId) {
         return state.physicalIntents().values().stream()
                 .anyMatch(intent -> intent.status() != PhysicalIntentStatus.CONFIRMED
-                        // CARGO_LOADING retains the source as SOURCE_ITEM, while provision
-                        // uses ITEM. The declared typed roles cover both without inference.
+                        // Pending effects declare their exact item through typed roles.
                         && intent.roles().namedRoles().containsValue(itemId));
     }
 }

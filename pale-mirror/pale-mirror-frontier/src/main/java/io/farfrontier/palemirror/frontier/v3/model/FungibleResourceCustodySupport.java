@@ -65,7 +65,17 @@ public final class FungibleResourceCustodySupport {
         }
         var account = accountAtContainer(state, containerId).orElse(null);
         if (account == null) return Optional.empty();
-        FungibleResourceLedger resources = state.inventory().fungibleResources();
+        return selectAtAccount(state.inventory().fungibleResources(), account.id(), economicOwnerId, itemKind, quantity);
+    }
+
+    /** Source-neutral allocation query; eligibility and physical access belong to the caller's port. */
+    public static Optional<LotSelection> selectAtAccount(FungibleResourceLedger resources, SubjectId accountId,
+                                                        SubjectId economicOwnerId, String itemKind, int quantity) {
+        Objects.requireNonNull(resources); Objects.requireNonNull(accountId); Objects.requireNonNull(economicOwnerId);
+        if (itemKind == null || itemKind.isBlank() || quantity < 1 || quantity > 64)
+            throw new IllegalArgumentException("resource lot selection is invalid");
+        var account = resources.accounts().get(accountId);
+        if (account == null) return Optional.empty();
         if (resources.unclaimedQuantity(account.id(), economicOwnerId, itemKind) < quantity) return Optional.empty();
         Map<SubjectId, Integer> pinned = new java.util.HashMap<>();
         account.claimQuantities().keySet().forEach(claimId -> {

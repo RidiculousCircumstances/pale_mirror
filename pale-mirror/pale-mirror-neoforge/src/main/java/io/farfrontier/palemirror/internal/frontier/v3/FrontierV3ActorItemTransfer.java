@@ -35,14 +35,14 @@ final class FrontierV3ActorItemTransfer {
         Objects.requireNonNull(source, "source slot");
         requireHand(hand);
         if (source.slot() >= chest.getContainerSize()
-                || !FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(source.slot()), expected)
+                || !FrontierV3ExactItemPresentation.exactMatch(chest.getItem(source.slot()), expected)
                 || !actor.getItemBySlot(hand).isEmpty()) return false;
         ItemStack stack = chest.getItem(source.slot());
         chest.setItem(source.slot(), ItemStack.EMPTY);
         chest.setChanged();
         actor.setItemSlot(hand, stack);
         return chest.getItem(source.slot()).isEmpty()
-                && FrontierV3CargoHandoffExecutor.exactMatch(actor.getItemBySlot(hand), expected);
+                && FrontierV3ExactItemPresentation.exactMatch(actor.getItemBySlot(hand), expected);
     }
 
     static boolean place(ChestBlockEntity chest, Villager actor, ExactItemStack expected,
@@ -54,13 +54,13 @@ final class FrontierV3ActorItemTransfer {
         requireHand(hand);
         if (destination.slot() >= chest.getContainerSize()
                 || !chest.getItem(destination.slot()).isEmpty()
-                || !FrontierV3CargoHandoffExecutor.exactMatch(actor.getItemBySlot(hand), expected)) return false;
+                || !FrontierV3ExactItemPresentation.exactMatch(actor.getItemBySlot(hand), expected)) return false;
         ItemStack stack = actor.getItemBySlot(hand);
         actor.setItemSlot(hand, ItemStack.EMPTY);
         chest.setItem(destination.slot(), stack);
         chest.setChanged();
         return actor.getItemBySlot(hand).isEmpty()
-                && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(destination.slot()), expected);
+                && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(destination.slot()), expected);
     }
 
     /**
@@ -70,8 +70,8 @@ final class FrontierV3ActorItemTransfer {
      */
     static final class FungibleStep {
         private final ActorContainerItemOrder order;
-        private final ChestBlockEntity chest;
-        private final Villager actor;
+        private final net.minecraft.world.Container chest;
+        private final net.minecraft.world.entity.Mob actor;
         private final UUID declaredBodyId;
         private final List<MaterialSourceSelection.Slice> source;
         private final int destinationSlot;
@@ -84,8 +84,13 @@ final class FrontierV3ActorItemTransfer {
         }
         FungibleStep(ActorContainerItemOrder order, ChestBlockEntity chest, Villager actor, UUID declaredBodyId,
                      List<MaterialSourceSelection.Slice> source, int destinationSlot, int destinationBefore) {
+            this(order, FrontierV3PhysicalContainer.declaredChest(order.containerEndpoint().containerId(), chest),
+                    actor, declaredBodyId, source, destinationSlot, destinationBefore);
+        }
+        FungibleStep(ActorContainerItemOrder order, FrontierV3PhysicalContainer container, net.minecraft.world.entity.Mob actor,
+                     UUID declaredBodyId, List<MaterialSourceSelection.Slice> source, int destinationSlot, int destinationBefore) {
             this.order = Objects.requireNonNull(order, "fungible actor order");
-            this.chest = Objects.requireNonNull(chest, "declared material container");
+            this.chest = Objects.requireNonNull(container, "declared material container").inventory();
             this.actor = Objects.requireNonNull(actor, "declared physical actor");
             this.declaredBodyId = Objects.requireNonNull(declaredBodyId, "declared scene body");
             this.source = List.copyOf(Objects.requireNonNull(source, "current source bindings"));
@@ -93,8 +98,7 @@ final class FrontierV3ActorItemTransfer {
             this.destinationBefore = destinationBefore;
             if (!(order.portion() instanceof ActorContainerItemOrder.Portion.Fungible portion)
                     || !actor.getUUID().equals(declaredBodyId)
-                    || !order.containerEndpoint().containerId().value().equals(chest.getPersistentData()
-                    .getString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY))
+                    || !order.containerEndpoint().containerId().equals(container.containerId())
                     || source.isEmpty() || source.stream().mapToInt(MaterialSourceSelection.Slice::moved).sum() != portion.quantity()
                     || source.stream().map(MaterialSourceSelection.Slice::address).distinct().count() != source.size()
                     || source.stream().map(MaterialSourceSelection.Slice::epoch).distinct().count() != 1)

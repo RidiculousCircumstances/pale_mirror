@@ -64,6 +64,15 @@ final class FungibleResourceValidation {
             if (!addressMatchesCustody(binding.address(), account.custody())) {
                 throw new IllegalArgumentException("physical stack address disagrees with its canonical custody owner");
             }
+            if (account.actorPresentation().isPresent()) {
+                var declared = account.actorPresentation().orElseThrow();
+                boolean matches = switch (binding.address()) {
+                    case PhysicalStackAddress.ActorPocket pocket -> declared.equals(new ActorItemSlot.Pocket(pocket.slot()));
+                    case PhysicalStackAddress.ActorHand hand -> declared.equals(new ActorItemSlot.Hand(hand.hand()));
+                    default -> false;
+                };
+                if (!matches) throw new IllegalArgumentException("physical stack address differs from retained personal placement");
+            }
             binding.lotQuantities().forEach((id, quantity) -> { ResourceLot lot = lots.get(id); if (lot == null || !lot.itemKind().equals(binding.itemKind())) throw new IllegalArgumentException("physical stack binding has incompatible lot evidence");
                 boundLots.computeIfAbsent(account.id(), ignored -> new HashMap<>()).merge(id, quantity, Integer::sum); });
             binding.claimQuantities().forEach((id, quantity) -> {

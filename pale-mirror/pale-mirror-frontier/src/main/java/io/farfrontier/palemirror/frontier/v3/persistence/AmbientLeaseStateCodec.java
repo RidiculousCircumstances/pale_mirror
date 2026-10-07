@@ -29,7 +29,7 @@ final class AmbientLeaseStateCodec {
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId actor = new SubjectId(readString(input)); BodyPosition handoff = readBody(input); long instant = input.readLong(); long revision = input.readLong();
             int status = input.readUnsignedByte(); int goal = input.readUnsignedByte(); BodyPosition goalBody = readBody(input);
-            if (status >= AmbientLeaseStatus.values().length || goal >= AmbientGoalKind.values().length || leases.put(actor,
+            if (status >= AmbientLeaseStatus.values().length || leases.put(actor,
                     new AmbientActorLease(actor, handoff, new SimInstant(instant), revision, FrontierWireTags.require(AmbientLeaseStatus.class, status), FrontierWireTags.require(AmbientGoalKind.class, goal), goalBody)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate ambient lease");
             }

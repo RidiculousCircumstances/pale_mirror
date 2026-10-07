@@ -7,7 +7,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
  * prove that every sealed cause has exactly one owner before simulation starts.</p>
  */
 public enum SceneCauseKind {
-    LOGISTICS,
     SETTLEMENT_ASSAULT,
     ENGINEERING_WORKSITE,
     MEDICAL_TREATMENT,

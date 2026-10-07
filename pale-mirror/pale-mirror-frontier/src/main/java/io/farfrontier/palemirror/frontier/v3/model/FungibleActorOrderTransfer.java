@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /** Validates the actor-order declaration and its observed physical addresses. */
 final class FungibleActorOrderTransfer {
@@ -23,6 +24,8 @@ final class FungibleActorOrderTransfer {
         if (!source.custody().equals(portion.sourceCustody())
                 || existing != null && !existing.custody().equals(portion.destinationCustody()))
             throw new IllegalArgumentException("actor item order has stale source or destination custody");
+        if (source.actorPresentation().isPresent() && !source.actorPresentation().equals(Optional.of(order.actorSlot())))
+            throw new IllegalArgumentException("actor transfer has a foreign retained source presentation");
         if (order.direction() == ActorContainerItemOrder.Direction.TAKE && existing == null)
             ActorCarriedResources.requireNewAccountCapacity(ledger, order.actorId(), portion.destinationAccountId());
         for (var entry : portion.lotQuantities().entrySet()) {
@@ -52,8 +55,11 @@ final class FungibleActorOrderTransfer {
         FungibleResourceLedger.requireSubset(source.lotQuantities(), portion.lotQuantities(), "actor order source lots");
         FungibleResourceLedger.requireOptionalSubset(source.claimQuantities(), claimed, "actor order source claim");
         CustodyAccount destination = existing == null
-                ? new CustodyAccount(portion.destinationAccountId(), portion.destinationCustody(), portion.lotQuantities(), claimed)
+                ? new CustodyAccount(portion.destinationAccountId(), portion.destinationCustody(), portion.lotQuantities(), claimed,
+                        portion.destinationCustody() instanceof ResourceCustody.Actor ? Optional.of(order.actorSlot()) : Optional.empty())
                 : existing;
+        if (destination.actorPresentation().isPresent() && !destination.actorPresentation().equals(Optional.of(order.actorSlot())))
+            throw new IllegalArgumentException("actor transfer cannot replace its retained personal presentation");
         return new Accounts(source, destination, existing != null, portion.lotQuantities(), claimed);
     }
 

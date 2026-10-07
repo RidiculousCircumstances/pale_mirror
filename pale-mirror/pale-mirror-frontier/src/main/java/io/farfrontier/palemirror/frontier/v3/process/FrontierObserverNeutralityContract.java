@@ -133,7 +133,6 @@ public final class FrontierObserverNeutralityContract {
         Map<FrontierDurationProcessDriverRegistry.Family, Declaration> values = new EnumMap<>(FrontierDurationProcessDriverRegistry.Family.class);
         for (FrontierDurationProcessDriverRegistry.Family family : FrontierDurationProcessDriverRegistry.Family.values()) {
             Measurement measurement = family == FrontierDurationProcessDriverRegistry.Family.SETTLEMENT_ASSAULT
-                    || family == FrontierDurationProcessDriverRegistry.Family.ROUTE_ENGAGEMENT
                     ? Measurement.CALIBRATED_COMBAT : Measurement.EXACT_QUIET;
             values.put(family, new Declaration(family, VERSION, measurement,
                     measurement == Measurement.CALIBRATED_COMBAT ? COMBAT_CALIBRATION : QUIET_CALIBRATION));

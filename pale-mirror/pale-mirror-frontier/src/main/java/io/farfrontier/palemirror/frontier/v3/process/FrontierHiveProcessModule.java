@@ -18,7 +18,6 @@ import java.util.Set;
 final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
     @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
         return List.of(explosionCapability(), nutrientTransferCapability(), hiveGrowthCapability(),
-                routeSceneStrikeCapability(),
                 settlementAssaultCapability());
     }
 
@@ -104,34 +103,6 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 retirementAccount(PhysicalIntentLifecycleOwner.HIVE_GROWTH), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.HIVE_GROWTH);
     }
 
-    private static PhysicalIntentLifecycleCapability routeSceneStrikeCapability() {
-        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT,
-                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE),
-                Set.of(PhysicalIntentRoleSchema.ROUTE_SCENE_STRIKE)),
-                (state, command, prepared) -> {
-                    try {
-                        SceneStrikeStateSupport.validateIntent(state, prepared.intent());
-                        return new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, prepared.intent()), prepared)));
-                    } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-                },
-                (state, command, intent, transition) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.transitionOwner(state, intent, transition), transition))),
-                (state, subject, intent) -> {
-                    SceneStrikeStateSupport.validateIntent(state, intent);
-                    if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike must be prepared by its exact scene owner");
-                    return state.preparePhysicalIntent(intent);
-                },
-                (state, subject, intent, transition) -> {
-                    if (!subject.equals(SceneStrikeStateSupport.transitionOwner(state, intent, transition))) throw new IllegalArgumentException("scene strike transition lacks exact scene ownership");
-                    return reduceSceneStrikeTransition(state, intent, transition);
-                }, PhysicalIntentLifecycleRetirementPolicy.of(
-                        (state, command, intent, transition) -> new CommandPlan.Accepted(List.of(
-                                new ProposedEvent(SceneStrikeStateSupport.transitionOwner(state, intent, transition), transition))),
-                        (state, subject, intent, transition) -> {
-                            if (!subject.equals(SceneStrikeStateSupport.transitionOwner(state, intent, transition))) throw new IllegalArgumentException("scene strike retirement lacks exact scene ownership");
-                            return reduceSceneStrikeTransition(state, intent, transition);
-                        }), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.ROUTE_ENGAGEMENT);
-    }
 
     private static PhysicalIntentLifecycleCapability settlementAssaultCapability() {
         return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT,
@@ -249,7 +220,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 carrier = new PhysicalIntentRetirementAccount.Exact<>(job.nestId());
                 commitment = new PhysicalIntentRetirementAccount.Exact<>(job.consumedItemId());
             }
-            case ROUTE_ENGAGEMENT, SETTLEMENT_ASSAULT -> {
+            case SETTLEMENT_ASSAULT -> {
                 if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
                     SceneStrikeStateSupport.transitionOwner(state, intent, transition);
                     carrier = new PhysicalIntentRetirementAccount.Exact<>(new SubjectId(intent.roles().scene().orElseThrow().leaseId().value()));
@@ -422,16 +393,6 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), started)));
         }
-        if (command.payload() instanceof HotScoutOperationObserved observed) {
-            try { HivePerceptionProcess.reduceHot(state, state.bootstrap().hive().id(), observed); }
-            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-            HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(observed.operationId(), observed.scoutId(),
-                    observed.seenCarrierPosition(), observed.observedAt());
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), observed),
-                    new ProposedEvent(state.bootstrap().hive().id(), new ScheduleEffect.Created(
-                            StrategicObjectiveProcess.interceptOpportunity(state.bootstrap().hive().id(), sighting,
-                                    Math.addExact(command.submittedAt().ticks(), 1L))))));
-        }
         if (command.payload() instanceof HiveMobilizationReleaseStarted started) {
             try { HiveMobilizationProcess.reduceReleaseStarted(state, state.bootstrap().hive().id(), started); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
@@ -512,19 +473,11 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             case HiveMobilizationReturnAdvanced advanced -> HiveMobilizationProcess.reduceReturnAdvanced(state, event.subject(), advanced);
             case HiveMobilizationDeparted departed -> HiveMobilizationProcess.reduceDeparted(state, event.subject(), departed);
             case HiveMobilizationConflicted conflicted -> HiveMobilizationProcess.reduceConflicted(state, event.subject(), conflicted);
-            case HiveOperationObserved observed -> HivePerceptionProcess.reduce(state, event.subject(), observed);
             case HiveTerritoryObserved observed -> HiveTerritoryPerceptionProcess.reduce(state, event.subject(), observed);
             case HiveSettlementObserved observed -> HiveSettlementPerceptionProcess.reduce(state, event.subject(), observed);
             case HiveDoctrineSelected selected -> HiveDoctrineProcess.reduce(state, event.subject(), selected);
-            case HotScoutOperationObserved observed -> HivePerceptionProcess.reduceHot(state, event.subject(), observed);
             case ScoutPatrolAdvanced advanced -> HiveScoutPatrolProcess.reduce(state, event.subject(), advanced);
             case ScoutPatrolStarted started -> HiveScoutPatrolProcess.reduceStarted(state, event.subject(), started);
-            case RouteEngagementStarted started -> HiveRouteEngagementProcess.reduceStarted(state, event.subject(), started);
-            case RouteEngagementAttackerAdvanced advanced -> HiveRouteEngagementProcess.reduceAdvanced(state, event.subject(), advanced);
-            case RouteEngagementTransition transition -> HiveRouteEngagementProcess.reduceTransition(state, event.subject(), transition);
-            case RouteEngagementStrike strike -> HiveRouteEngagementProcess.reduceStrike(state, event.subject(), strike);
-            case RouteEngagementResolved resolved -> HiveRouteEngagementProcess.reduceResolved(state, event.subject(), resolved);
-            case RouteEngagementCommandAuthorityChanged changed -> HiveRouteEngagementProcess.reduceCommandAuthorityChanged(state, event.subject(), changed);
             case SettlementAssaultStarted started -> HiveSettlementAssaultProcess.reduceStarted(state, event.subject(), started);
             case SettlementAssaultAttackerAdvanced advanced -> HiveSettlementAssaultProcess.reduceAdvanced(state, event.subject(), advanced);
             case SettlementAssaultFormationObserved observed -> HiveSettlementAssaultProcess.reduceFormationObserved(state, event.subject(), observed);

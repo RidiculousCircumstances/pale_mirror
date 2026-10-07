@@ -43,7 +43,6 @@ public enum FrontierV3DiagnosticView {
     CONTAINER("container", true),
     REFERENCE_CONTAINER("reference_container", true),
     MARKET_ORDER("market_order", true),
-    OPERATION("operation", true),
     ROUTE_CONSTRUCTION("route_construction", true),
     ROUTE_MAINTENANCE("route_maintenance", true),
     ROUTE_TOPOLOGY("route_topology", true),

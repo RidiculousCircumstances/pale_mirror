@@ -60,10 +60,15 @@ public final class ActorCarriedResources {
 
     static void validateCapacity(java.util.Collection<CustodyAccount> accounts) {
         var counts = new java.util.HashMap<SubjectId, Integer>();
+        var occupied = new java.util.HashMap<SubjectId, java.util.Set<ActorItemSlot>>();
         for (CustodyAccount account : accounts) {
             if (account.custody() instanceof ResourceCustody.Actor actor
                     && counts.merge(actor.actorId(), 1, Integer::sum) > MAX_STACK_ACCOUNTS)
                 throw new IllegalArgumentException("actor carry-account capacity exceeded");
+            if (account.custody() instanceof ResourceCustody.Actor actor && account.actorPresentation().isPresent()
+                    && !occupied.computeIfAbsent(actor.actorId(), ignored -> new java.util.HashSet<>())
+                        .add(account.actorPresentation().orElseThrow()))
+                throw new IllegalArgumentException("two personal accounts claim the same inventory presentation");
         }
     }
 }

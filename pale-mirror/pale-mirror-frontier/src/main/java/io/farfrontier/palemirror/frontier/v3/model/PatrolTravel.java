@@ -162,7 +162,7 @@ public record PatrolTravel(SubjectId leaderId, TraversalTopology leaderRoute,
                 || !edge.capabilities().contains(TraversalCapability.PEDESTRIAN))) {
             throw new IllegalArgumentException("patrol travel requires pedestrian topology");
         }
-        if (topology.linearCorridorSurfaces().size() < 2 || topology.linearCorridorSurfaces().size() > OperationTravel.MAX_CELLS) {
+        if (topology.linearCorridorSurfaces().size() < 2 || topology.linearCorridorSurfaces().size() > TraversalTopology.MAX_NODES) {
             throw new IllegalArgumentException("patrol travel corridor is outside bounded profile");
         }
         return topology;

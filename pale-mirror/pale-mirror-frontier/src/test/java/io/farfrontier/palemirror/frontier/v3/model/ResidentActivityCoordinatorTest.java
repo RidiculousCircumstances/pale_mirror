@@ -148,8 +148,7 @@ class ResidentActivityCoordinatorTest {
         assertTrue(ResidentActivityCoordinator.mayStartOrdinaryWork(state, resident, 12_000L),
                 "FREE permits available work when there is no competing activity");
         assertEquals(12_020L, ResidentActivityCoordinator.nextOrdinaryWorkAdmission(state, resident, 12_000L));
-        for (HumanAssignmentKind family : List.of(HumanAssignmentKind.CARGO_TRANSPORT,
-                HumanAssignmentKind.ESCORT, HumanAssignmentKind.ROUTE_PATROL,
+        for (HumanAssignmentKind family : List.of(HumanAssignmentKind.ROUTE_PATROL,
                 HumanAssignmentKind.SETTLEMENT_DEFENCE, HumanAssignmentKind.ENGINEERING_RECOVERY,
                 HumanAssignmentKind.SETTLEMENT_SERVICE, HumanAssignmentKind.MEDICAL_EVACUATION,
                 HumanAssignmentKind.TRANSIT)) {

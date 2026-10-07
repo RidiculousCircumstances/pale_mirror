@@ -44,7 +44,7 @@ final class EngineeringApproachCorridor {
         }
         List<List<BlockPosition>> clear = new ArrayList<>();
         for (List<BlockPosition> candidate : pathCandidates(state, start, destination)) {
-            if (candidate.size() <= OperationTravel.MAX_CELLS && candidate.stream()
+            if (candidate.size() <= TraversalTopology.MAX_NODES && candidate.stream()
                     .allMatch(cell -> traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, cell))) clear.add(candidate);
         }
         return List.copyOf(clear);
@@ -111,7 +111,7 @@ final class EngineeringApproachCorridor {
             // Reject an overlong candidate before resolving another topology column. The
             // operation limit is a compiler budget, not a post-hoc validation after a path
             // finder has walked arbitrarily far through a finite world.
-            if (append && cells.size() >= OperationTravel.MAX_CELLS) return false;
+            if (append && cells.size() >= TraversalTopology.MAX_NODES) return false;
             BlockPosition cell = x == from.x() && z == from.z() ? from : x == to.x() && z == to.z() ? to : terrainSurface(state, surfaces, x, z);
             BlockPosition previous = cells.isEmpty() ? null : cells.getLast();
             if (previous != null && Math.abs(previous.y() - cell.y()) > 1) return false;

@@ -529,6 +529,7 @@ tasks.register('verifyPackagedJar') {
                 throw new GradleException("${jarFile} must not package JourneyMap API classes")
             }
             def fixtureEntries = [
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3BootstrapGameTestFixtures.class',
                     'io/farfrontier/palemirror/frontier/v3/model/FrontierDevelopmentScenarios.class',
                     'io/farfrontier/palemirror/frontier/v3/model/FrontierV3FixtureCatalog.class',
                     'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PilotFixtureBootstrap.class',

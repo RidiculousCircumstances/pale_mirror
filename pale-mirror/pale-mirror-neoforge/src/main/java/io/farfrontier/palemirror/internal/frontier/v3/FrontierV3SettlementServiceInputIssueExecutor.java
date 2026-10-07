@@ -184,7 +184,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
 
     private static boolean sourceMatches(ChestBlockEntity chest, Target target) {
         return target.sourceSlot().slot() < chest.getContainerSize()
-                && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.sourceSlot().slot()), target.item());
+                && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.sourceSlot().slot()), target.item());
     }
 
     private static boolean handOff(ChestBlockEntity chest, Villager worker, Target target) {
@@ -197,7 +197,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
 
     private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
                                        ChestBlockEntity chest, Villager worker) {
-        boolean source = sourceMatches(chest, target), hand = FrontierV3CargoHandoffExecutor.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
+        boolean source = sourceMatches(chest, target), hand = FrontierV3ExactItemPresentation.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
         if (!source && hand) { confirm(runtime, intent, target); return; }
         if (source && worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
             var permission = takeAuthority(level, runtime, intent, target, worker);
@@ -209,7 +209,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
 
     private static void inspectRecovered(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
                                          ChestBlockEntity chest, Villager worker) {
-        boolean source = sourceMatches(chest, target), hand = FrontierV3CargoHandoffExecutor.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
+        boolean source = sourceMatches(chest, target), hand = FrontierV3ExactItemPresentation.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
         if (!source && hand) confirm(runtime, intent, target);
         else if (source && worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
             var permission = takeAuthority(level, runtime, intent, target, worker);
@@ -244,7 +244,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         var chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
         if (chest == null) return () -> { };
         boolean source = sourceMatches(chest, target);
-        boolean hand = FrontierV3CargoHandoffExecutor.exactMatch(body.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
+        boolean hand = FrontierV3ExactItemPresentation.exactMatch(body.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
         if (!source && hand) return () -> confirm(runtime, intent, target);
         if (source && body.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return () -> {
             if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFLICTED, Optional.empty(), "death-unapplied"))

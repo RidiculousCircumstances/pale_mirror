@@ -3,7 +3,6 @@ package io.farfrontier.palemirror.frontier.v3.persistence;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkSceneCause;
-import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause;
@@ -22,13 +21,6 @@ final class SceneCauseStateCodec {
     private SceneCauseStateCodec() { }
 
     static void write(DataOutputStream output, SceneCause cause) throws IOException {
-        if (cause instanceof LogisticsSceneCause logistics) {
-            output.writeByte(0); FrontierWorldStateCodec.writeString(output, logistics.operationId().value());
-            FrontierWorldStateCodec.writeString(output, logistics.cargoId().value()); output.writeBoolean(logistics.engagementId().isPresent());
-            if (logistics.engagementId().isPresent()) FrontierWorldStateCodec.writeString(output, logistics.engagementId().orElseThrow().value());
-            FrontierWorldStateCodec.writePosition(output, logistics.cargoPosition());
-            output.writeByte(logistics.carrierDisposition().wireTag()); return;
-        }
         if (cause instanceof SettlementAssaultSceneCause assault) {
             output.writeByte(1); FrontierWorldStateCodec.writeString(output, assault.assaultId().value());
             FrontierWorldStateCodec.writeString(output, assault.settlementId().value()); return;
@@ -48,9 +40,6 @@ final class SceneCauseStateCodec {
 
     static SceneCause read(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
-            case 0 -> new LogisticsSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)),
-                    new SubjectId(FrontierWorldStateCodec.readString(input)), readOptionalSubject(input), FrontierWorldStateCodec.readPosition(input),
-                    io.farfrontier.palemirror.frontier.v3.model.CargoProjectionRetirement.Disposition.fromWireTag(input.readUnsignedByte()));
             case 1 -> new SettlementAssaultSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)), new SubjectId(FrontierWorldStateCodec.readString(input)));
             case 2 -> new EngineeringWorkSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readInt());
             case 3 -> new MedicalTreatmentSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)));
@@ -63,7 +52,4 @@ final class SceneCauseStateCodec {
         };
     }
 
-    private static Optional<SubjectId> readOptionalSubject(DataInputStream input) throws IOException {
-        return input.readBoolean() ? Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input))) : Optional.empty();
-    }
 }

@@ -25,17 +25,19 @@ public final class FrontierDomainRelationships {
     private FrontierDomainRelationships() { }
 
     public enum EntityKind {
-        OBJECTIVE, TASK, MARKET_DEMAND, MARKET_QUOTE, MARKET_ORDER, FINANCIAL_RESERVATION,
+        OBJECTIVE, TASK, MARKET_DEMAND, MARKET_QUOTE, MARKET_ORDER, FINANCIAL_RESERVATION, FINANCIAL_BUDGET,
         GOODS_ORDER, GOODS_CONTRACT, ECONOMIC_ACCOUNT, CONTAINER, SHIPMENT, UNIT_GROUP, TRANSPORT_MISSION,
         PRODUCTION_JOB, HIVE_GROWTH_JOB, RESOURCE_SITE, RESOURCE_HARVEST_JOB, RESIDENT, EXACT_ITEM, RESOURCE_LOT, RESOURCE_ACCOUNT,
         RESOURCE_CLAIM, PROVISION_CYCLE, PROVISION_ALLOCATION, SCENE_LEASE, AMBIENT_LEASE, CARRIER_EVIDENCE,
-        SUPPLY_CONTRACT, ROUTE_OPERATION, CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE
+        CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE
     }
 
     /** Stable semantic strings are deliberately independent from enum ordinal/wire ordering. */
     public enum Kind {
+        BUDGET_PAYER("budget-payer"), BUDGET_OWNER("budget-owner"), RESERVATION_BUDGET("reservation-budget"),
         GROUP_MEMBER("group-member"), GROUP_MISSION("group-mission"), TRANSPORT_GROUP("transport-group"),
         TRANSPORT_SHIPMENT("transport-shipment"), SHIPMENT_MISSION("shipment-mission"),
+        TRANSPORT_SUPPLY_CLAIM("transport-supply-claim"), TRANSPORT_SUPPLY_SOURCE("transport-supply-source"),
         SHIPMENT_COURIER("shipment-courier"), SHIPMENT_SOURCE("shipment-source"), SHIPMENT_RECEIVER("shipment-receiver"),
         SHIPMENT_CLAIM("shipment-claim"), SHIPMENT_ACCOUNT("shipment-account"), SHIPMENT_CONTRACT("shipment-contract"),
         GOODS_ORDER_PARTY("goods-order-party"), GOODS_ORDER_COUNTERPARTY("goods-order-counterparty"), GOODS_ORDER_CONTAINER("goods-order-container"),
@@ -53,8 +55,7 @@ public final class FrontierDomainRelationships {
         HARVEST_SUCCESSOR_TASK("harvest-successor-task"), HARVEST_SUCCESSOR_JOB("harvest-successor-job"),
         PROVISION_ALLOCATION("provision-allocation"), ALLOCATION_RESOURCE("allocation-resource"), ALLOCATION_RECIPIENT("allocation-recipient"),
         ACTOR_CARRIER_EVIDENCE("actor-carrier-evidence"),
-        CONTRACT_ROUTE_OPERATION("contract-route-operation"), CONTRACT_CARGO("contract-cargo"),
-        ROUTE_CARRIER("route-carrier"), SERVICE_TASK("service-task"), SERVICE_WORKER("service-worker"),
+        SERVICE_TASK("service-task"), SERVICE_WORKER("service-worker"),
         SERVICE_FACILITY("service-facility"), SERVICE_INPUT("service-input"), SERVICE_SCENE_LEASE("service-scene-lease"),
         HIVE_MOBILIZATION_TASK("hive-mobilization-task"), HIVE_MOBILIZATION_MEMBER("hive-mobilization-member");
 
@@ -91,8 +92,10 @@ public final class FrontierDomainRelationships {
         return Map.copyOf(result); }
     private static Set<Lifecycle> lifecycle(Kind kind) { return kind == Kind.ACTOR_AMBIENT_LEASE || kind == Kind.ACTOR_CARRIER_EVIDENCE ? EnumSet.of(Lifecycle.OBSERVED) : EnumSet.allOf(Lifecycle.class); }
     private static EntityKind source(Kind kind) { return switch (kind) {
+        case BUDGET_PAYER, BUDGET_OWNER -> EntityKind.FINANCIAL_BUDGET;
+        case RESERVATION_BUDGET -> EntityKind.FINANCIAL_RESERVATION;
         case GROUP_MEMBER, GROUP_MISSION -> EntityKind.UNIT_GROUP;
-        case TRANSPORT_GROUP, TRANSPORT_SHIPMENT -> EntityKind.TRANSPORT_MISSION;
+        case TRANSPORT_GROUP, TRANSPORT_SHIPMENT, TRANSPORT_SUPPLY_CLAIM, TRANSPORT_SUPPLY_SOURCE -> EntityKind.TRANSPORT_MISSION;
         case SHIPMENT_MISSION -> EntityKind.SHIPMENT;
         case SHIPMENT_COURIER, SHIPMENT_SOURCE, SHIPMENT_RECEIVER, SHIPMENT_CLAIM, SHIPMENT_ACCOUNT, SHIPMENT_CONTRACT -> EntityKind.SHIPMENT;
         case GOODS_ORDER_PARTY, GOODS_ORDER_COUNTERPARTY, GOODS_ORDER_CONTAINER -> EntityKind.GOODS_ORDER;
@@ -104,14 +107,18 @@ public final class FrontierDomainRelationships {
         case ACTOR_AMBIENT_LEASE, ACTOR_CARRIER_EVIDENCE -> EntityKind.RESIDENT; case HARVEST_SITE, HARVEST_PREDECESSOR -> EntityKind.RESOURCE_SITE;
         case HARVEST_TASK, HARVEST_WORKER, HARVEST_ACTOR_ACCOUNT, HARVEST_DEPOT_ACCOUNT, HARVEST_OUTPUT, HARVEST_SUCCESSOR_TASK, HARVEST_SUCCESSOR_JOB -> EntityKind.RESOURCE_HARVEST_JOB;
         case PROVISION_ALLOCATION -> EntityKind.PROVISION_CYCLE; case ALLOCATION_RESOURCE, ALLOCATION_RECIPIENT -> EntityKind.PROVISION_ALLOCATION;
-        case CONTRACT_ROUTE_OPERATION, CONTRACT_CARGO -> EntityKind.SUPPLY_CONTRACT; case ROUTE_CARRIER -> EntityKind.ROUTE_OPERATION;
         case SERVICE_TASK, SERVICE_WORKER, SERVICE_FACILITY, SERVICE_INPUT, SERVICE_SCENE_LEASE -> EntityKind.SERVICE_WORK;
         case HIVE_MOBILIZATION_TASK, HIVE_MOBILIZATION_MEMBER -> EntityKind.HIVE_MOBILIZATION; }; }
     private static EntityKind target(Kind kind) { return switch (kind) {
+        case BUDGET_PAYER -> EntityKind.ECONOMIC_ACCOUNT;
+        case BUDGET_OWNER -> EntityKind.TRANSPORT_MISSION;
+        case RESERVATION_BUDGET -> EntityKind.FINANCIAL_BUDGET;
         case GROUP_MEMBER -> EntityKind.RESIDENT;
         case GROUP_MISSION, SHIPMENT_MISSION -> EntityKind.TRANSPORT_MISSION;
         case TRANSPORT_GROUP -> EntityKind.UNIT_GROUP;
         case TRANSPORT_SHIPMENT -> EntityKind.SHIPMENT;
+        case TRANSPORT_SUPPLY_CLAIM -> EntityKind.RESOURCE_CLAIM;
+        case TRANSPORT_SUPPLY_SOURCE -> EntityKind.RESOURCE_ACCOUNT;
         case SHIPMENT_COURIER -> EntityKind.RESIDENT;
         case SHIPMENT_SOURCE, SHIPMENT_RECEIVER -> EntityKind.CONTAINER;
         case SHIPMENT_CLAIM -> EntityKind.RESOURCE_CLAIM;
@@ -129,12 +136,14 @@ public final class FrontierDomainRelationships {
         case HARVEST_ACTOR_ACCOUNT, HARVEST_DEPOT_ACCOUNT -> EntityKind.RESOURCE_ACCOUNT;
         case JOB_SCENE_LEASE -> EntityKind.SCENE_LEASE; case ACTOR_AMBIENT_LEASE -> EntityKind.AMBIENT_LEASE; case ACTOR_CARRIER_EVIDENCE -> EntityKind.CARRIER_EVIDENCE;
         case HARVEST_SITE, HARVEST_PREDECESSOR, HARVEST_SUCCESSOR_JOB -> EntityKind.RESOURCE_HARVEST_JOB; case PROVISION_ALLOCATION -> EntityKind.PROVISION_ALLOCATION;
-        case CONTRACT_ROUTE_OPERATION -> EntityKind.ROUTE_OPERATION; case CONTRACT_CARGO -> EntityKind.CARGO; case ROUTE_CARRIER, SERVICE_WORKER -> EntityKind.RESIDENT;
+        case SERVICE_WORKER -> EntityKind.RESIDENT;
         case SERVICE_TASK, HIVE_MOBILIZATION_TASK -> EntityKind.TASK; case SERVICE_FACILITY -> EntityKind.STRUCTURE; case SERVICE_INPUT -> EntityKind.EXACT_ITEM;
         case SERVICE_SCENE_LEASE -> EntityKind.SCENE_LEASE; case HIVE_MOBILIZATION_MEMBER -> EntityKind.BIOFORM; }; }
     private static EntityKind owner(Kind kind) { return switch (kind) {
+        case BUDGET_PAYER, BUDGET_OWNER -> EntityKind.FINANCIAL_BUDGET;
+        case RESERVATION_BUDGET -> EntityKind.FINANCIAL_RESERVATION;
         case GROUP_MEMBER, GROUP_MISSION -> EntityKind.UNIT_GROUP;
-        case TRANSPORT_GROUP, TRANSPORT_SHIPMENT -> EntityKind.TRANSPORT_MISSION;
+        case TRANSPORT_GROUP, TRANSPORT_SHIPMENT, TRANSPORT_SUPPLY_CLAIM, TRANSPORT_SUPPLY_SOURCE -> EntityKind.TRANSPORT_MISSION;
         case SHIPMENT_MISSION -> EntityKind.SHIPMENT;
         case SHIPMENT_COURIER, SHIPMENT_SOURCE, SHIPMENT_RECEIVER, SHIPMENT_CLAIM, SHIPMENT_ACCOUNT, SHIPMENT_CONTRACT -> EntityKind.SHIPMENT;
         case GOODS_ORDER_PARTY, GOODS_ORDER_COUNTERPARTY, GOODS_ORDER_CONTAINER -> EntityKind.GOODS_ORDER;
@@ -149,7 +158,6 @@ public final class FrontierDomainRelationships {
         case HARVEST_SITE, HARVEST_PREDECESSOR, HARVEST_SUCCESSOR_TASK, HARVEST_SUCCESSOR_JOB -> EntityKind.RESOURCE_SITE;
         case HARVEST_TASK, HARVEST_WORKER, HARVEST_ACTOR_ACCOUNT, HARVEST_DEPOT_ACCOUNT, HARVEST_OUTPUT -> EntityKind.RESOURCE_HARVEST_JOB;
         case PROVISION_ALLOCATION -> EntityKind.PROVISION_CYCLE; case ALLOCATION_RESOURCE, ALLOCATION_RECIPIENT -> EntityKind.PROVISION_ALLOCATION;
-        case CONTRACT_ROUTE_OPERATION, CONTRACT_CARGO -> EntityKind.SUPPLY_CONTRACT; case ROUTE_CARRIER -> EntityKind.ROUTE_OPERATION;
         case SERVICE_TASK, SERVICE_WORKER, SERVICE_FACILITY, SERVICE_INPUT, SERVICE_SCENE_LEASE -> EntityKind.SERVICE_WORK;
         case HIVE_MOBILIZATION_TASK, HIVE_MOBILIZATION_MEMBER -> EntityKind.HIVE_MOBILIZATION; }; }
     private static Cardinality cardinality(Kind kind) { return switch (kind) {
@@ -180,11 +188,8 @@ public final class FrontierDomainRelationships {
             new Family("resource-harvest-successor", FamilyDisposition.RELATION_LAYER_CURRENT, "ResourceSiteLifecycle", "F0.6R3 vertical"),
             new Family("provision-allocation-recipient", FamilyDisposition.RELATION_LAYER_CURRENT, "SettlementProvision", "F0.6R3 vertical"),
             new Family("actor-physical-carrier", FamilyDisposition.RELATION_LAYER_CURRENT, "canonical actor plus NeoForge evidence", "XACT-001 completes producer/adopter inventory"),
-            new Family("supply-cargo-route", FamilyDisposition.RELATION_LAYER_CURRENT, "SupplyContract/RouteOperation", "ARC-001C explicit route contract"),
             new Family("hive-operation-roster", FamilyDisposition.RELATION_LAYER_CURRENT, "HiveColony/StrategicPlanState", "ARC-001C current mobilization roster"),
             new Family("service-work-station", FamilyDisposition.RELATION_LAYER_CURRENT, "SettlementServiceWork", "ARC-001C current service endpoints"),
-            new Family("cargo-projection-retirement", FamilyDisposition.OWNER_EXPLICIT_UNCHANGED, "FencedRecoveryState/CargoProjectionRetirements",
-                    "terminal self-contained authorization; validate world and retained scene, never require compacted historical cargo/scene"),
             new Family("retired-meal-resources", FamilyDisposition.OWNER_EXPLICIT_UNCHANGED, "HumanPopulation/ResidentMealResourceObligation",
                     "ResidentMealReferenceClosure validates exact dead actor/body/execution and portion allocation; no active meal or physical permission"),
             new Family("replica-fingerprint", FamilyDisposition.NOT_A_DOMAIN_RELATION, "PhysicalReplicaCustodyState", "adapter evidence, never domain relationship authority"));
@@ -208,7 +213,12 @@ public final class FrontierDomainRelationships {
 
     private static final List<OwnerSurface> CURRENT_OWNER_SURFACES = List.of(
             surface(Shipment.class, "id", "sourceAccountId", "carriedAccountId", "receivingAccountId", "lotQuantities", "transportMissionId"),
-            surface(TransportMission.class, "id", "groupId", "shipmentIds"),
+            surface(TransportMission.class, "id", "groupId", "shipmentIds", "financialBudgetId"),
+            surface(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad.class, "foodTargets", "assemblyStations"),
+            surface(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad.Allocation.class,
+                    "claimId", "actorId", "sourceAccountId", "destinationAccountId", "lots"),
+            surface(FinancialBudget.class, "id", "payerId", "ownerId"),
+            surface(FinancialReservation.class, "id", "payerId", "payeeId", "reasonId", "budgetId"),
             surface(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.class, "id"),
             surface(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member.class, "actorId", "activityOwnerId"),
             surface(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Mission.class, "id"),
@@ -225,7 +235,7 @@ public final class FrontierDomainRelationships {
             surface(ResourceTitleTransfer.class, "accountId", "claimId", "sourceOwnerId", "destinationOwnerId", "portions", "splitLotIds"),
             surface(GoodsTradeStockAllocation.class, "accountId"),
             surface(StrategicObjective.class, "id", "ownerId", "resourceSiteTarget", "authorityId"),
-            surface(StrategicTask.class, "id", "objectiveId", "ownerId", "operationTarget", "resourceSiteTarget", "dependencies", "authorityId"),
+            surface(StrategicTask.class, "id", "objectiveId", "ownerId", "resourceSiteTarget", "dependencies", "authorityId"),
             surface(MarketDemand.class, "id", "buyerId", "reasonId"),
             surface(CompanyQuote.class, "id", "demandId", "sellerId"),
             surface(MarketWorkOrder.class, "id", "demandId", "quoteId", "sellerId", "taskId", "jobId", "reservationId"),
@@ -240,8 +250,9 @@ public final class FrontierDomainRelationships {
             surface(SettlementRationAllocation.class, "itemId", "recipientIds"),
             surface(SceneLease.class, "id", "worldId", "ambientHandoffActorIds"),
             surface(AmbientActorLease.class, "actorId"),
-            surface(CargoProjectionRetirement.class, "worldId", "leaseId", "cargoId"),
-            surface(ResidentMealResourceObligation.class, "settlementId", "depotId", "sourceAccountId", "actorAccountId"),
+            surface(ResidentMealResourceObligation.class, "settlementId", "actorAccountId"),
+            surface(ResidentFoodSource.Depot.class, "settlementId", "containerId", "accountId"),
+            surface(ResidentFoodSource.Personal.class, "actorId", "accountId"),
             surface(FencedRecoveryTombstone.class, "bindingId", "ownerId"));
 
     public static List<OwnerSurface> currentOwnerSurfaces() { return CURRENT_OWNER_SURFACES; }
@@ -358,6 +369,7 @@ public final class FrontierDomainRelationships {
         GoodsTradeRelationships.collect(state, edges);
         ShipmentRelationships.collect(state, edges);
         UnitGroupRelationships.collect(state, edges);
+        FinancialBudgetRelationships.collect(state, edges);
         addLeases(state, edges);
         edges.sort(Comparator.comparing((Edge edge) -> edge.kind().tag()).thenComparing(edge -> edge.source().stableKey()).thenComparing(edge -> edge.target().stableKey()));
         incidents.sort(Comparator.comparing((Incident incident) -> incident.kind().tag()).thenComparing(incident -> incident.owner().stableKey()));
@@ -406,7 +418,9 @@ public final class FrontierDomainRelationships {
     private record ValidationFamily(java.util.function.Function<FrontierWorldState, List<Object>> dependencies,
                                     ValidationCollector collect) { }
     private static final List<ValidationFamily> VALIDATION_FAMILIES = List.of(
-            new ValidationFamily(s -> List.of(s.unitGroups(), s.shipments(), s.actorLocations(), s.actorExecutions(), s.actorMovements(), s.bootstrap()),
+            new ValidationFamily(s -> List.of(s.inventory().economics(), s.shipments()),
+                    (s, edges, incidents) -> FinancialBudgetRelationships.collect(s, edges)),
+            new ValidationFamily(s -> List.of(s.unitGroups(), s.shipments(), s.actorLocations(), s.actorExecutions(), s.actorMovements(), s.bootstrap(), s.inventory().fungibleResources()),
                     (s, edges, incidents) -> UnitGroupRelationships.collect(s, edges)),
             new ValidationFamily(s -> List.of(s.shipments(), s.actorExecutions(), s.companies().goodsTrade(), s.inventory().containers(),
                     s.inventory().fungibleResources(), s.bootstrap()), (s, edges, incidents) -> ShipmentRelationships.collect(s, edges)),
@@ -421,7 +435,7 @@ public final class FrontierDomainRelationships {
             new ValidationFamily(s -> List.of(s.humanPopulation().provisions(), s.humanPopulation().residents(),
                     s.inventory().items(), s.inventory().fungibleResources().lots()), FrontierDomainRelationships::addProvision),
             new ValidationFamily(s -> List.of(s.sceneLeases(), s.ambientLeases()), (s, edges, incidents) -> addLeases(s, edges)),
-            new ValidationFamily(s -> List.of(s.contracts(), s.operations(), s.serviceWorks(), s.hiveColony().mobilizations()),
+            new ValidationFamily(s -> List.of(s.serviceWorks(), s.hiveColony().mobilizations()),
                     (s, edges, incidents) -> addCurrentRetirementFamilies(s, edges)));
 
     /**
@@ -595,21 +609,6 @@ public final class FrontierDomainRelationships {
     }
 
     private static void addCurrentRetirementFamilies(FrontierWorldState state, List<Edge> edges) {
-        // A supply contract owns its declared cargo before a loaded route operation exists.  The
-        // active-depot physical hand-off retires in that interval, so this relation must be
-        // current from contract creation rather than being inferred from the later route.
-        for (SupplyContract contract : state.contracts().values()) {
-            Endpoint owner = subject(EntityKind.SUPPLY_CONTRACT, contract.id());
-            edge(edges, Kind.CONTRACT_CARGO, owner, owner, subject(EntityKind.CARGO, contract.cargoId()),
-                    Lifecycle.ACTIVE, contract.id().value());
-        }
-        for (RouteOperation operation : state.operations().values()) {
-            SupplyContract contract = state.contracts().get(operation.contractId());
-            if (contract == null || !contract.cargoId().equals(operation.cargoId())) throw new IllegalArgumentException("route operation lacks exact retained contract");
-            Endpoint route = subject(EntityKind.ROUTE_OPERATION, operation.id()), owner = subject(EntityKind.SUPPLY_CONTRACT, contract.id());
-            edge(edges, Kind.CONTRACT_ROUTE_OPERATION, owner, owner, route, Lifecycle.ACTIVE, operation.id().value());
-            edge(edges, Kind.ROUTE_CARRIER, route, route, subject(EntityKind.RESIDENT, operation.cargoCarrierId()), Lifecycle.ACTIVE, operation.id().value());
-        }
         for (SettlementServiceWork work : state.serviceWorks().values()) { Endpoint service = subject(EntityKind.SERVICE_WORK, work.id());
             edge(edges, Kind.SERVICE_TASK, service, service, subject(EntityKind.TASK, work.taskId()), Lifecycle.ACTIVE, work.id().value());
             edge(edges, Kind.SERVICE_WORKER, service, service, subject(EntityKind.RESIDENT, work.workerId()), Lifecycle.ACTIVE, work.id().value());

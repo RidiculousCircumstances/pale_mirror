@@ -140,8 +140,8 @@ class FrontierV3SceneDepartureConsumptionTest {
         var stored = new CompoundTag(); stored.putIntArray("Position", new int[] {chunk.x, chunk.z});
         var entities = new ListTag(); var body = new CompoundTag();
         body.putUUID("UUID", MEMBER.entityId()); entities.add(body); stored.put("Entities", entities);
-        assertArrayEquals(new boolean[] {true, false}, FrontierV3DepartureReturnReadFence.fenceStoredInventory(
-                chunk, stored, actors, FrontierV3CargoDepartureLedger.emptyForTest()));
+        assertTrue(FrontierV3DepartureReturnReadFence.fenceStoredInventory(
+                chunk, stored, actors));
         assertTrue(actors.returnRead(ACTOR)); assertFalse(actors.noLoadRecoverableDeparture(receipt));
     }
 

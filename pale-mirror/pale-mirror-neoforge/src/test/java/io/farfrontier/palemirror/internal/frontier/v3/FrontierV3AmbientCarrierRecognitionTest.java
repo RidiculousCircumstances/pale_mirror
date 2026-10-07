@@ -8,6 +8,27 @@ import static org.junit.jupiter.api.Assertions.*;
 import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ActorCarrierComposition.*;
 
 class FrontierV3AmbientCarrierRecognitionTest {
+    @Test void packAnimalRequiresItsExactProducerAndPhysicalTypeNotTheNonBioformFallback() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:pack-recognition"), 41,
+                FrontierRulesets.installed("frontier-v3-expedition-candidate-r1")));
+        var asset = state.transportFleet().assets().values().iterator().next();
+        state = ActorBodyAuthority.demand(state, asset.actorId());
+        var body = FrontierV3AmbientActorExecutor.carrierDeclaration(state, asset.actorId(),
+                FrontierV3AmbientActorExecutor.entityId(state, asset.actorId()), Representation.LIVE_BODY,
+                ActorBodyAuthority.current(state, asset.actorId()).physicalEpoch());
+        var observed = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(body.entityId(), body.actorId().value(),
+                false, body.kind().name(), body.owner().name(), body.representation().name(),
+                body.authorityRevision(), body.epoch(), "minecraft:donkey");
+        assertTrue(FrontierV3AmbientCarrierRecognition.recognizesOwnership(state, observed));
+        assertFalse(FrontierV3AmbientCarrierRecognition.recognizesOwnership(state,
+                new FrontierV3AmbientCarrierRecognition.ManagedCarrier(body.entityId(), body.actorId().value(),
+                        false, body.kind().name(), body.owner().name(), body.representation().name(),
+                        body.authorityRevision(), body.epoch(), "minecraft:villager")));
+        var retained = state;
+        assertThrows(IllegalArgumentException.class, () -> fromCanonical(retained, asset.actorId(), ActorKind.RESIDENT,
+                Owner.ACTOR_BODY, body.entityId(), Representation.LIVE_BODY, 0, body.epoch()));
+    }
     private static final SubjectId ACTOR = new SubjectId("resident:1-1");
     private static Declaration declaration(FrontierWorldState state) {
         return FrontierV3AmbientActorExecutor.carrierDeclaration(state, ACTOR,
@@ -19,8 +40,8 @@ class FrontierV3AmbientCarrierRecognitionTest {
     }
     private static FrontierV3AmbientCarrierRecognition.ManagedCarrier observed(Declaration body, String owner,
                                                                              long revision, long epoch, String representation) {
-        return new FrontierV3AmbientCarrierRecognition.ManagedCarrier(body.entityId(), body.actorId().value(), false, false,
-                body.kind().name(), owner, representation, revision, epoch);
+        return new FrontierV3AmbientCarrierRecognition.ManagedCarrier(body.entityId(), body.actorId().value(), false,
+                body.kind().name(), owner, representation, revision, epoch, FrontierV3ActorCarrierFactory.entityType(body.kind()));
     }
 
     @Test void closingActivityCannotAuthorizeRetiringItsPhysicalBody() {

@@ -25,6 +25,7 @@ public final class ResidentMealProcess {
     public static java.util.Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
         ResidentMeal meal = state.humanPopulation().meals().get(action.subject());
         if (meal == null) return java.util.Set.of(action.subject());
+        if (meal.portable()) return java.util.Set.of();
         if (meal.pendingPhysicalStep().isPresent()
                 || !FrontierSceneAdmission.available(state, List.of(meal.residentId()))
                 || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(meal.residentId()))
@@ -158,9 +159,11 @@ public final class ResidentMealProcess {
         String suffix = residentId.value().substring("resident:".length());
         SubjectId claimId = new SubjectId("claim:resident-meal-" + suffix + "-" + now);
         SubjectId actorAccount = new SubjectId("custody:resident-meal-" + suffix);
-        ResidentMeal meal = new ResidentMeal(residentId, resident.settlementId(), source.depotId(), source.clearingSurface(),
-                selected.accountId(), actorAccount, source.portion(), claimId,
-                assignment.ownerId(), ResidentMeal.Phase.MOVE, now, Optional.empty(),
+        boolean portable = source.foodSource() instanceof ResidentFoodSource.Personal;
+        ResidentMeal meal = new ResidentMeal(residentId, resident.settlementId(), source.foodSource(), source.clearingSurface(),
+                portable ? selected.accountId() : actorAccount, source.portion(), claimId,
+                assignment.ownerId(), portable ? ResidentMeal.Phase.CONSUME : ResidentMeal.Phase.MOVE, now,
+                Optional.empty(), Optional.empty(), Optional.empty(),
                 state.actorExecutions().next(residentId, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, claimId));
         ResidentMealStarted started = new ResidentMealStarted(meal);
         // A broken ownership/binding invariant must remain visible. Ordinary absence was
@@ -178,32 +181,31 @@ public final class ResidentMealProcess {
                 || !resident.settlementId().equals(meal.settlementId())
                 || state.humanPopulation().meals().containsKey(subject)
                 || state.actorMovements().containsKey(subject)
-                || !ResidentMealServiceAccess.mayStart(state, meal.depotId(), subject)
-                || !ServiceAccessCoordinator.mealClearingSurface(state, subject).equals(Optional.of(meal.clearingSurface()))
+                || !meal.portable() && (!ResidentMealServiceAccess.mayStart(state, meal.depotId(), subject)
+                    || !ServiceAccessCoordinator.mealClearingSurface(state, subject).equals(Optional.of(meal.clearingSurface())))
                 || state.humanPopulation().migration(subject) != null
                 || state.actorLocations().get(subject).condition().status() != ActorLifeStatus.ALIVE
                 || !HumanAssignmentProjection.compile(state).assignment(subject).ownerId()
                     .equals(meal.retainedWorkOwner())
                 || ResidentActivityCoordinator.assess(state, subject, meal.startedAtTick()).kind()
                     != ResidentActivityChoice.Kind.EAT
-                || meal.phase() != ResidentMeal.Phase.MOVE
+                || meal.phase() != (meal.portable() ? ResidentMeal.Phase.CONSUME : ResidentMeal.Phase.MOVE)
                 || meal.waitReason().isPresent()
                 || state.humanPopulation().nutrition(subject).accrueThrough(meal.startedAtTick(),
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(meal.startedAtTick())).satietyUnits() >= state.bootstrap().ruleset().residentLife().eatBelowUnits())
             throw new IllegalArgumentException("meal start requires one hungry safely yielded living resident");
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, meal.depotId()))
+        if (!meal.portable() && ReferenceContainerCustody.blocksCanonicalUse(state, meal.depotId()))
             throw new IllegalArgumentException("meal source depot is unavailable");
         var opportunity = ResidentMealOpportunity.find(state, subject, meal.startedAtTick()).orElseThrow(
                 () -> new IllegalArgumentException("meal has no executable registered portion"));
-        if (!opportunity.portion().equals(meal.portion()))
+        if (!opportunity.portion().equals(meal.portion()) || !opportunity.foodSource().equals(meal.source())
+                || !opportunity.clearingSurface().equals(meal.clearingSurface()))
             throw new IllegalArgumentException("meal portion differs from current nutritional demand and stock");
-        var selected = FungibleResourceCustodySupport.selectAtContainer(state, meal.depotId(),
-                resident.settlementId(), meal.portion().itemKind(), meal.portion().quantity()).orElseThrow(
-                () -> new IllegalArgumentException("meal source lacks its exact unclaimed food portion"));
+        var selected = opportunity.selection();
         if (!selected.accountId().equals(meal.sourceAccountId())
                 || !selected.lotQuantities().equals(meal.portion().lotQuantities())
-                || state.inventory().fungibleResources().accounts().containsKey(meal.actorAccountId()))
+                || !meal.portable() && state.inventory().fungibleResources().accounts().containsKey(meal.actorAccountId()))
             throw new IllegalArgumentException("meal start cannot replace its selected source or actor hand");
         ClaimAllocation claim = new ClaimAllocation(meal.claimId(), meal.residentId(),
                 meal.settlementId(), meal.portion().itemKind(), meal.portion().quantity(),
@@ -214,7 +216,8 @@ public final class ResidentMealProcess {
         if (bindings.isEmpty()) ledger = ledger.reserve(claim, meal.sourceAccountId());
         else {
             long epoch = bindings.getFirst().authorityEpoch();
-            if (!ReferenceContainerCustody.hasOperationalCustody(state, meal.depotId())
+            if ((!meal.portable() && !ReferenceContainerCustody.hasOperationalCustody(state, meal.depotId())
+                    || meal.portable() && !ActorBodyAuthority.retainsPhysicalCustody(state, subject))
                     || bindings.stream().anyMatch(binding -> binding.authorityEpoch() != epoch))
                 throw new IllegalArgumentException("meal source has no current physical custody");
             ledger = ledger.reserveBound(claim, meal.sourceAccountId(), epoch);
@@ -235,7 +238,7 @@ public final class ResidentMealProcess {
                         new ResourceCustody.Actor(meal.residentId()), Optional.of(meal.claimId()),
                         meal.portion().itemKind(), meal.portion().lotQuantities()),
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(meal.depotId()),
-                serviceSurface(state, meal), ResidentMeal.CARRIED_PORTION_SLOT,
+                serviceSurface(state, meal), meal.inventorySlot(),
                 FrontierWireTags.tag(meal.phase()), 1L);
     }
 
@@ -286,11 +289,8 @@ public final class ResidentMealProcess {
                     .filter(binding -> binding.accountId().equals(meal.actorAccountId())).toList();
             if (step.consumptionQuantity() != meal.portion().quantity()
                     || bindings.size() != 1 || bindings.getFirst().authorityEpoch() != step.sourceEpoch()
-                    || step.destinationEpoch() != 0 || !bindings.getFirst().lotQuantities().equals(meal.portion().lotQuantities())
-                    || !(bindings.getFirst().address() instanceof PhysicalStackAddress.ActorPocket hand)
-                    || hand.slot() != ResidentMeal.CARRIED_PORTION_SLOT.index()
-                    || !hand.actorId().equals(subject)
-                    || !hand.entityId().equals(SceneLease.deterministicEntityId(state.bootstrap().worldId(), subject)))
+                    || step.destinationEpoch() != 0 || !coversPortion(bindings.getFirst().lotQuantities(), meal.portion())
+                    || !bindings.getFirst().address().equals(inventoryAddress(state, meal)))
                 throw new IllegalArgumentException("meal consumption fence lacks its exact bound HOT hand");
         }
         return state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.prepare(step)));
@@ -307,8 +307,7 @@ public final class ResidentMealProcess {
                 : !observed.observedBody().equals(goalSurface(state, meal).standingBody())))
             throw new IllegalArgumentException("HOT meal receipt differs from its exact phase or resident body");
         if (step.phase() == ResidentMeal.Phase.TAKE) {
-            PhysicalStackAddress.ActorPocket hand = new PhysicalStackAddress.ActorPocket(subject,
-                    SceneLease.deterministicEntityId(state.bootstrap().worldId(), subject), ResidentMeal.CARRIED_PORTION_SLOT.index());
+            PhysicalStackAddress hand = inventoryAddress(state, meal);
             if (observed.destination().size() != 1
                     || !observed.destination().getFirst().address().equals(hand)
                     || !observed.destination().getFirst().itemKind().equals(meal.portion().itemKind())
@@ -319,11 +318,11 @@ public final class ResidentMealProcess {
             return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory)
                     .humanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.CLEAR_ACCESS))));
         }
-        if (!observed.remainingSource().isEmpty() || !observed.destination().isEmpty())
+        if ((!meal.portable() && !observed.remainingSource().isEmpty()) || !observed.destination().isEmpty())
             throw new IllegalArgumentException("observed meal consumption retained a physical bread stack");
         FungibleResourceLedger ledger = state.inventory().fungibleResources().destroyObserved(
                 meal.actorAccountId(), step.sourceEpoch(), meal.portion().lotQuantities(),
-                Map.of(meal.claimId(), meal.portion().quantity()), List.of());
+                Map.of(meal.claimId(), meal.portion().quantity()), observed.remainingSource());
         HumanPopulation people = state.humanPopulation().consumeResidentFood(subject, atTick, meal.portion().nutritionUnits(),
                         state.bootstrap().ruleset().residentLife())
                 .completeMeal(meal);
@@ -384,7 +383,9 @@ public final class ResidentMealProcess {
 
     /** Eating owns the food effect, not an exact navigation station after access was cleared. */
     public static boolean mayConsumeAt(FrontierWorldState state, ResidentMeal meal, BodyPosition observedBody) {
-        return meal.phase() == ResidentMeal.Phase.CONSUME && port(state, meal).accessBoundary().cleared(observedBody);
+        return meal.phase() == ResidentMeal.Phase.CONSUME && (meal.portable()
+                ? state.actorLocations().get(meal.residentId()).body().equals(observedBody)
+                : port(state, meal).accessBoundary().cleared(observedBody));
     }
 
     /** Supported exit releases access and permits eating; further parking travel is not a meal prerequisite. */
@@ -427,7 +428,7 @@ public final class ResidentMealProcess {
                 .filter(binding -> binding.accountId().equals(meal.actorAccountId())).toList();
         if (bindings.size() != 1 || !bindings.getFirst().address().equals(released.observedHand().address())
                 || bindings.getFirst().authorityEpoch() != released.ambientRevision()
-                || !bindings.getFirst().lotQuantities().equals(meal.portion().lotQuantities()))
+                || !coversPortion(bindings.getFirst().lotQuantities(), meal.portion()))
             throw new IllegalArgumentException("meal hand release differs from exact HOT custody");
         return state.withInventory(state.inventory().withFungibleResources(
                 ledger.releaseBindings(meal.actorAccountId(), released.ambientRevision())));
@@ -435,16 +436,14 @@ public final class ResidentMealProcess {
 
     private static void requireMealHand(FrontierWorldState state, ResidentMeal meal,
                                         FungiblePhysicalObservation.Stack observed) {
-        if (!(observed.address() instanceof PhysicalStackAddress.ActorPocket hand)
-                || hand.slot() != ResidentMeal.CARRIED_PORTION_SLOT.index()
-                || !hand.actorId().equals(meal.residentId())
-                || !hand.entityId().equals(SceneLease.deterministicEntityId(state.bootstrap().worldId(), meal.residentId()))
-                || !observed.itemKind().equals(meal.portion().itemKind()) || observed.quantity() != meal.portion().quantity())
+        if (!observed.address().equals(inventoryAddress(state, meal))
+                || !observed.itemKind().equals(meal.portion().itemKind()))
             throw new IllegalArgumentException("meal hand observation does not name one exact resident bread");
         CustodyAccount account = state.inventory().fungibleResources().accounts().get(meal.actorAccountId());
         if (account == null || !account.custody().equals(new ResourceCustody.Actor(meal.residentId()))
-                || !account.lotQuantities().equals(meal.portion().lotQuantities())
-                || !account.claimQuantities().equals(Map.of(meal.claimId(), meal.portion().quantity())))
+                || !coversPortion(account.lotQuantities(), meal.portion())
+                || account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() != observed.quantity()
+                || account.claimQuantities().getOrDefault(meal.claimId(), 0) != meal.portion().quantity())
             throw new IllegalArgumentException("meal hand observation has no exact canonical bread and claim");
     }
 
@@ -594,6 +593,19 @@ public final class ResidentMealProcess {
     public static SurfaceAnchor goalSurface(FrontierWorldState state, ResidentMeal meal) {
         return meal.movesToClearance() || meal.phase() == ResidentMeal.Phase.CONSUME
                 ? meal.clearingSurface() : serviceSurface(state, meal);
+    }
+
+    public static PhysicalStackAddress inventoryAddress(FrontierWorldState state, ResidentMeal meal) {
+        var entity = SceneLease.deterministicEntityId(state.bootstrap().worldId(), meal.residentId());
+        return switch (meal.inventorySlot()) {
+            case ActorItemSlot.Pocket pocket -> new PhysicalStackAddress.ActorPocket(meal.residentId(), entity, pocket.index());
+            case ActorItemSlot.Hand hand -> new PhysicalStackAddress.ActorHand(meal.residentId(), entity, hand.hand());
+        };
+    }
+
+    private static boolean coversPortion(Map<SubjectId, Integer> lots, FoodPortion portion) {
+        return portion.lotQuantities().entrySet().stream().allMatch(entry ->
+                lots.getOrDefault(entry.getKey(), 0) >= entry.getValue());
     }
 
     /** Reducer for a witnessed COLD-only stage; no HOT source or hand may be spent here. */

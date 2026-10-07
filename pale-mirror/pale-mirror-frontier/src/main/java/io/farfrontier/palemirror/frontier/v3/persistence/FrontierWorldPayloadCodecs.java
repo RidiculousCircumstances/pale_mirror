@@ -10,18 +10,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static PayloadCodecs physicalCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
             new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new StructureDamagedCodec(),
             PhysicalDeltaPayloadCodecs.single(), PhysicalDeltaPayloadCodecs.batch(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(),
-            new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), SettlementEconomyPayloadCodecs.resourceDeposited(),
-            new CargoCarrierReleasedPayloadCodec())), FungibleResourcePayloadCodecs.observationCodecs()); }
+            new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), SettlementEconomyPayloadCodecs.resourceDeposited())), FungibleResourcePayloadCodecs.observationCodecs()); }
     static PayloadCodecs replicaCustodyCodecs() { return PayloadCodecs.merge(new PayloadCodecs(PhysicalReplicaCustodyPayloadCodecs.codecs()), new PayloadCodecs(FencedRecoveryPayloadCodecs.codecs())); }
     static PayloadCodecs ambientCodecs() { return new PayloadCodecs(List.of(
             AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
             AmbientLeasePayloadCodecs.restartAbsenceObserved(), AmbientLeasePayloadCodecs.bodyConfirmed())); }
-    static PayloadCodecs logisticsCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
-            new ContractCreatedCodec(), new ContractAbandonedCodec(), new CargoLoadedCodec(), new CargoDeliveredCodec(), new OperationCreatedCodec(),
-            new OperationAdvancedCodec(), new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(),
-            new OperationTravelAdvancedCodec(), new OperationTravelSegmentCompletedCodec(), new OperationColdSuspendedCodec(), new SceneLeasePreparedCodec(),
-            new SceneLeaseHandoffCodec(), new SettlementAssaultSceneLeasePreparedCodec(), new SettlementAssaultSceneLeaseHandoffCodec(),
-            new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new SceneRecoveryPayloadCodec(), new SceneRecoveryRevokedPayloadCodec(), new OperationFailedCodec(), new TerminalLogisticsCompactedCodec())),
+    static PayloadCodecs sceneLifecycleCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
+            new SettlementAssaultSceneLeasePreparedCodec(), new SettlementAssaultSceneLeaseHandoffCodec(),
+            new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new SceneRecoveryPayloadCodec(), new SceneRecoveryRevokedPayloadCodec())),
             EngineeringWorkScenePayloadCodecs.codecs()); }
     static PayloadCodecs populationCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
             HumanPopulationPayloadCodecs.born(), HumanPopulationPayloadCodecs.migrated(), HumanPopulationPayloadCodecs.birthStarted(), HumanPopulationPayloadCodecs.birthCancelled(),
@@ -66,13 +62,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             ResourceSitePayloadCodecs.foreignChangeHeld(), ResourceSitePayloadCodecs.foreignCellObserved(),
             ResourceSitePayloadCodecs.foreignChangeAcknowledged(),
             ResourceSitePayloadCodecs.playerBreakPrepared())), ResourceSiteHarvestScenePayloadCodecs.codecs()); }
-    static PayloadCodecs hiveCodecs() { return PayloadCodecs.merge(RouteEngagementPayloadCodecs.codecs(), SettlementAssaultPayloadCodecs.codecs(),
+    static PayloadCodecs hiveCodecs() { return PayloadCodecs.merge(SettlementAssaultPayloadCodecs.codecs(),
             HiveMobilizationPayloadCodecs.codecs(), DeferredAftermathPayloadCodecs.codecs(), new PayloadCodecs(List.of(new InfectionCodec(),
             new HiveGrowthStartedCodec(), new HiveGrowthBiomassConsumedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
             new HiveNutrientTransferStartedCodec(), new HiveNutrientTransferAdvancedCodec(), new HiveNutrientTransferCompletedCodec(),
-            new HiveNutrientTransferBlockedCodec(), new HiveNutrientTransferEndpointPreparedCodec(), StrategicPlanPayloadCodecs.hiveOperationObserved(),
+            new HiveNutrientTransferBlockedCodec(), new HiveNutrientTransferEndpointPreparedCodec(),
             StrategicPlanPayloadCodecs.hiveTerritoryObserved(), StrategicPlanPayloadCodecs.hiveSettlementObserved(),
-            StrategicPlanPayloadCodecs.hiveDoctrineSelected(), StrategicPlanPayloadCodecs.hotScoutOperationObserved(), StrategicPlanPayloadCodecs.scoutPatrolAdvanced(),
+            StrategicPlanPayloadCodecs.hiveDoctrineSelected(),  StrategicPlanPayloadCodecs.scoutPatrolAdvanced(),
             StrategicPlanPayloadCodecs.scoutPatrolStarted()))); }
     static PayloadCodecs infrastructureCodecs() { return new PayloadCodecs(List.of(RouteConstructionPayloadCodecs.started(),
             RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RouteConstructionPayloadCodecs.assemblyStarted(),
@@ -105,128 +101,6 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             return new InfectionChanged(new InfectionCell(input.getInt(), input.getInt()), new FixedRatio(new FixedScalar(input.getLong())));
         }
     }
-    private static final class ContractCreatedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.supply_contract_created"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeContract(output, ((SupplyContractCreated) payload).contract())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new SupplyContractCreated(readContract(input))); }
-    }
-    private static final class ContractAbandonedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.supply_contract_abandoned"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSubject(output, ((SupplyContractAbandoned) payload).contractId())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new SupplyContractAbandoned(readSubject(input).value())); }
-    }
-    private static final class CargoLoadedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.cargo_loaded"; } @Override public byte[] encode(FrontierPayload payload) {
-            CargoLoaded loaded = (CargoLoaded) payload;
-            return encodeProduction(output -> {
-                writeSubject(output, loaded.contractId()); writeSubject(output, loaded.cargo().id()); writeSubject(output, loaded.cargo().ownerId());
-                output.writeBoolean(loaded.cargo().fungibleContents()); output.writeByte(loaded.cargo().itemIds().size());
-                for (var item : loaded.cargo().itemIds()) writeSubject(output, item);
-            });
-        }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            SubjectIdHolder contract = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder owner = readSubject(input); boolean fungible = input.readBoolean(); int count = input.readUnsignedByte();
-            java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.SubjectId> items = new java.util.ArrayList<>(); for (int index = 0; index < count; index++) items.add(readSubject(input).value());
-            return new CargoLoaded(contract.value(), new CargoBatch(cargo.value(), owner.value(), items, fungible));
-        }); }
-    }
-    private static final class CargoDeliveredCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.cargo_delivered"; }
-        @Override public byte[] encode(FrontierPayload payload) {
-            CargoDelivered delivered = (CargoDelivered) payload;
-            return encodeProduction(output -> {
-                writeSubject(output, delivered.operationId()); writeSubject(output, delivered.cargoId()); output.writeBoolean(delivered.fungibleContents()); output.writeByte(delivered.placements().size());
-                for (CargoHandoffPlacement placement : delivered.placements()) {
-                    writeSubject(output, placement.itemId()); writeSubject(output, placement.receiverSlot().containerId()); output.writeByte(placement.receiverSlot().slot());
-                }
-            });
-        }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            SubjectIdHolder operation = readSubject(input); SubjectIdHolder cargo = readSubject(input); boolean fungible = input.readBoolean(); int count = input.readUnsignedByte();
-            java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>();
-            for (int index = 0; index < count; index++) {
-                SubjectIdHolder item = readSubject(input); SubjectIdHolder receiver = readSubject(input);
-                placements.add(new CargoHandoffPlacement(item.value(), new InventoryCustody.ContainerSlot(receiver.value(), input.readUnsignedByte())));
-            }
-            return new CargoDelivered(operation.value(), cargo.value(), placements, fungible);
-        }); }
-    }
-    private static final class OperationCreatedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.operation_created"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
-            var created = (OperationCreated) payload; writeOperation(output, created.operation());
-            ActorExecutionStateCodec.writeGroup(output, created.executions()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationCreated(
-                readOperation(input), ActorExecutionStateCodec.readGroup(input))); }
-    }
-    private static final class OperationAdvancedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.operation_advanced"; } @Override public byte[] encode(FrontierPayload payload) {
-            OperationAdvanced advanced = (OperationAdvanced) payload;
-            return encodeProduction(output -> { writeSubject(output, advanced.operationId()); output.writeByte(advanced.routeIndex()); output.writeByte(advanced.stage().wireCode()); });
-        }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            SubjectIdHolder id = readSubject(input); int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
-            return new OperationAdvanced(id.value(), routeIndex, OperationStage.fromWireCode(stage));
-        }); }
-    }
-    private static final class OperationAssemblyAdvancedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.operation_assembly_advanced"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationAssemblyAdvanced advanced = (OperationAssemblyAdvanced) payload;
-            writeSubject(output, advanced.operationId()); writeOperationAssembly(output, advanced.assembly()); ActorExecutionStateCodec.writeGroup(output, advanced.executions());
-            output.writeBoolean(advanced.hotArrival().isPresent());
-            if (advanced.hotArrival().isPresent()) {
-                var arrival = advanced.hotArrival().orElseThrow(); writeSubject(output, arrival.body().actorId());
-                output.writeLong(arrival.body().physicalEpoch()); output.writeLong(arrival.leaseRevision());
-            }
-        }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            var operation = readSubject(input).value(); var assembly = readOperationAssembly(input); var executions = ActorExecutionStateCodec.readGroup(input);
-            var hot = input.readBoolean() ? java.util.Optional.of(new OperationAssemblyAdvanced.HotArrival(
-                    new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(readSubject(input).value(), input.readLong()), input.readLong()))
-                    : java.util.Optional.<OperationAssemblyAdvanced.HotArrival>empty();
-            return new OperationAssemblyAdvanced(operation, assembly, executions, hot);
-        }); }
-    }
-    private static final class OperationAssemblyDeferredCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.operation_assembly_deferred"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationAssemblyDeferred deferred = (OperationAssemblyDeferred) payload;
-            writeSubject(output, deferred.operationId()); writeSubject(output, deferred.deferral().actorId());
-            output.writeInt(deferred.deferral().target().x()); output.writeInt(deferred.deferral().target().y()); output.writeInt(deferred.deferral().target().z());
-            output.writeInt(deferred.deferral().obstructionSurface().x()); output.writeInt(deferred.deferral().obstructionSurface().y()); output.writeInt(deferred.deferral().obstructionSurface().z());
-            output.writeByte(deferred.deferral().reason().wireTag()); ActorExecutionStateCodec.writeGroup(output, deferred.executions()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            SubjectIdHolder operation = readSubject(input); SubjectIdHolder actor = readSubject(input);
-            BlockPosition target = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
-            BlockPosition obstruction = new BlockPosition(input.readInt(), input.readInt(), input.readInt()); int reason = input.readUnsignedByte();
-            if (reason >= OperationAssemblyDeferral.Reason.values().length) throw new IllegalArgumentException("unknown operation assembly deferral reason");
-            return new OperationAssemblyDeferred(operation.value(), new OperationAssemblyDeferral(actor.value(), new SurfaceAnchor(target), new SurfaceAnchor(obstruction),
-                    FrontierWireTags.require(OperationAssemblyDeferral.Reason.class, reason)), ActorExecutionStateCodec.readGroup(input));
-        }); }
-    }
-    private static final class OperationTravelStartedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.operation_travel_started"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationTravelStarted started = (OperationTravelStarted) payload;
-            writeSubject(output, started.operationId()); writeOperationTravel(output, started.travel()); ActorExecutionStateCodec.writeGroup(output, started.executions()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input ->
-                new OperationTravelStarted(readSubject(input).value(), readOperationTravel(input), ActorExecutionStateCodec.readGroup(input))); }
-    }
-    private static final class OperationTravelAdvancedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.operation_travel_advanced"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationTravelAdvanced advanced = (OperationTravelAdvanced) payload;
-            writeSubject(output, advanced.operationId()); writeOperationTravel(output, advanced.travel()); OperationTravelObservationCodec.write(output, advanced.observation()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input ->
-                new OperationTravelAdvanced(readSubject(input).value(), readOperationTravel(input), OperationTravelObservationCodec.read(input))); }
-    }
-    private static final class OperationTravelSegmentCompletedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.operation_travel_segment_completed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { var completed = (OperationTravelSegmentCompleted) payload;
-            writeSubject(output, completed.operationId()); ActorExecutionStateCodec.writeGroup(output, completed.executions()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationTravelSegmentCompleted(readSubject(input).value(), ActorExecutionStateCodec.readGroup(input))); }
-    }
-    private static final class OperationColdSuspendedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.operation_cold_suspended"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationColdSuspended suspended = (OperationColdSuspended) payload;
-            writeSubject(output, suspended.operationId()); writeString(output, suspended.leaseId().value()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input ->
-                new OperationColdSuspended(readSubject(input).value(), new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)))); }
-    }
     private static final class PhysicalIntentPreparedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.physical_intent_prepared"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> PhysicalIntentPayloadCodec.write(output, ((PhysicalIntentPrepared) payload).intent())); }
@@ -251,27 +125,6 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             if (status >= io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values().length) throw new IllegalArgumentException("unknown physical intent status");
             var decodedStatus = FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.class, status);
             return new PhysicalIntentTransition(id, decodedStatus, observation, proof, diagnostic);
-        }); }
-    }
-    private static final class SceneLeasePreparedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.scene_lease_prepared"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSceneLease(output, ((SceneLeasePrepared) payload).lease())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new SceneLeasePrepared(readSceneLease(input))); }
-    }
-    private static final class SceneLeaseHandoffCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.scene_lease_handoff"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
-            SceneLeaseHandoff handoff = (SceneLeaseHandoff) payload; writeSceneLease(output, handoff.lease()); output.writeByte(handoff.ambientMembers().size());
-            for (SceneMemberPosition member : handoff.ambientMembers()) {
-                writeSubject(output, member.actorId()); output.writeInt(member.body().x()); output.writeInt(member.body().y()); output.writeInt(member.body().z()); output.writeLong(member.health().raw());
-            }
-        }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            SceneLease lease = readSceneLease(input); java.util.ArrayList<SceneMemberPosition> members = new java.util.ArrayList<>();
-            for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
-                members.add(new SceneMemberPosition(readSubject(input).value(), new BodyPosition(input.readInt(), input.readInt(), input.readInt()),
-                        new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
-            }
-            return new SceneLeaseHandoff(lease, members);
         }); }
     }
     private static final class SettlementAssaultSceneLeasePreparedCodec implements PayloadCodec {
@@ -334,17 +187,6 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 return new StructureDamaged(structure.value(), position, FrontierWireTags.require(GrayboxSemanticPart.class, part), readString(input));
             });
         }
-    }
-    private static final class OperationFailedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.operation_failed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationFailed failed = (OperationFailed) payload; writeSubject(output, failed.operationId()); writeString(output,
-                failed.reason()); writeDiagnosticTuple(output, failed.diagnostic()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationFailed(readSubject(input).value(), readString(input), readDiagnosticTuple(input))); }
-    }
-    private static final class TerminalLogisticsCompactedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.terminal_logistics_compacted"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSubject(output, ((TerminalLogisticsCompacted) payload).operationId())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new TerminalLogisticsCompacted(readSubject(input).value())); }
     }
     private static final class ExactItemCustodyChangedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.exact_item_custody_changed"; }
@@ -531,132 +373,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
     static void writeBody(DataOutputStream output, BodyPosition body) throws IOException { output.writeInt(body.x()); output.writeInt(body.y()); output.writeInt(body.z()); }
     static BodyPosition readBody(DataInputStream input) throws IOException { return new BodyPosition(input.readInt(), input.readInt(), input.readInt()); }
-    private static void writeContract(DataOutputStream output, SupplyContract contract) throws IOException {
-        writeSubject(output, contract.id()); writeSubject(output, contract.settlementId()); writeSubject(output, contract.recipientId());
-        writeSubject(output, contract.cargoId()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().wireTag());
-    }
-    private static SupplyContract readContract(DataInputStream input) throws IOException {
-        SubjectIdHolder id = readSubject(input); SubjectIdHolder settlement = readSubject(input); SubjectIdHolder recipient = readSubject(input);
-        SubjectIdHolder cargo = readSubject(input); String kind = readString(input); int count = input.readUnsignedByte(); int status = input.readUnsignedByte();
-        if (status >= ContractStatus.values().length) throw new IllegalArgumentException("unknown contract status");
-        return new SupplyContract(id.value(), settlement.value(), recipient.value(), cargo.value(), kind, count, FrontierWireTags.require(ContractStatus.class, status));
-    }
-    private static void writeOperation(DataOutputStream output, RouteOperation operation) throws IOException {
-        writeSubject(output, operation.id()); writeSubject(output, operation.contractId()); writeSubject(output, operation.settlementId()); writeSubject(output, operation.cargoId()); writeSubject(output, operation.destinationId());
-        // 0xFF cannot be a historical participant count (the old route owner capped at eight).
-        output.writeByte(0xFF); RouteUnitManifestCodec.write(output, operation.unit());
-        output.writeByte(operation.route().size());
-        for (BlockPosition point : operation.route()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
-        output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().wireCode());
-        // 0xA6 separates the current retained-tactical-plan envelope from the legacy travel payload.
-        output.writeByte(0xA6); output.writeBoolean(operation.activeAssembly().isPresent());
-        if (operation.activeAssembly().isPresent()) writeOperationAssembly(output, operation.activeAssembly().orElseThrow());
-        output.writeBoolean(operation.activeTravel().isPresent());
-        if (operation.activeTravel().isPresent()) writeOperationTravel(output, operation.activeTravel().orElseThrow());
-        TacticalPlanStateCodec.write(output, operation.tacticalPlan());
-    }
-    private static RouteOperation readOperation(DataInputStream input) throws IOException {
-        SubjectIdHolder id = readSubject(input); SubjectIdHolder contract = readSubject(input); SubjectIdHolder settlement = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder destination = readSubject(input);
-        int participantEnvelope = input.readUnsignedByte();
-        RouteUnitManifest unit;
-        if (participantEnvelope != 0xFF) throw new IllegalArgumentException("route operation payload requires the current unit-manifest envelope");
-        unit = RouteUnitManifestCodec.read(input);
-        java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) route.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
-        int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
-        int marker = input.readUnsignedByte();
-        java.util.Optional<OperationAssembly> assembly = java.util.Optional.empty();
-        java.util.Optional<OperationTravel> travel;
-        if (marker != 0xA6) throw new IllegalArgumentException("route operation payload requires the current tactical-plan envelope");
-        assembly = input.readBoolean() ? java.util.Optional.of(readOperationAssembly(input)) : java.util.Optional.empty();
-        travel = input.readBoolean() ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
-        TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
-        return new RouteOperation(id.value(), contract.value(), settlement.value(), cargo.value(), destination.value(), unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel, tacticalPlan);
-    }
-    private static void writeOperationTravel(DataOutputStream output, OperationTravel travel) throws IOException {
-        output.writeShort(0xfffd); OperationTravelStateCodec.write(output, travel);
-    }
-    private static OperationTravel readOperationTravel(DataInputStream input) throws IOException {
-        if (input.readUnsignedShort() != 0xfffd)
-            throw new IllegalArgumentException("operation travel requires current continuation/evidence schema");
-        return OperationTravelStateCodec.read(input);
-    }
-    private static void writeOperationAssembly(DataOutputStream output, OperationAssembly assembly) throws IOException {
-        writeSubject(output, assembly.cargoCarrierId()); output.writeByte(assembly.members().size());
-        for (var entry : assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
-            writeSubject(output, entry.getKey()); TraversalTopologyStateCodec.write(output, entry.getValue().topology());
-            output.writeShort(entry.getValue().cursor());
-            output.writeLong(entry.getValue().routeRevision()); TraversalRejoinCodec.write(output, entry.getValue().rejoin());
-        }
-    }
-    private static OperationAssembly readOperationAssembly(DataInputStream input) throws IOException {
-        io.farfrontier.palemirror.frontier.v3.api.SubjectId carrier = readSubject(input).value();
-        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, OperationAssembly.Member> members = new java.util.LinkedHashMap<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
-            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor = readSubject(input).value();
-            if (members.put(actor, new OperationAssembly.Member(TraversalTopologyStateCodec.read(input), input.readUnsignedShort(), input.readLong(),
-                    TraversalRejoinCodec.read(input))) != null) throw new IllegalArgumentException("duplicate operation assembly member");
-        }
-        return new OperationAssembly(members, carrier);
-    }
-    private static void writeCargoHandoffObservation(DataOutputStream output, CargoHandoffObservation observation) throws IOException {
-        writeString(output, observation.id().value()); writeString(output, observation.intentId().value()); writeSubject(output, observation.cargoId());
-        output.writeByte(observation.placements().size());
-        for (CargoHandoffPlacement placement : observation.placements()) {
-            writeSubject(output, placement.itemId()); writeSubject(output, placement.receiverSlot().containerId()); output.writeByte(placement.receiverSlot().slot());
-        }
-    }
-    private static CargoHandoffObservation readCargoHandoffObservation(DataInputStream input) throws IOException {
-        var id = new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input)); var intentId = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
-        SubjectIdHolder cargoId = readSubject(input);
-        java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
-            SubjectIdHolder itemId = readSubject(input); SubjectIdHolder receiver = readSubject(input);
-            placements.add(new CargoHandoffPlacement(itemId.value(), new InventoryCustody.ContainerSlot(receiver.value(), input.readUnsignedByte())));
-        }
-        return new CargoHandoffObservation(id, intentId, cargoId.value(), placements);
-    }
     private static final int PARTICIPANT_LEASE_MARKER = 0xffe2;
     private static final int CARGO_PARTICIPANT_LEASE_MARKER = 0xffe1;
-    private static void writeSceneLease(DataOutputStream output, SceneLease lease) throws IOException {
-        if (!FrontierSceneBehaviors.isLogistics(lease)) {
-            throw new IllegalArgumentException("logistics scene WAL payload requires its typed cause");
-        }
-        LogisticsSceneCause logistics = FrontierSceneBehaviors.logistics(lease);
-        output.writeShort(CARGO_PARTICIPANT_LEASE_MARKER);
-        writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeSubject(output, logistics.operationId()); writeSubject(output, logistics.cargoId());
-        output.writeBoolean(logistics.engagementId().isPresent()); if (logistics.engagementId().isPresent()) writeSubject(output, logistics.engagementId().orElseThrow());
-        output.writeInt(lease.handoffPosition().x()); output.writeInt(lease.handoffPosition().y()); output.writeInt(lease.handoffPosition().z());
-        output.writeInt(logistics.cargoPosition().x()); output.writeInt(logistics.cargoPosition().y()); output.writeInt(logistics.cargoPosition().z());
-        output.writeByte(logistics.carrierDisposition().wireTag());
-        output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag()); output.writeByte(lease.members().size());
-        for (SceneMember member : lease.members()) {
-            writeSubject(output, member.actorId());
-            writeString(output, member.entityId().toString());
-        }
-        output.writeByte(lease.ambientHandoffActorIds().size()); for (io.farfrontier.palemirror.frontier.v3.api.SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) writeSubject(output, actor);
-    }
-    private static SceneLease readSceneLease(DataInputStream input) throws IOException {
-        if (input.readUnsignedShort() != CARGO_PARTICIPANT_LEASE_MARKER) throw new IllegalArgumentException("scene lease payload requires explicit carrier disposition");
-        var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input));
-        var world = new io.farfrontier.palemirror.frontier.v3.api.WorldId(readString(input)); SubjectIdHolder operation = readSubject(input); SubjectIdHolder cargo = readSubject(input);
-        java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> engagement = input.readBoolean() ? java.util.Optional.of(readSubject(input).value()) : java.util.Optional.empty();
-        BlockPosition position = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
-        BlockPosition cargoPosition = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
-        var disposition = io.farfrontier.palemirror.frontier.v3.model.CargoProjectionRetirement.Disposition.fromWireTag(input.readUnsignedByte());
-        long handoff = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
-        if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
-        java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
-            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor = readSubject(input).value();
-            members.add(new SceneMember(actor, java.util.UUID.fromString(readString(input))));
-        }
-        java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> handoffActors = new java.util.LinkedHashSet<>();
-        for (int actor = 0, actorCount = input.readUnsignedByte(); actor < actorCount; actor++) handoffActors.add(readSubject(input).value());
-        return SceneLease.forCause(id, world, new LogisticsSceneCause(operation.value(), cargo.value(), engagement, cargoPosition, disposition), position, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision,
-                FrontierWireTags.require(SceneLeaseStatus.class, status), members, handoffActors,
-                java.util.Optional.empty());
-    }
     private static void writeAssaultSceneLease(DataOutputStream output, SceneLease lease) throws IOException {
         if (!(lease.cause() instanceof SettlementAssaultSceneCause cause)) {
             throw new IllegalArgumentException("assault scene WAL payload requires its typed cause");

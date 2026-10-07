@@ -202,7 +202,7 @@ public final class RouteMaintenanceProcess {
                         && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent())
                 .filter(loss -> loss.semanticPart().filter(RouteMaintenanceProcess::repairable).isPresent())
                 .filter(loss -> FrontierRouteNetwork.containsOperationSurfaceCell(
-                        state.routeTopology().supplyWaypoints(state.bootstrap(), settlementId), loss.position())).toList();
+                        state.routeTopology().settlementWaypoints(state.bootstrap(), settlementId), loss.position())).toList();
         // No loss means the retry arrived after an observed repair; RouteConstructionProcess
         // closes its no-longer-needed task instead of manufacturing a replacement.
         if (retainedBaselineLosses.isEmpty()) return false;
@@ -219,7 +219,7 @@ public final class RouteMaintenanceProcess {
 
     private static Optional<RouteMaintenance> admitted(FrontierWorldState state, PhysicalDelta loss, HumanAssignmentProjection assignments) {
         SubjectId settlementId = state.bootstrap().settlements().stream().map(Settlement::id).sorted().filter(settlement ->
-                FrontierRouteNetwork.containsOperationSurfaceCell(state.routeTopology().supplyWaypoints(state.bootstrap(), settlement), loss.position())).findFirst().orElse(null);
+                FrontierRouteNetwork.containsOperationSurfaceCell(state.routeTopology().settlementWaypoints(state.bootstrap(), settlement), loss.position())).findFirst().orElse(null);
         if (settlementId == null) return Optional.empty();
         SubjectId id = new SubjectId("maintenance:route-" + loss.position().x() + "-" + loss.position().y() + "-" + loss.position().z());
         if (state.routeMaintenances().containsKey(id)) return Optional.empty();

@@ -22,8 +22,8 @@ class TacticalPolicyRegistryTest {
                 List.of(TacticalBehaviour.HOLD_FORMATION, TacticalBehaviour.HOLD_FORMATION)),
                 "one individual behaviour may not be duplicated under a tactical owner");
         assertThrows(IllegalArgumentException.class, () -> plan(TacticalPolicyRegistry.ROUTE_PATROL,
-                List.of(TacticalBehaviour.DEFEND_CARGO)),
-                "an individual behaviour owned by cargo escort must not silently transfer to patrol");
+                List.of(TacticalBehaviour.ENGAGE_WITHIN_ENVELOPE)),
+                "an individual behaviour owned by hive expedition must not silently transfer to patrol");
     }
 
     private static TacticalPlan plan(TacticalPolicyDescriptor policy, List<TacticalBehaviour> behaviours) {

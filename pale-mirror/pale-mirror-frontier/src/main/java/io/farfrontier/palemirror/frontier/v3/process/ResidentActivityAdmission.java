@@ -24,6 +24,8 @@ public sealed interface ResidentActivityAdmission {
         CONTAINER_CUSTODY,
         SERVICE_ACCESS,
         FOOD_STOCK,
+        MISSION_SUPPLY,
+        INVENTORY_CAPACITY,
         WORK_CHECKPOINT,
         MEAL_CLEARANCE
     }

@@ -52,6 +52,13 @@ final class ActorMovementStateCodec {
                 case ActorMovementContext.GroupLeg leg -> {
                     output.writeByte(2); FrontierWorldStateCodec.writeString(output, leg.groupId().value()); output.writeLong(leg.groupRevision());
                 }
+                case ActorMovementContext.ExpeditionSupply supply -> {
+                    output.writeByte(3); FrontierWorldStateCodec.writeString(output, supply.missionId().value());
+                    FrontierWorldStateCodec.writeString(output, supply.claimId().value());
+                }
+                case ActorMovementContext.ExpeditionAssembly assembly -> {
+                    output.writeByte(4); FrontierWorldStateCodec.writeString(output, assembly.missionId().value());
+                }
             }
             output.writeBoolean(movement.coldTravel().isPresent());
             if (movement.coldTravel().isPresent()) {
@@ -91,6 +98,9 @@ final class ActorMovementStateCodec {
                 case 1 -> new ActorMovementContext.ShipmentLeg(
                         new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
                 case 2 -> new ActorMovementContext.GroupLeg(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
+                case 3 -> new ActorMovementContext.ExpeditionSupply(new SubjectId(FrontierWorldStateCodec.readString(input)),
+                        new SubjectId(FrontierWorldStateCodec.readString(input)));
+                case 4 -> new ActorMovementContext.ExpeditionAssembly(new SubjectId(FrontierWorldStateCodec.readString(input)));
                 default -> throw new IllegalArgumentException("unknown actor movement provider tag");
             };
             ActorMovement movement = new ActorMovement(order, issuedAt, context, executionId);

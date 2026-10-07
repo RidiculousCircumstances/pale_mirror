@@ -27,7 +27,6 @@ import io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncident;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubjectKind;
-import io.farfrontier.palemirror.frontier.v3.process.HivePerceptionProcess;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientReceipt;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientTransfer;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
@@ -54,7 +53,6 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenance;
-import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementProvision;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTask;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskKind;
@@ -90,6 +88,7 @@ final class FrontierV3DiagnosticJson {
         return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, Optional.empty());
     }
 
+
     static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
                          Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
@@ -103,18 +102,8 @@ final class FrontierV3DiagnosticJson {
                          Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                          Optional<FrontierV3SceneReadiness.Value> sceneReadiness,
-                         Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness) {
-        return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, sceneReadiness, assemblyReadiness, Optional.empty());
-    }
-
-    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
-                         Optional<FrontierV3DiagnosticTrace.Entry> trace,
-                         Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
-                         Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
-                         Optional<FrontierV3SceneReadiness.Value> sceneReadiness,
-                         Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness,
                          Optional<FrontierV3ContainerSurfaceExecutor.Readiness> containerReadiness) {
-        return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, sceneReadiness, assemblyReadiness,
+        return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, sceneReadiness,
                 containerReadiness, Optional.empty(), Optional.empty());
     }
 
@@ -123,7 +112,6 @@ final class FrontierV3DiagnosticJson {
                          Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                          Optional<FrontierV3SceneReadiness.Value> sceneReadiness,
-                         Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness,
                          Optional<FrontierV3ContainerSurfaceExecutor.Readiness> containerReadiness,
                          Optional<FrontierV3EquipmentIssueExecutor.Readiness> equipmentIssueReadiness,
                          Optional<FrontierV3EquipmentReturnExecutor.Readiness> equipmentReturnReadiness) {
@@ -134,7 +122,6 @@ final class FrontierV3DiagnosticJson {
         Objects.requireNonNull(admission, "admission");
         Objects.requireNonNull(harvestReadiness, "harvestReadiness");
         Objects.requireNonNull(sceneReadiness, "sceneReadiness");
-        Objects.requireNonNull(assemblyReadiness, "assemblyReadiness");
         Objects.requireNonNull(containerReadiness, "containerReadiness");
         Objects.requireNonNull(equipmentIssueReadiness, "equipmentIssueReadiness");
         Objects.requireNonNull(equipmentReturnReadiness, "equipmentReturnReadiness");
@@ -156,7 +143,6 @@ final class FrontierV3DiagnosticJson {
             case "container" -> container(id, checkpoint, state, containerReadiness);
             case "reference_container" -> referenceContainer(id, checkpoint, state);
             case "market_order" -> marketOrder(id, checkpoint, state);
-            case "operation" -> operation(id, checkpoint, state, assemblyReadiness);
             case "route_construction" -> FrontierV3DiagnosticEngineeringJson.routeConstruction(id, checkpoint, state);
             case "route_maintenance" -> FrontierV3DiagnosticEngineeringJson.routeMaintenance(id, checkpoint, state);
             case "physical_delta" -> physicalDelta(id, checkpoint, state);
@@ -251,7 +237,6 @@ final class FrontierV3DiagnosticJson {
                 + ",\"residents\":" + state.humanPopulation().residents().size()
                 + ",\"bioforms\":" + state.actorLocations().keySet().stream().filter(value -> value.value().startsWith("bioform:")).count()
                 + ",\"sites\":" + state.resourceSites().sites().size()
-                + ",\"operations\":" + state.operations().size()
                 + ",\"intents\":" + state.physicalIntents().size()
                 + ",\"ambientLeases\":" + state.ambientLeases().size()
                 + ",\"sceneLeases\":" + state.sceneLeases().size()
@@ -785,60 +770,8 @@ final class FrontierV3DiagnosticJson {
                 + ",\"taskStatus\":\"" + quote(order.taskStatus()) + "\",\"terminalReceipt\":" + terminal + "}";
     }
 
-    private static String operation(String id, CheckpointImage checkpoint, FrontierWorldState state,
-                                    Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> readiness) {
-        SubjectId subject = subject(id).orElse(null); RouteOperation operation = subject == null ? null : state.operations().get(subject);
-        if (operation == null) return unavailable("operation", id, checkpoint, "not_found");
-        String members = operation.participantIds().stream().sorted().map(value -> "\"" + quote(value.value()) + "\"").reduce((left, right) -> left + "," + right).orElse("");
-        String assembly = operation.activeAssembly().map(value -> ",\"assemblyMembers\":" + value.members().size()
-                + ",\"assemblyCursorTotal\":" + value.members().values().stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.OperationAssembly.Member::cursor).sum()
-                + ",\"assemblyComplete\":" + value.complete() + ",\"cargoCarrier\":\"" + quote(value.cargoCarrierId().value()) + "\""
-                + ",\"assemblyProgress\":[" + value.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
-                .map(entry -> assemblyProgress(entry.getKey(), entry.getValue())).reduce((left, right) -> left + "," + right).orElse("") + "]"
-                + value.deferral().map(deferral -> ",\"assemblyDeferred\":true,\"assemblyDeferredActor\":\"" + quote(deferral.actorId().value())
-                        + "\",\"assemblyDeferredTarget\":" + position(deferral.target().support()) + ",\"assemblyObstructionSurface\":" + position(deferral.obstructionSurface().support())
-                        + ",\"assemblyDeferredReason\":\"" + deferral.reason() + "\"")
-                        .orElse(",\"assemblyDeferred\":false")).orElse("");
-        String travel = operation.activeTravel().map(value -> {
-            long blockedEdges = value.topology().edges().stream()
-                    .filter(edge -> edge.availability() != io.farfrontier.palemirror.frontier.v3.model.TraversalAvailability.OPEN).count();
-            String nextEdge = value.arrived() ? "" : value.nextEdge().id().value();
-            String nextAvailability = value.arrived() ? "" : value.nextEdge().availability().name();
-            return ",\"travelTopology\":\"" + quote(value.topology().id().value()) + "\",\"travelTopologyRevision\":" + value.topology().revision()
-                    + ",\"travelCursor\":" + value.cursor() + ",\"travelLength\":" + value.corridor().size()
-                    + ",\"travelCurrent\":" + position(value.currentPosition()) + ",\"travelCargo\":" + position(value.cargoAnchor().surface().support())
-                    + ",\"travelArrived\":" + value.arrived() + ",\"travelNextEdge\":\"" + quote(nextEdge)
-                    + "\",\"travelNextEdgeAvailability\":\"" + quote(nextAvailability) + "\",\"travelUnavailableEdges\":" + blockedEdges;
-        }).orElse("");
-        var settlementTopology = state.routeTopology().supplyTraversalTopology(state.bootstrap(), operation.settlementId());
-        long settlementUnavailableEdges = settlementTopology.edges().stream()
-                .filter(edge -> edge.availability() != io.farfrontier.palemirror.frontier.v3.model.TraversalAvailability.OPEN).count();
-        String hiveSighting = HivePerceptionProcess.observedCarrierPosition(state, operation.id())
-                .map(position -> ",\"hiveObservedCarrier\":" + position(position)).orElse("");
-        String hiveIntercept = HivePerceptionProcess.interceptTask(state, operation.id())
-                .map(task -> ",\"hiveIntercept\":{\"position\":" + position(task.position()) + ",\"status\":\"" + quote(task.status()) + "\"}").orElse("");
-        String hiveEngagement = HivePerceptionProcess.interceptEngagement(state, operation.id())
-                .map(FrontierV3DiagnosticJson::hiveEngagement).orElse("");
-        return base("operation", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(operation.settlementId().value())
-                + "\",\"cargo\":\"" + quote(operation.cargoId().value()) + "\",\"destination\":\"" + quote(operation.destinationId().value())
-                + "\",\"stage\":\"" + operation.stage() + "\",\"routeIndex\":" + operation.routeIndex()
-                + ",\"routeLength\":" + operation.route().size() + ",\"settlementTraversalAvailable\":"
-                + (settlementUnavailableEdges == 0L) + ",\"settlementUnavailableEdges\":" + settlementUnavailableEdges
-                + ",\"participants\":[" + members + "]" + assembly + travel + hiveSighting + hiveIntercept + hiveEngagement
-                + readiness.map(FrontierV3DiagnosticJson::assemblyReadiness).orElse("") + "}";
-    }
 
     /** Bounded operator evidence for the one retained command source of an active hive engagement. */
-    private static String hiveEngagement(HivePerceptionProcess.InterceptEngagement engagement) {
-        var authority = engagement.command();
-        String coverage = authority.relayCoverage().map(value -> ",\"relay\":\"" + quote(authority.currentAuthorityId().value())
-                + "\",\"ganglion\":\"" + quote(value.ganglionId().value()) + "\",\"radius\":" + value.radius()).orElse("");
-        return ",\"hiveEngagement\":{\"status\":\"" + quote(engagement.status()) + "\",\"command\":{\"kind\":\""
-                + quote(authority.kind()) + "\",\"original\":\"" + quote(authority.originalAuthorityId().value())
-                + "\",\"controller\":\"" + quote(authority.currentAuthorityId().value()) + "\",\"signal\":\""
-                + quote(authority.signalPhase()) + "\",\"members\":" + authority.rosterSize() + ",\"subordinateWeight\":"
-                + authority.subordinateWeight() + coverage + "}}";
-    }
 
     /** One declared supply topology, with grade facts only; diagnostics never survey or alter Minecraft terrain. */
     private static String routeTopology(String id, CheckpointImage checkpoint, FrontierWorldState state) {
@@ -846,35 +779,20 @@ final class FrontierV3DiagnosticJson {
         if (settlement == null || state.bootstrap().settlements().stream().noneMatch(value -> value.id().equals(settlement))) {
             return unavailable("route_topology", id, checkpoint, "not_found");
         }
-        var topology = state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement);
+        var topology = state.routeTopology().settlementTraversalTopology(state.bootstrap(), settlement);
         var grades = topology.edges().stream().filter(edge -> edge.grade() > 0).toList();
         int maximumGrade = grades.stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.TraversalTopology.Edge::grade).max().orElse(0);
-        boolean supplyPassable = state.routeTopology().supplyPassable(state.bootstrap(), settlement);
+        boolean routePassable = state.routeTopology().routePassable(state.bootstrap(), settlement);
         String firstGrade = grades.isEmpty() ? "null" : "{\"from\":" + position(topology.nodes().get(grades.getFirst().from()).support())
                 + ",\"to\":" + position(topology.nodes().get(grades.getFirst().to()).support()) + "}";
         return base("route_topology", id, checkpoint) + ",\"status\":\"ok\",\"topology\":\"" + quote(topology.id().value())
                 + "\",\"revision\":" + topology.revision() + ",\"nodes\":" + topology.nodes().size() + ",\"edges\":" + topology.edges().size()
-                + ",\"supplyPassable\":" + supplyPassable
+                + ",\"routePassable\":" + routePassable
                 + ",\"gradedEdges\":" + grades.size() + ",\"maximumGrade\":" + maximumGrade + ",\"firstGrade\":" + firstGrade + "}";
     }
 
     /** Bounded exact cursors make a stalled ordinary HOT approach diagnosable without world mutation. */
-    private static String assemblyProgress(SubjectId actorId, io.farfrontier.palemirror.frontier.v3.model.OperationAssembly.Member member) {
-        String next = member.arrived() ? "null" : position(member.nextSurface().support());
-        return "{\"actor\":\"" + quote(actorId.value()) + "\",\"cursor\":" + member.cursor()
-                + ",\"length\":" + member.corridor().size() + ",\"current\":" + position(member.currentSurface().support()) + ",\"next\":" + next + "}";
-    }
 
-    private static String assemblyReadiness(FrontierV3OperationAssemblyDiagnostic.Readiness value) {
-        String members = value.members().stream().map(member -> "{\"actor\":\"" + quote(member.actorId().value())
-                + "\",\"current\":" + position(member.current()) + ",\"next\":" + nullablePosition(member.next())
-                + ",\"observed\":" + nullablePosition(member.observed()) + ",\"observedExact\":" + nullablePosition(member.observedExact())
-                + ",\"targetStatus\":\"" + quote(member.targetStatus()) + "\",\"floorBlock\":\"" + quote(member.floorBlock())
-                + "\",\"supportBlock\":\"" + quote(member.supportBlock()) + "\",\"bodyBlock\":\"" + quote(member.bodyBlock())
-                + "\",\"headBlock\":\"" + quote(member.headBlock()) + "\",\"occupants\":" + strings(member.occupants()) + "}")
-                .reduce((left, right) -> left + "," + right).orElse("");
-        return ",\"physicalAssembly\":[" + members + "]";
-    }
 
     /** One exact durable world-change fact, keyed by a canonical x,y,z cell rather than a player identity. */
     private static String physicalDelta(String id, CheckpointImage checkpoint, FrontierWorldState state) {

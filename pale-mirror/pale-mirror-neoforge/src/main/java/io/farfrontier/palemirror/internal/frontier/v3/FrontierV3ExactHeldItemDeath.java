@@ -24,13 +24,13 @@ final class FrontierV3ExactHeldItemDeath {
                 || !SceneLease.deterministicEntityId(state.bootstrap().worldId(), source.actorId()).equals(body.getUUID()))
             throw new IllegalArgumentException("exact death disposition lacks its declared actor/hand predecessor");
         var hand = body.getItemBySlot(EquipmentSlot.MAINHAND);
-        if (!FrontierV3CargoHandoffExecutor.exactMatch(hand, item))
+        if (!FrontierV3ExactItemPresentation.exactMatch(hand, item))
             return destroy(level, runtime, item, source, correlation, tracePrefix, "actor-death-held-item-missing");
         var carrier = UUID.nameUUIDFromBytes((state.bootstrap().worldId().value() + ":"
                 + source.actorId().value() + ":" + item.id().value()).getBytes(StandardCharsets.UTF_8));
         var drop = new ItemEntity(level, body.getX(), body.getY() + 0.25D, body.getZ(), hand.copy());
         drop.setUUID(carrier);
-        FrontierV3CargoHandoffExecutor.bindWorldCarrier(drop.getItem(), carrier);
+        FrontierV3ExactItemPresentation.bindWorldCarrier(drop.getItem(), carrier);
         drop.setItem(drop.getItem());
         var result = FrontierV3CommandSubmission.submit(runtime, "actor-held-death-drop", item.id().value(),
                 new ExactItemCustodyChanged(item.id(), source, new InventoryCustody.WorldCarrier(carrier)));

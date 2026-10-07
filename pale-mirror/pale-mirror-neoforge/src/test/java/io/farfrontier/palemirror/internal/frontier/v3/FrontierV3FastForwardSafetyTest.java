@@ -30,18 +30,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FrontierV3FastForwardSafetyTest {
     @Test
     void unloadedPhysicalIntentDoesNotFreezeColdTimeButLoadedIntentDoes() {
-        PhysicalIntent pending = new PhysicalIntent(new PhysicalIntentId("intent:fast-forward-safety"), PhysicalIntentKind.CARGO_HANDOFF,
-                PhysicalIntentStatus.PREPARED, new SubjectId("contract:1-2"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.cargoHandoff(new SubjectId("contract:1-2"), new SubjectId("cargo:1-2")),
+        PhysicalIntent pending = new PhysicalIntent(new PhysicalIntentId("intent:fast-forward-safety"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
+                PhysicalIntentStatus.PREPARED, new SubjectId("job:1-2"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.production(new SubjectId("job:1-2"), new SubjectId("item:input"), new SubjectId("item:output")),
                 new FixedPosition(FixedScalar.whole(48), FixedScalar.whole(64), FixedScalar.whole(-32)), 0,
-                PhysicalPostcondition.CARGO_HANDOFF_OBSERVED,
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_OPERATION);
+                PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
 
         assertFalse(FrontierV3FastForwardSafety.requiresPhysicalStep(List.of(pending), List.of(), ignored -> false),
                 "a COLD intent in an unloaded chunk has no physical step to skip");
         assertTrue(FrontierV3FastForwardSafety.requiresPhysicalStep(List.of(pending), List.of(), ignored -> true),
                 "the same durable intent must stop before an executor could affect a loaded world");
         assertTrue(FrontierV3FastForwardSafety.blockingDescription(List.of(pending), List.of(), ignored -> true)
-                        .contains("intent:fast-forward-safety:CARGO_HANDOFF:PREPARED"),
+                        .contains("intent:fast-forward-safety:PRODUCTION_TRANSFORMATION:PREPARED"),
                 "a stopped COLD interval must expose the exact loaded intent rather than only a generic busy state");
     }
 

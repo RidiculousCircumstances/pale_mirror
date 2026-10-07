@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PhysicalSceneBindingCodecTest {
     @Test void payloadAndSnapshotRetainExactSceneAndRevision() throws Exception {
-        for (boolean assault : new boolean[]{false, true}) {
+        for (boolean assault : new boolean[]{true}) {
             PhysicalIntent intent = intent(assault);
             var payload = new ByteArrayOutputStream();
             PhysicalIntentPayloadCodec.write(new DataOutputStream(payload), intent);
@@ -23,7 +23,7 @@ class PhysicalSceneBindingCodecTest {
     }
 
     @Test void missingBindingAndRetiredUnboundSchemasAreRejected() throws Exception {
-        var intent = intent(false);
+        var intent = intent(true);
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentRoleBinding.decode(intent.roles().schema(), intent.roles().namedRoles()));
         assertThrows(IllegalArgumentException.class, () -> new PhysicalSceneBinding(new SceneLeaseId("lease:test"), -1));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentRoleSchema.fromWire(7));
@@ -44,10 +44,8 @@ class PhysicalSceneBindingCodecTest {
         var attacker = new SubjectId("actor:a"); var target = new SubjectId("actor:b");
         var lease = new SceneLeaseId("lease:exact");
         return new PhysicalIntent(new PhysicalIntentId("intent:opaque"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                new SubjectId("operation:opaque"), assault
-                ? PhysicalIntentRoleBinding.assaultSceneStrike(attacker, target, lease, 73)
-                : PhysicalIntentRoleBinding.routeSceneStrike(attacker, target, lease, 73),
+                new SubjectId("assault:opaque"), PhysicalIntentRoleBinding.assaultSceneStrike(attacker, target, lease, 73),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
-                assault ? PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT : PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
+                PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
     }
 }

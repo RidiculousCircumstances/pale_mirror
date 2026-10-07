@@ -129,19 +129,19 @@ final class FrontierV3EquipmentIssueExecutor {
 
     private static boolean sourceMatches(ChestBlockEntity chest, Target target) {
         return target.sourceSlot().slot() >= 0 && target.sourceSlot().slot() < chest.getContainerSize()
-                && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.sourceSlot().slot()), target.item());
+                && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.sourceSlot().slot()), target.item());
     }
 
     static boolean handOff(ChestBlockEntity chest, Villager resident, Target target) {
         if (!sourceMatches(chest, target) || !resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return false;
         ItemStack stack = chest.getItem(target.sourceSlot().slot()); chest.setItem(target.sourceSlot().slot(), ItemStack.EMPTY); chest.setChanged();
         resident.setItemSlot(EquipmentSlot.MAINHAND, stack);
-        return chest.getItem(target.sourceSlot().slot()).isEmpty() && FrontierV3CargoHandoffExecutor.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
+        return chest.getItem(target.sourceSlot().slot()).isEmpty() && FrontierV3ExactItemPresentation.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
     }
 
     private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
                                        ChestBlockEntity chest, Villager resident) {
-        boolean source = sourceMatches(chest, target), hand = FrontierV3CargoHandoffExecutor.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
+        boolean source = sourceMatches(chest, target), hand = FrontierV3ExactItemPresentation.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
         if (!source && hand) { confirm(level, runtime, intent, target); return; }
         if (source && resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty() && handOff(chest, resident, target)) { confirm(level, runtime, intent, target); return; }
         unknown(runtime, intent.id(), "restart-postcondition-conflict");
@@ -150,7 +150,7 @@ final class FrontierV3EquipmentIssueExecutor {
     /** Same exact whole-state recovery rule as the paired engineering return executor. */
     private static void inspectRecovered(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
                                          ChestBlockEntity chest, Villager resident) {
-        boolean source = sourceMatches(chest, target), hand = FrontierV3CargoHandoffExecutor.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
+        boolean source = sourceMatches(chest, target), hand = FrontierV3ExactItemPresentation.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
         if (!source && hand) { confirm(level, runtime, intent, target); return; }
         if (source && resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty() && handOff(chest, resident, target)) confirm(level, runtime, intent, target);
     }

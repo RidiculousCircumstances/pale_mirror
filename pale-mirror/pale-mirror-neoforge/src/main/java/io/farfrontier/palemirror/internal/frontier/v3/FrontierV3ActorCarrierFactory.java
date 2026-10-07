@@ -20,11 +20,14 @@ final class FrontierV3ActorCarrierFactory {
         java.util.Objects.requireNonNull(condition, "canonical actor condition");
         if (condition.status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("dead actor cannot acquire a new living body");
-        Mob body = switch (declaration.kind()) {
-            case RESIDENT -> EntityType.VILLAGER.create(level);
-            case BIOFORM -> EntityType.ZOMBIE.create(level);
-        };
+        Mob body = physicalType(declaration.kind()).create(level);
         if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 actor body");
+        if (body instanceof net.minecraft.world.entity.animal.horse.Donkey donkey) {
+            donkey.setTamed(true);
+            if (!donkey.getSlot(499).set(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.CHEST))
+                    || !donkey.hasChest() || donkey.getInventory().getContainerSize() != 16)
+                throw new IllegalStateException("Minecraft could not initialize the declared chest donkey");
+        }
         // Only a newly constructed, not-yet-admitted body receives canonical health.
         // Existing/rejoined bodies retain their observed physical health; never heal
         // them as part of an ownership handoff or a repeated materialization tick.
@@ -32,6 +35,30 @@ final class FrontierV3ActorCarrierFactory {
         body.setUUID(declaration.entityId());
         FrontierV3ActorCarrierComposition.stamp(body, declaration);
         return body;
+    }
+
+    static String entityType(io.farfrontier.palemirror.frontier.v3.model.ActorKind kind) {
+        return switch (kind) {
+            case RESIDENT -> "minecraft:villager";
+            case BIOFORM -> "minecraft:zombie";
+            case PACK_ANIMAL -> "minecraft:donkey";
+        };
+    }
+    static EntityType<? extends Mob> physicalType(io.farfrontier.palemirror.frontier.v3.model.ActorKind kind) {
+        return switch (kind) {
+            case RESIDENT -> EntityType.VILLAGER;
+            case BIOFORM -> EntityType.ZOMBIE;
+            case PACK_ANIMAL -> EntityType.DONKEY;
+        };
+    }
+
+    static boolean matchesKind(net.minecraft.world.entity.Entity entity,
+                               io.farfrontier.palemirror.frontier.v3.model.ActorKind kind) {
+        return switch (kind) {
+            case RESIDENT -> entity instanceof net.minecraft.world.entity.npc.Villager;
+            case BIOFORM -> entity instanceof net.minecraft.world.entity.monster.Zombie;
+            case PACK_ANIMAL -> entity instanceof net.minecraft.world.entity.animal.horse.Donkey;
+        };
     }
 
     static float physicalHealth(ActorCondition condition, float maximumHealth) {

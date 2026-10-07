@@ -179,11 +179,11 @@ final class FrontierV3RouteMaintenanceExecutor {
         if (!FrontierV3PhysicalDemand.exists(level, new BlockPos(origin.x(), origin.y(), origin.z()))) return;
         MaterialTarget target = materialTarget(state, intent);
         if (target == null) { unknown(runtime, intent.id(), "material-canonical-target-conflict"); return; }
-        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
-                new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.containerId()));
+        ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,
+                new FrontierV3ExactItemPresentation.StoreTarget(target.chestPosition(), target.containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "material-chest-conflict"); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectMaterialLoading(level, runtime, intent, target, chest); return; }
-        if (!FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.slot()), target.sourceMaterial())) {
+        if (!FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.slot()), target.sourceMaterial())) {
             unknown(runtime, intent.id(), "material-stack-conflict"); return;
         }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "material-running")) return;
@@ -196,7 +196,7 @@ final class FrontierV3RouteMaintenanceExecutor {
     private static void inspectMaterialLoading(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
                                                MaterialTarget target, ChestBlockEntity chest) {
         ItemStack stack = chest.getItem(target.slot());
-        if (FrontierV3CargoHandoffExecutor.exactOneUnitDecrement(stack, target.sourceMaterial())) {
+        if (FrontierV3ExactItemPresentation.exactOneUnitDecrement(stack, target.sourceMaterial())) {
             confirmMaterialLoading(level, runtime, intent, target);
         } else unknown(runtime, intent.id(), "material-restart-postcondition-conflict");
     }

@@ -501,9 +501,17 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         FrontierWorldState hot = FrontierTestActorBodies.present(withWork.prepareSceneLease(lease), lease)
                 .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         StrategicTask bound = hot.strategicPlans().tasks().get(prepared.taskId());
-        StrategicTask unrelatedBlocked = new StrategicTask(new SubjectId("task:production-unrelated-blocked"), bound.objectiveId(), bound.ownerId(), bound.kind(),
-                bound.infectionTarget(), bound.operationTarget(), bound.resourceSiteTarget(), bound.requirements(), bound.dependencies(),
-                StrategicTaskStatus.BLOCKED, bound.operationObservationPosition(), bound.authorityId(), bound.authorityEpoch());
+        StrategicTask unrelatedBlocked = new StrategicTask(new SubjectId("task:production-unrelated-blocked"),
+                bound.objectiveId(),
+                bound.ownerId(),
+                bound.kind(),
+                bound.infectionTarget(),
+                bound.resourceSiteTarget(),
+                bound.requirements(),
+                bound.dependencies(),
+                StrategicTaskStatus.BLOCKED,
+                bound.authorityId(),
+                bound.authorityEpoch());
         FrontierWorldState blocked = hot.withStrategicPlans(hot.strategicPlans().addTask(unrelatedBlocked)
                         .transitionTask(prepared.taskId(), StrategicTaskStatus.BLOCKED))
                 .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);

@@ -43,7 +43,7 @@ final class FungibleObservedStockTransitions {
             nextAccounts.remove(account.id());
             return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, withoutBindingsFor(ledger, account.id()));
         }
-        nextAccounts.put(account.id(), new CustodyAccount(account.id(), account.custody(), remainingLots, remainingClaims));
+        nextAccounts.put(account.id(), account.withQuantities(remainingLots, remainingClaims));
         FungibleResourceLedger reduced = new FungibleResourceLedger(nextLots, nextClaims, nextAccounts,
                 withoutBindingsFor(ledger, account.id()));
         return reduced.rebind(account.id(), authorityEpoch,
@@ -74,8 +74,7 @@ final class FungibleObservedStockTransitions {
             return new FungibleResourceLedger(nextLots, ledger.claims(), nextAccounts,
                     withoutBindingsFor(ledger, account.id()));
         }
-        nextAccounts.put(account.id(), new CustodyAccount(account.id(), account.custody(), retained,
-                account.claimQuantities()));
+        nextAccounts.put(account.id(), account.withQuantities(retained, account.claimQuantities()));
         FungibleResourceLedger reduced = new FungibleResourceLedger(nextLots, ledger.claims(), nextAccounts,
                 withoutBindingsFor(ledger, account.id()));
         return reduced.rebind(account.id(), authorityEpoch,
@@ -109,8 +108,7 @@ final class FungibleObservedStockTransitions {
         Map<SubjectId, Integer> quantities = new HashMap<>(account.lotQuantities());
         quantities.put(contribution.id(), contribution.quantity());
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(ledger.accounts());
-        nextAccounts.put(account.id(), new CustodyAccount(account.id(), account.custody(), quantities,
-                account.claimQuantities()));
+        nextAccounts.put(account.id(), account.withQuantities(quantities, account.claimQuantities()));
         FungibleResourceLedger expanded = new FungibleResourceLedger(nextLots, ledger.claims(), nextAccounts,
                 withoutBindingsFor(ledger, account.id()));
         return expanded.rebind(account.id(), authorityEpoch,

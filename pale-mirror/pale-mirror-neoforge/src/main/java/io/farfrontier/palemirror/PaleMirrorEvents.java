@@ -396,11 +396,6 @@ public final class PaleMirrorEvents {
             if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.presentObjectBoard(level, player, event.getTarget())) {
                 event.setCanceled(true); event.setCancellationResult(InteractionResult.SUCCESS); return;
             }
-            var cargo = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.releaseCargoCarrier(level, player, event.getTarget());
-            if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.REJECTED) {
-                PaleMirrorPlayerPresentation.actionRejected(player, "frontier-v3:cargo-carrier-rejected");
-                event.setCanceled(true); event.setCancellationResult(InteractionResult.FAIL); return;
-            }
         }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
@@ -430,11 +425,6 @@ public final class PaleMirrorEvents {
                 && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
             if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.presentObjectBoard(level, player, event.getTarget())) {
                 event.setCanceled(true); event.setCancellationResult(InteractionResult.SUCCESS); return;
-            }
-            var cargo = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.releaseCargoCarrier(level, player, event.getTarget());
-            if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.REJECTED) {
-                PaleMirrorPlayerPresentation.actionRejected(player, "frontier-v3:cargo-carrier-rejected");
-                event.setCanceled(true); event.setCancellationResult(InteractionResult.FAIL); return;
             }
         }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND

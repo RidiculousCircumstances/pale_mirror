@@ -6,7 +6,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
-import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 
 import java.util.ArrayList;
@@ -40,14 +39,10 @@ public final class FrontierDurationProcessDriverRegistry {
                 FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.settlement.production.task.complete", SceneCauseKind.PRODUCTION_WORK, ContractState.DEFERRED),
         SETTLEMENT_SERVICE_WORK("frontier.settlement-service-work", "SettlementServiceWork", "F0.2 revalidation", "settlement-service-work",
                 FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.decontamination.scan", SceneCauseKind.SERVICE_WORK, ContractState.DEFERRED),
-        ROUTE_OPERATION("frontier.route-operation", "RouteOperation", "F0.4", "logistics-scenes",
-                FrontierProcessSceneSdk.ExecutionArchetype.COORDINATED_TRAVERSAL, "frontier.operation.progress", SceneCauseKind.LOGISTICS, ContractState.DEFERRED),
         ROUTE_PATROL("frontier.route-patrol", "RoutePatrol", "F0.4", "infrastructure",
                 FrontierProcessSceneSdk.ExecutionArchetype.COORDINATED_TRAVERSAL, "frontier.route_patrol.progress", SceneCauseKind.ROUTE_PATROL, ContractState.DEFERRED),
         HIVE_MOBILIZATION("frontier.hive-mobilization", "HiveMobilization", "F0.4", "hive",
                 FrontierProcessSceneSdk.ExecutionArchetype.COMPOSITE_OPERATION, null, null, ContractState.DEFERRED),
-        ROUTE_ENGAGEMENT("frontier.route-engagement", "RouteEngagement", "F0.4", "hive",
-                FrontierProcessSceneSdk.ExecutionArchetype.COMPOSITE_OPERATION, null, SceneCauseKind.LOGISTICS, ContractState.DEFERRED),
         SETTLEMENT_ASSAULT("frontier.settlement-assault", "SettlementAssault", "F0.4", "hive",
                 FrontierProcessSceneSdk.ExecutionArchetype.COMPOSITE_OPERATION, null, SceneCauseKind.SETTLEMENT_ASSAULT, ContractState.DEFERRED),
         POPULATION_MIGRATION("frontier.population-migration", "ResidentMigrationJourney", "F0.4 revalidation", "population",
@@ -177,8 +172,7 @@ public final class FrontierDurationProcessDriverRegistry {
             SceneAdmissionBinding.fixed(SceneCauseKind.RESOURCE_SITE_HARVEST, Family.RESOURCE_SITE_HARVEST, 0, 0),
             SceneAdmissionBinding.fixed(SceneCauseKind.PRODUCTION_WORK, Family.PRODUCTION_WORK, 0, 0),
             SceneAdmissionBinding.fixed(SceneCauseKind.SERVICE_WORK, Family.SETTLEMENT_SERVICE_WORK, 0, 0),
-            SceneAdmissionBinding.fixed(SceneCauseKind.ROUTE_PATROL, Family.ROUTE_PATROL, 0, 0),
-            SceneAdmissionBinding.logistics()));
+            SceneAdmissionBinding.fixed(SceneCauseKind.ROUTE_PATROL, Family.ROUTE_PATROL, 0, 0)));
 
     public sealed interface Driver permits ColdDriver, HotDriver { Family family(); }
 
@@ -436,11 +430,6 @@ public final class FrontierDurationProcessDriverRegistry {
                     (lease, actorLocations) -> SceneWorkUsage.forLease(lease, actorLocations, cargo, effects));
         }
 
-        static SceneAdmissionBinding logistics() {
-            return new SceneAdmissionBinding(SceneCauseKind.LOGISTICS, Set.of(Family.ROUTE_OPERATION, Family.ROUTE_ENGAGEMENT),
-                    lease -> logisticsCause(lease).engagementId().isPresent() ? Family.ROUTE_ENGAGEMENT : Family.ROUTE_OPERATION,
-                    (lease, actorLocations) -> SceneWorkUsage.forLease(lease, actorLocations, 1, logisticsCause(lease).engagementId().isPresent() ? 1 : 0));
-        }
 
         Family resolveFamily(SceneLease lease) {
             requireKind(lease);
@@ -460,9 +449,6 @@ public final class FrontierDurationProcessDriverRegistry {
             }
         }
 
-        private static LogisticsSceneCause logisticsCause(SceneLease lease) {
-            return FrontierSceneBehaviors.logistics(Objects.requireNonNull(lease, "logistics scene lease"));
-        }
     }
 
     private static final class SceneAdmissionRegistry {
@@ -609,9 +595,9 @@ public final class FrontierDurationProcessDriverRegistry {
             case PRODUCTION_WORK, SETTLEMENT_SERVICE_WORK, MEDICAL_TREATMENT, ENGINEERING_WORKSITE,
                     HIVE_NUTRIENT_TRANSFER -> new FrontierProcessSceneSdk.Limits(16, 32, 16, 16, 1_024, 32,
                     1_024, 262_144, 2_400, 256);
-            case ROUTE_OPERATION, ROUTE_PATROL, POPULATION_MIGRATION -> new FrontierProcessSceneSdk.Limits(64, 32,
+            case ROUTE_PATROL, POPULATION_MIGRATION -> new FrontierProcessSceneSdk.Limits(64, 32,
                     16, 32, 4_096, 64, 2_048, 524_288, 2_400, 512);
-            case HIVE_MOBILIZATION, ROUTE_ENGAGEMENT, SETTLEMENT_ASSAULT -> new FrontierProcessSceneSdk.Limits(128,
+            case HIVE_MOBILIZATION, SETTLEMENT_ASSAULT -> new FrontierProcessSceneSdk.Limits(128,
                     64, 64, 64, 4_096, 128, 4_096, 1_048_576, 2_400, 1_024);
             case SETTLEMENT_PROVISION, RESOURCE_SITE_PREPARATION -> new FrontierProcessSceneSdk.Limits(8, 64, 8,
                     16, 64, 16, 512, 131_072, 2_400, 128);

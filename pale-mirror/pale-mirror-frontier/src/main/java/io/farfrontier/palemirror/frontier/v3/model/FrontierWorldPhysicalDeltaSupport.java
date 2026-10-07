@@ -65,10 +65,8 @@ public final class FrontierWorldPhysicalDeltaSupport {
         FrontierWorldState changed = state.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(next));
         for (PhysicalDelta delta : deltas) {
             if (!isKnownRouteLoss(delta)) continue;
-            RouteTopology topology = changed.routeTopology().blockAffectedSupplyEdges(changed.bootstrap(), delta.position());
-            Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
-            changed.operations().forEach((operationId, operation) -> operations.put(operationId, operation.blockTravelAt(delta.position())));
-            changed = changed.withChanges(FrontierWorldStateUpdate.begin().routeTopology(topology).operations(operations));
+            RouteTopology topology = changed.routeTopology().blockAffectedRouteEdges(changed.bootstrap(), delta.position());
+            changed = changed.withChanges(FrontierWorldStateUpdate.begin().routeTopology(topology));
         }
         for (PhysicalDelta delta : deltas) {
             if (!isKnownWorksiteStagingLoss(delta)) continue;

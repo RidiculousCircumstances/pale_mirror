@@ -20,7 +20,7 @@ import java.util.Set;
  */
 final class FrontierReferenceClosure {
     private static final Set<String> SYSTEM_SUBJECTS = Set.of(
-            "system:terminal-logistics-retention", "system:structural-repair", "system:route-maintenance",
+            "system:structural-repair", "system:route-maintenance",
             "system:hive-mobilization", "system:decontamination", "system:route-construction", "system:population");
 
     private FrontierReferenceClosure() { }
@@ -82,7 +82,6 @@ final class FrontierReferenceClosure {
                 || state.inventory().fungibleResources().lots().containsKey(id)
                 || state.inventory().fungibleResources().claims().containsKey(id)
                 || state.productionJobs().containsKey(id) || state.serviceWorks().containsKey(id)
-                || state.contracts().containsKey(id) || state.operations().containsKey(id)
                 || state.routeConstructions().containsKey(id) || state.routeMaintenances().containsKey(id)
                 || state.resourceSites().sites().containsKey(id)
                 || state.humanPopulation().residents().containsKey(id)
@@ -91,7 +90,6 @@ final class FrontierReferenceClosure {
                 || state.hiveColony().nutrientTransfers().containsKey(id)
                 || state.hiveColony().mobilizations().containsKey(id) || state.strategicPlans().objectives().containsKey(id)
                 || state.strategicPlans().tasks().containsKey(id) || state.strategicPlans().routePatrols().containsKey(id)
-                || state.strategicPlans().routeEngagements().containsKey(id)
                 || state.strategicPlans().settlementAssaults().containsKey(id)
                 || state.companies().companies().containsKey(id)
                 || state.companies().market().demands().containsKey(id) || state.companies().market().quotes().containsKey(id)

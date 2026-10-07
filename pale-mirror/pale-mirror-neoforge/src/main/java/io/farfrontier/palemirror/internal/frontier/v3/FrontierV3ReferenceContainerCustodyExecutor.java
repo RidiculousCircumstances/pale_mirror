@@ -522,12 +522,12 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                     continue;
                 }
                 String itemId = custom == null ? "foreign:" + BuiltInRegistries.ITEM.getKey(stack.getItem())
-                        : custom.copyTag().getString(FrontierV3CargoHandoffExecutor.ITEM_ID_KEY);
+                        : custom.copyTag().getString(FrontierV3ExactItemPresentation.ITEM_ID_KEY);
                 if (itemId.isBlank()) itemId = "foreign:" + BuiltInRegistries.ITEM.getKey(stack.getItem());
                 slots.add(new ReferenceContainerCustody.ObservedSlot(slot, itemId, kind, stack.getCount()));
             }
         }
-        String owner = chest.getPersistentData().getString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY);
+        String owner = chest.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY);
         String taggedProvenance = chest.getPersistentData().getString(REPLICA_PROVENANCE_KEY);
         String provenance = !owner.equals(containerId.value())
                 ? "foreign:container-owner=" + (owner.isBlank() ? "untagged" : owner) + ";replica-provenance=" + (taggedProvenance.isBlank() ? "missing" : taggedProvenance)

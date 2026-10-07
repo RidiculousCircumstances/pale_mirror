@@ -10,13 +10,11 @@ public final class StrategicOperationSpecifications {
             case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY, StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT);
             case HIVE_EXPAND_INFECTION -> List.of(StrategicTaskRequirement.OPERATIONAL_GANGLION);
             case HIVE_GROW_ORGANISM -> List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS);
-            case HIVE_INTERCEPT_ROUTE_OPERATION -> List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD, StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER);
             case HIVE_ASSAULT_SETTLEMENT -> List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD, StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER);
             // Wheat-to-bread is an exact one-for-one replacement in the same owned
             // slot. Requiring a second vacant depot slot would incorrectly block a
             // full warehouse despite a completely safe transformation path.
             case SETTLEMENT_PRODUCE_BREAD, SETTLEMENT_COMPANY_PRODUCTION -> List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT);
-            case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
             case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> List.of(StrategicTaskRequirement.AVAILABLE_GUARD);
             case SETTLEMENT_CONSTRUCT_ROUTE_BYPASS -> List.of(StrategicTaskRequirement.CONFIRMED_ROUTE_OBSTRUCTION, StrategicTaskRequirement.EXACT_ROUTE_CONSTRUCTION_MATERIAL);
             case SETTLEMENT_HARVEST_RESOURCE_SITE -> List.of(StrategicTaskRequirement.ACTIVE_FARM, StrategicTaskRequirement.AVAILABLE_FARMER,

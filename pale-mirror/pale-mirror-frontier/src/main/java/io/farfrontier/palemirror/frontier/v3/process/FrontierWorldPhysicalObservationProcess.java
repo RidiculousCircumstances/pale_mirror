@@ -26,9 +26,9 @@ public final class FrontierWorldPhysicalObservationProcess {
         appendMealRouteWakeups(after, List.of(observed.delta()), submittedAt, events);
         appendActorMovementRouteWakeups(after, List.of(observed.delta()), submittedAt, events);
         appendProductionFacilityFailures(after, List.of(observed.delta()), events);
-        if (isKnownRouteLoss(observed.delta()) && !hasActiveAffectedOperation(after, observed.delta())) {
+        if (isKnownRouteLoss(observed.delta())) {
             for (Settlement settlement : after.bootstrap().settlements()) {
-                if (!after.routeTopology().supplyPassable(after.bootstrap(), settlement.id())) {
+                if (!after.routeTopology().routePassable(after.bootstrap(), settlement.id())) {
                     var reconsideration = StrategicObjectiveProcess.routeReconsideration(settlement.id(), observed.delta().position(), "loss", Math.addExact(submittedAt, 1L));
                     events.add(new ProposedEvent(settlement.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(reconsideration)));
                 }
@@ -56,10 +56,10 @@ public final class FrontierWorldPhysicalObservationProcess {
         appendProductionFacilityFailures(after, observed.deltas(), events);
         java.util.Optional<PhysicalDelta> genericRouteLoss = observed.deltas().stream()
                 .filter(FrontierWorldPhysicalObservationProcess::isKnownRouteLoss)
-                .filter(delta -> !hasActiveAffectedOperation(after, delta)).findFirst();
+                .findFirst();
         if (genericRouteLoss.isPresent()) {
             for (Settlement settlement : after.bootstrap().settlements()) {
-                if (!after.routeTopology().supplyPassable(after.bootstrap(), settlement.id())) {
+                if (!after.routeTopology().routePassable(after.bootstrap(), settlement.id())) {
                     PhysicalDelta cause = genericRouteLoss.orElseThrow();
                     var reconsideration = StrategicObjectiveProcess.routeReconsideration(settlement.id(), cause.position(), "loss", Math.addExact(submittedAt, 1L));
                     events.add(new ProposedEvent(settlement.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(reconsideration)));
@@ -126,12 +126,6 @@ public final class FrontierWorldPhysicalObservationProcess {
      * actual convoy cause and can saturate the bounded scheduler.  Its terminal
      * failure emits the exact operation-backed reconsideration instead.
      */
-    private static boolean hasActiveAffectedOperation(FrontierWorldState state, PhysicalDelta delta) {
-        return state.operations().values().stream()
-                .filter(operation -> operation.stage() == OperationStage.ASSEMBLING || operation.stage() == OperationStage.EN_ROUTE
-                        || operation.stage() == OperationStage.RETURNING || operation.stage() == OperationStage.ARRIVED)
-                .anyMatch(operation -> FrontierRouteNetwork.containsOperationSurfaceCell(operation.route(), delta.position()));
-    }
 
     /** One physical observation may damage several graybox cells, but each named workshop job is blocked once. */
     private static void appendProductionFacilityFailures(FrontierWorldState after, List<PhysicalDelta> deltas, List<ProposedEvent> events) {

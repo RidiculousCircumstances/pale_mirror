@@ -55,7 +55,6 @@ class FrontierWorldStateTest {
         assertEquals(state.inventory().containers().keySet(), state.inventory().surfaces().keySet());
         assertTrue(state.productionJobs().isEmpty());
         assertTrue(state.serviceWorks().isEmpty());
-        assertTrue(state.operations().isEmpty());
         assertTrue(state.physicalIntents().isEmpty());
         assertTrue(state.structureConditions().values().stream().allMatch(condition -> condition == StructureCondition.INTACT));
         assertEquals(18, state.infection().size());
@@ -224,55 +223,14 @@ class FrontierWorldStateTest {
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());
         missingActor.remove(new SubjectId("resident:1-1"));
-        assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(source.bootstrap(), missingActor,
-                source.structureConditions(), source.infection(), source.inventory(), source.productionJobs(), source.contracts(), source.operations(), source.logisticsHistory(), source.physicalIntents(),
-                source.physicalObservations(), source.sceneLeases(), source.hiveColony(), source.structureDamage(), source.physicalDeltas(),
-                source.ambientLeases(), source.routeConstructions(), source.routeTopology(), source.strategicPlans(), source.humanPopulation(), source.companies(), source.resourceSites()));
+        assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(source.bootstrap(),
+                missingActor, source.structureConditions(), source.infection(), source.inventory(), source.productionJobs(),
+                source.physicalIntents(), source.physicalObservations(), source.sceneLeases(), source.hiveColony(),
+                source.structureDamage(), source.physicalDeltas(), source.ambientLeases(), source.routeConstructions(),
+                source.routeTopology(), source.strategicPlans(), source.humanPopulation(), source.companies(),
+                source.resourceSites()));
     }
 
-    @Test
-    void durableAssemblyPreservesExactPeopleWithoutCreationTeleportAndSurvivesSnapshotRecovery() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.operationAssemblyConfiguration(new WorldId("frontier:operation-travel"), 91L));
-        FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchAssembly(before).orElseThrow();
-        OperationAssembly assembly = operation.activeAssembly().orElseThrow();
-
-        assertEquals(OperationStage.ASSEMBLING, operation.stage());
-        assertTrue(operation.participantIds().stream().allMatch(actor -> FrontierTestPositions.supportOf(before.actorLocations().get(actor))
-                .equals(assembly.positions().get(actor).support())), "creation and recovery retain each actual person, not a route-anchor teleport");
-        assertEquals(before, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(before)));
-        assertThrows(IllegalArgumentException.class, () -> before.startOperationTravel(operation.id(), new OperationTravel(
-                topology(adjacentSegment(operation.route().getFirst(), operation.route().get(1))), 0,
-                assembly.positions().entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> BodyPosition.above(entry.getValue()))),
-                new TransportAnchor(assembly.positions().get(assembly.cargoCarrierId()))), OperationExecutionAuthority.logisticsAdmission(before, operation)));
-        assertThrows(IllegalArgumentException.class, () -> before.advanceOperation(operation.id(), operation.routeIndex() + 1, OperationStage.EN_ROUTE));
-    }
-
-    @Test
-    void hotAssemblyMovesOnlyTheObservedMemberAndRetargetsItsSameLease() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.operationAssemblyConfiguration(new WorldId("frontier:operation-assembly-hot"), 91L));
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchAssembly(state).orElseThrow();
-        SubjectId hauler = operation.participantIds().getFirst(); OperationAssembly initial = operation.activeAssembly().orElseThrow();
-        AmbientActorLease prepared = AmbientActorProcess.nextLease(state, hauler, engine.checkpoint().instant());
-        assertEquals(AmbientGoalKind.OPERATION_ASSEMBLY, prepared.goal());
-        state = ModeledActorBodyFacts.present(AmbientLeaseStateProcess.prepare(state, prepared), hauler);
-        state = AmbientLeaseStateProcess.transition(state, hauler, AmbientLeaseStatus.HOT);
-        Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(initial.members());
-        OperationAssembly.Member current = members.get(hauler); members.put(hauler, new OperationAssembly.Member(current.topology(), current.cursor() + 1));
-        state = ModeledActorBodyFacts.inspected(state, hauler, current.nextSurface().standingBody());
-
-        FrontierWorldState advanced = state.advanceOperationAssembly(operation.id(), new OperationAssembly(members, initial.cargoCarrierId()),
-                OperationExecutionAuthority.assemblyCurrent(state, operation));
-
-        assertEquals(current.nextSurface().support(), FrontierTestPositions.supportOf(advanced.actorLocations().get(hauler)));
-        for (SubjectId member : operation.participantIds()) {
-            if (!member.equals(hauler)) assertEquals(state.actorLocations().get(member), advanced.actorLocations().get(member),
-                    "only the physically observed member may move");
-        }
-        assertEquals(AmbientGoalKind.OPERATION_ASSEMBLY, advanced.ambientLeases().get(hauler).goal());
-        assertEquals(advanced, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(advanced)));
-    }
 
     @Test
     void pinnedCodecReusesOnlyItsVerifiedImmutableBootstrap() {
@@ -392,14 +350,16 @@ class FrontierWorldStateTest {
     @Test
     void physicalIntentCannotReferenceAForeignCauseSubject() {
         FrontierWorldState state = initial();
-        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-foreign"), PhysicalIntentKind.CARGO_HANDOFF,
-                PhysicalIntentStatus.PREPARED, new SubjectId("operation:foreign"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.cargoHandoff(new SubjectId("operation:foreign"), new SubjectId("cargo:foreign")),
-                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED,
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_OPERATION);
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:production-foreign"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
+                PhysicalIntentStatus.PREPARED, new SubjectId("job:foreign"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.production(new SubjectId("job:foreign"),
+                        new SubjectId("item:foreign-input"), new SubjectId("item:foreign-output")),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
 
-        assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(),
-                state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), Map.of(intent.id(), intent), state.physicalObservations(),
-                state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
+        assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(state.bootstrap(),
+                state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
+                Map.of(intent.id(), intent), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
+                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
                 state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites()));
     }
 

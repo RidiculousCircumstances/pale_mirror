@@ -169,11 +169,18 @@ public final class ShipmentStateSupport {
                 shipment.execution().actorId(), shipment.carriedAccountId(), new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN))) : java.util.Optional.empty();
     }
     static FrontierWorldStateUpdate withdrawSourceClaim(FrontierWorldState state, SubjectId claim) {
+        var settled = withdrawSourceClaim(state, claim, new FungibleForfeitureSettlement(state.inventory(), state.companies(),
+                state.shipments(), state.actorExecutions(), state.actorMovements()));
+        return settled.shipments().equals(state.shipments()) ? FrontierWorldStateUpdate.begin()
+                : FrontierWorldStateUpdate.begin().shipments(settled.shipments()).actorExecutions(settled.executions()).actorMovements(settled.movements());
+    }
+    static FungibleForfeitureSettlement withdrawSourceClaim(FrontierWorldState state, SubjectId claim,
+                                                            FungibleForfeitureSettlement transaction) {
         requireSourceWithdrawal(state, claim);
-        ShipmentState shipments = state.shipments(); var executions = state.actorExecutions();
-        var movements = new java.util.LinkedHashMap<>(state.actorMovements());
+        ShipmentState shipments = transaction.shipments(); var executions = transaction.executions();
+        var movements = new java.util.LinkedHashMap<>(transaction.movements());
         boolean changed = false;
-        for (Shipment shipment : state.shipments().shipments().values()) {
+        for (Shipment shipment : transaction.shipments().shipments().values()) {
             if (shipment.terminal() || !shipment.authorization().claimId().equals(claim)) continue;
             shipments = shipments.replace(shipment, shipment.withStatus(Shipment.Status.ALLOCATION_WITHDRAWN));
             var movement = movements.get(shipment.execution().actorId());
@@ -186,8 +193,7 @@ public final class ShipmentStateSupport {
                     shipment.execution().activityKind(), shipment.id());
             changed = true;
         }
-        return changed ? FrontierWorldStateUpdate.begin().shipments(shipments).actorExecutions(executions).actorMovements(movements)
-                : FrontierWorldStateUpdate.begin();
+        return changed ? transaction.withShipments(shipments, executions, movements) : transaction;
     }
     static void validateTransition(FrontierWorldState before, FrontierWorldState after) {
         for (Shipment shipment : before.shipments().shipments().values()) {

@@ -11,28 +11,16 @@ public final class SceneStrikeStateSupport {
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return;
         SceneLease lease = matchingHotLease(state, intent);
-        if (FrontierSceneBehaviors.isLogistics(lease)) {
-            RouteOperation operation = state.operations().get(intent.causeSubjectId());
-            if (operation == null || operation.stage() != OperationStage.EN_ROUTE) {
-                throw new IllegalArgumentException("logistics scene strike must retain one en-route operation");
-            }
-        }
         validateMembers(state.actorLocations(), lease, intent);
         validateSettlementSelection(state.strategicPlans(), state.actorLocations(), state.physicalIntents().values(), lease, intent);
         validateSettlementLeaseBinding(state, lease, intent);
     }
 
-    public static void validateIntent(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
+    public static void validateIntent(Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
                                Map<SubjectId, ActorLocation> actors, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return;
         SceneLease lease = leases.values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT).filter(value -> matches(value, intent))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("scene strike requires one HOT owned lease"));
-        if (FrontierSceneBehaviors.isLogistics(lease)) {
-            RouteOperation operation = operations.get(intent.causeSubjectId());
-            if (operation == null || operation.stage() != OperationStage.EN_ROUTE) {
-                throw new IllegalArgumentException("logistics scene strike must retain one en-route operation");
-            }
-        }
         SubjectId attacker = attacker(intent), target = target(intent);
         ActorLocation attackerLocation = actors.get(attacker), targetLocation = actors.get(target);
         if (!lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(members(intent))
@@ -58,7 +46,7 @@ public final class SceneStrikeStateSupport {
         validateSettlementLeaseBinding(state, lease, intent);
     }
 
-    static void validateObservation(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
+    static void validateObservation(Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
                                     PhysicalIntent intent, SceneStrikeObservation observation) {
         if (leases.values().stream().filter(lease -> matches(lease, intent)).noneMatch(lease -> lease.members().stream()
                 .map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(members(intent)))) {
@@ -96,7 +84,6 @@ public final class SceneStrikeStateSupport {
     public static boolean boundTo(SceneLease lease, PhysicalIntent intent) {
         var binding = intent.roles().scene().orElseThrow(() -> new IllegalArgumentException("scene strike lacks explicit scene binding"));
         boolean family = switch (intent.lifecycleOwner()) {
-            case ROUTE_ENGAGEMENT -> FrontierSceneBehaviors.isLogistics(lease);
             case SETTLEMENT_ASSAULT -> FrontierSceneBehaviors.isSettlementAssault(lease);
             default -> false;
         };

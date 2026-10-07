@@ -538,7 +538,7 @@ class FrontierV3DiagnosticJsonTest {
                 "minecraft:chest", "FOREIGN_OR_UNTAGGED", "UNAVAILABLE", "", false, false, 0, 0);
 
         String json = FrontierV3DiagnosticJson.render("container", container.value(), checkpoint, state, Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(readiness));
+                Optional.empty(), Optional.empty(), Optional.of(readiness));
 
         assertTrue(json.contains("\"physicalSocket\":{\"chunk\":\"LOADED\",\"freshSocket\":\"CONFLICT\""));
         assertTrue(json.contains("\"targetBlock\":\"minecraft:chest\"") && json.contains("\"chest\":\"FOREIGN_OR_UNTAGGED\""));
@@ -613,54 +613,6 @@ class FrontierV3DiagnosticJsonTest {
         runtime.shutdown();
     }
 
-    @Test
-    void exposesOneBoundedPhysicalAssemblyProbeWithoutChangingItsCursor(@TempDir Path directory) {
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierV3FixtureCatalog.operationAssemblyConfiguration(new WorldId("frontier:diagnostic-assembly-test"), 41L),
-                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        FrontierWorldState state = runtime.decodedState().orElseThrow();
-        var operation = state.operations().values().iterator().next();
-        var entry = operation.activeAssembly().orElseThrow().members().entrySet().iterator().next();
-        var member = entry.getValue();
-        var readiness = new FrontierV3OperationAssemblyDiagnostic.Readiness(java.util.List.of(
-                new FrontierV3OperationAssemblyDiagnostic.MemberReadiness(entry.getKey(), member.currentSurface().support(),
-                        member.nextSurface().support(), member.currentSurface().support(), new FrontierV3AmbientActorExecutor.ObservedPosition(4.5D, 64.0D, 8.5D), "OCCUPIED",
-                        "minecraft:gray_carpet", "minecraft:stone", "minecraft:air", "minecraft:air", java.util.List.of("minecraft:villager"))));
-
-        String operationJson = FrontierV3DiagnosticJson.render("operation", operation.id().value(), checkpoint, state, Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(readiness));
-
-        assertTrue(operationJson.contains("\"physicalAssembly\":[{\"actor\":\"" + entry.getKey().value() + "\""));
-        assertTrue(operationJson.contains("\"targetStatus\":\"OCCUPIED\"") && operationJson.contains("\"occupants\":[\"minecraft:villager\"]"));
-        assertTrue(operationJson.contains("\"observedExact\":{\"x\":4.5,\"y\":64.0,\"z\":8.5}") && operationJson.contains("\"supportBlock\":\"minecraft:stone\""));
-        assertTrue(runtime.decodedState().orElseThrow().equals(state), "a physical assembly probe may not advance or defer the operation");
-    }
-
-    @Test
-    void exposesTheRetainedTraversalEdgeWithoutChangingTheRoute(@TempDir Path directory) {
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierV3FixtureCatalog.routeSceneReturnConfiguration(new WorldId("frontier:diagnostic-traversal-test"), 41L),
-                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        FrontierWorldState state = runtime.decodedState().orElseThrow();
-        var operations = state.operations().values().stream()
-                .filter(value -> value.settlementId().equals(new SubjectId("settlement:1")) && value.activeTravel().isPresent()).toList();
-        assertEquals(1, operations.size(), "fixture must expose one exact initial shipment");
-        var operation = operations.getFirst();
-        var travel = operation.activeTravel().orElseThrow();
-
-        String operationJson = FrontierV3DiagnosticJson.render("operation", operation.id().value(), checkpoint, state, Optional.empty());
-
-        assertTrue(operationJson.contains("\"travelTopology\":\"" + travel.topology().id().value() + "\""));
-        assertTrue(operationJson.contains("\"travelNextEdge\":\"" + travel.nextEdge().id().value() + "\""));
-        assertTrue(operationJson.contains("\"travelNextEdgeAvailability\":\"OPEN\"")
-                        && operationJson.contains("\"settlementTraversalAvailable\":true")
-                        && operationJson.contains("\"settlementUnavailableEdges\":0"),
-                "the read-only operation view must distinguish an intact retained edge from a globally blocked route");
-        assertTrue(runtime.decodedState().orElseThrow().equals(state), "a traversal diagnostic may not replan or advance the operation");
-        runtime.shutdown();
-    }
 
     @Test
     void exposesDeclaredGradeFactsWithoutSurveyingOrChangingTheRoute(@TempDir Path directory) {
@@ -769,7 +721,7 @@ class FrontierV3DiagnosticJsonTest {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         SubjectId settlement = state.bootstrap().settlements().getFirst().id();
-        BlockPosition position = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement).get(1);
+        BlockPosition position = state.routeTopology().settlementWaypoints(state.bootstrap(), settlement).get(1);
         FrontierWorldState damaged = state.recordPhysicalDelta(new PhysicalDelta(position, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK,
                         FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
@@ -813,25 +765,6 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(malformed.contains("\"status\":\"not_found\""));
     }
 
-    @Test
-    void exposesOneReadOnlyEngagementSceneWithoutCreatingOrAdvancingIt(@TempDir Path directory) {
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId("frontier:diagnostic-scene-test"), 41L),
-                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        FrontierWorldState state = runtime.decodedState().orElseThrow();
-        var candidate = state.coldEngagementSceneCandidates().getFirst();
-        String id = candidate.engagementId().value();
-
-        String scene = FrontierV3DiagnosticJson.render("scene", id, checkpoint, state, Optional.empty());
-        String operation = FrontierV3DiagnosticJson.render("operation", candidate.operationId().value(), checkpoint, state, Optional.empty());
-
-        assertTrue(scene.contains("\"status\":\"not_found\""), "without a materialized scene lease the read-only view must not create one");
-        assertTrue(operation.contains("\"hiveEngagement\":{\"status\":\"COLD_COMBAT\",\"command\":{\"kind\":\"OVERSEER\"")
-                && operation.contains("\"signal\":\"CONNECTED\""),
-                "the player-facing operation diagnostic retains its exact command-admission fact without creating a scene");
-        assertTrue(runtime.decodedState().orElseThrow().sceneLeases().isEmpty(), "diagnostics never mutate the canonical scene state");
-    }
 
     @Test
     void exposesOneTypedCargoFreeAssaultSceneWithoutCallingItsLegacyLogisticsView(@TempDir Path directory) {

@@ -11,15 +11,18 @@ import java.util.Objects;
  * Bounded authoritative registry of economic claim holders and their monetary accounts.
  * It deliberately contains no item quantities: exact resources remain in {@link ExactInventory}.
  */
-public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<SubjectId, FinancialReservation> reservations) {
+public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<SubjectId, FinancialReservation> reservations,
+                             Map<SubjectId, FinancialBudget> budgets) {
     public static final int MAX_ACCOUNTS = 4_096;
     public static final int MAX_RESERVATIONS = 4_096;
 
     public EconomicLedger {
         accounts = Map.copyOf(accounts);
         reservations = Map.copyOf(reservations);
+        budgets = Map.copyOf(budgets);
         if (accounts.size() > MAX_ACCOUNTS) throw new IllegalArgumentException("economic account retention limit exceeded");
         if (reservations.size() > MAX_RESERVATIONS) throw new IllegalArgumentException("financial reservation retention limit exceeded");
+        if (budgets.size() > MAX_RESERVATIONS) throw new IllegalArgumentException("financial budget retention limit exceeded");
         for (Map.Entry<SubjectId, EconomicAccount> entry : accounts.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().ownerId())) {
                 throw new IllegalArgumentException("economic account key must match owner identity");
@@ -33,9 +36,31 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
             if (accounts.get(reservation.payerId()).ownerKind() == EconomicOwnerKind.RESIDENT
                     || accounts.get(reservation.payeeId()).ownerKind() == EconomicOwnerKind.RESIDENT)
                 throw new IllegalArgumentException("resident resource-title registration cannot participate in monetary reservations");
+            if (reservation.budgetId().isPresent()) {
+                var budget = budgets.get(reservation.budgetId().orElseThrow());
+                if (budget == null || !budget.payerId().equals(reservation.payerId()))
+                    throw new IllegalArgumentException("purchase lost its declared source budget");
+            }
+        }
+        for (var entry : budgets.entrySet()) {
+            var budget = entry.getValue(); var payer = accounts.get(budget.payerId());
+            if (!entry.getKey().equals(budget.id()) || reservations.containsKey(entry.getKey())
+                    || payer == null || payer.ownerKind() == EconomicOwnerKind.RESIDENT)
+                throw new IllegalArgumentException("financial budget requires a registered non-resident treasury");
+        }
+        var heldByPayer = new LinkedHashMap<SubjectId, FixedScalar>();
+        reservations.values().forEach(hold -> heldByPayer.merge(hold.payerId(), hold.amount(), FixedScalar::plus));
+        budgets.values().forEach(budget -> heldByPayer.merge(budget.payerId(), budget.remaining(), FixedScalar::plus));
+        for (var held : heldByPayer.entrySet()) {
+            var payer = accounts.get(held.getKey());
+            if (held.getValue().raw() > 0 && held.getValue().compareTo(payer.balance().plus(payer.creditLimit())) > 0)
+                throw new IllegalArgumentException("retained financial commitments exceed their treasury: " + held.getKey().value());
         }
     }
 
+    public EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<SubjectId, FinancialReservation> reservations) {
+        this(accounts, reservations, Map.of());
+    }
     public EconomicLedger(Map<SubjectId, EconomicAccount> accounts) { this(accounts, Map.of()); }
 
     public static EconomicLedger bootstrap(FrontierBootstrap bootstrap) {
@@ -73,7 +98,7 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
             throw new IllegalArgumentException("economic account identity already exists: " + account.ownerId().value());
         }
         Map<SubjectId, EconomicAccount> next = new LinkedHashMap<>(accounts); next.put(account.ownerId(), account);
-        return new EconomicLedger(next, reservations);
+        return new EconomicLedger(next, reservations, budgets);
     }
 
     /** Atomically transfers a positive amount without minting money or bypassing either account. */
@@ -81,20 +106,67 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
         if (availableToReserve(payerId).compareTo(Objects.requireNonNull(amount, "transfer amount")) < 0) {
             throw new IllegalArgumentException("economic transfer exceeds available unreserved funds");
         }
-        return transfer(accounts, reservations, payerId, payeeId, amount);
+        return transfer(accounts, reservations, budgets, payerId, payeeId, amount);
     }
 
     /** Reserves funds without moving them; another reservation cannot spend the same available balance or credit. */
     public EconomicLedger reserve(FinancialReservation reservation) {
         Objects.requireNonNull(reservation, "financial reservation");
-        if (reservations.containsKey(reservation.id())) throw new IllegalArgumentException("financial reservation identity already exists: " + reservation.id().value());
+        if (reservation.budgetId().isPresent())
+            throw new IllegalArgumentException("budget-backed purchase must allocate its exact budget atomically");
+        if (reservations.containsKey(reservation.id()) || budgets.containsKey(reservation.id())) throw new IllegalArgumentException("financial reservation identity already exists: " + reservation.id().value());
         EconomicAccount payer = require(reservation.payerId()); EconomicAccount payee = require(reservation.payeeId());
         if (payer.status() != EconomicAccountStatus.ACTIVE || payee.status() != EconomicAccountStatus.ACTIVE
                 || availableToReserve(reservation.payerId()).compareTo(reservation.amount()) < 0) {
             throw new IllegalArgumentException("financial reservation exceeds available funds");
         }
         Map<SubjectId, FinancialReservation> next = new LinkedHashMap<>(reservations); next.put(reservation.id(), reservation);
-        return new EconomicLedger(accounts, next);
+        return new EconomicLedger(accounts, next, budgets);
+    }
+
+    public EconomicLedger reserveBudget(FinancialBudget budget) {
+        Objects.requireNonNull(budget);
+        var payer = require(budget.payerId());
+        if (budget.remaining().raw() <= 0 || budgets.containsKey(budget.id())
+                || reservations.containsKey(budget.id()) || payer.status() != EconomicAccountStatus.ACTIVE
+                || payer.ownerKind() == EconomicOwnerKind.RESIDENT
+                || availableToReserve(budget.payerId()).compareTo(budget.remaining()) < 0)
+            throw new IllegalArgumentException("financial budget exceeds available treasury or repeats identity");
+        var next = new LinkedHashMap<>(budgets); next.put(budget.id(), budget);
+        return new EconomicLedger(accounts, reservations, next);
+    }
+
+    /** Move a budget slice into an exact purchase hold, without changing balances or total held funds. */
+    public EconomicLedger reserveFromBudget(SubjectId budgetId, FinancialReservation purchase) {
+        var budget = budgets.get(Objects.requireNonNull(budgetId)); Objects.requireNonNull(purchase);
+        if (budget == null || !purchase.budgetId().equals(java.util.Optional.of(budgetId))
+                || !purchase.payerId().equals(budget.payerId()) || reservations.containsKey(purchase.id())
+                || budgets.containsKey(purchase.id()) || purchase.amount().compareTo(budget.remaining()) > 0
+                || require(purchase.payeeId()).status() != EconomicAccountStatus.ACTIVE
+                || require(purchase.payerId()).status() != EconomicAccountStatus.ACTIVE)
+            throw new IllegalArgumentException("purchase does not fit its exact available budget");
+        var nextBudgets = new LinkedHashMap<>(budgets);
+        nextBudgets.put(budgetId, budget.withRemaining(budget.remaining().minus(purchase.amount())));
+        var nextPurchases = new LinkedHashMap<>(reservations); nextPurchases.put(purchase.id(), purchase);
+        return new EconomicLedger(accounts, nextPurchases, nextBudgets);
+    }
+
+    public EconomicLedger releaseBudget(SubjectId budgetId) {
+        if (!budgets.containsKey(Objects.requireNonNull(budgetId)) || reservations.values().stream()
+                .anyMatch(purchase -> purchase.budgetId().equals(java.util.Optional.of(budgetId))))
+            throw new IllegalArgumentException("budget is unknown or retains unsettled purchases");
+        var next = new LinkedHashMap<>(budgets); next.remove(budgetId);
+        return new EconomicLedger(accounts, reservations, next);
+    }
+
+    /** Release unused money now while retaining a zero-valued owner reference until causal retirement. */
+    public EconomicLedger closeBudget(SubjectId budgetId) {
+        if (!budgets.containsKey(Objects.requireNonNull(budgetId)) || reservations.values().stream()
+                .anyMatch(purchase -> purchase.budgetId().equals(java.util.Optional.of(budgetId))))
+            throw new IllegalArgumentException("budget cannot close with an unsettled purchase");
+        var next = new LinkedHashMap<>(budgets);
+        next.put(budgetId, next.get(budgetId).withRemaining(FixedScalar.ZERO));
+        return new EconomicLedger(accounts, reservations, next);
     }
 
     /** Releases an unspent named hold; release is never an implicit transfer or mint. */
@@ -102,8 +174,7 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
         if (!reservations.containsKey(Objects.requireNonNull(reservationId, "financial reservation id"))) {
             throw new IllegalArgumentException("unknown financial reservation: " + reservationId.value());
         }
-        Map<SubjectId, FinancialReservation> next = new LinkedHashMap<>(reservations); next.remove(reservationId);
-        return new EconomicLedger(accounts, next);
+        return releasePortion(reservationId, reservations.get(reservationId).amount());
     }
 
     /** Releases only the cancelled portion; no balance changes or implicit settlement. */
@@ -116,8 +187,13 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
         Map<SubjectId, FinancialReservation> next = new LinkedHashMap<>(reservations);
         if (amount.equals(reservation.amount())) next.remove(reservationId);
         else next.put(reservationId, new FinancialReservation(reservation.id(), reservation.payerId(),
-                reservation.payeeId(), reservation.reasonId(), reservation.amount().minus(amount)));
-        return new EconomicLedger(accounts, next);
+                reservation.payeeId(), reservation.reasonId(), reservation.amount().minus(amount), reservation.budgetId()));
+        var nextBudgets = new LinkedHashMap<>(budgets);
+        reservation.budgetId().ifPresent(id -> {
+            var budget = nextBudgets.get(id);
+            nextBudgets.put(id, budget.withRemaining(budget.remaining().plus(amount)));
+        });
+        return new EconomicLedger(accounts, next, nextBudgets);
     }
 
     /** Settles exactly one named hold, atomically removing it and transferring its held amount. */
@@ -137,18 +213,21 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
         Map<SubjectId, FinancialReservation> remaining = new LinkedHashMap<>(reservations);
         if (amount.equals(reservation.amount())) remaining.remove(reservationId);
         else remaining.put(reservationId, new FinancialReservation(reservation.id(), reservation.payerId(),
-                reservation.payeeId(), reservation.reasonId(), reservation.amount().minus(amount)));
-        return transfer(accounts, remaining, reservation.payerId(), reservation.payeeId(), amount);
+                reservation.payeeId(), reservation.reasonId(), reservation.amount().minus(amount), reservation.budgetId()));
+        return transfer(accounts, remaining, budgets, reservation.payerId(), reservation.payeeId(), amount);
     }
 
     public FixedScalar availableToReserve(SubjectId payerId) {
         EconomicAccount payer = require(payerId);
         FixedScalar held = reservations.values().stream().filter(reservation -> reservation.payerId().equals(payerId))
                 .map(FinancialReservation::amount).reduce(FixedScalar.ZERO, FixedScalar::plus);
+        held = held.plus(budgets.values().stream().filter(budget -> budget.payerId().equals(payerId))
+                .map(FinancialBudget::remaining).reduce(FixedScalar.ZERO, FixedScalar::plus));
         return payer.balance().plus(payer.creditLimit()).minus(held);
     }
 
     private static EconomicLedger transfer(Map<SubjectId, EconomicAccount> current, Map<SubjectId, FinancialReservation> reservations,
+                                           Map<SubjectId, FinancialBudget> budgets,
                                            SubjectId payerId, SubjectId payeeId, FixedScalar amount) {
         Objects.requireNonNull(amount, "transfer amount");
         if (amount.raw() <= 0L) throw new IllegalArgumentException("transfer amount must be positive");
@@ -157,7 +236,7 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
         if (payer == null || payee == null) throw new IllegalArgumentException("economic transfer requires registered accounts");
         Map<SubjectId, EconomicAccount> next = new LinkedHashMap<>(current);
         next.put(payerId, payer.debit(amount)); next.put(payeeId, payee.credit(amount));
-        return new EconomicLedger(next, reservations);
+        return new EconomicLedger(next, reservations, budgets);
     }
 
     private static EconomicAccount account(SubjectId owner, EconomicOwnerKind kind) {

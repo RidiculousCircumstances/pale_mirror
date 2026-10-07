@@ -92,7 +92,7 @@ final class FrontierV3ActorCarrierComposition {
 
     private static boolean matchesDeclaration(Entity entity, Declaration declaration) {
         if (!declaration.entityId().equals(entity.getUUID())) return false;
-        if (declaration.kind() == ActorKind.BIOFORM ? !(entity instanceof Zombie) : !(entity instanceof Villager)) return false;
+        if (!FrontierV3ActorCarrierFactory.matchesKind(entity, declaration.kind())) return false;
         if (!entity.getPersistentData().contains(REVISION_KEY, net.minecraft.nbt.Tag.TAG_LONG)
                 || !entity.getPersistentData().contains(EPOCH_KEY, net.minecraft.nbt.Tag.TAG_LONG)) return false;
         return declaration.actorId().value().equals(entity.getPersistentData().getString(ACTOR_KEY))
@@ -157,7 +157,10 @@ final class FrontierV3ActorCarrierComposition {
         boolean bioform = state.bootstrap().hive().bioforms().stream().anyMatch(value -> value.id().equals(actorId))
                 || state.hiveColony().spawnedBioforms().containsKey(actorId);
         var actor = state.actorLocations().get(actorId);
-        if (resident == bioform || (kind == ActorKind.RESIDENT) != resident || actor == null || actor.kind() != kind) {
+        boolean animal = state.transportFleet().assets().containsKey(actorId);
+        int producers = (resident ? 1 : 0) + (bioform ? 1 : 0) + (animal ? 1 : 0);
+        boolean declared = switch (kind) { case RESIDENT -> resident; case BIOFORM -> bioform; case PACK_ANIMAL -> animal; };
+        if (producers != 1 || !declared || actor == null || actor.kind() != kind) {
             throw new IllegalArgumentException("canonical actor declaration does not match its closed producer roster");
         }
         return new Declaration(actorId, kind, owner, entityId, representation, revision, epoch);

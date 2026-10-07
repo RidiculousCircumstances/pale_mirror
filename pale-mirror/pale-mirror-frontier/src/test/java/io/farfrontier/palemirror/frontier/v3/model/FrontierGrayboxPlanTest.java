@@ -143,7 +143,7 @@ class FrontierGrayboxPlanTest {
     @Test
     void cargoOperationUsesTheSameRouteNetworkAsTheVisibleCorridor() {
         FrontierWorldState state = initial();
-        var waypoints = FrontierRouteNetwork.supplyWaypoints(state.bootstrap(), state.bootstrap().settlements().getFirst().id());
+        var waypoints = FrontierRouteNetwork.settlementWaypoints(state.bootstrap(), state.bootstrap().settlements().getFirst().id());
         var plan = FrontierGrayboxPlan.compile(state);
 
         assertTrue(waypoints.stream().skip(1).allMatch(position -> plan.cells().containsKey(position)));
@@ -169,20 +169,6 @@ class FrontierGrayboxPlanTest {
         });
     }
 
-    @Test
-    void activeConvoyFormationAndCargoHaveExactPlannedSupportAcrossTheWholeCarriageway() {
-        FrontierWorldState state = FrontierDevelopmentScenarios.routeSceneReturnFixture(
-                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:carriageway-support"), 91L).state();
-        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state).orElseThrow();
-        OperationTravel travel = operation.activeTravel().orElseThrow();
-        FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
-
-        travel.formation().forEach((actor, body) -> org.junit.jupiter.api.Assertions.assertNotNull(
-                plan.cells().get(body.supportingSurface().support()),
-                () -> "active convoy body must have a compiled exact support: " + actor));
-        org.junit.jupiter.api.Assertions.assertNotNull(plan.cells().get(travel.cargoAnchor().surface().support()),
-                "active convoy cargo must have a compiled exact support");
-    }
 
     @Test
     void everyInfirmaryCompilesAnOpenTreatmentPortAndReachableBoundedCareFormation() {

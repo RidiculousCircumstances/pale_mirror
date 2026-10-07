@@ -103,7 +103,7 @@ class StructuralRepairProcessTest {
     @Test
     void routeLossIsNeverAdmittedToGenericStructuralRepair() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:route-repair"), 91L));
-        BlockPosition routeCell = FrontierRouteNetwork.supplyWaypoints(state.bootstrap(), state.bootstrap().settlements().getFirst().id()).get(2);
+        BlockPosition routeCell = FrontierRouteNetwork.settlementWaypoints(state.bootstrap(), state.bootstrap().settlements().getFirst().id()).get(2);
         state = state.recordPhysicalDelta(new PhysicalDelta(routeCell, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "explosion:test"));
         SubjectId materialId = new SubjectId("item:route-repair-gray-concrete");

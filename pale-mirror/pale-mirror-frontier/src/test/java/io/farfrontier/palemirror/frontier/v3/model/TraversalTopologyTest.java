@@ -65,9 +65,9 @@ class TraversalTopologyTest {
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         RouteTopology routes = RouteTopology.initial();
 
-        TraversalTopology topology = routes.supplyTraversalTopology(bootstrap, settlement);
+        TraversalTopology topology = routes.settlementTraversalTopology(bootstrap, settlement);
 
-        assertEquals(FrontierRouteNetwork.expandWaypoints(routes.supplyWaypoints(bootstrap, settlement)).size(), topology.nodes().size());
+        assertEquals(FrontierRouteNetwork.expandWaypoints(routes.settlementWaypoints(bootstrap, settlement)).size(), topology.nodes().size());
         assertTrue(topology.edges().stream().allMatch(edge -> edge.kind() == TraversalKind.PEDESTRIAN
                 && edge.traversableBy(TraversalCapability.PEDESTRIAN) && !edge.traversableBy(TraversalCapability.RAIL_VEHICLE)));
     }
@@ -75,14 +75,14 @@ class TraversalTopologyTest {
     @Test void declaredReplacementGradeCompilesIntoSupportedThreeWideStepsWithoutTerrainDiscovery() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:topology-stepped-route"), 91L);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement);
+        List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement);
         BlockPosition origin = baseline.getFirst();
         BlockPosition crest = origin.offset(0, 2, 8);
         java.util.ArrayList<BlockPosition> declared = new java.util.ArrayList<>();
         declared.add(origin); declared.add(crest); declared.addAll(baseline.subList(1, baseline.size()));
 
-        RouteTopology routes = RouteTopology.initial().replaceSupplyRoute(bootstrap, settlement, declared);
-        TraversalTopology topology = routes.supplyTraversalTopology(bootstrap, settlement);
+        RouteTopology routes = RouteTopology.initial().replaceSettlementRoute(bootstrap, settlement, declared);
+        TraversalTopology topology = routes.settlementTraversalTopology(bootstrap, settlement);
         BlockPosition stepped = topology.linearCorridorSurfaces().stream().map(SurfaceAnchor::support)
                 .filter(position -> position.y() == origin.y() + 1).findFirst().orElseThrow();
         BlockPosition lateral = stepped.offset(1, 0, 0);
@@ -93,18 +93,18 @@ class TraversalTopologyTest {
         assertThrows(IllegalArgumentException.class, () -> {
             java.util.ArrayList<BlockPosition> tooSteep = new java.util.ArrayList<>();
             tooSteep.add(origin); tooSteep.add(origin.offset(0, 9, 8)); tooSteep.addAll(baseline.subList(1, baseline.size()));
-            RouteTopology.initial().replaceSupplyRoute(bootstrap, settlement, tooSteep);
+            RouteTopology.initial().replaceSettlementRoute(bootstrap, settlement, tooSteep);
         });
     }
 
     @Test void surveyedRaisedRouteMaterializesOwnedFootingsAndFoundationLossBlocksTheSameRetainedEdge() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:topology-footing"), 91L);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement);
+        List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement);
         BlockPosition origin = baseline.getFirst();
         List<BlockPosition> declared = new java.util.ArrayList<>();
         declared.add(origin); declared.add(origin.offset(0, 2, 8)); declared.addAll(baseline.subList(1, baseline.size()));
-        RouteTopology routes = RouteTopology.initial().replaceSupplyRoute(bootstrap, settlement, declared);
+        RouteTopology routes = RouteTopology.initial().replaceSettlementRoute(bootstrap, settlement, declared);
         BlockPosition footing = FrontierRouteNetwork.foundationCells(bootstrap, routes).iterator().next();
         FrontierWorldState state = FrontierWorldState.initial(bootstrap).withRouteTopology(routes);
 
@@ -113,7 +113,7 @@ class TraversalTopologyTest {
         FrontierWorldState damaged = state.recordPhysicalDelta(new PhysicalDelta(footing, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), java.util.Optional.of(GrayboxSemanticPart.ROUTE_FOUNDATION), "explosion:test"));
 
-        assertFalse(damaged.routeTopology().supplyPassable(bootstrap, settlement),
+        assertFalse(damaged.routeTopology().routePassable(bootstrap, settlement),
                 "a destroyed raised footing blocks the retained route graph; no hidden flat bypass exists");
         assertEquals(damaged, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(damaged)),
                 "the immutable terrain plan and its route consequence survive generic snapshot recovery");
@@ -122,7 +122,7 @@ class TraversalTopologyTest {
     @Test void sparseSurveyChangesOnlyItsOwnedSurfaceColumnsAndSurvivesBootstrapRecovery() {
         FrontierBootstrap flat = FrontierBootstrapper.create(new WorldId("frontier:terrain-flat"), 91L);
         SubjectId settlement = flat.settlements().getFirst().id();
-        BlockPosition surveyedSurface = FrontierRouteNetwork.supplyWaypoints(flat, settlement).getFirst();
+        BlockPosition surveyedSurface = FrontierRouteNetwork.settlementWaypoints(flat, settlement).getFirst();
         TerrainSurfacePlan terrain = TerrainSurfacePlan.uniform(63)
                 .withSurveyedSupport(surveyedSurface.x(), surveyedSurface.z(), 61);
         FrontierBootstrap surveyed = FrontierBootstrapper.create(new WorldId("frontier:terrain-surveyed"), 91L,

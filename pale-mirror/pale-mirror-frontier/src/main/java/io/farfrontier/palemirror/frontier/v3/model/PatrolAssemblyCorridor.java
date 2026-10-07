@@ -31,7 +31,7 @@ public final class PatrolAssemblyCorridor {
     public static PatrolAssembly compile(FrontierWorldState state, SubjectId patrolId, Settlement settlement,
                                          RouteUnitManifest unit) {
         return compile(state, patrolId, settlement, unit,
-                state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement.id()));
+                state.routeTopology().settlementTraversalTopology(state.bootstrap(), settlement.id()));
     }
 
     /** Compiles ingress only onto the caller's already retained causal inspection topology. */

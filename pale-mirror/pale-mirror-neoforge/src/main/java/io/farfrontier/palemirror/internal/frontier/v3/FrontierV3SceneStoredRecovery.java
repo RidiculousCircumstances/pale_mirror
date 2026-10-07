@@ -125,16 +125,10 @@ final class FrontierV3SceneStoredRecovery {
         // consumed by generic release. A receipt or elapsed time alone never grants permission.
         var ledger = FrontierV3AmbientCarrierLedger.get(level, current.bootstrap().worldId());
         if (attempt.receipts().actors().values().stream().anyMatch(receipt -> !ledger.noLoadProofCandidate(receipt))) return;
-        var cargoLedger = FrontierV3CargoDepartureLedger.get(level, current.bootstrap().worldId());
-        if (attempt.receipts().cargo().filter(receipt -> !cargoLedger.noLoadProofCandidate(receipt)).isPresent()) return;
         for (var receipt : attempt.receipts().actors().values()) {
             if (!ledger.confirmSavedDeparture(receipt)) return;
         }
         ledger.persist(level, current.bootstrap().worldId());
-        if (attempt.receipts().cargo().isPresent()) {
-            if (!cargoLedger.confirmSavedObservation(attempt.receipts().cargo().orElseThrow())) return;
-            cargoLedger.persist(level, current.bootstrap().worldId());
-        }
         // The proof, latest entity-write/read stamps and canonical owner are checked on the
         // server thread immediately before this WAL transition. Generic release then consumes
         // the same saved departures, preserves exact cargo and publishes physical actor health.
@@ -182,7 +176,6 @@ final class FrontierV3SceneStoredRecovery {
         if (retained == null || !retained.equals(attempt.lease()) || demandExists(level, retained)
                 || !proof.current(level) || !attempt.missing().equals(missingCallbacks(level, current, retained))) return;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, current.bootstrap().worldId());
-        var cargoLedger = FrontierV3CargoDepartureLedger.get(level, current.bootstrap().worldId());
         Map<UUID, FrontierV3SceneDeparture> recoveredActors = new LinkedHashMap<>();
         for (SceneMember member : retained.members()) {
             if (!missing.contains(member.entityId())) continue;
@@ -210,28 +203,10 @@ final class FrontierV3SceneStoredRecovery {
             if (!saved.matches(receipt)) return;
             recoveredActors.put(member.entityId(), receipt);
         }
-        FrontierV3CargoDeparture recoveredCargo = null;
-        if (FrontierV3SceneBehaviorRegistry.hasCargoCarrier(retained)
-                && missing.contains(FrontierV3CargoCarrierExecutor.id(retained))) {
-            var saved = proof.cart(FrontierV3CargoCarrierExecutor.id(retained));
-            if (saved == null) return;
-            try {
-                recoveredCargo = new FrontierV3CargoDeparture(saved.leaseId(), saved.cargoId(), saved.id(),
-                        saved.revision(), saved.epoch(), saved.body(), saved.inventory());
-            } catch (IllegalArgumentException foreign) { return; }
-            if (!saved.matches(recoveredCargo) || cargoLedger.conflicted(recoveredCargo.entityId())
-                    || !FrontierV3CargoCarrierExecutor.currentDeparture(current, retained, recoveredCargo,
-                    level.registryAccess())) return;
-        }
-        if (recoveredActors.size() + (recoveredCargo == null ? 0 : 1) != missing.size() || !proof.current(level)) return;
+        if (recoveredActors.size() != missing.size() || !proof.current(level)) return;
         // Publish disk-derived receipts only after the entire missing subset is proven.
         // The ordinary whole-scene stored proof then rechecks the complete loaded/saved
         // partition before any canonical DRAINING transition or cargo custody change.
-        if (recoveredCargo != null) {
-            if (!cargoLedger.record(recoveredCargo) || !cargoLedger.noLoadProofCandidate(recoveredCargo)
-                    || !cargoLedger.confirmSavedObservation(recoveredCargo)) return;
-            cargoLedger.persist(level, current.bootstrap().worldId());
-        }
         for (var receipt : recoveredActors.values()) {
             var actor = receipt.carrier().identity().actorId();
             var bodyId = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(actor, receipt.carrier().identity().epoch());
@@ -242,11 +217,11 @@ final class FrontierV3SceneStoredRecovery {
             if (snapshot == null || !FrontierV3ActorBodyController.confirmStoredDeparture(level, runtime, bodyId,
                     current.actorLocations().get(actor), proof.census(), column, snapshot)) return;
         }
-        PaleMirrorMod.LOGGER.info("PMV3_SCENE_STORED_RECOVERY missing-callback-proved lease={} actors={} cargo={}",
-                retained.id().value(), recoveredActors.size(), recoveredCargo != null);
+        PaleMirrorMod.LOGGER.info("PMV3_SCENE_STORED_RECOVERY missing-callback-proved lease={} actors={}",
+                retained.id().value(), recoveredActors.size());
         // Retain the already-proven one-body fast path; other compositions run the
         // existing independent full-set proof on the next server tick.
-        if (recoveredActors.size() == 1 && recoveredCargo == null && retained.members().size() == 1) {
+        if (recoveredActors.size() == 1 && retained.members().size() == 1) {
             CommandResult result = FrontierV3CommandSubmission.submit(runtime, "scene-disk-recovered-draining",
                     lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             if (result instanceof CommandResult.Accepted) FrontierV3SceneExecutor.release(level, runtime, lease);
@@ -256,7 +231,6 @@ final class FrontierV3SceneStoredRecovery {
     /** Null is an invalid/inconsistent partition, empty means no missing callback. */
     private static Set<UUID> missingCallbacks(ServerLevel level, FrontierWorldState state, SceneLease lease) {
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        var cargoLedger = FrontierV3CargoDepartureLedger.get(level, state.bootstrap().worldId());
         Set<UUID> missing = new HashSet<>();
         for (SceneMember member : lease.members()) {
             var actor = state.actorLocations().get(member.actorId());
@@ -277,17 +251,6 @@ final class FrontierV3SceneStoredRecovery {
             var ambient = state.ambientLeases().get(member.actorId());
             if (ambient != null && ambient.status() != AmbientLeaseStatus.CLOSED
                     || ledger.hasDepartureConflict(member.actorId()) || !missing.add(member.entityId())) return null;
-        }
-        if (FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease)) {
-            UUID id = FrontierV3CargoCarrierExecutor.id(lease);
-            if (level.getEntity(id) != null) {
-                if (!FrontierV3CargoCarrierExecutor.intact(level, state, lease)) return null;
-            } else if (cargoLedger.observation(id).isPresent()) {
-                var receipt = cargoLedger.observation(id).orElseThrow();
-                if (cargoLedger.conflicted(id) || !cargoLedger.noLoadProofCandidate(receipt)
-                        || !FrontierV3CargoCarrierExecutor.currentDeparture(state, lease, receipt,
-                        level.registryAccess())) return null;
-            } else if (cargoLedger.conflicted(id) || !missing.add(id)) return null;
         }
         return missing.size() > 256 ? null : Set.copyOf(missing);
     }
@@ -352,12 +315,6 @@ final class FrontierV3SceneStoredRecovery {
             var snapshot = snapshots.get(column);
             return census.uniqueAt(id, column) && snapshot != null ? snapshot.snapshot().actors().get(id) : null;
         }
-        FrontierV3CargoDeparturePersistence.SavedCart cart(UUID id) {
-            ChunkPos column = census.sightings().getOrDefault(id, Set.of()).stream().findFirst().orElse(null);
-            if (column == null) return null;
-            var snapshot = snapshots.get(column);
-            return census.uniqueAt(id, column) && snapshot != null ? snapshot.snapshot().cargo().get(id) : null;
-        }
     }
 
     private static final class UnobservedAttempt {
@@ -407,8 +364,6 @@ final class FrontierV3SceneStoredRecovery {
         Set<ChunkPos> columns = new HashSet<>();
         receipts.actors().values().forEach(receipt -> columns.add(new ChunkPos(
                 Math.floorDiv(receipt.observed().body().x(), 16), Math.floorDiv(receipt.observed().body().z(), 16))));
-        receipts.cargo().ifPresent(receipt -> columns.add(new ChunkPos(
-                Math.floorDiv(receipt.body().x(), 16), Math.floorDiv(receipt.body().z(), 16))));
         Map<ChunkPos, Long> epochs = new HashMap<>();
         for (ChunkPos column : columns) {
             var stamp = FrontierV3EntityWriteEpochs.stamp(level, column);
@@ -442,23 +397,8 @@ final class FrontierV3SceneStoredRecovery {
             if (receipt == null || !ledger.noLoadProofCandidate(receipt)
                     || receipts.putIfAbsent(member.entityId(), receipt) != null) return null;
         }
-        Optional<FrontierV3CargoDeparture> cargo = Optional.empty();
-        if (FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease)) {
-            UUID id = FrontierV3CargoCarrierExecutor.id(lease);
-            if (!expected.add(id)) return null;
-            if (level.getEntity(id) != null) {
-                if (!FrontierV3CargoCarrierExecutor.intact(level, state, lease)) return null;
-                loaded.add(id);
-            } else {
-                var cargoLedger = FrontierV3CargoDepartureLedger.get(level, state.bootstrap().worldId());
-                var receipt = cargoLedger.observation(id).orElse(null);
-                if (receipt == null || !cargoLedger.noLoadProofCandidate(receipt)
-                        || !FrontierV3CargoCarrierExecutor.currentDeparture(state, lease, receipt, level.registryAccess())) return null;
-                cargo = Optional.of(receipt);
-            }
-        }
-        if (receipts.isEmpty() && cargo.isEmpty()) return null; // all-loaded uses its existing owner path
-        var whole = new Receipts(receipts, cargo, loaded);
+        if (receipts.isEmpty()) return null; // all-loaded uses its existing owner path
+        var whole = new Receipts(receipts, loaded);
         return whole.covers(expected) ? whole : null;
     }
 
@@ -469,9 +409,6 @@ final class FrontierV3SceneStoredRecovery {
             byChunk.computeIfAbsent(new ChunkPos(Math.floorDiv(body.x(), 16), Math.floorDiv(body.z(), 16)),
                     ignored -> new HashSet<>()).add(entry.getKey());
         }
-        receipts.cargo().ifPresent(cargo -> byChunk.computeIfAbsent(
-                new ChunkPos(Math.floorDiv(cargo.body().x(), 16), Math.floorDiv(cargo.body().z(), 16)),
-                ignored -> new HashSet<>()).add(cargo.entityId()));
         Set<UUID> targets = receipts.targets();
         CompletableFuture<FrontierV3StoredEntityCensus.Result> censusFuture;
         try { censusFuture = FrontierV3StoredEntityCensus.scan(level, targets); }
@@ -491,18 +428,16 @@ final class FrontierV3SceneStoredRecovery {
         }, level.getServer());
     }
 
-    record Receipts(Map<UUID, FrontierV3SceneDeparture> actors, Optional<FrontierV3CargoDeparture> cargo,
-                    Set<UUID> loaded) {
-        Receipts { actors = Map.copyOf(actors); java.util.Objects.requireNonNull(cargo); loaded = Set.copyOf(loaded); }
-        Receipts(Map<UUID, FrontierV3SceneDeparture> actors, Optional<FrontierV3CargoDeparture> cargo) {
-            this(actors, cargo, Set.of());
+    record Receipts(Map<UUID, FrontierV3SceneDeparture> actors, Set<UUID> loaded) {
+        Receipts { actors = Map.copyOf(actors); loaded = Set.copyOf(loaded); }
+        Receipts(Map<UUID, FrontierV3SceneDeparture> actors) {
+            this(actors, Set.of());
         }
 
         Set<UUID> targets() {
             var result = new HashSet<>(actors.keySet());
-            cargo.ifPresent(receipt -> result.add(receipt.entityId()));
-            if (result.size() != actors.size() + (cargo.isPresent() ? 1 : 0))
-                throw new IllegalArgumentException("duplicate scene actor/cargo identity");
+            if (result.size() != actors.size())
+                throw new IllegalArgumentException("duplicate scene actor identity");
             return Set.copyOf(result);
         }
 
@@ -529,7 +464,7 @@ final class FrontierV3SceneStoredRecovery {
         }
 
         boolean matches(Map<UUID, FrontierV3SceneDeparture> actors) {
-            return matches(new Receipts(actors, Optional.empty()));
+            return matches(new Receipts(actors));
         }
 
         boolean matches(Receipts receipts) {
@@ -541,8 +476,7 @@ final class FrontierV3SceneStoredRecovery {
                     var actor = receipts.actors().get(id);
                     if (actor != null) {
                         if (!snapshot.snapshot().matches(actor)) return false;
-                    } else if (receipts.cargo().isEmpty() || !id.equals(receipts.cargo().orElseThrow().entityId())
-                            || !snapshot.snapshot().matches(receipts.cargo().orElseThrow())) return false;
+                    } else return false;
                 }
             }
             return byChunk.values().stream().mapToInt(Set::size).sum() == receipts.targets().size();

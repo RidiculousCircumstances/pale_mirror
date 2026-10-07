@@ -41,11 +41,6 @@ public record PhysicalIntent(
         roles.validate(lifecycleOwner, kind);
         if (radiusBlocks < 0 || radiusBlocks > 64) throw new IllegalArgumentException("physical intent radius must be 0..64 blocks");
         switch (kind) {
-            case CARGO_HANDOFF -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.CARGO_HANDOFF_OBSERVED) {
-                    throw new IllegalArgumentException("cargo hand-off must use zero radius and cargo postcondition");
-                }
-            }
             case STRUCTURAL_REPAIR -> {
                 if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED || semanticTarget.isEmpty()) {
                     throw new IllegalArgumentException("structural repair must use zero radius and repair postcondition");
@@ -79,11 +74,6 @@ public record PhysicalIntent(
             case PRODUCTION_TRANSFORMATION -> {
                 if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED) {
                     throw new IllegalArgumentException("production transformation must bind one job, input and output without an area radius");
-                }
-            }
-            case CARGO_LOADING -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED) {
-                    throw new IllegalArgumentException("cargo loading must bind contract, cargo and exact depot stack without an area radius");
                 }
             }
             case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> {

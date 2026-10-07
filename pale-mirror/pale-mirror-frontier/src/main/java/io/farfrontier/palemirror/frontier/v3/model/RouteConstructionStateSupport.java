@@ -20,7 +20,6 @@ public final class RouteConstructionStateSupport {
     static void validate(FrontierBootstrap bootstrap, RouteTopology topology, Map<SubjectId, RouteConstruction> constructions,
                          Map<SubjectId, ActorLocation> actors,
                          HumanPopulation population, Map<SubjectId, ProductionJob> jobs, ResourceSiteState sites,
-                         Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts,
                          StrategicPlanState plans, Map<SubjectId, AmbientActorLease> ambientLeases) {
         if (constructions.size() > MAX_CONSTRUCTIONS) throw new IllegalArgumentException("route construction retention limit exceeded");
         HashSet<SubjectId> settlements = new HashSet<>();
@@ -29,7 +28,7 @@ public final class RouteConstructionStateSupport {
             if (!entry.getKey().equals(project.id()) || !settlements.add(project.settlementId())) {
                 throw new IllegalArgumentException("route construction identity or settlement is duplicated");
             }
-            FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, project.settlementId(), project.waypoints());
+            FrontierRouteNetwork.validateSettlementWaypoints(bootstrap, project.settlementId(), project.waypoints());
             List<BlockPosition> required = project.workCells();
             if (required.isEmpty() || project.confirmedCells() > required.size()) throw new IllegalArgumentException("route construction cursor is invalid");
             if (project.status() == RouteConstructionStatus.READY != (project.confirmedCells() == required.size())) {
@@ -47,7 +46,7 @@ public final class RouteConstructionStateSupport {
                 }
             }));
         }
-        RouteConstructionTeamStateSupport.validate(population, constructions, Map.of(), jobs, sites, operations, contracts, plans);
+        RouteConstructionTeamStateSupport.validate(population, constructions, Map.of(), jobs, sites, plans);
     }
 
     static FrontierWorldState begin(FrontierWorldState state, RouteConstruction project,
@@ -234,7 +233,7 @@ public final class RouteConstructionStateSupport {
                 && entry.getValue().status() == SceneLeaseStatus.CLOSED);
         return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).physicalObservations(observations)
                 .sceneLeases(leases)
-                .routeConstructions(projects).routeTopology(state.routeTopology().replaceSupplyRoute(state.bootstrap(), project.settlementId(), project.waypoints()))
+                .routeConstructions(projects).routeTopology(state.routeTopology().replaceSettlementRoute(state.bootstrap(), project.settlementId(), project.waypoints()))
                 .actorExecutions(EngineeringExecutionAuthority.retired(state, project)));
     }
 

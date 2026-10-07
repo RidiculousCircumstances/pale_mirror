@@ -32,7 +32,6 @@ record FrontierV3OfflineFirstAdmissionRecoveryPlan(FrontierV3ActorFirstAdmission
                 || state.serviceWorks().values().stream().anyMatch(work -> work.workerId().equals(actor))
                 || state.resourceSites().sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
                     .anyMatch(job -> job.workerId().equals(actor))
-                || state.operations().values().stream().anyMatch(operation -> operation.participantIds().contains(actor))
                 || state.routeConstructions().values().stream().anyMatch(work -> work.engineeringTeam()
                     .map(team -> team.memberIds().contains(actor)).orElse(false))
                 || state.routeMaintenances().values().stream().anyMatch(work -> work.team().memberIds().contains(actor))

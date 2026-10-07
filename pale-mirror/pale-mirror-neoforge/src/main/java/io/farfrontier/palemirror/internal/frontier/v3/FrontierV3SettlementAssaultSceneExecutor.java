@@ -388,7 +388,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 .filter(member -> !owns(runtime, level.getEntity(member.entityId()), member)).map(SceneMember::actorId)
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
         if (!missing.isEmpty()) {
-            submit(runtime, "settlement-assault-recovery-unresolved", new SceneLeaseRecoveryUnresolved(lease.id(), missing, false));
+            submit(runtime, "settlement-assault-recovery-unresolved", new SceneLeaseRecoveryUnresolved(lease.id(), missing));
             return;
         }
     }

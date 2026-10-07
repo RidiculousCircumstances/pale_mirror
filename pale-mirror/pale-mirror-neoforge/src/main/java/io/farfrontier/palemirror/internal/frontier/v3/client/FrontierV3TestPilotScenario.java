@@ -17,7 +17,7 @@ final class FrontierV3TestPilotScenario {
             "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board",
             "observe_entity_motion", "observe_settlement_population", "open_container", "quick_move_from_inventory",
             "quick_move_from_container", "split_move_from_container", "move_within_container",
-            "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
+            "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "assert_visible_entity");
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
         int setupCount() { return setup.size(); }
         int actionCount() { return actions.size(); }
@@ -62,8 +62,6 @@ final class FrontierV3TestPilotScenario {
             if (!validCausalMilestone(action, causalMilestones) || (type.equals("release_fast_forward_hold") && action.size() != 1) ||
                     (type.equals("command") && !action.has("command")) ||
                     (type.equals("visit") && !validVisit(action)) ||
-                    (type.equals("visit_operation") && !validOperationVisit(action)) ||
-                    (type.equals("look_operation") && !validOperationLook(action)) ||
                     (type.equals("inspect") && !validDiagnosticIdentity(action)) ||
                     (type.equals("wait_until_diagnostic") && (!validDiagnosticIdentity(action) || !action.has("expect")
                             || !action.get("expect").isJsonObject() || !boundedDiagnosticWait(action) || !validOptionalIncreasePath(action)
@@ -310,20 +308,8 @@ final class FrontierV3TestPilotScenario {
     }
 
     /** A semantic camera may read one current operation projection, then perform only ordinary player travel. */
-    private static boolean validOperationVisit(JsonObject action) {
-        return requiredId(action, "operationId", "operation:") && action.has("dimension") && action.get("dimension").isJsonPrimitive()
-                && (!action.has("anchor") || action.get("anchor").isJsonPrimitive()
-                && (action.get("anchor").getAsString().equals("travelCurrent") || action.get("anchor").getAsString().equals("travelCargo")))
-                && action.get("dimension").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
-                && offset(action) && timeout(action, 120_000L, "settleMs") && timeout(action, 120_000L);
-    }
 
     /** A semantic camera target is derived from the same bounded operation diagnostic, never a server-selected entity. */
-    private static boolean validOperationLook(JsonObject action) {
-        return requiredId(action, "operationId", "operation:") && (!action.has("anchor") || action.get("anchor").isJsonPrimitive()
-                && (action.get("anchor").getAsString().equals("travelCurrent") || action.get("anchor").getAsString().equals("travelCargo")))
-                && timeout(action, 120_000L);
-    }
 
     private static boolean validVisibleBoard(JsonObject action) {
         if (!resolvablePosition(action, "position") || !timeout(action, 120_000L) || !action.has("text") || !action.get("text").isJsonPrimitive()

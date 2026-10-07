@@ -168,12 +168,6 @@ public final class AmbientActorProcess {
             BlockPosition target = member.arrived() ? member.currentPosition() : member.nextSurface().support();
             return new AmbientGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target);
         }
-        RouteOperation assembling = OperationExecutionAuthority.assemblyOwner(state, actorId).orElse(null);
-        if (assembling != null) {
-            OperationAssembly.Member member = assembling.activeAssembly().orElseThrow().members().get(actorId);
-            SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
-            return new AmbientGoal(AmbientGoalKind.OPERATION_ASSEMBLY, target.support());
-        }
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
         if (journey != null) {
             BlockPosition target = journey.status() == ResidentMigrationStatus.EN_ROUTE && !journey.arriving()
@@ -218,6 +212,12 @@ public final class AmbientActorProcess {
             // exact retained cursors.
             return new AmbientGoal(AmbientGoalKind.PATROL,
                     state.actorLocations().get(actorId).body().supportingSurface().support());
+        }
+        if (declaration.kind() == ActorKind.PACK_ANIMAL) {
+            state.transportFleet().require(actorId);
+            var movement = state.actorMovements().get(actorId);
+            return movement == null ? new AmbientGoal(AmbientGoalKind.PATROL, declaration.supportingSurface().support())
+                    : new AmbientGoal(AmbientGoalKind.ACTOR_MOVEMENT, movement.order().legalStations().getFirst().support());
         }
         Bioform bioform = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), actorId);
         BlockPosition nest = state.bootstrap().hive().seedNests().stream().filter(value -> value.id().equals(bioform.nestId())).findFirst().orElseThrow().anchor();

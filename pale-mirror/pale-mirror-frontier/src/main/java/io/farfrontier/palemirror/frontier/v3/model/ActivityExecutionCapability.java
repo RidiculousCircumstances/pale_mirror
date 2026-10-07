@@ -4,6 +4,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public interface ActivityExecutionCapability {
     HumanAssignmentKind kind();
     ActivityExecutionCheckpoint checkpoint(FrontierWorldState state, HumanAssignment assignment);
+    /** Mission owners can prohibit an independent home-food detour while retaining local self-care. */
+    default boolean permitsHomeFood(FrontierWorldState state, HumanAssignment assignment) { return true; }
     /** Owner says whether a resource wait may relinquish a temporary service position. */
     default boolean waitingForServiceResource(FrontierWorldState state, HumanAssignment assignment) { return false; }
     default FrontierWorldState pauseLabour(FrontierWorldState state, HumanAssignment assignment, long tick) {

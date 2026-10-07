@@ -15,7 +15,7 @@ final class FrontierWorldPhysicalObservationValidation {
 
     static void validate(FrontierBootstrap bootstrap, ExactInventory inventory, Map<InfectionCell, io.farfrontier.palemirror.frontier.v3.api.FixedRatio> infection,
                          Map<PhysicalIntentId, PhysicalIntent> intents, Map<PhysicalObservationId, PhysicalEffectObservation> observations,
-                         Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts, Map<SceneLeaseId, SceneLease> sceneLeases,
+                         Map<SceneLeaseId, SceneLease> sceneLeases,
                          Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
                          RouteTopology topology, Map<SubjectId, SettlementServiceWork> serviceWorks) {
         for (Map.Entry<PhysicalObservationId, PhysicalEffectObservation> entry : observations.entrySet()) {
@@ -26,31 +26,11 @@ final class FrontierWorldPhysicalObservationValidation {
                     || !intent.postconditionObservationId().equals(java.util.Optional.of(observation.id()))) {
                 throw new IllegalArgumentException("physical observation must be the confirmed intent receipt");
             }
-            if (observation instanceof CargoHandoffObservation cargo) {
-                FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, cargo);
-            } else if (observation instanceof FungibleCargoHandoffObservation cargo) {
-                if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL) {
-                    if (!intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO).equals(cargo.cargoId())) {
-                        throw new IllegalArgumentException("fungible nutrient arrival receipt has foreign cargo");
-                    }
-                    continue;
+            if (observation instanceof FungibleCargoHandoffObservation cargo) {
+                if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL
+                        || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO).equals(cargo.cargoId())) {
+                    throw new IllegalArgumentException("fungible nutrient arrival receipt has foreign cargo");
                 }
-                RouteOperation operation = operations.get(intent.causeSubjectId());
-                if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || operation == null
-                        || !operation.cargoId().equals(cargo.cargoId()) || inventory.cargo().containsKey(cargo.cargoId())) {
-                    throw new IllegalArgumentException("fungible cargo receipt has no completed route hand-off");
-                }
-                SupplyContract contract = contracts.values().stream().filter(value -> value.cargoId().equals(cargo.cargoId())).findFirst()
-                        .orElseThrow(() -> new IllegalArgumentException("fungible cargo receipt has no contract"));
-                SubjectId receiver = FrontierCargoValidation.receiverStore(bootstrap, operation);
-                if (contract.status() != ContractStatus.DELIVERED || cargo.stacks().stream().anyMatch(stack -> !(stack.address()
-                        instanceof PhysicalStackAddress.ContainerSlot slot) || !slot.slot().containerId().equals(receiver))) {
-                    throw new IllegalArgumentException("fungible cargo receipt has a foreign receiver");
-                }
-                CustodyAccount account = inventory.fungibleResources().accounts().values().stream().filter(value -> value.custody()
-                        instanceof ResourceCustody.Container container && container.containerId().equals(receiver)).findFirst()
-                        .orElseThrow(() -> new IllegalArgumentException("fungible cargo receipt has no receiver account"));
-                FungiblePhysicalObservation.bind(inventory.fungibleResources(), account.id(), cargo.authorityEpoch(), cargo.stacks());
             } else if (observation instanceof FungibleResourceConsumedObservation consumed) {
                 if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION
                         || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ITEM).equals(consumed.lotId())) throw new IllegalArgumentException("fungible consumption receipt has foreign intent subjects");
@@ -58,7 +38,7 @@ final class FrontierWorldPhysicalObservationValidation {
             } else if (observation instanceof ExplosionObservation explosion) {
                 ExplosionStateSupport.validateReceipt(intent, explosion);
             } else if (observation instanceof SceneStrikeObservation strike) {
-                SceneStrikeStateSupport.validateObservation(operations, sceneLeases, intent, strike);
+                SceneStrikeStateSupport.validateObservation(sceneLeases, intent, strike);
             } else if (observation instanceof DecontaminationObservation decontamination) {
                 if (serviceWorks.containsKey(intent.causeSubjectId())) {
                     SettlementServiceDecontaminationStateSupport.validateIntentForRecoveredReceipt(intent, decontamination, serviceWorks);
@@ -91,9 +71,7 @@ final class FrontierWorldPhysicalObservationValidation {
                 ProductionTransformationStateSupport.validateReceipt(intent, production);
             } else if (observation instanceof FungibleProductionObservation production) {
                 FungibleProductionStateSupport.validateReceipt(intent, production);
-            } else if (observation instanceof CargoLoadObservation loading) {
-                CargoLoadingStateSupport.validateReceipt(intent, loading);
-            } else if (observation instanceof HiveNutrientDepartureObservation departure) {
+            }  else if (observation instanceof HiveNutrientDepartureObservation departure) {
                 if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE
                         || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.nutrientDeparture(departure.transferId(), departure.cargoId(), departure.itemId()))) {
                     throw new IllegalArgumentException("hive nutrient departure receipt has foreign exact subjects");

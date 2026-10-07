@@ -68,6 +68,8 @@ public final class ResidentActivityProcess {
             case CONTAINER_CUSTODY -> ResidentActivityAdmission.Reason.CONTAINER_CUSTODY;
             case SERVICE_ACCESS -> ResidentActivityAdmission.Reason.SERVICE_ACCESS;
             case FOOD_STOCK -> ResidentActivityAdmission.Reason.FOOD_STOCK;
+            case MISSION_SUPPLY -> ResidentActivityAdmission.Reason.MISSION_SUPPLY;
+            case INVENTORY_CAPACITY -> ResidentActivityAdmission.Reason.INVENTORY_CAPACITY;
         });
         if (ResidentActivityCoordinator.assessEligibility(state, residentId, now).pending()
                 .filter(wait -> wait == ResidentActivityChoice.Wait.SAFE_CHECKPOINT).isPresent())

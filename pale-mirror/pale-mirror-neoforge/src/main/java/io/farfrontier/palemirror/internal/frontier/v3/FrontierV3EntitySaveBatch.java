@@ -47,7 +47,7 @@ final class FrontierV3EntitySaveBatch {
         var successfulWrites = CompletableFuture.allOf(java.util.stream.Stream.concat(writes.values().stream(), reads.values().stream())
                 .toArray(CompletableFuture[]::new));
         return Optional.of(new Ticket(generation,
-                FrontierV3CargoCleanupPersistence.afterSuccessfulWriteAndSync(successfulWrites, synchronize)));
+                FrontierV3StoredEntityInventory.afterSuccessfulWriteAndSync(successfulWrites, synchronize)));
     }
 
     boolean current(Ticket ticket) { return !overflowed && ticket.generation() == generation; }

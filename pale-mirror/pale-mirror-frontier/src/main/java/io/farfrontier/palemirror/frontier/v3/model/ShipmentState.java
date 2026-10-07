@@ -69,6 +69,17 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
         if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale mission predecessor");
         var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.advance(stage)); return new ShipmentState(shipments, next);
     }
+    public ShipmentState replaceSupplies(TransportMission mission,
+            io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad supplies) {
+        if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale provisioning predecessor");
+        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.withSupplies(supplies));
+        return new ShipmentState(shipments, next);
+    }
+    public ShipmentState abortLoadingMission(TransportMission mission) {
+        if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale loading-abort predecessor");
+        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.abortLoading());
+        return new ShipmentState(shipments, next);
+    }
     public ShipmentState retireMission(TransportMission mission) {
         if (!mission.equals(missions.get(mission.id())) || mission.stage() != TransportMission.Stage.COMPLETE)
             throw new IllegalArgumentException("only an exact completed mission may retire");

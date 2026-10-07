@@ -9,7 +9,6 @@ final class FrontierV3PhysicalExecutors {
             executor("physical-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "physical-delta", FrontierV3PhysicalObservationExecutor::tick),
             executor("resource-site-explosion-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("physical-observation"), "resource-site-explosion", FrontierV3ResourceSiteExplosionExecutor::tick),
             executor("explosion-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("resource-site-explosion-observation"), "explosion-observation", FrontierV3ExplosionExecutor::tick),
-            executor("cargo-carrier-impact-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("explosion-observation"), "cargo-carrier-impact", FrontierV3CargoCarrierImpactExecutor::tick),
 
             executor("graybox-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("physical-observation"), "graybox-projection", FrontierV3AftermathOwnerComposition::projection),
             executor("resource-site-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("graybox-projection"), "resource-site-projection", FrontierV3ResourceSiteExecutor::tick),
@@ -26,24 +25,24 @@ final class FrontierV3PhysicalExecutors {
             executor("ambient-actors", FrontierV3PhysicalExecutorRegistry.Stage.ACTOR, Set.of("pedestrian-courtesy"), "ambient-actor-leases", FrontierV3AmbientActorExecutor::tick),
 
             executor("inventory-observation", FrontierV3PhysicalExecutorRegistry.Stage.CUSTODY, Set.of("ambient-actors"), "inventory-custody-observation", FrontierV3InventoryObservationExecutor::tick),
-            executor("cargo-carrier-observation", FrontierV3PhysicalExecutorRegistry.Stage.CUSTODY, Set.of("inventory-observation"), "cargo-carrier-custody-observation", FrontierV3CargoCarrierObservationExecutor::tick),
 
-            executor("cargo-loading", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-carrier-observation"), "cargo-loading-effect", FrontierV3CargoLoadingExecutor::tick),
             // A RUNNING production transformation may have changed one exact owned chest slot
             // before a restart persisted its canonical receipt.  Reconcile that durable
             // physical effect before the generic surface drift audit: otherwise the audit
             // mistakes its own known recovery window for player/world tampering.
-            executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-loading"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
+            executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("inventory-observation"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
             // Resume an already-fenced farmer hand/chest pair before any generic observer
             // can misclassify its crash window as an unrelated fungible or reference drift.
             executor("resource-site-delivery", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
                     Set.of("production-transformation"), "resource-site-hand-depot-delivery", FrontierV3ResourceSiteDeliveryExecutor::tick),
+            executor("expedition-supplies", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
+                    Set.of("resource-site-delivery"), "expedition-supply-interaction", FrontierV3ExpeditionSupplyExecutor::tick),
             // A restart can retain an ordinary player/container split in vanilla storage before
             // its typed handoff reaches the canonical WAL.  Read that fenced HOT evidence
             // before the generic surface audit: the latter only knows the older canonical
             // layout and would otherwise mark the source CONFLICT, permanently hiding the
             // one recoverable player departure.
-            executor("fungible-resource-observation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-delivery"), "fungible-resource-custody-observation", FrontierV3FungibleResourceObservationExecutor::tick),
+            executor("fungible-resource-observation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-delivery", "expedition-supplies"), "fungible-resource-custody-observation", FrontierV3FungibleResourceObservationExecutor::tick),
             // The generic audit has two independently durable predecessors: a
             // RUNNING production receipt and a fungible HOT handoff recovered
             // from physical storage.  Keep both graph edges explicit so a
@@ -68,8 +67,7 @@ final class FrontierV3PhysicalExecutors {
                     FrontierV3SettlementServiceDecontaminationExecutor::tick),
             executor("defender-equipment-return", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("settlement-service-decontamination"), "defender-equipment-return-effect", FrontierV3EquipmentReturnExecutor::tick),
             executor("exact-item-consumption", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation", "hive-nutrient-endpoints"), "exact-item-consumption-effect", FrontierV3ExactItemConsumptionExecutor::tick),
-            executor("cargo-handoff", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("exact-item-consumption"), "cargo-handoff-effect", FrontierV3CargoHandoffExecutor::tick),
-            executor("structural-repair", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-handoff"), "structural-repair-effect", FrontierV3StructuralRepairExecutor::tick),
+            executor("structural-repair", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("exact-item-consumption"), "structural-repair-effect", FrontierV3StructuralRepairExecutor::tick),
             executor("route-construction", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("structural-repair"), "route-construction-effect", FrontierV3RouteConstructionExecutor::tick),
             executor("route-maintenance", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("route-construction"), "route-maintenance-effect", FrontierV3RouteMaintenanceExecutor::tick),
             executor("deferred-aftermath", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("route-maintenance"), "deferred-aftermath-effect", FrontierV3AftermathOwnerComposition::aftermath),

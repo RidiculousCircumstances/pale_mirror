@@ -92,52 +92,20 @@ class HumanRoleAssignmentTest {
         assertEquals(born.id(), started.job().workerId());
     }
 
-    @Test
-    void bornHaulerAndTwoGuardsReplaceDeadBootstrapRolesForAnExactCargoOperation() {
-        FrontierWorldState state = initial("frontier:human-route");
-        Settlement settlement = state.bootstrap().settlements().getFirst();
-        var access = SettlementAccessPort.forHall(settlement.structures().stream()
-                .filter(structure -> structure.kind() == StructureKind.HALL).findFirst().orElseThrow());
-        state = killRole(state, ResidentRole.GUARD);
-        state = killRole(state, ResidentRole.HAULER);
-        ResidentProfile guard = born(state, "resident:1-guard-born", ResidentRole.GUARD);
-        // This role-selection fixture starts its new crew at the producer's declared assembly slots.
-        // Joint approach/collision behavior has its own OperationAssemblyCorridorTest coverage.
-        state = HumanPopulationTestFixtures.withResident(state, guard, access.routeFloor());
-        ResidentProfile secondGuard = born(state, "resident:1-guard-second-born", ResidentRole.GUARD);
-        state = HumanPopulationTestFixtures.withResident(state, secondGuard, access.assemblyFloor().offset(0, 0, 1));
-        ResidentProfile hauler = born(state, "resident:1-hauler-born", ResidentRole.HAULER);
-        state = HumanPopulationTestFixtures.withResident(state, hauler, access.assemblyFloor());
-        assertEquals(FixedScalar.whole(3), RouteEngagementCombatRules.damage(state, guard.id()));
-        state = state.withInventory(withBread(state.inventory(), settlement.id()));
-
-        StrategicTask preparation = preparationTask(settlement.id());
-        StrategicTask delivery = deliveryTask(settlement.id(), preparation.id());
-        StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective(preparation, StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE))
-                .addTask(preparation).addTask(delivery);
-        state = state.withStrategicPlans(plans).createSupplyContract(new SupplyContract(new SubjectId("contract:supply-1-1"), settlement.id(),
-                state.bootstrap().hive().id(), new SubjectId("cargo:supply-1-1"), "minecraft:bread", 64, ContractStatus.ORDERED));
-
-        List<ProposedEvent> planned = SupplyOperationProcess.planCargoLoad(state, cargoLoad(new SubjectId("contract:supply-1-1")), false);
-
-        OperationCreated created = planned.stream().map(ProposedEvent::payload).filter(OperationCreated.class::isInstance)
-                .map(OperationCreated.class::cast).findFirst().orElseThrow();
-        assertEquals(List.of(hauler.id(), guard.id(), secondGuard.id()), created.operation().participantIds());
-    }
 
     @Test
     void exactActorHeldWeaponChangesTheSameCivilianCombatCapability() {
         FrontierWorldState state = initial("frontier:human-equipped-worker");
         ResidentProfile worker = state.humanPopulation().residents().values().stream()
                 .filter(value -> value.profession() != ResidentProfession.SECURITY_WORKER).findFirst().orElseThrow();
-        assertEquals(FixedScalar.whole(1), RouteEngagementCombatRules.damage(state, worker.id()));
+        assertEquals(FixedScalar.whole(1), FrontierCombatRules.damage(state, worker.id()));
         SubjectId depot = FrontierWorldState.depotId(worker.settlementId());
         int slot = state.inventory().firstFreeSlot(depot).orElseThrow();
         SubjectId sword = new SubjectId("item:human-equipped-worker-sword");
         ExactInventory stored = state.inventory().store(new ExactItemStack(sword, worker.settlementId(), "minecraft:iron_sword", 1,
                 new InventoryCustody.ContainerSlot(depot, slot)));
         state = state.withInventory(stored.moveObservedItem(sword, new InventoryCustody.ContainerSlot(depot, slot), new InventoryCustody.Actor(worker.id())));
-        assertEquals(FixedScalar.whole(3), RouteEngagementCombatRules.damage(state, worker.id()));
+        assertEquals(FixedScalar.whole(3), FrontierCombatRules.damage(state, worker.id()));
     }
 
     private static FrontierWorldState initial(String world) {
@@ -187,18 +155,5 @@ class HumanRoleAssignmentTest {
                 StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.PENDING);
     }
 
-    private static StrategicTask preparationTask(SubjectId settlement) {
-        return new StrategicTask(new SubjectId("task:human-route-prepare"), new SubjectId("objective:human-route"), settlement,
-                StrategicTaskKind.PREPARE_BREAD_CARGO, Optional.empty(), List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO), List.of(), StrategicTaskStatus.ACTIVE);
-    }
 
-    private static StrategicTask deliveryTask(SubjectId settlement, SubjectId preparation) {
-        return new StrategicTask(new SubjectId("task:human-route-deliver"), new SubjectId("objective:human-route"), settlement,
-                StrategicTaskKind.DELIVER_BREAD_TO_HIVE, Optional.empty(), List.of(StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE,
-                StrategicTaskRequirement.AVAILABLE_HAULER, StrategicTaskRequirement.AVAILABLE_GUARD), List.of(preparation), StrategicTaskStatus.PENDING);
-    }
-
-    private static ScheduledAction cargoLoad(SubjectId contract) {
-        return new ScheduledAction(new ScheduleId("schedule:human-role-cargo-load"), new SimInstant(100L), 0, contract, "frontier.supply.cargo.load", 1);
-    }
 }

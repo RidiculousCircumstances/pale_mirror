@@ -19,7 +19,17 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                               FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
                               ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
                               GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks,
-                              SettlementLabourRules labour) {
+                              SettlementLabourRules labour,
+                              io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition) {
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                           ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
+                           GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks,
+                           SettlementLabourRules labour) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand, residentLife,
+                resourceHarvestColdTravelTicksPerEdge, workCatalog, goodsTrade, initialSettlementStocks, labour,
+                io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules.initial());
+    }
     public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                            FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
                            ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
@@ -70,6 +80,10 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         workCatalog = Objects.requireNonNull(workCatalog, "work catalog");
         goodsTrade = Objects.requireNonNull(goodsTrade, "goods trade rules");
         labour = Objects.requireNonNull(labour, "labour rules");
+        expedition = Objects.requireNonNull(expedition, "expedition rules");
+        if (schemaVersion < 17 && !expedition.equals(
+                io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules.initial()))
+            throw new IllegalArgumentException("custom expedition policy requires hashed schema17");
         if (schemaVersion < 16 && !labour.equals(SettlementLabourRules.initial()))
             throw new IllegalArgumentException("custom labour rules require their hashed schema16 profile");
         initialSettlementStocks = java.util.List.copyOf(initialSettlementStocks);
@@ -107,7 +121,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 + (schemaVersion >= 14 ? "|" + goodsTrade.canonicalText() : "")
                 + (schemaVersion >= 15 ? "|" + initialSettlementStocks.stream()
                     .map(InitialSettlementStock::canonicalText).sorted().collect(java.util.stream.Collectors.joining(";")) : "")
-                + (schemaVersion >= 16 ? "|" + labour.canonicalText() : "");
+                + (schemaVersion >= 16 ? "|" + labour.canonicalText() : "")
+                + (schemaVersion >= 17 ? "|" + expedition.canonicalText() : "");
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */
@@ -198,21 +213,45 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     }
 
     /** All elapsed-time choices used by the canonical process layer. */
-    public record Cadence(long resourceInitialPreparationTick, long resourceGrowthStageInterval, long resourceHarvestTraversalInterval, long resourceHarvestRetryInterval,
-                          long companyFoundationReviewInterval, long strategicReviewInterval, long populationBirthReviewInterval,
-                          long populationBirthCompletionDelay, long provisionInitialReviewTick, long provisionReviewInterval,
-                          long migrationReviewInterval, long migrationStepInterval, long humanHealthProgressionDelay,
-                          long marketRetryInterval, long marketDemandLifetime, long hiveInfectionPulseInterval,
-                          long hiveScoutPatrolInterval, long hiveNutrientTransferStepInterval, long hivePerceptionRefreshInterval,
-                          long hiveRouteEngagementStepInterval, long hiveRouteEngagementCombatInterval,
-                          long hiveSettlementAssaultStepInterval, long hiveSettlementAssaultCombatInterval,
-                          long routePatrolStepInterval, long terminalLogisticsReviewInterval,
-                          long decontaminationScanInterval, long structuralRepairScanInterval, long routeConstructionScanInterval,
-                          long structuralRepairInitialScanTick, long routeConstructionInitialScanTick, long decontaminationInitialScanTick,
-                          long settlementStrategicInitialReviewTick, long populationBirthInitialReviewTick, long companyFoundationInitialReviewTick,
-                          long populationMigrationInitialReviewTick, long terminalLogisticsInitialReviewTick, long hiveScoutInitialPatrolTick,
-                          long hiveScoutInitialStagger, long hiveStrategicInitialReviewTick, long settlementInitialStagger,
-                          long hiveTerritoryKnowledgeMaxAge, long hiveSettlementKnowledgeMaxAge) {
+    public record Cadence(long resourceInitialPreparationTick,
+                          long resourceGrowthStageInterval,
+                          long resourceHarvestTraversalInterval,
+                          long resourceHarvestRetryInterval,
+                          long companyFoundationReviewInterval,
+                          long strategicReviewInterval,
+                          long populationBirthReviewInterval,
+                          long populationBirthCompletionDelay,
+                          long provisionInitialReviewTick,
+                          long provisionReviewInterval,
+                          long migrationReviewInterval,
+                          long migrationStepInterval,
+                          long humanHealthProgressionDelay,
+                          long marketRetryInterval,
+                          long marketDemandLifetime,
+                          long hiveInfectionPulseInterval,
+                          long hiveScoutPatrolInterval,
+                          long hiveNutrientTransferStepInterval,
+                          long hivePerceptionRefreshInterval,
+                          long hiveSettlementAssaultStepInterval,
+                          long hiveSettlementAssaultCombatInterval,
+                          long routePatrolStepInterval,
+                          long transportReviewInterval,
+                          long decontaminationScanInterval,
+                          long structuralRepairScanInterval,
+                          long routeConstructionScanInterval,
+                          long structuralRepairInitialScanTick,
+                          long routeConstructionInitialScanTick,
+                          long decontaminationInitialScanTick,
+                          long settlementStrategicInitialReviewTick,
+                          long populationBirthInitialReviewTick,
+                          long companyFoundationInitialReviewTick,
+                          long populationMigrationInitialReviewTick,
+                          long hiveScoutInitialPatrolTick,
+                          long hiveScoutInitialStagger,
+                          long hiveStrategicInitialReviewTick,
+                          long settlementInitialStagger,
+                          long hiveTerritoryKnowledgeMaxAge,
+                          long hiveSettlementKnowledgeMaxAge) {
         public Cadence {
             requirePositive(resourceInitialPreparationTick, "resource initial preparation tick");
             requirePositive(resourceGrowthStageInterval, "resource growth stage interval");
@@ -233,12 +272,10 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             requirePositive(hiveScoutPatrolInterval, "hive scout patrol interval");
             requirePositive(hiveNutrientTransferStepInterval, "hive nutrient transfer step interval");
             requirePositive(hivePerceptionRefreshInterval, "hive perception refresh interval");
-            requirePositive(hiveRouteEngagementStepInterval, "hive route engagement step interval");
-            requirePositive(hiveRouteEngagementCombatInterval, "hive route engagement combat interval");
             requirePositive(hiveSettlementAssaultStepInterval, "hive settlement assault step interval");
             requirePositive(hiveSettlementAssaultCombatInterval, "hive settlement assault combat interval");
             requirePositive(routePatrolStepInterval, "route patrol step interval");
-            requirePositive(terminalLogisticsReviewInterval, "terminal logistics review interval");
+            requirePositive(transportReviewInterval, "transport review interval");
             requirePositive(decontaminationScanInterval, "decontamination scan interval");
             requirePositive(structuralRepairScanInterval, "structural repair scan interval");
             requirePositive(routeConstructionScanInterval, "route construction scan interval");
@@ -249,7 +286,6 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             requirePositive(populationBirthInitialReviewTick, "population birth initial review tick");
             requirePositive(companyFoundationInitialReviewTick, "company foundation initial review tick");
             requirePositive(populationMigrationInitialReviewTick, "population migration initial review tick");
-            requirePositive(terminalLogisticsInitialReviewTick, "terminal logistics initial review tick");
             requirePositive(hiveScoutInitialPatrolTick, "hive scout initial patrol tick");
             requirePositive(hiveScoutInitialStagger, "hive scout initial stagger");
             requirePositive(hiveStrategicInitialReviewTick, "hive strategic initial review tick");
@@ -262,39 +298,42 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                     + "," + strategicReviewInterval + "," + populationBirthReviewInterval + "," + populationBirthCompletionDelay + "," + provisionInitialReviewTick
                     + "," + provisionReviewInterval + "," + migrationReviewInterval + "," + migrationStepInterval + "," + humanHealthProgressionDelay
                     + "," + marketRetryInterval + "," + marketDemandLifetime + "," + hiveInfectionPulseInterval + "," + hiveScoutPatrolInterval
-                    + "," + hiveNutrientTransferStepInterval + "," + hivePerceptionRefreshInterval + "," + hiveRouteEngagementStepInterval + "," + hiveRouteEngagementCombatInterval
-                    + "," + hiveSettlementAssaultStepInterval + "," + hiveSettlementAssaultCombatInterval + "," + routePatrolStepInterval + "," + terminalLogisticsReviewInterval
+                    + "," + hiveNutrientTransferStepInterval + "," + hivePerceptionRefreshInterval
+                    + "," + hiveSettlementAssaultStepInterval + "," + hiveSettlementAssaultCombatInterval + "," + routePatrolStepInterval + "," + transportReviewInterval
                     + "," + decontaminationScanInterval + "," + structuralRepairScanInterval + "," + routeConstructionScanInterval
                     + "," + structuralRepairInitialScanTick + "," + routeConstructionInitialScanTick + "," + decontaminationInitialScanTick
                     + "," + settlementStrategicInitialReviewTick + "," + populationBirthInitialReviewTick + "," + companyFoundationInitialReviewTick
-                    + "," + populationMigrationInitialReviewTick + "," + terminalLogisticsInitialReviewTick + "," + hiveScoutInitialPatrolTick
+                    + "," + populationMigrationInitialReviewTick + "," + hiveScoutInitialPatrolTick
                     + "," + hiveScoutInitialStagger + "," + hiveStrategicInitialReviewTick + "," + settlementInitialStagger
                     + "," + hiveTerritoryKnowledgeMaxAge + "," + hiveSettlementKnowledgeMaxAge;
         }
     }
 
     /** World-scale distances and COLD movement strides used by the canonical process layer. */
-    public record Spatial(int decontaminationResponseRadius, int settlementInfectionRadius, int hivePerceptionRadius,
-                          int hiveTerritoryGanglionRadius, int hiveTerritoryScoutRadius, int hiveSettlementSightRadius,
-                          int hiveScoutPatrolRadius, int hiveScoutPatrolStep, int hiveRouteEngagementColdStepBlocks,
-                          int hiveSettlementAssaultTerritoryRadius, int hiveSettlementAssaultColdStepBlocks) {
+    public record Spatial(int decontaminationResponseRadius,
+                          int settlementInfectionRadius,
+                          int hiveTerritoryGanglionRadius,
+                          int hiveTerritoryScoutRadius,
+                          int hiveSettlementSightRadius,
+                          int hiveScoutPatrolRadius,
+                          int hiveScoutPatrolStep,
+                          int hiveSettlementAssaultTerritoryRadius,
+                          int hiveSettlementAssaultColdStepBlocks) {
         public Spatial {
             requirePositive(decontaminationResponseRadius, "decontamination response radius");
             requirePositive(settlementInfectionRadius, "settlement infection radius");
-            requirePositive(hivePerceptionRadius, "hive perception radius");
             requirePositive(hiveTerritoryGanglionRadius, "hive territory ganglion radius");
             requirePositive(hiveTerritoryScoutRadius, "hive territory scout radius");
             requirePositive(hiveSettlementSightRadius, "hive settlement sight radius");
             requirePositive(hiveScoutPatrolRadius, "hive scout patrol radius");
             requirePositive(hiveScoutPatrolStep, "hive scout patrol step");
-            requirePositive(hiveRouteEngagementColdStepBlocks, "hive route engagement COLD step");
             requirePositive(hiveSettlementAssaultTerritoryRadius, "hive settlement assault territory radius");
             requirePositive(hiveSettlementAssaultColdStepBlocks, "hive settlement assault COLD step");
         }
         private String canonicalText() {
-            return decontaminationResponseRadius + "," + settlementInfectionRadius + "," + hivePerceptionRadius + "," + hiveTerritoryGanglionRadius
+            return decontaminationResponseRadius + "," + settlementInfectionRadius + "," + hiveTerritoryGanglionRadius
                     + "," + hiveTerritoryScoutRadius + "," + hiveSettlementSightRadius + "," + hiveScoutPatrolRadius + "," + hiveScoutPatrolStep
-                    + "," + hiveRouteEngagementColdStepBlocks + "," + hiveSettlementAssaultTerritoryRadius + "," + hiveSettlementAssaultColdStepBlocks;
+                    + "," + hiveSettlementAssaultTerritoryRadius + "," + hiveSettlementAssaultColdStepBlocks;
         }
     }
 

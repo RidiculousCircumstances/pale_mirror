@@ -36,22 +36,22 @@ public final class FrontierV3SettlementServiceInputIssueGameTests {
         SubjectId container = new SubjectId("container:service-input-game-test"), itemId = new SubjectId("item:service-reagent-game-test");
         InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(container, 0);
         ExactItemStack reagent = new ExactItemStack(itemId, new SubjectId("settlement:northwatch"), "minecraft:glowstone_dust", 1, slot);
-        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(reagent));
+        chest.setItem(0, FrontierV3ExactItemPresentation.materializedStack(reagent));
         helper.assertTrue(FrontierV3SettlementServiceInputIssueExecutor.handOff(chest, worker, reagent, slot),
                 "the exact declared reagent leaves its depot slot only for the empty named worker hand");
-        helper.assertTrue(chest.getItem(0).isEmpty() && FrontierV3CargoHandoffExecutor.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), reagent),
+        helper.assertTrue(chest.getItem(0).isEmpty() && FrontierV3ExactItemPresentation.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), reagent),
                 "the completed hand-off has one inspectable empty source and the same tagged worker stack");
-        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(reagent)); worker.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance());
+        chest.setItem(0, FrontierV3ExactItemPresentation.materializedStack(reagent)); worker.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance());
         helper.assertTrue(!FrontierV3SettlementServiceInputIssueExecutor.handOff(chest, worker, reagent, slot),
                 "a nonempty worker hand is player/world conflict evidence and is never overwritten");
         chest.setItem(0, net.minecraft.world.item.ItemStack.EMPTY);
-        worker.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(reagent));
+        worker.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3ExactItemPresentation.materializedStack(reagent));
         helper.assertTrue(FrontierV3ActorItemTransfer.place(chest, worker, reagent, slot, EquipmentSlot.MAINHAND),
                 "the same tagged stack can return from the named hand to one empty declared slot");
         helper.assertTrue(worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()
-                        && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(0), reagent),
+                        && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(0), reagent),
                 "a placed stack has one physical holder after the transfer");
-        worker.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(reagent));
+        worker.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3ExactItemPresentation.materializedStack(reagent));
         helper.assertTrue(!FrontierV3ActorItemTransfer.place(chest, worker, reagent, slot, EquipmentSlot.MAINHAND),
                 "an occupied destination cannot be overwritten or duplicate the actor's carried stack");
         // The full suite reuses a dense test grid and the village-observer test deliberately

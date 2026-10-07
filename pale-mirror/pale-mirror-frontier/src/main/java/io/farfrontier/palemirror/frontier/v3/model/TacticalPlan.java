@@ -50,18 +50,6 @@ public record TacticalPlan(SubjectId id, SubjectId operationId, SubjectId author
         return plans.currentDecisionAuthority(authorityId, authorityEpoch);
     }
 
-    public static TacticalPlan cargoEscort(SubjectId operationId, SubjectId authorityId, long authorityEpoch, RouteUnitManifest unit,
-                                           List<BlockPosition> route) {
-        java.util.Map<SubjectId, TacticalRole> roles = new java.util.LinkedHashMap<>();
-        for (SubjectId member : unit.memberIds()) roles.put(member, member.equals(unit.cargoCrewId()) ? TacticalRole.CARGO_CARRIER
-                : member.equals(unit.leaderId()) ? TacticalRole.LEADER : TacticalRole.ESCORT);
-        String operationSuffix = operationId.value().substring(operationId.value().indexOf(':') + 1);
-        return new TacticalPlan(new SubjectId("plan:" + operationSuffix), operationId, authorityId,
-                authorityEpoch, 0L, TacticalPolicyRegistry.CARGO_ESCORT, TacticalPlanPhase.ASSEMBLE,
-                List.of(operationId), roles, List.of(TacticalBehaviour.HOLD_FORMATION, TacticalBehaviour.ADVANCE_CHECKPOINT,
-                TacticalBehaviour.DEFEND_CARGO, TacticalBehaviour.OBSERVE_OBSTRUCTION, TacticalBehaviour.RETREAT_TO_PORT),
-                route.getFirst(), route.getLast(), route.getFirst());
-    }
 
     public static TacticalPlan routePatrol(StrategicTask task, RouteUnitManifest unit, List<BlockPosition> route) {
         Objects.requireNonNull(task, "patrol tactical task"); Objects.requireNonNull(unit, "patrol tactical unit");

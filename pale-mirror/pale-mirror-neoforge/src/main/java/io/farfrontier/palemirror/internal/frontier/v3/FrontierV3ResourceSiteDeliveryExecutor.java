@@ -154,8 +154,8 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) continue;
             BlockPos position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
             if (!level.hasChunkAt(position) || !level.shouldTickBlocksAt(position)) continue;
-            ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
-                    new FrontierV3CargoHandoffExecutor.StoreTarget(position, depot));
+            ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,
+                    new FrontierV3ExactItemPresentation.StoreTarget(position, depot));
             if (chest == null) continue;
             PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(depot);
             PhysicalCustodyLease custody = state.replicaCustody().custodyByScope()
@@ -342,8 +342,8 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) return null;
         BlockPos position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
         if (!level.hasChunkAt(position) || !level.shouldTickBlocksAt(position)) return null;
-        return FrontierV3CargoHandoffExecutor.activeChest(level,
-                new FrontierV3CargoHandoffExecutor.StoreTarget(position, depot));
+        return FrontierV3ExactItemPresentation.activeChest(level,
+                new FrontierV3ExactItemPresentation.StoreTarget(position, depot));
     }
 
     private static ChestState classify(FrontierWorldState state, ChestBlockEntity chest, SubjectId depot,
@@ -366,7 +366,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             }
             ExactItemStack exact = state.inventory().itemAt(depot, slot).orElse(null);
             if (exact != null) {
-                if (!FrontierV3CargoHandoffExecutor.exactMatch(stack, exact)) return ChestState.FOREIGN;
+                if (!FrontierV3ExactItemPresentation.exactMatch(stack, exact)) return ChestState.FOREIGN;
                 observed.add(new ReferenceContainerCustody.ObservedSlot(slot, exact.id().value(), exact.itemKind(), exact.count()));
                 continue;
             }

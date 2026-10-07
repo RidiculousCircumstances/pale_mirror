@@ -43,8 +43,8 @@ public final class FrontierMigrationCorridor {
                 .filter(position -> !position.equals(arrival))
                 .forEach(blocked::add);
         List<BlockPosition> anchors = new ArrayList<>();
-        appendSupplyLaneAnchors(anchors, state.routeTopology().supplyWaypoints(state.bootstrap(), source.id()), false, blocked, state.bootstrap().bounds());
-        appendSupplyLaneAnchors(anchors, state.routeTopology().supplyWaypoints(state.bootstrap(), destination.id()), true, blocked, state.bootstrap().bounds());
+        appendSettlementLaneAnchors(anchors, state.routeTopology().settlementWaypoints(state.bootstrap(), source.id()), false, blocked, state.bootstrap().bounds());
+        appendSettlementLaneAnchors(anchors, state.routeTopology().settlementWaypoints(state.bootstrap(), destination.id()), true, blocked, state.bootstrap().bounds());
         anchors.add(arrival);
         List<BlockPosition> route = new ArrayList<>(); route.add(start);
         blocked.remove(start);
@@ -57,12 +57,12 @@ public final class FrontierMigrationCorridor {
         return List.copyOf(route);
     }
 
-    private static void appendSupplyLaneAnchors(List<BlockPosition> anchors, List<BlockPosition> supply, boolean reverse,
+    private static void appendSettlementLaneAnchors(List<BlockPosition> anchors, List<BlockPosition> settlementRoute, boolean reverse,
                                                  Set<BlockPosition> blocked, WorldBounds bounds) {
         if (reverse) {
-            for (int index = supply.size() - 1; index >= 1; index--) anchors.add(nearestClearLane(bounds, blocked, supply.get(index)));
+            for (int index = settlementRoute.size() - 1; index >= 1; index--) anchors.add(nearestClearLane(bounds, blocked, settlementRoute.get(index)));
         } else {
-            for (int index = 1; index < supply.size(); index++) anchors.add(nearestClearLane(bounds, blocked, supply.get(index)));
+            for (int index = 1; index < settlementRoute.size(); index++) anchors.add(nearestClearLane(bounds, blocked, settlementRoute.get(index)));
         }
     }
 

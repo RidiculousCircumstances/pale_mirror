@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
 
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
@@ -42,13 +43,17 @@ public final class ExplosionStateSupport {
         if (!bomber.isExplosiveAssaulter() || state.actorLocations().get(bomber.id()).condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("explosion cause must be one living bomber bioform");
         }
-        SceneLease lease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(value -> value.status() == SceneLeaseStatus.HOT)
-                .filter(value -> FrontierSceneBehaviors.logistics(value).engagementId().isPresent()).filter(value -> value.members().stream().anyMatch(member -> member.actorId().equals(bomber.id())))
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("explosion requires one HOT bomber scene"));
-        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(FrontierSceneBehaviors.logistics(lease).engagementId().orElseThrow());
-        if (engagement == null || engagement.status() != RouteEngagementStatus.HOT || !engagement.attackerIds().contains(bomber.id())
-                || !intent.roles().equals(PhysicalIntentRoleBinding.explosion(bomber.id(), engagement.id()))) {
-            throw new IllegalArgumentException("explosion must bind its exact HOT bomber and engagement");
+        SubjectId assaultId = intent.roles().require(PhysicalIntentSubjectRole.ENGAGEMENT);
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(assaultId);
+        boolean hot = state.sceneLeases().values().stream()
+                .filter(FrontierSceneBehaviors::isSettlementAssault)
+                .anyMatch(lease -> lease.status() == SceneLeaseStatus.HOT
+                        && FrontierSceneBehaviors.settlementAssault(lease).assaultId().equals(assaultId)
+                        && lease.members().stream().anyMatch(member -> member.actorId().equals(bomber.id())));
+        if (assault == null || assault.status() != SettlementAssaultStatus.HOT || !hot
+                || !assault.attackerIds().contains(bomber.id())
+                || !intent.roles().equals(PhysicalIntentRoleBinding.explosion(bomber.id(), assaultId))) {
+            throw new IllegalArgumentException("explosion must bind its exact HOT bomber and settlement assault");
         }
     }
 

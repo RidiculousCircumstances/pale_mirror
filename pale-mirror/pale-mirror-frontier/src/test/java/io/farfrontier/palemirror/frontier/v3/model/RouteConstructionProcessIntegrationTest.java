@@ -26,7 +26,7 @@ class RouteConstructionProcessIntegrationTest {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 100L));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
-        BlockPosition loss = initial.routeTopology().supplyWaypoints(initial.bootstrap(), settlement).get(1);
+        BlockPosition loss = initial.routeTopology().settlementWaypoints(initial.bootstrap(), settlement).get(1);
         PhysicalDelta delta = new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)),
                 Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "blast:test");
         CommandId commandId = new CommandId("command:route-reroute-loss");
@@ -53,7 +53,7 @@ class RouteConstructionProcessIntegrationTest {
         assertEquals(team, restored.routeMaintenances().get(candidate.id()).team());
         assertEquals(assignments, HumanAssignmentProjection.compile(restored));
         assertTrue(after.routeConstructions().isEmpty(), "one retained baseline loss may not become a concurrent bypass project");
-        assertTrue(!after.routeTopology().supplyPassable(after.bootstrap(), settlement), "unrepaired loss must retain its blocked edge");
+        assertTrue(!after.routeTopology().routePassable(after.bootstrap(), settlement), "unrepaired loss must retain its blocked edge");
         assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement)
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().equals(Optional.of(loss))));
     }

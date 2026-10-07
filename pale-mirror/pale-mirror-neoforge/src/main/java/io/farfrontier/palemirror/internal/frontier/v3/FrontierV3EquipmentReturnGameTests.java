@@ -34,13 +34,13 @@ public final class FrontierV3EquipmentReturnGameTests {
         SubjectId container = new SubjectId("container:equipment-return-game-test"), itemId = new SubjectId("item:equipment-return-game-test");
         ExactItemStack sword = new ExactItemStack(itemId, new SubjectId("settlement:northwatch"), "minecraft:iron_sword", 1,
                 new InventoryCustody.Actor(new SubjectId("resident:equipment-return-game-test")));
-        resident.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(sword));
+        resident.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3ExactItemPresentation.materializedStack(sword));
         FrontierV3EquipmentReturnExecutor.Target target = new FrontierV3EquipmentReturnExecutor.Target(new SubjectId("assault:equipment-return-game-test"),
                 new SubjectId("resident:equipment-return-game-test"), sword, new InventoryCustody.ContainerSlot(container, 0), position);
         helper.assertTrue(FrontierV3EquipmentReturnExecutor.handOff(chest, resident, target), "the exact tagged defender stack moves only to its named empty depot slot");
-        helper.assertTrue(resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty() && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(0), sword),
+        helper.assertTrue(resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty() && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(0), sword),
                 "restart inspection can prove one empty hand and the same exact depot stack");
-        resident.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(sword)); chest.setItem(0, Items.STICK.getDefaultInstance());
+        resident.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3ExactItemPresentation.materializedStack(sword)); chest.setItem(0, Items.STICK.getDefaultInstance());
         helper.assertTrue(!FrontierV3EquipmentReturnExecutor.handOff(chest, resident, target), "a changed target slot is conflict evidence and is never overwritten");
         helper.assertTrue(FrontierV3EquipmentReturnExecutor.commandId("running", new Revision(9_876L)).value()
                         .equals("executor:equipment-return-running-r9876"),

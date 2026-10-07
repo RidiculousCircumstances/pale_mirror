@@ -56,7 +56,7 @@ final class FrontierV3DecontaminationExecutor {
             return;
         }
         if (target.markers().stream().anyMatch(position -> !level.hasChunkAt(position)) || !level.hasChunkAt(target.chestPosition())) return;
-        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level, new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.containerId()));
+        ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level, new FrontierV3ExactItemPresentation.StoreTarget(target.chestPosition(), target.containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target, chest); return; }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
@@ -72,7 +72,7 @@ final class FrontierV3DecontaminationExecutor {
 
     private static boolean consumed(ItemStack stack, Target target) {
         return target.material().count() == 1 ? stack.isEmpty() : stack.getCount() == target.material().count() - 1
-                && FrontierV3CargoHandoffExecutor.itemId(stack).equals(Optional.of(target.material().id()));
+                && FrontierV3ExactItemPresentation.itemId(stack).equals(Optional.of(target.material().id()));
     }
 
     /** Rebuilds only our own SavedData claim from an already-measured completed effect after a crash. */
@@ -101,7 +101,7 @@ final class FrontierV3DecontaminationExecutor {
         FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(target.cell()); ItemStack stack = chest.getItem(target.slot());
         if (claim == null || !claim.active() || claim.stage() != target.priorStage()
                 || target.markers().stream().anyMatch(position -> !level.getBlockState(position).equals(FrontierV3InfectionOverlayExecutor.material(target.priorStage())))
-                || !FrontierV3CargoHandoffExecutor.exactMatch(stack, target.material())) return false;
+                || !FrontierV3ExactItemPresentation.exactMatch(stack, target.material())) return false;
         if (target.remainingRaw() == 0L) {
             if (!replace(level, target.markers(), Blocks.AIR.defaultBlockState())) return false;
             ledger.clearedByEffect(target.cell());

@@ -31,7 +31,6 @@ historical_surface_active_references:
   max_total: 35
   allowed_files:
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ReferenceSurfaceRecovery.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/CargoLoadingStateSupport.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/DecontaminationStateSupport.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/EngineeringEquipmentStateSupport.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/EquipmentIssueStateSupport.java: 1
@@ -57,7 +56,6 @@ historical_surface_active_references:
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/SettlementProvisionProcess.java: 2
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/SettlementServiceWorkProcess.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/StructuralRepairProcess.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/SupplyOperationProcess.java: 2
 max_production_development_configurations: 0
 max_lifecycle_fixture_profile_branches: 0
 max_process_classes_in_model: 0

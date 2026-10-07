@@ -15,13 +15,13 @@ import java.util.Map;
 public final class RouteTopologyStateCodec {
     private RouteTopologyStateCodec() { }
     public static void write(DataOutputStream output, RouteTopology topology) throws IOException {
-        List<Map.Entry<SubjectId, List<BlockPosition>>> routes = topology.replacementSupplyRoutes().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList();
+        List<Map.Entry<SubjectId, List<BlockPosition>>> routes = topology.replacementRoutes().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList();
         output.writeByte(routes.size());
         for (Map.Entry<SubjectId, List<BlockPosition>> route : routes) {
             FrontierWorldStateCodec.writeString(output, route.getKey().value()); output.writeByte(route.getValue().size());
             for (BlockPosition point : route.getValue()) FrontierWorldStateCodec.writePosition(output, point);
         }
-        List<Map.Entry<SubjectId, Map<TraversalEdgeId, TraversalAvailability>>> availability = topology.supplyAvailability().entrySet().stream()
+        List<Map.Entry<SubjectId, Map<TraversalEdgeId, TraversalAvailability>>> availability = topology.routeAvailability().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey()).toList();
         output.writeByte(availability.size());
         for (Map.Entry<SubjectId, Map<TraversalEdgeId, TraversalAvailability>> entry : availability) {
@@ -41,7 +41,7 @@ public final class RouteTopologyStateCodec {
             }
             java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
             for (int point = 0; point < length; point++) route.add(FrontierWorldStateCodec.readPosition(input));
-            FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route);
+            FrontierRouteNetwork.validateSettlementWaypoints(bootstrap, settlement, route);
             if (routes.put(settlement, List.copyOf(route)) != null) throw new IllegalArgumentException("duplicate replacement route settlement");
         }
         Map<SubjectId, Map<TraversalEdgeId, TraversalAvailability>> availability = new LinkedHashMap<>();
@@ -61,7 +61,7 @@ public final class RouteTopologyStateCodec {
         }
         RouteTopology topology = new RouteTopology(routes, availability);
         for (SubjectId settlement : availability.keySet()) {
-            topology.supplyTraversalTopology(bootstrap, settlement);
+            topology.settlementTraversalTopology(bootstrap, settlement);
         }
         return topology;
     }

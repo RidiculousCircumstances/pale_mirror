@@ -62,13 +62,13 @@ public final class HiveNutrientTransferStateSupport {
         }
         boolean physicalDeparture = state.inventory().surfaces().get(transfer.sourceStoreId()).status() != ContainerSurfaceStatus.UNMATERIALIZED;
         ExactInventory inventory = physicalDeparture ? state.inventory() : state.inventory().loadCargo(new CargoBatch(transfer.cargoId(), transfer.hiveId(), List.of(transfer.itemId())));
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(),
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().startNutrientTransfer(transfer), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
     public static FrontierWorldState advance(FrontierWorldState state, SubjectId transferId, int cursor) {
         HiveNutrientTransfer transfer = requireTransit(state, transferId); validateTransit(state, transfer);
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().advanceNutrientTransfer(transferId, cursor), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
@@ -80,13 +80,13 @@ public final class HiveNutrientTransferStateSupport {
         ExactInventory inventory = transfer.fungibleContents()
                 ? state.inventory().completeFungibleCargoHandoff(transfer.cargoId(), transfer.targetStoreId())
                 : state.inventory().completeCargoHandoff(transfer.cargoId(), List.of(new CargoHandoffPlacement(transfer.itemId(), transfer.targetSlot())));
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(),
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().completeNutrientTransfer(receipt), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
     public static FrontierWorldState block(FrontierWorldState state, SubjectId transferId, HiveNutrientTransferBlockReason reason) {
         requireUnblocked(state, transferId);
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().blockNutrientTransfer(transferId, reason), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
@@ -130,12 +130,12 @@ public final class HiveNutrientTransferStateSupport {
             if (!liveSource || state.inventory().fungibleResources().bindings().values().stream().noneMatch(binding -> binding.accountId().equals(source.id()))) {
                 throw new IllegalArgumentException("fungible hive nutrient departure has no current source binding");
             }
-            return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
+            return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                     state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().startNutrientTransfer(transfer), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
         }
         if (liveSource) throw new IllegalArgumentException("fungible hive nutrient COLD departure retains live source custody");
         ExactInventory inventory = state.inventory().loadFungibleCargo(CargoBatch.fungible(transfer.cargoId(), transfer.hiveId()), source.id(), Map.of(transfer.itemId(), 64), Map.of());
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(),
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().startNutrientTransfer(transfer), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
@@ -164,7 +164,7 @@ public final class HiveNutrientTransferStateSupport {
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new java.util.LinkedHashMap<>(state.physicalObservations()); observations.put(observed.id(), observed);
         ExactInventory inventory = state.inventory().loadCargo(new CargoBatch(transfer.cargoId(), transfer.hiveId(), List.of(transfer.itemId())));
         HiveColony colony = state.hiveColony().advanceNutrientTransferState(transfer.id(), transfer.departed());
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(), intents,
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), intents,
                 observations, state.sceneLeases(), colony, state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
@@ -187,7 +187,7 @@ public final class HiveNutrientTransferStateSupport {
         ExactInventory inventory = state.inventory().loadObservedFungibleCargo(CargoBatch.fungible(transfer.cargoId(), transfer.hiveId()), source.id(),
                 observed.authorityEpoch(), Map.of(lot.id(), observed.quantity()), Map.of(), observed.remainingStacks());
         HiveColony colony = state.hiveColony().advanceNutrientTransferState(transfer.id(), transfer.departed());
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(), intents,
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), intents,
                 observations, state.sceneLeases(), colony, state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
@@ -204,7 +204,7 @@ public final class HiveNutrientTransferStateSupport {
         intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observed.id())));
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new java.util.LinkedHashMap<>(state.physicalObservations()); observations.put(observed.id(), observed);
         ExactInventory inventory = state.inventory().completeCargoHandoff(transfer.cargoId(), List.of(new CargoHandoffPlacement(transfer.itemId(), transfer.targetSlot())));
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(), intents,
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), intents,
                 observations, state.sceneLeases(), state.hiveColony().completeNutrientTransfer(receipt), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
@@ -220,7 +220,7 @@ public final class HiveNutrientTransferStateSupport {
         intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observed.id())));
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new java.util.LinkedHashMap<>(state.physicalObservations()); observations.put(observed.id(), observed);
         ExactInventory inventory = state.inventory().completeObservedFungibleCargoHandoff(transfer.cargoId(), transfer.targetStoreId(), observed.authorityEpoch(), observed.stacks());
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(), intents,
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), intents,
                 observations, state.sceneLeases(), state.hiveColony().completeNutrientTransfer(receipt), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
@@ -245,7 +245,7 @@ public final class HiveNutrientTransferStateSupport {
                 .filter(value -> value.endpointIntentId().equals(java.util.Optional.of(intent.id()))).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("hive endpoint intent has no transfer"));
         intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.HIVE_NUTRIENT_TRANSFER.stamp(intent)));
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(), intents,
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), intents,
                 state.physicalObservations(), state.sceneLeases(), state.hiveColony().blockNutrientTransfer(transfer.id(), HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST),
                 state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }

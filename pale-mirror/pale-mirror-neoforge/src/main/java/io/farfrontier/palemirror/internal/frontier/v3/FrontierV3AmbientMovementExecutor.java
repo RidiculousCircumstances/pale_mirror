@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMealServiceAccess;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.OperationExecutionAuthority;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
@@ -44,18 +43,12 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.HiveTaskAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody;
 import io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess;
-import io.farfrontier.palemirror.frontier.v3.model.OperationAssembly;
-import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferral;
-import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyAdvanced;
-import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferred;
-import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkOrder;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionAssemblyAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenance;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceAssemblyAdvanced;
-import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.Settlement;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAccessPort;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementStructure;
@@ -184,44 +177,6 @@ final class FrontierV3AmbientMovementExecutor {
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN) {
             return FrontierV3HiveReturnMotion.pursue(level, runtime, state, actorId, body, lease, actuation);
         }
-        if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
-            OperationAssembly.Member member = assemblyMember(state, actorId, lease);
-            if (member == null) {
-                FrontierV3GoalNavigation.stop(body, actuation);
-                return false;
-            }
-            RouteOperation operation = assemblingOperation(state, actorId);
-            OperationAssembly assembly = operation.activeAssembly().orElseThrow();
-            if (assembly.deferral().isPresent() && !assembly.deferral().orElseThrow().actorId().equals(actorId)) {
-                FrontierV3GoalNavigation.stop(body, actuation);
-                return false;
-            }
-            if (!assembly.safeAdvances().contains(actorId)) {
-                FrontierV3GoalNavigation.stop(body, actuation);
-                return false;
-            }
-            BlockPosition obstruction = assemblyObstruction(level, state, operation, lease.goalBody().supportingSurface().support());
-            if (obstruction != null) {
-                OperationAssemblyDeferral deferral = new OperationAssemblyDeferral(actorId, lease.goalBody().supportingSurface(), new SurfaceAnchor(obstruction),
-                        OperationAssemblyDeferral.Reason.LOADED_WORLD_OBSTRUCTION);
-                if (!assembly.deferral().filter(deferral::equals).isPresent()) {
-                    io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly-deferred", actorId.value(),
-                            new OperationAssemblyDeferred(operation.id(), deferral, OperationExecutionAuthority.assemblyCurrent(state, operation)));
-                    FrontierV3DiagnosticTrace.record(level.getServer(), "operation-assembly:" + operation.id().value(), "operation_assembly_deferred", actorId, result);
-                    FrontierV3GoalNavigation.stop(body, actuation);
-                    return true;
-                }
-                FrontierV3GoalNavigation.stop(body, actuation);
-                return false;
-            }
-            BlockPos physicalTarget = minecraftBody(lease.goalBody());
-            if (!level.hasChunkAt(physicalTarget) || !FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
-                FrontierV3GoalNavigation.stop(body, actuation);
-                return false;
-            }
-            pursueDeclaredGoal(level, state, body, lease, actuation);
-            return false;
-        }
         if (lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
             EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, lease);
             if (member == null || member.arrived()) {
@@ -319,7 +274,6 @@ final class FrontierV3AmbientMovementExecutor {
             }
             return FrontierV3ResidentMealPhysicalEffect.tick(level, runtime, state, actorId, body, lease);
         }
-        if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) return observeAssemblyArrival(level, runtime, state, actorId, body, lease, actuation);
         if (lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) return observeEngineeringAssemblyArrival(level, runtime, state, actorId, body, lease, actuation);
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_ASSEMBLY) return observeHiveAssemblyArrival(level, runtime, state, actorId, body, lease, actuation);
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN) return FrontierV3HiveReturnMotion.observeArrival(level, runtime, state, actorId, body, lease, actuation);
@@ -339,23 +293,6 @@ final class FrontierV3AmbientMovementExecutor {
                 new ResidentTransitAdvanced(actorId, journey.nextRouteIndex(), journey.routeRevision(), lease.revision(),
                         journey.executionId(), actuation.id().body()));
         FrontierV3DiagnosticTrace.record(level.getServer(), "resident-transit:" + actorId.value(), "resident_transit_advanced", actorId, result);
-        return true;
-    }
-    private static boolean observeAssemblyArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
-                                                   SubjectId actorId, Mob body, AmbientActorLease lease, FrontierV3ActorActuation actuation) {
-        OperationAssembly.Member member = assemblyMember(state, actorId, lease);
-        if (member == null || member.arrived()
-                || !FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())) return false;
-        RouteOperation operation = assemblingOperation(state, actorId); OperationAssembly assembly = operation.activeAssembly().orElseThrow();
-        if (!assembly.safeAdvances().contains(actorId)) {
-            FrontierV3GoalNavigation.stop(body, actuation);
-            return false;
-        }
-        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return false;
-        io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly", actorId.value(),
-                new OperationAssemblyAdvanced(operation.id(), assembly.advance(actorId), OperationExecutionAuthority.assemblyCurrent(state, operation),
-                        Optional.of(new OperationAssemblyAdvanced.HotArrival(actuation.id().body(), lease.revision()))));
-        FrontierV3DiagnosticTrace.record(level.getServer(), "operation-assembly:" + operation.id().value(), "operation_assembly_advanced", actorId, result);
         return true;
     }
     private static boolean observeEngineeringAssemblyArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -410,23 +347,6 @@ final class FrontierV3AmbientMovementExecutor {
                 receipt);
         FrontierV3DiagnosticTrace.record(level.getServer(), "scout-patrol:" + actorId.value(), "scout_patrol_advanced", actorId, result);
         return true;
-    }
-    private static RouteOperation assemblingOperation(FrontierWorldState state, SubjectId actorId) {
-        return OperationExecutionAuthority.assemblyOwner(state, actorId).orElse(null);
-    }
-    private static BlockPosition assemblyObstruction(ServerLevel level, FrontierWorldState state, RouteOperation operation, BlockPosition target) {
-        if (!FrontierV3StandingPosition.hasExactStandingColumn(level, target)) return target;
-        Settlement settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(operation.settlementId())).findFirst().orElse(null);
-        SettlementStructure hall = settlement == null ? null : settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst().orElse(null);
-        BlockPosition throat = hall == null ? null : SettlementAccessPort.forHall(hall).throatSurface().support();
-        return throat != null && !FrontierV3StandingPosition.hasExactStandingColumn(level, throat) ? throat : null;
-    }
-    static OperationAssembly.Member assemblyMember(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
-        RouteOperation operation = assemblingOperation(state, actorId);
-        if (operation == null || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY) return null;
-        OperationAssembly.Member member = operation.activeAssembly().orElseThrow().members().get(actorId);
-        SurfaceAnchor expected = member.arrived() ? member.currentSurface() : member.nextSurface();
-        return lease.goalBody().equals(expected.standingBody()) ? member : null;
     }
     private static EngineeringWorkOrder engineeringProject(FrontierWorldState state, SubjectId actorId) {
         return io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionAuthority.owner(state, actorId)

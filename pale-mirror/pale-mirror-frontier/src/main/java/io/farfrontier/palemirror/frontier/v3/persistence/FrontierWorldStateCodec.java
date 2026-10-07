@@ -85,9 +85,6 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 DiagnosticIncidentIndexCodec.write(output, state.diagnosticIncidents());
                 ProductionJobStateCodec.write(output, state.productionJobs());
                 SettlementServiceWorkStateCodec.write(output, state.serviceWorks());
-                writeContracts(output, state.contracts());
-                writeOperations(output, state.operations());
-                writeLogisticsHistory(output, state.logisticsHistory());
                 PhysicalIntentStateCodec.write(output, state.physicalIntents());
                 PhysicalEffectObservationStateCodec.write(output, state.physicalObservations());
                 SceneLeaseStateCodec.write(output, state.sceneLeases());
@@ -102,6 +99,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 ActorExecutionStateCodec.write(output, state.actorExecutions());
                 ShipmentStateCodec.write(output, state.shipments());
                 UnitGroupStateCodec.write(output, state.unitGroups());
+                TransportFleetStateCodec.write(output, state.transportFleet());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -131,8 +129,6 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             DiagnosticIncidentIndex diagnosticIncidents = DiagnosticIncidentIndexCodec.read(input);
             Map<SubjectId, ProductionJob> jobs = ProductionJobStateCodec.read(input);
             Map<SubjectId, SettlementServiceWork> serviceWorks = SettlementServiceWorkStateCodec.read(input);
-            Map<SubjectId, SupplyContract> contracts = readContracts(input); Map<SubjectId, RouteOperation> operations = readOperations(input, true, true, true, true, true, true, true);
-            LogisticsHistory history = readLogisticsHistory(input);
             Map<PhysicalIntentId, PhysicalIntent> intents = PhysicalIntentStateCodec.read(input, true);
             Map<PhysicalObservationId, PhysicalEffectObservation> observations = PhysicalEffectObservationStateCodec.read(input);
             Map<SceneLeaseId, SceneLease> scenes = SceneLeaseStateCodec.read(input); Map<SubjectId, AmbientActorLease> ambient = AmbientLeaseStateCodec.read(input);
@@ -140,13 +136,15 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<SubjectId, RouteMaintenance> maintenances = RouteMaintenanceStateCodec.read(input);
             RouteTopology topology = RouteTopologyStateCodec.read(input, bootstrap);
             constructions = RouteConstructionStateSupport.hydrateWorkCells(bootstrap, topology, constructions);
-            StrategicPlanState plans = StrategicPlanStateCodec.read(input, false, true, true, true, true, true, true, true, true, VERSION);
+            StrategicPlanState plans = StrategicPlanStateCodec.read(input);
             HumanPopulation population = HumanPopulationStateCodec.read(input, true, true, true, true, true, true, true, true);
             ResourceSiteState sites = ResourceSiteStateCodec.read(input); var actorMovements = ActorMovementStateCodec.read(input);
-            FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, serviceWorks, contracts, operations, history,
-                    intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances,
-                    topology, plans, population, companies, sites, replicaCustody, deferredAftermath, fencedRecovery,
-                    diagnosticIncidents, actorMovements, ActorExecutionStateCodec.read(input), ShipmentStateCodec.read(input), UnitGroupStateCodec.read(input));
+            FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures,
+                    infection, inventory, jobs, serviceWorks, intents, observations, scenes, colony, structureDamage,
+                    physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies,
+                    sites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents, actorMovements,
+                    ActorExecutionStateCodec.read(input), ShipmentStateCodec.read(input), UnitGroupStateCodec.read(input),
+                    TransportFleetStateCodec.read(input));
             FrontierWorldStateCodecValidation.validate(input, state);
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -413,6 +411,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (FinancialReservation reservation : ledger.reservations().values().stream().sorted(Comparator.comparing(FinancialReservation::id)).toList()) {
             writeString(output, reservation.id().value()); writeString(output, reservation.payerId().value()); writeString(output, reservation.payeeId().value());
             writeString(output, reservation.reasonId().value()); output.writeLong(reservation.amount().raw());
+            output.writeBoolean(reservation.budgetId().isPresent());
+            if (reservation.budgetId().isPresent()) writeString(output, reservation.budgetId().orElseThrow().value());
+        }
+        writeCount(output, ledger.budgets().size());
+        for (var budget : ledger.budgets().values().stream().sorted(Comparator.comparing(FinancialBudget::id)).toList()) {
+            writeString(output, budget.id().value()); writeString(output, budget.payerId().value());
+            output.writeByte(switch (budget.ownerKind()) { case TRANSPORT_MISSION -> 1; });
+            writeString(output, budget.ownerId().value()); output.writeLong(budget.remaining().raw());
         }
     }
     private static EconomicLedger readEconomicLedger(DataInputStream input, boolean reservationsPresent) throws IOException {
@@ -429,11 +435,20 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         if (reservationsPresent) {
             for (int index = 0, count = readCount(input); index < count; index++) {
                 SubjectId id = new SubjectId(readString(input)); FinancialReservation reservation = new FinancialReservation(id,
-                        new SubjectId(readString(input)), new SubjectId(readString(input)), new SubjectId(readString(input)), new FixedScalar(input.readLong()));
+                        new SubjectId(readString(input)), new SubjectId(readString(input)), new SubjectId(readString(input)), new FixedScalar(input.readLong()),
+                        input.readBoolean() ? Optional.of(new SubjectId(readString(input))) : Optional.empty());
                 if (reservations.put(id, reservation) != null) throw new IllegalArgumentException("duplicate financial reservation");
             }
         }
-        return new EconomicLedger(accounts, reservations);
+        Map<SubjectId, FinancialBudget> budgets = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            var id = new SubjectId(readString(input)); var payer = new SubjectId(readString(input));
+            var ownerKind = switch (input.readUnsignedByte()) { case 1 -> FinancialBudget.OwnerKind.TRANSPORT_MISSION;
+                default -> throw new IllegalArgumentException("unknown financial budget owner tag"); };
+            var budget = new FinancialBudget(id, payer, ownerKind, new SubjectId(readString(input)), new FixedScalar(input.readLong()));
+            if (budgets.putIfAbsent(id, budget) != null) throw new IllegalArgumentException("duplicate financial budget");
+        }
+        return new EconomicLedger(accounts, reservations, budgets);
     }
     private static void writeCompanyRegistry(DataOutputStream output, CompanyRegistry registry) throws IOException {
         writeCount(output, registry.companies().size());
@@ -527,7 +542,16 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         ContainerRecordStateCodec.write(output, inventory.containers());
         writeCount(output, inventory.surfaces().size());
         for (ContainerSurface surface : inventory.surfaces().values().stream().sorted(Comparator.comparing(ContainerSurface::containerId)).toList()) {
-            writeString(output, surface.containerId().value()); writePosition(output, surface.position()); output.writeByte(surface.status().wireTag());
+            writeString(output, surface.containerId().value());
+            switch (surface.location()) {
+                case io.farfrontier.palemirror.frontier.v3.model.ContainerLocation.Fixed fixed -> {
+                    output.writeByte(0); writePosition(output, fixed.position());
+                }
+                case io.farfrontier.palemirror.frontier.v3.model.ContainerLocation.Mobile mobile -> {
+                    output.writeByte(1); writeString(output, mobile.actorId().value());
+                }
+            }
+            output.writeByte(surface.status().wireTag());
         }
         writeCount(output, inventory.items().size());
         for (ExactItemStack value : inventory.items().values().stream().sorted(java.util.Comparator.comparing(ExactItemStack::id)).toList()) {
@@ -559,8 +583,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         Map<SubjectId, ContainerRecord> containers = ContainerRecordStateCodec.read(input);
         Map<SubjectId, ContainerSurface> surfaces = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); BlockPosition position = readPosition(input); int status = input.readUnsignedByte();
-            ContainerSurface surface = new ContainerSurface(id, position, FrontierWireTags.require(ContainerSurfaceStatus.class, status));
+            SubjectId id = new SubjectId(readString(input));
+            io.farfrontier.palemirror.frontier.v3.model.ContainerLocation location = switch (input.readUnsignedByte()) {
+                case 0 -> new io.farfrontier.palemirror.frontier.v3.model.ContainerLocation.Fixed(readPosition(input));
+                case 1 -> new io.farfrontier.palemirror.frontier.v3.model.ContainerLocation.Mobile(new SubjectId(readString(input)));
+                default -> throw new IllegalArgumentException("unknown container location kind");
+            };
+            int status = input.readUnsignedByte();
+            ContainerSurface surface = new ContainerSurface(id, location, FrontierWireTags.require(ContainerSurfaceStatus.class, status));
             if (status >= ContainerSurfaceStatus.values().length || surfaces.put(id, surface) != null) {
                 throw new IllegalArgumentException("invalid or duplicate container surface");
             }
@@ -611,115 +641,6 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 new DiagnosticOwner(DiagnosticWireTags.ownerKind(input.readUnsignedByte()), new SubjectId(readString(input))),
                 new DiagnosticSubject(DiagnosticWireTags.subjectKind(input.readUnsignedByte()), new SubjectId(readString(input))),
                 DiagnosticWireTags.disposition(input.readUnsignedByte()));
-    }
-    private static void writeContracts(DataOutputStream output, Map<SubjectId, SupplyContract> contracts) throws IOException {
-        writeCount(output, contracts.size()); for (SupplyContract contract : contracts.values().stream().sorted(java.util.Comparator.comparing(SupplyContract::id)).toList()) {
-            writeString(output, contract.id().value()); writeString(output, contract.settlementId().value()); writeString(output, contract.recipientId().value());
-            writeString(output, contract.cargoId().value()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().wireTag());
-        }
-    } private static Map<SubjectId, SupplyContract> readContracts(DataInputStream input) throws IOException {
-        Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId recipient = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
-            String kind = readString(input); int itemCount = input.readUnsignedByte(); int status = input.readUnsignedByte();
-            if (status >= ContractStatus.values().length
-                    || contracts.put(id, new SupplyContract(id, settlement, recipient, cargo, kind, itemCount, FrontierWireTags.require(ContractStatus.class, status))) != null) {
-                throw new IllegalArgumentException("invalid or duplicate supply contract");
-            }
-        }
-        return contracts;
-    }
-    private static void writeOperations(DataOutputStream output, Map<SubjectId, RouteOperation> operations) throws IOException {
-        writeCount(output, operations.size());
-        for (RouteOperation operation : operations.values().stream().sorted(Comparator.comparing(RouteOperation::id)).toList()) {
-            writeString(output, operation.id().value()); writeString(output, operation.contractId().value()); writeString(output, operation.settlementId().value()); writeString(output, operation.cargoId().value());
-            writeString(output, operation.destinationId().value()); RouteUnitManifestCodec.write(output, operation.unit());
-            writeCount(output, operation.route().size());
-            for (BlockPosition point : operation.route()) writePosition(output, point);
-            output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().wireCode());
-            output.writeBoolean(operation.activeAssembly().isPresent());
-            if (operation.activeAssembly().isPresent()) writeAssembly(output, operation.activeAssembly().orElseThrow());
-            output.writeBoolean(operation.activeTravel().isPresent());
-            if (operation.activeTravel().isPresent()) writeTravel(output, operation.activeTravel().orElseThrow());
-            TacticalPlanStateCodec.write(output, operation.tacticalPlan());
-        }
-    }
-    private static Map<SubjectId, RouteOperation> readOperations(DataInputStream input, boolean hasTravel, boolean hasAssembly, boolean hasAssemblyDeferral,
-                                                                   boolean hasDeferralObstruction, boolean hasRouteUnit, boolean hasTraversalTopology,
-                                                                   boolean hasTypedTravelAnchors) throws IOException {
-        Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); SubjectId contract = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
-            SubjectId destination = new SubjectId(readString(input));
-            RouteUnitManifest unit = RouteUnitManifestCodec.read(input);
-            java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
-            for (int point = 0, pointCount = readCount(input); point < pointCount; point++) route.add(readPosition(input));
-            int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
-            java.util.Optional<OperationAssembly> assembly = input.readBoolean() ? java.util.Optional.of(readAssembly(input, true, true)) : java.util.Optional.empty();
-            java.util.Optional<OperationTravel> travel = input.readBoolean() ? java.util.Optional.of(OperationTravelStateCodec.read(input)) : java.util.Optional.empty();
-            TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
-            if (operations.put(id, new RouteOperation(id, contract, settlement, cargo, destination, unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel, tacticalPlan)) != null) {
-                throw new IllegalArgumentException("invalid or duplicate route operation");
-            }
-        }
-        return operations;
-    }
-    private static void writeLogisticsHistory(DataOutputStream output, LogisticsHistory history) throws IOException {
-        output.writeLong(history.deliveredCount()); output.writeLong(history.failedCount()); output.writeLong(history.interruptedCount());
-        writeCount(output, history.receipts().size());
-        for (TerminalLogisticsReceipt receipt : history.receipts().values().stream().sorted(Comparator.comparing(TerminalLogisticsReceipt::operationId)).toList()) {
-            writeString(output, receipt.operationId().value()); writeString(output, receipt.contractId().value()); writeString(output, receipt.cargoId().value());
-            writeString(output, receipt.settlementId().value()); writeString(output, receipt.recipientId().value());
-            writeCount(output, receipt.participants().size()); for (SubjectId participant : receipt.participants()) writeString(output, participant.value());
-            output.writeByte(receipt.outcome().wireTag()); output.writeLong(receipt.terminalAtTick());
-        }
-    }
-    private static LogisticsHistory readLogisticsHistory(DataInputStream input) throws IOException {
-        long delivered = input.readLong(), failed = input.readLong(), interrupted = input.readLong();
-        Map<SubjectId, TerminalLogisticsReceipt> receipts = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId operation = new SubjectId(readString(input)); SubjectId contract = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
-            SubjectId settlement = new SubjectId(readString(input)); SubjectId recipient = new SubjectId(readString(input));
-            java.util.ArrayList<SubjectId> participants = new java.util.ArrayList<>();
-            for (int participant = 0, participantCount = readCount(input); participant < participantCount; participant++) participants.add(new SubjectId(readString(input)));
-            int outcome = input.readUnsignedByte(); long terminalAt = input.readLong();
-            if (outcome >= TerminalLogisticsReceipt.TerminalLogisticsOutcome.values().length
-                    || receipts.put(operation, new TerminalLogisticsReceipt(operation, contract, cargo, settlement, recipient, participants,
-                    FrontierWireTags.require(TerminalLogisticsReceipt.TerminalLogisticsOutcome.class, outcome), terminalAt)) != null) {
-                throw new IllegalArgumentException("invalid or duplicate terminal logistics receipt");
-            }
-        }
-        return new LogisticsHistory(receipts, delivered, failed, interrupted);
-    } private static void writeTravel(DataOutputStream output, OperationTravel travel) throws IOException {
-        OperationTravelStateCodec.write(output, travel);
-    } private static void writeAssembly(DataOutputStream output, OperationAssembly assembly) throws IOException {
-        writeString(output, assembly.cargoCarrierId().value()); writeCount(output, assembly.members().size());
-        for (var entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-            writeString(output, entry.getKey().value()); TraversalTopologyStateCodec.write(output, entry.getValue().topology());
-            writeCount(output, entry.getValue().cursor());
-            output.writeLong(entry.getValue().routeRevision()); TraversalRejoinCodec.write(output, entry.getValue().rejoin());
-        }
-        output.writeBoolean(assembly.deferral().isPresent());
-        if (assembly.deferral().isPresent()) {
-            OperationAssemblyDeferral deferred = assembly.deferral().orElseThrow(); writeString(output, deferred.actorId().value());
-            writePosition(output, deferred.target().support()); writePosition(output, deferred.obstructionSurface().support()); output.writeByte(deferred.reason().wireTag());
-        }
-    }
-    private static OperationAssembly readAssembly(DataInputStream input, boolean hasDeferral, boolean hasDeferralObstruction) throws IOException {
-        SubjectId carrier = new SubjectId(readString(input)); Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId actor = new SubjectId(readString(input));
-            if (members.put(actor, new OperationAssembly.Member(TraversalTopologyStateCodec.read(input), readCount(input), input.readLong(),
-                    TraversalRejoinCodec.read(input))) != null) throw new IllegalArgumentException("duplicate operation assembly member");
-        }
-        java.util.Optional<OperationAssemblyDeferral> deferral = java.util.Optional.empty();
-        if (hasDeferral && input.readBoolean()) {
-            SubjectId actor = new SubjectId(readString(input)); BlockPosition target = readPosition(input);
-            BlockPosition obstruction = hasDeferralObstruction ? readPosition(input) : target; int reason = input.readUnsignedByte();
-            if (reason >= OperationAssemblyDeferral.Reason.values().length) throw new IllegalArgumentException("unknown operation assembly deferral reason");
-            deferral = java.util.Optional.of(new OperationAssemblyDeferral(actor, new SurfaceAnchor(target), new SurfaceAnchor(obstruction), FrontierWireTags.require(OperationAssemblyDeferral.Reason.class, reason)));
-        }
-        return new OperationAssembly(members, carrier, deferral);
     }
     static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }

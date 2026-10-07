@@ -38,7 +38,7 @@ public final class HiveInfectionProcess {
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = state.strategicPlans().tasks().get(action.subject());
         if (task == null || task.kind() != StrategicTaskKind.SPREAD_INFECTION_CELL || !task.ownerId().equals(state.bootstrap().hive().id())) {
-            // A strategic interception may terminate and compact an older expansion task
+            // A strategic decision may terminate and compact an older expansion task
             // before this persisted due action reaches the scheduler.  The task lifecycle,
             // not the historical schedule entry, owns whether the pulse still exists.  The
             // kernel still needs the explicit cancellation so it cannot silently drop work.

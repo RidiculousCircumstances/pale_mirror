@@ -48,9 +48,6 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("residentMealClaimedSource", FrontierV3FixtureCatalog::residentMealClaimedSourceConfiguration),
             Map.entry("residentMealAfterColdTake", FrontierV3FixtureCatalog::residentMealAfterColdTakeConfiguration),
             Map.entry("residentWorkerMeal", FrontierV3FixtureCatalog::residentWorkerMealConfiguration),
-            Map.entry("uncontestedSupply", FrontierV3FixtureCatalog::uncontestedSupplyConfiguration),
-            Map.entry("autonomousSupplyInterception", FrontierV3FixtureCatalog::autonomousSupplyInterceptionConfiguration),
-            Map.entry("hotSceneStrike", FrontierV3FixtureCatalog::hotSceneStrikeConfiguration),
             Map.entry("settlementAssault", FrontierV3FixtureCatalog::settlementAssaultConfiguration),
             Map.entry("expeditionMarch", FrontierV3FixtureCatalog::expeditionMarchConfiguration),
             Map.entry("multiFrontPressure", FrontierV3FixtureCatalog::multiFrontPressureConfiguration),
@@ -63,11 +60,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("hiveMobilization", FrontierV3FixtureCatalog::hiveMobilizationConfiguration),
             Map.entry("hiveReturn", FrontierV3FixtureCatalog::hiveReturnConfiguration),
             Map.entry("hiveNutrientTransfer", FrontierV3FixtureCatalog::hiveNutrientTransferConfiguration),
-            Map.entry("routeSceneReturn", FrontierV3FixtureCatalog::routeSceneReturnConfiguration),
-            Map.entry("hotScoutSighting", FrontierV3FixtureCatalog::hotScoutSightingConfiguration),
-            Map.entry("hotScoutIntercept", FrontierV3FixtureCatalog::hotScoutInterceptConfiguration),
             Map.entry("hotScoutPatrolRecovery", FrontierV3FixtureCatalog::hotScoutPatrolRecoveryConfiguration),
-            Map.entry("operationAssembly", FrontierV3FixtureCatalog::operationAssemblyConfiguration),
             Map.entry("healthQuarantine", FrontierV3FixtureCatalog::healthQuarantineConfiguration),
             Map.entry("medicalTreatment", FrontierV3FixtureCatalog::medicalTreatmentConfiguration),
             Map.entry("serviceDecontamination", FrontierV3FixtureCatalog::serviceDecontaminationConfiguration),
@@ -114,16 +107,19 @@ public final class FrontierV3FixtureCatalog {
     public static List<Profile> profiles() { return List.copyOf(PROFILES.values()); }
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> goodsShipmentConfiguration(WorldId worldId, long seed) {
         var state = ShipmentFixture.initial(worldId, seed);
-        return configured(worldId, state, SimInstant.ZERO,
-                tradeSchedules(state, List.of(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(ShipmentFixture.ID, 1))), false);
+        return configured(worldId, state, SimInstant.ZERO, tradeSchedules(state, List.of(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(ShipmentFixture.ID, 1))));
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousGoodsConfiguration(WorldId worldId, long seed) {
-        var state = AutonomousTradeFixture.initial(worldId, seed);
+        return autonomousGoodsConfiguration(worldId, seed, FrontierRulesets.production());
+    }
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousGoodsConfiguration(WorldId worldId, long seed,
+                                                                                                                       FrontierRuleset rules) {
+        var state = AutonomousTradeFixture.initial(worldId, seed, rules);
         var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
         return configured(worldId, state, SimInstant.ZERO, tradeSchedules(state, List.of(
                 io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(seller.party().id(), 1),
-                io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(seller.known().getFirst().party().id(), 2))), false);
+                io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(seller.known().getFirst().party().id(), 2))));
     }
 
     /** Narrow trade fixtures retain wakeable clocks without running an unrelated population day. */
@@ -134,13 +130,6 @@ public final class FrontierV3FixtureCatalog {
         return List.copyOf(schedules);
     }
 
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> uncontestedSupplyConfiguration(WorldId worldId, long seed) {
-        return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, false), false);
-    }
-
-    static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> uncontestedSupplyConfiguration(FrontierBootstrap bootstrap) {
-        return withReserve(FrontierWorldRuntimeDefinition.configuration(bootstrap), false);
-    }
 
     /**
      * COLD custody/restart fixture with a declared level terminal apron. The ordinary
@@ -148,115 +137,79 @@ public final class FrontierV3FixtureCatalog {
      * support there correctly rejects travel, which is not this fixture's subject.
      * All production movement, resource and obstruction guards remain unchanged.
      */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> coldSupplyDeliveryConfiguration(WorldId worldId, long seed) {
-        FrontierBootstrap original = FrontierBootstrapper.create(worldId, seed);
-        List<BlockPosition> waypoints = FrontierRouteNetwork.supplyWaypoints(original, original.settlements().getFirst().id());
-        BlockPosition corner = waypoints.get(waypoints.size() - 2), end = waypoints.getLast();
-        var roadColumns = FrontierRouteNetwork.surfaceCells(original).stream()
-                .map(cell -> new TerrainColumn(cell.x(), cell.z())).collect(java.util.stream.Collectors.toSet());
-        TerrainSurfacePlan terrain = original.terrain();
-        for (int x = Math.min(corner.x(), end.x()) - 1; x <= Math.max(corner.x(), end.x()) + 1; x++) {
-            for (int z = Math.min(corner.z(), end.z()) - 1; z <= Math.max(corner.z(), end.z()) + 1; z++) {
-                if (!roadColumns.contains(new TerrainColumn(x, z))) terrain = terrain.withSurveyedSupport(x, z, end.y());
-            }
-        }
-        FrontierBootstrap level = new FrontierBootstrap(original.worldId(), original.seed(), original.bounds(),
-                original.settlements(), original.hive(), original.ruleset(), terrain, original.initialFieldLayouts());
-        return FrontierDevelopmentScenarios.routeCustodyConfiguration(uncontestedSupplyConfiguration(level));
-    }
 
     /** Same level-apron custody fixture, frozen after real assembly for scene/restart boundary checks. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> coldSupplySceneReturnConfiguration(WorldId worldId, long seed) {
-        var fixture = FrontierDevelopmentScenarios.routeSceneReturnFixture(coldSupplyDeliveryConfiguration(worldId, seed));
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
-    }
 
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousSupplyInterceptionConfiguration(WorldId worldId, long seed) {
-        // This profile exercises autonomous perception, including ordinary birth schedules.
-        // One admission before departure consumes a ration and adds two reserve rations.
-        // Keep those real economic consequences funded rather than disabling population
-        // growth or requiring the export planner to spend the settlement's reserve.
-        return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, true), true, 3);
-    }
-
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotSceneStrikeConfiguration(WorldId worldId, long seed) {
-        var fixture = FrontierDevelopmentScenarios.hotSceneStrikeFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
-    }
 
     /** Native templates supply an immutable translated manifest, never relocate a live actor. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotSceneStrikeConfiguration(FrontierBootstrap bootstrap) {
-        var fixture = FrontierDevelopmentScenarios.hotSceneStrikeFixture(bootstrap);
-        return configured(bootstrap.worldId(), fixture.state(), fixture.instant(), fixture.schedules(), true);
-    }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> settlementAssaultConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> settlementAssaultConfiguration(FrontierBootstrap bootstrap) {
         var fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(bootstrap);
-        return configured(bootstrap.worldId(), fixture.state(), fixture.instant(), fixture.schedules(), true);
+        return configured(bootstrap.worldId(), fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     /** Candidate-bound approach fixture: mobilisation has departed, but no COLD edge is pre-run. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> expeditionMarchConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.startedSettlementAssaultFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), List.of(), true);
+        return configured(worldId, fixture.state(), fixture.instant(), List.of());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> multiFrontPressureConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MultiFrontPressureFixture fixture = FrontierDevelopmentScenarios.multiFrontPressureFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> coldBomberAftermathConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.coldBomberAftermathFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> defenderEquipmentConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.defenderEquipmentFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> defenderEquipmentReturnConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.defenderEquipmentReturnFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> engineeringEquipmentConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RouteConstructionFixture fixture = FrontierDevelopmentScenarios.engineeringEquipmentFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> engineeringWorksiteConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RouteConstructionFixture fixture = FrontierDevelopmentScenarios.engineeringWorksiteFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hiveGrowthConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.HiveGrowthFixture fixture = FrontierDevelopmentScenarios.hiveGrowthFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hiveMobilizationConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.HiveMobilizationFixture fixture = FrontierDevelopmentScenarios.hiveMobilizationFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hiveReturnConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.HiveMobilizationFixture fixture = FrontierDevelopmentScenarios.hiveReturnFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hiveNutrientTransferConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.HiveNutrientTransferFixture fixture = FrontierDevelopmentScenarios.hiveNutrientTransferFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> settlementProvisionConfiguration(WorldId worldId, long seed) {
-        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(worldId, seed, false);
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(worldId, seed);
         FrontierWorldState state = base.initialState(); Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
         SubjectId bread = new SubjectId("item:provision-fixture-bread"); int rations = settlement.residents().size();
         ExactItemStack stack = new ExactItemStack(bread, settlement.id(), SettlementProvisionProcess.BREAD, 64, new InventoryCustody.ContainerSlot(depot, 1));
@@ -276,41 +229,21 @@ public final class FrontierV3FixtureCatalog {
                 new FrontierWorldStateCodec(state.bootstrap()), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(), base.stateValidator());
     }
 
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> routeSceneReturnConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.routeSceneReturnFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
-    }
-
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotScoutSightingConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.hotScoutSightingFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false,
-                java.util.Optional.of(FrontierDevelopmentScenarios.initialNorthwatchShipment(fixture.state()).orElseThrow().id()));
-    }
-
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotScoutInterceptConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.hotScoutInterceptFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false,
-                java.util.Optional.of(FrontierDevelopmentScenarios.initialNorthwatchShipment(fixture.state()).orElseThrow().id()));
-    }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotScoutPatrolRecoveryConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.AmbientScoutPatrolFixture fixture = FrontierDevelopmentScenarios.hotScoutPatrolRecoveryFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> operationAssemblyConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.OperationAssemblyFixture fixture = FrontierDevelopmentScenarios.operationAssemblyFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
-    }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> healthQuarantineConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.HealthQuarantineFixture fixture = FrontierDevelopmentScenarios.healthQuarantineFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> medicalTreatmentConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MedicalTreatmentFixture fixture = FrontierDevelopmentScenarios.medicalTreatmentFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     /**
@@ -321,22 +254,22 @@ public final class FrontierV3FixtureCatalog {
      */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> serviceDecontaminationConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.ServiceDecontaminationFixture fixture = FrontierDevelopmentScenarios.serviceDecontaminationFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> residentTransitConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.ResidentTransitFixture fixture = FrontierDevelopmentScenarios.residentTransitFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> productionInputTheftConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionInputTheftFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> productionWorkConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionWorkFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     /** Ordinary fungible admission and station-local COLD labor; no job/progress/output is injected. */
@@ -366,7 +299,7 @@ public final class FrontierV3FixtureCatalog {
                 List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.PENDING);
         state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(
-                configured(worldId, state, SimInstant.ZERO, List.of(ProductionProcess.start(task, 200L)), false));
+                configured(worldId, state, SimInstant.ZERO, List.of(ProductionProcess.start(task, 200L))));
         for (int step = 0; step < 300; step++) {
             var checkpoint = engine.checkpoint();
             if (checkpoint.schedules().isEmpty()) break;
@@ -378,7 +311,7 @@ public final class FrontierV3FixtureCatalog {
                             : work.phase() == BakeryWorkState.Phase.PROCESSING
                             && work.completedWorkTicks() == 7).isPresent()) {
                 var boundary = engine.checkpoint();
-                return configured(worldId, current, boundary.instant(), boundary.schedules(), false);
+                return configured(worldId, current, boundary.instant(), boundary.schedules());
             }
         }
         throw new IllegalStateException("fungible production fixture did not reach its ordinary bakery boundary");
@@ -417,32 +350,32 @@ public final class FrontierV3FixtureCatalog {
      */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> resourceSiteHarvestConfiguration(WorldId worldId, long seed) {
         FrontierResourceSiteHarvestFixture.Fixture fixture = FrontierResourceSiteHarvestFixture.create(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> concurrentFieldHarvestConfiguration(WorldId worldId, long seed) {
         var fixture = FrontierResourceSiteHarvestFixture.createConcurrent(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> resourceSiteHarvest65Configuration(WorldId worldId, long seed) {
         FrontierResourceSiteHarvestFixture.Fixture fixture = FrontierResourceSiteHarvestFixture.createWithOneExtraCell(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> resourceSiteHarvest65AfterColdPartConfiguration(WorldId worldId, long seed) {
         FrontierResourceSiteHarvestFixture.Fixture fixture = FrontierResourceSiteHarvestFixture.createWithOneExtraCellAfterColdPart(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> productionWorkerDeathConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionWorkerDeathFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> productionObstructionLivenessConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionObstructionLivenessFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     /**
@@ -451,18 +384,18 @@ public final class FrontierV3FixtureCatalog {
      */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> routeMaintenanceColdSourceFairnessConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RouteMaintenanceFairnessFixture fixture = FrontierDevelopmentScenarios.routeMaintenanceColdSourceFairnessFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> routePatrolConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RoutePatrolFixture fixture = FrontierDevelopmentScenarios.routePatrolFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
     /** One naturally stocked resident reaches hunger before the rest of the normal world. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> residentMealConfiguration(WorldId worldId, long seed) {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base =
-                FrontierWorldRuntimeDefinition.configuration(worldId, seed, false);
+                FrontierWorldRuntimeDefinition.configuration(worldId, seed);
         FrontierWorldState original = base.initialState();
         SubjectId id = new SubjectId("resident:6-1");
         ResidentCharacteristics previous = original.humanPopulation().resident(id).characteristics();
@@ -476,7 +409,7 @@ public final class FrontierV3FixtureCatalog {
         List<ScheduledAction> schedules = new ArrayList<>(base.initialSchedules());
         schedules.removeIf(action -> action.subject().equals(id) && action.kind().equals(ResidentNeedProcess.REVIEW));
         schedules.add(ResidentNeedProcess.review(id, due));
-        return configured(worldId, state, base.initialInstant(), schedules, false);
+        return configured(worldId, state, base.initialInstant(), schedules);
     }
 
     /** One hungry resident has a real reserved depot bread before any physical TAKE. */
@@ -498,10 +431,9 @@ public final class FrontierV3FixtureCatalog {
         long nextNeed = state.humanPopulation().nutrition(resident).nextThresholdTick(
                 state.bootstrap().ruleset().residentLife(),
                 state.humanPopulation().resident(resident).characteristics().effectiveMetabolismPermille(hungryAt));
-        return configured(worldId, state, new SimInstant(hungryAt),
-                List.of(ResidentMealProcess.progress(started.meal(), hungryAt + 1_000L),
+        return configured(worldId, state, new SimInstant(hungryAt), List.of(ResidentMealProcess.progress(started.meal(), hungryAt + 1_000L),
                         ResidentActivityProcess.review(resident, hungryAt + 1_000L),
-                        ResidentNeedProcess.review(resident, nextNeed)), false);
+                        ResidentNeedProcess.review(resident, nextNeed)));
     }
 
     /** A real COLD meal has already moved one claimed bread into the exact resident hand. */
@@ -536,10 +468,9 @@ public final class FrontierV3FixtureCatalog {
         long nextNeed = state.humanPopulation().nutrition(residentId).nextThresholdTick(
                 state.bootstrap().ruleset().residentLife(),
                 state.humanPopulation().resident(residentId).characteristics().effectiveMetabolismPermille(instant));
-        return configured(worldId, state, new SimInstant(instant),
-                List.of(ResidentMealProcess.progress(started.meal(), instant + 1_000L),
+        return configured(worldId, state, new SimInstant(instant), List.of(ResidentMealProcess.progress(started.meal(), instant + 1_000L),
                         ResidentActivityProcess.review(residentId, instant + 1_000L),
-                        ResidentNeedProcess.review(residentId, nextNeed)), false);
+                        ResidentNeedProcess.review(residentId, nextNeed)));
     }
 
     /** A retained field job reaches an exact resident hunger threshold while visibly HOT. */
@@ -593,7 +524,7 @@ public final class FrontierV3FixtureCatalog {
         schedules.add(ResourceSiteHarvestProcess.coldProgress(job, workDue));
         schedules.add(ResidentNeedProcess.review(resident, hungerDue));
         schedules.add(ResidentActivityProcess.review(resident, hungerDue));
-        return configured(worldId, state, fixture.instant(), schedules, false);
+        return configured(worldId, state, fixture.instant(), schedules);
     }
 
     /**
@@ -602,10 +533,10 @@ public final class FrontierV3FixtureCatalog {
      * ramp fill beneath every raised route carpet. The fixture itself writes no Minecraft block.
      */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> steppedRouteConfiguration(WorldId worldId, long seed) {
-        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(worldId, seed, false);
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(worldId, seed);
         FrontierWorldState state = base.initialState();
         SubjectId settlementId = state.bootstrap().settlements().getFirst().id();
-        List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(state.bootstrap(), settlementId);
+        List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(state.bootstrap(), settlementId);
         BlockPosition origin = baseline.getFirst();
         List<BlockPosition> declared = new ArrayList<>();
         declared.add(origin);
@@ -620,8 +551,8 @@ public final class FrontierV3FixtureCatalog {
         // surveyed cells to the lane point; a traversal topology may not encode a retraced
         // centre-line under duplicate node identities.
         declared.addAll(baseline.subList(2, baseline.size()));
-        RouteTopology topology = state.routeTopology().replaceSupplyRoute(state.bootstrap(), settlementId, declared);
-        return configured(worldId, state.withRouteTopology(topology), base.initialInstant(), base.initialSchedules(), false);
+        RouteTopology topology = state.routeTopology().replaceSettlementRoute(state.bootstrap(), settlementId, declared);
+        return configured(worldId, state.withRouteTopology(topology), base.initialInstant(), base.initialSchedules());
     }
 
     static Map<String, Profile> catalog(Profile... profiles) {
@@ -663,51 +594,15 @@ public final class FrontierV3FixtureCatalog {
         return value;
     }
 
-    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> withReserve(FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base,
-                                                                                                           boolean autonomousInterception) {
-        return withReserve(base, autonomousInterception, 0);
-    }
 
-    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> withReserve(FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base,
-                                                                                                           boolean autonomousInterception, int birthFoodAllowance) {
-        Settlement settlement = base.initialState().bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        int remaining = Math.addExact(SettlementFoodPolicy.reserveRequirement(base.initialState(), settlement.id()), birthFoodAllowance);
-        ExactInventory inventory = base.initialState().inventory(); int ordinal = 0;
-        while (remaining > 0) {
-            int count = Math.min(63, remaining);
-            inventory = inventory.store(new ExactItemStack(new SubjectId("item:development-supply-reserve-" + ordinal), settlement.id(), "minecraft:bread", count,
-                    new InventoryCustody.ContainerSlot(depot, ordinal + 1)));
-            remaining -= count; ordinal++;
-        }
-        return configured(base.worldId(), base.initialState().withInventory(inventory), base.initialInstant(), base.initialSchedules(),
-                autonomousInterception, java.util.Optional.empty(), true);
-    }
-
-    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configured(WorldId worldId, FrontierWorldState state,
-                                                                                                         SimInstant instant, List<ScheduledAction> schedules,
-                                                                                                         boolean autonomousInterception) {
-        return configured(worldId, state, instant, schedules, autonomousInterception, java.util.Optional.empty());
-    }
-
-    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configured(WorldId worldId, FrontierWorldState state,
-                                                                                                         SimInstant instant, List<ScheduledAction> schedules,
-                                                                                                         boolean autonomousInterception, java.util.Optional<SubjectId> frozenOperation) {
-        return configured(worldId, state, instant, schedules, autonomousInterception, frozenOperation, false);
-    }
-
-    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configured(WorldId worldId, FrontierWorldState state,
-                                                                                                         SimInstant instant, List<ScheduledAction> schedules,
-                                                                                                         boolean autonomousInterception, java.util.Optional<SubjectId> frozenOperation,
-                                                                                                         boolean explicitDevelopmentSupply) {
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configured(WorldId worldId, FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         return new FrontierEngineConfiguration<>(worldId, state, instant, FrontierWorldRuntimeDefinition::planCommand,
                 new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledActionPlanner<FrontierWorldState>() {
                     @Override public List<ProposedEvent> plan(FrontierWorldState candidate, ScheduledAction action) {
                         return plan(candidate, action, action.dueAt());
                     }
                     @Override public List<ProposedEvent> plan(FrontierWorldState candidate, ScheduledAction action, SimInstant currentInstant) {
-                        List<ProposedEvent> planned = frozenOperation.isPresent() ? frozenScoutSightingProgress(candidate, action, frozenOperation.orElseThrow(), currentInstant)
-                                : FrontierWorldRuntimeDefinition.planScheduled(candidate, action, autonomousInterception, currentInstant);
-                        return explicitDevelopmentSupply ? withDevelopmentSupplyOrder(candidate, action, planned) : planned;
+                        return FrontierWorldRuntimeDefinition.planScheduled(candidate, action, currentInstant);
                     }
                     @Override public boolean held(FrontierWorldState candidate, ScheduledAction action) {
                         return FrontierWorldRuntimeDefinition.scheduledHeld(candidate, action);
@@ -729,56 +624,8 @@ public final class FrontierV3FixtureCatalog {
                 new EngineLimits(4_096, 1_200L, 4_096), schedules, TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE);
     }
 
-    private static List<ProposedEvent> frozenScoutSightingProgress(FrontierWorldState state, ScheduledAction action, SubjectId operationId,
-                                                                 SimInstant currentInstant) {
-        if (action.subject().equals(operationId) && action.kind().equals("frontier.operation.progress")) {
-            return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
-        }
-        return FrontierWorldRuntimeDefinition.planScheduled(state, action, false, currentInstant);
-    }
 
     /** Explicit test demand; production settlement policy never invents tribute to the hive. */
-    private static List<ProposedEvent> withDevelopmentSupplyOrder(FrontierWorldState state, ScheduledAction action,
-                                                                   List<ProposedEvent> planned) {
-        SubjectId owner = state.bootstrap().settlements().getFirst().id();
-        if (!action.kind().equals("frontier.objective.review") || !action.subject().equals(owner)
-                || state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.STRATEGIC)
-                || planned.stream().anyMatch(event -> event.payload() instanceof StrategicObjectiveSelected)
-                || state.strategicPlans().objectives().values().stream().anyMatch(objective -> objective.ownerId().equals(owner)
-                        && objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE)
-                || state.humanPopulation().quarantined(owner)
-                || SettlementFoodPolicy.exportableBread(state, owner).isEmpty()
-                        && SettlementFoodPolicy.exportableFungibleBread(state, owner).isEmpty()) return planned;
-
-        int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
-        String suffix = owner.value().substring("settlement:".length()) + "-" + ordinal;
-        DecisionAuthority authority = state.strategicPlans().requireDecisionAuthority(owner);
-        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-supply-" + suffix), owner,
-                StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, java.util.Optional.empty(), java.util.Optional.empty(),
-                ordinal, StrategicObjectiveStatus.ACTIVE, authority.ownerId(), authority.reconsiderationEpoch());
-        List<SubjectId> predecessor = state.strategicPlans().tasks().values().stream()
-                .filter(task -> task.ownerId().equals(owner) && task.kind() == StrategicTaskKind.PRODUCE_BREAD
-                        && task.status() == StrategicTaskStatus.COMPLETED)
-                .sorted(java.util.Comparator.comparing((StrategicTask task) -> state.strategicPlans().objectives()
-                        .get(task.objectiveId()).decisionOrdinal()).reversed().thenComparing(StrategicTask::id))
-                .map(StrategicTask::id).limit(1).toList();
-        StrategicTask preparation = new StrategicTask(new SubjectId("task:development-supply-" + suffix + "-prepare"),
-                objective.id(), owner, StrategicTaskKind.PREPARE_BREAD_CARGO, java.util.Optional.empty(),
-                java.util.Optional.empty(), java.util.Optional.empty(), List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO),
-                predecessor, StrategicTaskStatus.PENDING, java.util.Optional.empty(), authority.ownerId(), authority.reconsiderationEpoch());
-        StrategicTask delivery = new StrategicTask(new SubjectId("task:development-supply-" + suffix + "-deliver"),
-                objective.id(), owner, StrategicTaskKind.DELIVER_BREAD_TO_HIVE, java.util.Optional.empty(),
-                java.util.Optional.empty(), java.util.Optional.empty(), List.of(StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE,
-                        StrategicTaskRequirement.AVAILABLE_HAULER, StrategicTaskRequirement.AVAILABLE_GUARD),
-                List.of(preparation.id()), StrategicTaskStatus.PENDING, java.util.Optional.empty(), authority.ownerId(), authority.reconsiderationEpoch());
-        List<ProposedEvent> result = new ArrayList<>(planned);
-        result.add(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)));
-        result.add(new ProposedEvent(owner, new StrategicTaskPlanned(preparation)));
-        result.add(new ProposedEvent(owner, new StrategicTaskPlanned(delivery)));
-        result.add(new ProposedEvent(owner, new ScheduleEffect.Created(SupplyOperationProcess.start(preparation,
-                Math.addExact(action.dueAt().ticks(), 100L)))));
-        return List.copyOf(result);
-    }
 
     public record Profile(String id, String provider, String rulesetId, String sourceProfile, String allowedRunner, String requiredAssertion,
                           BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>> factory) {

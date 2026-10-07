@@ -14,11 +14,9 @@ public enum PhysicalIntentRecoveryDiagnosticProducer {
     HIVE_MOBILIZATION(PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION),
     HIVE_NUTRIENT_TRANSFER(PhysicalIntentLifecycleOwner.HIVE_NUTRIENT_TRANSFER),
     HIVE_GROWTH(PhysicalIntentLifecycleOwner.HIVE_GROWTH),
-    ROUTE_ENGAGEMENT(PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT),
     SETTLEMENT_ASSAULT(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT),
     MEDICAL_TREATMENT(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT),
     SETTLEMENT_PROVISION(PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION),
-    ROUTE_OPERATION(PhysicalIntentLifecycleOwner.ROUTE_OPERATION),
     RESOURCE_SITE_PREPARATION(PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION),
     RESOURCE_SITE_HARVEST(PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST),
     NO_PHYSICAL_CAPABILITY(null);

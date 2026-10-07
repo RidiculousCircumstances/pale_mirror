@@ -76,9 +76,9 @@ final class FrontierV3StoredEntityCensus {
 
     static Column select(Optional<CompoundTag> raw, ChunkPos chunk, Set<UUID> targets) {
         var data = raw.orElse(null);
-        if (!FrontierV3CargoCleanupPersistence.matchesStoredChunk(data, chunk))
+        if (!FrontierV3StoredEntityInventory.matchesStoredChunk(data, chunk))
             throw new IllegalStateException("misplaced stored entity column in identity census");
-        var entities = FrontierV3CargoCleanupPersistence.serializedEntities(data)
+        var entities = FrontierV3StoredEntityInventory.serializedEntities(data)
                 .orElseThrow(() -> new IllegalStateException("invalid stored entity column in identity census"));
         var present = new HashSet<UUID>();
         for (var id : targets) if (entities.containsKey(id)) present.add(id);

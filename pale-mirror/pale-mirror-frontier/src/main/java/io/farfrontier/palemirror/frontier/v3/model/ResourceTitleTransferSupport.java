@@ -59,7 +59,7 @@ final class ResourceTitleTransferSupport {
             accountClaims.put(claim.id(), remaining);
         }
         Map<SubjectId, CustodyAccount> accounts = new HashMap<>(ledger.accounts());
-        accounts.put(account.id(), new CustodyAccount(account.id(), account.custody(), accountLots, accountClaims));
+        accounts.put(account.id(), account.withQuantities(accountLots, accountClaims));
         return FungibleBindingRepartition.retainLayout(ledger, lots, claims, accounts, account.id());
     }
 

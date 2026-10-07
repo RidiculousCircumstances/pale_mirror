@@ -294,11 +294,11 @@ final class FrontierV3BakeryPhysicalEffect {
             boolean sourceInHand = phase() == BakeryWorkState.Phase.STATION_LOAD
                     || phase() == BakeryWorkState.Phase.DEPOT_DELIVERY;
             if (exactSource != null) {
-                if (sourceInHand && !FrontierV3CargoHandoffExecutor.exactMatch(hand(), exactSource))
+                if (sourceInHand && !FrontierV3ExactItemPresentation.exactMatch(hand(), exactSource))
                     return observedBlock(BakeryWorkBlock.Reason.HAND_MISMATCH, containerId, -1, hand());
                 if (!sourceInHand) {
                     int slot = ((InventoryCustody.ContainerSlot) exactSource.custody()).slot();
-                    if (!FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), exactSource))
+                    if (!FrontierV3ExactItemPresentation.exactMatch(chest.getItem(slot), exactSource))
                         return observedBlock(BakeryWorkBlock.Reason.SOURCE_CHANGED, containerId, slot, chest.getItem(slot));
                 }
             } else for (MaterialSourceSelection.Slice slice : slices) {
@@ -322,11 +322,11 @@ final class FrontierV3BakeryPhysicalEffect {
         }
         boolean exactBefore() {
             return switch (phase()) {
-                case DEPOT_PICKUP, STATION_UNLOAD -> FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()), exactSource)
+                case DEPOT_PICKUP, STATION_UNLOAD -> FrontierV3ExactItemPresentation.exactMatch(chest.getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()), exactSource)
                         && hand().isEmpty();
-                case STATION_LOAD, DEPOT_DELIVERY -> FrontierV3CargoHandoffExecutor.exactMatch(hand(), exactSource)
+                case STATION_LOAD, DEPOT_DELIVERY -> FrontierV3ExactItemPresentation.exactMatch(hand(), exactSource)
                         && chest.getItem(destinationSlot).isEmpty();
-                case PROCESSING -> FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()), exactSource)
+                case PROCESSING -> FrontierV3ExactItemPresentation.exactMatch(chest.getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()), exactSource)
                         && chest.getItem(destinationSlot).isEmpty();
                 case DELIVERED -> false;
             };
@@ -334,11 +334,11 @@ final class FrontierV3BakeryPhysicalEffect {
         boolean exactAfter() {
             return switch (phase()) {
                 case DEPOT_PICKUP, STATION_UNLOAD -> chest.getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()).isEmpty()
-                        && FrontierV3CargoHandoffExecutor.exactMatch(hand(), exactSource);
+                        && FrontierV3ExactItemPresentation.exactMatch(hand(), exactSource);
                 case STATION_LOAD, DEPOT_DELIVERY -> hand().isEmpty()
-                        && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(destinationSlot), exactSource);
+                        && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(destinationSlot), exactSource);
                 case PROCESSING -> chest.getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()).isEmpty()
-                        && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(destinationSlot), exactOutput);
+                        && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(destinationSlot), exactOutput);
                 case DELIVERED -> false;
             };
         }
@@ -352,7 +352,7 @@ final class FrontierV3BakeryPhysicalEffect {
                             new InventoryCustody.ContainerSlot(containerId, destinationSlot), EquipmentSlot.MAINHAND);
                     case PROCESSING -> {
                         chest.setItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot(), ItemStack.EMPTY);
-                        chest.setItem(destinationSlot, FrontierV3CargoHandoffExecutor.materializedStack(exactOutput)); chest.setChanged();
+                        chest.setItem(destinationSlot, FrontierV3ExactItemPresentation.materializedStack(exactOutput)); chest.setChanged();
                     }
                     case DELIVERED -> throw new IllegalStateException("delivered bakery work has no effect");
                 }

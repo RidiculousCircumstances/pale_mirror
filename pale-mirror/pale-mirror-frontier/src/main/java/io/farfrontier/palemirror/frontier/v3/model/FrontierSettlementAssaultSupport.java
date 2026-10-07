@@ -16,8 +16,6 @@ final class FrontierSettlementAssaultSupport {
         bootstrap.hive().bioforms().forEach(value -> hiveBioforms.add(value.id()));
         hiveBioforms.addAll(colony.spawnedBioforms().keySet());
         Set<SubjectId> routeAttackers = new HashSet<>();
-        plans.routeEngagements().values().stream().filter(value -> value.status() != RouteEngagementStatus.RESOLVED)
-                .forEach(value -> routeAttackers.addAll(value.attackerIds()));
         Set<SubjectId> activeAttackers = new HashSet<>();
         Set<SubjectId> activeSettlements = new HashSet<>();
         for (SettlementAssault assault : plans.settlementAssaults().values()) {

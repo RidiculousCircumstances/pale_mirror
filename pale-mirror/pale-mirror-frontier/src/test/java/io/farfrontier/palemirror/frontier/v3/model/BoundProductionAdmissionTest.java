@@ -98,10 +98,17 @@ class BoundProductionAdmissionTest {
         var active = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
                 assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload()));
         state = ProductionProcess.reduceStarted(active, task.ownerId(), started);
-        var another = new StrategicTask(new SubjectId("task:second-bakery-request"), task.objectiveId(),
-                task.ownerId(), task.kind(), task.infectionTarget(), task.operationTarget(), task.resourceSiteTarget(),
-                task.requirements(), task.dependencies(), StrategicTaskStatus.PENDING,
-                task.operationObservationPosition(), task.authorityId(), task.authorityEpoch());
+        var another = new StrategicTask(new SubjectId("task:second-bakery-request"),
+                task.objectiveId(),
+                task.ownerId(),
+                task.kind(),
+                task.infectionTarget(),
+                task.resourceSiteTarget(),
+                task.requirements(),
+                task.dependencies(),
+                StrategicTaskStatus.PENDING,
+                task.authorityId(),
+                task.authorityEpoch());
         state = state.withStrategicPlans(state.strategicPlans().addTask(another));
         var jobs = state.productionJobs();
         var stock = state.inventory();

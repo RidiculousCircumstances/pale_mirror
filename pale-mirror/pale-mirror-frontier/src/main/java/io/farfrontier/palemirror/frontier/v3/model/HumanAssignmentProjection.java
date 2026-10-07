@@ -23,7 +23,7 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
     private record Dependencies(List<Object> sources) {
         static Dependencies of(FrontierWorldState state) {
             return new Dependencies(List.of(state.humanPopulation().residents(), state.productionJobs(),
-                    state.resourceSites().sites(), state.operations(), state.strategicPlans().routePatrols(),
+                    state.resourceSites().sites(), state.strategicPlans().routePatrols(),
                     state.strategicPlans().settlementAssaults(), state.routeConstructions(), state.routeMaintenances(),
                     state.serviceWorks(), state.humanPopulation().medicalOperations(), state.humanPopulation().migrations(), state.shipments(), state.unitGroups()));
         }
@@ -66,11 +66,6 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
         state.resourceSites().sites().values().stream().filter(site -> site.phase() == ResourceSitePhase.HARVESTING).sorted(Comparator.comparing(ResourceSiteLifecycle::siteId))
                 .flatMap(site -> site.harvestJobs().values().stream())
                 .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.FIELD_HARVEST, job.id()));
-        state.operations().values().stream().sorted(Comparator.comparing(RouteOperation::id))
-                .filter(operation -> FrontierWorldStateSupport.retainsParticipantClaim(state, operation)).forEach(operation -> {
-                    operation.unit().members().forEach(member -> claim(values, member.residentId(),
-                            member.duty() == RouteUnitDuty.CARGO_CREW ? HumanAssignmentKind.CARGO_TRANSPORT : HumanAssignmentKind.ESCORT, operation.id()));
-                });
         state.strategicPlans().routePatrols().values().stream().sorted(Comparator.comparing(RoutePatrol::taskId))
                 .filter(RoutePatrol::active)
                 .forEach(patrol -> patrol.memberIds().forEach(member -> claim(values, member, HumanAssignmentKind.ROUTE_PATROL, patrol.taskId())));

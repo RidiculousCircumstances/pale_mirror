@@ -7,60 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorBodyAuthorityTest {
-    @Test void savedAssemblyDepartureRejoinsWithoutCreditingArrivalOrMovingCargo() {
-        var state = FrontierV3FixtureCatalog.operationAssemblyConfiguration(
-                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:assembly-rejoin"), 91L).initialState();
-        var operation = FrontierDevelopmentScenarios.initialNorthwatchAssembly(state).orElseThrow();
-        var assembly = operation.activeAssembly().orElseThrow();
-        var actor = assembly.safeAdvances().stream().filter(id -> {
-            var approach = assembly.members().get(id);
-            return approach.cursor() + 2 < approach.corridor().size()
-                    && assembly.members().entrySet().stream().noneMatch(other -> !other.getKey().equals(id)
-                    && other.getValue().currentSurface().equals(approach.corridor().get(approach.cursor() + 2)));
-        }).findFirst().orElseThrow();
-        var member = assembly.members().get(actor);
-        state = ModeledActorBodyFacts.present(state, actor);
-        var location = state.actorLocations().get(actor);
-        var body = ActorBodyAuthority.current(state, actor);
-        var execution = state.actorExecutions().actors().get(actor).current().orElseThrow();
-        var observed = member.corridor().get(member.cursor() + 2).standingBody();
-        var unloaded = ActorBodyAuthority.unloaded(state, new ActorBodyUnloaded(body, location.body(),
-                location.condition().health(), observed, location.condition().health(), java.util.Optional.of(execution)));
-        var checkpoint = unloaded.operations().get(operation.id()).activeAssembly().orElseThrow();
-        assertEquals(member.cursor(), checkpoint.members().get(actor).cursor());
-        assertEquals(member.topology(), checkpoint.members().get(actor).topology());
-        assertEquals(member.routeRevision() + 1, checkpoint.members().get(actor).routeRevision());
-        assertEquals(observed, checkpoint.members().get(actor).currentSurface().standingBody());
-        assertTrue(checkpoint.members().get(actor).rejoin().isPresent());
-        assertTrue(checkpoint.members().get(actor).rejoin().orElseThrow().path().size() > 1,
-                "the saved actual position requires real known travel, not merely arrival credit");
-        assertEquals(state.inventory(), unloaded.inventory());
-        assertEquals(state.actorExecutions(), unloaded.actorExecutions());
-        assertTrue(ActorExecutionCoordinator.coldAvailable(unloaded, actor));
-        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unloaded));
-        assertEquals(checkpoint, recovered.operations().get(operation.id()).activeAssembly().orElseThrow());
-        assertThrows(IllegalArgumentException.class, () -> checkpoint.advance(assembly.advance(actor).members()),
-                "an obsolete pre-departure route revision cannot certify arrival");
-        var advanced = checkpoint.advance(actor);
-        var blocked = recovered.recordPhysicalDelta(new PhysicalDelta(
-                advanced.members().get(actor).currentSurface().support().offset(0, 1, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
-                java.util.Optional.empty(), java.util.Optional.empty(), "test:blocked-assembly-rejoin"));
-        assertThrows(IllegalArgumentException.class, () -> blocked.advanceOperationAssembly(operation.id(), advanced,
-                OperationExecutionAuthority.assemblyCurrent(blocked, operation)));
-        var planned = io.farfrontier.palemirror.frontier.v3.process.SupplyOperationProcess.planAssembly(blocked,
-                io.farfrontier.palemirror.frontier.v3.process.SupplyOperationProcess.operationAssembly(operation, 20L));
-        assertTrue(planned.stream().map(event -> event.payload()).filter(OperationAssemblyAdvanced.class::isInstance)
-                .map(OperationAssemblyAdvanced.class::cast).allMatch(event ->
-                        event.assembly().members().get(actor).equals(checkpoint.members().get(actor))),
-                "ordinary planning must hold the blocked member instead of emitting a rejected advance");
-        var receipt = new OperationAssemblyAdvanced(operation.id(), advanced, OperationExecutionAuthority.assemblyCurrent(recovered, operation));
-        var codecs = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
-        assertEquals(receipt, codecs.decode(receipt.type(), codecs.encode(receipt)));
-        var continued = recovered.advanceOperationAssembly(operation.id(), advanced, receipt.executions());
-        assertEquals(member.cursor() + 1, continued.operations().get(operation.id()).activeAssembly().orElseThrow().members().get(actor).cursor());
-        assertEquals(member.nextSurface().standingBody(), continued.actorLocations().get(actor).body());
-        assertEquals(state.inventory(), continued.inventory());
-    }
+
     @Test void physicalDeathWithoutAnyPresentationScopeRetiresExactBodyAndPassiveExecution() {
         var state = ResourceSiteHarvestProcessTest.initial();
         var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();

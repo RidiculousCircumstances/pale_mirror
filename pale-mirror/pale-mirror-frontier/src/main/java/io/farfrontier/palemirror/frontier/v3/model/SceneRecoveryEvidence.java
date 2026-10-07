@@ -4,12 +4,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Set;
 
-/** Loaded-world proof that an UNKNOWN scene cannot reclaim its exact pre-restart bodies or carrier. */
-public record SceneRecoveryEvidence(Set<SubjectId> missingActorIds, boolean missingCargoCarrier) {
+/** Loaded-world proof that an UNKNOWN scene cannot reclaim its exact pre-restart bodies. */
+public record SceneRecoveryEvidence(Set<SubjectId> missingActorIds) {
     public SceneRecoveryEvidence {
         missingActorIds = Set.copyOf(missingActorIds);
-        if (missingActorIds.isEmpty() && !missingCargoCarrier) {
-            throw new IllegalArgumentException("scene recovery evidence must retain a missing actor or carrier");
+        if (missingActorIds.isEmpty()) {
+            throw new IllegalArgumentException("scene recovery evidence must retain a missing actor");
         }
     }
 }

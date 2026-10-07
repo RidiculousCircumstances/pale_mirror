@@ -29,7 +29,6 @@ public final class AmbientPlacementPolicy {
             Map.entry(AmbientGoalKind.PATROL, AmbientPlacementPolicy::serviceZone),
             Map.entry(AmbientGoalKind.SCOUT_PATROL, AmbientPlacementPolicy::exact),
             Map.entry(AmbientGoalKind.TRANSIT, AmbientPlacementPolicy::exact),
-            Map.entry(AmbientGoalKind.OPERATION_ASSEMBLY, AmbientPlacementPolicy::exact),
             Map.entry(AmbientGoalKind.ENGINEERING_ASSEMBLY, AmbientPlacementPolicy::exact),
             Map.entry(AmbientGoalKind.HIVE_TASK_ASSEMBLY, AmbientPlacementPolicy::exact),
             Map.entry(AmbientGoalKind.HIVE_TASK_RETURN, AmbientPlacementPolicy::exact));

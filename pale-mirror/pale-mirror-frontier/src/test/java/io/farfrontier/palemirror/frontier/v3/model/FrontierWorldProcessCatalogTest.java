@@ -37,6 +37,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierWorldProcessCatalogTest {
+    @Test void retiredHiveSupplyHasNoProcessScheduleOrPayloadOwner() {
+        var registry = FrontierWorldRuntimeDefinition.processRegistry();
+        for (String kind : List.of("frontier.supply.task.start", "frontier.supply.cargo.load",
+                "frontier.operation.assembly", "frontier.operation.progress", "frontier.terminal_logistics.retention",
+                "frontier.hive_route_engagement.start", "frontier.hive_route_engagement.progress",
+                "frontier.hive_route_engagement.combat", "frontier.objective.interrupt"))
+            assertThrows(IllegalArgumentException.class, () -> registry.requireScheduledOwner(kind), kind);
+        for (String type : List.of("frontier.supply_contract_created", "frontier.cargo_loaded", "frontier.cargo_delivered",
+                "frontier.operation_created", "frontier.route_engagement_started", "frontier.hot_scout_operation_observed")) {
+            assertThrows(IllegalArgumentException.class, () -> registry.requireCommandOwner(type), type);
+            assertThrows(IllegalArgumentException.class, () -> registry.requireReducedEventOwner(type), type);
+            assertThrows(IllegalArgumentException.class,
+                    () -> FrontierWorldRuntimeDefinition.payloadCodecs().decode(type, new byte[0]), type);
+        }
+    }
     @Test void retiredOwnerlessObservationHasNoCommandEventOrCodecOwner() {
         var registry = FrontierWorldRuntimeDefinition.processRegistry();
         String retired = "frontier.ambient_actor_observed";
@@ -180,7 +195,7 @@ class FrontierWorldProcessCatalogTest {
                         new FrontierDurationProcessDriverRegistry.ColdDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
                                 "frontier.resource_site.harvest.cold_progress"),
                         new FrontierDurationProcessDriverRegistry.HotDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
-                                SceneCauseKind.LOGISTICS)),
+                                SceneCauseKind.SETTLEMENT_ASSAULT)),
                 FrontierWorldProcessCatalog.scheduledKinds(), java.util.Set.of(SceneCauseKind.values())));
     }
 
@@ -239,7 +254,7 @@ class FrontierWorldProcessCatalogTest {
     @Test
     void sharedSceneReleaseMayEmitTheTypedProductionFinalizationItPhysicallyConfirms() {
         var releaseExecutor = FrontierWorldProcessCatalog.descriptors().stream()
-                .filter(descriptor -> descriptor.id().equals("logistics-scenes"))
+                .filter(descriptor -> descriptor.id().equals("scene-lifecycle"))
                 .findFirst().orElseThrow();
         assertTrue(releaseExecutor.emittedPayloadTypes().contains("frontier.production_work_scene_finalized"));
     }
@@ -274,7 +289,7 @@ class FrontierWorldProcessCatalogTest {
                 Map.entry("ambient-actors", new AmbientLeaseReleased(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE)),
                 Map.entry("actor-body", new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyReleased(
                         new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(new SubjectId("actor:representative"), 1L))),
-                Map.entry("logistics-scenes", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT)),
+                Map.entry("scene-lifecycle", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT)),
                 Map.entry("population", ResidentMigrationDiagnosticProducer.QUARANTINE.create(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
                         new SubjectId("resident:representative"), io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.TRANSIT,
                         new SubjectId("resident:representative"), 1L))),
@@ -296,6 +311,10 @@ class FrontierWorldProcessCatalogTest {
                         new SubjectId("group:representative"), 1L,
                         io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupAdvanced.Change.CLOSE, 2L, Optional.empty(), Optional.empty())),
                 Map.entry("transport-missions", new TransportMissionRetired(new SubjectId("mission:representative"), 1L)),
+                Map.entry("expedition-supplies", new ExpeditionSupplyColdLoaded(new SubjectId("mission:representative"), new SubjectId("claim:representative"))),
+                Map.entry("unit-inventory", new UnitInventoryDispositionObserved(
+                        new ActorBodyId(new SubjectId("resident:representative"), 1), new SubjectId("custody:representative"), 1,
+                        UnitInventoryDispositionObserved.Outcome.MISSING_BEFORE_LOOT, Optional.empty())),
                 Map.entry("resource-sites", new ResourceSiteGrowthAdvanced(new SubjectId("site:representative"), 1L, 0)),
                 Map.entry("hive", new InfectionChanged(new InfectionCell(1, 1), new FixedRatio(FixedScalar.ONE))),
                 Map.entry("infrastructure", new RouteTopologyCutover(new SubjectId("route-construction:representative"), Optional.empty())),

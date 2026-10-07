@@ -154,15 +154,14 @@ public final class PopulationMigrationProcess {
                 - SettlementFacilityCapability.livingResidents(state, settlement.id()) - state.humanPopulation().inboundHousingReservations(settlement.id())));
     }
     private static boolean corridorPassable(FrontierWorldState state, Settlement source, Settlement destination) {
-        List<BlockPosition> route = new ArrayList<>(state.routeTopology().supplyWaypoints(state.bootstrap(), source.id()));
-        List<BlockPosition> reverse = new ArrayList<>(state.routeTopology().supplyWaypoints(state.bootstrap(), destination.id()));
+        List<BlockPosition> route = new ArrayList<>(state.routeTopology().settlementWaypoints(state.bootstrap(), source.id()));
+        List<BlockPosition> reverse = new ArrayList<>(state.routeTopology().settlementWaypoints(state.bootstrap(), destination.id()));
         java.util.Collections.reverse(reverse);
         route.addAll(reverse);
         return FrontierRouteNetwork.isPassable(state.bootstrap(), route, state.physicalDeltas());
     }
     private static boolean coldAvailable(FrontierWorldState state, SubjectId residentId) {
         return ActorExecutionCoordinator.coldAvailable(state, residentId)
-                && !FrontierWorldStateSupport.activeOperationClaim(state, residentId)
                 && !FrontierWorldStateSupport.activePatrolClaim(state, residentId)
                 && !FrontierWorldStateSupport.activeEmploymentClaim(state, residentId);
     }

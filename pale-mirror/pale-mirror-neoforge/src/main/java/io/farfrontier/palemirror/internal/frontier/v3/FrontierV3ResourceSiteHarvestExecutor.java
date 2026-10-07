@@ -114,8 +114,8 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         boolean depotLoaded = level.hasChunkAt(target.chestPosition());
         ContainerSurface surface = state.inventory().surfaces().get(outputSlot(target).containerId());
         String surfaceStatus = surface == null ? "MISSING" : surface.status().name();
-        ChestBlockEntity chest = depotLoaded ? FrontierV3CargoHandoffExecutor.activeChest(level,
-                new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), outputSlot(target).containerId())) : null;
+        ChestBlockEntity chest = depotLoaded ? FrontierV3ExactItemPresentation.activeChest(level,
+                new FrontierV3ExactItemPresentation.StoreTarget(target.chestPosition(), outputSlot(target).containerId())) : null;
         var siteClaim = fieldLoaded ? FrontierV3ResourceSiteLedger.get(level).siteClaim(target.site().id()) : null;
         if (siteClaim instanceof FrontierV3ResourceSiteLedger.CellSiteClaim cellClaim) {
             // The old exact-stack readiness vocabulary cannot describe per-cell progress or
@@ -177,8 +177,8 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         // ticking chest.  A receipt is a physical write, so it requires the same ground/body
         // fact as the reference-custody provider: a ticking chunk and its exact owned chest.
         boolean naturallyTicking = level.hasChunkAt(position) && level.shouldTickBlocksAt(position);
-        boolean ownedChestPresent = naturallyTicking && FrontierV3CargoHandoffExecutor.activeChest(level,
-                new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), containerId)) != null;
+        boolean ownedChestPresent = naturallyTicking && FrontierV3ExactItemPresentation.activeChest(level,
+                new FrontierV3ExactItemPresentation.StoreTarget(target.chestPosition(), containerId)) != null;
         return physicallyGroundedDepot(naturallyTicking, ownedChestPresent, hasOperationalDepotCustody(state, containerId));
     }
 
@@ -214,8 +214,8 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         // still UNMATERIALIZED: absence is a local output/materialization conflict, not a
         // reason to leave the exact terminal intent RUNNING until another observer arrives.
         if (surface.status() != ContainerSurfaceStatus.ACTIVE && !target.deferredReceipt()) return;
-        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
-                new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), outputSlot(target).containerId()));
+        ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,
+                new FrontierV3ExactItemPresentation.StoreTarget(target.chestPosition(), outputSlot(target).containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "missing-depot"); return; }
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
         if (intent.status() == PhysicalIntentStatus.RUNNING) {
@@ -244,7 +244,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         boolean completeField = fullyHarvested(level, site, ledger);
         if (!(output.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)) return false;
         ReceiptDisposition disposition = receiptDisposition(completeField, ledger.hasHarvestReceipt(site.id(), output),
-                FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot.slot()), output), chest.getItem(slot.slot()).isEmpty());
+                FrontierV3ExactItemPresentation.exactMatch(chest.getItem(slot.slot()), output), chest.getItem(slot.slot()).isEmpty());
         return switch (disposition) {
             case ALREADY_CONFIRMED -> true;
             case ACKNOWLEDGE_EXISTING_OUTPUT -> {
@@ -270,7 +270,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
             return ReceiptDisposition.CONFLICT;
         }
         return receiptDisposition(fullyHarvested(level, site, ledger), ledger.hasHarvestReceipt(site.id(), output),
-                FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot.slot()), output), chest.getItem(slot.slot()).isEmpty());
+                FrontierV3ExactItemPresentation.exactMatch(chest.getItem(slot.slot()), output), chest.getItem(slot.slot()).isEmpty());
     }
 
     private static boolean fullyHarvested(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger) {
@@ -329,7 +329,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         if (!(expected.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)) return false;
         ItemStack output = chest.getItem(slot.slot());
         return ledger.hasHarvestReceipt(site.id(), expected) && fullyHarvested(level, site, ledger)
-                && FrontierV3CargoHandoffExecutor.exactMatch(output, expected);
+                && FrontierV3ExactItemPresentation.exactMatch(output, expected);
     }
 
     static boolean apply(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, ChestBlockEntity chest, ExactItemStack output) {
@@ -344,7 +344,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         }
         if (!ledger.recordHarvestReceipt(site.id(), output)) return false;
         int slot = ((io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot) output.custody()).slot();
-        chest.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(output)); chest.setChanged();
+        chest.setItem(slot, FrontierV3ExactItemPresentation.materializedStack(output)); chest.setChanged();
         return completePostcondition(level, site, ledger, chest, output);
     }
 

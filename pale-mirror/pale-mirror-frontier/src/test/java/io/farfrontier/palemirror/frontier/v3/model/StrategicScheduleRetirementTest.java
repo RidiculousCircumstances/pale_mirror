@@ -39,7 +39,7 @@ class StrategicScheduleRetirementTest {
 
         var selected = wal.getFirst().events().stream()
                 .filter(event -> event.payload() instanceof StrategicObjectiveSelected).findFirst().orElseThrow();
-        var fixturePlanner = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(base.worldId(), 41L).scheduledPlanner();
+        var fixturePlanner = FrontierWorldRuntimeDefinition.configuration(base.worldId(), 41L).scheduledPlanner();
         assertEquals(List.of(pulse), fixturePlanner.retiredBy(initial, engine.canonicalState().state(), selected,
                 () -> List.of(pulse, otherPulse)), "native fixture wrappers must preserve the production retirement policy");
 
@@ -79,10 +79,17 @@ class StrategicScheduleRetirementTest {
             var objective = new StrategicObjective(new SubjectId("objective:retention-" + i), owner,
                     StrategicObjectiveKind.HIVE_EXPAND_INFECTION, target, Optional.empty(), i,
                     StrategicObjectiveStatus.ACTIVE, authority.ownerId(), authority.reconsiderationEpoch());
-            var task = new StrategicTask(new SubjectId("task:retention-" + i), objective.id(), owner,
-                    StrategicTaskKind.SPREAD_INFECTION_CELL, target, Optional.empty(), Optional.empty(),
-                    List.of(StrategicTaskRequirement.OPERATIONAL_GANGLION), List.of(), StrategicTaskStatus.PENDING,
-                    Optional.empty(), authority.ownerId(), authority.reconsiderationEpoch());
+            var task = new StrategicTask(new SubjectId("task:retention-" + i),
+                objective.id(),
+                owner,
+                StrategicTaskKind.SPREAD_INFECTION_CELL,
+                target,
+                Optional.empty(),
+                List.of(StrategicTaskRequirement.OPERATIONAL_GANGLION),
+                List.of(),
+                StrategicTaskStatus.PENDING,
+                authority.ownerId(),
+                authority.reconsiderationEpoch());
             plans = plans.addObjective(objective).addTask(task).transitionTask(task.id(), StrategicTaskStatus.BLOCKED);
         }
         return state.withStrategicPlans(plans);

@@ -24,15 +24,17 @@ class ClaimPurposeCodecTest {
     @Test
     void claimOwnerPurposeIsDurableAndUnknownTagFailsClosed() throws Exception {
         byte[] ration = encode(ClaimPurpose.SETTLEMENT_RATION);
-        byte[] supply = encode(ClaimPurpose.SUPPLY_CONTRACT);
-        assertEquals(ration.length, supply.length);
-        List<Integer> changed = IntStream.range(0, ration.length).filter(index -> ration[index] != supply[index]).boxed().toList();
+        byte[] trade = encode(ClaimPurpose.GOODS_TRADE);
+        assertEquals(ration.length, trade.length);
+        List<Integer> changed = IntStream.range(0, ration.length).filter(index -> ration[index] != trade[index]).boxed().toList();
         assertEquals(1, changed.size(), "only the declared purpose tag may change between otherwise identical claims");
         int purposeOffset = changed.getFirst();
         assertEquals(2, Byte.toUnsignedInt(ration[purposeOffset]));
-        assertEquals(3, Byte.toUnsignedInt(supply[purposeOffset]));
+        assertEquals(6, Byte.toUnsignedInt(trade[purposeOffset]));
         assertEquals(ClaimPurpose.SETTLEMENT_RATION, decode(ration).claims().values().iterator().next().purpose());
-        assertEquals(ClaimPurpose.SUPPLY_CONTRACT, decode(supply).claims().values().iterator().next().purpose());
+        assertEquals(ClaimPurpose.GOODS_TRADE, decode(trade).claims().values().iterator().next().purpose());
+        ration[purposeOffset] = 3; // Retired SUPPLY_CONTRACT tag may never be adopted by another purpose.
+        assertThrows(IllegalArgumentException.class, () -> decode(ration));
         ration[purposeOffset] = 127;
         assertThrows(IllegalArgumentException.class, () -> decode(ration));
     }

@@ -7,7 +7,6 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRecoveryConfiguration;
@@ -42,15 +41,6 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLif
 final class FrontierV3ServerPhysicalInteractions {
     private FrontierV3ServerPhysicalInteractions() { }
 
-    public static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, ServerPlayer player, Entity entity) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level)) return CargoCarrierInteraction.NOT_MANAGED;
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
-            return FrontierV3CargoCarrierExecutor.hasDeclaration(entity) ? CargoCarrierInteraction.REJECTED : CargoCarrierInteraction.NOT_MANAGED;
-        }
-        return releaseCargoCarrier(level, runtime, entity, java.util.Optional.of(player.getUUID()));
-    }
     public static boolean presentObjectBoard(ServerLevel level, ServerPlayer player, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
@@ -64,85 +54,17 @@ final class FrontierV3ServerPhysicalInteractions {
         PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + owner, FrontierV3ObjectBoardCard.fromBoard(board));
         return true;
     }
-    static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                                Entity entity, java.util.Optional<java.util.UUID> observerPlayerId) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(observerPlayerId, "observer player id");
-        Objects.requireNonNull(runtime, "runtime");
-        if (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
-            return FrontierV3CargoCarrierExecutor.hasDeclaration(entity) ? CargoCarrierInteraction.REJECTED : CargoCarrierInteraction.NOT_MANAGED;
-        }
-        FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null) return CargoCarrierInteraction.REJECTED;
-        var lease = FrontierV3CargoCarrierExecutor.activeLease(state, entity);
-        if (lease.isEmpty()) {
-            // An accepted handoff can survive a torn save of the old cart declaration.
-            // Canonical world custody allows ordinary interaction, not a second release.
-            if (entity instanceof MinecartChest && FrontierV3CargoCarrierExecutor.hasWorldCustody(state, entity.getUUID())) {
-                if (FrontierV3CargoCarrierExecutor.hasDeclaration(entity)) {
-                    if (!FrontierV3CargoCarrierExecutor.hasCurrentDeclaration(state, entity)) return CargoCarrierInteraction.REJECTED;
-                    if (!FrontierV3CargoCarrierProvenance.restore(state.inventory().items(), entity.getUUID(), (MinecartChest) entity)) {
-                        return CargoCarrierInteraction.REJECTED;
-                    }
-                    FrontierV3CargoCarrierExecutor.relinquishDeclaration(entity);
-                }
-                return CargoCarrierInteraction.NOT_MANAGED;
-            }
-            return FrontierV3CargoCarrierExecutor.hasDeclaration(entity)
-                    ? CargoCarrierInteraction.REJECTED : CargoCarrierInteraction.NOT_MANAGED;
-        }
-        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElse(null);
-        if (checkpoint == null) return CargoCarrierInteraction.REJECTED;
-        CommandId commandId = FrontierV3CommandIds.physical("cargo-carrier-release", checkpoint.revision().value());
-        CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId),
-                new CargoCarrierReleased(lease.orElseThrow().id(), io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.logistics(lease.orElseThrow()).cargoId(), entity.getUUID(), observerPlayerId)))
-                .orElse(null);
-        if (result instanceof CommandResult.Accepted) {
-            // activeLease validated this exact physical carrier without mutation. The
-            // server-thread handoff must commit before captions or item provenance change.
-            // Keep the pre-command state solely to validate the already admitted contents.
-            if (!FrontierV3CargoCarrierExecutor.markReleasedCarrier(state, lease.orElseThrow(), entity)) {
-                throw new IllegalStateException("accepted cargo handoff lost its validated physical carrier");
-            }
-            FrontierV3CargoCarrierExecutor.relinquishDeclaration(entity);
-            return CargoCarrierInteraction.RELEASED;
-        }
-        return CargoCarrierInteraction.REJECTED;
-    }
-    public static void observeTerminalVehicleDamage(ServerLevel level, Entity entity, DamageSource source) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(source, "damage source");
-        if (source.is(DamageTypeTags.IS_EXPLOSION)) return;
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
-        observeTerminalVehicleDamage(level, runtime, entity, source);
-    }
-    public static boolean isLeasedRoadCargoCarrier(Entity entity) {
-        return entity instanceof MinecartChest
-                && entity.getPersistentData().contains(FrontierV3CargoCarrierExecutor.LEASE_KEY)
-                && entity.getPersistentData().contains(FrontierV3CargoCarrierExecutor.CARGO_KEY);
-    }
-    static void observeTerminalVehicleDamage(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                             Entity entity, DamageSource source) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(source, "damage source");
-        if (source.is(DamageTypeTags.IS_EXPLOSION)) return;
-        CargoCarrierInteraction released = releaseCargoCarrier(level, runtime, entity, java.util.Optional.empty());
-        if (released == CargoCarrierInteraction.REJECTED) {
-            runtime.quarantine(new IllegalStateException("terminal vehicle damage cannot durably release one HOT cargo carrier"));
-            return;
-        }
-        captureCargoCarrierImpact(level, runtime, entity, "terminal vehicle damage");
-    }
     public static ExactCustodyObservation observeExactItemPickup(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(itemEntity, "item entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return ExactCustodyObservation.NOT_MANAGED;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return ExactCustodyObservation.REJECTED;
-        var carrierId = FrontierV3CargoHandoffExecutor.worldCarrierId(itemEntity.getItem());
+        var carrierId = FrontierV3ExactItemPresentation.worldCarrierId(itemEntity.getItem());
         if (carrierId.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
         var source = new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(carrierId.orElseThrow());
         var item = state.inventory().items().values().stream().filter(value -> value.custody().equals(source))
-                .filter(value -> FrontierV3CargoHandoffExecutor.exactMatch(itemEntity.getItem(), value)).findFirst();
+                .filter(value -> FrontierV3ExactItemPresentation.exactMatch(itemEntity.getItem(), value)).findFirst();
         if (item.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
         return submitExactCustody(runtime, "world-pickup", item.orElseThrow().id().value(),
                 new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(item.orElseThrow().id(), source,
@@ -156,20 +78,20 @@ final class FrontierV3ServerPhysicalInteractions {
         if (state == null) return ExactCustodyObservation.REJECTED;
         var item = state.inventory().items().values().stream().filter(value -> value.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.Player owner
                         && owner.playerId().equals(player.getUUID()))
-                .filter(value -> FrontierV3CargoHandoffExecutor.exactMatch(itemEntity.getItem(), value)).findFirst();
+                .filter(value -> FrontierV3ExactItemPresentation.exactMatch(itemEntity.getItem(), value)).findFirst();
         if (item.isEmpty()) {
-            var carrierId = FrontierV3CargoHandoffExecutor.worldCarrierId(itemEntity.getItem());
+            var carrierId = FrontierV3ExactItemPresentation.worldCarrierId(itemEntity.getItem());
             if (carrierId.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
             var source = new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(carrierId.orElseThrow());
             item = state.inventory().items().values().stream().filter(value -> value.custody().equals(source))
-                    .filter(value -> FrontierV3CargoHandoffExecutor.exactMatch(itemEntity.getItem(), value)).findFirst();
+                    .filter(value -> FrontierV3ExactItemPresentation.exactMatch(itemEntity.getItem(), value)).findFirst();
             if (item.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
-            FrontierV3CargoHandoffExecutor.bindWorldCarrier(itemEntity.getItem(), itemEntity.getUUID()); itemEntity.setItem(itemEntity.getItem());
+            FrontierV3ExactItemPresentation.bindWorldCarrier(itemEntity.getItem(), itemEntity.getUUID()); itemEntity.setItem(itemEntity.getItem());
             return submitExactCustody(runtime, "world-retoss", item.orElseThrow().id().value(),
                     new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(item.orElseThrow().id(), source,
                             new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(itemEntity.getUUID())));
         }
-        FrontierV3CargoHandoffExecutor.bindWorldCarrier(itemEntity.getItem(), itemEntity.getUUID()); itemEntity.setItem(itemEntity.getItem());
+        FrontierV3ExactItemPresentation.bindWorldCarrier(itemEntity.getItem(), itemEntity.getUUID()); itemEntity.setItem(itemEntity.getItem());
         return submitExactCustody(runtime, "player-toss", item.orElseThrow().id().value(),
                 new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(item.orElseThrow().id(), item.orElseThrow().custody(),
                         new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(itemEntity.getUUID())));
@@ -237,34 +159,10 @@ final class FrontierV3ServerPhysicalInteractions {
         Entity directSource = explosion == null ? null : explosion.getDirectSourceEntity();
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> managed = FrontierV3ExplosionExecutionScope.currentIntent()
                 .or(() -> FrontierV3BomberBomb.intentFor(explosion));
-        for (Entity entity : entities) {
-            CargoCarrierInteraction released = releaseCargoCarrier(level, runtime, entity, java.util.Optional.empty());
-            if (released == CargoCarrierInteraction.REJECTED) {
-                runtime.quarantine(new IllegalStateException("explosion cannot durably release one HOT cargo carrier"));
-                return false;
-            }
-            if (managed.isEmpty()) captureCargoCarrierImpact(level, runtime, entity, "external explosion");
-            if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) return false;
-        }
         boolean resourceSite = managed.map(intent -> FrontierV3ResourceSiteExplosionExecutor.captureManaged(level, runtime, intent, affected))
                 .orElseGet(() -> FrontierV3ResourceSiteExplosionExecutor.captureExternal(level, runtime, affected));
         boolean ordinary = managed.map(intent -> FrontierV3ExplosionExecutor.observeDetonation(level, runtime, intent, directSource, affected, entities))
                 .orElseGet(() -> FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected));
         return resourceSite || ordinary;
-    }
-    private static void captureCargoCarrierImpact(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                  Entity entity, String cause) {
-        if (!(entity instanceof MinecartChest)) return;
-        FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null) {
-            runtime.quarantine(new IllegalStateException(cause + " has no canonical state"));
-            return;
-        }
-        if (!FrontierV3CargoCarrierExecutor.hasWorldCustody(state, entity.getUUID())) return;
-        try {
-            FrontierV3CargoCarrierImpactLedger.get(level).capture(level.getGameTime(), entity, state);
-        } catch (RuntimeException error) {
-            runtime.quarantine(error);
-        }
     }
 }

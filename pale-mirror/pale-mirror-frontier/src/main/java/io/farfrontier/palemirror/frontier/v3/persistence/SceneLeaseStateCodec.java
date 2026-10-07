@@ -36,7 +36,6 @@ final class SceneLeaseStateCodec {
                 SceneRecoveryEvidence evidence = lease.recoveryEvidence().orElseThrow();
                 writeCount(output, evidence.missingActorIds().size());
                 for (SubjectId actor : evidence.missingActorIds().stream().sorted().toList()) writeString(output, actor.value());
-                output.writeBoolean(evidence.missingCargoCarrier());
             }
         }
     }
@@ -59,7 +58,7 @@ final class SceneLeaseStateCodec {
             if (input.readBoolean()) {
                 java.util.Set<SubjectId> missing = new java.util.LinkedHashSet<>();
                 for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) missing.add(new SubjectId(readString(input)));
-                recovery = java.util.Optional.of(new SceneRecoveryEvidence(missing, input.readBoolean()));
+                recovery = java.util.Optional.of(new SceneRecoveryEvidence(missing));
             }
             SceneLease lease = SceneLease.forCause(id, world, cause, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
                     FrontierWireTags.require(SceneLeaseStatus.class, status), members, handoffActors, recovery);

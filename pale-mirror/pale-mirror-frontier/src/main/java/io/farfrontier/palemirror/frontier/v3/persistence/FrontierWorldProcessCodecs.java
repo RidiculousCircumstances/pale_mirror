@@ -39,7 +39,7 @@ public final class FrontierWorldProcessCodecs {
         result.put("physical-observation", FrontierWorldPayloadCodecs.physicalCodecs());
         result.put("replica-custody", FrontierWorldPayloadCodecs.replicaCustodyCodecs());
         result.put("ambient-actors", FrontierWorldPayloadCodecs.ambientCodecs());
-        result.put("logistics-scenes", FrontierWorldPayloadCodecs.logisticsCodecs());
+        result.put("scene-lifecycle", FrontierWorldPayloadCodecs.sceneLifecycleCodecs());
         result.put("population", FrontierWorldPayloadCodecs.populationCodecs());
         result.put("actor-movement", ActorMovementPayloadCodecs.create());
         result.put("actor-execution", ActorExecutionPayloadCodecs.create());
@@ -49,6 +49,8 @@ public final class FrontierWorldProcessCodecs {
         result.put("shipments", ShipmentPayloadCodecs.create());
         result.put("unit-groups", UnitGroupPayloadCodecs.groups());
         result.put("transport-missions", UnitGroupPayloadCodecs.transport());
+        result.put("unit-inventory", UnitInventoryPayloadCodecs.create());
+        result.put("expedition-supplies", ExpeditionSupplyPayloadCodecs.create());
         result.put("resource-sites", FrontierWorldPayloadCodecs.resourceSiteCodecs());
         result.put("hive", FrontierWorldPayloadCodecs.hiveCodecs());
         result.put("infrastructure", FrontierWorldPayloadCodecs.infrastructureCodecs());

@@ -11,8 +11,6 @@ import java.util.Set;
  * producer-stamped schema rather than reconstruct it from kind or aggregate membership.</p>
  */
 public enum PhysicalIntentRoleSchema {
-    CARGO_HANDOFF(1, PhysicalIntentLifecycleOwner.ROUTE_OPERATION, PhysicalIntentKind.CARGO_HANDOFF,
-            PhysicalIntentSubjectRole.LOGISTICS_OPERATION, PhysicalIntentSubjectRole.CARGO),
     STRUCTURAL_REPAIR(2, PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE, PhysicalIntentKind.STRUCTURAL_REPAIR,
             PhysicalIntentSubjectRole.STRUCTURE, PhysicalIntentSubjectRole.MATERIAL),
     ROUTE_CONSTRUCTION(3, PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE, PhysicalIntentKind.ROUTE_CONSTRUCTION,
@@ -24,8 +22,6 @@ public enum PhysicalIntentRoleSchema {
     EXPLOSION(6, PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION, PhysicalIntentKind.EXPLOSION,
             PhysicalIntentSubjectRole.BOMBER, PhysicalIntentSubjectRole.ENGAGEMENT),
     // Tags 7/8 are retired: they omitted the mandatory exact scene binding.
-    ROUTE_SCENE_STRIKE(28, PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT, PhysicalIntentKind.SCENE_STRIKE,
-            PhysicalIntentSubjectRole.ATTACKER, PhysicalIntentSubjectRole.TARGET),
     ASSAULT_SCENE_STRIKE(29, PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT, PhysicalIntentKind.SCENE_STRIKE,
             PhysicalIntentSubjectRole.ATTACKER, PhysicalIntentSubjectRole.TARGET),
     HIVE_GROWTH_CONSUMPTION(9, PhysicalIntentLifecycleOwner.HIVE_GROWTH, PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
@@ -42,8 +38,6 @@ public enum PhysicalIntentRoleSchema {
             PhysicalIntentSubjectRole.CUSTODY_ACCOUNT, PhysicalIntentSubjectRole.RESOURCE_DESTINATION_ACCOUNT),
     PRODUCTION(15, PhysicalIntentLifecycleOwner.PRODUCTION_WORK, PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
             PhysicalIntentSubjectRole.PRODUCTION_JOB, PhysicalIntentSubjectRole.INPUT_ITEM, PhysicalIntentSubjectRole.OUTPUT_ITEM),
-    CARGO_LOADING(16, PhysicalIntentLifecycleOwner.ROUTE_OPERATION, PhysicalIntentKind.CARGO_LOADING,
-            PhysicalIntentSubjectRole.CONTRACT, PhysicalIntentSubjectRole.CARGO, PhysicalIntentSubjectRole.SOURCE_ITEM),
     ROUTE_CONSTRUCTION_LOADING(17, PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE, PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING,
             PhysicalIntentSubjectRole.ROUTE, PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT, PhysicalIntentSubjectRole.CARGO, PhysicalIntentSubjectRole.CARGO_ITEM, PhysicalIntentSubjectRole.SOURCE_ITEM),
     NUTRIENT_DEPARTURE(18, PhysicalIntentLifecycleOwner.HIVE_NUTRIENT_TRANSFER, PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE,

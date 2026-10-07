@@ -2,6 +2,10 @@
 
 Status: accepted target architecture; not yet implemented.
 
+## Retired hive-supply feature (2026-10-07)
+
+The obsolete settlement-to-hive bread-supply feature is retired, not disabled behind a flag. Its contracts, RouteOperation/OperationAssembly/OperationTravel state, interception knowledge, cart projections, payloads and development profiles have no production or recovery owner. Current goods trade uses GoodsTradeContract, Shipment, TransportMission and UnitGroup, generic custody, UAE and shared goal navigation. The independent hive assault, physiology and internal nutrient transport remain supported. Retired wire tags are reserved holes; incompatible snapshots and WAL are rejected before runtime admission. Removal uses state schema 258 and persistence envelope 102; disposable worlds are recreated, never migrated.
+
 This document is the stable contract for Frontier v3. Implementation details may
 change, but changing an invariant or player promise here requires an explicit
 product and architecture decision in the same commit.
@@ -479,41 +483,7 @@ through the lifecycle.
   bounded chunk-indexed deferred aftermath record. Natural later loading shows
   the current result without replaying the old action; unclassified drift is
   observed before any write and blocks only its smallest owner.
-- Every spatial logistics operation owns an immutable bounded `OperationTravel`:
-  strategic route milestones remain planning facts, while its adjacent-cell
-  corridor, cursor, formation positions and cargo anchor are the one movement
-  truth. COLD may advance that cursor by a bounded distance; HOT accepts only
-  observed physical arrival at its next cursor. A HOT acceptance atomically
-  replaces both that travel checkpoint and the lease's complete member/cargo
-  anchors with the same adjacent formation; a rejected observation changes
-  neither. Leaving or restarting midway
-  retains that same cursor and formation, never teleports the convoy to a
-  milestone or lets a second COLD route action run.
-- A logistics operation may begin that travel only after a durable assembly has
-  brought its exact participants and cargo to a compiled public access port.
-  A settlement's strategic anchor or a resident's ambient hand-off slot is not
-  implicitly a convoy location. Access ports are semantic graybox geometry with
-  an unblocked two-body-high throat into the public route graph, so an operation
-  cannot hide an initial transfer through a wall or duplicate a body at its
-  first visible segment.
-- `OperationAssembly` is a separate bounded movement truth, not a migration or
-  a formation teleport: every member has a distinct assigned port slot and
-  adjacent-cell cursor, while the named carrier retains cargo provenance.
-  Creation leaves all actor locations unchanged; only exact COLD/HOT cursor
-  transitions move them. A loaded physical obstruction is one durable,
-  identity-specific fact: it records the participant's next cursor plus either
-  that assigned slot or the same compiled Hall-throat floor. It freezes the
-  shared assembly until the named actor reaches that unchanged cursor through
-  ordinary Minecraft movement after the same floor is clear; no timer, COLD
-  poll, alternate port or generic repair command may erase the fact. Completion atomically starts the first
-  `OperationTravel`; an arrived travel atomically advances its strategic
-  segment while retaining the formation/cargo positions. Assembly is not an
-  attackable route operation, and a player/world obstruction of its compiled
-  throat or slot is the visible durable deferral above or a semantic damage observation, never
-  permission to choose a hidden alternative path. COLD actor records do not
-  represent physical bodies and therefore do not obstruct pure corridor
-  compilation; only a live HOT lease reserves its canonical floor cell, and
-  the naturally loaded Minecraft world remains the final admission authority.
+- Current goods movement is owned by the exact TransportMission and UnitGroup roster. Each member uses UAE and shared goal navigation; admission preserves actual actor locations. Cargo custody and recipient acceptance remain separate from movement. No legacy hive-supply route, assembly cursor or cart is retained as a second authority.
 - HOT-to-COLD waits through bounded no-demand hysteresis, verifies release is
   safe despite any observer-independent physical activity, then captures exact
   surviving bodies, positions, health, inventories, damage and unfinished

@@ -5,12 +5,23 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Map;
 import java.util.Objects;
 
-/** One canonical resource location; slots are transient physical bindings rather than stock owners. */
+/** One canonical resource location. Optional personal placement survives inventory changes;
+ * it is neither resource identity nor proof that a physical stack has been materialized. */
 public record CustodyAccount(SubjectId id, ResourceCustody custody, Map<SubjectId, Integer> lotQuantities,
-                             Map<SubjectId, Integer> claimQuantities) {
+                             Map<SubjectId, Integer> claimQuantities, java.util.Optional<ActorItemSlot> actorPresentation) {
+    public CustodyAccount(SubjectId id, ResourceCustody custody, Map<SubjectId, Integer> lots, Map<SubjectId, Integer> claims) {
+        this(id, custody, lots, claims, java.util.Optional.empty());
+    }
     public CustodyAccount {
         Objects.requireNonNull(id, "custody account id"); Objects.requireNonNull(custody, "custody account location");
         lotQuantities = checked(lotQuantities, "lot", false); claimQuantities = checked(claimQuantities, "claim", true);
+        actorPresentation = Objects.requireNonNull(actorPresentation, "declared actor presentation");
+        if (actorPresentation.isPresent() && !(custody instanceof ResourceCustody.Actor))
+            throw new IllegalArgumentException("personal presentation requires actor custody");
+    }
+
+    public CustodyAccount withQuantities(Map<SubjectId, Integer> lots, Map<SubjectId, Integer> claims) {
+        return new CustodyAccount(id, custody, lots, claims, actorPresentation);
     }
 
     private static Map<SubjectId, Integer> checked(Map<SubjectId, Integer> values, String label, boolean emptyAllowed) {

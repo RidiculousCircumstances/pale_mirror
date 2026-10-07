@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 /** A declared owner strategy; the common lifecycle cannot inspect family progress or custody. */
 public interface ActorActivityCapability {
     ActorActivityKind kind();
+    default boolean permitsHomeFood(FrontierWorldState state, ActorExecutionId execution) { return true; }
     /** Explicit owner policy, not inferred from profession, scene or current job shape. */
     enum Interruption { RETAIN_CONTINUATION, RELEASE, TERMINAL_ONLY }
     Interruption interruption();

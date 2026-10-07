@@ -8,9 +8,6 @@ import java.util.Objects;
 public final class TacticalBehaviourRegistry {
     private static final EnumSet<TacticalBehaviour> REGISTERED = EnumSet.allOf(TacticalBehaviour.class);
     private static final Map<TacticalPolicyDescriptor, EnumSet<TacticalBehaviour>> OWNERS = Map.of(
-            TacticalPolicyRegistry.CARGO_ESCORT, EnumSet.of(TacticalBehaviour.HOLD_FORMATION,
-                    TacticalBehaviour.ADVANCE_CHECKPOINT, TacticalBehaviour.DEFEND_CARGO,
-                    TacticalBehaviour.OBSERVE_OBSTRUCTION, TacticalBehaviour.RETREAT_TO_PORT),
             TacticalPolicyRegistry.ROUTE_PATROL, EnumSet.of(TacticalBehaviour.HOLD_FORMATION,
                     TacticalBehaviour.ADVANCE_CHECKPOINT, TacticalBehaviour.OBSERVE_OBSTRUCTION,
                     TacticalBehaviour.RETREAT_TO_PORT),

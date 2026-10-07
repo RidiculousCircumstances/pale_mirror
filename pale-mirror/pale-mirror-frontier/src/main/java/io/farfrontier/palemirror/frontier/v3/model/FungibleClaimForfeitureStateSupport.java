@@ -73,14 +73,17 @@ public final class FungibleClaimForfeitureStateSupport {
                 hive = hive.cancelGrowth(plan.hiveJobId());
             }
         }
-        FrontierWorldState next = state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs).companies(companies)
-                .physicalIntents(intents).hiveColony(hive).strategicPlans(strategic).actorExecutions(executions));
-        for (SubjectId claimId : observed.forfeitedClaimIds().stream().sorted().toList()) {
-            ClaimAllocation original = state.inventory().fungibleResources().claims().get(claimId);
-            var owner = FungibleClaimForfeitureComposition.OWNERS.get(original.purpose());
-            if (owner != null) next = owner.apply(next, original);
+        var settlement = new FungibleForfeitureSettlement(inventory, companies, state.shipments(), executions, state.actorMovements());
+        // All owning relations acknowledge the original state before any aggregate is published.
+        // Loss of a reservation and its owner's transition must never expose a dangling intermediate world.
+        for (var purpose : observed.forfeitedClaimIds().stream().map(state.inventory().fungibleResources().claims()::get)
+                .map(ClaimAllocation::purpose).distinct().sorted(java.util.Comparator.comparing(ClaimPurpose::name)).toList()) {
+            var owner = FungibleClaimForfeitureComposition.OWNERS.get(purpose);
+            if (owner != null) settlement = owner.settle(state, observed.forfeitedClaimIds().stream().sorted()
+                    .map(state.inventory().fungibleResources().claims()::get).filter(claim -> claim.purpose() == purpose).toList(), settlement);
         }
-        return next;
+        return state.withChanges(settlement.contribution().productionJobs(jobs)
+                .physicalIntents(intents).hiveColony(hive).strategicPlans(strategic));
     }
 
     private static List<Plan> plan(FrontierWorldState state, FungibleResourceHandoffObserved observed) {
@@ -124,7 +127,7 @@ public final class FungibleClaimForfeitureStateSupport {
                 yield hivePlan(state, job, claim);
             }
             case SETTLEMENT_RATION -> throw new IllegalArgumentException("settlement ration claim is retired");
-            case RESIDENT_MEAL, SUPPLY_CONTRACT, GOODS_TRADE, EXTERNAL_RESERVATION ->
+            case RESIDENT_MEAL, GOODS_TRADE, EXPEDITION_SUPPLY, EXTERNAL_RESERVATION ->
                     throw new IllegalArgumentException("physical theft has no declared retirement transition for " + claim.purpose());
         }).toList();
     }
@@ -133,7 +136,7 @@ public final class FungibleClaimForfeitureStateSupport {
     private static CustodyAccount expectedDestination(CustodyAccount current, FungibleResourceHandoffObserved observed) {
         Map<SubjectId, Integer> lots = new LinkedHashMap<>(current.lotQuantities());
         observed.lotQuantities().forEach((id, quantity) -> lots.merge(id, quantity, Integer::sum));
-        return new CustodyAccount(current.id(), current.custody(), lots, Map.of());
+        return current.withQuantities(lots, Map.of());
     }
 
     private static Plan productionPlan(FrontierWorldState state, ProductionJob job, ClaimAllocation claim) {

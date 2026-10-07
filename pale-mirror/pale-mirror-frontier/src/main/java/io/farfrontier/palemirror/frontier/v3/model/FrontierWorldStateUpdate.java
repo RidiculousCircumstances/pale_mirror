@@ -32,9 +32,6 @@ public final class FrontierWorldStateUpdate {
         INVENTORY,
         PRODUCTION_JOBS,
         SERVICE_WORKS,
-        CONTRACTS,
-        OPERATIONS,
-        LOGISTICS_HISTORY,
         PHYSICAL_INTENTS,
         PHYSICAL_OBSERVATIONS,
         SCENE_LEASES,
@@ -56,7 +53,8 @@ public final class FrontierWorldStateUpdate {
         ACTOR_MOVEMENTS,
         ACTOR_EXECUTIONS,
         SHIPMENTS,
-        UNIT_GROUPS
+        UNIT_GROUPS,
+        TRANSPORT_FLEET
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -66,9 +64,6 @@ public final class FrontierWorldStateUpdate {
     private ExactInventory inventory;
     private Map<SubjectId, ProductionJob> productionJobs;
     private Map<SubjectId, SettlementServiceWork> serviceWorks;
-    private Map<SubjectId, SupplyContract> contracts;
-    private Map<SubjectId, RouteOperation> operations;
-    private LogisticsHistory logisticsHistory;
     private Map<PhysicalIntentId, PhysicalIntent> physicalIntents;
     private Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations;
     private Map<SceneLeaseId, SceneLease> sceneLeases;
@@ -91,6 +86,7 @@ public final class FrontierWorldStateUpdate {
     private ActorExecutionState actorExecutions;
     private ShipmentState shipments;
     private io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState unitGroups;
+    private io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet;
 
     private FrontierWorldStateUpdate() { }
 
@@ -120,9 +116,6 @@ public final class FrontierWorldStateUpdate {
                 case INVENTORY -> inventory(contribution.inventory);
                 case PRODUCTION_JOBS -> productionJobs(contribution.productionJobs);
                 case SERVICE_WORKS -> serviceWorks(contribution.serviceWorks);
-                case CONTRACTS -> contracts(contribution.contracts);
-                case OPERATIONS -> operations(contribution.operations);
-                case LOGISTICS_HISTORY -> logisticsHistory(contribution.logisticsHistory);
                 case PHYSICAL_INTENTS -> physicalIntents(contribution.physicalIntents);
                 case PHYSICAL_OBSERVATIONS -> physicalObservations(contribution.physicalObservations);
                 case SCENE_LEASES -> sceneLeases(contribution.sceneLeases);
@@ -145,6 +138,7 @@ public final class FrontierWorldStateUpdate {
                 case ACTOR_EXECUTIONS -> actorExecutions(contribution.actorExecutions);
                 case SHIPMENTS -> shipments(contribution.shipments);
                 case UNIT_GROUPS -> unitGroups(contribution.unitGroups);
+                case TRANSPORT_FLEET -> transportFleet(contribution.transportFleet);
             }
         }
         return this;
@@ -167,15 +161,6 @@ public final class FrontierWorldStateUpdate {
     }
     public FrontierWorldStateUpdate serviceWorks(Map<SubjectId, SettlementServiceWork> next) {
         mark(Component.SERVICE_WORKS); serviceWorks = require(next, "settlement service works"); return this;
-    }
-    public FrontierWorldStateUpdate contracts(Map<SubjectId, SupplyContract> next) {
-        mark(Component.CONTRACTS); contracts = require(next, "contracts"); return this;
-    }
-    public FrontierWorldStateUpdate operations(Map<SubjectId, RouteOperation> next) {
-        mark(Component.OPERATIONS); operations = require(next, "operations"); return this;
-    }
-    public FrontierWorldStateUpdate logisticsHistory(LogisticsHistory next) {
-        mark(Component.LOGISTICS_HISTORY); logisticsHistory = require(next, "logistics history"); return this;
     }
     public FrontierWorldStateUpdate physicalIntents(Map<PhysicalIntentId, PhysicalIntent> next) {
         mark(Component.PHYSICAL_INTENTS); physicalIntents = require(next, "physical intents"); return this;
@@ -243,6 +228,9 @@ public final class FrontierWorldStateUpdate {
     public FrontierWorldStateUpdate unitGroups(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState next) {
         mark(Component.UNIT_GROUPS); unitGroups = require(next, "unit groups"); return this;
     }
+    public FrontierWorldStateUpdate transportFleet(io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet next) {
+        mark(Component.TRANSPORT_FLEET); transportFleet = require(next, "transport fleet"); return this;
+    }
 
     Map<SubjectId, ActorLocation> actorLocations(FrontierWorldState state) { return changed(Component.ACTOR_LOCATIONS, actorLocations, state.actorLocations()); }
     Map<SubjectId, StructureCondition> structureConditions(FrontierWorldState state) { return changed(Component.STRUCTURE_CONDITIONS, structureConditions, state.structureConditions()); }
@@ -250,9 +238,6 @@ public final class FrontierWorldStateUpdate {
     ExactInventory inventory(FrontierWorldState state) { return changed(Component.INVENTORY, inventory, state.inventory()); }
     Map<SubjectId, ProductionJob> productionJobs(FrontierWorldState state) { return changed(Component.PRODUCTION_JOBS, productionJobs, state.productionJobs()); }
     Map<SubjectId, SettlementServiceWork> serviceWorks(FrontierWorldState state) { return changed(Component.SERVICE_WORKS, serviceWorks, state.serviceWorks()); }
-    Map<SubjectId, SupplyContract> contracts(FrontierWorldState state) { return changed(Component.CONTRACTS, contracts, state.contracts()); }
-    Map<SubjectId, RouteOperation> operations(FrontierWorldState state) { return changed(Component.OPERATIONS, operations, state.operations()); }
-    LogisticsHistory logisticsHistory(FrontierWorldState state) { return changed(Component.LOGISTICS_HISTORY, logisticsHistory, state.logisticsHistory()); }
     Map<PhysicalIntentId, PhysicalIntent> physicalIntents(FrontierWorldState state) { return changed(Component.PHYSICAL_INTENTS, physicalIntents, state.physicalIntents()); }
     Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations(FrontierWorldState state) { return changed(Component.PHYSICAL_OBSERVATIONS, physicalObservations, state.physicalObservations()); }
     Map<SceneLeaseId, SceneLease> sceneLeases(FrontierWorldState state) { return changed(Component.SCENE_LEASES, sceneLeases, state.sceneLeases()); }
@@ -276,6 +261,9 @@ public final class FrontierWorldStateUpdate {
     ShipmentState shipments(FrontierWorldState state) { return changed(Component.SHIPMENTS, shipments, state.shipments()); }
     io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState unitGroups(FrontierWorldState state) {
         return changed(Component.UNIT_GROUPS, unitGroups, state.unitGroups());
+    }
+    io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet(FrontierWorldState state) {
+        return changed(Component.TRANSPORT_FLEET, transportFleet, state.transportFleet());
     }
 
     private void mark(Component component) {

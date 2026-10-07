@@ -45,13 +45,6 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
         }
     }
 
-    public static SceneLease atExactPositions(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId,
-                                              BlockPosition handoffPosition, BlockPosition cargoPosition, SimInstant handoffInstant, long revision,
-                                              SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members) {
-        return new SceneLease(id, worldId, new LogisticsSceneCause(operationId, cargoId, engagementId, cargoPosition,
-                CargoProjectionRetirement.Disposition.REMOVE_PROJECTION), handoffPosition, handoffInstant,
-                revision, status, members, Set.of(), Optional.empty());
-    }
 
     /** New scene families must use an explicit typed cause; their owner validates it before preparation. */
     public static SceneLease forCause(SceneLeaseId id, WorldId worldId, SceneCause cause, BlockPosition handoffPosition,
@@ -78,14 +71,6 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
                 ambientHandoffActorIds, nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART ? recoveryEvidence : Optional.empty());
     }
     /** The accepted handoff owns this irreversible decision, independent of later item custody. */
-    SceneLease withReleasedCargoCarrier() {
-        var logistics = FrontierSceneBehaviors.logistics(this);
-        if (status != SceneLeaseStatus.HOT) throw new IllegalArgumentException("only HOT carrier can be released");
-        return new SceneLease(id, worldId, new LogisticsSceneCause(logistics.operationId(), logistics.cargoId(),
-                logistics.engagementId(), logistics.cargoPosition(), CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY),
-                handoffPosition, handoffInstant, revision, SceneLeaseStatus.DRAINING, members,
-                ambientHandoffActorIds, Optional.empty());
-    }
     /** Work may be suspended while this lease still owns physical consequences. */
     public boolean retainsMemberCustody(SubjectId actorId) {
         return status != SceneLeaseStatus.CLOSED && members.stream().anyMatch(member -> member.actorId().equals(actorId));
@@ -103,22 +88,7 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
         return new SceneLease(id, worldId, cause, Objects.requireNonNull(position, "scene lease handoff position"), handoffInstant, revision,
                 status, members, ambientHandoffActorIds, recoveryEvidence);
     }
-    /**
-     * Advances a non-combat HOT logistics scene at the same durable grid checkpoint as its
-     * operation.  The lease keeps its identity and body UUIDs; only its current recovery anchor
-     * moves, so a return/restart never seeks the caravan at a stale segment origin.
-     */
-    public SceneLease rebaseHotOperationTravel(OperationTravel prior, OperationTravel next) {
-        Objects.requireNonNull(prior, "prior operation travel"); Objects.requireNonNull(next, "next operation travel");
-        LogisticsSceneCause logistics = FrontierSceneBehaviors.logistics(this);
-        if (status != SceneLeaseStatus.HOT || logistics.engagementId().isPresent()
-                || !logistics.cargoPosition().equals(prior.cargoAnchor().surface().support()) || !next.isExactHotAdvanceFrom(prior)) {
-            throw new IllegalArgumentException("HOT logistics scene does not match its current operation travel");
-        }
-        return new SceneLease(id, worldId,
-                new LogisticsSceneCause(logistics.operationId(), logistics.cargoId(), logistics.engagementId(), next.cargoAnchor().surface().support(), logistics.carrierDisposition()),
-                next.currentPosition(), handoffInstant, revision, status, members, ambientHandoffActorIds, recoveryEvidence);
-    }
+    /** Retains the exact missing-body evidence for the current recovery boundary. */
     public SceneLease withRecoveryEvidence(SceneRecoveryEvidence evidence) {
         return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, status, members,
                 ambientHandoffActorIds, Optional.of(Objects.requireNonNull(evidence, "scene recovery evidence")));

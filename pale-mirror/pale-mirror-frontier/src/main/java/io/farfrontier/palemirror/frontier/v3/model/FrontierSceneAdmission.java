@@ -18,56 +18,6 @@ public final class FrontierSceneAdmission {
     }
 
     /**
-     * A non-terminal HOT/COLD hand-off exclusively owns its route operation.  A COLD planner
-     * must not advance or resolve that operation until the lease is closed: otherwise one
-     * operation would have two simultaneous execution authorities.
-     */
-    public static boolean hasActiveSceneLease(FrontierWorldState state, SubjectId operationId) {
-        Objects.requireNonNull(state, "state"); Objects.requireNonNull(operationId, "operation id");
-        return state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).anyMatch(lease -> FrontierSceneBehaviors.logistics(lease).operationId().equals(operationId)
-                && lease.status() != SceneLeaseStatus.CLOSED);
-    }
-
-    /** A generic route scene must yield while the hive already owns an unresolved interception. */
-    public static boolean hasUnresolvedRouteEngagement(FrontierWorldState state, SubjectId operationId) {
-        Objects.requireNonNull(state, "state"); Objects.requireNonNull(operationId, "operation id");
-        return state.strategicPlans().routeEngagements().values().stream().anyMatch(engagement -> engagement.operationId().equals(operationId)
-                && engagement.status() != RouteEngagementStatus.RESOLVED);
-    }
-
-    /** Admission for beginning a new COLD interception, not for progressing its own engagement. */
-    public static boolean coldInterceptionAvailable(FrontierWorldState state, SubjectId operationId) {
-        Objects.requireNonNull(state, "state"); Objects.requireNonNull(operationId, "operation id");
-        RouteOperation operation = state.operations().get(operationId);
-        return operation != null && operation.tacticalPlan().currentFor(state.strategicPlans())
-                && !hasActiveSceneLease(state, operationId) && !hasUnresolvedRouteEngagement(state, operationId)
-                && ActorExecutionCoordinator.coldAvailable(state, operation.participantIds());
-    }
-
-    /**
-     * A COLD engagement may advance or strike only while every exact combatant is free of
-     * Minecraft-side authority.  {@code UNKNOWN_AFTER_RESTART} remains an active authority:
-     * the loaded-world inspector must settle it before a strategic action may change that actor.
-     */
-    public static boolean coldEngagementAvailable(FrontierWorldState state, RouteEngagement engagement) {
-        Objects.requireNonNull(state, "state"); Objects.requireNonNull(engagement, "engagement");
-        RouteOperation operation = state.operations().get(engagement.operationId());
-        if (operation == null || !operation.tacticalPlan().currentFor(state.strategicPlans())
-                || operation.stage() != OperationStage.EN_ROUTE || hasActiveSceneLease(state, operation.id())) return false;
-        return coldEngagementActorsAvailable(state, engagement);
-    }
-
-    /** Exact actor-authority check without assuming that a route is still en route. */
-    public static boolean coldEngagementActorsAvailable(FrontierWorldState state, RouteEngagement engagement) {
-        Objects.requireNonNull(state, "state"); Objects.requireNonNull(engagement, "engagement");
-        RouteOperation operation = state.operations().get(engagement.operationId());
-        if (operation == null) return false;
-        Collection<SubjectId> actors = new ArrayList<>(operation.participantIds());
-        actors.addAll(engagement.attackerIds());
-        return ActorExecutionCoordinator.coldAvailable(state, actors);
-    }
-
-    /**
      * A non-closed scene keeps every exact participant exclusively reserved, even if its owning
      * operation has already become terminal due to restart recovery evidence.  Otherwise an
      * ambient executor could race the still-authoritative UNKNOWN scene and force a quarantine.
@@ -88,9 +38,8 @@ public final class FrontierSceneAdmission {
     }
 
     /**
-     * A generic ambient goal may not take an actor that a strategic engagement, assault or
-     * already-prepared scene owns. An ordinary en-route logistics operation is intentionally
-     * excluded: its own ambient body is the legal precursor to its later scene hand-off.
+     * A generic ambient goal may not take an actor that an assault or already-prepared
+     * scene owns. Registered pre-lease handoffs retain their own admission authority.
      */
     public static boolean reservedFromGenericAmbient(FrontierWorldState state, SubjectId actorId) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(actorId, "actor id");
@@ -123,9 +72,6 @@ public final class FrontierSceneAdmission {
         Set<SubjectId> reserved = new LinkedHashSet<>();
         state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
                 .forEach(lease -> lease.members().forEach(member -> reserved.add(member.actorId())));
-        state.strategicPlans().routeEngagements().values().stream()
-                .filter(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED)
-                .forEach(engagement -> reserved.addAll(engagement.attackerIds()));
         state.strategicPlans().settlementAssaults().values().stream()
                 .filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)
                 .forEach(assault -> reserved.addAll(assault.attackerIds()));
@@ -249,20 +195,13 @@ public final class FrontierSceneAdmission {
         Set<SubjectId> reserved = new LinkedHashSet<>();
         state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
                 .forEach(lease -> lease.members().forEach(member -> reserved.add(member.actorId())));
-        state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.EN_ROUTE)
-                .forEach(operation -> reserved.addAll(operation.participantIds()));
         // A strategic COLD engagement owns its exact actors before a physical scene candidate
         // exists.  Otherwise an ambient visit between departure and battlefield arrival could
         // recreate one of the same identities as an unrelated patrol body.
-        state.strategicPlans().routeEngagements().values().stream()
-                .filter(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED)
-                .forEach(engagement -> reserved.addAll(engagement.attackerIds()));
         state.strategicPlans().settlementAssaults().values().stream()
                 .filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)
                 .forEach(assault -> reserved.addAll(assault.attackerIds()));
-        java.util.List<SceneEngagementCandidate> engagementCandidates = state.coldEngagementSceneCandidates();
         java.util.List<SettlementAssaultSceneCandidate> assaultCandidates = settlementAssaultCandidates(state, providerSource);
-        engagementCandidates.forEach(candidate -> reserved.addAll(candidate.actorIds()));
         assaultCandidates.forEach(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
         // A completed engineering assembly is the next exclusive physical owner, even before
         // its scene lease is prepared.  Without this reservation an ordinary ambient visit can
@@ -278,7 +217,7 @@ public final class FrontierSceneAdmission {
         // Field work uses the same atomic ambient-to-scene hand-off.  It deliberately is not
         // a pre-lease COLD reservation: the loaded Villager must remain available for that
         // hand-off rather than be drained and respawned at a guessed canonical surface.
-        return new ReservationAdmission(reserved, engagementCandidates, assaultCandidates);
+        return new ReservationAdmission(reserved, assaultCandidates);
     }
 
     /**
@@ -302,11 +241,9 @@ public final class FrontierSceneAdmission {
 
     /** Immutable read-only output of the production ambient-to-scene hand-off policy. */
     public record ReservationAdmission(Set<SubjectId> reservedActorIds,
-                                       java.util.List<SceneEngagementCandidate> engagementCandidates,
                                        java.util.List<SettlementAssaultSceneCandidate> settlementAssaultCandidates) {
         public ReservationAdmission {
             reservedActorIds = Set.copyOf(Objects.requireNonNull(reservedActorIds, "reserved actor ids"));
-            engagementCandidates = java.util.List.copyOf(Objects.requireNonNull(engagementCandidates, "engagement candidates"));
             settlementAssaultCandidates = java.util.List.copyOf(Objects.requireNonNull(settlementAssaultCandidates, "settlement assault candidates"));
         }
 
@@ -321,12 +258,7 @@ public final class FrontierSceneAdmission {
         return state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
                 && !FrontierSceneBehaviors.ownedBySettlementAssault(lease, assaultId)
                 && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
-                || state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE
-                && operation.participantIds().contains(actorId))
-                || state.strategicPlans().routeEngagements().values().stream().anyMatch(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED
-                && engagement.attackerIds().contains(actorId))
-                || otherActiveSettlementAssaultOwns(state, actorId, assaultId)
-                || state.coldEngagementSceneCandidates().stream().anyMatch(candidate -> candidate.actorIds().contains(actorId));
+                || otherActiveSettlementAssaultOwns(state, actorId, assaultId);
     }
 
     /**

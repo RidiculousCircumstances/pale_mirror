@@ -11,6 +11,12 @@ public final class FrontierSceneLabels {
     private FrontierSceneLabels() { }
 
     public static String actor(FrontierWorldState state, SubjectId actorId, boolean bioform) {
+        var declaration = state.actorLocations().get(actorId);
+        if (declaration != null && declaration.kind() == ActorKind.PACK_ANIMAL) {
+            var asset = state.transportFleet().require(actorId);
+            return FrontierWorldStateSupport.settlement(state.bootstrap(), asset.homeSettlementId()).displayName()
+                    + " PACK DONKEY";
+        }
         ResidentProfile resident = state.humanPopulation().resident(actorId);
         if (resident != null) {
             Settlement settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(resident.settlementId()))
@@ -35,6 +41,8 @@ public final class FrontierSceneLabels {
      * remain legible independently of which presentation scope currently observes their body.
      */
     public static boolean ambientActorNameVisible(FrontierWorldState state, SubjectId actorId, boolean bioform) {
+        var declaration = state.actorLocations().get(actorId);
+        if (declaration != null && declaration.kind() == ActorKind.PACK_ANIMAL) return true;
         var execution = state.actorExecutions().actors().get(actorId);
         boolean active = execution != null && execution.current().filter(id ->
                 id.activityKind() != io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE).isPresent();

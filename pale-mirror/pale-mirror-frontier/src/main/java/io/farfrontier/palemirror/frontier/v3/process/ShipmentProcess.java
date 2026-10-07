@@ -34,6 +34,8 @@ public final class ShipmentProcess {
     public static boolean held(FrontierWorldState state, ScheduledAction action) {
         Shipment shipment = state.shipments().shipments().get(action.subject());
         if (shipment == null || shipment.terminal()) return false;
+        if (shipment.transportMissionId().map(state.shipments().missions()::get).flatMap(TransportMission::supplies)
+                .filter(load -> !load.complete()).isPresent()) return true;
         if (shipment.transportMissionId().isPresent() && shipment.status() == Shipment.Status.CARRYING) {
             var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());
             if (mission == null) throw new IllegalArgumentException("shipment lost its exact transport mission");
@@ -61,7 +63,7 @@ public final class ShipmentProcess {
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         long now = Math.max(currentTick, action.dueAt().ticks());
         if (shipment.terminal()) return List.of(new ProposedEvent(shipment.id(), new ScheduleEffect.Rescheduled(action.id(), progress(shipment.id(),
-                now + state.bootstrap().ruleset().cadence().terminalLogisticsReviewInterval()))));
+                now + state.bootstrap().ruleset().cadence().transportReviewInterval()))));
         if (held(state, action)) throw new IllegalArgumentException("shipment awaits its exact custody boundary");
         var order = shipment.movementOrder();
         if (!order.arrivedAt(state.actorLocations().get(order.actorId()).supportingSurface())) {
@@ -85,7 +87,7 @@ public final class ShipmentProcess {
     }
     private static List<ProposedEvent> retry(FrontierWorldState state, Shipment shipment, long now) {
         var action = progress(shipment.id(), Math.addExact(now,
-                state.bootstrap().ruleset().cadence().terminalLogisticsReviewInterval()));
+                state.bootstrap().ruleset().cadence().transportReviewInterval()));
         return List.of(new ProposedEvent(shipment.id(), new ScheduleEffect.Rescheduled(action.id(), action)));
     }
     private ShipmentProcess() { }

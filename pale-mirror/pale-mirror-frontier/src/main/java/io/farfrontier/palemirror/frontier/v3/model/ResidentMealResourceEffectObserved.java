@@ -26,7 +26,7 @@ public record ResidentMealResourceEffectObserved(ActorBodyId body, ActorExecutio
                 || (outcome == Outcome.CONSUMPTION_APPLIED ? step.phase() != ResidentMeal.Phase.CONSUME
                         : step.phase() != ResidentMeal.Phase.TAKE)
                 || outcome != Outcome.TAKE_APPLIED && !destination.isEmpty()
-                || outcome == Outcome.CONSUMPTION_APPLIED && !remainingSource.isEmpty())
+                || outcome == Outcome.CONSUMPTION_APPLIED && remainingSource.size() > 1)
             throw new IllegalArgumentException("retired meal effect witness has a foreign identity, phase or layout");
     }
     @Override public String type() { return "frontier.resident_meal_resource_effect_observed"; }

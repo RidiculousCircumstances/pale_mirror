@@ -107,6 +107,7 @@ final class FrontierV3DepotClickExecutor {
     private static boolean containsManagedDepot(ServerLevel level, FrontierWorldState state,
                                                 CompoundContainer compound) {
         return state.inventory().surfaces().entrySet().stream()
+                .filter(entry -> entry.getValue().fixed())
                 .filter(entry -> entry.getValue().status() == ContainerSurfaceStatus.ACTIVE)
                 .filter(entry -> state.inventory().containers().get(entry.getKey()) instanceof ContainerRecord record
                         && record.ownerId().value().startsWith("settlement:")
@@ -264,6 +265,7 @@ final class FrontierV3DepotClickExecutor {
 
     private static ContainerRecord ownedDepot(FrontierWorldState state, BlockPos position) {
         return state.inventory().surfaces().entrySet().stream()
+                .filter(entry -> entry.getValue().fixed())
                 .filter(entry -> entry.getValue().status() == ContainerSurfaceStatus.ACTIVE)
                 .filter(entry -> entry.getValue().position().x() == position.getX()
                         && entry.getValue().position().y() == position.getY()
@@ -278,7 +280,7 @@ final class FrontierV3DepotClickExecutor {
                                              ChestBlockEntity chest) {
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ExactItemStack exact = state.inventory().itemAt(containerId, slot).orElse(null);
-            if (exact != null && !FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), exact)) return false;
+            if (exact != null && !FrontierV3ExactItemPresentation.exactMatch(chest.getItem(slot), exact)) return false;
         }
         return true;
     }

@@ -96,7 +96,7 @@ final class RouteConstructionStateCodec {
         Map<SubjectId, EngineeringWorkAssembly.Member> members = new LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
             SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input)); int cells = input.readUnsignedShort();
-            if (cells < 1 || cells > OperationTravel.MAX_CELLS) throw new IllegalArgumentException("route construction assembly corridor size is invalid");
+            if (cells < 1 || cells > TraversalTopology.MAX_NODES) throw new IllegalArgumentException("route construction assembly corridor size is invalid");
             java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>();
             for (int cell = 0; cell < cells; cell++) corridor.add(FrontierWorldStateCodec.readPosition(input));
             if (members.put(actor, new EngineeringWorkAssembly.Member(corridor, input.readUnsignedShort(),

@@ -37,7 +37,7 @@ public final class FrontierV3DecontaminationGameTests {
         ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(chestPosition); InfectionCell cell = new InfectionCell(7, 9);
         SubjectId container = new SubjectId("container:decontamination-game-test"), itemId = new SubjectId("item:decontamination-game-test");
         ExactItemStack two = new ExactItemStack(itemId, new SubjectId("settlement:1"), DecontaminationPolicy.REAGENT, 2, new InventoryCustody.ContainerSlot(container, 0));
-        List<BlockPos> markers = patch(marker); chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(two));
+        List<BlockPos> markers = patch(marker); chest.setItem(0, FrontierV3ExactItemPresentation.materializedStack(two));
         markers.forEach(position -> {
             level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
             level.setBlock(position, FrontierV3InfectionOverlayExecutor.material(InfectionOverlayStage.BLOOM), 3);

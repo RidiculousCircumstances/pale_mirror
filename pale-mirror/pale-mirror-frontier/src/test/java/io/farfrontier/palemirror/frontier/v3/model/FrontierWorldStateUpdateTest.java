@@ -40,9 +40,6 @@ class FrontierWorldStateUpdateTest {
         assertSame(state.infection(), changed.infection());
         assertSame(state.inventory(), changed.inventory());
         assertSame(state.productionJobs(), changed.productionJobs());
-        assertSame(state.contracts(), changed.contracts());
-        assertSame(state.operations(), changed.operations());
-        assertSame(state.logisticsHistory(), changed.logisticsHistory());
         assertSame(state.physicalIntents(), changed.physicalIntents());
         assertSame(state.physicalObservations(), changed.physicalObservations());
         assertSame(state.sceneLeases(), changed.sceneLeases());

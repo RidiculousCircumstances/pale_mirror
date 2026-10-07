@@ -39,7 +39,7 @@ public record SettlementDefenderReadinessProjection(
         Objects.requireNonNull(assault, "readiness assault");
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         List<SubjectId> livingAssigned = assault.defenderIds().stream().filter(id -> assignedTo(state, assignments, id, assault.id()))
-                .filter(id -> RouteEngagementCombatRules.alive(state, id)).toList();
+                .filter(id -> FrontierCombatRules.alive(state, id)).toList();
         List<SubjectId> armed = livingAssigned.stream().filter(id -> HumanTacticalFunctionProjection.hasWeapon(state, id)).toList();
         boolean leaderOperational = livingAssigned.contains(assault.defenderUnit().leaderId());
         SettlementDefenderReadinessStatus status = livingAssigned.isEmpty() ? SettlementDefenderReadinessStatus.UNAVAILABLE

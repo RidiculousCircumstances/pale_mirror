@@ -94,8 +94,6 @@ final class FrontierV3PerformanceDiagnostic {
                 == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT).peek(lease -> bindings.add(lease.actorId())).count();
         long activeAssaults = state.strategicPlans().settlementAssaults().values().stream().filter(assault -> assault.status()
                 != io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultStatus.RESOLVED).count();
-        long activeEngagements = state.strategicPlans().routeEngagements().values().stream().filter(engagement -> engagement.status()
-                != io.farfrontier.palemirror.frontier.v3.model.RouteEngagementStatus.RESOLVED).count();
         long settlementAuthorities = state.strategicPlans().decisionAuthorities().authorities().values().stream().filter(authority -> authority.kind()
                 == io.farfrontier.palemirror.frontier.v3.model.DecisionAuthorityKind.SETTLEMENT).count();
         long hivemindAuthorities = state.strategicPlans().decisionAuthorities().authorities().values().stream().filter(authority -> authority.kind()
@@ -104,7 +102,7 @@ final class FrontierV3PerformanceDiagnostic {
                 + ",\"settlementDecisionAuthorities\":" + settlementAuthorities + ",\"hivemindDecisionAuthorities\":" + hivemindAuthorities
                 + ",\"activeSceneLeases\":" + activeScenes
                 + ",\"hotSceneLeases\":" + hotScenes + ",\"sceneActorBindings\":" + sceneActorBindings + ",\"hotAmbientLeases\":" + hotAmbient + ",\"managedActorBindings\":" + bindings.size()
-                + ",\"activeAssaults\":" + activeAssaults + ",\"activeRouteEngagements\":" + activeEngagements
+                + ",\"activeAssaults\":" + activeAssaults
                 + ",\"physicalIntents\":" + state.physicalIntents().size() + ",\"physicalObservations\":" + state.physicalObservations().size()
                 + ",\"deferredAftermath\":" + state.deferredAftermath().entries().size() + ",\"recoveryCurrent\":" + state.fencedRecovery().current().size()
                 + ",\"recoveryTombstones\":" + state.fencedRecovery().tombstones().size() + ",\"checkpointBytes\":" + checkpoint.canonicalState().length + "}";

@@ -4,9 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
-import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierIdentity;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
-import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
@@ -21,25 +19,10 @@ final class FrontierV3SceneReleaseReadiness {
                         || lease.members().stream().filter(member -> member.entityId().equals(id))
                             .anyMatch(member -> FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).hasBodyDeparture(member.actorId())),
                 body -> FrontierV3SceneExecutor.entityStorageReady(level, new BlockPos(body.x(), body.y(), body.z())))
-                || awaitingCargoStorage(state, lease, id -> level.getEntity(id) != null
-                        || FrontierV3CargoDepartureLedger.get(level, state.bootstrap().worldId()).observation(id).isPresent(),
-                        support -> FrontierV3SceneExecutor.entityStorageReady(level, new BlockPos(support.x(), support.y(), support.z())));
+;
     }
 
     /** Cargo absence also needs entity-storage readiness, not just loaded actor chunks. */
-    static boolean awaitingCargoStorage(FrontierWorldState state, SceneLease lease,
-                                       java.util.function.Predicate<java.util.UUID> evidenceAvailable,
-                                       java.util.function.Predicate<BlockPosition> storageReady) {
-        if (!FrontierSceneBehaviors.isLogistics(lease)) return false;
-        var logistics = FrontierSceneBehaviors.logistics(lease);
-        var operation = state.operations().get(logistics.operationId());
-        if (operation != null && operation.stage() == OperationStage.INTERRUPTED) return false;
-        // Contradictory evidence must reach the release validator, never wait behind this gate.
-        if (evidenceAvailable.test(CargoCarrierIdentity.id(lease))) return false;
-        if (!storageReady.test(logistics.cargoPosition())) return true;
-        return operation != null && operation.activeTravel().isPresent()
-                && !storageReady.test(operation.activeTravel().orElseThrow().cargoAnchor().surface().support());
-    }
 
     static boolean awaitingEntityStorage(FrontierWorldState state, SceneLease lease,
                                          java.util.function.Predicate<java.util.UUID> evidenceAvailable,

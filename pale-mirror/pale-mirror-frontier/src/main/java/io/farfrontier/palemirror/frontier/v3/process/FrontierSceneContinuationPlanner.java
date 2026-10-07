@@ -10,8 +10,6 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneFinalized;
-import io.farfrontier.palemirror.frontier.v3.model.RouteEngagement;
-import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.RoutePatrol;
 import io.farfrontier.palemirror.frontier.v3.model.RoutePatrolBlocked;
 import io.farfrontier.palemirror.frontier.v3.model.RoutePatrolBlockReason;
@@ -95,9 +93,6 @@ public final class FrontierSceneContinuationPlanner {
     private static Map<SceneContinuation.Kind, ContinuationHandler> handlers() {
         EnumMap<SceneContinuation.Kind, ContinuationHandler> handlers = new EnumMap<>(SceneContinuation.Kind.class);
         register(handlers, new NoneHandler());
-        register(handlers, new ResumeOperationHandler());
-        register(handlers, new FailOperationHandler());
-        register(handlers, new ResumeEngagementHandler());
         register(handlers, new ResumeSettlementAssaultHandler());
         register(handlers, new FinalizeProductionWorkHandler());
         register(handlers, new ResumeProductionCompletionHandler());
@@ -130,34 +125,6 @@ public final class FrontierSceneContinuationPlanner {
         }
     }
 
-    private static final class ResumeOperationHandler implements ContinuationHandler {
-        @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_OPERATION; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
-            if (!(continuation instanceof SceneContinuation.ResumeOperation resume)) throw invalid(continuation, kind());
-            RouteOperation operation = requireOperation(state, resume.operationId());
-            return List.of(new ProposedEvent(operation.settlementId(), new ScheduleEffect.Created(
-                    SupplyOperationProcess.operationProgress(operation, resume.dueAt()))));
-        }
-    }
-
-    private static final class FailOperationHandler implements ContinuationHandler {
-        @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.FAIL_OPERATION; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
-            if (!(continuation instanceof SceneContinuation.FailOperation failure)) throw invalid(continuation, kind());
-            return SupplyOperationProcess.failed(state, requireOperation(state, failure.operationId()), failure.reason(), submittedAt);
-        }
-    }
-
-    private static final class ResumeEngagementHandler implements ContinuationHandler {
-        @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_ENGAGEMENT; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
-            if (!(continuation instanceof SceneContinuation.ResumeEngagement resume)) throw invalid(continuation, kind());
-            RouteEngagement engagement = state.strategicPlans().routeEngagements().get(resume.engagementId());
-            if (engagement == null) throw new IllegalArgumentException("scene continuation has no route engagement");
-            return List.of(new ProposedEvent(engagement.hiveId(), new ScheduleEffect.Created(
-                    HiveRouteEngagementProcess.combat(engagement, resume.dueAt()))));
-        }
-    }
 
     private static final class ResumeSettlementAssaultHandler implements ContinuationHandler {
         @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_SETTLEMENT_ASSAULT; }
@@ -239,11 +206,6 @@ public final class FrontierSceneContinuationPlanner {
         }
     }
 
-    private static RouteOperation requireOperation(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId operationId) {
-        RouteOperation operation = state.operations().get(operationId);
-        if (operation == null) throw new IllegalArgumentException("scene continuation has no route operation");
-        return operation;
-    }
 
     private static IllegalArgumentException invalid(SceneContinuation continuation, SceneContinuation.Kind expected) {
         return new IllegalArgumentException("scene continuation kind/type mismatch: expected " + expected + ", got " + continuation.getClass().getSimpleName());

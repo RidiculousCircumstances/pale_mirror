@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 /** Exact terminal producers; free-form presentation text never classifies a diagnostic. */
 public final class TerminalDiagnosticProducer {
     private TerminalDiagnosticProducer() { }
-    public static OperationFailed operationFailed(SubjectId id, String detail) { return new OperationFailed(id, detail, tuple(DiagnosticReason.OPERATION_FAILED, DiagnosticOwnerKind.ROUTE_OPERATION, DiagnosticSubjectKind.ROUTE_OPERATION, id)); }
     public static SettlementProvisionResolved provisionConflict(SubjectId id) { return new SettlementProvisionResolved(id, SettlementProvisionStatus.CONFLICT,
             java.util.Optional.of(tuple(DiagnosticReason.SETTLEMENT_PROVISION_CONFLICT, DiagnosticOwnerKind.SETTLEMENT_PROVISION, DiagnosticSubjectKind.SETTLEMENT_PROVISION, id))); }
     public static SettlementAssaultTransition assaultConflict(SubjectId id,

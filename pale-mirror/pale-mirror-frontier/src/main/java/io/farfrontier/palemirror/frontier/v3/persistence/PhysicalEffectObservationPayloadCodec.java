@@ -17,8 +17,7 @@ final class PhysicalEffectObservationPayloadCodec {
     private PhysicalEffectObservationPayloadCodec() { }
 
     static void write(DataOutputStream output, PhysicalEffectObservation observation) throws IOException {
-        if (observation instanceof CargoHandoffObservation cargo) { output.writeByte(0); cargo(output, cargo); }
-        else if (observation instanceof StructuralRepairObservation repair) writeRepair(output, repair);
+        if (observation instanceof StructuralRepairObservation repair) writeRepair(output, repair);
         else if (observation instanceof RouteConstructionObservation construction) writeConstruction(output, construction);
         else if (observation instanceof DecontaminationObservation decontamination) writeDecontamination(output, decontamination);
         else if (observation instanceof SceneStrikeObservation strike) writeStrike(output, strike);
@@ -35,10 +34,7 @@ final class PhysicalEffectObservationPayloadCodec {
             output.writeByte(8); ids(output, production); FrontierWorldPayloadCodecs.writeSubject(output, production.inputItemId());
             FrontierWorldPayloadCodecs.writeSubject(output, production.outputItemId()); output.writeByte(production.inputCount()); output.writeByte(production.outputCount());
         }
-        else if (observation instanceof CargoLoadObservation loading) {
-            output.writeByte(9); ids(output, loading); FrontierWorldPayloadCodecs.writeSubject(output, loading.contractId());
-            FrontierWorldPayloadCodecs.writeSubject(output, loading.cargoId()); FrontierWorldPayloadCodecs.writeSubject(output, loading.itemId()); output.writeByte(loading.itemCount());
-        }
+
         else if (observation instanceof ResourceSiteHarvestObservation harvest) {
             output.writeByte(10); ids(output, harvest); FrontierWorldPayloadCodecs.writeSubject(output, harvest.siteId());
             FrontierWorldPayloadCodecs.writeSubject(output, harvest.workerId()); FrontierWorldPayloadCodecs.writeSubject(output, harvest.output().id());
@@ -110,7 +106,6 @@ final class PhysicalEffectObservationPayloadCodec {
 
     static PhysicalEffectObservation read(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
-            case 0 -> cargo(input);
             case 1 -> new StructuralRepairObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readPosition(input));
             case 2 -> new RouteConstructionObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readPosition(input));
             case 3 -> new DecontaminationObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(), new InfectionCell(input.readInt(), input.readInt()), input.readLong(), input.readLong());
@@ -120,8 +115,7 @@ final class PhysicalEffectObservationPayloadCodec {
             case 7 -> new ResourceSitePreparationObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readInt(), input.readInt());
             case 8 -> new ProductionTransformationObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte(), input.readUnsignedByte());
-            case 9 -> new CargoLoadObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
-                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
+
             case 10 -> harvest(input);
             case 11 -> throw new IllegalArgumentException("legacy unsplit route-material receipt is not recoverable");
             case 12 -> new RouteConstructionMaterialLoadObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
@@ -156,20 +150,6 @@ final class PhysicalEffectObservationPayloadCodec {
         };
     }
 
-    private static void cargo(DataOutputStream output, CargoHandoffObservation cargo) throws IOException {
-        ids(output, cargo); FrontierWorldPayloadCodecs.writeSubject(output, cargo.cargoId()); output.writeByte(cargo.placements().size());
-        for (CargoHandoffPlacement placement : cargo.placements()) {
-            FrontierWorldPayloadCodecs.writeSubject(output, placement.itemId());
-            FrontierWorldPayloadCodecs.writeSubject(output, placement.receiverSlot().containerId()); output.writeByte(placement.receiverSlot().slot());
-        }
-    }
-    private static CargoHandoffObservation cargo(DataInputStream input) throws IOException {
-        PhysicalObservationId id = id(input); PhysicalIntentId intent = intent(input); var cargo = FrontierWorldPayloadCodecs.readSubject(input).value();
-        java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) placements.add(new CargoHandoffPlacement(
-                FrontierWorldPayloadCodecs.readSubject(input).value(), new InventoryCustody.ContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte())));
-        return new CargoHandoffObservation(id, intent, cargo, placements);
-    }
     private static void writeFungibleCargo(DataOutputStream output, FungibleCargoHandoffObservation cargo) throws IOException {
         output.writeByte(20); ids(output, cargo); FrontierWorldPayloadCodecs.writeSubject(output, cargo.cargoId()); output.writeLong(cargo.authorityEpoch());
         output.writeByte(cargo.stacks().size());

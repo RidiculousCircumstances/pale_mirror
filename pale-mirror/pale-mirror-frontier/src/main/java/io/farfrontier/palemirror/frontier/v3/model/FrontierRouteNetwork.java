@@ -16,8 +16,7 @@ import java.util.Set;
  * same declared orthogonal segments into its visible three-cell carriageway. A segment may
  * declare a bounded grade; the compiler expands it into surveyed adjacent steps. There is no second
  * hand-authored route for materialization. The centre cell remains the canonical topology;
- * its two lateral cells are the physical envelope needed by a real convoy body formation and
- * cargo carrier.</p>
+ * its two lateral cells are the physical envelope needed by public pedestrian movement.</p>
  */
 public final class FrontierRouteNetwork {
     public static final SubjectId OWNER = new SubjectId("route:frontier-network");
@@ -25,33 +24,27 @@ public final class FrontierRouteNetwork {
 
     private FrontierRouteNetwork() { }
 
-    public static List<BlockPosition> supplyWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId) {
+    public static List<BlockPosition> settlementWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(settlementId, "settlement id");
         Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown route settlement: " + settlementId.value()));
         SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("settlement lacks its Hall access port")));
         BlockPosition origin = access.routeSurface().support();
-        BlockPosition destination = supplyNest(bootstrap).anchor().offset(4, 0, -4);
         BlockPosition lane = origin.offset(0, 0, 36);
-        // The previous source route visited the central junction and then retraced the same
-        // physical corridor for southern settlements.  A traversal topology is a surveyed
-        // graph, not an ordered list allowed to duplicate one surface under two node IDs:
-        // retracing would make availability, recovery and HOT/COLD cursors ambiguous.  The
-        // direct vertical leg is the same real carriageway without the artificial out-and-back.
-        int junctionX = junctionX(bootstrap);
-        return List.of(origin, lane, new BlockPosition(junctionX, origin.y(), lane.z()),
-                new BlockPosition(junctionX, destination.y(), destination.z()), destination);
+        BlockPosition laneJunction = surveyedGridSurface(bootstrap, junctionX(bootstrap), lane.z());
+        BlockPosition publicJunction = surveyedGridSurface(bootstrap, junctionX(bootstrap), bootstrap.bounds().minZ() + 512);
+        return List.of(origin, lane, laneJunction, publicJunction);
     }
 
-    public static void validateSupplyWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId, List<BlockPosition> route) {
+    public static void validateSettlementWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId, List<BlockPosition> route) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(settlementId, "settlement id"); Objects.requireNonNull(route, "route");
         Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown route settlement: " + settlementId.value()));
         SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("settlement lacks its Hall access port")));
         if (route.size() < RouteTopology.MIN_WAYPOINTS || route.size() > RouteTopology.MAX_WAYPOINTS || !route.getFirst().equals(access.routeSurface().support())
-                || !route.getLast().equals(supplyNest(bootstrap).anchor().offset(4, 0, -4))) throw new IllegalArgumentException("replacement route has invalid endpoints or size");
+                || !route.getLast().equals(settlementWaypoints(bootstrap, settlementId).getLast())) throw new IllegalArgumentException("replacement route has invalid endpoints or size");
         for (int index = 1; index < route.size(); index++) {
             BlockPosition from = route.get(index - 1), to = route.get(index);
             if (!bootstrap.bounds().contains(from) || !bootstrap.bounds().contains(to) || !isDeclaredGrade(from, to)) {
@@ -60,10 +53,6 @@ public final class FrontierRouteNetwork {
         }
     }
 
-    public static HiveNest supplyNest(FrontierBootstrap bootstrap) {
-        Objects.requireNonNull(bootstrap, "bootstrap");
-        return bootstrap.hive().seedNests().getFirst();
-    }
 
     /**
      * The route's exact maintenance stock has a real, separately claimed surface. A player or a
@@ -137,8 +126,8 @@ public final class FrontierRouteNetwork {
                     surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36));
         }
         for (Settlement settlement : settlements) {
-            List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
-            for (int index = 1; index < supply.size(); index++) addCarriagewaySegment(cells, supply.get(index - 1), supply.get(index));
+            List<BlockPosition> settlementRoute = topology.settlementWaypoints(bootstrap, settlement.id());
+            for (int index = 1; index < settlementRoute.size(); index++) addCarriagewaySegment(cells, settlementRoute.get(index - 1), settlementRoute.get(index));
         }
         return Set.copyOf(cells);
     }
@@ -175,8 +164,8 @@ public final class FrontierRouteNetwork {
                     surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36))) return true;
         }
         for (Settlement settlement : settlements) {
-            List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
-            for (int index = 1; index < supply.size(); index++) if (onCarriagewaySegment(position, supply.get(index - 1), supply.get(index))) return true;
+            List<BlockPosition> settlementRoute = topology.settlementWaypoints(bootstrap, settlement.id());
+            for (int index = 1; index < settlementRoute.size(); index++) if (onCarriagewaySegment(position, settlementRoute.get(index - 1), settlementRoute.get(index))) return true;
         }
         return false;
     }
@@ -204,9 +193,9 @@ public final class FrontierRouteNetwork {
                     surveyedGridSurface(bootstrap, laneX, laneZ), surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36)));
         }
         for (Settlement settlement : settlements) {
-            List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
-            for (int index = 1; index < supply.size(); index++) {
-                highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, supply.get(index - 1), supply.get(index)));
+            List<BlockPosition> settlementRoute = topology.settlementWaypoints(bootstrap, settlement.id());
+            for (int index = 1; index < settlementRoute.size(); index++) {
+                highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, settlementRoute.get(index - 1), settlementRoute.get(index)));
             }
         }
         return highest == Integer.MIN_VALUE ? java.util.Optional.empty() : java.util.Optional.of(new BlockPosition(x, highest, z));
@@ -235,9 +224,9 @@ public final class FrontierRouteNetwork {
                     surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36))) return true;
         }
         for (Settlement settlement : settlements) {
-            List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
-            for (int index = 1; index < supply.size(); index++) {
-                if (supportsFoundationAt(position, terrain, supply.get(index - 1), supply.get(index))) return true;
+            List<BlockPosition> settlementRoute = topology.settlementWaypoints(bootstrap, settlement.id());
+            for (int index = 1; index < settlementRoute.size(); index++) {
+                if (supportsFoundationAt(position, terrain, settlementRoute.get(index - 1), settlementRoute.get(index))) return true;
             }
         }
         return false;
@@ -247,8 +236,8 @@ public final class FrontierRouteNetwork {
     public static List<BlockPosition> constructionCells(FrontierBootstrap bootstrap, RouteTopology active, SubjectId settlementId,
                                                  List<BlockPosition> replacement) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(active, "active topology");
-        validateSupplyWaypoints(bootstrap, settlementId, replacement);
-        // Only this supply route changes. Building both full-world surface sets made a local
+        validateSettlementWaypoints(bootstrap, settlementId, replacement);
+        // Only this settlement route changes. Building both full-world surface sets made a local
         // construction admission proportional to every settlement corridor and, on recovery,
         // repeated that work for each retained project. The exact set difference is simply the
         // replacement's own surface cells that are not already active anywhere in the network.

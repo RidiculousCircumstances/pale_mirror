@@ -13,6 +13,52 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EconomicLedgerTest {
+    @Test void expeditionBudgetAndPurchaseHoldsNeverDoubleCountOrMintMoney() {
+        SubjectId sender = new SubjectId("settlement:sender"), host = new SubjectId("settlement:host");
+        var initial = new EconomicLedger(Map.of(sender, new EconomicAccount(sender, EconomicOwnerKind.SETTLEMENT_TREASURY,
+                EconomicAccountStatus.ACTIVE, FixedScalar.whole(100), FixedScalar.ZERO),
+                host, new EconomicAccount(host, EconomicOwnerKind.SETTLEMENT_TREASURY,
+                EconomicAccountStatus.ACTIVE, FixedScalar.ZERO, FixedScalar.ZERO)));
+        var budget = new FinancialBudget(new SubjectId("budget:expedition"), sender,
+                FinancialBudget.OwnerKind.TRANSPORT_MISSION, new SubjectId("mission:expedition"), FixedScalar.whole(20));
+        var funded = initial.reserveBudget(budget);
+        assertEquals(FixedScalar.whole(80), funded.availableToReserve(sender));
+        var purchase = new FinancialReservation(new SubjectId("reservation:food"), sender, host,
+                new SubjectId("contract:food"), FixedScalar.whole(7), java.util.Optional.of(budget.id()));
+        var ordered = funded.reserveFromBudget(budget.id(), purchase);
+        assertEquals(FixedScalar.whole(80), ordered.availableToReserve(sender));
+        assertEquals(FixedScalar.whole(13), ordered.budgets().get(budget.id()).remaining());
+        assertThrows(IllegalArgumentException.class, () -> ordered.reserveFromBudget(budget.id(), purchase));
+        assertThrows(IllegalArgumentException.class, () -> ordered.closeBudget(budget.id()));
+        assertThrows(IllegalArgumentException.class, () -> ordered.reserve(new FinancialReservation(
+                new SubjectId("reservation:double-spend"), sender, host, new SubjectId("contract:other"), FixedScalar.whole(81))));
+        var partial = ordered.settlePortion(purchase.id(), FixedScalar.whole(3));
+        assertEquals(FixedScalar.whole(97), partial.require(sender).balance());
+        assertEquals(FixedScalar.whole(3), partial.require(host).balance());
+        assertEquals(purchase.budgetId(), partial.reservations().get(purchase.id()).budgetId());
+        var cancelledRemainder = partial.release(purchase.id());
+        assertEquals(FixedScalar.whole(17), cancelledRemainder.budgets().get(budget.id()).remaining());
+        assertEquals(FixedScalar.whole(80), cancelledRemainder.availableToReserve(sender));
+        var completed = cancelledRemainder.closeBudget(budget.id());
+        assertEquals(FixedScalar.whole(97), completed.availableToReserve(sender));
+        assertEquals(FixedScalar.whole(100), completed.require(sender).balance().plus(completed.require(host).balance()));
+        assertTrue(completed.releaseBudget(budget.id()).budgets().isEmpty());
+    }
+
+    @Test void restoredHoldsCannotOvercommitTreasuryOrLoseTheirBudget() {
+        SubjectId sender = new SubjectId("settlement:sender"), host = new SubjectId("settlement:host");
+        var accounts = Map.of(sender, new EconomicAccount(sender, EconomicOwnerKind.SETTLEMENT_TREASURY,
+                EconomicAccountStatus.ACTIVE, FixedScalar.whole(10), FixedScalar.ZERO),
+                host, new EconomicAccount(host, EconomicOwnerKind.SETTLEMENT_TREASURY,
+                EconomicAccountStatus.ACTIVE, FixedScalar.ZERO, FixedScalar.ZERO));
+        var budget = new FinancialBudget(new SubjectId("budget:expedition"), sender,
+                FinancialBudget.OwnerKind.TRANSPORT_MISSION, new SubjectId("mission:expedition"), FixedScalar.whole(8));
+        var purchase = new FinancialReservation(new SubjectId("reservation:food"), sender, host,
+                new SubjectId("contract:food"), FixedScalar.whole(3), java.util.Optional.of(budget.id()));
+        assertThrows(IllegalArgumentException.class, () -> new EconomicLedger(accounts, Map.of(purchase.id(), purchase)));
+        assertThrows(IllegalArgumentException.class, () -> new EconomicLedger(accounts, Map.of(purchase.id(), purchase), Map.of(budget.id(), budget)));
+    }
+
     @Test
     void bootstrapRegistersEveryCurrentExactClaimHolderAsAnAccount() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:economy-owners"), 91L));

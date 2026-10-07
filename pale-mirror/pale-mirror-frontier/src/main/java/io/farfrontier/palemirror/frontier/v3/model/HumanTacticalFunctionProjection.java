@@ -17,7 +17,7 @@ public final class HumanTacticalFunctionProjection {
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(residentId);
         return switch (assignment.kind()) {
             case SETTLEMENT_DEFENCE -> defenceFunction(state, assignment, resident);
-            case ROUTE_PATROL, ESCORT -> resident.profession() == ResidentProfession.SECURITY_WORKER || hasWeapon(state, residentId)
+            case ROUTE_PATROL -> resident.profession() == ResidentProfession.SECURITY_WORKER || hasWeapon(state, residentId)
                     ? HumanTacticalFunction.GUARD : HumanTacticalFunction.CIVILIAN;
             default -> HumanTacticalFunction.CIVILIAN;
         };

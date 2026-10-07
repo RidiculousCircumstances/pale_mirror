@@ -150,10 +150,8 @@ class FrontierV3AnnualAutonomyAuditTest {
         long unresolved = state.physicalIntents().values().stream().filter(intent -> intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
                 || intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING).count();
         assertEquals(0L, unresolved, "unloaded autonomous work may not stall behind a materialization-only physical intent");
-        assertFalse(state.operations().values().stream().anyMatch(operation -> state.canCompactTerminalLogistics(operation.id())),
-                "every fully settled logistics graph must have been detached into bounded retention evidence");
         return new AnnualResult(seed, checkpoint.revision().value(), state.humanPopulation().residents().size(), state.bootstrap().hive().bioforms().size() + state.hiveColony().spawnedBioforms().size(),
-                state.inventory().items().size(), state.contracts().size(), state.operations().size(), state.infection().size(), digest(checkpoint));
+                state.inventory().items().size(), state.infection().size(), digest(checkpoint));
     }
 
     private static List<FoodSnapshot> foodSnapshots(long seed, List<Long> ticks) {
@@ -225,15 +223,7 @@ class FrontierV3AnnualAutonomyAuditTest {
     }
 
     private static String annualFailure(long seed, CheckpointImage checkpoint, io.farfrontier.palemirror.frontier.v3.api.AdvanceResult result) {
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
-        String operations = state.operations().values().stream().sorted(java.util.Comparator.comparing(RouteOperation::id)).map(operation -> {
-            String actors = operation.participantIds().stream().map(actor -> actor.value() + "=" + state.actorLocations().get(actor).body()).collect(java.util.stream.Collectors.joining(","));
-            String travel = operation.activeTravel().map(value -> "cursor=" + value.cursor() + "/" + (value.corridor().size() - 1)
-                    + " formation=" + value.formation()).orElse("none");
-            return operation.id().value() + "[" + operation.stage() + ",route=" + operation.routeIndex() + "," + travel + ",actors=" + actors + "]";
-        }).collect(java.util.stream.Collectors.joining("; "));
-        return "seed " + seed + " quarantined at " + result.instant() + ": " + result.status().failureDetail().orElse("no detail")
-                + " | operations=" + operations;
+        return "seed " + seed + " quarantined at " + result.instant() + ": " + result.status().failureDetail().orElse("no detail");
     }
 
     private static String digest(CheckpointImage checkpoint) {
@@ -245,7 +235,7 @@ class FrontierV3AnnualAutonomyAuditTest {
         } catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
     }
 
-    private record AnnualResult(long seed, long revision, int residents, int bioforms, int itemStacks, int contracts, int operations,
+    private record AnnualResult(long seed, long revision, int residents, int bioforms, int itemStacks,
                                 int infectedCells, String stateDigest) { }
 
     private record FoodSnapshot(long tick, long nourishedResidents, long hungryResidents, long starvingResidents,

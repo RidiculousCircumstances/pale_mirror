@@ -109,17 +109,17 @@ class HumanTacticalFunctionProjectionTest {
 
         assertEquals(SettlementDefenderReadinessStatus.IMPROVISED,
                 SettlementDefenderReadinessProjection.derive(state, assault).status());
-        assertEquals(FixedScalar.ONE, RouteEngagementCombatRules.damage(state, fighter));
+        assertEquals(FixedScalar.ONE, FrontierCombatRules.damage(state, fighter));
         state = arm(state, assault, leader, "leader");
         state = arm(state, assault, fighter, "fighter");
         state = arm(state, assault, support, "support");
         assertEquals(SettlementDefenderReadinessStatus.READY, SettlementDefenderReadinessProjection.derive(state, assault).status());
-        assertEquals(FixedScalar.whole(3), RouteEngagementCombatRules.damage(state, fighter));
+        assertEquals(FixedScalar.whole(3), FrontierCombatRules.damage(state, fighter));
 
         SubjectId fighterSword = state.inventory().actorItems(fighter).getFirst().id();
         state = state.withInventory(state.inventory().destroyObservedItem(fighterSword, new InventoryCustody.Actor(fighter)));
         assertEquals(SettlementDefenderReadinessStatus.READY, SettlementDefenderReadinessProjection.derive(state, assault).status());
-        assertEquals(FixedScalar.ONE, RouteEngagementCombatRules.damage(state, fighter), "weapon loss changes the same exact defender");
+        assertEquals(FixedScalar.ONE, FrontierCombatRules.damage(state, fighter), "weapon loss changes the same exact defender");
 
         SubjectId leaderSword = state.inventory().actorItems(leader).getFirst().id();
         state = state.withInventory(state.inventory().destroyObservedItem(leaderSword, new InventoryCustody.Actor(leader)));
@@ -128,7 +128,7 @@ class HumanTacticalFunctionProjectionTest {
         actors.put(leader, new ActorLocation(leaderLocation.body(), ActorCondition.dead(), leaderLocation.kind()));
         state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         assertEquals(SettlementDefenderReadinessStatus.DEGRADED, SettlementDefenderReadinessProjection.derive(state, assault).status());
-        assertEquals(FixedScalar.ONE, RouteEngagementCombatRules.damage(state, fighter), "leader loss degrades survivors without replacing them");
+        assertEquals(FixedScalar.ONE, FrontierCombatRules.damage(state, fighter), "leader loss degrades survivors without replacing them");
         assertEquals("Northwatch MILITIA\nUNIT DEGRADED", FrontierSceneLabels.actor(state, fighter, false));
         assertEquals(state, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state)));

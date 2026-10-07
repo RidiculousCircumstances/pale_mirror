@@ -123,8 +123,8 @@ class RouteMaintenanceProcessTest {
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         SubjectId firstSettlement = bootstrap.settlements().get(0).id();
         SubjectId secondSettlement = bootstrap.settlements().get(1).id();
-        List<BlockPosition> firstRoute = initial.routeTopology().supplyWaypoints(bootstrap, firstSettlement);
-        List<BlockPosition> secondRoute = initial.routeTopology().supplyWaypoints(bootstrap, secondSettlement);
+        List<BlockPosition> firstRoute = initial.routeTopology().settlementWaypoints(bootstrap, firstSettlement);
+        List<BlockPosition> secondRoute = initial.routeTopology().settlementWaypoints(bootstrap, secondSettlement);
         BlockPosition firstLoss = firstRoute.stream().filter(position -> !secondRoute.contains(position)).findFirst().orElseThrow();
         BlockPosition secondLoss = secondRoute.stream().filter(position -> !firstRoute.contains(position)).findFirst().orElseThrow();
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(firstLoss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -171,7 +171,7 @@ class RouteMaintenanceProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-admission"), 41L);
         FrontierWorldState state = FrontierWorldState.initial(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        BlockPosition loss = state.routeTopology().supplyWaypoints(bootstrap, settlement).get(2);
+        BlockPosition loss = state.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         state = state.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
 
@@ -187,7 +187,7 @@ class RouteMaintenanceProcessTest {
         assertEquals(1, admitted.routeMaintenances().size());
         assertTrue(admitted.routeConstructions().isEmpty(), "one lost cell is in-place maintenance, never a hidden bypass project");
         assertTrue(admitted.physicalDeltas().containsKey(loss), "admission retains the original loss until an observed repair receipt");
-        assertEquals(state.routeTopology().supplyWaypoints(bootstrap, settlement), admitted.routeTopology().supplyWaypoints(bootstrap, settlement));
+        assertEquals(state.routeTopology().settlementWaypoints(bootstrap, settlement), admitted.routeTopology().settlementWaypoints(bootstrap, settlement));
     }
 
     @Test
@@ -197,7 +197,7 @@ class RouteMaintenanceProcessTest {
         GrayboxCell nonRouteCell = FrontierGrayboxPlan.compile(state).cells().values().stream()
                 .filter(cell -> !cell.ownerId().equals(FrontierRouteNetwork.OWNER))
                 .filter(cell -> cell.semanticPart() == GrayboxSemanticPart.FOUNDATION).findFirst().orElseThrow();
-        BlockPosition ordinaryRouteCell = state.routeTopology().supplyWaypoints(bootstrap, bootstrap.settlements().getFirst().id()).get(2);
+        BlockPosition ordinaryRouteCell = state.routeTopology().settlementWaypoints(bootstrap, bootstrap.settlements().getFirst().id()).get(2);
         FrontierWorldState foreign = state.recordPhysicalDelta(new PhysicalDelta(nonRouteCell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(nonRouteCell.semanticTarget()), Optional.of(nonRouteCell.semanticPart()), "player:test"));
         FrontierWorldState unknown = state.recordPhysicalDelta(new PhysicalDelta(ordinaryRouteCell, PhysicalDeltaKind.UNKNOWN_SCAR,
@@ -214,7 +214,7 @@ class RouteMaintenanceProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-close"), 41L);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        BlockPosition loss = initial.routeTopology().supplyWaypoints(bootstrap, settlement).get(2);
+        BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
         RouteMaintenanceStarted started = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()
@@ -246,7 +246,7 @@ class RouteMaintenanceProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-return-readiness"), 41L);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        BlockPosition loss = initial.routeTopology().supplyWaypoints(bootstrap, settlement).get(2);
+        BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
         RouteMaintenance maintenance = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()
@@ -299,7 +299,7 @@ class RouteMaintenanceProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-reactive-return"), 41L);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        BlockPosition loss = initial.routeTopology().supplyWaypoints(bootstrap, settlement).get(2);
+        BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
         RouteMaintenance maintenance = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()
@@ -335,7 +335,7 @@ class RouteMaintenanceProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-reactive-muster"), 41L);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        BlockPosition loss = initial.routeTopology().supplyWaypoints(bootstrap, settlement).get(2);
+        BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
         RouteMaintenanceStarted started = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()
@@ -381,7 +381,7 @@ class RouteMaintenanceProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-assembly"), 41L);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        BlockPosition loss = initial.routeTopology().supplyWaypoints(bootstrap, settlement).get(2);
+        BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
         RouteMaintenanceStarted started = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()
@@ -454,7 +454,7 @@ class RouteMaintenanceProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-intent-owner"), 41L);
         FrontierWorldState state = FrontierWorldState.initial(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        BlockPosition loss = state.routeTopology().supplyWaypoints(bootstrap, settlement).get(2);
+        BlockPosition loss = state.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         state = state.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
         RouteMaintenance maintenance = RouteMaintenanceProcess.plan(state, RouteMaintenanceProcess.scan(1, 100L)).stream()
@@ -475,7 +475,7 @@ class RouteMaintenanceProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(world, 41L);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        BlockPosition loss = initial.routeTopology().supplyWaypoints(bootstrap, settlement).get(2);
+        BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
         RouteMaintenance maintenance = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()
@@ -523,7 +523,7 @@ class RouteMaintenanceProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(world, 41L);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        BlockPosition loss = initial.routeTopology().supplyWaypoints(bootstrap, settlement).get(2);
+        BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
         RouteMaintenance maintenance = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()
@@ -592,7 +592,7 @@ class RouteMaintenanceProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-terminal-assembly"), 41L);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        BlockPosition loss = initial.routeTopology().supplyWaypoints(bootstrap, settlement).get(2);
+        BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
         RouteMaintenance maintenance = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()

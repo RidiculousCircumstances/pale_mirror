@@ -23,7 +23,6 @@ public enum DiagnosticReason {
     ROUTE_PATROL_BLOCKED(301, DiagnosticCategory.WAIT_OR_BLOCKED, DiagnosticOwnerKind.ROUTE_PATROL, DiagnosticSubjectKind.ROUTE_MEMBER, DiagnosticDisposition.RETRY),
     PRODUCTION_BLOCKED(302, DiagnosticCategory.WAIT_OR_BLOCKED, DiagnosticOwnerKind.PRODUCTION_JOB, DiagnosticSubjectKind.PRODUCTION_INPUT, DiagnosticDisposition.RETRY),
     RESIDENT_MIGRATION_BLOCKED(303, DiagnosticCategory.WAIT_OR_BLOCKED, DiagnosticOwnerKind.RESIDENT_MIGRATION, DiagnosticSubjectKind.RESIDENT_ASSIGNMENT, DiagnosticDisposition.RETRY),
-    OPERATION_FAILED(304, DiagnosticCategory.RECONCILIATION_CONFLICT, DiagnosticOwnerKind.ROUTE_OPERATION, DiagnosticSubjectKind.ROUTE_OPERATION, DiagnosticDisposition.INSPECT),
     SETTLEMENT_PROVISION_CONFLICT(305, DiagnosticCategory.RECONCILIATION_CONFLICT, DiagnosticOwnerKind.SETTLEMENT_PROVISION, DiagnosticSubjectKind.SETTLEMENT_PROVISION, DiagnosticDisposition.INSPECT),
     SETTLEMENT_ASSAULT_CONFLICT(306, DiagnosticCategory.RECONCILIATION_CONFLICT, DiagnosticOwnerKind.SETTLEMENT_ASSAULT, DiagnosticSubjectKind.SETTLEMENT_ASSAULT, DiagnosticDisposition.INSPECT),
     INVENTORY_CONFLICT(401, DiagnosticCategory.RECONCILIATION_CONFLICT, DiagnosticOwnerKind.INVENTORY_CUSTODY, DiagnosticSubjectKind.INVENTORY_SLOT, DiagnosticDisposition.INSPECT),

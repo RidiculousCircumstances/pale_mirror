@@ -12,10 +12,6 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 final class FrontierV3ClosedProjectionFence {
     private FrontierV3ClosedProjectionFence() { }
 
-    static boolean cargoIsStale(FrontierWorldState state, SceneLease lease) {
-        return rejects(state, FrontierSceneLeaseStateSupport.cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId()),
-                FencedRecoveryAsset.CARGO, lease, false);
-    }
 
     private static boolean rejects(FrontierWorldState state, SubjectId bindingId, FencedRecoveryAsset asset, SceneLease lease,
                                    boolean rejectMissingTombstone) {

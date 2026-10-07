@@ -213,10 +213,10 @@ class ActorBodyProcessTest {
                 Revision.ZERO, new SimInstant(22_300L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
                 CauseChain.root(id), new SceneLeaseTransition(scene.id(), SceneLeaseStatus.HOT));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,
-                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.planCommand("logistics-scenes", preparedScene, request),
+                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.planCommand("scene-lifecycle", preparedScene, request),
                 "a scene cannot defer the missing-body refusal until replay and quarantine the engine");
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
-                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.planCommand("logistics-scenes",
+                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.planCommand("scene-lifecycle",
                         ResourceSiteHarvestProcessTest.confirmedPhysicalParticipants(preparedScene, scene), request));
         assertEquals(FencedRecoveryPhase.PREPARED, ActorBodyAuthority.require(preparedScene,
                 ActorBodyAuthority.current(preparedScene, cold.job().workerId())).phase());

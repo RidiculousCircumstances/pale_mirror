@@ -251,7 +251,7 @@ class MedicalEvacuationOperationTest {
         SubjectId settlement = active.bootstrap().settlements().getFirst().id();
         var scheduledReview = StrategicObjectiveProcess.review(settlement, 1, 300L);
         var review = StrategicObjectiveProcess.plan(active, scheduledReview);
-        assertTrue(FrontierWorldProcessCatalog.planScheduled(FrontierWorldRuntimeDefinition.processRegistry(), active, scheduledReview, false).stream()
+        assertTrue(FrontierWorldProcessCatalog.planScheduled(FrontierWorldRuntimeDefinition.processRegistry(), active, scheduledReview).stream()
                 .map(event -> event.payload()).anyMatch(PhysicalIntentPrepared.class::isInstance));
         MedicalTreatmentStarted startedEvent = review.stream().map(event -> event.payload()).filter(MedicalTreatmentStarted.class::isInstance)
                 .map(MedicalTreatmentStarted.class::cast).findFirst().orElseThrow();

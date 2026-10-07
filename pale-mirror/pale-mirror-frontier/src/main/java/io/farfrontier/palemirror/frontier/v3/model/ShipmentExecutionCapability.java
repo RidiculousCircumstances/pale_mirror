@@ -6,6 +6,13 @@ import java.util.Optional;
 /** Courier owns a transport obligation, never the commercial contract or an independent body. */
 final class ShipmentExecutionCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.COURIER; }
+    @Override public boolean permitsHomeFood(FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution);
+        var shipment = state.shipments().shipments().get(execution.activityOwnerId());
+        if (shipment.transportMissionId().isEmpty()) return true;
+        var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());
+        return mission.stage() == TransportMission.Stage.LOADING || mission.stage() == TransportMission.Stage.COMPLETE;
+    }
     @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
     @Override public ActorActivityResumption resumptionReference() {
         return request -> {

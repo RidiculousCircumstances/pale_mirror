@@ -74,7 +74,7 @@ final class AmbientLeasePayloadCodecs {
         var actor = FrontierWorldPayloadCodecs.readSubject(input); BodyPosition handoff = readBody(input);
         long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte(); int goal = input.readUnsignedByte();
         BodyPosition goalBody = readBody(input);
-        if (status >= AmbientLeaseStatus.values().length || goal >= AmbientGoalKind.values().length) throw new IllegalArgumentException("unknown ambient lease value");
+        if (status >= AmbientLeaseStatus.values().length) throw new IllegalArgumentException("unknown ambient lease value");
         return new AmbientActorLease(actor.value(), handoff, new SimInstant(instant), revision, FrontierWireTags.require(AmbientLeaseStatus.class, status), FrontierWireTags.require(AmbientGoalKind.class, goal), goalBody);
     }
     private static void writeBody(DataOutputStream output, BodyPosition body) throws IOException { output.writeInt(body.x()); output.writeInt(body.y()); output.writeInt(body.z()); }

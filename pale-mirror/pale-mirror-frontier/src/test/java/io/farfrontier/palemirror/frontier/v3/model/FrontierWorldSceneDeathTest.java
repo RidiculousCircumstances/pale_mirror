@@ -22,39 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /** Regression coverage for several exact deaths from one physical scene effect. */
 class FrontierWorldSceneDeathTest {
-    @Test
-    void laterExactDeathsRemainDurableWhileTheSameSceneIsDraining() {
-        WorldId world = new WorldId("frontier:scene-multiple-deaths");
-        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
-                FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L));
-        FrontierWorldState initial = state(engine);
-        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(initial).orElseThrow();
-        SceneLeaseId leaseId = new SceneLeaseId("lease:multiple-deaths");
-        SceneLease lease = FrontierTestSceneLeases.exact(initial, leaseId, operation.id(), operation.cargoId(),
-                operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(),
-                java.util.Optional.empty(), operation.participantIds());
-        submit(engine, world, "prepare", new SceneLeasePrepared(lease));
-        FrontierTestActorBodies.present(engine, world, lease);
-        submit(engine, world, "hot", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
 
-        SceneMember first = lease.members().getFirst(), second = lease.members().get(1), third = lease.members().get(2);
-        submit(engine, world, "first-death", ModeledActorBodyFacts.death(state(engine), first.actorId(), lease.memberBody(state(engine).actorLocations(), first.actorId()), "explosion:test"));
-        assertEquals(SceneLeaseStatus.DRAINING, state(engine).sceneLeases().get(leaseId).status());
-
-        submit(engine, world, "second-death", ModeledActorBodyFacts.death(state(engine), second.actorId(), lease.memberBody(state(engine).actorLocations(), second.actorId()), "explosion:test"));
-        FrontierWorldState afterDeaths = state(engine);
-        assertEquals(ActorLifeStatus.DEAD, afterDeaths.actorLocations().get(first.actorId()).condition().status());
-        assertEquals(ActorLifeStatus.DEAD, afterDeaths.actorLocations().get(second.actorId()).condition().status());
-        assertEquals(SceneLeaseStatus.DRAINING, afterDeaths.sceneLeases().get(leaseId).status());
-
-        submit(engine, world, "third-death", ModeledActorBodyFacts.death(state(engine), third.actorId(), lease.memberBody(state(engine).actorLocations(), third.actorId()), "explosion:test"));
-        assertEquals(ActorLifeStatus.DEAD, state(engine).actorLocations().get(third.actorId()).condition().status());
-
-        submit(engine, world, "release", new SceneLeaseReleased(leaseId, List.of()));
-        FrontierWorldState released = state(engine);
-        assertEquals(SceneLeaseStatus.CLOSED, released.sceneLeases().get(leaseId).status());
-        assertEquals(OperationStage.FAILED, released.operations().get(operation.id()).stage());
-    }
 
     private static FrontierWorldState state(FrontierEngine<FrontierWorldProjection> engine) {
         return new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());

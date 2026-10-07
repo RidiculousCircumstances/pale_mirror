@@ -36,13 +36,13 @@ public final class FrontierV3ProductionTransformationGameTests {
                 new SubjectId("resident:1-3"), inputId, outputId, "minecraft:bread", 64);
         ProductionTransformationStateSupport.Target target = new ProductionTransformationStateSupport.Target(job, input, output, slot,
                 new BlockPosition(chestPosition.getX(), chestPosition.getY(), chestPosition.getZ()));
-        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(input));
+        chest.setItem(0, FrontierV3ExactItemPresentation.materializedStack(input));
 
         helper.assertTrue(FrontierV3ProductionTransformationExecutor.replace(chest, target),
                 "the executor may transform only the exact owned wheat stack after durable admission");
         helper.assertTrue(FrontierV3ProductionTransformationExecutor.matchesOutput(chest, target),
                 "the exact tagged bread is an inspectable postcondition after a crash window");
-        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(input)); chest.getItem(0).shrink(1);
+        chest.setItem(0, FrontierV3ExactItemPresentation.materializedStack(input)); chest.getItem(0).shrink(1);
         helper.assertTrue(!FrontierV3ProductionTransformationExecutor.replace(chest, target),
                 "an altered player/world stack remains conflict evidence and is never transformed");
         helper.succeed();

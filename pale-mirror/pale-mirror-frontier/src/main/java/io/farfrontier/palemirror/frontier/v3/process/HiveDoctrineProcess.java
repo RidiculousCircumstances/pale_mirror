@@ -10,12 +10,9 @@ import java.util.Optional;
 public final class HiveDoctrineProcess {
     private HiveDoctrineProcess() { }
 
-    public static HiveDoctrineState select(FrontierWorldState state, long now, boolean interceptionAllowed) {
-        Optional<HiveOperationKnowledge.Sighting> sighting = interceptionAllowed
-                ? state.strategicPlans().hiveOperationKnowledge().freshest(now,
-                        state.bootstrap().ruleset().cadence().hivePerceptionRefreshInterval()) : Optional.empty();
+    public static HiveDoctrineState select(FrontierWorldState state, long now) {
         Optional<HiveSettlementKnowledge.Sighting> settlement = state.strategicPlans().hiveSettlementKnowledge().freshest(state.bootstrap().ruleset(), now);
-        if (sighting.isPresent() || settlement.isPresent()) return new HiveDoctrineState(HiveDoctrine.INTERDICT, now);
+        if (settlement.isPresent()) return new HiveDoctrineState(HiveDoctrine.INTERDICT, now);
         if (hasStoredBiomass(state) || state.strategicPlans().hiveTerritoryKnowledge().freshInfection(state.bootstrap().ruleset(), now).isEmpty()) {
             return new HiveDoctrineState(HiveDoctrine.CONSOLIDATE, now);
         }

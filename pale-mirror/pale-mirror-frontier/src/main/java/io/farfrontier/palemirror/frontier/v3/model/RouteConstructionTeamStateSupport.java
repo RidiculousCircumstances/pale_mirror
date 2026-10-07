@@ -13,14 +13,11 @@ final class RouteConstructionTeamStateSupport {
     static void validate(HumanPopulation population, Map<SubjectId, RouteConstruction> constructions,
                          Map<SubjectId, RouteMaintenance> maintenances,
                          Map<SubjectId, ProductionJob> jobs, ResourceSiteState sites,
-                         Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts,
                          StrategicPlanState plans) {
         Set<SubjectId> assigned = new HashSet<>();
         jobs.values().forEach(job -> assigned.add(job.workerId()));
         sites.sites().values().stream().filter(site -> site.phase() == ResourceSitePhase.HARVESTING).flatMap(site -> site.harvestJobs().values().stream())
                 .forEach(job -> assigned.add(job.workerId()));
-        operations.values().stream().filter(operation -> FrontierWorldStateSupport.retainsParticipantClaim(contracts, operation))
-                .forEach(operation -> assigned.addAll(operation.participantIds()));
         plans.routePatrols().values().stream().filter(RoutePatrol::active)
                 .forEach(patrol -> assigned.addAll(patrol.memberIds()));
         plans.settlementAssaults().values().stream().filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)

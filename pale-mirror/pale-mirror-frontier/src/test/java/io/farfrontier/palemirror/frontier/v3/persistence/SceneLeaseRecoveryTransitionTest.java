@@ -36,7 +36,7 @@ class SceneLeaseRecoveryTransitionTest {
     @Test
     void recoveryTargetRoundTripsButDirectClosureStillRequiresItsOwnProtocol() {
         var transition = new SceneLeaseTransition(ID, SceneLeaseStatus.PREPARED);
-        var codecs = FrontierWorldPayloadCodecs.logisticsCodecs();
+        var codecs = FrontierWorldPayloadCodecs.sceneLifecycleCodecs();
         assertEquals(transition, codecs.decode(transition.type(), codecs.encode(transition)));
         assertThrows(IllegalArgumentException.class, () -> new SceneLeaseTransition(ID, SceneLeaseStatus.CLOSED));
     }

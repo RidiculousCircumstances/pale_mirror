@@ -30,10 +30,8 @@ class FrontierWireTagsTest {
         assertThrows(IllegalArgumentException.class,
                 () -> FrontierWireTags.require(HiveOrganKind.class, 0),
                 "the retired HEART byte must never become GANGLION");
-        assertEquals(RouteEngagementStatus.UNKNOWN_AFTER_RESTART,
-                FrontierWireTags.require(RouteEngagementStatus.class, 5));
-        assertEquals(PhysicalIntentKind.CARGO_LOADING,
-                FrontierWireTags.require(PhysicalIntentKind.class, 10));
+        assertThrows(IllegalArgumentException.class, () -> FrontierWireTags.require(PhysicalIntentKind.class, 10),
+                "retired cargo-loading tag cannot dispatch another physical effect");
         assertThrows(IllegalArgumentException.class,
                 () -> FrontierWireTags.require(SceneLeaseStatus.class, 127));
     }

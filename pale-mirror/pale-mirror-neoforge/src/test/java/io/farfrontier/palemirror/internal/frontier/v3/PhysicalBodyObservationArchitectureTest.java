@@ -46,8 +46,7 @@ class PhysicalBodyObservationArchitectureTest {
         while (root != null && !Files.isDirectory(root.resolve("pale-mirror-neoforge"))) root = root.getParent();
         assertNotNull(root, "module root");
         Path source = root.resolve("pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3");
-        Set<String> nonPedestrian = Set.of("FrontierV3BodyObservation.java", "FrontierV3CargoCarrierExecutor.java",
-                "FrontierV3CargoDepartureObserver.java");
+        Set<String> nonPedestrian = Set.of("FrontierV3BodyObservation.java");
         Pattern rawBody = Pattern.compile("new\\s+(?:[\\w.]+\\.)?BodyPosition\\s*\\([^;]*?getBlockY\\s*\\(", Pattern.DOTALL);
         try (var files = Files.walk(source)) {
             for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {

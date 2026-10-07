@@ -288,7 +288,7 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
                     || !replacement.orElseThrow().executionId().equals(expected.executionId())
                     || !replacement.orElseThrow().portion().equals(expected.portion())
                     || !replacement.orElseThrow().settlementId().equals(expected.settlementId())
-                    || !replacement.orElseThrow().depotId().equals(expected.depotId())
+                    || !replacement.orElseThrow().source().equals(expected.source())
                     || !replacement.orElseThrow().sourceAccountId().equals(expected.sourceAccountId())
                     || !replacement.orElseThrow().actorAccountId().equals(expected.actorAccountId())
                     || replacement.orElseThrow().retiredAtTick() != expected.retiredAtTick()))

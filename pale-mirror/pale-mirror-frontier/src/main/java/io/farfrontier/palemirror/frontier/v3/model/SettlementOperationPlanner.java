@@ -18,7 +18,7 @@ public interface SettlementOperationPlanner {
     }
 
     enum Priority { CRITICAL, IMPORTANT, NORMAL, BACKGROUND }
-    enum Reason { ROUTE_RECOVERY_ALREADY_OWNED, ROUTE_OBSERVATION_ALREADY_OWNED }
+    enum Reason { ROUTE_RECOVERY_ALREADY_OWNED }
     record Offer(SubjectId ownerId, StrategicOperationProposal proposal, Priority priority, List<SubjectId> replacePendingTasks) {
         public Offer(SubjectId ownerId, StrategicOperationProposal proposal, Priority priority) {
             this(ownerId, proposal, priority, List.of());

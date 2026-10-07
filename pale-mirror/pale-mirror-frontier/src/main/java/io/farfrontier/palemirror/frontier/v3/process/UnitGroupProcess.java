@@ -140,7 +140,7 @@ public final class UnitGroupProcess {
         if (group.phase() != UnitGroup.Phase.TRAVELLING) {
             if (group.phase() != UnitGroup.Phase.CLOSED) events.addAll(port.reconsider(state, group, now));
             events.add(new ProposedEvent(group.id(), new ScheduleEffect.Rescheduled(action.id(), progress(group.id(),
-                    now + state.bootstrap().ruleset().cadence().terminalLogisticsReviewInterval()))));
+                    now + state.bootstrap().ruleset().cadence().transportReviewInterval()))));
             return List.copyOf(events);
         }
         if (settled(state, group)) {
@@ -170,7 +170,7 @@ public final class UnitGroupProcess {
             events.add(new ProposedEvent(member.actorId(), new ScheduleEffect.Created(ActorMovementProcess.progress(movement, now + 1))));
         }
         events.add(new ProposedEvent(group.id(), new ScheduleEffect.Rescheduled(action.id(), progress(group.id(),
-                now + (events.isEmpty() ? state.bootstrap().ruleset().cadence().terminalLogisticsReviewInterval() : 1)))));
+                now + (events.isEmpty() ? state.bootstrap().ruleset().cadence().transportReviewInterval() : 1)))));
         return List.copyOf(events);
     }
     private static Optional<UnitGroup.Journey> nextFrame(FrontierWorldState state, UnitGroup group, UnitGroupMissionPort port) {

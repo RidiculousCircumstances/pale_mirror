@@ -68,6 +68,7 @@ public final class FrontierWorldStateSupport {
         return switch (declaration.kind()) {
             case RESIDENT -> resident(state, actorId).settlementId();
             case BIOFORM -> bioform(state.bootstrap(), state.hiveColony(), actorId).hiveId();
+            case PACK_ANIMAL -> state.transportFleet().require(actorId).homeSettlementId();
         };
     }
 
@@ -124,24 +125,6 @@ public final class FrontierWorldStateSupport {
         return SettlementWorkforce.availableForNewAssignment(state, resident);
     }
 
-    static boolean retainsParticipantClaim(FrontierWorldState state, RouteOperation operation) {
-        return retainsParticipantClaim(state.contracts(), operation);
-    }
-
-    static boolean retainsParticipantClaim(Map<SubjectId, SupplyContract> contracts, RouteOperation operation) {
-        return switch (operation.stage()) {
-            case ASSEMBLING, EN_ROUTE, RETURNING -> true;
-            // Delivery acknowledgement does not release people: the same exact residents still
-            // own their return journey until the operation reaches its home route point.
-            case ARRIVED -> true;
-            case COMPLETED, FAILED, INTERRUPTED -> false;
-        };
-    }
-
-    public static boolean activeOperationClaim(FrontierWorldState state, SubjectId residentId) {
-        return state.operations().values().stream().anyMatch(operation -> retainsParticipantClaim(state, operation)
-                && operation.participantIds().contains(residentId));
-    }
 
     public static boolean activeEmploymentClaim(FrontierWorldState state, SubjectId residentId) {
         return state.companies().employmentContracts().values().stream().anyMatch(contract -> contract.residentId().equals(residentId)

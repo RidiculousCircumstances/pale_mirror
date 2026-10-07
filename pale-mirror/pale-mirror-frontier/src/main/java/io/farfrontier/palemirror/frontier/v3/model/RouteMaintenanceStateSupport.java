@@ -33,8 +33,7 @@ public final class RouteMaintenanceStateSupport {
     static void validate(FrontierBootstrap bootstrap, HiveColony colony, RouteTopology topology, Map<SubjectId, RouteConstruction> constructions,
                          Map<SubjectId, RouteMaintenance> maintenances, Map<BlockPosition, PhysicalDelta> deltas,
                          Map<SubjectId, ActorLocation> actors, HumanPopulation population,
-                         Map<SubjectId, ProductionJob> jobs, ResourceSiteState sites, Map<SubjectId, RouteOperation> operations,
-                         Map<SubjectId, SupplyContract> contracts, StrategicPlanState plans) {
+                         Map<SubjectId, ProductionJob> jobs, ResourceSiteState sites, StrategicPlanState plans) {
         if (maintenances.size() > MAX_MAINTENANCE) throw new IllegalArgumentException("route maintenance retention limit exceeded");
         Set<BlockPosition> repairedCells = new HashSet<>();
         Set<SubjectId> ids = new HashSet<>(constructions.keySet());
@@ -60,7 +59,7 @@ public final class RouteMaintenanceStateSupport {
             EngineeringWorksite.validate(bootstrap, topology, maintenance);
             // A semantic checkpoint is not the independently observed physical pose.
         }
-        RouteConstructionTeamStateSupport.validate(population, constructions, maintenances, jobs, sites, operations, contracts, plans);
+        RouteConstructionTeamStateSupport.validate(population, constructions, maintenances, jobs, sites, plans);
     }
 
     static void validateAmbientAssemblyLeases(Map<SubjectId, RouteMaintenance> maintenances,
@@ -331,7 +330,7 @@ public final class RouteMaintenanceStateSupport {
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(observation.id(), observation);
         return EngineeringExecutionAuthority.workSettled(state, maintenance, FrontierWorldStateUpdate.begin().inventory(state.inventory().consumeCargoUnit(maintenance.cargoId().orElseThrow(), observation.itemId()))
                 .physicalIntents(intents).physicalObservations(observations).physicalDeltas(deltas).routeMaintenances(maintenances).sceneLeases(leases)
-                .routeTopology(state.routeTopology().reconcileSupplyAvailability(state.bootstrap(), deltas)));
+                .routeTopology(state.routeTopology().reconcileRouteAvailability(state.bootstrap(), deltas)));
     }
 
     public static FrontierWorldState conflict(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,

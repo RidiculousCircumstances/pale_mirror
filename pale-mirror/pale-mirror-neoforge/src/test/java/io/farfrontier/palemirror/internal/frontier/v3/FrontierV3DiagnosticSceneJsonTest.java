@@ -190,7 +190,7 @@ class FrontierV3DiagnosticSceneJsonTest {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState baseline = runtime.decodedState().orElseThrow();
         SubjectId settlement = baseline.bootstrap().settlements().getFirst().id();
-        java.util.List<BlockPosition> waypoints = baseline.routeTopology().supplyWaypoints(baseline.bootstrap(), settlement);
+        java.util.List<BlockPosition> waypoints = baseline.routeTopology().settlementWaypoints(baseline.bootstrap(), settlement);
         java.util.List<BlockPosition> bypass = java.util.List.of(waypoints.get(0), waypoints.get(1),
                 waypoints.get(1).offset(-10, 0, 0), waypoints.get(2).offset(-10, 0, 0),
                 waypoints.get(2), waypoints.get(3), waypoints.get(4));

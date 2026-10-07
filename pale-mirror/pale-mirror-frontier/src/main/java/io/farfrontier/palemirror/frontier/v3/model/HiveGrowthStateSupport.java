@@ -16,7 +16,7 @@ public final class HiveGrowthStateSupport {
                 || !HiveStorageSupport.operationalNestForStore(state, slot.containerId()).id().equals(job.nestId())) {
             throw new IllegalArgumentException("hive growth needs one exact nest-local hive-store input");
         }
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().startGrowth(job), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
@@ -31,7 +31,7 @@ public final class HiveGrowthStateSupport {
         FungibleResourceLedger resources = bindings.isEmpty()
                 ? state.inventory().fungibleResources().reserve(claim, held.accountId())
                 : state.inventory().fungibleResources().reserveBound(claim, held.accountId(), bindings.getFirst().authorityEpoch());
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withFungibleResources(resources), state.productionJobs(), state.contracts(), state.operations(),
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withFungibleResources(resources), state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().startGrowth(job), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
@@ -39,14 +39,14 @@ public final class HiveGrowthStateSupport {
         HiveGrowthJob job = state.hiveColony().growthJobs().get(Objects.requireNonNull(jobId, "hive growth job id"));
         if (job == null || state.actorLocations().containsKey(job.bioform().id())) throw new IllegalArgumentException("hive growth completion is invalid");
         var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.bioform().id(), ActorLocation.standingOn(new SurfaceAnchor(job.bioform().position()), ActorKind.BIOFORM));
-        return state.next(actors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
+        return state.next(actors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().completeGrowth(jobId), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
     static FrontierWorldState consume(FrontierWorldState state, SubjectId jobId, SubjectId itemId) {
         HiveGrowthJob job = state.hiveColony().growthJobs().get(Objects.requireNonNull(jobId, "hive growth job id"));
         if (job == null || !job.consumedItemId().equals(itemId)) throw new IllegalArgumentException("hive growth biomass does not match its active job");
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withoutItem(itemId), state.productionJobs(), state.contracts(), state.operations(),
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withoutItem(itemId), state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().consumeTransferredNutrient(jobId, itemId), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
@@ -56,7 +56,7 @@ public final class HiveGrowthStateSupport {
             throw new IllegalArgumentException("fungible hive growth biomass does not match its active job");
         }
         FungibleResourceLedger resources = state.inventory().fungibleResources().destroy(held.accountId(), Map.of(held.itemId(), 64), Map.of(held.claimId(), 64));
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withFungibleResources(resources), state.productionJobs(), state.contracts(), state.operations(),
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withFungibleResources(resources), state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().consumeTransferredNutrient(jobId, held.itemId()), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
@@ -71,7 +71,7 @@ public final class HiveGrowthStateSupport {
     }
 
     static FrontierWorldState cancel(FrontierWorldState state, SubjectId jobId) {
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().cancelGrowth(jobId), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 

@@ -67,7 +67,7 @@ public final class FrontierV3PlayerCustodyGameTests {
         FrontierV3CommandSubmission.submit(runtime, "player-withdrawal-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
         ExactItemStack exact = state(runtime).inventory().itemAt(container, 0).orElseThrow();
         var player = helper.makeMockServerPlayerInLevel();
-        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(exact));
+        chest.setItem(0, FrontierV3ExactItemPresentation.materializedStack(exact));
         player.getInventory().setItem(0, chest.removeItemNoUpdate(0));
 
         helper.assertTrue(FrontierV3InventoryObservationExecutor.observeOne(level, runtime, state(runtime), FrontierV3HopperCarrierLedger.get(level),
@@ -84,7 +84,7 @@ public final class FrontierV3PlayerCustodyGameTests {
                 "the same tagged player stack returned to the owned chest must be observed once");
         helper.assertValueEqual(state(runtime).inventory().items().get(exact.id()).custody(), new InventoryCustody.ContainerSlot(container, 0),
                 "return must restore the original exact slot without creating or aggregating a resource");
-        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(0), exact),
+        helper.assertTrue(FrontierV3ExactItemPresentation.exactMatch(chest.getItem(0), exact),
                 "the physical return must retain the exact durable tag and count");
         runtime.shutdown(); helper.succeed();
     }

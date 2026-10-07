@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.api;
 
 /** Exact fact an executor must inspect after a physical intent or after restart. */
 public enum PhysicalPostcondition {
-    CARGO_HANDOFF_OBSERVED,
     STRUCTURAL_REPAIR_OBSERVED,
     ROUTE_CONSTRUCTION_OBSERVED,
     DECONTAMINATION_OBSERVED,
@@ -12,7 +11,6 @@ public enum PhysicalPostcondition {
     RESOURCE_SITE_PREPARED_OBSERVED,
     RESOURCE_SITE_HARVESTED_OBSERVED,
     PRODUCTION_TRANSFORMED_OBSERVED,
-    CARGO_LOADED_FROM_DEPOT_OBSERVED,
     ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED,
     HIVE_NUTRIENT_DEPARTED_OBSERVED,
     HIVE_NUTRIENT_ARRIVED_OBSERVED,
@@ -24,7 +22,6 @@ public enum PhysicalPostcondition {
 
     public int wireTag() {
         return switch (this) {
-            case CARGO_HANDOFF_OBSERVED -> 0;
             case STRUCTURAL_REPAIR_OBSERVED -> 1;
             case ROUTE_CONSTRUCTION_OBSERVED -> 2;
             case DECONTAMINATION_OBSERVED -> 3;
@@ -34,7 +31,6 @@ public enum PhysicalPostcondition {
             case RESOURCE_SITE_PREPARED_OBSERVED -> 7;
             case RESOURCE_SITE_HARVESTED_OBSERVED -> 8;
             case PRODUCTION_TRANSFORMED_OBSERVED -> 9;
-            case CARGO_LOADED_FROM_DEPOT_OBSERVED -> 10;
             case ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED -> 11;
             case HIVE_NUTRIENT_DEPARTED_OBSERVED -> 12;
             case HIVE_NUTRIENT_ARRIVED_OBSERVED -> 13;

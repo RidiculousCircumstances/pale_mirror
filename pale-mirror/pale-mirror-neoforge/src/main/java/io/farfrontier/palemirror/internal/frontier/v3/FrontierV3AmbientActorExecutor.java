@@ -43,18 +43,12 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.HiveTaskAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody;
 import io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess;
-import io.farfrontier.palemirror.frontier.v3.model.OperationAssembly;
-import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferral;
-import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyAdvanced;
-import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferred;
-import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkOrder;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionAssemblyAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenance;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceAssemblyAdvanced;
-import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.Settlement;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAccessPort;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementStructure;
@@ -220,13 +214,13 @@ final class FrontierV3AmbientActorExecutor {
                         }
                     } else if (lease.status() == AmbientLeaseStatus.HOT) {
                         Entity body = level.getEntity(entityId(state, actorId));
-                        if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId))) {
+                        if (body instanceof Mob mob && owned(mob, actorId, state.actorLocations().get(actorId).kind())) {
                             holdForPreLeaseHandoff(mob);
                         }
                     }
                 } else if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
                     Entity body = level.getEntity(entityId(state, actorId));
-                    if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId))
+                    if (body instanceof Mob mob && owned(mob, actorId, state.actorLocations().get(actorId).kind())
                             && drainReservedColdContinuation(runtime, state, actorId, mob, lease)) admitted++;
                     // An unloaded serialized body is not a live physical owner.  Leaving its
                     // HOT lease open nevertheless made the same retained COLD production
@@ -252,7 +246,7 @@ final class FrontierV3AmbientActorExecutor {
             if (!demanded) {
                 if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
                     Entity body = level.getEntity(entityId(state, actorId));
-                    if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId))) {
+                    if (body instanceof Mob mob && owned(mob, actorId, state.actorLocations().get(actorId).kind())) {
                         FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, mob, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
                         if (FrontierV3AmbientActorLocalTargets.directedGoal(lease)) {
                             pursueLocalGoal(level, runtime, state, actorId, mob, lease);
@@ -284,13 +278,9 @@ final class FrontierV3AmbientActorExecutor {
                 continue;
             }
             Entity body = level.getEntity(entityId(state, actorId));
-            if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, actorId, bioform(state, actorId))) {
+            if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, actorId, location.kind())) {
                 FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, mob, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
                 FrontierV3ScenePresentation.applyAmbientActorPresentation(mob, state, actorId, bioform(state, actorId));
-                if (FrontierV3HotScoutObservation.observe(level, runtime, state, actorId, mob, lease)) {
-                    admitted++;
-                    continue;
-                }
                 if (pursueLocalGoal(level, runtime, state, actorId, mob, lease)) return;
                 if (observeDirectedArrival(level, runtime, state, actorId, mob, lease)) admitted++;
             }
@@ -311,7 +301,7 @@ final class FrontierV3AmbientActorExecutor {
         if (existing != null) {
             var binding = FrontierV3ActorOwnerBinding.from(existing).orElse(null);
             var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-            if (!owned(existing, actorId, bioform) || !FrontierV3ActorBodyController.recognizes(state, existing)
+            if (!owned(existing, actorId, state.actorLocations().get(actorId).kind()) || !FrontierV3ActorBodyController.recognizes(state, existing)
                     || binding == null || !ledger.permitsRecordedOwner(binding) || ledger.hasBodyDeparture(actorId)
                     || ledger.hasDepartureConflict(actorId)) return Result.CONFLICT;
             if (existing instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
@@ -354,7 +344,7 @@ final class FrontierV3AmbientActorExecutor {
         state.inventory().actorItems(actorId).stream().filter(item -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind())
                         || EngineeringToolCustody.isTool(item.itemKind()))
                 .sorted(Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.ExactItemStack::id)).findFirst()
-                .ifPresent(item -> body.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(item)));
+                .ifPresent(item -> body.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3ExactItemPresentation.materializedStack(item)));
     }
     static Result materialize(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                               FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody) {
@@ -470,7 +460,7 @@ final class FrontierV3AmbientActorExecutor {
         if (existing != null) {
             BlockPosition observedPosition = new BlockPosition(existing.getBlockX(), existing.getBlockY(), existing.getBlockZ());
             ObservedPosition observedExact = new ObservedPosition(existing.getX(), existing.getY(), existing.getZ());
-            if (owned(existing, actorId, bioform(state, actorId))) {
+            if (owned(existing, actorId, state.actorLocations().get(actorId).kind())) {
                 return FrontierV3AmbientAdmissionDiagnostic.indexed(expectedId, FrontierV3AmbientPendingAdmissions.get(runtime, expectedId) != null, observedPosition, observedExact,
                         existing instanceof Mob mob ? FrontierV3MobMotionLifecycle.trackerObservation(mob) : new FrontierV3ControlledMobMotion.TrackerObservation(0, 0),
                         existing instanceof Mob mob ? FrontierV3ControlledMobMotion.motionObservation(mob) : FrontierV3ControlledMobMotion.MotionObservation.idle())
@@ -494,7 +484,7 @@ final class FrontierV3AmbientActorExecutor {
         if (!level.areEntitiesLoaded(ChunkPos.asLong(anchor))) return FrontierV3AmbientAdmissionDiagnostic.entityStoragePending(expectedId,
                 new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
         if (!FrontierV3StandingPosition.hasExactStandingColumn(level, location.supportingSurface().support())) return FrontierV3AmbientAdmissionDiagnostic.blocked(expectedId, location.supportingSurface().support());
-        if (FrontierV3BodyPlacement.occupied(level, bioform(state, actorId) ? EntityType.ZOMBIE : EntityType.VILLAGER, location.supportingSurface()))
+        if (FrontierV3BodyPlacement.occupied(level, FrontierV3ActorCarrierFactory.physicalType(location.kind()), location.supportingSurface()))
             return FrontierV3AmbientAdmissionDiagnostic.occupied(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
         return FrontierV3AmbientAdmissionDiagnostic.ready(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
     }
@@ -507,7 +497,7 @@ final class FrontierV3AmbientActorExecutor {
         SubjectId actorId;
         try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return JoinDisposition.NOT_MANAGED; }
         if (!state.actorLocations().containsKey(actorId) || state.actorLocations().get(actorId).condition().status() != ActorLifeStatus.ALIVE
-                || !entityId(state, actorId).equals(entity.getUUID()) || !owned(entity, actorId, bioform(state, actorId))) return JoinDisposition.NOT_MANAGED;
+                || !entityId(state, actorId).equals(entity.getUUID()) || !owned(entity, actorId, state.actorLocations().get(actorId).kind())) return JoinDisposition.NOT_MANAGED;
         FrontierV3AmbientPendingAdmissions.RetainResult retained = FrontierV3AmbientPendingAdmissions.retain(runtime, entity, actorId);
         if (retained == FrontierV3AmbientPendingAdmissions.RetainResult.LIMIT_REACHED) return JoinDisposition.NOT_MANAGED;
         if (retained == FrontierV3AmbientPendingAdmissions.RetainResult.DUPLICATE_UNINDEXED) return JoinDisposition.DUPLICATE_UNINDEXED;
@@ -543,12 +533,14 @@ final class FrontierV3AmbientActorExecutor {
                 .orElseThrow(() -> new IllegalArgumentException("not a canonical Frontier v3 bioform: " + actorId));
     }
     static boolean owned(Entity entity, SubjectId actorId, boolean bioform) {
+        return owned(entity, actorId, bioform ? ActorKind.BIOFORM : ActorKind.RESIDENT);
+    }
+    static boolean owned(Entity entity, SubjectId actorId, ActorKind kind) {
         return !entity.isRemoved() && actorId.value().equals(entity.getPersistentData().getString(ACTOR_KEY))
-                && (bioform ? entity instanceof Zombie : entity instanceof Villager)
-                && (bioform ? "BIOFORM" : "RESIDENT").equals(entity.getPersistentData().getString(KIND_KEY))
+                && FrontierV3ActorCarrierFactory.matchesKind(entity, kind)
+                && kind.name().equals(entity.getPersistentData().getString(KIND_KEY))
                 && actorId.value().equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.ACTOR_KEY))
-                && (bioform ? ActorKind.BIOFORM.name()
-                : ActorKind.RESIDENT.name()).equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.KIND_KEY))
+                && kind.name().equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.KIND_KEY))
                 && FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY.name().equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.OWNER_KEY))
                 && FrontierV3ActorCarrierComposition.Representation.LIVE_BODY.name().equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.REPRESENTATION_KEY))
                 && entity.getPersistentData().contains(FrontierV3ActorCarrierComposition.REVISION_KEY, net.minecraft.nbt.Tag.TAG_LONG)
@@ -602,7 +594,7 @@ final class FrontierV3AmbientActorExecutor {
         try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return Optional.empty(); }
         var current = state.actorLocations().get(actorId);
         if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(state, actorId).equals(body.getUUID())
-                || !owned(body, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F
+                || !owned(body, actorId, state.actorLocations().get(actorId).kind()) || body.getHealth() <= 0.0F
                 || state.ambientLeases().get(actorId) == null
                 || (state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT
                     && state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING

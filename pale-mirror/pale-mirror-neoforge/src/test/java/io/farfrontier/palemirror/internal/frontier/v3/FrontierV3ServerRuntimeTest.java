@@ -38,7 +38,6 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
-import io.farfrontier.palemirror.frontier.v3.model.ContractStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
@@ -52,17 +51,13 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
-import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseHandoff;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
-import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
-import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
@@ -199,102 +194,6 @@ class FrontierV3ServerRuntimeTest {
         recovered.shutdown();
     }
 
-    @Test
-    void sceneAdmissionDefersWhenAnExactParticipantAlreadyHasAnAmbientLease(@TempDir Path directory) {
-        WorldId world = new WorldId("frontier:scene-ambient-handoff");
-        var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L),
-                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
-        FrontierWorldState before = worldState(runtime);
-        RouteOperation operation = initialNorthwatchOperation(before);
-        SubjectId participant = operation.participantIds().getFirst();
-        submitAmbient(runtime, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(before, participant,
-                runtime.checkpointImage().orElseThrow().instant())), "command:ambient-scene-overlap-prepare");
-        presentModeledBody(runtime, participant, "ambient-overlap-body");
-        submitAmbient(runtime, world, admittedAmbientFixture(worldState(runtime), participant), "command:ambient-scene-overlap-hot");
-        FrontierWorldState overlapped = worldState(runtime);
-
-        assertFalse(FrontierSceneAdmission.available(overlapped, operation.participantIds()));
-        assertTrue(FrontierSceneAdmission.reserved(overlapped, participant));
-        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
-    }
-
-    @Test
-    void sceneHandoffAtomicallyCapturesAndClosesTheExactAmbientLease(@TempDir Path directory) {
-        WorldId world = new WorldId("frontier:scene-ambient-transfer");
-        var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L),
-                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
-        FrontierWorldState before = worldState(runtime);
-        RouteOperation operation = initialNorthwatchOperation(before);
-        SubjectId participant = operation.participantIds().getFirst();
-        submitAmbient(runtime, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(before, participant,
-                runtime.checkpointImage().orElseThrow().instant())), "command:ambient-scene-transfer-prepare");
-        presentModeledBody(runtime, participant, "ambient-transfer-body");
-        submitAmbient(runtime, world, admittedAmbientFixture(worldState(runtime), participant), "command:ambient-scene-transfer-hot");
-        FrontierWorldState overlapped = worldState(runtime);
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        SceneLease lease = FrontierV3TestSceneLeases.exact(overlapped, checkpoint,
-                new SceneLeaseId("lease:ambient-transfer-r" + checkpoint.revision().value()), operation.id(), operation.cargoId(),
-                operation.currentPosition(), java.util.Optional.empty(), operation.participantIds());
-        SceneMemberPosition capture = new SceneMemberPosition(participant, new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(12, 64, -12),
-                overlapped.actorLocations().get(participant).condition().health());
-        lease = lease.withAmbientHandoff(java.util.Set.of(participant));
-        SceneLeaseHandoff handoff = new SceneLeaseHandoff(lease, List.of(capture));
-        SceneLease handoffLease = lease;
-
-        assertEquals(handoff, FrontierWorldRuntimeDefinition.payloadCodecs().decode(handoff.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(handoff)));
-        assertThrows(IllegalArgumentException.class, () -> overlapped.handoffAmbientScene(new SceneLeaseHandoff(handoffLease,
-                List.of(new SceneMemberPosition(operation.participantIds().getLast(), capture.body(), capture.health())))));
-        inspectModeledBody(runtime, participant, capture.body(), "ambient-transfer-captured-body");
-        submitAmbient(runtime, world, handoff, "command:ambient-scene-transfer");
-
-        FrontierWorldState transferred = worldState(runtime);
-        assertEquals(AmbientLeaseStatus.CLOSED, transferred.ambientLeases().get(participant).status());
-        assertEquals(capture.body(),
-                transferred.actorLocations().get(participant).body(),
-                "the scope handoff must preserve the independently inspected common body position");
-        assertEquals(lease, transferred.sceneLeases().get(lease.id()));
-        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
-    }
-
-    @Test
-    void loadedMissingRestartSceneBlocksItsDeliveryWithoutReplacingActorsOrCargo(@TempDir Path directory) {
-        WorldId world = new WorldId("frontier:scene-recovery-unresolved");
-        var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L),
-                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
-        FrontierWorldState state = worldState(runtime);
-        RouteOperation operation = initialNorthwatchOperation(state);
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        SceneLeaseId leaseId = new SceneLeaseId("lease:scene-recovery-unresolved");
-        SceneLease lease = FrontierV3TestSceneLeases.exact(state, checkpoint, leaseId, operation.id(), operation.cargoId(),
-                operation.currentPosition(), java.util.Optional.empty(), operation.participantIds());
-        submitWorld(runtime, "recovery-unresolved-prepare", new SceneLeasePrepared(lease));
-        for (SubjectId actor : operation.participantIds()) presentModeledBody(runtime, actor, "recovery-unresolved-body-" + actor.value().replace(':', '-'));
-        transitionScene(runtime, world, leaseId, SceneLeaseStatus.HOT, "command:recovery-unresolved-hot");
-        assertEquals(1, FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime));
-
-        submitWorld(runtime, "recovery-unresolved-observation", new SceneLeaseRecoveryUnresolved(leaseId, Set.of(operation.participantIds().getFirst()), false));
-
-        FrontierWorldState after = worldState(runtime);
-        assertEquals(OperationStage.FAILED, after.operations().get(operation.id()).stage());
-        assertEquals(Set.of(operation.participantIds().getFirst()), after.sceneLeases().get(leaseId).recoveryEvidence().orElseThrow().missingActorIds());
-        assertEquals(SceneLeaseStatus.UNKNOWN_AFTER_RESTART, after.sceneLeases().get(leaseId).status());
-        String operationProgressSchedule = "schedule:operation-progress-" + operation.id().value().substring("operation:".length());
-        assertTrue(runtime.checkpointImage().orElseThrow().schedules().stream()
-                .noneMatch(action -> action.id().value().equals(operationProgressSchedule)));
-        for (int tick = 0; tick < 100; tick++) runtime.tick(new WorkBudget(64, 512));
-        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
-        assertTrue(runtime.checkpointImage().orElseThrow().schedules().stream()
-                .noneMatch(action -> action.id().value().equals(operationProgressSchedule)));
-        SubjectId reservedParticipant = operation.participantIds().getFirst();
-        assertTrue(FrontierSceneAdmission.reserved(after, reservedParticipant));
-        CheckpointImage rejectedCheckpoint = runtime.checkpointImage().orElseThrow();
-        CommandId rejectedCommandId = new CommandId("command:ambient-recovery-evidence-overlap");
-        CommandResult rejected = runtime.submit(new FrontierCommand(1, rejectedCommandId, world, rejectedCheckpoint.revision(), rejectedCheckpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(rejectedCommandId),
-                new AmbientLeasePrepared(AmbientActorProcess.nextLease(after, reservedParticipant, rejectedCheckpoint.instant())))).orElseThrow();
-        assertEquals(RejectionCode.REJECTED_BY_POLICY, assertInstanceOf(CommandResult.Rejected.class, rejected).rejection().code());
-        runtime.shutdown();
-    }
 
     @Test
     void freshLifecycleWritesAheadTicksPersistsAndRecoversWithoutWorldTimeInput(@TempDir Path directory) {
@@ -516,74 +415,6 @@ class FrontierV3ServerRuntimeTest {
                 "failed recovery must not fabricate field ownership from initial state");
     }
 
-    @Test
-    void restartRetainsAnUnloadedColdCargoDeliveryWithoutAStalledMaterializationIntent(@TempDir Path directory) {
-        WorldId world = new WorldId("frontier:restart-safety");
-        FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
-        var configuration = FrontierV3FixtureCatalog.coldSupplyDeliveryConfiguration(world, 91L);
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        SubjectId settlementId = new SubjectId("settlement:1");
-        // The ordinary bakery now clears the depot before closing its job; that
-        // can admit the route near tick 12,000, before its finite COLD travel.
-        for (int tick = 0; tick < 14_000; tick++) {
-            boolean delivered = runtime.decodedState().orElseThrow(() -> new AssertionError(
-                    "COLD delivery runtime stopped at tick " + runtime.calendarInstant() + ": " + runtime.status())).contracts().values().stream()
-                    .anyMatch(contract -> contract.settlementId().equals(settlementId) && contract.status() == ContractStatus.DELIVERED);
-            if (delivered) break;
-            runtime.tick(new WorkBudget(64, 512));
-        }
-
-        FrontierWorldState delivered = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
-        SubjectId contractId = delivered.contracts().values().stream()
-                .filter(contract -> contract.settlementId().equals(settlementId) && contract.status() == ContractStatus.DELIVERED)
-                .map(contract -> contract.id()).findFirst().orElseThrow(() -> new AssertionError("Northwatch never delivered its COLD cargo: contracts="
-                        + delivered.contracts() + ", operations=" + delivered.operations()));
-        String suffix = contractId.value().substring("contract:".length());
-        assertEquals(ContractStatus.DELIVERED, delivered.contracts().get(contractId).status());
-        assertFalse(delivered.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-" + suffix)),
-                "unloaded COLD delivery may not create an intent that requires a materializer to finish");
-
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
-                FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
-        assertEquals(ContractStatus.DELIVERED, state.contracts().get(contractId).status());
-        assertFalse(state.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-" + suffix)));
-        assertEquals(0, recovered.projection(ProjectionQuery.summary()).orElseThrow().unknownPhysicalIntentCount());
-    }
-
-    @Test
-    void restartRetainsManagedExplosionForItsPersistedPostconditionInspector(@TempDir Path directory) {
-        WorldId world = new WorldId("frontier:managed-explosion-restart"); FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
-        var configuration = FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, 91L);
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        FrontierWorldState initial = worldState(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:managed-explosion-restart");
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        SceneLease lease = FrontierV3TestSceneLeases.exact(initial, checkpoint, leaseId, candidate.operationId(), candidate.cargoId(),
-                candidate.handoffPosition(), java.util.Optional.of(candidate.engagementId()), candidate.actorIds());
-        submitWorld(runtime, "prepare-explosion-lease", new SceneLeasePrepared(lease));
-        for (SubjectId actor : candidate.actorIds()) presentModeledBody(runtime, actor, "explosion-body-" + actor.value().replace(':', '-'));
-        submitWorld(runtime, "hot-explosion-lease", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-        FrontierWorldState hot = worldState(runtime); SubjectId bomber = hot.bootstrap().hive().bioforms().stream().filter(io.farfrontier.palemirror.frontier.v3.model.Bioform::isExplosiveAssaulter)
-                .filter(value -> candidate.actorIds().contains(value.id())).findFirst().orElseThrow().id();
-        var point = hot.actorLocations().get(bomber).body(); PhysicalIntentId intentId = new PhysicalIntentId("intent:managed-explosion-restart");
-        PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.EXPLOSION, PhysicalIntentStatus.PREPARED, bomber, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.explosion(bomber, candidate.engagementId()),
-                new FixedPosition(FixedScalar.whole(point.x()), FixedScalar.whole(point.y()), FixedScalar.whole(point.z())), 4, PhysicalPostcondition.EXPLOSION_OBSERVED,
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION);
-        submitWorld(runtime, "prepare-explosion", new PhysicalIntentPrepared(intent)); submitWorld(runtime, "run-explosion", new PhysicalIntentTransition(intentId, PhysicalIntentStatus.RUNNING, java.util.Optional.empty()));
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered = FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        assertEquals(0, FrontierV3PhysicalIntentRestartSafety.quarantineWithManagedPostcondition(recovered, intentId::equals));
-        assertEquals(PhysicalIntentStatus.RUNNING, worldState(recovered).physicalIntents().get(intentId).status());
-        assertEquals(1, FrontierV3PhysicalIntentRestartSafety.quarantineWithManagedPostcondition(recovered, ignored -> false));
-        FrontierWorldState quarantined = worldState(recovered);
-        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, quarantined.physicalIntents().get(intentId).status());
-        var recovery = quarantined.fencedRecovery().current().get(
-                io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhysicalIntentSupport.bindingId(intent));
-        assertEquals(io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset.EFFECT, recovery.asset());
-        assertEquals(io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhase.AMBIGUOUS, recovery.phase());
-        assertEquals(io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryDisposition.INSPECT, recovery.nextAction(),
-                "the restart inspector preserves a managed effect as a local recovery question, never a replay or runtime quarantine");
-    }
 
     @Test
     void deferredColdAftermathRecoversItsRunningBoundaryWithoutMintingASecondCanonicalLoss(@TempDir Path directory) {
@@ -639,11 +470,11 @@ class FrontierV3ServerRuntimeTest {
                 PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
         PhysicalIntent unsupported = new PhysicalIntent(new PhysicalIntentId("intent:restart-unsupported"), PhysicalIntentKind.SCENE_STRIKE,
-                PhysicalIntentStatus.RUNNING, new SubjectId("operation:supply-1-2"),
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(new SubjectId("bioform:west-1"), new SubjectId("resident:1-1"), new
+                PhysicalIntentStatus.RUNNING, new SubjectId("assault:restart-unsupported"),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(new SubjectId("bioform:west-1"), new SubjectId("resident:1-1"), new
                         io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:runtime-test"), 0L),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
 
         assertTrue(FrontierV3PhysicalIntentRestartSafety.hasLoadedPostconditionInspector(harvest, ignored -> false),
                 "the harvest executor verifies all owned crop cells and the exact depot stack without replay");
@@ -726,57 +557,6 @@ class FrontierV3ServerRuntimeTest {
         recovered.shutdown();
     }
 
-    @Test
-    void restartRetainsPreparedSceneLeaseAndKeepsItsColdRouteSuspended(@TempDir Path directory) {
-        WorldId world = new WorldId("frontier:scene-lease-recovery");
-        FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
-        var configuration = FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L);
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        FrontierWorldState before = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
-        RouteOperation operation = initialNorthwatchOperation(before);
-        SceneLeaseId leaseId = new SceneLeaseId("lease:recovery-supply-1-2");
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        SceneLease lease = FrontierV3TestSceneLeases.exact(before, checkpoint, leaseId, operation.id(), operation.cargoId(),
-                operation.currentPosition(), java.util.Optional.empty(), operation.participantIds());
-        CommandId commandId = new CommandId("command:scene-lease-recovery");
-        assertInstanceOf(CommandResult.Accepted.class, runtime.submit(new FrontierCommand(1, commandId, world, checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new SceneLeasePrepared(lease))).orElseThrow());
-
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
-                FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        FrontierWorldState restored = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
-        assertEquals(lease, restored.sceneLeases().get(leaseId));
-        for (int tick = 0; tick < 100; tick++) recovered.tick(new WorkBudget(64, 512));
-        FrontierWorldState afterColdDue = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
-        assertEquals(0, afterColdDue.operations().get(operation.id()).routeIndex());
-
-        for (SubjectId actor : operation.participantIds()) presentModeledBody(recovered, actor, "scene-recovery-body-" + actor.value().replace(':', '-'));
-        transitionScene(recovered, world, leaseId, SceneLeaseStatus.HOT, "command:scene-recovery-hot");
-        transitionScene(recovered, world, leaseId, SceneLeaseStatus.DRAINING, "command:scene-recovery-draining");
-        CheckpointImage draining = recovered.checkpointImage().orElseThrow();
-        SceneLeaseReleased released = new SceneLeaseReleased(leaseId, lease.members().stream().map(member -> {
-            var body = lease.memberBody(worldState(recovered).actorLocations(), member.actorId());
-            return new SceneMemberPosition(member.actorId(), body);
-        }).toList());
-        CommandId releaseCommand = new CommandId("command:scene-recovery-release");
-        assertInstanceOf(CommandResult.Accepted.class, recovered.submit(new FrontierCommand(1, releaseCommand, world, draining.revision(), draining.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(releaseCommand), released)).orElseThrow());
-        recovered.tick(new WorkBudget(8, 64));
-        assertEquals(0, worldState(recovered).operations().get(operation.id()).routeIndex(),
-                "closing presentation cannot start COLD motion while common physical custody is retained");
-        for (SubjectId actor : operation.participantIds()) {
-            var current = worldState(recovered); var location = current.actorLocations().get(actor);
-            submitWorld(recovered, "scene-recovery-unloaded-" + actor.value().replace(':', '-'),
-                    new ActorBodyUnloaded(ActorBodyAuthority.current(current, actor), location.body(), location.condition().health(),
-                            location.body(), location.condition().health(), current.actorExecutions().actors().get(actor).current()));
-        }
-        for (int tick = 0; tick < 1_000 && worldState(recovered).operations().get(operation.id()).routeIndex() == 0; tick++) {
-            recovered.tick(new WorkBudget(8, 64));
-        }
-        FrontierWorldState resumed = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
-        assertEquals(1, resumed.operations().get(operation.id()).routeIndex());
-    }
 
     @Test
     void restartQuarantinesAmbientHotLeaseIdempotently(@TempDir Path directory) {
@@ -890,14 +670,6 @@ class FrontierV3ServerRuntimeTest {
                 "runtime has no readable active state at " + runtime.calendarInstant() + ": " + runtime.status())).canonicalState());
     }
 
-    private static RouteOperation initialNorthwatchOperation(FrontierWorldState state) {
-        return state.operations().values().stream()
-                .filter(operation -> operation.settlementId().equals(new SubjectId("settlement:1")))
-                .filter(operation -> operation.stage() == OperationStage.EN_ROUTE && operation.routeIndex() == 0)
-                .filter(operation -> operation.activeTravel().isPresent() && operation.activeTravel().orElseThrow().cursor() == 0)
-                .reduce((left, right) -> { throw new AssertionError("ambiguous initial Northwatch route operations"); })
-                .orElseThrow(() -> new AssertionError("initial Northwatch route operation is absent"));
-    }
 
     /** Explicit modeled body event for filesystem recovery coverage, not a native movement claim. */
     private static void presentModeledBody(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

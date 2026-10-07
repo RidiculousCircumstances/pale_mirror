@@ -126,7 +126,7 @@ final class FrontierV3EquipmentReturnExecutor {
     }
 
     private static boolean handMatches(Villager resident, Target target) {
-        return FrontierV3CargoHandoffExecutor.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
+        return FrontierV3ExactItemPresentation.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
     }
 
     static boolean handOff(ChestBlockEntity chest, Villager resident, Target target) {
@@ -135,7 +135,7 @@ final class FrontierV3EquipmentReturnExecutor {
 
     private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
                                        ChestBlockEntity chest, Villager resident) {
-        boolean hand = handMatches(resident, target), stored = FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.targetSlot().slot()), target.item());
+        boolean hand = handMatches(resident, target), stored = FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.targetSlot().slot()), target.item());
         if (!hand && stored) { confirm(level, runtime, intent, target); return; }
         if (hand && chest.getItem(target.targetSlot().slot()).isEmpty() && handOff(chest, resident, target)) { confirm(level, runtime, intent, target); return; }
         unknown(runtime, intent.id(), "restart-postcondition-conflict");
@@ -149,7 +149,7 @@ final class FrontierV3EquipmentReturnExecutor {
      */
     private static void inspectRecovered(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
                                          ChestBlockEntity chest, Villager resident) {
-        boolean hand = handMatches(resident, target), stored = FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.targetSlot().slot()), target.item());
+        boolean hand = handMatches(resident, target), stored = FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.targetSlot().slot()), target.item());
         if (!hand && stored) { confirm(level, runtime, intent, target); return; }
         if (hand && chest.getItem(target.targetSlot().slot()).isEmpty() && handOff(chest, resident, target)) confirm(level, runtime, intent, target);
     }

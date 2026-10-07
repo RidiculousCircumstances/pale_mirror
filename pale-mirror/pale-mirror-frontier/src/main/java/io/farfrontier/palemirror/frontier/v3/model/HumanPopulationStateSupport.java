@@ -15,8 +15,6 @@ public final class HumanPopulationStateSupport {
         ActorLocation actor = state.actorLocations().get(migration.residentId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("only a living resident may migrate");
         if (state.humanPopulation().resident(migration.residentId()) == null) throw new IllegalArgumentException("migration subject is not a resident");
-        if (state.operations().values().stream().anyMatch(operation -> FrontierWorldStateSupport.retainsParticipantClaim(state, operation)
-                && operation.participantIds().contains(migration.residentId()))) throw new IllegalArgumentException("resident assigned to an active operation cannot migrate");
         ResidentProfile current = state.humanPopulation().resident(migration.residentId());
         ResidentMigrationJourney journey = state.humanPopulation().migration(migration.residentId());
         if (journey == null || !journey.executionId().equals(migration.executionId()))
@@ -172,7 +170,6 @@ public final class HumanPopulationStateSupport {
 
     private static boolean coldAvailable(FrontierWorldState state, SubjectId residentId) {
         return FrontierSceneAdmission.available(state, java.util.List.of(residentId))
-                && !FrontierWorldStateSupport.activeOperationClaim(state, residentId)
                 && !FrontierWorldStateSupport.activePatrolClaim(state, residentId);
     }
 

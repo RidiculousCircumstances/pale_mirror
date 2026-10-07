@@ -8,10 +8,10 @@ public final class ResidentMealPhysicalAuthority {
 
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId containerId) {
         return state.humanPopulation().meals().values().stream().anyMatch(meal ->
-                meal.depotId().equals(containerId) && meal.phase() == ResidentMeal.Phase.TAKE
+                !meal.portable() && meal.depotId().equals(containerId) && meal.phase() == ResidentMeal.Phase.TAKE
                         && meal.pendingPhysicalStep().isPresent())
                 || state.humanPopulation().mealResourceObligations().values().stream().anyMatch(obligation ->
-                    obligation.depotId().equals(containerId)
+                    !obligation.portable() && obligation.depotId().equals(containerId)
                         && obligation.custodyState() == ResidentMealResourceObligation.CustodyState.SOURCE_TAKE_PENDING);
     }
 }

@@ -98,7 +98,7 @@ class PhysicalIntentLifecycleOwnerCodecTest {
         assertThrows(IllegalArgumentException.class, () -> new PhysicalIntent(new PhysicalIntentId("intent:mismatched-owner"),
                 PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, new SubjectId("job:one"),
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.production(new SubjectId("job:one"), new SubjectId("item:input"), new SubjectId("item:output")), origin(), 0,
-                PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.ROUTE_OPERATION));
+                PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION));
     }
 
     @Test
@@ -117,7 +117,7 @@ class PhysicalIntentLifecycleOwnerCodecTest {
                 origin(), 0, PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED, PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
         assertThrows(IllegalArgumentException.class, () -> new PhysicalIntent(new PhysicalIntentId("intent:wrong-owner-schema"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
                 PhysicalIntentStatus.PREPARED, new SubjectId("job:one"), PhysicalIntentRoleBinding.production(new SubjectId("job:one"), new SubjectId("item:input"), new SubjectId("item:output")),
-                origin(), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.ROUTE_OPERATION));
+                origin(), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION));
         assertMessage(() -> decodeWithSchemaTag(productionIntent(), 255), "unknown");
     }
 

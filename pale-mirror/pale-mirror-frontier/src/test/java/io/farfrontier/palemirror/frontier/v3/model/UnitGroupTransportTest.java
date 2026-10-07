@@ -191,6 +191,16 @@ class UnitGroupTransportTest {
         state = state.withHumanPopulation(new HumanPopulation(population.households(), population.residents(), population.birthJobs(),
                 population.health(), population.quarantines(), population.migrations(), population.provisions(), nutrition,
                 population.medicalOperations(), population.schedules(), population.meals(), population.mealResourceObligations()));
+        // Outbound members eat actual fixture-held provisions, not a new solo route to the home depot.
+        var resources = state.inventory().fungibleResources();
+        for (var member : group.members()) {
+            var lot = new SubjectId("lot:meal-resume-" + member.actorId().value().replace(':', '-'));
+            var account = new SubjectId("custody:meal-resume-" + member.actorId().value().replace(':', '-'));
+            var owner = state.humanPopulation().resident(member.actorId()).settlementId();
+            resources = resources.issue(new ResourceLot(lot, owner, FoodCatalog.BREAD, 8, "fixture", List.of()),
+                    new CustodyAccount(account, new ResourceCustody.Actor(member.actorId()), Map.of(lot, 8), Map.of()));
+        }
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
         var schedules = new ArrayList<>(initialEngine.checkpoint().schedules());
         for (var member : group.members()) {
             var review = ResidentActivityProcess.review(member.actorId(), now + 1);

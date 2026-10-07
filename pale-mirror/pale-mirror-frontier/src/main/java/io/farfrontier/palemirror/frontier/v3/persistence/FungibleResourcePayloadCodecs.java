@@ -190,10 +190,13 @@ final class FungibleResourcePayloadCodecs {
     private static void writeFungibleAccount(DataOutputStream output, CustodyAccount account) throws IOException {
         writeSubject(output, account.id()); writeResourceCustody(output, account.custody()); writeFungibleQuantities(output, account.lotQuantities());
         writeFungibleQuantities(output, account.claimQuantities());
+        output.writeBoolean(account.actorPresentation().isPresent());
+        if (account.actorPresentation().isPresent()) ActorItemSlotCodec.write(output, account.actorPresentation().orElseThrow());
     }
 
     private static CustodyAccount readFungibleAccount(DataInputStream input) throws IOException {
-        return new CustodyAccount(readSubject(input).value(), readResourceCustody(input), readFungibleQuantities(input), readFungibleQuantities(input));
+        return new CustodyAccount(readSubject(input).value(), readResourceCustody(input), readFungibleQuantities(input), readFungibleQuantities(input),
+                input.readBoolean() ? java.util.Optional.of(ActorItemSlotCodec.read(input)) : java.util.Optional.empty());
     }
 
     private static void writeResourceCustody(DataOutputStream output, ResourceCustody custody) throws IOException {

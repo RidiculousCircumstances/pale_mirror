@@ -606,7 +606,7 @@ public final class FrontierV3AmbientActorGameTests {
         var feet = helper.absolutePos(new BlockPos(0, 1, 0));
         // Translate immutable initial geometry into the randomly positioned GameTest
         // cell. Do not relocate a runtime actor or loosen production bounds.
-        return FrontierWorldRuntimeDefinition.configuration(FrontierV3CargoLoadingGameTests.translatedBootstrap(
+        return FrontierWorldRuntimeDefinition.configuration(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(
                 original.initialState().bootstrap(), feet.getX() - canonical.x(), feet.getY() - canonical.y(), feet.getZ() - canonical.z()));
     }
 

@@ -360,7 +360,7 @@ class HiveSettlementAssaultProcessTest {
         SettlementAssaultSceneLeasePrepared payload = new SettlementAssaultSceneLeasePrepared(lease);
         assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
         FrontierWorldState unknown = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
-        unknown = FrontierSceneLeaseStateSupport.recoveryUnresolved(unknown, new SceneLeaseRecoveryUnresolved(lease.id(), java.util.Set.of(members.getFirst().actorId()), false));
+        unknown = FrontierSceneLeaseStateSupport.recoveryUnresolved(unknown, new SceneLeaseRecoveryUnresolved(lease.id(), java.util.Set.of(members.getFirst().actorId())));
         assertEquals(SettlementAssaultStatus.UNKNOWN_AFTER_RESTART, unknown.strategicPlans().settlementAssaults().get(assault.id()).status());
         assertEquals(unknown, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknown)));
         state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease)

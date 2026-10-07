@@ -140,7 +140,7 @@ function terminalExpectation(value) {
     && value.expectedMaterial === MATERIAL && value.provenance === PROVENANCE && value.cellStatus === 'REALIZED'
     && value.nextStatus === 'NONE' && value.terminal === true;
 }
-function isVisit(action) { return action?.type === 'visit' || action?.type === 'visit_operation'; }
+function isVisit(action) { return action?.type === 'visit'; }
 function pending(value, phase) {
   if (!sameIdentity(value, value) || value.terminal !== false || value.nextStatus !== 'PENDING' || value.cellStatus !== 'PENDING'
       || value.authorityRevision !== -1 || value.observedAt !== null || value.cursor !== 0 || !revision(value)) {

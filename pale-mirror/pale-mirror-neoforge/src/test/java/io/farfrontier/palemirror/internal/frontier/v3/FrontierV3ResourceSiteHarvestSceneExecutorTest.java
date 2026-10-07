@@ -32,13 +32,13 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
     @Test void resourceReleaseCapabilityMustMatchItsRegisteredFamily() {
         assertThrows(IllegalArgumentException.class, () -> new FrontierV3SceneBehaviorRegistry.Behavior(
                 SceneCauseKind.PRODUCTION_WORK, (level, runtime) -> false,
-                (state, lease, attacker, epoch) -> null, false, (level, floor) -> floor,
+                (state, lease, attacker, epoch) -> null, (level, floor) -> floor,
                 java.util.Optional.empty(), "AWAITING_EXACT_FLOOR", FrontierV3SceneBehaviorRegistry.ReleaseFailurePolicy.STANDARD,
                 (checkpoint, state, lease) -> java.util.Optional.empty(), (level, state, lease) -> true,
                 new FrontierV3HarvestSceneReleaseEffects()));
         assertThrows(NullPointerException.class, () -> new FrontierV3SceneBehaviorRegistry.Behavior(
                 SceneCauseKind.PRODUCTION_WORK, (level, runtime) -> false,
-                (state, lease, attacker, epoch) -> null, false, (level, floor) -> floor,
+                (state, lease, attacker, epoch) -> null, (level, floor) -> floor,
                 java.util.Optional.empty(), "AWAITING_EXACT_FLOOR", FrontierV3SceneBehaviorRegistry.ReleaseFailurePolicy.STANDARD,
                 (checkpoint, state, lease) -> java.util.Optional.empty(), (level, state, lease) -> true, null));
     }

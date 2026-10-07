@@ -77,8 +77,8 @@ final class FrontierV3HiveNutrientEndpointExecutor {
                 && !ReferenceContainerCustody.hasOperationalCustody(state, target.containerId())) return;
         if (target.surface().status() == ContainerSurfaceStatus.UNMATERIALIZED || target.surface().status() == ContainerSurfaceStatus.PREPARED) return;
         if (target.surface().status() == ContainerSurfaceStatus.CONFLICT) { unknown(runtime, intent.id(), "surface-conflict"); return; }
-        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
-                new FrontierV3CargoHandoffExecutor.StoreTarget(target.position(), target.containerId()));
+        ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,
+                new FrontierV3ExactItemPresentation.StoreTarget(target.position(), target.containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target, chest); return; }
         if (!precondition(intent, target, chest)) { unknown(runtime, intent.id(), "stack-precondition-conflict"); return; }
@@ -117,8 +117,8 @@ final class FrontierV3HiveNutrientEndpointExecutor {
         if (ReferenceContainerCustody.isReferenceContainer(state, target.transfer().sourceStoreId())
                 && !ReferenceContainerCustody.hasOperationalCustody(state, target.transfer().sourceStoreId())) return;
         if (target.surface().status() != ContainerSurfaceStatus.ACTIVE) return;
-        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
-                new FrontierV3CargoHandoffExecutor.StoreTarget(target.position(), target.transfer().sourceStoreId()));
+        ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,
+                new FrontierV3ExactItemPresentation.StoreTarget(target.position(), target.transfer().sourceStoreId()));
         if (chest == null) { unknown(runtime, intent.id(), "fungible-chest-conflict"); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) {
             if (matchesFungibleDeparture(chest, target)) confirmFungibleDeparture(runtime, intent, target, chest);
@@ -185,8 +185,8 @@ final class FrontierV3HiveNutrientEndpointExecutor {
         if (ReferenceContainerCustody.isReferenceContainer(state, target.transfer().targetStoreId())
                 && !ReferenceContainerCustody.hasOperationalCustody(state, target.transfer().targetStoreId())) return;
         if (target.surface().status() != ContainerSurfaceStatus.ACTIVE) return;
-        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
-                new FrontierV3CargoHandoffExecutor.StoreTarget(target.position(), target.transfer().targetStoreId()));
+        ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,
+                new FrontierV3ExactItemPresentation.StoreTarget(target.position(), target.transfer().targetStoreId()));
         if (chest == null) { unknown(runtime, intent.id(), "fungible-arrival-chest-conflict"); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) {
             if (confirmedFungibleArrival(state, target, chest)) confirmFungibleArrival(runtime, intent, target, chest);
@@ -287,12 +287,12 @@ final class FrontierV3HiveNutrientEndpointExecutor {
     private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
                                        Endpoint target, ChestBlockEntity chest) {
         boolean observed = intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE ? chest.getItem(target.slot()).isEmpty()
-                : FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.slot()), target.item());
+                : FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.slot()), target.item());
         if (observed) confirm(level, runtime, intent, target, chest); else unknown(runtime, intent.id(), "restart-postcondition-conflict");
     }
 
     static boolean matchesDeparture(ChestBlockEntity chest, int slot, ExactItemStack item) {
-        return slot >= 0 && slot < chest.getContainerSize() && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), item);
+        return slot >= 0 && slot < chest.getContainerSize() && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(slot), item);
     }
     static boolean matchesArrival(ChestBlockEntity chest, int slot) { return slot >= 0 && slot < chest.getContainerSize() && chest.getItem(slot).isEmpty(); }
     static boolean removeExact(ChestBlockEntity chest, int slot, ExactItemStack item) {
@@ -301,8 +301,8 @@ final class FrontierV3HiveNutrientEndpointExecutor {
     }
     static boolean insertExact(ChestBlockEntity chest, int slot, ExactItemStack item) {
         if (!matchesArrival(chest, slot)) return false;
-        chest.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(item)); chest.setChanged();
-        return FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), item);
+        chest.setItem(slot, FrontierV3ExactItemPresentation.materializedStack(item)); chest.setChanged();
+        return FrontierV3ExactItemPresentation.exactMatch(chest.getItem(slot), item);
     }
 
     private static void confirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Endpoint target, ChestBlockEntity chest) {
