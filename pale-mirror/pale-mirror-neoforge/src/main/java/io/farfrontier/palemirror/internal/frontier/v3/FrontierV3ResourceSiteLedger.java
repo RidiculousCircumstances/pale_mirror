@@ -194,9 +194,7 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
     }
     void beginFieldWorldChange(FrontierV3ResourceFieldWorldChangeWitness change) {
         if (!(fieldClaim(change.siteId()) instanceof FieldOwnership owner) || owner.status() != Status.ACTIVE
-                || !owner.witness().cell(change.cellId()).committed().equals(change.before())
-                || owner.witness().cell(change.cellId()).pending().isPresent()
-                || owner.witness().cell(change.cellId()).foreign().isPresent()
+                || !owner.witness().admitsWorldChange(change)
                 || fieldPlayerBreaks.containsKey(change.siteId())
                 || fieldForeignChanges.containsKey(change.siteId()))
             throw new IllegalStateException("world field change lacks an unblocked exact physical predecessor");
@@ -627,8 +625,7 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         for (Tag value : worldRows) {
             var change = FrontierV3ResourceFieldWorldChangeWitness.read((CompoundTag) value);
             if (!(fieldClaims.get(change.siteId()) instanceof FieldOwnership owner)
-                    || !owner.witness().cell(change.cellId()).committed().equals(change.before())
-                    && !owner.witness().cell(change.cellId()).committed().equals(change.after())
+                    || !owner.witness().retainsWorldChange(change)
                     || fieldWorldChanges.put(change.siteId(), change) != null)
                 throw new IllegalStateException("field world-change witness has no unique exact cell owner");
         }

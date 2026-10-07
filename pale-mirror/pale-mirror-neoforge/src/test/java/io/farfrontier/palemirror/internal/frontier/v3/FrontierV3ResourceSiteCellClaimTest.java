@@ -21,6 +21,50 @@ class FrontierV3ResourceSiteCellClaimTest {
     private static final SubjectId SITE = new SubjectId("site:cell-claim-test");
     private static final PhysicalIntentId INTENT = new PhysicalIntentId("intent:cell-claim-test");
 
+    @Test void laggingBiologyObservationSurvivesBothSidesOfItsSavedDataAcknowledgement() {
+        var site = site();
+        var id = site.layout().cells().getFirst().id();
+        var projected = ResourceFieldCycle.seeded(SITE, site.layout(), 1).advanceGrowth(id);
+        var witness = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.fromCycle(projected));
+        var fixture = FrontierV3ResourceSiteLedger.fixture();
+        fixture.reserveFieldInitialization(site, INTENT, projected);
+        var encoded = fixture.save(new CompoundTag(), null);
+        var row = encoded.getList("fieldClaims", 10).getCompound(0);
+        row.putString("kind", "OWNED"); row.putString("status", "ACTIVE");
+        row.remove("initial"); row.put("witness", witness.write());
+        var ledger = FrontierV3ResourceSiteLedger.load(encoded, null);
+        var canonical = projected;
+        for (int stage = 0; stage < 4; stage++) canonical = canonical.advanceGrowth(id);
+        var actual = canonical.advanceGrowth(id);
+        var before = ResourceFieldPhysicalSurface.Condition.of(canonical.cell(id));
+        var after = ResourceFieldPhysicalSurface.Condition.of(actual.cell(id));
+        var change = new FrontierV3ResourceFieldWorldChangeWitness(
+                new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved(SITE, 1,
+                        site.layout().revision(), id, before, after,
+                        io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Change.CROP_GROWN,
+                        io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Source.WORLD, "world:lagging-growth"));
+        ledger.beginFieldWorldChange(change);
+        var recovered = FrontierV3ResourceSiteLedger.load(ledger.save(new CompoundTag(), null), null);
+        assertEquals(change, recovered.fieldWorldChange(SITE));
+        var owner = (FrontierV3ResourceSiteLedger.FieldOwnership) recovered.fieldClaim(SITE);
+        var acknowledged = owner.witness().acknowledgeWorldChange(change, actual,
+                new FrontierV3ResourceFieldObservation.Owned(after));
+        recovered.replaceFieldClaim(owner, owner.withWitness(acknowledged));
+        var afterAcknowledgement = FrontierV3ResourceSiteLedger.load(recovered.save(new CompoundTag(), null), null);
+        assertEquals(change, afterAcknowledgement.fieldWorldChange(SITE));
+        afterAcknowledgement.retireFieldWorldChange(change);
+        assertEquals(after, ((FrontierV3ResourceSiteLedger.FieldOwnership) afterAcknowledgement.fieldClaim(SITE))
+                .witness().cell(id).committed());
+        ledger.retireFieldWorldChange(change);
+        var loss = new FrontierV3ResourceFieldWorldChangeWitness(
+                new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved(SITE, 1,
+                        site.layout().revision(), id, before,
+                        new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.ABSENT, 0),
+                        io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Change.CROP_REMOVED,
+                        io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Source.WORLD, "world:not-lagging-growth"));
+        assertThrows(IllegalStateException.class, () -> ledger.beginFieldWorldChange(loss));
+    }
+
     @Test void initialProjectionRetainsTheActualColdSurfaceInsteadOfReplayingAgeZero() {
         var site = site();
         var cycle = ResourceFieldCycle.seeded(SITE, site.layout(), 4);

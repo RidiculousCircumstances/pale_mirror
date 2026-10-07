@@ -289,12 +289,26 @@ final class FrontierV3ResourceFieldWitness {
                 || !ResourceFieldPhysicalSurface.Condition.of(accepted.cell(change.cellId())).equals(change.after()))
             throw new IllegalArgumentException("world field change lacks its accepted and observed postcondition");
         Cell prior = cell(change.cellId());
-        if (!admitsWorldObservation(change.cellId(), change.before(), change.after())
-                && !(prior.pending().isEmpty() && prior.foreign().isEmpty()
-                && prior.committed().equals(change.after())))
+        if (!retainsWorldChange(change))
             throw new IllegalArgumentException("world field change has a foreign physical predecessor");
         return prior.committed().equals(change.after()) ? this
                 : replace(change.cellId(), new Cell(change.after(), Optional.empty(), Optional.empty()));
+    }
+
+    boolean admitsWorldChange(FrontierV3ResourceFieldWorldChangeWitness change) {
+        return siteId.equals(change.siteId()) && epoch == change.observation().epoch()
+                && layoutRevision == change.observation().layoutRevision()
+                && admitsWorldObservation(change.cellId(), change.before(), change.after());
+    }
+
+    /** Recovery also accepts the exact already-acknowledged result before cause retirement. */
+    boolean retainsWorldChange(FrontierV3ResourceFieldWorldChangeWitness change) {
+        if (admitsWorldChange(change)) return true;
+        var prior = cell(change.cellId());
+        return siteId.equals(change.siteId()) && epoch == change.observation().epoch()
+                && layoutRevision == change.observation().layoutRevision()
+                && prior.pending().isEmpty() && prior.foreign().isEmpty()
+                && prior.committed().equals(change.after());
     }
 
     /** A lagging projection can observe later biology, never infer harvest, loss or yield. */
