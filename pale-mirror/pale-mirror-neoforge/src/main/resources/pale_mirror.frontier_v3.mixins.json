@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "FrontierV3ChunkPresentationMixin",
+    "FrontierV3ResidentInventoryMixin",
     "CalendarLevelDataMixin",
     "CalendarServerLevelDataMixin",
     "FrontierV3GoalNavigationMobMixin",

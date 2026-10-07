@@ -624,6 +624,7 @@ final class FrontierV3AmbientActorExecutor {
         // this presentation. Keep it HOT so its registered executor can settle;
         // only a real saved departure may release physical cargo custody.
         if (!releaseEligible(state, release)) return Optional.empty();
+        FrontierV3ActorCarryProjection.requireMatches(state, actorId, body);
         if (lease.status() != AmbientLeaseStatus.DRAINING && !(submit(runtime, "ambient-draining", actorId.value(),
                 new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
                 instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();

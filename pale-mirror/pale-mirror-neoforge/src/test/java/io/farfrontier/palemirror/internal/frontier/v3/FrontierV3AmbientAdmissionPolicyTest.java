@@ -339,7 +339,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
                     "a lease-only replacement must reuse the compatible structural snapshot");
 
             SubjectId unrelated = state.actorLocations().keySet().stream()
-                    .filter(actor -> !state.hiveColony().bioformLifecycles().containsKey(actor))
+                    .filter(actor -> state.actorLocations().get(actor).kind() == io.farfrontier.palemirror.frontier.v3.model.ActorKind.RESIDENT)
                     .filter(actor -> state.strategicPlans().settlementAssaults().values().stream()
                             .noneMatch(assault -> assault.attackerIds().contains(actor) || assault.defenderIds().contains(actor))).findFirst().orElseThrow();
             FrontierWorldState unrelatedReplacement = withPreparedLease(state, unrelated);
@@ -391,7 +391,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
     void productionSnapshotBoundsAdmissionAndJoinRecognitionBeforePointQueries() {
         FrontierWorldState base = twoEligibleAssaults();
         SubjectId ambientResident = base.actorLocations().keySet().stream()
-                .filter(actor -> !base.hiveColony().bioformLifecycles().containsKey(actor))
+                .filter(actor -> base.actorLocations().get(actor).kind() == io.farfrontier.palemirror.frontier.v3.model.ActorKind.RESIDENT)
                 .filter(actor -> base.strategicPlans().settlementAssaults().values().stream()
                         .noneMatch(assault -> assault.attackerIds().contains(actor) || assault.defenderIds().contains(actor)))
                 .findFirst().orElseThrow();
@@ -477,7 +477,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
     void scheduledNutrientTransitionRetainsProjectionCompatibilityThroughRuntimeJoinAndFirewall() {
         FrontierWorldState initial = nutrientRuntimeState();
         SubjectId resident = initial.actorLocations().keySet().stream()
-                .filter(actor -> !initial.hiveColony().bioformLifecycles().containsKey(actor)).findFirst().orElseThrow();
+                .filter(actor -> initial.actorLocations().get(actor).kind() == io.farfrontier.palemirror.frontier.v3.model.ActorKind.RESIDENT).findFirst().orElseThrow();
         FrontierWorldState state = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.demand(
                 withPreparedLease(initial, resident), resident);
         StrategicTask task = state.strategicPlans().tasks().get(new SubjectId("task:runtime-nutrient"));

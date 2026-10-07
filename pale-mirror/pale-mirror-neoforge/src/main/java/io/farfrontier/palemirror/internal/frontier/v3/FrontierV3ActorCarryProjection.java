@@ -37,9 +37,22 @@ final class FrontierV3ActorCarryProjection {
 
     /** Only a confirmed scene-resource release or new-body admission may record this proof. */
     static void rememberConfirmed(FrontierWorldState state, SubjectId actorId, Mob body) {
-        if (!matches(state, actorId, body)) throw new IllegalArgumentException("confirmed carried resource differs from physical inventory");
+        requireMatches(state, actorId, body);
         body.getPersistentData().putString(WITNESS, declarations(state, actorId).stream()
                 .map(carry -> signature(state.inventory().fungibleResources(), carry)).collect(java.util.stream.Collectors.joining(";")));
+    }
+
+    /** Pure precondition; scope closure may not publish a receipt before checking its physical cargo. */
+    static void requireMatches(FrontierWorldState state, SubjectId actorId, Mob body) {
+        if (matches(state, actorId, body)) return;
+        String inventory = declarations(state, actorId).stream().map(carry -> {
+            var expected = stack(state.inventory().fungibleResources(), carry);
+            var actual = FrontierV3ActorResourceSlots.get(body, carry.slot());
+            return "account=" + carry.accountId().value() + " slot=" + carry.slot()
+                    + " expected=" + expected + " actual=" + actual;
+        }).collect(java.util.stream.Collectors.joining("; "));
+        throw new IllegalArgumentException("confirmed carried resource differs from physical inventory actor="
+                + actorId.value() + " entity=" + body.getUUID() + " [" + inventory + "]");
     }
 
     static boolean witnessed(FrontierWorldState state, SubjectId actorId, Mob body) {
