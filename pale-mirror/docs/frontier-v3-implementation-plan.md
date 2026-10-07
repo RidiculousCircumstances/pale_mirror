@@ -4,6 +4,24 @@ Status: approved product execution plan for
 [`frontier-v3-contract.md`](frontier-v3-contract.md).
 This document owns product sequencing, not agent workflow.
 
+2026-10-06 accepted current cut: [community labour](work-orders/PM-COMMUNITY-LABOUR-20261006.md)
+finishes the six shared labour mechanisms for agriculture, baking and logistics.
+Public production/distribution supersedes resident wages and paid food; external
+settlement/company trade and exact resource ownership remain. Evidence status is
+in CONTINUITY.md, not implied by this plan.
+
+2026-10-05 accepted next product direction: autonomous trade for independent
+settlements and companies, with bread and stone as first content. The
+[trade/logistics contract](frontier-v3-trade-logistics-contract.md) owns boundaries;
+[PM-TRADE001](work-orders/PM-TRADE001-AUTONOMOUS-TRADE-01.md) records inspected
+source gaps, commercial/ledger work, reusable logistics, participant policy,
+finite quarry/stone consumption and connected player acceptance. Current turn
+has committed commercial core and transport-authority WIP; autonomous/native
+delivery and content remain pending. Farming is user-assessed
+minimally playable, not formal closure of all F0.6/UAE/ARC or MAT obligations.
+Adopt the touched delivery family, without requalifying unrelated infrastructure
+or importing the legacy economy. Current assignment is main alone, no subagents.
+
 2026-09-28 explicit user reprioritization: main alone is implementing the
 [resident-life/resource cut](frontier-v3-resident-life-resource-contract.md)
 before resuming the remaining F0.6R3/MAT sequence. This is a replacement of
@@ -20,11 +38,11 @@ product examples; it cannot override the contract or `architecture.yml`.
 
 All task lifecycle, review, permission, evidence/retry, monitoring and economy
 rules come solely from [the unified protocol](engineering-agent-protocol.md).
-Main is project manager / architect and owns product direction, priorities,
-system contracts and conformance acceptance. Terra high is the autonomous
-senior tech lead and sole coder, responsible for technical decisions, code,
-verification and the working result. PM does not direct methods, files, tests
-or ordinary retries. Current phase, assignment and accepted/missing evidence
+Roles follow the current user assignment and canonical ledger; historical
+main-PM/Terra-coder assignments do not override main-alone execution. The
+executor owns technical decisions, code, verification and the working result;
+product review checks scope and responsibility boundaries, not permission for
+ordinary implementation steps. Current phase, assignment and accepted/missing evidence
 come from `CONTINUITY.md`, not historical handoff paragraphs. The next stage
 still requires product acceptance; a failed command is not a stage boundary.
 
@@ -559,29 +577,7 @@ new movement-bearing scene or transport family is added, close
    cases. A disposable player scenario must show the same actor/route cursor
    before and after HOT/COLD/restart without force-loading.
 
-T0.3 now owns a bounded immutable terrain-provider contract: supply routes, active
-`OperationTravel` cursors and each active `OperationAssembly` member retain their own persisted topology,
-while the bootstrap retains a baseline plus sparse surveyed support columns. Current snapshot schema 98
-and persistence-envelope v7 retain typed `BodyPosition` formation cells, `TransportAnchor`, assembly
-`SurfaceAnchor` routes and the exact terrain survey. Raised surfaces compile provider-owned footing/deck
-cells from that survey; player scaffolding is not part of a valid route and foundation loss blocks the
-same retained edge. The present provider deliberately does not excavate or synthesize a facility terrace:
-support at or above a declared deck fails closed until an explicit earthworks/bridge provider exists.
-Any other snapshot or WAL envelope is rejected fail-closed; v3 worlds are
-disposable and recreated for a new format. This is deliberately not T0.4
-completion: observed edge damage and its physical restart proof remain separate
-owners and gates. Assembly cursors are already typed topology owners.
-
-The partial implementation still has one non-negotiable semantic boundary:
-`TraversalTopology` nodes are typed support surfaces while `OperationTravel`
-and scene leases retain role-specific body/transport values. Current
-actor/assembly/work/medical candidates may deliberately own support cells and
-cross only through a named support-to-body conversion. No executor may treat one
-value as both a support column and a body/cargo position. Before a non-flat
-transit cursor is accepted, move that remaining candidate to role-specific
-persisted types and make the physical adapter prove the exact support-to-feet
-conversion once at scene admission. Assembly now retains typed pedestrian topology rather
-than a raw support list, and its registered HOT provider resolves the explicit feet cell.
+Current terrain providers retain explicit support/body/port types and the baseline plus sparse surveyed support columns. Current shipments and groups use shared goal navigation and actual actor poses; patrol and assault retain their declared topology. The obsolete hive-supply OperationAssembly/OperationTravel family is retired, not a terrain-adoption prerequisite. State schema 258 and persistence envelope 102 reject older disposable worlds; no compatibility migration is required.
 
 The first implementation may keep the graybox physically flat by providing a
 uniform-datum topology. It is not required to build the production terrain
@@ -798,54 +794,11 @@ complete twelve-settlement world while all identities and clocks remain real.
 - Leave the scene, let COLD events change forces/infection/structures, return
   and materialize only the current continuation with the same surviving IDs.
 
-### Logistics assembly transition
+### Current transport and retired hive-supply family
 
-The first visible segment must not be created by moving residents from a Hall
-anchor. `RouteOperation` begins in `ASSEMBLING` with one bounded,
-versioned `OperationAssembly`: each named participant has an adjacent-cell
-approach cursor to a distinct compiled port slot; the cargo carrier is named;
-and no household, settlement membership or player/world position is changed by
-that record. The port exposes a two-body-clear throat, a public outer cargo
-slot and a distinct second participant slot; a wider future formation requires
-new compiled geometry rather than overlapping an unrelated route cell.
+The obsolete settlement-to-hive bread-supply feature is retired, not disabled behind a flag. Its contracts, RouteOperation/OperationAssembly/OperationTravel state, interception knowledge, cart projections, payloads and development profiles have no production or recovery owner. Current goods trade uses GoodsTradeContract, Shipment, TransportMission and UnitGroup, generic custody, UAE and shared goal navigation. The independent hive assault, physiology and internal nutrient transport remain supported. Retired wire tags are reserved holes; incompatible snapshots and WAL are rejected before runtime admission. Removal uses state schema 258 and persistence envelope 102; disposable worlds are recreated, never migrated.
 
-The only valid lifecycle is:
-
-`cargo loaded -> durable assembly -> exact COLD/HOT approach -> all members and
-cargo at port -> atomic start of OperationTravel -> bounded segment cursor ->
-atomic segment hand-off -> next segment/arrival`.
-
-Creation must retain each actor's current canonical position. Assembly COLD
-movement uses the same pure clear-lane planner as Transit; HOT assembly uses
-an actor lease with a distinct `OPERATION_ASSEMBLY` goal and accepts only the
-next observed cursor. A naturally loaded obstruction at the throat or assigned
-slot becomes a durable identity-specific deferral containing the member's next
-cursor and the exact blocked compiled floor; it freezes the shared operation
-until that same actor normally reaches that same cursor after ordinary passage
-is restored. It neither selects a hidden alternate slot nor changes the world.
-An interrupted/failed assembly releases only its own participant and
-cargo claims after the corresponding durable reason.
-
-`OperationTravel` is never cleared by a non-atomic `OperationAdvanced`.
-`OperationTravelSegmentCompleted` verifies the arrived cursor and advances the
-strategic route index in the same canonical transaction while retaining the
-formation/cargo positions. Scene demand, carrier projection, route engagement,
-death, cargo-loss, recovery and readability consult that same current
-position; they cannot assume a route milestone or treat `ASSEMBLING` as an
-attackable caravan.
-
-A scene lease preserves that truth at the HOT boundary: its demand point is not
-a spawn coordinate. It persists the exact position of every leased actor and
-the exact cargo anchor, validates them against the canonical operation before
-preparation, and uses those positions when bodies/carriers appear. A legacy
-uniform lease or carrier offset is rejected rather than quietly moving a convoy.
-
-Required evidence is a pure lifecycle/recovery test plus a causal pilot:
-ordinary player reaches a naturally loaded port, sees the two named villagers
-approach and depart, obstructs the owned public sill or throat, observes the
-durable assembly deferral, restores ordinary passage, then verifies the same
-IDs and cursor after graceful restart. Foundry reports the port at `COMPILED`,
-then the pilot supplies `MATERIALIZED`/`RELOADED` evidence without force-load.
+Group admission retains its exact roster, purpose and actual actor positions; it cannot teleport members to a Hall or route anchor. Shared UAE/navigation own member execution and HOT/COLD movement. Shipment custody, receiver acceptance and commercial settlement remain distinct owners. Existing goods-shipment/restart scenarios cover this current family; old bread-to-hive assembly/return/interception/cart scenarios are removed rather than repaired or accepted as release evidence.
 
 ### Tests
 
@@ -891,8 +844,11 @@ remains present because breadth, balance and product comprehension are not done.
 - Trade route selection, exact cargo lifecycle, patrol, escort, reconnaissance,
   clearance, reclamation, evacuation, construction, field-post and resupply
   operations.
-- Before promoting trade/resupply breadth, replace the development-only
-  settlement-to-hive bread shipment with a recipient-neutral delivery contract.
+- The development-only settlement-to-hive bread shipment is removed. Current
+  trade/resupply uses a recipient-neutral delivery contract.
+  The accepted [trade/logistics contract](frontier-v3-trade-logistics-contract.md)
+  and [PM-TRADE001](work-orders/PM-TRADE001-AUTONOMOUS-TRADE-01.md) specify the
+  commercial, resource, financial and shared-execution adoption for this scope.
   A sender's authorized demand/order must retain an exact recipient, cargo,
   custody, destination acceptance capability/port, route goal and terminal
   hand-off; admission validates diplomacy, ownership, capacity and reachability.
@@ -901,9 +857,7 @@ remains present because breadth, balance and product comprehension are not done.
   inferring the receiver from location. COLD/HOT transfer, full/blocked receiver,
   interruption, loss and restart preserve that same contract and give a local
   disposition rather than quarantining the world. Ordinary settlements must not
-  autonomously send food to the hostile hive: the old hive-facing route remains
-  available only as an explicit development fixture until retired or given a
-  separately justified product policy. Acceptance includes a real two-settlement
+  autonomously send food to the hostile hive: the old hive-facing route and its development fixture are retired. Acceptance includes a real two-settlement
   cargo transfer with recipient-side stock/receipt and no duplicate or invented
   custody, plus a negative full-receiver case.
 - Field posts, modules, hospitals, fortifications, supply lines, engagements and
@@ -943,15 +897,7 @@ remains present because breadth, balance and product comprehension are not done.
   compile `UNAVAILABLE`, `IMPROVISED`, `DEGRADED` or `READY`. COLD settlement
   combat consumes that same fact, so a lost weapon reduces the same person's
   output and a lost leader degrades surviving members without a replacement.
-  The next role owner correction is `V3-AUD-017`: `RoutePatrol` and
-  `RouteOperation` embed a shared immutable exact-unit manifest instead of a
-  global roster. New patrols are one leader plus one-to-three scouts; a named
-  cargo crew is distinct from its two-to-four exact escorts. Schema-82 routes
-  may retain only an explicit understrength legacy formation until their
-  ordinary terminal outcome, never a hydrated or invented replacement. The
-  subsequent expansion must add real engineering/recovery and medical/
-  evacuation operation/equipment owners before it introduces sapper or medic
-  labels.
+  Current patrols retain an immutable exact-unit manifest with one leader and one-to-three scouts. Current goods transport retains its exact roster and cargo/escort roles in UnitGroup; it does not reuse the removed hive-supply RouteOperation, cargo-crew or interception family. No old-world compatibility formation is required for that removed feature. Engineering/recovery and medical owners remain separate from transport roles.
 - The first engineering/recovery owner is now route reconstruction: each new
   `RouteConstruction` embeds one immutable one-to-four-person local
   `EngineeringRecoveryTeam`, and those same exact people derive exclusive
