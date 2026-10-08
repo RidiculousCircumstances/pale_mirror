@@ -47,6 +47,17 @@ class FrontierV3SceneReleaseReadinessTest {
     }
 
     @Test
+    void nativeQueuedBodyWaitsForItsReceiptButMissingOrContradictoryEvidenceDoesNot() {
+        assertTrue(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, LEASE,
+                id -> false, body -> true, id -> id.equals(LEASE.members().getFirst().entityId())),
+                "loaded storage can still contain the exact hidden body awaiting the store pass");
+        assertFalse(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, LEASE,
+                id -> false, body -> true, id -> false), "an empty unload queue cannot hide unexplained absence");
+        assertFalse(FrontierV3SceneReleaseReadiness.awaitingEntityStorage(STATE, LEASE,
+                id -> true, body -> true, id -> true), "an existing departure receipt must be validated, not waited away");
+    }
+
+    @Test
     void availableBlocksAloneNeverProveEntityStorageReady() {
         assertFalse(FrontierV3SceneExecutor.entityStorageReady(true, false));
         assertFalse(FrontierV3SceneExecutor.entityStorageReady(false, true));

@@ -95,7 +95,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
             "frontier.production_cold_work_advanced", "frontier.bakery_cold_step", "frontier.bakery_input_reallocated",
             "frontier.bakery_hot_effect_prepared", "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick",
-            "frontier.bakery_hot_hand_release", "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled", "frontier.production_work_traversal_blocked",
+            "frontier.bakery_hot_hand_release", "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
+            "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff", "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized",
             "frontier.production_blocked", "frontier.production_interrupted");
     private static final Set<String> RESOURCE_SITES = types(
@@ -671,7 +672,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
             "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_effect_prepared",
             "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
-            "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled", "frontier.production_work_traversal_blocked",
+            "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
+            "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff"); }
     private static Set<String> resourceCommands() { return types(
             "frontier.resource_site_conflict_observed",
@@ -832,7 +834,8 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
                     "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_effect_prepared",
                     "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
-                    "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled", "frontier.production_work_traversal_blocked",
+                    "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
+                    "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
                     "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff",
                     "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized", "frontier.production_blocked", "frontier.production_interrupted",
                     "frontier.scene_lease_transition",

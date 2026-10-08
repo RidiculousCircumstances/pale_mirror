@@ -393,6 +393,7 @@ class BakeryHotVerticalTest {
         for (int count = 1; count <= ProductionWorkProgress.REQUIRED_PROCESSING_TICKS; count++)
             state = ProductionProcess.reduceBakeryHotWorkTick(state, task.ownerId(),
                     new BakeryHotWorkTick(job.id(), leaseId, station.workerStation().standingBody(), count));
+        assertStationConflictCanReleaseHungryBaker(state, job.id(), leaseId);
         state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
                 new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.PROCESSING, station.outputSlot()));
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
@@ -557,6 +558,79 @@ class BakeryHotVerticalTest {
         assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
         assertEquals(123, state.inventory().fungibleResources().totalQuantity(task.ownerId(), "minecraft:bread"),
                 "delivery adds 64 bread without replacing the depot's existing 59");
+    }
+
+    private static void assertStationConflictCanReleaseHungryBaker(FrontierWorldState input, SubjectId jobId, SceneLeaseId leaseId) {
+        var job = input.productionJobs().get(jobId);
+        var actorId = job.workerId();
+        var prior = input.inventory().fungibleResources();
+        var breadId = new SubjectId("lot:station-recovery-food");
+        var depot = FrontierWorldState.depotId(job.settlementId());
+        var accountId = ReferenceContainerCustody.scopeId(depot);
+        var lots = new java.util.LinkedHashMap<>(prior.lots());
+        lots.put(breadId, new ResourceLot(breadId, job.settlementId(), "minecraft:bread", 4, "test", List.of()));
+        var accounts = new java.util.LinkedHashMap<>(prior.accounts());
+        accounts.put(accountId, new CustodyAccount(accountId, new ResourceCustody.Container(depot), Map.of(breadId, 4), Map.of()));
+        var hungry = input.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(input.inventory().withFungibleResources(new FungibleResourceLedger(lots, prior.claims(), accounts, prior.bindings())))
+                .humanPopulation(input.humanPopulation().accrueHunger(actorId, 27_000L)));
+        var meal = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
+                .selectSourceAtYield(hungry, actorId, 27_000L).orElseThrow();
+        hungry = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceStarted(hungry, actorId, meal);
+        var conflicted = hungry.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
+        var lease = conflicted.sceneLeases().get(leaseId);
+        var actor = conflicted.actorLocations().get(actorId);
+        var fence = ActorBodyAuthority.require(conflicted, ActorBodyAuthority.current(conflicted, actorId));
+        var receipt = new BakeryStationSceneReconciled(jobId, leaseId, lease.revision(), fence.authorityEpoch(),
+                lease.members().getFirst().entityId(), actor.body(), BakeryWorkState.Phase.PROCESSING);
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(receipt, codecs.decode(receipt.type(), codecs.encode(receipt)));
+        var base = FrontierWorldRuntimeDefinition.configuration(conflicted.bootstrap().worldId(), 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(conflicted.bootstrap().worldId(), conflicted,
+                new SimInstant(27_000L), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
+                base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        var command = new CommandId("command:station-conflict-release");
+        var checkpoint = engine.checkpoint();
+        var result = engine.submit(new FrontierCommand(1, command, conflicted.bootstrap().worldId(), checkpoint.revision(),
+                checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), receipt));
+        assertInstanceOf(CommandResult.Accepted.class, result, result.toString());
+        var draining = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(SceneLeaseStatus.DRAINING, draining.sceneLeases().get(leaseId).status());
+        assertEquals(conflicted.inventory(), draining.inventory(), "recovery cannot move station cargo");
+        assertEquals(conflicted.productionJobs(), draining.productionJobs(), "recovery cannot replay processing");
+        assertEquals(conflicted.humanPopulation().meals(), draining.humanPopulation().meals(), "retained meal is preserved");
+        var closed = draining.releaseSceneLease(leaseId, List.of(new SceneMemberPosition(actorId, actor.body(), actor.condition().health())));
+        assertTrue(FrontierSceneAdmission.available(closed, List.of(actorId)), "the exact body is now available for its retained meal");
+        assertFalse(closed.sceneLeases().get(leaseId).retainsMemberCustody(actorId));
+        assertEquals(closed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(closed)));
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation
+                .reduce(conflicted, job.settlementId(), new BakeryStationSceneReconciled(jobId, leaseId, lease.revision(),
+                        fence.authorityEpoch() + 1, receipt.entityId(), actor.body(), receipt.phase())));
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation
+                .reduce(conflicted, job.settlementId(), new BakeryStationSceneReconciled(jobId, leaseId, lease.revision(),
+                        fence.authorityEpoch(), java.util.UUID.randomUUID(), actor.body(), receipt.phase())));
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation
+                .reduce(draining, job.settlementId(), receipt), "duplicate recovery cannot reset custody");
+        var ambiguous = ActorBodyAuthority.isolate(conflicted, ActorBodyAuthority.current(conflicted, actorId), "restart body needs inspection");
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation
+                .reduce(ambiguous, job.settlementId(), receipt), "an indexed assertion alone cannot resolve restart ambiguity");
+        var savedReceipt = new BakeryStationSceneReconciled(jobId, leaseId, lease.revision(), fence.authorityEpoch(),
+                receipt.entityId(), actor.body(), receipt.phase(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.SAVED_DEPARTURE);
+        assertEquals(savedReceipt, codecs.decode(savedReceipt.type(), codecs.encode(savedReceipt)));
+        var savedDrain = io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation.reduce(
+                ambiguous, job.settlementId(), savedReceipt);
+        assertEquals(FencedRecoveryPhase.AMBIGUOUS, ActorBodyAuthority.require(savedDrain,
+                ActorBodyAuthority.current(savedDrain, actorId)).phase(), "scene recovery cannot grant a loaded body");
+        assertEquals(SceneLeaseStatus.DRAINING, savedDrain.sceneLeases().get(leaseId).status());
+        assertEquals(ambiguous.fencedRecovery(), savedDrain.fencedRecovery());
+        var station = input.inventory().containers().values().stream().flatMap(value -> value.productionStation().stream())
+                .filter(value -> value.id().equals(job.bakeryWork().orElseThrow().stationId())).findFirst().orElseThrow();
+        var pending = ProductionProcess.reduceBakeryHotEffectPrepared(input, job.settlementId(),
+                new BakeryHotEffectPrepared(jobId, leaseId, BakeryWorkState.Phase.PROCESSING, station.outputSlot()));
+        var pendingConflict = pending.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation
+                .reduce(pendingConflict, job.settlementId(), receipt), "a potentially applied recipe is never cleared by empty hands");
     }
 
     private static FrontierWorldState at(FrontierWorldState state, SceneLeaseId leaseId,

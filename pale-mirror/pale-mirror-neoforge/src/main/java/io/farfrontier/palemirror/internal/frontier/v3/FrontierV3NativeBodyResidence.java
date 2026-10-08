@@ -12,6 +12,23 @@ final class FrontierV3NativeBodyResidence {
     private static final java.util.Map<ServerLevel, java.util.Set<Long>> HIDDEN_COLUMNS = new java.util.WeakHashMap<>();
     private FrontierV3NativeBodyResidence() { }
 
+    /** Tracking stops before vanilla's queued store pass emits its departure receipt. */
+    static boolean departurePending(ServerLevel level, java.util.UUID entityId) {
+        var manager = ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3ServerEntityManagerAccessor) level)
+                .frontierV3$getEntityManager();
+        var storage = (io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3EntityPermanentStorageAccessor) manager;
+        var columns = storage.frontierV3$getChunksToUnload().iterator();
+        while (columns.hasNext()) {
+            long column = columns.nextLong();
+            if (storage.frontierV3$getSectionStorage().getExistingSectionsInChunk(column)
+                    .flatMap(section -> section.getEntities())
+                    .anyMatch(entity -> entity.getUUID().equals(entityId) && !entity.isRemoved() && entity.shouldBeSaved()))
+                return true;
+        }
+        // Neither an old visibility override nor a queued empty column proves a pending body.
+        return false;
+    }
+
     /**
      * A resident can remain indexed in the non-ticking, terrain-visible halo, or after
      * its terrain holder became inaccessible. Loaded blocks are not a ticking body.

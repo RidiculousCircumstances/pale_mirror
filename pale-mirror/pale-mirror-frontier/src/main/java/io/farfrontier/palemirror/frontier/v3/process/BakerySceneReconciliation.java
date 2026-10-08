@@ -9,6 +9,52 @@ import java.util.LinkedHashMap;
 /** Production-owned recovery of an unchanged bound batch at a safe owner checkpoint. */
 public final class BakerySceneReconciliation {
     private BakerySceneReconciliation() { }
+
+    /** Reopens only the ordinary release boundary, never production or a physical recipe. */
+    public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, BakeryStationSceneReconciled receipt) {
+        var job = state.productionJobs().get(receipt.jobId());
+        var lease = state.sceneLeases().get(receipt.leaseId());
+        if (job == null || !subject.equals(job.settlementId()) || job.bakeryWork().isEmpty()
+                || job.inputHold() instanceof ProductionInputHold.Materialized
+                || lease == null || lease.status() != SceneLeaseStatus.CONFLICT
+                || lease.revision() != receipt.leaseRevision() || lease.members().size() != 1
+                || !FrontierSceneBehaviors.isProductionWork(lease)
+                || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id())
+                || !lease.members().getFirst().actorId().equals(job.workerId())
+                || !lease.members().getFirst().entityId().equals(receipt.entityId()))
+            throw new IllegalArgumentException("station recovery lacks its exact conflicted owner/body");
+        var work = job.bakeryWork().orElseThrow();
+        var actor = state.actorLocations().get(job.workerId());
+        var ledger = state.inventory().fungibleResources();
+        var station = state.inventory().containers().values().stream()
+                .flatMap(container -> container.productionStation().stream())
+                .filter(candidate -> candidate.id().equals(work.stationId())).findFirst().orElseThrow(
+                        () -> new IllegalArgumentException("station recovery lost its production station"));
+        var batch = ledger.accounts().get(work.stationAccountId());
+        String kind = work.phase() == BakeryWorkState.Phase.PROCESSING ? "minecraft:wheat" : "minecraft:bread";
+        if (work.phase() != receipt.phase() || work.pendingPhysicalStep().isPresent()
+                || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
+                || !ActorExecutionCoordinator.ambientAvailable(state, java.util.List.of(job.workerId()))
+                || state.actorMovements().containsKey(job.workerId())
+                || ledger.accounts().containsKey(work.actorAccountId())
+                || FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)
+                || batch == null || !batch.custody().equals(new ResourceCustody.Container(station.containerId()))
+                || batch.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() != job.outputCount()
+                || batch.lotQuantities().keySet().stream().anyMatch(id -> !ledger.lots().get(id).itemKind().equals(kind)))
+            throw new IllegalArgumentException("station recovery cannot abandon cargo or a pending physical effect");
+        var fence = state.fencedRecovery().current().get(ActorBodyId.recoveryBindingId(job.workerId()));
+        if (fence == null || fence.asset() != FencedRecoveryAsset.BODY || !fence.ownerId().equals(job.workerId())
+                || fence.ownerRevision() != 0L || fence.authorityEpoch() != receipt.recoveryEpoch()
+                || fence.phase() != FencedRecoveryPhase.RUNNING
+                    && !(receipt.source() == io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.SAVED_DEPARTURE
+                        && fence.phase() == FencedRecoveryPhase.AMBIGUOUS)
+                || !actor.body().equals(receipt.observedBody())
+                || !state.bootstrap().bounds().contains(receipt.observedBody().supportingSurface().support()))
+            throw new IllegalArgumentException("station recovery has a stale body fence");
+        var leases = new LinkedHashMap<>(state.sceneLeases());
+        leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.DRAINING));
+        return state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
+    }
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, BakerySceneReconciled receipt) {
         var job = state.productionJobs().get(receipt.jobId());
         var lease = state.sceneLeases().get(receipt.leaseId());
