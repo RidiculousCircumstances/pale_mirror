@@ -19,10 +19,17 @@ final class FrontierV3ActorCarryProjection {
         var ledger = state.inventory().fungibleResources();
         for (var carry : declarations) {
             if (ledger.bindings().values().stream().anyMatch(binding -> binding.accountId().equals(carry.accountId()))
-                    || !FrontierV3ActorResourceSlots.get(body, carry.slot()).isEmpty() || stack(ledger, carry).isEmpty()) return false;
+                    || stack(ledger, carry).isEmpty()) return false;
+            // A family may have prepared its work hand on this still-private body.
+            // Accept only the exact declaration; never overwrite a conflicting item.
+            if (!FrontierV3ActorResourceSlots.get(body, carry.slot()).isEmpty()
+                    && !matches(ledger, carry, body)) return false;
         }
         // A genuinely new body is persisted with its inventory and witness together, not as a second live replica.
-        for (var carry : declarations) FrontierV3ActorResourceSlots.set(body, carry.slot(), stack(ledger, carry));
+        for (var carry : declarations) {
+            if (FrontierV3ActorResourceSlots.get(body, carry.slot()).isEmpty())
+                FrontierV3ActorResourceSlots.set(body, carry.slot(), stack(ledger, carry));
+        }
         rememberConfirmed(state, actorId, body);
         return true;
     }

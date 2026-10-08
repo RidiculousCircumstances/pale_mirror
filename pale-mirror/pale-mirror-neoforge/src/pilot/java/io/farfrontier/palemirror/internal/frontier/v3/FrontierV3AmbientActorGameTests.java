@@ -430,6 +430,20 @@ public final class FrontierV3AmbientActorGameTests {
         var level = helper.getLevel();
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:single-body-lifetime"), 91L));
         var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        var foodLot = new SubjectId("lot:scene-birth-personal-food");
+        var handLot = new SubjectId("lot:scene-birth-prepared-hand");
+        var economicOwner = state.humanPopulation().residents().get(actor).settlementId();
+        var pocket = new io.farfrontier.palemirror.frontier.v3.model.ActorItemSlot.Pocket(1);
+        var mainHand = new io.farfrontier.palemirror.frontier.v3.model.ActorItemSlot.Hand(
+                io.farfrontier.palemirror.frontier.v3.model.ActorContainerItemOrder.Hand.MAIN);
+        var resources = state.inventory().fungibleResources()
+                .issue(new ResourceLot(foodLot, economicOwner, "minecraft:bread", 1, "scene birth regression", List.of()),
+                        new CustodyAccount(new SubjectId("custody:scene-birth-personal-food"), new ResourceCustody.Actor(actor),
+                                java.util.Map.of(foodLot, 1), java.util.Map.of(), Optional.of(pocket)))
+                .issue(new ResourceLot(handLot, economicOwner, "minecraft:wheat", 7, "scene birth regression", List.of()),
+                        new CustodyAccount(new SubjectId("custody:scene-birth-prepared-hand"), new ResourceCustody.Actor(actor),
+                                java.util.Map.of(handLot, 7), java.util.Map.of(), Optional.of(mainHand)));
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
         var presence = state.actorExecutions().next(actor,
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, actor);
         state = io.farfrontier.palemirror.frontier.v3.model.ActorExecutionComposition.LIFECYCLE
@@ -447,14 +461,42 @@ public final class FrontierV3AmbientActorGameTests {
         var feet = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, feet);
         var support = bodyAt(feet).supportingSurface();
         var request = new FrontierV3ActorBodyController.BirthRequest(
-                FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY, binding, List.of(support),
+                FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY, binding, List.of(support),
                 new FrontierV3NavigationScope.Restricted(io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope.around(
                         support.standingBody(), support.standingBody())),
-                FrontierV3StandingPosition::aboveExactFloor, body -> { body.setHealth(7.0F); return true; });
+                FrontierV3StandingPosition::aboveExactFloor, body -> {
+                    body.setHealth(7.0F);
+                    body.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
+                            new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, 7));
+                    return true; // Scene callback intentionally does not prepare personal pockets.
+                });
+        var rejectedRequest = new FrontierV3ActorBodyController.BirthRequest(request.requester(), binding,
+                request.surfaces(), request.scope(), request.standing(), body -> {
+                    body.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
+                            new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, 6));
+                    return true;
+                });
+        helper.assertValueEqual(FrontierV3ActorBodyController.materialize(level, state, rejectedRequest),
+                FrontierV3ActorBodyController.Result.CONFLICT, "wrong preprojected hand cannot be silently overwritten");
+        helper.assertTrue(level.getEntity(declaration.entityId()) == null, "bad inventory cannot enter the native index");
         helper.assertValueEqual(FrontierV3ActorBodyController.materialize(level, state, request),
                 FrontierV3ActorBodyController.Result.APPLIED, "only the common boundary creates the body");
         var body = (net.minecraft.world.entity.Mob) level.getEntity(declaration.entityId());
         helper.assertTrue(body != null, "the common body is indexed");
+        helper.assertTrue(FrontierV3ActorResourceSlots.get(body, pocket).is(net.minecraft.world.item.Items.BREAD)
+                        && FrontierV3ActorResourceSlots.get(body, pocket).getCount() == 1,
+                "scene-created body must already carry its exact sparse personal food account");
+        helper.assertValueEqual(body.getMainHandItem().getCount(), 7, "correct family-prepared hand is preserved");
+        FrontierV3ActorResourceSlots.set(body, pocket, net.minecraft.world.item.ItemStack.EMPTY);
+        boolean rejectedRelease = false;
+        try { FrontierV3ActorCarryProjection.requireMatches(state, actor, body); }
+        catch (IllegalArgumentException mismatch) {
+            rejectedRelease = mismatch.getMessage().contains("custody:scene-birth-personal-food")
+                    && mismatch.getMessage().contains("Pocket[index=1]");
+        }
+        helper.assertTrue(rejectedRelease, "release precondition diagnoses the exact missing personal slot");
+        helper.assertTrue(FrontierV3ActorResourceSlots.get(body, pocket).isEmpty(), "validation cannot mint missing stock");
+        FrontierV3ActorResourceSlots.set(body, pocket, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 1));
         state = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.running(state, bodyId);
         var successor = state.actorExecutions().next(actor,
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, actor);

@@ -84,6 +84,7 @@ final class FrontierV3SceneReleaseExecutor {
             }
             if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
             state = runtime.decodedState().orElseThrow();
+            FrontierV3ActorCarryProjection.requireMatches(state, member.actorId(), body);
             var currentActor = state.actorLocations().get(member.actorId());
             positions.add(new SceneMemberPosition(member.actorId(), currentActor.body(), currentActor.condition().health()));
             // A process releases its participant, not that participant's body.

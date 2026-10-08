@@ -56,6 +56,9 @@ class FrontierV3ActorCarrierCompositionTest {
                 methodCallBoundaries(FrontierV3ActorCarrierFactory.class, "create"),
                 "only the shared body controller may construct an exact actor body");
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
+                methodCallBoundaries(FrontierV3ActorCarryProjection.class, "prepareNew"),
+                "every new body receives carried inventory at common admission, not an optional activity callback");
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
                 methodCallBoundaries(FrontierV3BodyPlacement.class, "select"),
                 "activity executors cannot re-place a body under a new activity or scene");
         assertEquals(Set.of(FrontierV3BodyPlacement.class.getName()),

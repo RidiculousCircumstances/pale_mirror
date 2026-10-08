@@ -332,8 +332,7 @@ final class FrontierV3AmbientActorExecutor {
                         standingPositionProvider::resolve, body -> {
                             if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
                             hydrateExactHeldEquipment(body, state, actorId);
-                            if (!FrontierV3ActorCarryProjection.prepareNew(state, actorId, body)
-                                    || !FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)
+                            if (!FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)
                                     || !FrontierV3ResidentMealHandProjection.prepareAmbientNew(state, actorId, body)) return false;
                             FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
                             return resourceProjection.test(body);
