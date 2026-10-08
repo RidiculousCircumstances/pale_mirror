@@ -35,6 +35,10 @@
           }
         }
       ]
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 release_advance_hold"
     }
   ],
   "actions": [
@@ -56,7 +60,7 @@
       },
       "offset": {
         "x": -8,
-        "y": 0,
+        "y": -1,
         "z": 0
       },
       "settleMs": 0,
@@ -100,7 +104,7 @@
       },
       "offset": {
         "x": 1,
-        "y": 0,
+        "y": -1,
         "z": -2
       },
       "settleMs": 0,
@@ -163,7 +167,7 @@
       },
       "offset": {
         "x": -8,
-        "y": 0,
+        "y": -1,
         "z": 0
       },
       "settleMs": 0,
@@ -197,6 +201,10 @@
     "afterAction": 8,
     "resumeSetup": [
       {
+        "type": "command",
+        "command": "/pale_mirror v3 release_advance_hold"
+      },
+      {
         "type": "visit",
         "dimension": "pale_mirror:frontier_graybox",
         "position": {
@@ -208,7 +216,7 @@
         },
         "offset": {
           "x": -8,
-          "y": 0,
+          "y": -1,
           "z": 0
         },
         "settleMs": 0
