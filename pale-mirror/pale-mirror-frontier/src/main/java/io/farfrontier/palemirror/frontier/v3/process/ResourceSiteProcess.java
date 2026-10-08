@@ -352,7 +352,7 @@ public final class ResourceSiteProcess {
                         || !FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())) return lease;
                 return switch (lease.status()) {
                     case HOT, UNKNOWN_AFTER_RESTART -> lease.withStatus(
-                            FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)
+                            FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)
                                     ? SceneLeaseStatus.CONFLICT : SceneLeaseStatus.DRAINING);
                     case PREPARED -> lease.withStatus(SceneLeaseStatus.CONFLICT);
                     default -> lease;

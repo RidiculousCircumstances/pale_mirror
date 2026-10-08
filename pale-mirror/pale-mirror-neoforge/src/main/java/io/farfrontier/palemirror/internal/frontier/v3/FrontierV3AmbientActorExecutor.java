@@ -89,6 +89,9 @@ final class FrontierV3AmbientActorExecutor {
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, Long>> COLD_DEMAND_SINCE = new IdentityHashMap<>();
     private FrontierV3AmbientActorExecutor() { }
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        var departures = new FrontierV3PhysicalTransitionBudget((long)
+                (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
+                System::nanoTime);
         FrontierV3AmbientPendingAdmissions.clean(runtime);
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
@@ -108,6 +111,11 @@ final class FrontierV3AmbientActorExecutor {
             state = runtime.decodedState().orElse(null);
             if (state == null) return;
             FrontierV3ActorBodyController.cleanRetired(level, state, actorId);
+            if (FrontierV3ActorBodyController.departurePending(level, state, actorId) && !departures.tryStart()) {
+                FrontierV3ActorProbeSchedule.defer(runtime, actorId, level.getGameTime());
+                continue;
+            }
+            FrontierV3ActorProbeSchedule.probed(runtime, actorId);
             FrontierV3ActorBodyController.progressDeparture(level, runtime, state, actorId);
             state = runtime.decodedState().orElse(null);
             if (state == null) return;
@@ -749,10 +757,7 @@ final class FrontierV3AmbientActorExecutor {
         // bindings until the common body owner retires them atomically with custody.
         // The registered activity owner alone checks its outstanding effects.
         try {
-            var draining = state.ambientLeases().get(release.actorId()).status() == AmbientLeaseStatus.DRAINING
-                    ? state : io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.transition(
-                        state, release.actorId(), AmbientLeaseStatus.DRAINING);
-            io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.release(draining, release);
+            io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.requireReleaseEligible(state, release);
             return true;
         } catch (IllegalArgumentException rejected) {
             return false;

@@ -44,14 +44,13 @@ final class GoodsShipmentPlanning {
     }
     static List<ProposedEvent> dispatch(FrontierWorldState state, GoodsParticipant seller, long now) {
         var replenishmentBudget = state.bootstrap().ruleset().expedition().replenishmentBudget();
-        if (state.inventory().economics().availableToReserve(seller.endpoint().settlementId())
-                .compareTo(replenishmentBudget) < 0) return List.of();
         for (var contract : state.companies().goodsTrade().contracts().values().stream()
                 .filter(value -> !value.terminal() && value.seller().equals(seller.party())
                         && !value.sourceContainerId().equals(value.receiverContainerId()))
                 .sorted(Comparator.comparing(GoodsTradeContract::id)).toList()) {
             var buyer = state.companies().goodsTrade().participants().participants().get(contract.buyer().id());
             if (buyer == null || !buyer.party().equals(contract.buyer())) throw new IllegalArgumentException("accepted goods contract lost its declared buyer");
+            if (!GoodsTradeSourceAdmission.dispatchFunded(state, seller, buyer.endpoint().containerId())) return List.of();
             var source = FungibleResourceCustodySupport.accountAtContainer(state, contract.sourceContainerId()).orElse(null);
             if (source == null) continue;
             for (var claimId : contract.outstandingClaims().keySet().stream().sorted().toList()) {

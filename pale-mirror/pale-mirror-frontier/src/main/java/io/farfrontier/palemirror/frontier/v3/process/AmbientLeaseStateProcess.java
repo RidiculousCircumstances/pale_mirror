@@ -68,12 +68,7 @@ public final class AmbientLeaseStateProcess {
     public static FrontierWorldState transition(FrontierWorldState state, SubjectId actorId, AmbientLeaseStatus nextStatus) {
         AmbientActorLease current = state.ambientLeases().get(Objects.requireNonNull(actorId, "ambient actor id"));
         if (current == null) throw new IllegalArgumentException("unknown ambient lease actor: " + actorId.value());
-        boolean allowed = current.status() == AmbientLeaseStatus.PREPARED && (nextStatus == AmbientLeaseStatus.HOT || nextStatus == AmbientLeaseStatus.DRAINING
-                || nextStatus == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)
-                || current.status() == AmbientLeaseStatus.HOT && (nextStatus == AmbientLeaseStatus.DRAINING || nextStatus == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)
-                || current.status() == AmbientLeaseStatus.DRAINING && nextStatus == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART
-                || current.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART && (nextStatus == AmbientLeaseStatus.HOT || nextStatus == AmbientLeaseStatus.DRAINING);
-        if (!allowed) throw new IllegalArgumentException("ambient lease transition is not allowed");
+        requireTransition(current, nextStatus);
         Map<SubjectId, AmbientActorLease> next = new LinkedHashMap<>(state.ambientLeases()); next.put(actorId, current.withStatus(nextStatus));
         FrontierWorldState changed = copy(state, state.actorLocations(), next);
         if (nextStatus != AmbientLeaseStatus.HOT) return changed;
@@ -86,9 +81,33 @@ public final class AmbientLeaseStateProcess {
         return changed.withChanges(FrontierWorldStateUpdate.begin().hiveColony(changed.hiveColony().withBioformLifecycles(lifecycles)));
     }
 
+    private static void requireTransition(AmbientActorLease current, AmbientLeaseStatus nextStatus) {
+        boolean allowed = current.status() == AmbientLeaseStatus.PREPARED && (nextStatus == AmbientLeaseStatus.HOT || nextStatus == AmbientLeaseStatus.DRAINING
+                || nextStatus == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)
+                || current.status() == AmbientLeaseStatus.HOT && (nextStatus == AmbientLeaseStatus.DRAINING || nextStatus == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)
+                || current.status() == AmbientLeaseStatus.DRAINING && nextStatus == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART
+                || current.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART && (nextStatus == AmbientLeaseStatus.HOT || nextStatus == AmbientLeaseStatus.DRAINING);
+        if (!allowed) throw new IllegalArgumentException("ambient lease transition is not allowed");
+    }
+
+    /** Read-only admission: no speculative draining/released world copies or whole-world audit. */
+    public static void requireReleaseEligible(FrontierWorldState state, AmbientLeaseReleased release) {
+        Objects.requireNonNull(release, "ambient release");
+        var current = state.ambientLeases().get(release.actorId());
+        if (current == null) throw new IllegalArgumentException("unknown ambient lease actor");
+        if (current.status() != AmbientLeaseStatus.DRAINING) requireTransition(current, AmbientLeaseStatus.DRAINING);
+        requireReleaseFacts(state, release);
+    }
+
     public static FrontierWorldState release(FrontierWorldState state, AmbientLeaseReleased release) {
         Objects.requireNonNull(release, "ambient release"); AmbientActorLease current = state.ambientLeases().get(release.actorId());
         if (current == null || current.status() != AmbientLeaseStatus.DRAINING) throw new IllegalArgumentException("only a draining ambient lease can be released");
+        requireReleaseFacts(state, release);
+        Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(release.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
+        return copy(state, state.actorLocations(), leases);
+    }
+
+    private static void requireReleaseFacts(FrontierWorldState state, AmbientLeaseReleased release) {
         ActorLocation actor = state.actorLocations().get(release.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("ambient release actor is not alive");
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), release.body().supportingSurface().support());
@@ -97,8 +116,6 @@ public final class AmbientLeaseStateProcess {
         // Closing presentation neither releases the common body nor acknowledges
         // a route cursor. Exact registered owners alone assess outstanding effects.
         ActorExecutionComposition.CAPABILITIES.validateAmbientRelease(state, release.actorId());
-        Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(release.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
-        return copy(state, state.actorLocations(), leases);
     }
 
     /**

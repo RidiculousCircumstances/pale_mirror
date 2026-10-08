@@ -31,6 +31,10 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                         "{\"id\":" + string(value.id().value()) + ",\"seller\":" + string(value.seller().id().value())
                                 + ",\"buyer\":" + string(value.buyer().id().value()) + ",\"commodity\":" + string(value.itemKind())
                                 + ",\"acceptedQuantity\":" + value.acceptedQuantity() + ",\"remainingQuantity\":" + value.remainingQuantity()
+                                + ",\"disposedQuantity\":" + value.disposedQuantity()
+                                + ",\"withdrawalReasons\":[" + value.dispositions().values().stream()
+                                    .map(disposition -> disposition.reason().name()).distinct().sorted()
+                                    .map(FrontierV3GoodsParticipantDiagnosticJson::string).collect(Collectors.joining(",")) + "]"
                                 + ",\"fulfilled\":" + value.fulfilled() + ",\"shipments\":["
                                 + state.shipments().shipments().values().stream()
                                     .filter(shipment -> shipment.authorization().claimantId().equals(value.id()))

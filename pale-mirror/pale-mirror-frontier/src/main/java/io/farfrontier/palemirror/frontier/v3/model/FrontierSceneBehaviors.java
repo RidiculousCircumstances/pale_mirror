@@ -98,6 +98,10 @@ public final class FrontierSceneBehaviors {
         return behavior(lease).ownedBySettlementAssault(lease, assaultId);
     }
     public static SubjectId owner(FrontierWorldState state, SceneLease lease) { return behavior(lease).owner(state, lease); }
+    /** Only family-owned work custody is settled by scope release; personal inventory belongs to the body. */
+    public static Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) {
+        return behavior(lease).resourceHandAccounts(state, lease);
+    }
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
         behavior(lease).validatePrepared(state, lease);
     }
@@ -176,6 +180,7 @@ public final class FrontierSceneBehaviors {
         boolean owns(SceneLease lease, SubjectId subjectId);
         default boolean ownedBySettlementAssault(SceneLease lease, SubjectId assaultId) { return false; }
         SubjectId owner(FrontierWorldState state, SceneLease lease);
+        Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease);
         void validatePrepared(FrontierWorldState state, SceneLease lease);
         Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                        Map<SubjectId, StructureCondition> structures,
@@ -192,6 +197,7 @@ public final class FrontierSceneBehaviors {
 
 
     private static final class SettlementAssaultBehavior implements SceneBehavior<SettlementAssaultSceneCause> {
+        @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) { return Set.of(); }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             FrontierSettlementAssaultSceneSupport.require(state, cause(lease));
             return SceneLeaseStatus.HOT;
@@ -271,6 +277,7 @@ public final class FrontierSceneBehaviors {
     }
 
     private static final class EngineeringWorksiteBehavior implements SceneBehavior<EngineeringWorkSceneCause> {
+        @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) { return Set.of(); }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             EngineeringWorkSceneCause cause = cause(lease);
             EngineeringWorkOrder project = EngineeringWorkOrderSupport.require(state, cause.projectId());
@@ -329,6 +336,7 @@ public final class FrontierSceneBehaviors {
 
     /** The care owner itself, rather than a synthetic medic mob, owns every treatment scene. */
     private static final class MedicalTreatmentBehavior implements SceneBehavior<MedicalTreatmentSceneCause> {
+        @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) { return Set.of(); }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             return switch (FrontierMedicalTreatmentSceneSupport.require(state, cause(lease)).status()) {
                 case COMPLETED, BLOCKED -> SceneLeaseStatus.DRAINING;
@@ -387,6 +395,10 @@ public final class FrontierSceneBehaviors {
 
     /** One named agricultural worker, not an ambient Villager or synthetic field animation. */
     private static final class ResourceSiteHarvestBehavior implements SceneBehavior<ResourceSiteHarvestSceneCause> {
+        @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) {
+            if (FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause(lease))) return Set.of();
+            return Set.of(FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease)).actorAccountId());
+        }
         @Override public SceneCauseKind kind() { return SceneCauseKind.RESOURCE_SITE_HARVEST; }
         @Override public Class<ResourceSiteHarvestSceneCause> causeType() { return ResourceSiteHarvestSceneCause.class; }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
@@ -475,6 +487,10 @@ public final class FrontierSceneBehaviors {
 
     /** One named industrial worker, never an ambient Villager substituted at the workshop. */
     private static final class ProductionWorkBehavior implements SceneBehavior<ProductionWorkSceneCause> {
+        @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) {
+            return FrontierProductionWorkSceneSupport.require(state, cause(lease)).bakeryWork()
+                    .map(work -> Set.of(work.actorAccountId())).orElseGet(Set::of);
+        }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
             return blocked(state, job) || job.bakeryWork().isEmpty() && job.workProgress().terminalEffectEligible()
@@ -527,6 +543,7 @@ public final class FrontierSceneBehaviors {
 
     /** One named resident and one retained field/workshop station, never an ambient substitute. */
     private static final class SettlementServiceWorkBehavior implements SceneBehavior<SettlementServiceWorkSceneCause> {
+        @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) { return Set.of(); }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             return switch (FrontierSettlementServiceWorkSceneSupport.require(state, cause(lease)).phase()) {
                 case COMPLETED, BLOCKED -> SceneLeaseStatus.DRAINING;
@@ -597,6 +614,7 @@ public final class FrontierSceneBehaviors {
 
     /** Class-D route patrol: generic guard motion never substitutes for this retained formation. */
     private static final class RoutePatrolBehavior implements SceneBehavior<RoutePatrolSceneCause> {
+        @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) { return Set.of(); }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             return FrontierRoutePatrolSceneSupport.require(state, cause(lease)).active()
                     ? SceneLeaseStatus.HOT : SceneLeaseStatus.DRAINING;

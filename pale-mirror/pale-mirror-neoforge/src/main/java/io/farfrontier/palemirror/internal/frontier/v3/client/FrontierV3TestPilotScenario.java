@@ -410,7 +410,7 @@ final class FrontierV3TestPilotScenario {
                 && (diagnosticField.equals("marchCurrent") || diagnosticField.equals("marchNextBody")));
     }
 
-    /** An ordinary player may place at its observed route future body or exact container position. */
+    /** An ordinary player may place at an explicitly published route, container or crop anchor. */
     private static boolean placePosition(JsonObject action) {
         if (position(action)) return true;
         JsonObject value = action.getAsJsonObject("position");
@@ -419,6 +419,8 @@ final class FrontierV3TestPilotScenario {
                 && reference.get("view").isJsonPrimitive() && reference.get("id").isJsonPrimitive() && reference.get("field").isJsonPrimitive()
                 && ((reference.get("view").getAsString().equals("scene") && requiredId(reference, "id", "job:")
                     && reference.get("field").getAsString().equals("productionFutureBody"))
+                    || (reference.get("view").getAsString().equals("site") && requiredId(reference, "id", "site:")
+                    && Set.of("firstCrop", "lastCrop").contains(reference.get("field").getAsString()))
                     || (reference.get("view").getAsString().equals("container") && requiredId(reference, "id", "container:")
                     && reference.get("field").getAsString().equals("position"))
                     || (reference.get("view").getAsString().equals("scene") && requiredId(reference, "id", "task:")

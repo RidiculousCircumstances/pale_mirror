@@ -269,6 +269,24 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         return withAccount(account.withQuantities(account.lotQuantities(), nextQuantities), nextClaims, bindings);
     }
 
+    /** Releases one complete reservation under its current HOT epoch without changing physical stock. */
+    public FungibleResourceLedger releaseBoundClaim(SubjectId accountId, SubjectId claimId, long authorityEpoch) {
+        CustodyAccount account = requireAccount(accountId);
+        var current = bindings.values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+        if (authorityEpoch < 1 || current.isEmpty()
+                || current.stream().anyMatch(binding -> binding.authorityEpoch() != authorityEpoch))
+            throw new IllegalArgumentException("bound claim release does not own the current physical custody");
+        // Release commercial metadata only: preserve every stack address, lot, count and epoch.
+        var unbound = withAccount(account, claims, withoutBindingsFor(account.id())).releaseClaim(account.id(), claimId);
+        Map<SubjectId, PhysicalStackBinding> nextBindings = new HashMap<>(bindings);
+        for (var binding : current) {
+            var nextClaims = new HashMap<>(binding.claimQuantities()); nextClaims.remove(claimId);
+            nextBindings.put(binding.id(), new PhysicalStackBinding(binding.id(), binding.accountId(), binding.address(),
+                    binding.authorityEpoch(), binding.itemKind(), binding.lotQuantities(), nextClaims, binding.playerSaveFence()));
+        }
+        return new FungibleResourceLedger(unbound.lots, unbound.claims, unbound.accounts, nextBindings);
+    }
+
     /** Releases named allocations across their current HOT layout after an observed physical loss. */
     public FungibleResourceLedger releaseClaims(java.util.Set<SubjectId> claimIds) {
         Objects.requireNonNull(claimIds, "released claim ids");

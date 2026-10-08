@@ -508,6 +508,19 @@ class BakeryHotVerticalTest {
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, deliverySlot)),
                 "minecraft:bread", 64))));
         assertEquals(BakeryWorkState.Phase.DELIVERED, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        // A delivered baker may still carry personal inventory in OFF. That account
+        // is owned by the common body, not the now-empty bakery work hand.
+        var personalLot = new SubjectId("lot:bakery-foreign-offhand");
+        var personalAccount = new SubjectId("custody:bakery-foreign-offhand");
+        var personalResources = state.inventory().fungibleResources().issue(
+                new ResourceLot(personalLot, job.settlementId(), "minecraft:stone", 64, "fixture:personal-stone", List.of()),
+                new CustodyAccount(personalAccount, new ResourceCustody.Actor(job.workerId()), Map.of(personalLot, 64), Map.of()));
+        var personalBinding = new PhysicalStackBinding(new SubjectId("binding:bakery-foreign-offhand"), personalAccount,
+                new PhysicalStackAddress.ActorHand(job.workerId(), state.sceneLeases().get(leaseId).members().getFirst().entityId(),
+                        ActorContainerItemOrder.Hand.OFF), 7L, "minecraft:stone", Map.of(personalLot, 64), Map.of());
+        state = state.withInventory(state.inventory().withFungibleResources(
+                personalResources.rebind(personalAccount, 7L, List.of(personalBinding))));
+        assertFalse(FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, state.sceneLeases().get(leaseId)));
         var deliveredGoal = BakeryWorkGoal.current(state, state.productionJobs().get(job.id()));
         assertThrows(IllegalArgumentException.class, deliveredGoal::movementOrder,
                 "a delivered job cannot retain an exact exit-cell obligation");
@@ -597,11 +610,24 @@ class BakeryHotVerticalTest {
         assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
         assertEquals(123, state.inventory().fungibleResources().totalQuantity(task.ownerId(), "minecraft:bread"),
                 "delivery adds 64 bread without replacing the depot's existing 59");
+        assertEquals(personalBinding, state.inventory().fungibleResources().bindings().get(personalBinding.id()));
+        assertEquals(personalBinding, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state))
+                .inventory().fungibleResources().bindings().get(personalBinding.id()));
     }
 
     private static void assertStationConflictCanReleaseHungryBaker(FrontierWorldState input, SubjectId jobId, SceneLeaseId leaseId) {
         var job = input.productionJobs().get(jobId);
         var actorId = job.workerId();
+        var personalLot = new SubjectId("lot:station-recovery-personal-stone");
+        var personalAccount = new SubjectId("custody:station-recovery-personal-stone");
+        var resources = input.inventory().fungibleResources().issue(
+                new ResourceLot(personalLot, job.settlementId(), "minecraft:stone", 64, "fixture:personal-stone", List.of()),
+                new CustodyAccount(personalAccount, new ResourceCustody.Actor(actorId), Map.of(personalLot, 64), Map.of()));
+        var personalBinding = new PhysicalStackBinding(new SubjectId("binding:station-recovery-personal-stone"), personalAccount,
+                new PhysicalStackAddress.ActorHand(actorId, input.sceneLeases().get(leaseId).members().getFirst().entityId(),
+                        ActorContainerItemOrder.Hand.OFF), 7L, "minecraft:stone", Map.of(personalLot, 64), Map.of());
+        input = input.withInventory(input.inventory().withFungibleResources(
+                resources.rebind(personalAccount, 7L, List.of(personalBinding))));
         var hungry = withRetainedMeal(input, actorId, job.settlementId());
         var conflicted = hungry.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
         var lease = conflicted.sceneLeases().get(leaseId);
@@ -657,6 +683,8 @@ class BakeryHotVerticalTest {
         assertEquals(FencedRecoveryPhase.AMBIGUOUS, ActorBodyAuthority.require(savedDrain,
                 ActorBodyAuthority.current(savedDrain, actorId)).phase(), "scene recovery cannot grant a loaded body");
         assertEquals(SceneLeaseStatus.DRAINING, savedDrain.sceneLeases().get(leaseId).status());
+        assertEquals(personalBinding, savedDrain.inventory().fungibleResources().bindings().get(personalBinding.id()),
+                "saved station recovery cannot discard the baker's personal OFF hand");
         assertEquals(ambiguous.fencedRecovery(), savedDrain.fencedRecovery());
         var station = input.inventory().containers().values().stream().flatMap(value -> value.productionStation().stream())
                 .filter(value -> value.id().equals(job.bakeryWork().orElseThrow().stationId())).findFirst().orElseThrow();

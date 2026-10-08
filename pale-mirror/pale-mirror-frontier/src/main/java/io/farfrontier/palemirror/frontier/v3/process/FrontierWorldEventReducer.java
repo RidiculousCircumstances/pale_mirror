@@ -13,7 +13,7 @@ public final class FrontierWorldEventReducer {
 
     public static FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event,
                                             DeterministicProcessRegistry processRegistry) {
-        return FrontierWorldState.duringReducerTransition(() -> {
+        return FrontierWorldState.duringUnpublishedTransition(() -> {
             DiagnosticProducerContract.requireAdmitted(event.payload());
             if (event.payload() instanceof KernelQuarantineObserved) {
                 return FrontierEventDiagnosticSupport.reduceKernelQuarantine(state, event);

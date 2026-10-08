@@ -14,7 +14,7 @@ final class FrontierV3HarvestSceneReleaseEffects implements FrontierV3SceneRelea
 
     public Decision prepare(ServerLevel level, FrontierWorldState state, SceneLease lease,
                             SceneLeaseReleased exit, Set<SubjectId> departed) {
-        if (!FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)) return new Ready(exit);
+        if (!FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)) return new Ready(exit);
         if (lease.members().size() != 1) return new Conflict("release-bound-hand-without-typed-owner");
         var job = FrontierResourceSiteHarvestSceneSupport.require(state, FrontierSceneBehaviors.resourceSiteHarvest(lease));
         var hand = FrontierV3SceneReleaseHandEvidence.read(level, state, lease, lease.members().getFirst(),

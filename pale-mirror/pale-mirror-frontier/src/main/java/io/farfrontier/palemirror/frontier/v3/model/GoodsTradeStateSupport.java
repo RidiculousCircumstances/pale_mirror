@@ -27,6 +27,15 @@ public final class GoodsTradeStateSupport {
         }
         contract.seller().validate(state.inventory().economics()); contract.buyer().validate(state.inventory().economics());
         requireContainer(state, contract.sourceContainerId()); requireContainer(state, contract.receiverContainerId());
+        int protectedMinimum = GoodsTradeSourceAdmission.protectedMinimum(state, contract.seller(),
+                contract.sourceContainerId(), contract.itemKind());
+        var seller = state.companies().goodsTrade().participants().participants().get(contract.seller().id());
+        if (!GoodsTradeSourceAdmission.dispatchFunded(state, seller, contract.receiverContainerId()))
+            throw new IllegalArgumentException("goods reservation has no source dispatch budget");
+        var source = FungibleResourceCustodySupport.accountAtContainer(state, contract.sourceContainerId()).orElseThrow();
+        if (state.inventory().fungibleResources().unclaimedQuantity(source.id(), contract.seller().id(), contract.itemKind())
+                - contract.quantity() < protectedMinimum)
+            throw new IllegalArgumentException("goods reservation would spend the protected local reserve");
         if (!contract.sourceContainerId().equals(contract.receiverContainerId())
                 && !ContainerStorageAdmission.receive(state, contract.receiverContainerId(), contract.itemKind(),
                         contract.quantity(), java.util.Optional.empty())) {
@@ -185,14 +194,38 @@ public final class GoodsTradeStateSupport {
                 .companies(state.companies().withGoodsTrade(trade)));
     }
 
-    /** Only the seller can abandon an unbound allocation still at the declared source. */
+    /** No cancellation crosses a delegated shipment or a possibly applied physical effect. */
+    public static boolean canCancelBeforeLoading(FrontierWorldState state, GoodsTradeContract contract, SubjectId claimId) {
+        if (!contract.equals(state.companies().goodsTrade().contracts().get(contract.id()))
+                || !contract.outstandingClaims().containsKey(claimId) || state.shipments().holds(claimId)
+                || ReferenceContainerCustody.blocksCanonicalUse(state, contract.sourceContainerId())
+                || state.physicalIntents().values().stream().anyMatch(i -> i.causeSubjectId().equals(contract.id())
+                    || i.roles().namedRoles().containsValue(claimId))) return false;
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, contract.sourceContainerId()).orElse(null);
+        if (account == null || account.claimQuantities().getOrDefault(claimId, 0)
+                != contract.outstandingClaims().get(claimId)) return false;
+        if (ReferenceContainerCustody.hasLiveCustody(state, contract.sourceContainerId())
+                && !ReferenceContainerCustody.hasOperationalCustody(state, contract.sourceContainerId())) return false;
+        var bindings = state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(account.id())).toList();
+        if (bindings.isEmpty()) return true;
+        var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(contract.sourceContainerId()));
+        return lease != null && ReferenceContainerCustody.hasOperationalCustody(state, contract.sourceContainerId())
+                && bindings.stream().allMatch(binding -> binding.authorityEpoch() == lease.authorityEpoch());
+    }
+
+    /** Only the seller can abandon an allocation still at the declared source; no stock changes. */
     public static FrontierWorldState cancelBeforeLoading(FrontierWorldState state, SubjectId subject,
                                                          GoodsTradeDisposition disposition) {
         GoodsTradeContract contract = state.companies().goodsTrade().contracts().get(disposition.contractId());
         if (contract == null || !subject.equals(contract.seller().id())
-                || disposition.reason() != GoodsTradeDisposition.Reason.CANCELLED_BEFORE_LOADING) {
+                || disposition.reason() == GoodsTradeDisposition.Reason.OBSERVED_ALLOCATION_CHANGED
+                || !canCancelBeforeLoading(state, contract, disposition.claimId())) {
             throw new IllegalArgumentException("goods cancellation lacks its declared source owner");
         }
+        if (disposition.reason() != GoodsTradeDisposition.Reason.CANCELLED_BEFORE_LOADING
+                && !GoodsTradeSourceAdmission.withdrawalReason(state, contract).equals(java.util.Optional.of(disposition.reason())))
+            throw new IllegalArgumentException("goods withdrawal no longer has its declared current policy reason");
         GoodsTradeState trade = state.companies().goodsTrade().dispose(disposition);
         if (state.shipments().holds(disposition.claimId()))
             throw new IllegalArgumentException("cancellation must settle its dispatched shipment first");
@@ -205,7 +238,10 @@ public final class GoodsTradeStateSupport {
                 || state.physicalIntents().values().stream().anyMatch(i -> i.causeSubjectId().equals(contract.id()))) {
             throw new IllegalArgumentException("goods cancellation cannot erase a transport or physical obligation");
         }
-        resources = resources.releaseClaim(account.id(), disposition.claimId());
+        boolean bound = resources.bindings().values().stream().anyMatch(binding -> binding.accountId().equals(account.id()));
+        resources = bound ? resources.releaseBoundClaim(account.id(), disposition.claimId(), state.replicaCustody()
+                .custodyByScope().get(ReferenceContainerCustody.scopeId(contract.sourceContainerId())).authorityEpoch())
+                : resources.releaseClaim(account.id(), disposition.claimId());
         var economics = state.inventory().economics().releasePortion(contract.financialReservationId(),
                 contract.deliveredUnitPrice().multiply(disposition.quantity()));
         return state.withChanges(FrontierWorldStateUpdate.begin()

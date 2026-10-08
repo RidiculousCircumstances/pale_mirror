@@ -1,0 +1,293 @@
+{
+  "schema": 1,
+  "id": "disposable_accelerated_expedition_boundary",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25575,
+    "profile": "expedition-provisioning",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 9,
+    "resumeSetup": [
+      {
+        "type": "command",
+        "command": "/tick rate 50"
+      }
+    ]
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/tick rate 50"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": -1,
+        "z": -8
+      },
+      "settleMs": 0,
+      "causalMilestone": "ordinary_player_observes_real_provision_loading"
+    },
+    {
+      "type": "release_fast_forward_hold"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "expeditions": {
+          "activeMissions": 1,
+          "reservedAnimals": 1,
+          "allocatedBudgets": 1
+        }
+      },
+      "timeoutMs": 120000,
+      "causalMilestone": "actual_mission_admission_before_physical_loading"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "expeditions": {
+          "provisionedOutbound": 1,
+          "reservedAnimals": 1,
+          "allocatedBudgets": 1
+        }
+      },
+      "timeoutMs": 120000,
+      "causalMilestone": "real_capacity_driven_pack_departure"
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "actor:pack/settlement-1",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "settlement:1",
+      "workerId": "actor:pack/settlement-1",
+      "entityType": "minecraft:donkey",
+      "nameContains": "PACK DONKEY",
+      "maxDistance": 64,
+      "durationTicks": 200,
+      "sampleEveryTicks": 2,
+      "timeoutMs": 45000,
+      "causalMilestone": "same_real_pack_animal_physically_travels"
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:pack/settlement-1",
+      "causalMilestone": "actual_attached_goods_and_provision_stock"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:12-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": -1,
+        "z": -8
+      },
+      "settleMs": 0,
+      "causalMilestone": "ordinary_player_releases_group_to_cold"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "actor",
+      "id": "actor:pack/settlement-1",
+      "expect": {
+        "status": "ok",
+        "ambientLease": "CLOSED"
+      },
+      "timeoutMs": 90000,
+      "causalMilestone": "saved_actual_attachment_before_restart"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "settlement:1",
+      "causalMilestone": "recovered_same_finite_fleet_obligation"
+    },
+    {
+      "type": "fast_forward_to_instant",
+      "targetInstant": 24000,
+      "timeoutMs": 120000,
+      "causalMilestone": "cold_group_progress_without_historical_motion_replay"
+    },
+    {
+      "type": "release_fast_forward_hold"
+    },
+    {
+      "type": "fast_forward_to_instant",
+      "targetInstant": 45000,
+      "timeoutMs": 120000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:10-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": -1,
+        "z": -8
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "release_fast_forward_hold"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "availableMoneyRaw": 132000000,
+        "expeditions": {
+          "activeMissions": 0,
+          "reservedAnimals": 0,
+          "allocatedBudgets": 0
+        }
+      },
+      "timeoutMs": 120000,
+      "causalMilestone": "settled_sale_and_actual_return_survive_contract_retirement"
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:10-depot",
+      "causalMilestone": "physical_receiver_custody_is_not_payment_by_proximity"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "settlement:10",
+      "causalMilestone": "buyer_payment_matches_seller_receipt"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": -1,
+        "z": -8
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "actor:pack/settlement-1",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:donkey",
+      "nameContains": "PACK DONKEY",
+      "maxDistance": 64,
+      "maxAngleDeg": 90,
+      "timeoutMs": 60000
+    }
+  ],
+  "assertions": [
+    {
+      "after": 16,
+      "view": "process",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "availableMoneyRaw": 132000000,
+        "expeditions": {
+          "activeMissions": 0,
+          "reservedAnimals": 0,
+          "allocatedBudgets": 0
+        }
+      }
+    },
+    {
+      "after": 18,
+      "view": "process",
+      "id": "settlement:10",
+      "expect": {
+        "status": "ok",
+        "availableMoneyRaw": 68000000
+      }
+    },
+    {
+      "after": 21,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 6,
+      "name": "actual-pack-travel"
+    },
+    {
+      "after": 21,
+      "name": "same-pack-returned-home"
+    }
+  ]
+}

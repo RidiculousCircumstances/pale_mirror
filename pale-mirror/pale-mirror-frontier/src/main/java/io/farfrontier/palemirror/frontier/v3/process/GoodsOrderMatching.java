@@ -37,6 +37,9 @@ final class GoodsOrderMatching {
                 var sellerIntent = intent(state, seller, sell.itemKind(), GoodsTradeOrder.Side.SELL, cachedIntents);
                 var buyerIntent = intent(state, buyer, buy.itemKind(), GoodsTradeOrder.Side.BUY, cachedIntents);
                 if (sellerIntent.isEmpty() || buyerIntent.isEmpty()) { disposition = "CURRENT_RESERVE_STOCK_OR_FUNDS"; continue; }
+                if (!GoodsTradeSourceAdmission.dispatchFunded(state, seller, buy.containerId())) {
+                    disposition = "DISPATCH_UNFUNDED"; continue;
+                }
                 if (sell.unitPriceLimit().compareTo(sellerIntent.orElseThrow().limit()) < 0
                         || sell.unitPriceLimit().compareTo(buyerIntent.orElseThrow().limit()) > 0) {
                     disposition = "CURRENT_PRICE_POLICY"; continue;

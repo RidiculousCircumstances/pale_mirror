@@ -423,8 +423,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 routeMaintenances, strategicPlans, resourceSites, productionJobs, sceneLeases, serviceWorks, activelyAmbientLeased);
         }
     public static FrontierWorldState initial(FrontierBootstrap bootstrap) { return FrontierWorldInitialState.create(bootstrap); }
-    /** Reducer construction defers complete validation until the enclosing transaction reaches WAL durability. */
-    public static <T> T duringReducerTransition(Supplier<T> transition) {
+    /**
+     * Planning and reduction may build unpublished immutable candidates. Their local
+     * declarations are still checked at construction; the complete cross-world audit
+     * belongs to the enclosing transaction's mandatory pre-WAL publication barrier.
+     * Bootstrap, hydration and that barrier never inherit this deferral.
+     */
+    public static <T> T duringUnpublishedTransition(Supplier<T> transition) {
         Objects.requireNonNull(transition, "transition");
         int depth = DEFERRED_FULL_VALIDATION_DEPTH.get();
         DEFERRED_FULL_VALIDATION_DEPTH.set(depth + 1);

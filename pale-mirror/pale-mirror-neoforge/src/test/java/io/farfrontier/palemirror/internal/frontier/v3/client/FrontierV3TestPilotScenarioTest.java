@@ -373,6 +373,18 @@ class FrontierV3TestPilotScenarioTest {
                 {"schema":1,"actions":[{"type":"place","position":{"x":1,"y":65,"z":2},
                 "item":"minecraft:gray_concrete","timeoutMs":10000}]}""");
         assertEquals(1, parsed.actionCount());
+        for (String crop : java.util.List.of("firstCrop", "lastCrop")) {
+            assertEquals(1, FrontierV3TestPilotScenario.parse("""
+                    {"schema":1,"actions":[{"type":"place","position":{"diagnostic":{
+                    "view":"site","id":"site:1-wheat-field","field":"%s"}},
+                    "item":"minecraft:stone","timeoutMs":10000}]}
+                    """.formatted(crop)).actionCount());
+        }
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"place","position":{"diagnostic":{
+                "view":"site","id":"site:1-wheat-field","field":"cropSlots"}},
+                "item":"minecraft:stone","timeoutMs":10000}]}
+                """));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"place","position":{"x":1,"y":65,"z":2},
                 "item":"gray_concrete","timeoutMs":10000}]}"""));

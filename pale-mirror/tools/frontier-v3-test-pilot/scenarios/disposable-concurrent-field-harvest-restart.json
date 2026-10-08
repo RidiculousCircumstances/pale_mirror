@@ -47,12 +47,18 @@
     { "type": "wait_until_diagnostic", "view": "intent", "id": "intent:site-harvest-1-wheat-field-2",
       "expect": { "status": "ok", "intentStatus": "CONFIRMED" }, "timeoutMs": 120000 },
     { "type": "inspect", "view": "site", "id": "site:1-wheat-field" },
-    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot" }
+    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot" },
+    { "type": "wait_until_harvest_result", "siteId": "site:1-wheat-field",
+      "intentId": "intent:site-harvest-1-wheat-field-1", "itemId": "item:site-harvest-1-wheat-field-1-wheat",
+      "workerId": "resident:1-13", "timeoutMs": 30000 },
+    { "type": "wait_until_harvest_result", "siteId": "site:1-wheat-field",
+      "intentId": "intent:site-harvest-1-wheat-field-2", "itemId": "item:site-harvest-1-wheat-field-2-wheat",
+      "workerId": "resident:1-1", "timeoutMs": 30000 }
   ],
   "restart": { "mode": "graceful", "afterAction": 10 },
   "assertions": [
     { "after": 18, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok", "activeWork": [] } },
-    { "after": 19, "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 128, "claims": [] } }
+    { "after": 19, "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "claims": [] } }
   ],
   "frames": [{ "after": 7, "name": "two-independent-farmers-working" }]
 }

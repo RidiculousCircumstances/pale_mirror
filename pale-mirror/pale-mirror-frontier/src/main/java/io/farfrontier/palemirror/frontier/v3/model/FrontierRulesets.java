@@ -11,14 +11,17 @@ public final class FrontierRulesets {
      * semantic checkpoint left a HOT farmer visibly pausing at every grid cell even though the
      * motion actuator was continuous.  Crop work remains a slower, distinct boundary.
      */
-    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r14", 17, 1L, 20L, 20L);
+    private static final FrontierRuleset PREVIOUS_PRODUCTION_R14 = ruleset("frontier-v3-production-r14", 17, 1L, 20L, 20L);
+    private static final FrontierRuleset PRODUCTION = caravanPace("frontier-v3-production-r15", PREVIOUS_PRODUCTION_R14, 15L);
     // Named deterministic precondition profile; it shares the adopted production expedition policy.
-    private static final FrontierRuleset EXPEDITION_CANDIDATE = ruleset("frontier-v3-expedition-candidate-r1", 17, 1L, 20L, 20L);
-    private static final FrontierRuleset TRADE_PLAYTEST = new FrontierRuleset("frontier-v3-trade-playtest-r3", 17,
-            PRODUCTION.cadence(), PRODUCTION.spatial(), PRODUCTION.rates(), PRODUCTION.facilityCapacity(),
-            PRODUCTION.combat(), PRODUCTION.hiveCommand(), PRODUCTION.residentLife(),
-            PRODUCTION.resourceHarvestColdTravelTicksPerEdge(), PRODUCTION.workCatalog(), PRODUCTION.goodsTrade(),
+    private static final FrontierRuleset PREVIOUS_EXPEDITION_CANDIDATE_R1 = ruleset("frontier-v3-expedition-candidate-r1", 17, 1L, 20L, 20L);
+    private static final FrontierRuleset EXPEDITION_CANDIDATE = caravanPace("frontier-v3-expedition-candidate-r2", PREVIOUS_EXPEDITION_CANDIDATE_R1, 15L);
+    private static final FrontierRuleset PREVIOUS_TRADE_PLAYTEST_R3 = new FrontierRuleset("frontier-v3-trade-playtest-r3", 17,
+            PREVIOUS_PRODUCTION_R14.cadence(), PREVIOUS_PRODUCTION_R14.spatial(), PREVIOUS_PRODUCTION_R14.rates(), PREVIOUS_PRODUCTION_R14.facilityCapacity(),
+            PREVIOUS_PRODUCTION_R14.combat(), PREVIOUS_PRODUCTION_R14.hiveCommand(), PREVIOUS_PRODUCTION_R14.residentLife(),
+            PREVIOUS_PRODUCTION_R14.resourceHarvestColdTravelTicksPerEdge(), PREVIOUS_PRODUCTION_R14.workCatalog(), PREVIOUS_PRODUCTION_R14.goodsTrade(),
             java.util.List.of(new InitialSettlementStock(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("settlement:7"), "minecraft:bread", 256)));
+    private static final FrontierRuleset TRADE_PLAYTEST = caravanPace("frontier-v3-trade-playtest-r4", PREVIOUS_TRADE_PLAYTEST_R3, 15L);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -31,17 +34,34 @@ public final class FrontierRulesets {
      * current default: decoding old bytes is a named compatibility migration with fixed data.
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
-    private static final Map<String, FrontierRuleset> INSTALLED = Map.of(PRODUCTION.id(), PRODUCTION, TRADE_PLAYTEST.id(), TRADE_PLAYTEST,
-            EXPEDITION_CANDIDATE.id(), EXPEDITION_CANDIDATE,
-            PREVIOUS_PRODUCTION_R6.id(), PREVIOUS_PRODUCTION_R6,
-            PREVIOUS_PRODUCTION_R4.id(), PREVIOUS_PRODUCTION_R4,
-            PREVIOUS_PRODUCTION_R3.id(), PREVIOUS_PRODUCTION_R3,
-            PREVIOUS_PRODUCTION_R2.id(), PREVIOUS_PRODUCTION_R2,
-            LEGACY_PRE_RULESET_R79.id(), LEGACY_PRE_RULESET_R79);
+    private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
+            Map.entry(PRODUCTION.id(), PRODUCTION), Map.entry(TRADE_PLAYTEST.id(), TRADE_PLAYTEST),
+            Map.entry(EXPEDITION_CANDIDATE.id(), EXPEDITION_CANDIDATE),
+            Map.entry(PREVIOUS_PRODUCTION_R14.id(), PREVIOUS_PRODUCTION_R14),
+            Map.entry(PREVIOUS_TRADE_PLAYTEST_R3.id(), PREVIOUS_TRADE_PLAYTEST_R3),
+            Map.entry(PREVIOUS_EXPEDITION_CANDIDATE_R1.id(), PREVIOUS_EXPEDITION_CANDIDATE_R1),
+            Map.entry(PREVIOUS_PRODUCTION_R6.id(), PREVIOUS_PRODUCTION_R6),
+            Map.entry(PREVIOUS_PRODUCTION_R4.id(), PREVIOUS_PRODUCTION_R4),
+            Map.entry(PREVIOUS_PRODUCTION_R3.id(), PREVIOUS_PRODUCTION_R3),
+            Map.entry(PREVIOUS_PRODUCTION_R2.id(), PREVIOUS_PRODUCTION_R2),
+            Map.entry(LEGACY_PRE_RULESET_R79.id(), LEGACY_PRE_RULESET_R79));
 
     private FrontierRulesets() { }
 
     public static FrontierRuleset production() { return PRODUCTION; }
+
+    /** A new pinned balance selector; old worlds retain their exact expedition clock and digest. */
+    private static FrontierRuleset caravanPace(String id, FrontierRuleset base, long ticksPerEdge) {
+        var prior = base.expedition();
+        var expedition = new io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules(
+                prior.personalStackSlots(), prior.personalFoodItems(), prior.packAnimalStackSlots(), ticksPerEdge,
+                prior.destinationWorkTicks(), prior.durationMarginPermille(), prior.replenishmentBudget(),
+                prior.formationSpacing(), prior.maxFormationStretch());
+        return new FrontierRuleset(id, base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(),
+                base.resourceHarvestColdTravelTicksPerEdge(), base.workCatalog(), base.goodsTrade(),
+                base.initialSettlementStocks(), base.labour(), expedition);
+    }
 
     /** Explicit installed configuration, including its complete pinned digest on persistence. */
     public static FrontierRuleset installed(String id) {

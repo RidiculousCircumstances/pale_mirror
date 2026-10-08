@@ -12,6 +12,30 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class UnitInventoryDispositionTest {
+    @Test void carriedAccountIndexIsOrderedImmutableAndInvalidatedByActualCustodyChange() {
+        var actor = new SubjectId("resident:inventory-index");
+        var other = new SubjectId("resident:inventory-index-other");
+        var owner = new SubjectId("settlement:inventory-index");
+        var lot = new SubjectId("lot:inventory-index");
+        var first = new SubjectId("custody:inventory-index-a");
+        var second = new SubjectId("custody:inventory-index-b");
+        var ledger = FungibleResourceLedger.empty().issue(new ResourceLot(lot, owner, "minecraft:bread", 2, "fixture", List.of()),
+                new CustodyAccount(second, new ResourceCustody.Actor(actor), Map.of(lot, 2), Map.of()));
+        var before = ActorCarriedResources.accounts(ledger, actor);
+        assertSame(before, ActorCarriedResources.accounts(ledger, actor));
+        assertTrue(ActorCarriedResources.accounts(ledger, other).isEmpty());
+        assertThrows(UnsupportedOperationException.class, () -> before.clear());
+        var nextLot = new SubjectId("lot:inventory-index-next");
+        var changed = ledger.issue(new ResourceLot(nextLot, owner, "minecraft:wheat", 1, "fixture", List.of()),
+                new CustodyAccount(first, new ResourceCustody.Actor(actor), Map.of(nextLot, 1), Map.of()));
+        assertEquals(List.of(first, second), ActorCarriedResources.accounts(changed, actor).stream().map(CustodyAccount::id).toList());
+        assertEquals(List.of(second), ActorCarriedResources.accounts(ledger, actor).stream().map(CustodyAccount::id).toList());
+        var reassigned = new FungibleResourceLedger(changed.lots(), changed.claims(), Map.of(
+                first, changed.accounts().get(first),
+                second, new CustodyAccount(second, new ResourceCustody.Actor(other), Map.of(lot, 2), Map.of())), changed.bindings());
+        assertEquals(List.of(first), ActorCarriedResources.accounts(reassigned, actor).stream().map(CustodyAccount::id).toList());
+        assertEquals(List.of(second), ActorCarriedResources.accounts(reassigned, other).stream().map(CustodyAccount::id).toList());
+    }
     private record Fixture(FrontierWorldState state, ActorBodyId body, SubjectId account) { }
     private Fixture dyingInventory() {
         var state = ResourceSiteHarvestProcessTest.initial();

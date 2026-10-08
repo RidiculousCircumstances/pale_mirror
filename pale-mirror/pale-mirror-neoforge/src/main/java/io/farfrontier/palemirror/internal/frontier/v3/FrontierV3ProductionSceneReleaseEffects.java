@@ -16,7 +16,7 @@ final class FrontierV3ProductionSceneReleaseEffects implements FrontierV3SceneRe
 
     public Decision prepare(ServerLevel level, FrontierWorldState state, SceneLease lease,
                             SceneLeaseReleased exit, Set<SubjectId> departed) {
-        if (!FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)) return new Ready(exit);
+        if (!FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)) return new Ready(exit);
         var job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
         if (job == null || job.bakeryWork().isEmpty() || lease.members().size() != 1)
             return new Conflict("release-bakery-hand-without-owner");

@@ -227,6 +227,12 @@ test('retired hive-supply profiles and operation actions are rejected', () => {
 test('native pilot permits one ordinary bounded block placement as causal evidence', () => {
   const placement = { ...scenario, actions: [{ type: 'place', item: 'minecraft:stone', position: { x: 1, y: 65, z: 2 }, timeoutMs: 10_000 }], assertions: [], frames: [] };
   assert.doesNotThrow(() => validateScenario(placement));
+  for (const field of ['firstCrop', 'lastCrop']) {
+    const position = { diagnostic: { view: 'site', id: 'site:1-wheat-field', field } };
+    assert.doesNotThrow(() => validateScenario({ ...placement, actions: [{ ...placement.actions[0], position }] }));
+  }
+  assert.throws(() => validateScenario({ ...placement, actions: [{ ...placement.actions[0],
+    position: { diagnostic: { view: 'site', id: 'site:1-wheat-field', field: 'cropSlots' } } }] }), /position/);
   assert.throws(() => validateScenario({ ...placement, actions: [{ ...placement.actions[0], item: 'stone' }] }), /place needs/);
   assert.throws(() => validateScenario({ ...placement, actions: [{ ...placement.actions[0], timeoutMs: 120_001 }] }), /place needs/);
 });

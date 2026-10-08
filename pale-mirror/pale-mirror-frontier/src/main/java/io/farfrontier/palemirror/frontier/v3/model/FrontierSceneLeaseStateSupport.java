@@ -111,7 +111,7 @@ public final class FrontierSceneLeaseStateSupport {
                     && job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent())
                 throw new IllegalArgumentException("bakery scene cannot release a possibly applied physical effect");
         }
-        requireNoBoundActorHand(state, current);
+        requireNoBoundSceneHand(state, current);
         FrontierWorldState releaseReady = SceneStrikeStateSupport.prepareRelease(state, current);
         Set<SubjectId> expected = current.members().stream().map(SceneMember::actorId).filter(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE)
                 .collect(java.util.stream.Collectors.toSet());
@@ -129,17 +129,19 @@ public final class FrontierSceneLeaseStateSupport {
         return copy(releaseReady, releaseReady.actorLocations(), leases, state.ambientLeases(), plans, confirmRecovery(releaseReady, releaseReady.fencedRecovery(), current));
     }
 
-    /** Work-hand settlement precedes scope closure; personal pockets remain with the common body owner. */
-    public static void requireNoBoundActorHand(FrontierWorldState state, SceneLease lease) {
-        if (hasBoundActorHand(state, lease)) {
+    /** Work-hand settlement precedes scope closure; personal hands/pockets remain with the common body owner. */
+    public static void requireNoBoundSceneHand(FrontierWorldState state, SceneLease lease) {
+        if (hasBoundSceneHand(state, lease)) {
             throw new IllegalArgumentException("scene release requires typed actor-hand custody transfer");
         }
     }
 
-    /** Bound hands need a typed release; pocket bindings are not work-scene custody. */
-    public static boolean hasBoundActorHand(FrontierWorldState state, SceneLease lease) {
+    /** The family explicitly declares its work accounts; the physical slot never identifies the owner. */
+    public static boolean hasBoundSceneHand(FrontierWorldState state, SceneLease lease) {
+        Set<SubjectId> accounts = FrontierSceneBehaviors.resourceHandAccounts(state, lease);
         Set<SubjectId> members = lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
         return state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> accounts.contains(binding.accountId()))
                 .map(PhysicalStackBinding::address)
                 .filter(PhysicalStackAddress.ActorHand.class::isInstance)
                 .map(PhysicalStackAddress.ActorHand.class::cast)
@@ -164,7 +166,7 @@ public final class FrontierSceneLeaseStateSupport {
     /** A conflicted semantic scope cannot turn an unattempted body into a physical owner. */
     private static boolean unstartedConflict(FrontierWorldState state, SceneLease lease) {
         return lease.status() == SceneLeaseStatus.CONFLICT && lease.ambientHandoffActorIds().isEmpty()
-                && !hasBoundActorHand(state, lease)
+                && !hasBoundSceneHand(state, lease)
                 && lease.members().stream().allMatch(member -> ActorBodyAuthority.require(state,
                         ActorBodyAuthority.current(state, member.actorId())).phase() == FencedRecoveryPhase.PREPARED);
     }

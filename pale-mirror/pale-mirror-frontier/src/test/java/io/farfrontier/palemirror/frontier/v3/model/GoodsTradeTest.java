@@ -593,11 +593,111 @@ class GoodsTradeTest {
     }
 
     @Test void breadPromisedForDeliveryIsNotCountedAsAvailablePublicFood() {
+        var state = breadReserved();
+        int minimum = SettlementFoodPolicy.reserveRequirement(state, SELLER);
+        assertEquals(minimum + 60, SettlementFoodPolicy.breadStock(state, SELLER));
+        assertEquals(minimum, SettlementFoodPolicy.reserveCoverageBread(state, SELLER));
+        assertEquals(minimum, SettlementFoodPolicy.coldUsableBread(state, SELLER));
+        var extraSell = new GoodsTradeOrder(id("order:extra-sell"), SELLER_PARTY, BUYER_PARTY,
+                GoodsTradeOrder.Side.SELL, SOURCE, "minecraft:bread", 1, 0, PRICE, 10_000);
+        var extraBuy = new GoodsTradeOrder(id("order:extra-buy"), BUYER_PARTY, SELLER_PARTY,
+                GoodsTradeOrder.Side.BUY, RECEIVER, "minecraft:bread", 1, 0, PRICE, 10_000);
+        state = fact(fact(state, SELLER, new GoodsTradeOrderPlaced(extraSell)), BUYER, new GoodsTradeOrderPlaced(extraBuy));
+        var contractId = id("contract:extra"); var claimId = id("claim:extra");
+        var contract = new GoodsTradeContract(contractId, extraSell.id(), extraBuy.id(), SELLER_PARTY, BUYER_PARTY,
+                SOURCE, RECEIVER, "minecraft:bread", 1, PRICE, id("reservation:extra"), 0, Map.of(claimId, 1), Map.of());
+        var excessive = new GoodsTradeReserved(contract, List.of(new GoodsTradeStockAllocation(SOURCE_ACCOUNT,
+                new ClaimAllocation(claimId, contractId, SELLER, "minecraft:bread", 1, Map.of(id("lot:trade-bread"), 1),
+                        ClaimPurpose.GOODS_TRADE), GoodsTradeStockAllocation.Authority.COLD, 0)));
+        var unchanged = state;
+        assertThrows(IllegalArgumentException.class, () -> fact(unchanged, SELLER, excessive),
+                "direct mutation must protect food even when a caller bypasses autonomous matching");
+    }
+
+    @Test void depletedSourceRecoversFoodAndBuyerFundsThroughRegisteredReviewInColdAndHot() {
+        for (boolean hot : List.of(false, true)) {
+            var state = breadReserved(); var protectedStock = state;
+            assertThrows(IllegalArgumentException.class, () -> fact(protectedStock, SELLER, new GoodsTradeCancelled(
+                    new GoodsTradeDisposition(id("receipt:forged-deficit"), CONTRACT, 0, CLAIM, 60,
+                            GoodsTradeDisposition.Reason.LOCAL_RESERVE_REQUIRED))));
+            int minimum = SettlementFoodPolicy.reserveRequirement(state, SELLER);
+            var resources = state.inventory().fungibleResources().destroy(SOURCE_ACCOUNT,
+                    Map.of(id("lot:trade-bread"), minimum), Map.of());
+            state = state.withInventory(state.inventory().withFungibleResources(resources));
+            if (hot) {
+                var record = PhysicalReplicaRecord.expected(SOURCE, ReferenceContainerCustody.semanticKind(state, SOURCE), 7,
+                        ReferenceContainerCustody.canonicalFingerprint(state, SOURCE), ReferenceContainerCustody.provenance(SOURCE));
+                var custody = state.replicaCustody().declare(record).observe(SOURCE, 7, 1, record.fingerprint(), record.provenance(), 7)
+                        .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(SOURCE), SOURCE, ReferenceContainerCustody.PROVIDER_ID,
+                                7, 7, 2, PhysicalCustodyLeaseStatus.ACQUIRED, null));
+                resources = resources.rebind(SOURCE_ACCOUNT, 7, FungiblePhysicalObservation.bind(resources, SOURCE_ACCOUNT, 7,
+                        List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                                new InventoryCustody.ContainerSlot(SOURCE, 0)), "minecraft:bread", 60))));
+                state = state.withChanges(FrontierWorldStateUpdate.begin()
+                        .inventory(state.inventory().withFungibleResources(resources)).replicaCustody(custody));
+                var scope = ReferenceContainerCustody.scopeId(SOURCE); var leases = new java.util.HashMap<>(custody.custodyByScope());
+                leases.put(scope, leases.get(scope).unresolved(PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY));
+                var uncertain = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(
+                        new PhysicalReplicaCustodyState(custody.replicas(), leases, custody.diagnostics())));
+                assertFalse(GoodsTradeStateSupport.canCancelBeforeLoading(uncertain,
+                        uncertain.companies().goodsTrade().contracts().get(CONTRACT), CLAIM));
+                var stale = resources;
+                assertThrows(IllegalArgumentException.class, () -> stale.releaseBoundClaim(SOURCE_ACCOUNT, CLAIM, 6));
+            }
+            state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+            var before = state;
+            assertEquals(0, state.inventory().fungibleResources().unclaimedQuantity(SOURCE_ACCOUNT, SELLER, "minecraft:bread"));
+            var action = io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(SELLER, 400);
+            var events = FrontierWorldRuntimeDefinition.planScheduled(state, action, new SimInstant(400));
+            assertTrue(events.stream().anyMatch(event -> event.payload() instanceof GoodsTradeCancelled cancelled
+                    && cancelled.disposition().reason() == GoodsTradeDisposition.Reason.LOCAL_RESERVE_REQUIRED));
+            state = applyEvents(state, events, 400, "goods-trade");
+            assertEquals(60, state.inventory().fungibleResources().unclaimedQuantity(SOURCE_ACCOUNT, SELLER, "minecraft:bread"));
+            assertEquals(before.inventory().fungibleResources().lots(), state.inventory().fungibleResources().lots());
+            assertEquals(before.inventory().economics().accounts(), state.inventory().economics().accounts());
+            assertFalse(state.inventory().economics().reservations().containsKey(HOLD));
+            assertTrue(state.companies().goodsTrade().contracts().get(CONTRACT).terminal());
+            assertFalse(state.companies().goodsTrade().contracts().get(CONTRACT).fulfilled());
+            assertEquals(0, state.companies().goodsTrade().contracts().get(CONTRACT).acceptedQuantity());
+            if (hot) {
+                var oldBinding = before.inventory().fungibleResources().bindings().values().iterator().next();
+                var binding = state.inventory().fungibleResources().bindings().get(oldBinding.id());
+                assertEquals(oldBinding.address(), binding.address()); assertEquals(oldBinding.lotQuantities(), binding.lotQuantities());
+                assertEquals(7, binding.authorityEpoch()); assertTrue(binding.claimQuantities().isEmpty());
+            }
+            var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)); assertEquals(state, restored);
+            var repeated = FrontierWorldRuntimeDefinition.planScheduled(restored, action, new SimInstant(400));
+            assertTrue(repeated.stream().noneMatch(event -> event.payload() instanceof GoodsTradeCancelled));
+        }
+    }
+
+    @Test void unfundedUndispatchedPromiseReleasesGoodsButDelegatedShipmentKeepsItsAuthority() {
+        var state = reserved(); var funds = state.inventory().economics().availableToReserve(SELLER);
+        state = state.withInventory(state.inventory().withEconomics(state.inventory().economics().transfer(SELLER, BUYER, funds)));
+        var action = io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(SELLER, 400);
+        var events = FrontierWorldRuntimeDefinition.planScheduled(state, action, new SimInstant(400));
+        assertTrue(events.stream().anyMatch(event -> event.payload() instanceof GoodsTradeCancelled cancelled
+                && cancelled.disposition().reason() == GoodsTradeDisposition.Reason.DISPATCH_UNFUNDED));
+        var closed = applyEvents(state, events, 400, "goods-trade");
+        assertFalse(closed.inventory().fungibleResources().claims().containsKey(CLAIM));
+        assertFalse(closed.inventory().economics().reservations().containsKey(HOLD));
+        state = shipmentFact(state, SELLER, new ShipmentDispatched(shipment(state)));
+        var delegated = state;
+        assertFalse(GoodsTradeStateSupport.canCancelBeforeLoading(state, state.companies().goodsTrade().contracts().get(CONTRACT), CLAIM));
+        assertTrue(FrontierWorldRuntimeDefinition.planScheduled(state, action, new SimInstant(400)).stream()
+                .noneMatch(event -> event.payload() instanceof GoodsTradeCancelled));
+        assertThrows(IllegalArgumentException.class, () -> fact(delegated, SELLER, new GoodsTradeCancelled(
+                new GoodsTradeDisposition(id("receipt:illegal-withdraw"), CONTRACT, 0, CLAIM, 60,
+                        GoodsTradeDisposition.Reason.DISPATCH_UNFUNDED))));
+    }
+
+    private static FrontierWorldState breadReserved() {
         FrontierWorldState state = initial(); var resources = state.inventory().fungibleResources();
         resources = resources.destroy(SOURCE_ACCOUNT, Map.of(LOT, 64), Map.of());
         SubjectId bread = id("lot:trade-bread");
-        resources = resources.issue(new ResourceLot(bread, SELLER, "minecraft:bread", 64, "fixture:trade-bread", List.of()),
-                new CustodyAccount(SOURCE_ACCOUNT, new ResourceCustody.Container(SOURCE), Map.of(bread, 64), Map.of()));
+        int quantity = SettlementFoodPolicy.reserveRequirement(state, SELLER) + 60;
+        resources = resources.issue(new ResourceLot(bread, SELLER, "minecraft:bread", quantity, "fixture:trade-bread", List.of()),
+                new CustodyAccount(SOURCE_ACCOUNT, new ResourceCustody.Container(SOURCE), Map.of(bread, quantity), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         state = fact(state, SELLER, new GoodsTradeOrderPlaced(new GoodsTradeOrder(SELL_ORDER, SELLER_PARTY, BUYER_PARTY,
                 GoodsTradeOrder.Side.SELL, SOURCE, "minecraft:bread", 60, 0, PRICE, 10_000)));
@@ -608,10 +708,7 @@ class GoodsTradeTest {
         state = fact(state, SELLER, new GoodsTradeReserved(contract, List.of(new GoodsTradeStockAllocation(SOURCE_ACCOUNT,
                 new ClaimAllocation(CLAIM, CONTRACT, SELLER, "minecraft:bread", 60, Map.of(bread, 60), ClaimPurpose.GOODS_TRADE),
                 GoodsTradeStockAllocation.Authority.COLD, 0))));
-        assertEquals(64, SettlementFoodPolicy.breadStock(state, SELLER));
-        assertEquals(4, SettlementFoodPolicy.reserveCoverageBread(state, SELLER));
-        assertEquals(4, SettlementFoodPolicy.coldUsableBread(state, SELLER));
-        assertFalse(SettlementFoodPolicy.allowsPopulationGrowth(state, SELLER));
+        return state;
     }
 
     @Test void inboundCommitmentUsesTheExistingStorageOwnerAndStopsDoubleCountingAfterArrival() {

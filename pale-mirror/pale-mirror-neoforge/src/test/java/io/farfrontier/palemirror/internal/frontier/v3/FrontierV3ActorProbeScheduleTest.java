@@ -6,8 +6,26 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3ActorProbeScheduleTest {
+    @Test void timeDeferredActorsRemainFairAndSelectionAloneCannotForgetThem() {
+        var actors = java.util.stream.IntStream.range(0, 40)
+                .mapToObj(index -> new SubjectId("actor:" + index)).toList();
+        var cursor = new FrontierV3ActorProbeSchedule.Cursor(actors);
+        for (SubjectId actor : actors) cursor.defer(actor);
+        assertEquals("{\"depth\":40,\"oldestHostTicks\":12}", cursor.diagnostic(12L));
+        cursor.defer(actors.getFirst(), 10L);
+        assertEquals("{\"depth\":40,\"oldestHostTicks\":12}", cursor.diagnostic(12L), "repeated deferral cannot reset its age");
+        for (SubjectId expected : actors) {
+            var window = cursor.prioritizeDeferred(cursor.next(32, 16), 32);
+            assertEquals(expected, window.getFirst());
+            assertEquals(window, cursor.prioritizeDeferred(window, 32), "unvisited selected actors remain queued");
+            cursor.probed(expected);
+        }
+        assertThrows(IllegalArgumentException.class, () -> cursor.defer(new SubjectId("actor:foreign")));
+    }
+
     @Test
     void nextWindowRetainsUnconsumedCandidatesAtTheNextAdmissionFront() {
         FrontierV3ActorProbeSchedule.Cursor cursor = new FrontierV3ActorProbeSchedule.Cursor(List.of(

@@ -37,7 +37,7 @@ public final class BakerySceneReconciliation {
                 || !ActorExecutionCoordinator.ambientAvailable(state, java.util.List.of(job.workerId()))
                 || state.actorMovements().containsKey(job.workerId())
                 || ledger.accounts().containsKey(work.actorAccountId())
-                || FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)
+                || FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)
                 || batch == null || !batch.custody().equals(new ResourceCustody.Container(station.containerId()))
                 || batch.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() != job.outputCount()
                 || batch.lotQuantities().keySet().stream().anyMatch(id -> !ledger.lots().get(id).itemKind().equals(kind)))

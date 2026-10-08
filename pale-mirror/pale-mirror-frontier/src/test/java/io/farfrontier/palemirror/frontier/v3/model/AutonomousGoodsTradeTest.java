@@ -84,6 +84,23 @@ class AutonomousGoodsTradeTest {
         assertEquals(companyMoney.minus(FixedScalar.whole(64)), state.inventory().economics().require(COMPANY).balance());
     }
 
+    @Test void mutuallyQuotedGoodsDoNotFreezeStockOrBuyerMoneyWithoutSourceDispatchBudget() {
+        var configuration = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:unfunded-dispatch"), 41);
+        var state = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration).canonicalState().state();
+        var seller = state.companies().goodsTrade().participants().participants().get(HOME);
+        var buyer = seller.known().getFirst().party().id();
+        state = state.withInventory(state.inventory().withEconomics(state.inventory().economics().transfer(HOME, buyer,
+                state.inventory().economics().availableToReserve(HOME))));
+        var before = state;
+        state = review(state, HOME, 400); state = review(state, buyer, 400);
+        assertFalse(state.companies().goodsTrade().orders().isEmpty(), "consent may exist without a committed shipment");
+        assertTrue(state.companies().goodsTrade().contracts().isEmpty());
+        assertTrue(state.inventory().fungibleResources().claims().isEmpty());
+        assertTrue(state.inventory().economics().reservations().isEmpty());
+        assertEquals(before.inventory().economics(), state.inventory().economics());
+        assertTrue(state.companies().goodsTrade().participants().participants().get(buyer).decision().contains("DISPATCH_UNFUNDED"));
+    }
+
     @Test void delayedPeriodicAndOpportunityReviewsUseExecutionTimeAtTheOrderExpiryBoundary() {
         var quoted = review(issue(companyFixture(), HOME, "minecraft:wheat", 64, "delayed-public-grain"), HOME, 400);
         var sell = quoted.companies().goodsTrade().orders().values().stream()

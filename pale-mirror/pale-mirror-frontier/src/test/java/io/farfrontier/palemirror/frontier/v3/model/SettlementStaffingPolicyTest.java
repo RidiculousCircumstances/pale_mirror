@@ -9,6 +9,29 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SettlementStaffingPolicyTest {
+    @Test void reusedInitialAuthorityImageDoesNotShareCurrentDecisionsOrWeakenValidation() {
+        var state = initial();
+        var bootstrap = state.bootstrap();
+        var declared = DecisionAuthorityState.initial(bootstrap);
+        assertSame(declared, DecisionAuthorityState.initial(bootstrap));
+        var other = FrontierBootstrapper.create(new WorldId("frontier:other-staffing-policy"), 72);
+        assertNotSame(declared, DecisionAuthorityState.initial(other));
+        assertEquals(declared, DecisionAuthorityState.initial(bootstrap));
+        var home = bootstrap.settlements().getFirst().id();
+        var permissions = declared.require(home).workPermissions();
+        state.withStrategicPlans(state.strategicPlans().withWorkPermissions(home, ResidentWorkPermissions.none()));
+        assertEquals(permissions, DecisionAuthorityState.initial(bootstrap).require(home).workPermissions());
+        var authority = declared.require(home);
+        var forged = declared.replace(new DecisionAuthority(home, authority.kind(),
+                new DecisionPolicyDescriptor("frontier:unregistered", 1), authority.reconsiderationEpoch(),
+                authority.commitmentIds(), authority.provenanceIds(), authority.workPermissions()));
+        var plans = state.strategicPlans();
+        var invalid = new StrategicPlanState(plans.objectives(), plans.tasks(), plans.routePatrols(),
+                plans.infectionKnowledge(), plans.hiveTerritoryKnowledge(), plans.hiveSettlementKnowledge(),
+                plans.hiveDoctrine(), plans.settlementAssaults(), forged, plans.frontEffects(), plans.scoutPatrols());
+        assertThrows(IllegalArgumentException.class, () -> state.withStrategicPlans(invalid));
+    }
+
     @Test void isolatedFieldConflictRetainsItsWorkerAndDoesNotQuarantineStaffingReview() {
         var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
         var state = fixture.state();

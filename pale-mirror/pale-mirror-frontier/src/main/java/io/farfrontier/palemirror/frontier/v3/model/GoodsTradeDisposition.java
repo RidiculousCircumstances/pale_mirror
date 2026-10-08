@@ -7,7 +7,8 @@ import java.util.Objects;
 public record GoodsTradeDisposition(SubjectId id, SubjectId contractId, long expectedContractRevision,
                                     SubjectId claimId, int quantity, Reason reason) {
     public enum Reason {
-        CANCELLED_BEFORE_LOADING(1), OBSERVED_ALLOCATION_CHANGED(2);
+        CANCELLED_BEFORE_LOADING(1), OBSERVED_ALLOCATION_CHANGED(2),
+        LOCAL_RESERVE_REQUIRED(3), DISPATCH_UNFUNDED(4);
         private final int wireTag;
         Reason(int wireTag) { this.wireTag = wireTag; }
         public int wireTag() { return wireTag; }

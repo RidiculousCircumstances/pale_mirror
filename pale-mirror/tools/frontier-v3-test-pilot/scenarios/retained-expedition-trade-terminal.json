@@ -1,0 +1,147 @@
+{
+  "schema": 1,
+  "id": "retained_expedition_trade_terminal",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 26720,
+    "profile": "expedition-provisioning"
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/tick rate 20"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "process",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "availableMoneyRaw": 132000000,
+            "expeditions": {
+              "activeMissions": 0,
+              "reservedAnimals": 0,
+              "allocatedBudgets": 0
+            }
+          }
+        },
+        {
+          "view": "process",
+          "id": "settlement:10",
+          "expect": {
+            "status": "ok",
+            "availableMoneyRaw": 68000000
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "settlement:1"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "settlement:10"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": -1,
+        "z": -8
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "actor:pack/settlement-1",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:donkey",
+      "nameContains": "PACK DONKEY",
+      "maxDistance": 64,
+      "maxAngleDeg": 90,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "actor",
+      "id": "actor:pack/settlement-1"
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:pack/settlement-1"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 1,
+      "view": "process",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "availableMoneyRaw": 132000000,
+        "expeditions": {
+          "activeMissions": 0,
+          "reservedAnimals": 0,
+          "allocatedBudgets": 0
+        }
+      }
+    },
+    {
+      "after": 2,
+      "view": "process",
+      "id": "settlement:10",
+      "expect": {
+        "status": "ok",
+        "availableMoneyRaw": 68000000
+      }
+    },
+    {
+      "after": 6,
+      "view": "actor",
+      "id": "actor:pack/settlement-1",
+      "expect": {
+        "status": "ok",
+        "life": "ALIVE"
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 5,
+      "name": "same-pack-paid-trip-returned"
+    }
+  ]
+}

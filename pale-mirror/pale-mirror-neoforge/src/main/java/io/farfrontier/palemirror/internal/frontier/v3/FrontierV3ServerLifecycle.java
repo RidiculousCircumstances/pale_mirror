@@ -126,7 +126,8 @@ public final class FrontierV3ServerLifecycle {
         return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(), state,
                 FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
                 FAST_FORWARD_OUTCOMES.get(server), FAST_FORWARD_SLICE_TELEMETRY.get(server), fastForwardRequests(server),
-                FrontierV3PedestrianPlanning.diagnostic(runtime));
+                FrontierV3PedestrianPlanning.diagnostic(runtime),
+                FrontierV3ActorProbeSchedule.diagnostic(runtime, FrontierV3PhysicalWorld.require(server).getGameTime()));
     }
     static FrontierV3PilotSceneDemandSnapshot pilotSceneDemandSnapshot(ServerLevel level, SubjectId assaultId) {
         Objects.requireNonNull(level, "pilot demand level");

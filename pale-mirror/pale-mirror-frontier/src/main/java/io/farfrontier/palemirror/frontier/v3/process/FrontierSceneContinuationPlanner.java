@@ -47,7 +47,7 @@ public final class FrontierSceneContinuationPlanner {
                                                     SceneLeaseReleased released, Optional<ScheduledAction> binding) {
         // The reducer repeats this atomic disposition; do not journal an impossible release.
         io.farfrontier.palemirror.frontier.v3.model.SceneStrikeStateSupport.prepareRelease(state, lease);
-        io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.requireNoBoundActorHand(state, lease);
+        io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.requireNoBoundSceneHand(state, lease);
         SceneReleasePlan plan = FrontierSceneBehaviors.releasePlan(state, lease, submittedAt, released);
         return events(state, plan.owner(), plan.released(), plan.continuation(), submittedAt, binding);
     }

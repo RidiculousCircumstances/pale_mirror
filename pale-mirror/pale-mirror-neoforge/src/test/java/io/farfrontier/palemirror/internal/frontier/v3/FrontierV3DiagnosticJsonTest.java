@@ -367,7 +367,8 @@ class FrontierV3DiagnosticJsonTest {
 
         String value = FrontierV3PerformanceDiagnostic.render(checkpoint, metrics.snapshot(), null, 17, null, null,
                 new FrontierV3ServerLifecycle.FastForwardTargetOutcome(4L, 12L, 11L, null, "REJECTED", "physical work is pending at admission"),
-                new FrontierV3ServerLifecycle.FastForwardSliceTelemetry(2L, 40L, 23L, 12L, 7L, 20L, 11L, 7L));
+                new FrontierV3ServerLifecycle.FastForwardSliceTelemetry(2L, 40L, 23L, 12L, 7L, 20L, 11L, 7L),
+                List.of(), null, "{\"depth\":7,\"oldestHostTicks\":3}");
 
         assertTrue(value.startsWith(FrontierV3DiagnosticJson.PREFIX + "{\"schema\":1,\"kind\":\"performance\""));
         assertTrue(value.contains("\"stage\":\"PHYSICAL\"") && value.contains("\"maxLagTicks\":8")
@@ -378,6 +379,7 @@ class FrontierV3DiagnosticJsonTest {
                 && value.contains("\"safetyNanos\":12") && value.contains("\"advanceNanos\":20")
                 && value.contains("\"worstSpan\":{\"stage\":\"PHYSICAL\",\"kind\":\"scenes\",\"owner\":\"scene\""));
         assertTrue(value.length() < 8_192, "performance diagnostics retain the ordinary bounded operator response limit");
+        assertTrue(value.contains("\"ambientDepartureQueue\":{\"depth\":7,\"oldestHostTicks\":3}"));
     }
 
     @Test

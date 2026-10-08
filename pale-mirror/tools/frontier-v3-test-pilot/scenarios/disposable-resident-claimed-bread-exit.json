@@ -15,7 +15,7 @@
   "actions": [
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
       "position": { "diagnostic": { "view": "container", "id": "container:6-depot", "field": "position" } },
-      "offset": { "x": -2, "y": 1, "z": 0 }, "settleMs": 0,
+      "offset": { "x": -2, "y": -1, "z": 0 }, "settleMs": 0,
       "causalMilestone": "ordinary_player_admits_claimed_depot" },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:6-depot",
       "expect": { "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } },
@@ -28,7 +28,9 @@
       "expect": { "status": "ok", "nutrition": "HUNGRY", "mealPhase": "NONE",
         "depotBread": 0, "depotBreadClaimed": 0 }, "timeoutMs": 30000,
       "causalMilestone": "claim_retired_and_resident_waits_for_new_source" },
-    { "type": "inspect", "view": "container", "id": "container:6-depot" }
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:6-depot",
+      "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } },
+      "timeoutMs": 30000 }
   ],
   "assertions": [
     { "after": 5, "view": "resident_life", "id": "resident:6-1",

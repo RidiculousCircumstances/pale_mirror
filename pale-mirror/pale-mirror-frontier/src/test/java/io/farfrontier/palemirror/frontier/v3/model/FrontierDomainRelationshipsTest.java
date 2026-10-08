@@ -12,6 +12,26 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 class FrontierDomainRelationshipsTest {
+    @Test void unpublishedCandidatesCannotBypassThePreWalAuditAndScopeCannotLeak() {
+        var before = FrontierV3FixtureCatalog.productionWorkConfiguration(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:unpublished-validation"), 91L).initialState();
+        var invalid = FrontierWorldState.duringUnpublishedTransition(() ->
+                before.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(StrategicPlanState.empty())));
+        assertThrows(IllegalArgumentException.class, () ->
+                FrontierWorldState.duringUnpublishedTransition(() -> {
+                    FrontierWorldStateTransitionValidator.INSTANCE.validateTransaction(before, invalid,
+                            java.util.List.of(), java.util.List.of(), java.util.List.of());
+                    return null;
+                }), "publication must force the full audit even inside an unpublished scope");
+        assertThrows(IllegalStateException.class, () -> FrontierWorldState.duringUnpublishedTransition(() -> {
+            throw new IllegalStateException("failed planner");
+        }));
+        assertThrows(IllegalArgumentException.class, () ->
+                before.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(StrategicPlanState.empty())),
+                "ordinary construction must validate again after failed planning");
+        assertDoesNotThrow(() -> before.validateComplete());
+    }
+
     @Test
     void dependencyAwareValidationRejectsRetiredTargetsOfUnchangedJobsLikeTheFullAudit() {
         var before = FrontierV3FixtureCatalog.productionWorkConfiguration(
@@ -19,7 +39,7 @@ class FrontierDomainRelationshipsTest {
         assertTrue(!before.productionJobs().isEmpty());
         assertDoesNotThrow(() -> FrontierDomainRelationships.validate(before));
         assertDoesNotThrow(() -> FrontierDomainRelationships.validateTransition(before, before));
-        var after = FrontierWorldState.duringReducerTransition(() ->
+        var after = FrontierWorldState.duringUnpublishedTransition(() ->
                 before.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(StrategicPlanState.empty())));
         assertTrue(before.productionJobs() == after.productionJobs(), "the owning jobs did not change");
         var full = assertThrows(IllegalArgumentException.class, () -> FrontierDomainRelationships.validate(after));

@@ -87,6 +87,16 @@ final class FrontierV3ActorBodyController {
         return true;
     }
 
+    /** Read-only eligibility for host deferral; the departure transition keeps all exact fences. */
+    static boolean departurePending(ServerLevel level, FrontierWorldState state,
+                                    io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        if (!ledger.hasBodyDeparture(actor)) return false;
+        var body = ActorBodyAuthority.current(state, actor);
+        var phase = ActorBodyAuthority.require(state, body).phase();
+        return phase == FencedRecoveryPhase.RUNNING || phase == FencedRecoveryPhase.AMBIGUOUS;
+    }
+
     /** Called by bounded actor probes, including actors with no remaining projection scope. */
     static void progressDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                   FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {

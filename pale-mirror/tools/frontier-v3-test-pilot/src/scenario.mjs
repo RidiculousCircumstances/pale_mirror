@@ -551,6 +551,7 @@ function validPlacePosition(value) {
   return value && typeof value === 'object' && Object.keys(value).length === 1
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
     && ((reference.view === 'scene' && requiredId(reference.id, 'job:') && reference.field === 'productionFutureBody')
+      || (reference.view === 'site' && requiredId(reference.id, 'site:') && ['firstCrop', 'lastCrop'].includes(reference.field))
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'scene' && requiredId(reference.id, 'task:') && reference.field === 'patrolNextBody'));
 }

@@ -56,14 +56,16 @@ public final class FrontierWorldRuntimeDefinition {
         return FrontierWorldConfigurationFactory.processRegistry(PAYLOAD_CODECS);
     }
     public static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
-        return FrontierWorldCommandPlanner.plan(state, command, PROCESS_REGISTRY, PHYSICAL_EXECUTOR);
+        return FrontierWorldState.duringUnpublishedTransition(() ->
+                FrontierWorldCommandPlanner.plan(state, command, PROCESS_REGISTRY, PHYSICAL_EXECUTOR));
     }
     public static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action) {
         return planScheduled(state, action, action.dueAt());
     }
     public static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action,
                                                                                                       io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
-        return FrontierWorldProcessCatalog.planScheduled(PROCESS_REGISTRY, state, action, currentInstant);
+        return FrontierWorldState.duringUnpublishedTransition(() ->
+                FrontierWorldProcessCatalog.planScheduled(PROCESS_REGISTRY, state, action, currentInstant));
     }
     public static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
         return FrontierWorldEventReducer.reduce(state, event, PROCESS_REGISTRY);

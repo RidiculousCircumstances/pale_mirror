@@ -25,6 +25,13 @@ public final class GoodsParticipantProcess {
         if (participant == null) throw new IllegalArgumentException("goods review lost its exact declared participant");
         long now = executionInstant.ticks();
         var events = new ArrayList<ProposedEvent>();
+        var commitments = GoodsCommitmentReview.plan(state, participant);
+        state = commitments.state(); events.addAll(commitments.events());
+        for (var withdrawal : commitments.events()) {
+            var disposition = ((GoodsTradeCancelled) withdrawal.payload()).disposition();
+            var contract = state.companies().goodsTrade().contracts().get(disposition.contractId());
+            events.addAll(GoodsParticipantWakeup.party(state, contract.buyer().id(), disposition.id().value(), now));
+        }
         var retirement = closedRetirement(state, now);
         if (retirement.isPresent()) {
             events.add(new ProposedEvent(GoodsTradeMarketIdentity.OWNER, retirement.orElseThrow()));
@@ -88,7 +95,11 @@ public final class GoodsParticipantProcess {
                 if (!value.contract().sourceContainerId().equals(value.contract().receiverContainerId()) && dispatch.isEmpty()) decision = "RESERVED_AWAITING_AVAILABLE_COURIER";
             } else decision = "NAVIGATION_" + routeStatus.name();
         } else events.addAll(GoodsShipmentPlanning.dispatch(state, participant, now));
-        decision += "; " + GoodsParticipantPolicies.require(participant).explain(GoodsParticipantView.read(state, participant), rules);
+        decision += "; withdrawn=" + commitments.events().stream().mapToInt(event ->
+                    ((GoodsTradeCancelled) event.payload()).disposition().quantity()).sum()
+                + "; reasons=" + commitments.events().stream().map(event ->
+                    ((GoodsTradeCancelled) event.payload()).disposition().reason().name()).distinct().toList()
+                + "; " + GoodsParticipantPolicies.require(participant).explain(GoodsParticipantView.read(state, participant), rules);
         if (decision.length() > 512) decision = decision.substring(0, 512);
         events.add(new ProposedEvent(participant.party().id(), new GoodsParticipantReviewed(participant.reviewRevision(), decision, now)));
         if (periodic) events.add(new ProposedEvent(participant.party().id(), new ScheduleEffect.Created(review(participant.party().id(), Math.addExact(now, rules.reviewInterval())))));

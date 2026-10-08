@@ -14,7 +14,7 @@
   "actions": [
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
       "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
-      "offset": { "x": -8, "y": 1, "z": 0 }, "settleMs": 0,
+      "offset": { "x": -8, "y": -1, "z": 0 }, "settleMs": 0,
       "causalMilestone": "ordinary_player_starts_depot_pickup" },
     { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-development-fungible-production",
       "expect": { "status": "ok", "result": { "workStage": "STATION_LOAD" } },
@@ -37,7 +37,7 @@
       "causalMilestone": "cold_depot_authority_before_player_reentry" },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
       "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
-      "offset": { "x": -8, "y": 1, "z": 0 }, "settleMs": 0,
+      "offset": { "x": -8, "y": -1, "z": 0 }, "settleMs": 0,
       "causalMilestone": "player_reenters_after_cold_completion" },
     { "type": "inspect", "view": "process", "id": "job:production-development-fungible-production",
       "causalMilestone": "same_bakery_job_completed" },

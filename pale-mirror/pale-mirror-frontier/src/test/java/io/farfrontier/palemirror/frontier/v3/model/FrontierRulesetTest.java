@@ -17,6 +17,23 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierRulesetTest {
+    @Test void caravanPaceIsSharedWithProvisionForecastAndOldWorldsKeepTheirClock() {
+        var current = FrontierRulesets.production();
+        var previous = FrontierRulesets.installed("frontier-v3-production-r14");
+        assertEquals(15L, current.expedition().ticksPerRouteEdge());
+        assertEquals(20L, previous.expedition().ticksPerRouteEdge());
+        assertEquals(15L, FrontierRulesets.installed("frontier-v3-expedition-candidate-r2").expedition().ticksPerRouteEdge());
+        assertEquals(20L, FrontierRulesets.installed("frontier-v3-expedition-candidate-r1").expedition().ticksPerRouteEdge());
+        assertEquals(15L, FrontierRulesets.installed("frontier-v3-trade-playtest-r4").expedition().ticksPerRouteEdge());
+        assertEquals(20L, FrontierRulesets.installed("frontier-v3-trade-playtest-r3").expedition().ticksPerRouteEdge());
+        assertTrue(current.expedition().plannedDuration(300, 300) < previous.expedition().plannedDuration(300, 300));
+        assertEquals(previous.resourceHarvestColdTravelTicksPerEdge(), current.resourceHarvestColdTravelTicksPerEdge());
+        assertEquals(previous.expedition().formationSpacing(), current.expedition().formationSpacing());
+        assertEquals(previous.expedition().maxFormationStretch(), current.expedition().maxFormationStretch());
+        assertEquals(previous, FrontierRulesets.require(previous.id(), previous.schemaVersion(), previous.contentSha256()));
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:caravan-pace"), 41L, current));
+        assertEquals(current, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)).bootstrap().ruleset());
+    }
     @Test void tradePlaytestStockIsFinitePublicGenesisAndPinnedOnRecovery() {
         var selected = FrontierRulesets.installed("frontier-v3-trade-playtest-r3");
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:trade-playtest"), 41L, selected));

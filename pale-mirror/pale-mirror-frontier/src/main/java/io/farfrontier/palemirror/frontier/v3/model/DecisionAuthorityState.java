@@ -9,6 +9,11 @@ import java.util.Objects;
 /** Bounded owner registry for settlement and whole-Hivemind decision scopes. */
 public final class DecisionAuthorityState {
     private static final int MAX_AUTHORITIES = 13;
+    private record InitialImage(FrontierBootstrap bootstrap, DecisionAuthorityState state) { }
+    // The full-state audit needs the same immutable declared owner/policy roster. Rebuilding
+    // every settlement's initial staffing per transaction supplies no new validation evidence.
+    // Keep just the most recent bootstrap image per thread, never world history/current decisions.
+    private static final ThreadLocal<InitialImage> INITIAL_IMAGE = new ThreadLocal<>();
     private final Map<SubjectId, DecisionAuthority> authorities;
 
     public DecisionAuthorityState(Map<SubjectId, DecisionAuthority> authorities) {
@@ -24,6 +29,8 @@ public final class DecisionAuthorityState {
     /** Fresh worlds install all decision owners before any review can run. */
     public static DecisionAuthorityState initial(FrontierBootstrap bootstrap) {
         Objects.requireNonNull(bootstrap, "bootstrap");
+        var image = INITIAL_IMAGE.get();
+        if (image != null && image.bootstrap() == bootstrap) return image.state();
         Map<SubjectId, DecisionAuthority> initial = new LinkedHashMap<>();
         bootstrap.settlements().stream().sorted(java.util.Comparator.comparing(Settlement::id)).forEach(settlement ->
                 initial.put(settlement.id(), new DecisionAuthority(settlement.id(), DecisionAuthorityKind.SETTLEMENT,
@@ -32,7 +39,9 @@ public final class DecisionAuthorityState {
         SubjectId hive = bootstrap.hive().id();
         initial.put(hive, new DecisionAuthority(hive, DecisionAuthorityKind.HIVEMIND,
                 new DecisionPolicyDescriptor("frontier:hivemind", 1), 0L, java.util.List.of(), java.util.List.of()));
-        return new DecisionAuthorityState(initial);
+        var state = new DecisionAuthorityState(initial);
+        INITIAL_IMAGE.set(new InitialImage(bootstrap, state));
+        return state;
     }
     public Map<SubjectId, DecisionAuthority> authorities() { return authorities; }
     public DecisionAuthority require(SubjectId ownerId) {

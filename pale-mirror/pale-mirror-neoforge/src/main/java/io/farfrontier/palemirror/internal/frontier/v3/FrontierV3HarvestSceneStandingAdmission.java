@@ -38,7 +38,7 @@ final class FrontierV3HarvestSceneStandingAdmission {
             if (job == null || job.progress().hasPendingPhysicalWork()
                     || state.resourceSites().hasPendingWorldChange(cause.siteId())
                     || field.fieldDelivery(cause.siteId()) != null || field.fieldHandProjection(cause.siteId()) != null
-                    || FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)
+                    || FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)
                     || !FrontierV3SceneExecutor.entityStorageReady(level, new BlockPos(position.x(), position.y() - 1, position.z()))
                     || !FrontierV3ActorBodyCustody.unstartedAbsenceProven(level, runtime, state, member.actorId())) return false;
         } else if (!obstructedBodyFreeColumn(level, member.entityId(), lease.memberBody(state.actorLocations(), member.actorId()))) return false;

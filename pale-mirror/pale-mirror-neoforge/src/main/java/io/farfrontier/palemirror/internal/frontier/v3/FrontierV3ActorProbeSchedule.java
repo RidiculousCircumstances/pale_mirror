@@ -28,9 +28,25 @@ final class FrontierV3ActorProbeSchedule {
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
 
+    static void defer(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actor, long gameTime) {
+        Cursor cursor = CURSORS.get(runtime);
+        if (cursor == null) throw new IllegalStateException("deferred actor without an active probe cursor");
+        cursor.defer(actor, gameTime);
+    }
+
+    static void probed(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actor) {
+        CURSORS.get(runtime).probed(actor);
+    }
+
+    static String diagnostic(FrontierV3ServerRuntime<?, ?> runtime, long gameTime) {
+        Cursor cursor = CURSORS.get(runtime);
+        return cursor == null ? "{\"depth\":0,\"oldestHostTicks\":0}" : cursor.diagnostic(gameTime);
+    }
+
     static final class Cursor {
         private final List<SubjectId> actors;
         private final Map<SubjectId, Long> retainedDemand = new LinkedHashMap<>();
+        private final Map<SubjectId, Long> deferred = new LinkedHashMap<>();
         private int next;
         private int nextDemanded;
 
@@ -38,6 +54,33 @@ final class FrontierV3ActorProbeSchedule {
 
         Cursor(FrontierWorldState state) {
             this(state.actorLocations().keySet().stream().sorted().toList());
+        }
+
+        void defer(SubjectId actor) { defer(actor, 0L); }
+
+        void defer(SubjectId actor, long gameTime) {
+            if (!actors.contains(actor)) throw new IllegalArgumentException("deferred unknown actor");
+            deferred.putIfAbsent(actor, gameTime);
+        }
+
+        void probed(SubjectId actor) { deferred.remove(actor); }
+
+        String diagnostic(long gameTime) {
+            long oldest = deferred.values().stream().mapToLong(Long::longValue).min().orElse(gameTime);
+            return "{\"depth\":" + deferred.size() + ",\"oldestHostTicks\":" + Math.max(0L, gameTime - oldest) + "}";
+        }
+
+        List<SubjectId> prioritizeDeferred(List<SubjectId> candidates, int maximum) {
+            LinkedHashSet<SubjectId> result = new LinkedHashSet<>();
+            var iterator = deferred.keySet().iterator();
+            while (iterator.hasNext() && result.size() < maximum) {
+                result.add(iterator.next());
+            }
+            for (SubjectId actor : candidates) {
+                if (result.size() >= maximum) break;
+                result.add(actor);
+            }
+            return List.copyOf(result);
         }
 
         List<SubjectId> next(int maximum, int advance) {
@@ -56,14 +99,14 @@ final class FrontierV3ActorProbeSchedule {
             List<SubjectId> demanded = demanded(state, level, instant);
             retainDemanded(demanded, state, level.getGameTime());
             demanded = retainedDemanded(demanded, state, level.getGameTime());
-            if (demanded.isEmpty()) return next(maximum, advance);
+            if (demanded.isEmpty()) return prioritizeDeferred(next(maximum, advance), maximum);
             List<SubjectId> result = new ArrayList<>(maximum);
             int start = Math.floorMod(nextDemanded, demanded.size());
             int demandBudget = Math.min(FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK, maximum);
             for (int count = 0; count < Math.min(demandBudget, demanded.size()); count++) result.add(demanded.get((start + count) % demanded.size()));
             nextDemanded = (start + demandBudget) % demanded.size();
             for (SubjectId actor : next(maximum, advance)) if (result.size() < maximum && !result.contains(actor)) result.add(actor);
-            return List.copyOf(result);
+            return prioritizeDeferred(result, maximum);
         }
 
         private List<SubjectId> demanded(FrontierWorldState state, ServerLevel level, long instant) {

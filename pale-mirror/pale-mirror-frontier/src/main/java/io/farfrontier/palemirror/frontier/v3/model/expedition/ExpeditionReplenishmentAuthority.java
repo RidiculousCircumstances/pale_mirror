@@ -131,7 +131,8 @@ public final class ExpeditionReplenishmentAuthority {
         requireExecution(state, mission, transfer);
         if (transfer.pending().isPresent() || !ActorExecutionCoordinator.coldAvailable(state, transfer.actorId()))
             throw new IllegalArgumentException("refill cannot overwrite current physical effects");
-        return complete(state, mission, transfer, ActorItemCustody.transferCold(state, transfer.order(mission.id(), mission.revision())));
+        return complete(state, mission, transfer, ActorItemCustody.transferCold(state, transfer.order(mission.id(), mission.revision())),
+                OptionalLong.empty());
     }
     public static FrontierWorldState prepare(FrontierWorldState state, SubjectId missionId, SubjectId claimId, ActorItemTransferStep step) {
         var mission = require(state, missionId); var transfer = retained(mission, claimId); requireExecution(state, mission, transfer);
@@ -159,11 +160,14 @@ public final class ExpeditionReplenishmentAuthority {
         if (!destination.equals(List.of(new FungiblePhysicalObservation.Stack(address, transfer.itemKind(), transfer.quantity()))))
             throw new IllegalArgumentException("refill did not enter its declared personal slot");
         return complete(state, mission, transfer, ActorItemCustody.transferObserved(state, transfer.order(mission.id(), mission.revision()),
-                step.sourceEpoch(), step.destinationEpoch(), remainder, destination));
+                step.sourceEpoch(), step.destinationEpoch(), remainder, destination), OptionalLong.of(step.destinationEpoch()));
     }
-    private static FrontierWorldState complete(FrontierWorldState state, TransportMission mission, UnitResourceTransfer transfer, ExactInventory inventory) {
+    private static FrontierWorldState complete(FrontierWorldState state, TransportMission mission, UnitResourceTransfer transfer,
+                                               ExactInventory inventory, OptionalLong observedDestinationEpoch) {
         inventory = mission.replenishmentPurchase().isPresent() ? GoodsSpotPurchaseAuthority.receive(inventory, transfer, mission.replenishmentPurchase().orElseThrow())
-                : inventory.withFungibleResources(inventory.fungibleResources().releaseClaim(transfer.destinationAccountId(), transfer.claimId()));
+                : inventory.withFungibleResources(observedDestinationEpoch.isPresent()
+                    ? inventory.fungibleResources().releaseBoundClaim(transfer.destinationAccountId(), transfer.claimId(), observedDestinationEpoch.orElseThrow())
+                    : inventory.fungibleResources().releaseClaim(transfer.destinationAccountId(), transfer.claimId()));
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).shipments(state.shipments().replaceReplenishment(mission, Optional.empty())));
     }
     private static void requireExecution(FrontierWorldState state, TransportMission mission, UnitResourceTransfer transfer) {

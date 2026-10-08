@@ -1,0 +1,582 @@
+{
+  "schema": 1,
+  "id": "disposable_hot_cold_economy_soak",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 26720,
+    "profile": "world",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "zeroPlayerPrelude": {
+    "kind": "cold_duty_cycle",
+    "advanceTicks": 24000,
+    "timeoutMs": 180000
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/tick rate 20"
+    }
+  ],
+  "actions": [
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -10,
+        "y": -1,
+        "z": -10
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "firstCrop"
+        }
+      }
+    },
+    {
+      "type": "wait",
+      "ms": 20000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:7-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 24,
+        "y": 64,
+        "z": -132
+      },
+      "settleMs": 12000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 12000,
+      "timeoutMs": 165000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 12000,
+      "timeoutMs": 165000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:8"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:12"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 12000,
+      "timeoutMs": 165000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 12000,
+      "timeoutMs": 165000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:8"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:12"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:8-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -10,
+        "y": -1,
+        "z": -10
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:8-wheat-field",
+          "field": "firstCrop"
+        }
+      }
+    },
+    {
+      "type": "wait",
+      "ms": 20000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:8"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:8-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "settlement:8"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 24,
+        "y": 64,
+        "z": -132
+      },
+      "settleMs": 12000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 12000,
+      "timeoutMs": 165000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 12000,
+      "timeoutMs": 165000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:8"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:12"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 12000,
+      "timeoutMs": 165000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 12000,
+      "timeoutMs": 165000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:8"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:12"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:12-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -10,
+        "y": -1,
+        "z": -10
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:12-wheat-field",
+          "field": "firstCrop"
+        }
+      }
+    },
+    {
+      "type": "wait",
+      "ms": 20000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:12"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:12-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "settlement:12"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -10,
+        "y": -1,
+        "z": -10
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "firstCrop"
+        }
+      }
+    },
+    {
+      "type": "wait",
+      "ms": 20000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:7-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 1,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 9,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 17,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 24,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 32,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 40,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 47,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 55,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 63,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 65,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 5,
+      "name": "settlement-7-hot-1",
+      "presentation": "player"
+    },
+    {
+      "after": 28,
+      "name": "settlement-8-hot-2",
+      "presentation": "player"
+    },
+    {
+      "after": 51,
+      "name": "settlement-12-hot-3",
+      "presentation": "player"
+    },
+    {
+      "after": 59,
+      "name": "settlement-7-hot-4",
+      "presentation": "player"
+    }
+  ]
+}

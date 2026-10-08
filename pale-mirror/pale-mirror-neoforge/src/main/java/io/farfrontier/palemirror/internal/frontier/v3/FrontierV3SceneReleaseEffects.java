@@ -31,7 +31,7 @@ interface FrontierV3SceneReleaseEffects {
         public boolean matchesBody(FrontierWorldState state, SceneLease lease, SceneMember member, Mob body) { return true; }
         public Decision prepare(ServerLevel level, FrontierWorldState state, SceneLease lease,
                                 SceneLeaseReleased exit, Set<SubjectId> departed) {
-            return FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)
+            return FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)
                     ? new Conflict("release-bound-hand-without-typed-owner") : new Ready(exit);
         }
     }

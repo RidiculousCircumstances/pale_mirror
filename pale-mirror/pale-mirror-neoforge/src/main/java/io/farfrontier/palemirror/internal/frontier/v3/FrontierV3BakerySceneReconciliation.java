@@ -68,7 +68,9 @@ final class FrontierV3BakerySceneReconciliation {
         if (phase != BakeryWorkState.Phase.PROCESSING && phase != BakeryWorkState.Phase.STATION_UNLOAD) return;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var departure = FrontierV3SceneDepartureObserver.validDeparture(state, lease, member, ledger).orElse(null);
-        if (departure == null || departure.mainhand().isPresent() || departure.offhand().isPresent()
+        // OFF may contain body-owned personal inventory; only bakery MAIN is empty
+        // in these station phases. The common owner retains the full saved carry proof.
+        if (departure == null || departure.mainhand().isPresent()
                 || !FrontierV3ActorBodyController.checkpointSavedDeparture(level, runtime, member.actorId())) return;
         state = runtime.decodedState().orElseThrow();
         var fence = state.fencedRecovery().current().get(ActorBodyId.recoveryBindingId(member.actorId()));

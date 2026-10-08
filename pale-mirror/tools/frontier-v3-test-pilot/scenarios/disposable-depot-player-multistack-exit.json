@@ -12,7 +12,7 @@
   "actions": [
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
       "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
-      "offset": { "x": -2, "y": 1, "z": 0 }, "settleMs": 0 },
+      "offset": { "x": -2, "y": -1, "z": 0 }, "settleMs": 0 },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot",
       "expect": { "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } }, "timeoutMs": 30000 },
     { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },

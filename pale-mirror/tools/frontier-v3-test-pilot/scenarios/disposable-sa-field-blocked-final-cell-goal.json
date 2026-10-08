@@ -5,6 +5,9 @@
   "server": { "host": "127.0.0.1", "port": 25590, "profile": "resource-site-harvest-65-after-cold-part", "viewDistance": 6 },
   "pilot": { "username": "PMTestPilot" },
   "setup": [
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "command", "command": "/give PMTestPilot minecraft:stone 1" },
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
       { "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": {
         "status": "ok", "conservation": { "completedCropSlots": 64, "totalCropSlots": 65,
@@ -13,7 +16,7 @@
     ] },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
       "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "lastCrop" } },
-      "offset": { "x": 4, "y": 0, "z": -6 }, "settleMs": 1000 },
+      "offset": { "x": 3, "y": 0, "z": 0 }, "settleMs": 1000 },
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
       { "view": "field_physical", "id": "site:1-wheat-field", "expect": {
         "status": "ACTIVE", "claimKind": "OWNERSHIP", "layoutCurrent": true
@@ -24,27 +27,32 @@
         "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } },
         "conservation": { "completedCropSlots": 64, "deliveredYield": 64 }
       } }
-    ] },
-    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run setblock -335 64 -346 minecraft:stone" }
+    ] }
   ],
   "actions": [
-    { "type": "wait_until_block", "position": { "x": -335, "y": 64, "z": -346 },
-      "block": "minecraft:stone", "timeoutMs": 10000 },
+    { "type": "break", "position": {
+        "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "lastCrop" }
+      } },
+    { "type": "place", "position": {
+        "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "lastCrop" }
+      }, "item": "minecraft:stone", "timeoutMs": 30000 },
     { "type": "release_fast_forward_hold" },
     { "type": "wait_until_diagnostic", "view": "trace", "id": "field-foreign-observed:site:1-wheat-field",
       "expect": { "status": "ok", "eventKind": "resource_field_foreign_cell_observed",
         "subject": "site:1-wheat-field" }, "timeoutMs": 60000 },
-    { "type": "wait_until_diagnostic", "view": "trace",
-      "id": "resource-site-harvest:job:site-harvest-1-wheat-field-1",
-      "expect": { "status": "ok", "eventKind": "resource_site_harvest_blocked_cell_skipped",
-        "subject": "job:site-harvest-1-wheat-field-1" }, "timeoutMs": 120000 },
     { "type": "wait_until_diagnostic", "view": "site", "id": "site:1-wheat-field",
-      "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2,
-        "terminalHarvest": { "physicalReceiptResolved": true } },
-      "timeoutMs": 120000 }
+      "expect": { "status": "ok", "phase": "GROWING", "activeWork": [] },
+      "timeoutMs": 120000 },
+    { "type": "wait_until_harvest_result", "siteId": "site:1-wheat-field",
+      "intentId": "intent:site-harvest-1-wheat-field-1", "itemId": "item:site-harvest-1-wheat-field-1-wheat",
+      "workerId": "resident:1-13", "timeoutMs": 30000 },
+    { "type": "inspect", "view": "trace", "id": "resource-site-harvest:job:site-harvest-1-wheat-field-1" },
+    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot" }
   ],
   "assertions": [
     { "after": 5, "view": "site", "id": "site:1-wheat-field", "expect": {
-      "status": "ok", "phase": "GROWING", "growthEpoch": 2 } }
+      "status": "ok", "phase": "GROWING", "activeWork": [] } },
+    { "after": 8, "view": "resource", "id": "custody:container-1-depot", "expect": {
+      "status": "ok", "quantity": 128, "bindingCount": 2, "claims": [] } }
   ]
 }

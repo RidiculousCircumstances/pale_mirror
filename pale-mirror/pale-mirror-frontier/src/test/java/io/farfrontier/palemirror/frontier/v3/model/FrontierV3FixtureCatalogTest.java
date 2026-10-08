@@ -164,7 +164,7 @@ class FrontierV3FixtureCatalogTest {
             var configuration = FrontierV3FixtureCatalog.configuration(profile.id(), new WorldId(world), 41L);
             assertEquals(world, configuration.worldId().value());
             assertEquals(profile.rulesetId().equals("production") ? FrontierRulesets.production()
-                    : FrontierRulesets.installed("frontier-v3-expedition-candidate-r1"), configuration.initialState().bootstrap().ruleset(),
+                    : FrontierRulesets.installed("frontier-v3-expedition-candidate-r2"), configuration.initialState().bootstrap().ruleset(),
                     "a fixture must use its explicitly declared immutable ruleset");
         }
     }
