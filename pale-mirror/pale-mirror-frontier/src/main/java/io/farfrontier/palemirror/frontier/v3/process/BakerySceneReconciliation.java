@@ -81,11 +81,12 @@ public final class BakerySceneReconciliation {
                 || !hand.actorId().equals(job.workerId()) || !hand.entityId().equals(lease.members().getFirst().entityId())
                 || !kind.equals(receipt.observedHand().itemKind()) || receipt.observedHand().quantity() != job.outputCount()
                 || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
-                || bindings.size() != 1 || !bindings.getFirst().address().equals(hand)
-                || !bindings.getFirst().lotQuantities().equals(account.lotQuantities())
-                || !bindings.getFirst().claimQuantities().equals(account.claimQuantities()))
+                || bindings.size() > 1
+                || !bindings.isEmpty() && (!bindings.getFirst().address().equals(hand)
+                    || !bindings.getFirst().lotQuantities().equals(account.lotQuantities())
+                    || !bindings.getFirst().claimQuantities().equals(account.claimQuantities())))
             throw new IllegalArgumentException("bakery recovery cannot replace or replay its cargo/effect");
-        ActorCarriedResources.requireBinding(state.inventory().fungibleResources(), job.workerId(),
+        if (!bindings.isEmpty()) ActorCarriedResources.requireBinding(state.inventory().fungibleResources(), job.workerId(),
                 work.actorAccountId(), receipt.observedHand());
         // A retained meal is waiting for this owner to yield, not an admitted
         // ambient actuator. Restore the exact work scope so its ordinary
@@ -102,6 +103,12 @@ public final class BakerySceneReconciliation {
             throw new IllegalArgumentException("bakery recovery body is outside world");
         var leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.HOT));
-        return state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
+        var restored = state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
+        // A body can be admitted before its positive cargo projection is bound.
+        // Reuse the ordinary issuer atomically; never replace an existing binding
+        // or grant work permission while leaving the carried stock unaccounted.
+        return bindings.isEmpty() ? BakeryProcess.materializeHotHand(restored, subject,
+                new BakeryHotHandMaterialized(job.id(), lease.id(), work.actorAccountId(),
+                        Math.max(1L, lease.revision()), receipt.observedHand())) : restored;
     }
 }

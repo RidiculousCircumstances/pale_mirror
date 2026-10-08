@@ -18,6 +18,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
         for (SceneLease lease : state.sceneLeases().values()) {
             if (lease.status() != SceneLeaseStatus.CONFLICT || !FrontierSceneBehaviors.isResourceSiteHarvest(lease)
                     || lease.members().size() != 1) continue;
+            if (FrontierV3HarvestSceneStandingAdmission.abortObstructedBodyFreePreparation(level, runtime, state, lease)) return true;
             var cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
             var lifecycle = state.resourceSites().sites().get(cause.siteId());
             if (lifecycle == null) continue;

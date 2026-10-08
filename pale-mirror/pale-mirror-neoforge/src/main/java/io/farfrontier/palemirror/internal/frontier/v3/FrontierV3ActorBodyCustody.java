@@ -16,17 +16,25 @@ final class FrontierV3ActorBodyCustody {
     static boolean releaseUnstartedAbsence(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                           io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
         var state = runtime.decodedState().orElseThrow();
+        if (!unstartedAbsenceProven(level, runtime, state, actor)) return false;
+        var body = ActorBodyAuthority.current(state, actor);
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        ledger.persist(level, state.bootstrap().worldId());
+        return FrontierV3CommandSubmission.submit(runtime, "actor-body-unstarted-release", actor.value(), new ActorBodyReleased(body))
+                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
+    }
+
+    /** Shared positive admission-history proof; no caller may derive absence from a UUID lookup. */
+    static boolean unstartedAbsenceProven(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
         var body = ActorBodyAuthority.current(state, actor);
         if (ActorBodyAuthority.require(state, body).phase() != FencedRecoveryPhase.PREPARED) return false;
         var id = ActorBodyId.entityId(state.bootstrap().worldId(), actor);
         if (level.getEntity(id) != null || FrontierV3AmbientPendingAdmissions.get(runtime, id) != null) return false;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        if (!unstartedEvidence(body, state.actorLocations().get(actor).kind(), id, ledger.firstAdmission(actor),
+        return unstartedEvidence(body, state.actorLocations().get(actor).kind(), id, ledger.firstAdmission(actor),
                 ledger.inactiveCarrier(actor), ledger.pendingAdoption(actor).isPresent()
-                        || ledger.hasDepartureConflict(actor))) return false;
-        ledger.persist(level, state.bootstrap().worldId());
-        return FrontierV3CommandSubmission.submit(runtime, "actor-body-unstarted-release", actor.value(), new ActorBodyReleased(body))
-                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
+                        || ledger.hasDepartureConflict(actor));
     }
     static boolean unstartedEvidence(ActorBodyId body, ActorKind kind, java.util.UUID id,
                                     java.util.Optional<FrontierV3ActorFirstAdmission> first,

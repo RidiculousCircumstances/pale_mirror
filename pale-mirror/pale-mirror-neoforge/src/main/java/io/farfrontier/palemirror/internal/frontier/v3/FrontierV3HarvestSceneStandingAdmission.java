@@ -30,8 +30,18 @@ final class FrontierV3HarvestSceneStandingAdmission {
         var binding = state.fencedRecovery().current().get(
                 ActorBodyId.recoveryBindingId(member.actorId()));
         if (binding == null || binding.phase() != FencedRecoveryPhase.PREPARED) return false;
-        if (!obstructedBodyFreeColumn(level, member.entityId(), lease.memberBody(state.actorLocations(), member.actorId()))) return false;
         ResourceSiteHarvestSceneCause cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
+        if (lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CONFLICT) {
+            var job = state.resourceSites().site(cause.siteId()).harvestJob(cause.jobId()).orElse(null);
+            var field = FrontierV3ResourceSiteLedger.get(level);
+            var position = lease.memberBody(state.actorLocations(), member.actorId());
+            if (job == null || job.progress().hasPendingPhysicalWork()
+                    || state.resourceSites().hasPendingWorldChange(cause.siteId())
+                    || field.fieldDelivery(cause.siteId()) != null || field.fieldHandProjection(cause.siteId()) != null
+                    || FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)
+                    || !FrontierV3SceneExecutor.entityStorageReady(level, new BlockPos(position.x(), position.y() - 1, position.z()))
+                    || !FrontierV3ActorBodyCustody.unstartedAbsenceProven(level, runtime, state, member.actorId())) return false;
+        } else if (!obstructedBodyFreeColumn(level, member.entityId(), lease.memberBody(state.actorLocations(), member.actorId()))) return false;
         CommandResult result = FrontierV3CommandSubmission.submit(runtime, "resource-site-harvest-preparation-aborted",
                 lease.id().value(), new ResourceSiteHarvestScenePreparationAborted(lease.id(), cause.siteId(), cause.jobId(),
                         new ActorBodyId(member.actorId(), binding.authorityEpoch())));

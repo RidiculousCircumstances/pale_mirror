@@ -406,11 +406,25 @@ class ResourceSiteHarvestProcessTest {
                 ActorBodyAuthority.current(restartResumed, start.job().workerId()));
         assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(restartResumed, due));
 
+        var unstartedConflict = state.transitionSceneLease(lease.id(), SceneLeaseStatus.CONFLICT);
+        assertInstanceOf(CommandPlan.Accepted.class,
+                FrontierWorldProcessCatalog.planCommand("resource-sites", unstartedConflict, command));
+        var conflictResumed = FrontierWorldProcessCatalog.reduce("resource-sites", unstartedConflict, event);
+        assertEquals(SceneLeaseStatus.CLOSED, conflictResumed.sceneLeases().get(lease.id()).status());
+        assertEquals(unstartedConflict.inventory(), conflictResumed.inventory(), "unstarted recovery preserves all stock");
+        assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(conflictResumed, due),
+                "the separate body owner must still prove and acknowledge unstarted absence");
+
         FrontierWorldState attempted = confirmedPhysicalParticipants(state, lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
                 .transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
         assertInstanceOf(CommandPlan.Rejected.class,
                 FrontierWorldProcessCatalog.planCommand("resource-sites", attempted, command),
                 "an attempted physical admission cannot be retired as a body-free preparation");
+        assertInstanceOf(CommandPlan.Rejected.class,
+                FrontierWorldProcessCatalog.planCommand("resource-sites",
+                        confirmedPhysicalParticipants(state, lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
+                                .transitionSceneLease(lease.id(), SceneLeaseStatus.CONFLICT), command),
+                "CONFLICT cannot turn an attempted body into an unstarted one");
     }
     @Test void releasedHotPathFailureResumesOnlyThroughTheNextKnownColdStep() {
         ColdHarvest start = coldHarvestAfterSteps(125L, 0);

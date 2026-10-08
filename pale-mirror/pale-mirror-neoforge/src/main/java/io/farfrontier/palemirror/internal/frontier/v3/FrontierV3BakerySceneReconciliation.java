@@ -43,6 +43,10 @@ final class FrontierV3BakerySceneReconciliation {
             return;
         }
         var hand = body.getMainHandItem();
+        var accountId = job.bakeryWork().orElseThrow().actorAccountId();
+        boolean unbound = state.inventory().fungibleResources().bindings().values().stream()
+                .noneMatch(binding -> binding.accountId().equals(accountId));
+        if (unbound && !FrontierV3ActorCarryProjection.witnessed(state, member.actorId(), body)) return;
         var receipt = new BakerySceneReconciled(jobId, lease.id(), lease.revision(), fence.authorityEpoch(), observed.orElseThrow(),
                 new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(member.actorId(), member.entityId(),
                         ActorContainerItemOrder.Hand.MAIN), net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(hand.getItem()).toString(), hand.getCount()));

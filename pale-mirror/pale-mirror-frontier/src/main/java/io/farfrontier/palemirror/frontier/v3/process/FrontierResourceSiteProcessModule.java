@@ -586,6 +586,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
         ResourceSite site = state.resourceSite(aborted.siteId());
         if (lease == null || lease.status() != SceneLeaseStatus.PREPARED
                 && (lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || lease.recoveryEvidence().isPresent())
+                && lease.status() != SceneLeaseStatus.CONFLICT
                 || !FrontierSceneBehaviors.isResourceSiteHarvest(lease)
                 || site == null || !subject.equals(site.settlementId())
                 || !FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(aborted.siteId())
@@ -594,6 +595,8 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 || lease.members().size() != 1
                 || state.resourceSites().site(aborted.siteId()).harvestJob(aborted.jobId())
                         .filter(job -> job.id().equals(aborted.jobId())
+                                && !job.progress().hasPendingPhysicalWork()
+                                && !state.resourceSites().hasPendingWorldChange(aborted.siteId())
                                 && lease.members().getFirst().actorId().equals(job.workerId())).isEmpty()) {
             throw new IllegalArgumentException("field preparation abort lacks one exact body-free job scene");
         }

@@ -315,6 +315,16 @@ class BakeryHotVerticalTest {
         assertEquals(waitingMeal.inventory(), hungryRecovery.inventory(), "carried work stock stays exact");
         assertTrue(ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(hungryRecovery, job.workerId(), 27_000L),
                 "the ordinary work owner must now yield to the retained meal");
+        var beforeBinding = waitingMeal.withInventory(waitingMeal.inventory().withFungibleResources(
+                waitingMeal.inventory().fungibleResources().releaseBindings(work.actorAccountId(), 37L)));
+        var projectedRecovery = io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation.reduce(
+                beforeBinding, task.ownerId(), reconciled);
+        var rebound = ActorCarriedResources.requireBinding(projectedRecovery.inventory().fungibleResources(),
+                job.workerId(), work.actorAccountId(), hand);
+        assertEquals(lease.revision(), rebound.authorityEpoch(), "only an absent binding uses the ordinary scene issuer");
+        assertEquals(beforeBinding.inventory().fungibleResources().accounts(),
+                projectedRecovery.inventory().fungibleResources().accounts(), "projection cannot alter lots or claims");
+        assertEquals(beforeBinding.humanPopulation().meals(), projectedRecovery.humanPopulation().meals());
         assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation.reduce(
                 conflicted, task.ownerId(), new BakerySceneReconciled(job.id(), leaseId, lease.revision(),
                         fence.authorityEpoch(), actor.body(), new FungiblePhysicalObservation.Stack(hand.address(), "minecraft:wheat", 63))));

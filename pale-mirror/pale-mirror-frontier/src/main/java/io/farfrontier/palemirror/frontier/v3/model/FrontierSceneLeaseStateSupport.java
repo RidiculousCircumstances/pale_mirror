@@ -150,7 +150,8 @@ public final class FrontierSceneLeaseStateSupport {
     public static FrontierWorldState abortPrepared(FrontierWorldState state, SceneLeaseId leaseId) {
         SceneLease current = state.sceneLeases().get(leaseId);
         if (current == null || current.status() != SceneLeaseStatus.PREPARED
-                && (current.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || current.recoveryEvidence().isPresent())) {
+                && (current.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || current.recoveryEvidence().isPresent())
+                && !unstartedConflict(state, current)) {
             throw new IllegalArgumentException("only an unstarted scene lease can be aborted before materialization");
         }
         // Cancelling process admission does not revoke an actor incarnation. It may already
@@ -158,6 +159,14 @@ public final class FrontierSceneLeaseStateSupport {
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans(), revokePreparedRecovery(state.fencedRecovery(), current));
+    }
+
+    /** A conflicted semantic scope cannot turn an unattempted body into a physical owner. */
+    private static boolean unstartedConflict(FrontierWorldState state, SceneLease lease) {
+        return lease.status() == SceneLeaseStatus.CONFLICT && lease.ambientHandoffActorIds().isEmpty()
+                && !hasBoundActorHand(state, lease)
+                && lease.members().stream().allMatch(member -> ActorBodyAuthority.require(state,
+                        ActorBodyAuthority.current(state, member.actorId())).phase() == FencedRecoveryPhase.PREPARED);
     }
 
     private static FrontierWorldState copy(FrontierWorldState state, Map<SubjectId, ActorLocation> actors,
