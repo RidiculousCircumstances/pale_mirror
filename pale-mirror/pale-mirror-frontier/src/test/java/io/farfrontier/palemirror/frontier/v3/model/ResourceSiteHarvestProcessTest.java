@@ -33,6 +33,74 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Goal-navigation regression and shared fixture; obsolete route-cursor tests are archived. */
 class ResourceSiteHarvestProcessTest {
+    @Test void personalPocketFoodSurvivesHarvestAdmissionAndRecovery() {
+        FrontierWorldState state = ready(initial(126L));
+        SubjectId settlement = new SubjectId("settlement:1"), site = new SubjectId("site:1-wheat-field");
+        ResidentProfile farmer = FrontierWorldStateSupport.availableWorkResident(state, settlement,
+                ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE).orElseThrow();
+        var rules = state.bootstrap().ruleset().residentLife();
+        state = state.withHumanPopulation(state.humanPopulation().consumeResidentFood(farmer.id(), 27_000L,
+                rules.satietyCapacityUnits(), rules));
+        SubjectId pocket = new SubjectId("custody:farmer-personal-food"), lot = new SubjectId("lot:farmer-personal-food");
+        var resources = state.inventory().fungibleResources().issue(
+                new ResourceLot(lot, settlement, "minecraft:bread", 2, "test:personal-food", List.of()),
+                new CustodyAccount(pocket, new ResourceCustody.Actor(farmer.id()), Map.of(lot, 2), Map.of(),
+                        Optional.of(new ActorItemSlot.Pocket(0))));
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        assertTrue(ActorExecutionCoordinator.ordinaryWorkAdmission(state, farmer.id()).permitted());
+        state = pendingHarvest(state, site, settlement);
+        var task = state.strategicPlans().tasks().values().stream()
+                .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
+        var events = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 27_085L));
+        var start = events.stream().map(ProposedEvent::payload).filter(ResourceSiteHarvestStarted.class::isInstance)
+                .map(ResourceSiteHarvestStarted.class::cast).filter(value -> value.job().workerId().equals(farmer.id()))
+                .findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, settlement,
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ResourceSiteHarvestProcess.reduceStarted(state, site, start);
+        assertEquals(resources.accounts().get(pocket), state.inventory().fungibleResources().accounts().get(pocket));
+        var codec = new FrontierWorldStateCodec(state.bootstrap());
+        assertEquals(state, codec.decode(codec.encode(state)));
+        assertEquals(resources.lots().get(lot), state.inventory().fungibleResources().lots().get(lot));
+    }
+
+    @Test void exhaustedPersonalCarryCapacityDefersHarvestWithoutQuarantiningOrDiscardingStock() {
+        FrontierWorldState state = ready(initial(126L));
+        SubjectId settlement = new SubjectId("settlement:1"), site = new SubjectId("site:1-wheat-field");
+        var resources = state.inventory().fungibleResources();
+        for (var resident : state.humanPopulation().residents().values()) {
+            if (!resident.settlementId().equals(settlement)
+                    || !SettlementWorkPolicy.permissions(state, settlement).permits(ResidentWorkKind.AGRICULTURE, resident.id()))
+                continue;
+            for (int i = 0; i < ActorCarriedResources.MAX_STACK_ACCOUNTS; i++) {
+                SubjectId lot = new SubjectId("lot:capacity-" + resident.id().value().replace(':', '-') + "-" + i);
+                SubjectId account = new SubjectId("custody:capacity-" + resident.id().value().replace(':', '-') + "-" + i);
+                resources = resources.issue(new ResourceLot(lot, settlement, "minecraft:stone", 1, "test:capacity", List.of()),
+                        new CustodyAccount(account, new ResourceCustody.Actor(resident.id()), Map.of(lot, 1), Map.of()));
+                assertFalse(ActorCarriedResources.canAddAccount(resources, resident.id(), account), "duplicate account rejects");
+            }
+            var full = resources;
+            assertThrows(IllegalArgumentException.class, () -> ActorCarriedResources.requireNewAccountCapacity(full,
+                    resident.id(), new SubjectId("custody:new-harvest")));
+        }
+        state = pendingHarvest(state.withInventory(state.inventory().withFungibleResources(resources)), site, settlement);
+        var task = state.strategicPlans().tasks().values().stream()
+                .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
+        var planned = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 27_085L));
+        assertTrue(planned.stream().map(ProposedEvent::payload).noneMatch(ResourceSiteHarvestStarted.class::isInstance));
+        assertTrue(planned.stream().map(ProposedEvent::payload).anyMatch(ScheduleEffect.Rescheduled.class::isInstance));
+        assertEquals(resources, state.inventory().fungibleResources());
+        assertEquals(StrategicTaskStatus.PENDING, state.strategicPlans().tasks().get(task.id()).status());
+    }
+
+    private static FrontierWorldState pendingHarvest(FrontierWorldState state, SubjectId site, SubjectId settlement) {
+        var opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 27_000L));
+        state = StrategicObjectiveProcess.reduceObjective(state, settlement,
+                (StrategicObjectiveSelected) opportunity.getFirst().payload());
+        return StrategicObjectiveProcess.reduceTask(state, settlement, (StrategicTaskPlanned) opportunity.get(1).payload());
+    }
+
     @Test void hungryFarmerStartsReadyHarvestWhenDepotHasNoBread() {
         FrontierWorldState state = ready(initial(126L));
         SubjectId site = new SubjectId("site:1-wheat-field");

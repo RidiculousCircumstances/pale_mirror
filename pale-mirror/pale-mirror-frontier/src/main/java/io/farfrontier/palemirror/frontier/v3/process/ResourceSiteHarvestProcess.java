@@ -898,10 +898,8 @@ public final class ResourceSiteHarvestProcess {
         if (!admitted) {
             SettlementWorkforce.requireAvailable(state, settlement.id(), List.of(job.workerId()));
             ActorExecutionCoordinator.requireOrdinaryWorkAdmission(state, job.workerId());
-            if (state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())
-                    || state.inventory().fungibleResources().accounts().values().stream().anyMatch(account ->
-                    account.custody().equals(new ResourceCustody.Actor(job.workerId()))))
-                throw new IllegalArgumentException("resource-site harvest actor already has resource custody");
+            ActorCarriedResources.requireNewAccountCapacity(state.inventory().fungibleResources(),
+                    job.workerId(), job.actorAccountId());
             if (job.progress().completedCropSlots() != 0 || job.progress().hasPendingCrop()
                     || job.returningForBatch() || job.navigationBlock().isPresent())
                 throw new IllegalArgumentException("field start must declare an unstarted semantic job");

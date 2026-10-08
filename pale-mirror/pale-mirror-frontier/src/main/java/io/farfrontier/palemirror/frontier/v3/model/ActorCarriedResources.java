@@ -73,8 +73,14 @@ public final class ActorCarriedResources {
                 .sorted(java.util.Comparator.comparing(CustodyAccount::id)).toList();
     }
 
+    /** Shared admission query; personal stock is not itself an exclusive work claim. */
+    public static boolean canAddAccount(FungibleResourceLedger ledger, SubjectId actorId, SubjectId accountId) {
+        Objects.requireNonNull(ledger); Objects.requireNonNull(actorId); Objects.requireNonNull(accountId);
+        return !ledger.accounts().containsKey(accountId) && accounts(ledger, actorId).size() < MAX_STACK_ACCOUNTS;
+    }
+
     public static void requireNewAccountCapacity(FungibleResourceLedger ledger, SubjectId actorId, SubjectId accountId) {
-        if (ledger.accounts().containsKey(accountId) || accounts(ledger, actorId).size() >= MAX_STACK_ACCOUNTS)
+        if (!canAddAccount(ledger, actorId, accountId))
             throw new IllegalArgumentException("actor resource account exists or carry capacity is exhausted");
     }
 

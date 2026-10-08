@@ -150,6 +150,8 @@ final class ResourceSiteHarvestPlanning {
         var field = state.resourceSites().cycle(site.id());
         ResourceSiteHarvestJob job = job(site, lifecycle, task, farmer,
                 new InventoryCustody.ContainerSlot(depot, slot.getAsInt()), field);
+        if (!ActorCarriedResources.canAddAccount(state.inventory().fungibleResources(),
+                farmer.id(), job.actorAccountId())) return java.util.Optional.empty();
         var selected = lifecycle.selectHarvestStart(job, field, worker.supportingSurface(), index -> actionable(field, index));
         if (selected.isEmpty()) return java.util.Optional.empty();
         job = job.withProgress(job.progress().withSelectedCropSlot(selected.getAsInt())).bindTarget(field);
