@@ -66,7 +66,7 @@ class FrontierV3HarvestSceneReleaseBarrierTest {
         var witness = new FrontierV3ResourceSiteDeliveryWitness(site, job.id(), job.intentId(), job.workerId(),
                 lease.members().getFirst().entityId(), lease.id(), lease.revision(), job.outputSlot().containerId(),
                 job.outputSlot().slot(), 64, 3L, "sha256:" + "a".repeat(64), "sha256:" + "b".repeat(64),
-                "witness:delivery-release", 0, true, job.outputSlot().slot() + 1);
+                "witness:delivery-release", 0, true, job.outputSlot().slot() + 1, 3L);
         var ledger = FrontierV3ResourceSiteLedger.fixture();
         assertTrue(FrontierV3HarvestSceneReleaseBarrier.ready(ledger, lease));
         ledger.beginFieldDelivery(witness);

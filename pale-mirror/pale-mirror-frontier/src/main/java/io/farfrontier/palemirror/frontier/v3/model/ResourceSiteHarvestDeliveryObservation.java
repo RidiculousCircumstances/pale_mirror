@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
-/** Observed farmer hand and complete depot layout for one bounded part or terminal cycle. */
+/** Observed farmer hand and depot layout. actorEpoch fences resource custody, not scene/body versions. */
 public record ResourceSiteHarvestDeliveryObservation(PhysicalObservationId id, PhysicalIntentId intentId,
                                                      SubjectId siteId, SubjectId jobId, SubjectId workerId,
                                                      SubjectId actorAccountId, SubjectId depotAccountId,

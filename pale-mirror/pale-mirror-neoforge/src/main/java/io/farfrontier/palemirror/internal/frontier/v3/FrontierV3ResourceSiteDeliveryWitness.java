@@ -12,10 +12,10 @@ import java.util.UUID;
 /** Durable before-effect owner of one bounded farmer-hand to depot-slot transfer. */
 record FrontierV3ResourceSiteDeliveryWitness(SubjectId siteId, SubjectId jobId, PhysicalIntentId intentId,
                                              SubjectId workerId, UUID entityId, SceneLeaseId leaseId,
-                                             long actorEpoch, SubjectId containerId, int slot, int quantity,
+                                             long leaseRevision, SubjectId containerId, int slot, int quantity,
                                              long depotEpoch, String beforeFingerprint, String afterFingerprint,
                                              String witnessId, int deliveredYieldBefore, boolean intermediate,
-                                             int successorSlot) {
+                                             int successorSlot, long resourceEpoch) {
     FrontierV3ResourceSiteDeliveryWitness {
         Objects.requireNonNull(siteId, "delivery site"); Objects.requireNonNull(jobId, "delivery job");
         Objects.requireNonNull(intentId, "delivery intent"); Objects.requireNonNull(workerId, "delivery worker");
@@ -24,7 +24,7 @@ record FrontierV3ResourceSiteDeliveryWitness(SubjectId siteId, SubjectId jobId, 
         Objects.requireNonNull(afterFingerprint, "delivery successor"); Objects.requireNonNull(witnessId, "delivery witness identity");
         if (!siteId.value().startsWith("site:") || !jobId.value().startsWith("job:site-harvest-")
                 || !intentId.value().startsWith("intent:site-harvest-") || !workerId.value().startsWith("resident:")
-                || !containerId.value().startsWith("container:") || actorEpoch < 1 || depotEpoch < 1
+                || !containerId.value().startsWith("container:") || leaseRevision < 1 || depotEpoch < 1 || resourceEpoch < 1
                 || slot < 0 || quantity < 1 || quantity > 64 || beforeFingerprint.equals(afterFingerprint)
                 || !beforeFingerprint.matches("sha256:[0-9a-f]{64}")
                 || !afterFingerprint.matches("sha256:[0-9a-f]{64}")
@@ -38,18 +38,20 @@ record FrontierV3ResourceSiteDeliveryWitness(SubjectId siteId, SubjectId jobId, 
 
     FrontierV3ResourceSiteDeliveryWitness(SubjectId siteId, SubjectId jobId, PhysicalIntentId intentId,
                                           SubjectId workerId, UUID entityId, SceneLeaseId leaseId,
-                                          long actorEpoch, SubjectId containerId, int slot, int quantity,
+                                          long leaseRevision, SubjectId containerId, int slot, int quantity,
                                           long depotEpoch, String beforeFingerprint, String afterFingerprint,
-                                          String witnessId) {
-        this(siteId, jobId, intentId, workerId, entityId, leaseId, actorEpoch, containerId, slot, quantity,
-                depotEpoch, beforeFingerprint, afterFingerprint, witnessId, 0, false, -1);
+                                          String witnessId, long resourceEpoch) {
+        this(siteId, jobId, intentId, workerId, entityId, leaseId, leaseRevision, containerId, slot, quantity,
+                depotEpoch, beforeFingerprint, afterFingerprint, witnessId, 0, false, -1, resourceEpoch);
     }
 
     CompoundTag write() {
         CompoundTag tag = new CompoundTag();
         tag.putString("site", siteId.value()); tag.putString("job", jobId.value()); tag.putString("intent", intentId.value());
         tag.putString("worker", workerId.value()); tag.putUUID("entity", entityId); tag.putString("lease", leaseId.value());
-        tag.putLong("actorEpoch", actorEpoch); tag.putString("container", containerId.value()); tag.putInt("slot", slot);
+        // Keep the historical wire key for its original scene-version meaning.
+        tag.putLong("actorEpoch", leaseRevision); tag.putString("container", containerId.value()); tag.putInt("slot", slot);
+        tag.putLong("resourceEpoch", resourceEpoch);
         tag.putInt("quantity", quantity); tag.putLong("depotEpoch", depotEpoch);
         tag.putString("before", beforeFingerprint); tag.putString("after", afterFingerprint);
         tag.putString("witness", witnessId); tag.putInt("deliveredBefore", deliveredYieldBefore);
@@ -61,7 +63,7 @@ record FrontierV3ResourceSiteDeliveryWitness(SubjectId siteId, SubjectId jobId, 
         for (String key : java.util.List.of("site", "job", "intent", "worker", "lease", "container", "before", "after", "witness")) {
             if (!tag.contains(key, Tag.TAG_STRING)) throw new IllegalStateException("incomplete field delivery witness: " + key);
         }
-        for (String key : java.util.List.of("actorEpoch", "depotEpoch")) {
+        for (String key : java.util.List.of("actorEpoch", "depotEpoch", "resourceEpoch")) {
             if (!tag.contains(key, Tag.TAG_LONG)) throw new IllegalStateException("incomplete field delivery witness: " + key);
         }
         for (String key : java.util.List.of("slot", "quantity", "deliveredBefore", "successorSlot")) {
@@ -74,6 +76,6 @@ record FrontierV3ResourceSiteDeliveryWitness(SubjectId siteId, SubjectId jobId, 
                 new SceneLeaseId(tag.getString("lease")), tag.getLong("actorEpoch"), new SubjectId(tag.getString("container")),
                 tag.getInt("slot"), tag.getInt("quantity"), tag.getLong("depotEpoch"), tag.getString("before"),
                 tag.getString("after"), tag.getString("witness"), tag.getInt("deliveredBefore"),
-                tag.getBoolean("intermediate"), tag.getInt("successorSlot"));
+                tag.getBoolean("intermediate"), tag.getInt("successorSlot"), tag.getLong("resourceEpoch"));
     }
 }

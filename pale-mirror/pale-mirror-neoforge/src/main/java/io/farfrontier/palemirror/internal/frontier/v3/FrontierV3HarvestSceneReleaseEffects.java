@@ -21,7 +21,13 @@ final class FrontierV3HarvestSceneReleaseEffects implements FrontierV3SceneRelea
                 departed, ActorContainerItemOrder.Hand.OFF).orElse(null);
         if (hand == null || !hand.itemKind().equals("minecraft:wheat"))
             return new Conflict("bound-hand-release-physical-foreign");
-        var payload = new ResourceSiteHarvestHandRelease(job.siteId(), job.id(), job.actorAccountId(), lease.revision(),
+        var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
+                lease.members().getFirst().entityId()), hand.itemKind(), hand.quantity());
+        final PhysicalStackBinding binding;
+        try { binding = ActorCarriedResources.requireBinding(state.inventory().fungibleResources(),
+                job.workerId(), job.actorAccountId(), stack); }
+        catch (IllegalArgumentException invalid) { return new Conflict("bound-hand-release-preflight:" + invalid.getMessage()); }
+        var payload = new ResourceSiteHarvestHandRelease(job.siteId(), job.id(), job.actorAccountId(), binding.authorityEpoch(),
                 new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
                         lease.members().getFirst().entityId()), hand.itemKind(), hand.quantity()), exit);
         try { ResourceSiteHarvestProcess.reduceHandRelease(state, state.resourceSite(job.siteId()).settlementId(), payload); }

@@ -146,8 +146,7 @@ public final class ResourceSiteHarvestProcess {
                 || !FrontierSceneBehaviors.isResourceSiteHarvest(lease)
                 || !FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())
                 || !FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())
-                || lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId())
-                || lease.revision() != released.actorEpoch())
+                || lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId()))
             throw new IllegalArgumentException("harvest hand release lacks its draining worker lease");
         PhysicalStackAddress.ActorHand address = (PhysicalStackAddress.ActorHand) released.observedHand().address();
         if (!address.actorId().equals(job.workerId())
@@ -224,7 +223,7 @@ public final class ResourceSiteHarvestProcess {
             if (lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId())
                     || !hand.address().actorId().equals(job.workerId())
                     || !hand.address().entityId().equals(lease.members().getFirst().entityId())
-                    || hand.authorityEpoch() != lease.revision()
+                    || hand.authorityEpoch() != ResourceSiteHarvestCargo.handEpoch(state, job, lease)
                     || hand.quantity() != carriedAfter)
                 throw new IllegalArgumentException("HOT crop work disagrees with its exact actor hand and custody epoch");
             FungibleResourceLedger resources = inventory.fungibleResources();

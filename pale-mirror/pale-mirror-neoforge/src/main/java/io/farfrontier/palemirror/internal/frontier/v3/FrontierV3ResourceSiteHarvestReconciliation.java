@@ -69,17 +69,21 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                         ResourceFieldCycle.WorkOutcome.HARVESTED, binding.id(), binding.dueAt().ticks(),
                         java.util.Optional.of(new ResourceSiteHarvestProgressed.HandObservation(
                                 (PhysicalStackAddress.ActorHand) receipt.observedHand().address(),
-                                lease.revision(), receipt.observedHand().quantity())));
+                                pending.orElseThrow().handEffect().orElseThrow().authorityEpoch(), receipt.observedHand().quantity())));
                 var recovered = new ResourceSiteHarvestEffectReconciled(receipt, applied);
                 try { ResourceSiteHarvestSceneReconciliation.reduceApplied(state, job.siteId(), recovered); }
-                catch (IllegalArgumentException unresolved) { continue; }
+                catch (IllegalArgumentException unresolved) {
+                    FrontierV3PhysicalWaitTrace.reconciliation(worker, lease, unresolved.getMessage()); continue;
+                }
                 FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_effect_reconciled", lease,
                         FrontierV3CommandSubmission.submitBound(runtime, "resource-site-harvest-effect-reconciled",
                                 lease.id().value(), recovered, binding));
                 return true;
             }
             try { ResourceSiteHarvestSceneReconciliation.reduce(state, job.siteId(), receipt); }
-            catch (IllegalArgumentException unresolved) { continue; }
+            catch (IllegalArgumentException unresolved) {
+                FrontierV3PhysicalWaitTrace.reconciliation(worker, lease, unresolved.getMessage()); continue;
+            }
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_scene_reconciled", lease,
                     FrontierV3CommandSubmission.submit(runtime, "resource-site-harvest-scene-reconciled", lease.id().value(), receipt));
             return true;
@@ -111,7 +115,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                 && cycle.physicalWorkTransition(cell).filter(pending.transition()::equals).isPresent()
                 && pending.handEffect().filter(hand -> hand.siteId().equals(job.siteId()) && hand.jobId().equals(job.id())
                     && hand.actorId().equals(job.workerId()) && hand.entityId().equals(lease.members().getFirst().entityId())
-                    && hand.authorityEpoch() == lease.revision() && hand.beforeCount() == job.undeliveredYieldQuantity()).isPresent());
+                    && hand.beforeCount() == job.undeliveredYieldQuantity()).isPresent());
     }
 
     private static boolean currentField(ServerLevel level, SceneLease lease, ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {

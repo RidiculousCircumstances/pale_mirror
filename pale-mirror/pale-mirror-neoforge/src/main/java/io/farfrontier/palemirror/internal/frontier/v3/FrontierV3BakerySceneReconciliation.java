@@ -35,7 +35,9 @@ final class FrontierV3BakerySceneReconciliation {
             var receipt = new BakeryStationSceneReconciled(jobId, lease.id(), lease.revision(),
                     fence.authorityEpoch(), body.getUUID(), observed.orElseThrow(), phase);
             try { BakerySceneReconciliation.reduce(state, job.settlementId(), receipt); }
-            catch (IllegalArgumentException unresolved) { return; }
+            catch (IllegalArgumentException unresolved) {
+                FrontierV3PhysicalWaitTrace.reconciliation(body, lease, unresolved.getMessage()); return;
+            }
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_station_scene_reconciled", lease,
                     FrontierV3CommandSubmission.submit(runtime, "bakery-station-scene-reconciled", lease.id().value(), receipt));
             return;
@@ -45,7 +47,9 @@ final class FrontierV3BakerySceneReconciliation {
                 new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(member.actorId(), member.entityId(),
                         ActorContainerItemOrder.Hand.MAIN), net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(hand.getItem()).toString(), hand.getCount()));
         try { BakerySceneReconciliation.reduce(state, job.settlementId(), receipt); }
-        catch (IllegalArgumentException unresolved) { return; }
+        catch (IllegalArgumentException unresolved) {
+            FrontierV3PhysicalWaitTrace.reconciliation(body, lease, unresolved.getMessage()); return;
+        }
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_scene_reconciled", lease,
                 FrontierV3CommandSubmission.submit(runtime, "bakery-scene-reconciled", lease.id().value(), receipt));
     }

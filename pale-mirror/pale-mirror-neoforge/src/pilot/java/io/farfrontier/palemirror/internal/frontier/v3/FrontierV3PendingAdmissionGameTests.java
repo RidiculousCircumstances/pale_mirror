@@ -39,7 +39,7 @@ public final class FrontierV3PendingAdmissionGameTests {
         var witness = new FrontierV3ResourceSiteDeliveryWitness(site, job.id(), job.intentId(), job.workerId(),
                 lease.members().getFirst().entityId(), lease.id(), lease.revision(), job.outputSlot().containerId(),
                 job.outputSlot().slot(), 64, 3L, "sha256:" + "a".repeat(64), "sha256:" + "b".repeat(64),
-                "witness:pending-delivery-barrier", 0, true, job.outputSlot().slot() + 1);
+                "witness:pending-delivery-barrier", 0, true, job.outputSlot().slot() + 1, 3L);
         try {
             ledger.beginFieldDelivery(witness);
             helper.assertTrue(!FrontierV3SceneBehaviorRegistry.releaseReady(helper.getLevel(), state, lease),

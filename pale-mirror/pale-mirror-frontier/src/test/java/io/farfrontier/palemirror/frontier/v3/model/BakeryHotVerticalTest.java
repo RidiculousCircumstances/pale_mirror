@@ -285,6 +285,11 @@ class BakeryHotVerticalTest {
         assertEquals(BakeryWorkState.Phase.STATION_LOAD, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
         // The actual pickup batch survives a failed no-demand release. Fresh recovery
         // may resume this exact body/hand, never clear an unknown pending recipe effect.
+        var carriedResources = state.inventory().fungibleResources();
+        carriedResources = carriedResources.releaseBindings(work.actorAccountId(), 1L);
+        carriedResources = carriedResources.rebind(work.actorAccountId(), 37L,
+                FungiblePhysicalObservation.bind(carriedResources, work.actorAccountId(), 37L, List.of(hand)));
+        state = state.withInventory(state.inventory().withFungibleResources(carriedResources));
         var conflicted = state.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
         var fence = conflicted.fencedRecovery().current().get(
                 ActorBodyId.recoveryBindingId(job.workerId()));
@@ -338,7 +343,7 @@ class BakeryHotVerticalTest {
                 .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
         var release = new SceneLeaseReleased(leaseId, List.of(new SceneMemberPosition(job.workerId(), actor.body(),
                 actor.condition().health())));
-        var handRelease = new BakeryHotHandRelease(job.id(), work.actorAccountId(), 1L, hand, release);
+        var handRelease = new BakeryHotHandRelease(job.id(), work.actorAccountId(), 37L, hand, release);
         assertEquals(handRelease, codecs.decode(handRelease.type(), codecs.encode(handRelease)),
                 "scene release replay must retain the baker's main hand");
         blockedWithCargo = ProductionProcess.reduceBakeryHotHandRelease(blockedWithCargo, task.ownerId(), handRelease);
@@ -386,7 +391,7 @@ class BakeryHotVerticalTest {
                 "wheat placed in the output port cannot masquerade as station input");
         state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), new BakeryHotEffectObserved(
                 job.id(), leaseId, BakeryWorkState.Phase.STATION_LOAD, station.workerStation().standingBody(),
-                1L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
+                37L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(machine, station.inputSlot())),
                 "minecraft:wheat", 64))));
         assertEquals(BakeryWorkState.Phase.PROCESSING, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());

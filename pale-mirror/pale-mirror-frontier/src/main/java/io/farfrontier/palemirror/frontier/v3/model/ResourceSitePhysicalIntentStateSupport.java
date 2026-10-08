@@ -129,7 +129,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
         }
         SceneLease lease = FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, receipt.leaseId());
         if (!lease.members().getFirst().entityId().equals(receipt.entityId())
-                || lease.revision() != receipt.actorEpoch()) {
+                || receipt.harvestedQuantity() == 0 && lease.revision() != receipt.actorEpoch()) {
             throw new IllegalArgumentException("field delivery lacks its exact HOT farmer body and epoch");
         }
         ActorLocation actor = state.actorLocations().get(job.workerId());
@@ -244,8 +244,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
             throw new IllegalArgumentException("field batch delivery lacks its exact pending full hand and intent");
         validateHarvestDeliveryReceipt(state.bootstrap(), intent, receipt);
         SceneLease lease = FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, receipt.leaseId());
-        if (!lease.members().getFirst().entityId().equals(receipt.entityId())
-                || lease.revision() != receipt.actorEpoch())
+        if (!lease.members().getFirst().entityId().equals(receipt.entityId()))
             throw new IllegalArgumentException("field batch delivery lacks its exact HOT farmer body and epoch");
         ActorLocation actor = state.actorLocations().get(job.workerId());
         if (actor == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job))

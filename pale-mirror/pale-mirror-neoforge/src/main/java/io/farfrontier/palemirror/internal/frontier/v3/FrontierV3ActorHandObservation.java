@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestCargo;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
@@ -91,7 +92,8 @@ final class FrontierV3ActorHandObservation {
         ItemStack held = worker.getOffhandItem();
         return classify(job.workerId(), member.entityId(), held.isEmpty() ? "" : Objects.toString(BuiltInRegistries.ITEM.getKey(held.getItem()), ""),
                 held.isEmpty() ? 0 : held.getCount(), held.isEmpty() || ItemStack.isSameItemSameComponents(held,
-                        new ItemStack(Items.WHEAT, held.getCount()))).fromWorld(job.siteId(), job.id(), lease.revision());
+                        new ItemStack(Items.WHEAT, held.getCount()))).fromWorld(job.siteId(), job.id(),
+                        ResourceSiteHarvestCargo.handEpoch(state, job, lease));
     }
 
     static Review classify(SubjectId actorId, UUID entityId, String itemKind, int count) {

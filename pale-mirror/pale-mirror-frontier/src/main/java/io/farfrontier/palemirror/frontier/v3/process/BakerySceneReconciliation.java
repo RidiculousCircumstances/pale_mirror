@@ -83,10 +83,11 @@ public final class BakerySceneReconciliation {
                 || !kind.equals(receipt.observedHand().itemKind()) || receipt.observedHand().quantity() != job.outputCount()
                 || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
                 || bindings.size() != 1 || !bindings.getFirst().address().equals(hand)
-                || bindings.getFirst().authorityEpoch() != lease.revision()
                 || !bindings.getFirst().lotQuantities().equals(account.lotQuantities())
                 || !bindings.getFirst().claimQuantities().equals(account.claimQuantities()))
             throw new IllegalArgumentException("bakery recovery cannot replace or replay its cargo/effect");
+        ActorCarriedResources.requireBinding(state.inventory().fungibleResources(), job.workerId(),
+                work.actorAccountId(), receipt.observedHand());
         var recoveryId = ActorBodyId.recoveryBindingId(job.workerId());
         var fence = state.fencedRecovery().current().get(recoveryId);
         if (fence == null || fence.asset() != FencedRecoveryAsset.BODY

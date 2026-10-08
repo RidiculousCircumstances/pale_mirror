@@ -230,7 +230,9 @@ final class FrontierV3DiagnosticJson {
         long retainedConflicts = state.diagnosticIncidents().incidents().values().stream().filter(DiagnosticIncident::awaitingReview).count();
         long custodyDiagnostics = state.diagnosticIncidents().incidents().values().stream().filter(value -> value.diagnostic().owner().kind()
                 == io.farfrontier.palemirror.frontier.v3.model.DiagnosticOwnerKind.REPLICA_CUSTODY).count();
-        String verdict = retainedConflicts == 0 ? "green" : "blocked";
+        long sceneConflicts = state.sceneLeases().values().stream().filter(value -> value.status()
+                == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CONFLICT).count();
+        String verdict = retainedConflicts == 0 && sceneConflicts == 0 ? "green" : "blocked";
         return base("summary", "", checkpoint)
                 + ",\"status\":\"ok\",\"diagnosticVerdict\":\"" + verdict + "\",\"requiredConflicts\":" + retainedConflicts
                 + ",\"settlements\":" + state.bootstrap().settlements().size()
@@ -240,6 +242,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"intents\":" + state.physicalIntents().size()
                 + ",\"ambientLeases\":" + state.ambientLeases().size()
                 + ",\"sceneLeases\":" + state.sceneLeases().size()
+                + ",\"sceneConflicts\":" + sceneConflicts
                 + ",\"items\":" + state.inventory().items().size()
                 + ",\"inventoryConflicts\":" + state.inventory().conflicts().size()
                 + ",\"replicaCustodyDiagnostics\":" + custodyDiagnostics

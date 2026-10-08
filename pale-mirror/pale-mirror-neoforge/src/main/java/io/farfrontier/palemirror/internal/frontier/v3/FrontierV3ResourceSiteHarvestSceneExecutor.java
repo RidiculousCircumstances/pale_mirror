@@ -712,7 +712,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 .filter(value -> value.accountId().equals(job.actorAccountId())).toList();
         if (!binding.isEmpty()) {
             if (pending == null) return false;
-            if (binding.size() != 1 || binding.getFirst().authorityEpoch() != lease.revision()
+            if (binding.size() != 1
                     || hand.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
                     || hand.stack().orElseThrow().quantity() != part.quantity()
                     || !binding.getFirst().address().equals(hand.stack().orElseThrow().address())) {

@@ -195,7 +195,7 @@ class FrontierV3ResourceSiteCellClaimTest {
                 new SubjectId("resident:cell-claim-test"), java.util.UUID.fromString("00000000-0000-0000-0000-000000000091"),
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:field-delivery-cell-claim-test"),
                 2L, new SubjectId("container:1-depot"), 1, 7, 3L,
-                "sha256:" + "a".repeat(64), "sha256:" + "b".repeat(64), "witness:field-delivery-test");
+                "sha256:" + "a".repeat(64), "sha256:" + "b".repeat(64), "witness:field-delivery-test", 7L);
         activeLedger.beginFieldHandProjection(hand);
         assertThrows(IllegalStateException.class, () -> activeLedger.beginFieldDelivery(delivery),
                 "depot effect cannot overtake an unretired farmer-hand projection");
@@ -206,8 +206,8 @@ class FrontierV3ResourceSiteCellClaimTest {
         assertTrue(restoredDelivery.hasPendingFieldDelivery(delivery.containerId()));
         assertThrows(IllegalStateException.class, () -> restoredDelivery.beginFieldDelivery(new FrontierV3ResourceSiteDeliveryWitness(
                 delivery.siteId(), delivery.jobId(), delivery.intentId(), delivery.workerId(), delivery.entityId(), delivery.leaseId(),
-                delivery.actorEpoch(), delivery.containerId(), 2, delivery.quantity(), delivery.depotEpoch(),
-                delivery.beforeFingerprint(), delivery.afterFingerprint(), delivery.witnessId())));
+                delivery.leaseRevision(), delivery.containerId(), 2, delivery.quantity(), delivery.depotEpoch(),
+                delivery.beforeFingerprint(), delivery.afterFingerprint(), delivery.witnessId(), delivery.resourceEpoch())));
         restoredDelivery.retireFieldDelivery(delivery);
         assertTrue(restoredDelivery.pendingFieldDeliveries().isEmpty());
         activeLedger.retireFieldDelivery(delivery);
@@ -284,7 +284,7 @@ class FrontierV3ResourceSiteCellClaimTest {
                 new PhysicalIntentId("intent:site-harvest-cell-claim-cold"), hand.workerId(),
                 hand.entityId(), hand.leaseId(), hand.actorEpoch(), new SubjectId("container:1-depot"),
                 1, 64, 3L, "sha256:" + "a".repeat(64), "sha256:" + "b".repeat(64),
-                "witness:field-cold-delivery");
+                "witness:field-cold-delivery", 5L);
         var pendingField = FrontierV3ResourceSiteLedger.fixture();
         pendingField.reserveFieldInitialization(site(), INTENT);
         for (var ledger : List.of(FrontierV3ResourceSiteLedger.fixture(), pendingField)) {

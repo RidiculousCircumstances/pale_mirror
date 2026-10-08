@@ -45,6 +45,10 @@ final class FrontierV3PhysicalWaitTrace {
 
     static void clear(Entity body) { WAITS.remove(body); }
 
+    static void reconciliation(Entity body, SceneLease lease, String reason) {
+        emit(body, lease.id().value(), "reconciliation=" + reason + ";sceneRevision=" + lease.revision());
+    }
+
     private static void emit(Entity body, String subject, String reason) {
         if (!reason.equals(WAITS.put(body, reason))) PaleMirrorMod.LOGGER.warn(
                 "PMV3_PHYSICAL_WAIT subject={} entity={} position={} reason={}", subject,

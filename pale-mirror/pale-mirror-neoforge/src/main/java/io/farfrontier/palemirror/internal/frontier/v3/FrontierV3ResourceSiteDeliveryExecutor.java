@@ -76,7 +76,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 if (hand.disposition() == FrontierV3ActorHandObservation.Disposition.EMPTY
                         && !state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())) {
                     if (startRunningAtReturn(runtime, job, scene, intent.status())) return;
-                    confirm(runtime, state, job, scene, 0, 0L, List.of(), "not_applicable",
+                    confirm(runtime, state, job, scene, scene.revision(), 0, 0L, List.of(), "not_applicable",
                             "witness:field-zero-" + job.id().value().substring("job:".length()));
                     return;
                 }
@@ -88,7 +88,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             var binding = state.inventory().fungibleResources().bindings().values().stream()
                     .filter(value -> value.accountId().equals(job.actorAccountId())).toList();
             if (account == null || account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() != quantity
-                    || binding.size() != 1 || binding.getFirst().authorityEpoch() != scene.revision()
+                    || binding.size() != 1
                     || !binding.getFirst().address().equals(hand.stack().orElseThrow().address())) continue;
             SubjectId depot = job.outputSlot().containerId();
             // A COLD-worked full part may first join HOT at the depot. Its intent is still
@@ -130,7 +130,9 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                     job.outputSlot().slot(), quantity, custody.authorityEpoch(), replica.fingerprint(), after,
                     "witness:field-delivery-" + job.id().value().substring("job:".length()) + "-part-" + job.deliveredYieldQuantity(),
                     job.deliveredYieldQuantity(), intermediate,
-                    intermediate ? job.batchSuccessorSlot().map(InventoryCustody.ContainerSlot::slot).orElse(-1) : -1);
+                    intermediate ? job.batchSuccessorSlot().map(InventoryCustody.ContainerSlot::slot).orElse(-1) : -1,
+                    ActorCarriedResources.requireBinding(state.inventory().fungibleResources(), job.workerId(),
+                            job.actorAccountId(), hand.stack().orElseThrow()).authorityEpoch());
             ledger.beginFieldDelivery(witness);
             ledger.persist(level);
             return;
@@ -215,7 +217,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         if ((!witness.intermediate() && !job.progress().complete()) || !cycle.pendingPlayerBreaks().isEmpty()
                 || ResourceSiteHarvestCargo.quantity(state, job) != witness.quantity()) return false;
         SceneLease scene = state.sceneLeases().get(witness.leaseId());
-        if (scene == null || scene.status() != SceneLeaseStatus.HOT || scene.revision() != witness.actorEpoch()
+        if (scene == null || scene.status() != SceneLeaseStatus.HOT || scene.revision() != witness.leaseRevision()
                 || scene.members().size() != 1 || !scene.members().getFirst().entityId().equals(witness.entityId())) return false;
         if (!workerAtDepot(level, state, job, scene)) return false;
         PhysicalCustodyLease custody = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(witness.containerId()));
@@ -249,7 +251,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
                 || !account.lotQuantities().equals(java.util.Map.of(part.id(), part.quantity()))
                 || !account.claimQuantities().isEmpty() || bindings.size() != 1
-                || bindings.getFirst().authorityEpoch() != witness.actorEpoch()
+                || bindings.getFirst().authorityEpoch() != witness.resourceEpoch()
                 || !bindings.getFirst().address().equals(new PhysicalStackAddress.ActorHand(job.workerId(), witness.entityId()))) {
             FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-actor-lot-diverged");
             return true;
@@ -292,7 +294,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         if (chestState != ChestState.AFTER || !handAfter) return false;
         List<FungiblePhysicalObservation.Stack> stacks = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(
                 chest, state, witness.containerId());
-        confirm(runtime, state, job, scene, witness.quantity(), witness.depotEpoch(), stacks,
+        confirm(runtime, state, job, scene, witness.resourceEpoch(), witness.quantity(), witness.depotEpoch(), stacks,
                 witness.afterFingerprint(), witness.witnessId());
         FrontierWorldState current = runtime.decodedState().orElse(null);
         if (current != null && (witness.intermediate() && acceptedBatchObservation(current, witness)
@@ -320,7 +322,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
     }
 
     private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
-                                ResourceSiteHarvestJob job, SceneLease scene, int quantity, long depotEpoch,
+                                ResourceSiteHarvestJob job, SceneLease scene, long resourceEpoch, int quantity, long depotEpoch,
                                 List<FungiblePhysicalObservation.Stack> stacks, String fingerprint, String witnessId) {
         PhysicalCustodyLease custody = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(job.outputSlot().containerId()));
         long revision = quantity == 0 ? runtime.canonicalState().orElseThrow().revision().value()
@@ -329,7 +331,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 ? batchObservationId(job.id(), job.deliveredYieldQuantity()) : new PhysicalObservationId(
                 "observation:field-delivery-" + job.id().value().substring("job:".length())),
                 job.intentId(), job.siteId(), job.id(), job.workerId(), job.actorAccountId(), job.depotAccountId(),
-                scene.id(), scene.members().getFirst().entityId(), scene.revision(), quantity, depotEpoch,
+                scene.id(), scene.members().getFirst().entityId(), resourceEpoch, quantity, depotEpoch,
                 stacks, fingerprint, revision, witnessId);
         CommandResult result = FrontierV3CommandSubmission.submit(runtime, "field-delivery", job.id().value(),
                 job.returningForBatch() ? new ResourceSiteHarvestBatchDelivered(receipt, job.deliveredYieldQuantity())

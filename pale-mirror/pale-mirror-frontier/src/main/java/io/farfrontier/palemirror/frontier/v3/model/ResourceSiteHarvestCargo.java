@@ -23,6 +23,16 @@ public final class ResourceSiteHarvestCargo {
         return part(state, job).map(ResourceLot::quantity).orElse(0);
     }
 
+    /** New yield/projection is issued by the admitted scene; a retained binding keeps its resource epoch. */
+    public static long handEpoch(FrontierWorldState state, ResourceSiteHarvestJob job, SceneLease lease) {
+        int quantity = quantity(state, job);
+        if (quantity == 0 || state.inventory().fungibleResources().bindings().values().stream()
+                .noneMatch(binding -> binding.accountId().equals(job.actorAccountId()))) return lease.revision();
+        return ActorCarriedResources.requireBinding(state.inventory().fungibleResources(), job.workerId(),
+                job.actorAccountId(), new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
+                        job.workerId(), lease.members().getFirst().entityId()), "minecraft:wheat", quantity)).authorityEpoch();
+    }
+
     public static Optional<ResourceLot> part(FrontierWorldState state, ResourceSiteHarvestJob job) {
         var owner = state.resourceSite(job.siteId()).settlementId();
         var resources = state.inventory().fungibleResources();

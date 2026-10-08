@@ -9,6 +9,26 @@ public final class ActorCarriedResources {
     public static final int MAX_STACK_ACCOUNTS = 10;
     private ActorCarriedResources() { }
 
+    /** The resource ledger, not the activity scene or body fence, owns this binding's epoch. */
+    public static PhysicalStackBinding requireBinding(FungibleResourceLedger ledger, SubjectId actorId,
+                                                       SubjectId accountId, FungiblePhysicalObservation.Stack observed) {
+        Objects.requireNonNull(ledger); Objects.requireNonNull(actorId); Objects.requireNonNull(accountId);
+        Objects.requireNonNull(observed);
+        CustodyAccount account = ledger.accounts().get(accountId);
+        var bindings = ledger.bindings().values().stream().filter(value -> value.accountId().equals(accountId)).toList();
+        if (!(observed.address() instanceof PhysicalStackAddress.ActorStack stack) || !stack.actorId().equals(actorId)
+                || account == null || !account.custody().equals(new ResourceCustody.Actor(actorId))
+                || bindings.size() != 1)
+            throw new IllegalArgumentException("carried stack lacks its exact actor account and sole binding");
+        var binding = bindings.getFirst();
+        if (!binding.address().equals(observed.address()) || !binding.itemKind().equals(observed.itemKind())
+                || binding.quantity() != observed.quantity()
+                || !binding.lotQuantities().equals(account.lotQuantities())
+                || !binding.claimQuantities().equals(account.claimQuantities()))
+            throw new IllegalArgumentException("carried stack disagrees with its current resource binding");
+        return binding;
+    }
+
     /** Quantity in one exact homogeneous stack account, not in another actor or a work-area counter. */
     public static int stackQuantity(FungibleResourceLedger ledger, SubjectId actorId, SubjectId accountId,
                                      SubjectId economicOwnerId, String itemKind) {

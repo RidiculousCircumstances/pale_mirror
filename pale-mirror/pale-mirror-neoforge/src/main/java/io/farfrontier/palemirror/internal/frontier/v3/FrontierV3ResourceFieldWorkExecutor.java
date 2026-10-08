@@ -97,7 +97,8 @@ final class FrontierV3ResourceFieldWorkExecutor {
             if (outcome == ResourceFieldCycle.WorkOutcome.HARVESTED) {
                 var handBefore = FrontierV3ActorHandObservation.observe(level, state, lease, job);
                 var effect = new FrontierV3ResourceFieldWitness.HandEffect(job.siteId(), job.id(), job.workerId(),
-                        lease.members().getFirst().entityId(), lease.revision(), ResourceSiteHarvestCargo.quantity(state, job));
+                        lease.members().getFirst().entityId(), ResourceSiteHarvestCargo.handEpoch(state, job, lease),
+                        ResourceSiteHarvestCargo.quantity(state, job));
                 if (!handBefore.matchesBefore(effect))
                     return Result.conflict("hand-before-" + handBefore.disposition().name().toLowerCase(java.util.Locale.ROOT));
                 witness = witness.beginHarvest(transition.orElseThrow(), cause(job, cycle, id), effect, before, handBefore);
@@ -177,7 +178,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
             return Result.conflict("hand-result-" + observed.disposition().name().toLowerCase(java.util.Locale.ROOT));
         return Result.ready(outcome, new ResourceSiteHarvestProgressed.HandObservation(
                 new PhysicalStackAddress.ActorHand(job.workerId(), lease.members().getFirst().entityId()),
-                lease.revision(), count));
+                ResourceSiteHarvestCargo.handEpoch(state, job, lease), count));
     }
 
     private static Result observeInterruption(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

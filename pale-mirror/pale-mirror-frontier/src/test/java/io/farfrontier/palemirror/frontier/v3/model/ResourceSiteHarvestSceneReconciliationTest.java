@@ -17,6 +17,15 @@ class ResourceSiteHarvestSceneReconciliationTest {
         var state = preceding == 0 ? hot.state() : oneObservedCrop(hot);
         var job = state.resourceSites().site(hot.site()).harvestJobs().values().stream()
                 .reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
+        long resourceEpoch = preceding == 0 ? hot.lease().revision() : 37L;
+        if (preceding > 0) {
+            var resources = state.inventory().fungibleResources().releaseBindings(job.actorAccountId(), hot.lease().revision());
+            resources = resources.rebind(job.actorAccountId(), resourceEpoch, FungiblePhysicalObservation.bind(resources,
+                    job.actorAccountId(), resourceEpoch, java.util.List.of(new FungiblePhysicalObservation.Stack(
+                            new PhysicalStackAddress.ActorHand(job.workerId(), hot.lease().members().getFirst().entityId()),
+                            "minecraft:wheat", preceding))));
+            state = state.withInventory(state.inventory().withFungibleResources(resources));
+        }
         state = ResourceSiteHarvestProcessTest.inspectGoal(state, hot.site(), job, hot.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         job = state.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow();
@@ -35,7 +44,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
                 new ResourceSiteHarvestProgressed(hot.site(), field.epoch(), job.id(), job.progress().completedCropSlots() + 1,
                         field.layout().revision(), job.target().cellId(), job.target().generation(),
                         ResourceFieldCycle.WorkOutcome.HARVESTED, due.id(), due.dueAt().ticks(), java.util.Optional.of(
-                        new ResourceSiteHarvestProgressed.HandObservation(address, lease.revision(), preceding + 1))));
+                        new ResourceSiteHarvestProgressed.HandObservation(address, resourceEpoch, preceding + 1))));
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         assertEquals(receipt, codecs.decode(receipt.type(), codecs.encode(receipt)));
         var isolated = state;
@@ -43,6 +52,12 @@ class ResourceSiteHarvestSceneReconciliationTest {
                 receipt.recovery().observedBody(), hand);
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestSceneReconciliation.reduceApplied(isolated,
                 hot.site(), new ResourceSiteHarvestEffectReconciled(staleEpoch, receipt.applied())));
+        var wrongResource = new ResourceSiteHarvestProgressed(hot.site(), field.epoch(), job.id(),
+                receipt.applied().completedCropSlots(), field.layout().revision(), job.target().cellId(), job.target().generation(),
+                ResourceFieldCycle.WorkOutcome.HARVESTED, due.id(), due.dueAt().ticks(), java.util.Optional.of(
+                        new ResourceSiteHarvestProgressed.HandObservation(address, resourceEpoch + 1, preceding + 1)));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestSceneReconciliation.reduceApplied(isolated,
+                hot.site(), new ResourceSiteHarvestEffectReconciled(receipt.recovery(), wrongResource)));
         var wrongGeneration = new ResourceSiteHarvestProgressed(hot.site(), field.epoch(), job.id(),
                 receipt.applied().completedCropSlots(), field.layout().revision(), job.target().cellId(), job.target().generation() + 1,
                 ResourceFieldCycle.WorkOutcome.HARVESTED, due.id(), due.dueAt().ticks(), receipt.applied().observedHand());
@@ -100,6 +115,9 @@ class ResourceSiteHarvestSceneReconciliationTest {
                 new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
                         new InventoryCustody.ContainerSlot(depot, slot)), stack.itemKind(), stack.quantity())));
         var resources = state.inventory().fungibleResources();
+        resources = resources.releaseBindings(job.actorAccountId(), lease.revision());
+        resources = resources.rebind(job.actorAccountId(), 37L,
+                FungiblePhysicalObservation.bind(resources, job.actorAccountId(), 37L, java.util.List.of(hand)));
         resources = resources.rebind(job.depotAccountId(), 1L,
                 FungiblePhysicalObservation.bind(resources, job.depotAccountId(), 1L, stacks));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
@@ -111,7 +129,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
                         1L, 7L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null))));
         stacks.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(job.outputSlot()), "minecraft:wheat", 64));
         var deliveredResources = ResourceSiteHarvestCargo.deliverObserved(state, job,
-                lease.members().getFirst().entityId(), lease.revision(), 1L, stacks);
+                lease.members().getFirst().entityId(), 37L, 1L, stacks);
         var field = state.resourceSites().cycle(job.siteId());
         var expected = state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(state.inventory().withFungibleResources(deliveredResources))
@@ -120,7 +138,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
                         state.actorLocations().get(job.workerId()).supportingSurface()))));
         var receipt = new ResourceSiteHarvestDeliveryObservation(ResourceSiteHarvestBatchDelivered.observationId(job.id(), 0),
                 job.intentId(), job.siteId(), job.id(), job.workerId(), job.actorAccountId(), job.depotAccountId(), lease.id(),
-                lease.members().getFirst().entityId(), lease.revision(), 64, 1L, stacks,
+                lease.members().getFirst().entityId(), 37L, 64, 1L, stacks,
                 ReferenceContainerCustody.canonicalFingerprint(expected, depot), 8L, "witness:capacity-delivery");
         var batch = new ResourceSiteHarvestBatchDelivered(receipt, 0);
         var after = ResourceSitePhysicalIntentStateSupport.deliverHarvestBatch(state, batch);
@@ -210,7 +228,15 @@ class ResourceSiteHarvestSceneReconciliationTest {
         var complete = terminal
                 ? ResourceSiteHarvestProcessTest.completeHarvestWorkHot(hot.state(), hot.site(), hot.job(), hot.lease().id())
                 : oneObservedCrop(hot);
-        var state = complete.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.CONFLICT);
+        var isolatedState = complete.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.CONFLICT);
+        var isolatedJob = isolatedState.resourceSites().site(hot.site()).harvestJobs().values().stream()
+                .reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
+        var reboundResources = isolatedState.inventory().fungibleResources().releaseBindings(isolatedJob.actorAccountId(), hot.lease().revision());
+        reboundResources = reboundResources.rebind(isolatedJob.actorAccountId(), 37L,
+                FungiblePhysicalObservation.bind(reboundResources, isolatedJob.actorAccountId(), 37L,
+                        java.util.List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
+                                isolatedJob.workerId(), hot.lease().members().getFirst().entityId()), "minecraft:wheat", terminal ? 64 : 1))));
+        var state = isolatedState.withInventory(isolatedState.inventory().withFungibleResources(reboundResources));
         var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         var lease = state.sceneLeases().get(hot.lease().id());
         var bindingId = ActorBodyId.recoveryBindingId(job.workerId());

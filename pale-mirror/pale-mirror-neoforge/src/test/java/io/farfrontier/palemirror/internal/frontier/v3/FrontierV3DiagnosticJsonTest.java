@@ -66,6 +66,26 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FrontierV3DiagnosticJsonTest {
+    @Test void conflictedScopeCannotProduceGreenSummaryWithoutAnIncidentRecord() {
+        var configuration = FrontierV3FixtureCatalog.resourceSiteHarvestConfiguration(new WorldId("frontier:scope-summary"), 421L);
+        var state = configuration.initialState();
+        var site = new SubjectId("site:1-wheat-field");
+        var job = state.resourceSites().site(site).harvestJobs().values().iterator().next();
+        var lease = SceneLease.forCause(new SceneLeaseId("lease:scope-summary"), configuration.worldId(),
+                new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause(site, job.id()),
+                io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport.candidate(state, job)
+                        .orElseThrow().cropSlot(), configuration.initialInstant(), 17L,
+                SceneLeaseStatus.PREPARED, List.of(new io.farfrontier.palemirror.frontier.v3.model.SceneMember(job.workerId(),
+                        SceneLease.deterministicEntityId(configuration.worldId(), job.workerId()))), java.util.Set.of(), Optional.empty());
+        state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.CONFLICT);
+        var checkpoint = new CheckpointImage(configuration.worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(1),
+                configuration.initialInstant(), new byte[] {1}, List.of(), List.of());
+        var summary = JsonParser.parseString(FrontierV3DiagnosticJson.render("summary", "", checkpoint, state, Optional.empty())
+                .substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals(0, summary.get("requiredConflicts").getAsInt());
+        assertEquals(1, summary.get("sceneConflicts").getAsInt());
+        assertEquals("blocked", summary.get("diagnosticVerdict").getAsString());
+    }
 
     @Test
     void expeditionParticipantUsesTheCommonPilotEnvelopeWithoutMutatingItsFiniteFixture() {

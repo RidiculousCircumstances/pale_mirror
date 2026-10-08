@@ -59,8 +59,10 @@ class FrontierV3ResourceSiteLedgerPersistenceTest {
                 new SubjectId("resident:capacity"), java.util.UUID.fromString("00000000-0000-0000-0000-000000000064"),
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:capacity"), 1L,
                 new SubjectId("container:capacity"), 0, 64, 1L, "sha256:" + "a".repeat(64),
-                "sha256:" + "b".repeat(64), "witness:capacity", 0, true, -1);
+                "sha256:" + "b".repeat(64), "witness:capacity", 0, true, -1, 37L);
         assertEquals(witness, FrontierV3ResourceSiteDeliveryWitness.read(witness.write()));
+        var missingEpoch = witness.write(); missingEpoch.remove("resourceEpoch");
+        assertThrows(IllegalStateException.class, () -> FrontierV3ResourceSiteDeliveryWitness.read(missingEpoch));
         var invalid = witness.write(); invalid.putInt("successorSlot", 0);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceSiteDeliveryWitness.read(invalid));
     }
