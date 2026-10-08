@@ -177,6 +177,7 @@ public final class FrontierV3ServerLifecycle {
     private static void startConfigured(MinecraftServer server,
                                         io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
         FrontierV3NativeFieldOwnership.forget(server);
+        FrontierV3NativeActorOwnership.forget(server);
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         FrontierV3PerformanceMetrics metrics = new FrontierV3PerformanceMetrics();
         FrontierFileStore store = new FrontierFileStore(server.getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs());
@@ -392,7 +393,8 @@ public final class FrontierV3ServerLifecycle {
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined: {}", runtime.status().detail().orElse("unknown"));
-            releaseRuntime(server, runtime);
+            try { releaseRuntime(server, runtime); }
+            finally { server.halt(false); }
         }
     }
     public static void observeNaturalChunkLoad(ServerLevel level, net.minecraft.world.level.ChunkPos chunk) {
@@ -452,6 +454,7 @@ public final class FrontierV3ServerLifecycle {
             if (runtime != null) releaseRuntime(server, runtime);
         } finally {
             FrontierV3NativeFieldOwnership.forget(server);
+            FrontierV3NativeActorOwnership.forget(server);
             io.farfrontier.palemirror.internal.calendar.MinecraftCalendarPresentation.detach(server);
             FrontierV3DiagnosticTrace.forget(server);
             clearFastForwardState(server);
@@ -460,6 +463,7 @@ public final class FrontierV3ServerLifecycle {
     private static void releaseRuntime(MinecraftServer server,
                                        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         FrontierV3NativeFieldOwnership.retain(server, runtime);
+        FrontierV3NativeActorOwnership.retain(server, runtime);
         RUNTIMES.remove(server, runtime);
         releaseRuntime(runtime);
         FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server);
@@ -704,16 +708,22 @@ public final class FrontierV3ServerLifecycle {
     public static JoinFirewallProof observeSourceJoin(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
+        if (!FrontierV3PhysicalWorld.isPhysical(level)) {
             return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
         }
+        if (runtime == null) return passiveSourceJoin(level, entity);
         return observeSourceJoin(level, runtime, entity);
     } // Both the host and isolated native runtimes use the same real join boundary.
+    static JoinFirewallProof passiveSourceJoin(ServerLevel level, Entity entity) {
+        return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED,
+                FrontierV3NativeActorOwnership.recognizes(level, entity));
+    }
     static JoinFirewallProof observeSourceJoin(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity");
         if (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE)
-            return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
+            return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, runtime.passiveOwnershipState()
+                    .map(state -> FrontierV3ActorBodyController.recognizesPassiveBody(level, state, entity)).orElse(false));
         FrontierV3ActorBodyController.observeJoin(level, runtime, entity);
         JoinFirewallProof proof = observeSourceJoin(runtime, entity);
         if (proof.verifiedV3Carrier() && proof.lifecycleAdmission() != EntityJoinAdmission.DUPLICATE_UNINDEXED)
@@ -875,7 +885,7 @@ public final class FrontierV3ServerLifecycle {
                                                 net.minecraft.world.level.block.state.BlockState previous, Entity entity) {
         var runtime = RUNTIMES.get(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null) return;
-        var state = runtime.stateForNativeGrowthFence().orElse(null);
+        var state = runtime.passiveOwnershipState().orElse(null);
         if (state == null) return;
         var cell = new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(position.getX(), position.getY(), position.getZ());
         var site = state.resourceSiteDescriptors().values().stream()

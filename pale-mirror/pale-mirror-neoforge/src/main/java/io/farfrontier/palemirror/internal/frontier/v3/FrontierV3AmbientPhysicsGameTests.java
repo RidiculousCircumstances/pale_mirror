@@ -45,6 +45,82 @@ import java.util.Optional;
 public final class FrontierV3AmbientPhysicsGameTests {
     private FrontierV3AmbientPhysicsGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void quarantinedPendingLifetimeSurvivesHistoricalJoinWithoutExecution(GameTestHelper helper) {
+        verifyQuarantinedReturn(helper, false);
+    }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void quarantinedSavedDepartureSurvivesWithoutConsumingItsFence(GameTestHelper helper) {
+        verifyQuarantinedReturn(helper, true);
+    }
+
+    private static void verifyQuarantinedReturn(GameTestHelper helper, boolean departing) {
+        var level = helper.getLevel();
+        var support = helper.absolutePos(new BlockPos(2, 4, 2));
+        prepareFallArena(level, support);
+        var fixture = fixture(support, helper.absolutePos(new BlockPos(5, 4, 2)));
+        var state = ActorBodyAuthority.demand(fixture.state(), fixture.resident());
+        state = ActorBodyAuthority.running(state, ActorBodyAuthority.current(state, fixture.resident()));
+        var runtime = runtime(level, state);
+        var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, fixture.resident(),
+                FrontierV3AmbientActorExecutor.entityId(state, fixture.resident()),
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
+                ActorBodyAuthority.current(state, fixture.resident()).physicalEpoch());
+        var binding = FrontierV3ActorOwnerBinding.body(declaration);
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        helper.assertTrue(ledger.beginFirstAdmission(binding), "fixture reserves exact lifetime");
+        var body = EntityType.VILLAGER.create(level);
+        if (body == null) throw new IllegalStateException("quarantine fixture has no body");
+        body.setUUID(declaration.entityId()); binding.stamp(body);
+        body.getPersistentData().putLong(FrontierV3ActorBodyController.RESIDENCE_KEY, ledger.beginBodyResidence(declaration));
+        body.setNoAi(true); body.setPos(support.getX() + .5, support.getY() + 1.0, support.getZ() + .5);
+        body.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND,
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, 2));
+        if (departing) {
+            helper.assertTrue(ledger.acknowledgeFirstAdmission(ledger.firstAdmission(fixture.resident()).orElseThrow(), binding),
+                    "departure fixture has established lifetime");
+            var receipt = FrontierV3ActorBodyController.captureReturnedBody(level, state, body).orElseThrow();
+            helper.assertTrue(ledger.recordBodyDeparture(receipt), "departure retained");
+            helper.assertTrue(ledger.fence(receipt.identity(), declaration.epoch(), 0), "inactive fence retained");
+        }
+        var saved = body.saveWithoutId(new net.minecraft.nbt.CompoundTag());
+        var ledgerBefore = ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()).copy();
+        runtime.quarantine(new IllegalStateException("fixture: owner failed before historical chunk return"));
+        FrontierV3NativeActorOwnership.retain(level.getServer(), runtime);
+        FrontierV3ServerLifecycle.releaseRuntime(runtime);
+        var returned = EntityType.VILLAGER.create(level);
+        if (returned == null) throw new IllegalStateException("quarantine return unavailable");
+        returned.load(saved);
+        var proof = FrontierV3ServerLifecycle.passiveSourceJoin(level, returned);
+        helper.assertTrue(proof.verifiedV3Carrier() && !io.farfrontier.palemirror.internal.world.SourceGrayboxEntityAdmission
+                .rejectsSourceMob(proof, true, false), "ordinary source firewall retains exact historical body without runtime");
+        helper.assertTrue(runtime.decodedState().isEmpty(), "passive recognition never reopens execution");
+        helper.assertTrue(ledgerBefore.equals(ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess())),
+                "recognition neither consumes departure nor changes first-admission/custody history");
+        var foreign = EntityType.VILLAGER.create(level);
+        if (foreign == null) throw new IllegalStateException("foreign fixture unavailable");
+        foreign.load(saved); foreign.setUUID(java.util.UUID.randomUUID());
+        helper.assertTrue(!FrontierV3ServerLifecycle.passiveSourceJoin(level, foreign).verifiedV3Carrier(),
+                "copied tags do not grant identity");
+        foreign.discard();
+        FrontierV3NativeActorOwnership.forget(level.getServer());
+        helper.assertTrue(!FrontierV3ServerLifecycle.passiveSourceJoin(level, returned).verifiedV3Carrier(),
+                "a cleared server has no invented retained ownership");
+        helper.assertTrue(level.addFreshEntity(returned), "native saved body remains indexable");
+        helper.runAfterDelay(1, () -> {
+            var duplicate = EntityType.VILLAGER.create(level);
+            if (duplicate == null) throw new IllegalStateException("duplicate fixture unavailable");
+            duplicate.load(saved);
+            helper.assertTrue(!FrontierV3ServerLifecycle.observeSourceJoin(level, runtime, duplicate).verifiedV3Carrier(),
+                    "quarantine cannot replace an already indexed body with a second object");
+            helper.assertTrue(level.getEntity(returned.getUUID()) == returned && returned.getOffhandItem().getCount() == 2,
+                    "native identity and cargo survive admission");
+            duplicate.discard(); returned.discard();
+            helper.succeed();
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void savedAirborneReturnPassesJoinAndFallsWithoutGrantingStationArrival(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();

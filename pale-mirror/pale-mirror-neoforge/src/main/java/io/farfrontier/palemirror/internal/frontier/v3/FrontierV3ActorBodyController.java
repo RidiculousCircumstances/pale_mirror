@@ -321,6 +321,28 @@ final class FrontierV3ActorBodyController {
                 || phase == FencedRecoveryPhase.PREPARED && retainsRecordedBody(level, state, entity);
     }
 
+    /**
+     * Quarantine stops execution, never the native retention of an exact saved body.
+     * Read-only departure matching does not consume its fence or fabricate an arrival.
+     */
+    static boolean recognizesPassiveBody(ServerLevel level, FrontierWorldState state,
+                                         net.minecraft.world.entity.Entity entity) {
+        if (retainsRecordedBody(level, state, entity) || recognizesRecordedBody(level, state, entity)) return true;
+        if (!(entity instanceof Mob body) || !body.isAlive() || body.level() != level || !recognizes(state, body)) return false;
+        var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow();
+        var indexed = level.getEntity(body.getUUID());
+        if (indexed != null && indexed != body) return false;
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        if (ledger.hasDepartureConflict(declaration.actorId())) return false;
+        var receipt = ledger.bodyDeparture(declaration.actorId()).orElse(null);
+        if (receipt == null || !receipt.current(state)) return false;
+        var actual = captureReturnedBody(level, state, body).orElse(null);
+        return actual != null && receipt.residenceGeneration() == actual.residenceGeneration()
+                && receipt.identity().equals(actual.identity()) && receipt.observed().equals(actual.observed())
+                && receipt.offhand().equals(actual.offhand()) && receipt.mainhand().equals(actual.mainhand())
+                && receipt.attachedStorage().equals(actual.attachedStorage());
+    }
+
     /** Called only after the join firewall has accepted this exact physical object. */
     static void confirmPresent(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                net.minecraft.world.entity.Entity entity) {

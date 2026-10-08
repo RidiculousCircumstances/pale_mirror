@@ -183,7 +183,7 @@ final class FrontierV3ResourceSiteExecutor {
     /** Managed field soil is process-owned, like its growth clock; vanilla cannot retire it. */
     static boolean blocksNativeSoilReversion(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                              ServerLevel level, BlockPos position) {
-        FrontierWorldState state = runtime.stateForNativeGrowthFence().orElse(null);
+        FrontierWorldState state = runtime.passiveOwnershipState().orElse(null);
         if (state == null || !level.getBlockState(position).is(Blocks.FARMLAND)) return false;
         Target target = target(state, position);
         if (target == null) return false;
@@ -217,7 +217,7 @@ final class FrontierV3ResourceSiteExecutor {
     }
 
     static boolean blocksNativeCropGrowth(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level, BlockPos position) {
-        FrontierWorldState state = runtime.stateForNativeGrowthFence().orElse(null); if (state == null) return false;
+        FrontierWorldState state = runtime.passiveOwnershipState().orElse(null); if (state == null) return false;
         Target target = target(state, position); if (target == null || target.site().layout().cropAt(canonical(position)).isEmpty()) return false;
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
         var siteClaim = ledger.siteClaim(target.site().id());
@@ -274,7 +274,7 @@ final class FrontierV3ResourceSiteExecutor {
     }
     static boolean restoreNativeGrowthPostcondition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                      ServerLevel level, BlockPos position) {
-        FrontierWorldState state = runtime.stateForNativeGrowthFence().orElse(null);
+        FrontierWorldState state = runtime.passiveOwnershipState().orElse(null);
         if (state == null) return false;
         Target target = target(state, position);
         return target != null && restoreNativeGrowthPostcondition(level, FrontierV3ResourceSiteLedger.get(level), target.site(), position);

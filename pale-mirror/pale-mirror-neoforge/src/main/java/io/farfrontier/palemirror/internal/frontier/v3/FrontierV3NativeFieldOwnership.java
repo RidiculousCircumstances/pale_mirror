@@ -19,7 +19,7 @@ final class FrontierV3NativeFieldOwnership {
 
     static void retain(MinecraftServer server, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED)
-            runtime.stateForNativeGrowthFence().ifPresent(state -> RETAINED.put(server,
+            runtime.passiveOwnershipState().ifPresent(state -> RETAINED.put(server,
                     List.copyOf(state.resourceSiteDescriptors().values())));
     }
 

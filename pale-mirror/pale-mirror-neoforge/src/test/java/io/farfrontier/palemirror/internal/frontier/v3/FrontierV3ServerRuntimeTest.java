@@ -329,7 +329,7 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
-    void quarantineRetainsNativeGrowthVetoOwnershipWithoutReopeningExecution(@TempDir Path directory) {
+    void quarantineRetainsPassiveOwnershipWithoutReopeningExecution(@TempDir Path directory) {
         var runtime = FrontierV3ServerRuntime.start(configuration(), new FrontierFileStore(directory, codecs()), 20);
         assertInstanceOf(CommandResult.Accepted.class,
                 runtime.submit(command("command:before-quarantine", Revision.ZERO, SimInstant.ZERO, 3)).orElseThrow());
@@ -337,9 +337,9 @@ class FrontierV3ServerRuntimeTest {
         runtime.quarantine(new IllegalStateException("test physical executor failure"));
         assertTrue(runtime.decodedState().isEmpty());
         assertTrue(runtime.canonicalState().isEmpty());
-        assertSame(retained, runtime.stateForNativeGrowthFence().orElseThrow());
+        assertSame(retained, runtime.passiveOwnershipState().orElseThrow());
         assertTrue(runtime.submit(command("command:after-quarantine", new Revision(1), SimInstant.ZERO, 7)).isEmpty());
-        assertSame(retained, runtime.stateForNativeGrowthFence().orElseThrow());
+        assertSame(retained, runtime.passiveOwnershipState().orElseThrow());
         assertEquals(FrontierV3RuntimeStatus.Kind.QUARANTINED, runtime.status().kind());
     }
 
@@ -411,7 +411,7 @@ class FrontierV3ServerRuntimeTest {
 
         assertEquals(FrontierV3RuntimeStatus.Kind.QUARANTINED, failed.status().kind());
         assertTrue(failed.projection(ProjectionQuery.summary()).isEmpty());
-        assertTrue(failed.stateForNativeGrowthFence().isEmpty(),
+        assertTrue(failed.passiveOwnershipState().isEmpty(),
                 "failed recovery must not fabricate field ownership from initial state");
     }
 

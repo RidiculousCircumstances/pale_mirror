@@ -181,13 +181,13 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     }
 
     /**
-     * Read-only retained ownership for the native crop-growth veto/post-veto, including quarantine.
+     * Read-only retained ownership for native lifetime/field fences, including quarantine.
      * Quarantine suspends execution; it does not surrender already-owned physical cells
-     * to a second simulation. The paired post-veto may undo a forced native growth event;
+     * to a second simulation. Passive body admission preserves native storage, not execution;
      * never use this view to resume commands or advance canonical projection writes.
      * Failed startup without a recovered engine supplies no invented ownership.
      */
-    Optional<S> stateForNativeGrowthFence() {
+    Optional<S> passiveOwnershipState() {
         return engine == null ? Optional.empty() : Optional.of(engine.canonicalState().state());
     }
 
