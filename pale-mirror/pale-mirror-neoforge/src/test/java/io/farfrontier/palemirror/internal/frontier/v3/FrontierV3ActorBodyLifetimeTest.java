@@ -68,6 +68,19 @@ class FrontierV3ActorBodyLifetimeTest {
         return ledger;
     }
 
+    @Test void departureBudgetRejectsRetiredReceiptBeforeRequiringAnIncarnation() {
+        var state = running(); var receipt = receipt(state);
+        assertTrue(FrontierV3ActorBodyController.departurePending(state, receipt));
+        var retired = ActorBodyAuthority.released(state, ActorBodyAuthority.current(state, receipt.identity().actorId()));
+        var restored = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
+                .decode(new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(retired));
+        assertFalse(FrontierV3ActorBodyController.departurePending(restored, receipt));
+        var successor = ActorBodyAuthority.demand(restored, receipt.identity().actorId());
+        assertFalse(FrontierV3ActorBodyController.departurePending(successor, receipt));
+        successor = ActorBodyAuthority.running(successor, ActorBodyAuthority.current(successor, receipt.identity().actorId()));
+        assertFalse(FrontierV3ActorBodyController.departurePending(successor, receipt));
+    }
+
     @Test void rejectedJoinDistinguishesPositiveRetirementFromCurrentMissingAndForeignBodies() {
         var state = running(); var receipt = receipt(state); var ledger = ledger(receipt);
         var live = receipt.identity().liveBody(Owner.ACTOR_BODY, 0L, receipt.identity().epoch());

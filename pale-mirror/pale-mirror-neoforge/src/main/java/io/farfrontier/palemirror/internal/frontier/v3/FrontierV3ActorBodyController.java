@@ -91,8 +91,14 @@ final class FrontierV3ActorBodyController {
     static boolean departurePending(ServerLevel level, FrontierWorldState state,
                                     io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        if (!ledger.hasBodyDeparture(actor)) return false;
-        var body = ActorBodyAuthority.current(state, actor);
+        return ledger.bodyDeparture(actor).filter(receipt -> departurePending(state, receipt)).isPresent();
+    }
+
+    static boolean departurePending(FrontierWorldState state, FrontierV3ActorBodyDeparture receipt) {
+        // Saved historical receipts may outlive their incarnation. As in progressDeparture,
+        // establish exact current evidence before requesting its retained physical authority.
+        if (!receipt.current(state)) return false;
+        var body = ActorBodyAuthority.current(state, receipt.identity().actorId());
         var phase = ActorBodyAuthority.require(state, body).phase();
         return phase == FencedRecoveryPhase.RUNNING || phase == FencedRecoveryPhase.AMBIGUOUS;
     }
