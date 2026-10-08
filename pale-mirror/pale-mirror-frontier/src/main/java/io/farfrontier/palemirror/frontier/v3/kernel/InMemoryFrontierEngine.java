@@ -306,6 +306,11 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 worldId, revision, instant, schedules.snapshot());
     }
 
+    @Override public boolean retainsScheduledAction(ScheduledAction action) {
+        requireOwnerThread();
+        return schedules.containsExact(action);
+    }
+
     @Override
     public Optional<SimInstant> nextScheduledInstantAfter(SimInstant after) {
         requireOwnerThread();

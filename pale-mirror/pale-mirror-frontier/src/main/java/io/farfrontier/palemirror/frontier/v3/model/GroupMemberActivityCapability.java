@@ -58,11 +58,16 @@ final class GroupMemberActivityCapability implements ActorActivityCapability {
         throw new IllegalArgumentException("group purpose ends only through the group completion protocol");
     }
     static void validateReferences(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState groups, ActorExecutionState executions) {
-        for (var actor : executions.actors().values()) for (var id : java.util.stream.Stream.concat(actor.current().stream(), actor.suspended().stream()).toList()) {
+        for (var id : executions.current(ActorActivityKind.GROUP_MEMBER).values()) validateGroupReference(groups, id);
+        for (var id : executions.suspended()) {
             if (id.activityKind() != ActorActivityKind.GROUP_MEMBER) continue;
-            var group = groups.groups().get(id.activityOwnerId());
-            if (group == null || group.phase() == UnitGroup.Phase.CLOSED) throw new IllegalArgumentException("group execution has no retained roster");
-            group.member(id.actorId());
+            validateGroupReference(groups, id);
         }
+    }
+    private static void validateGroupReference(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState groups,
+                                               ActorExecutionId id) {
+        var group = groups.groups().get(id.activityOwnerId());
+        if (group == null || group.phase() == UnitGroup.Phase.CLOSED) throw new IllegalArgumentException("group execution has no retained roster");
+        group.member(id.actorId());
     }
 }

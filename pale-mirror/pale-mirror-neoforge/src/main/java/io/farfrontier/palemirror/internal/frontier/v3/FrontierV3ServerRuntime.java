@@ -156,6 +156,10 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         return Optional.of(engine.executionView());
     }
 
+    boolean retainsScheduledAction(io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction action) {
+        return status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && engine.retainsScheduledAction(action);
+    }
+
     Optional<io.farfrontier.palemirror.frontier.v3.api.CommandAdmissionCapacity> commandAdmissionCapacity() {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         return Optional.of(engine.commandAdmissionCapacity());

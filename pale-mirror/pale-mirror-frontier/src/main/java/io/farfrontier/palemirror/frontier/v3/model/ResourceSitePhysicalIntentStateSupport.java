@@ -42,19 +42,28 @@ public final class ResourceSitePhysicalIntentStateSupport {
         }
     }
 
-    static boolean ownsNonterminalSubject(ResourceSiteState sites, SubjectId subject) {
-        return sites.sites().values().stream().anyMatch(lifecycle -> lifecycle.phase() == ResourceSitePhase.UNPREPARED
-                && lifecycle.preparationWork()
-                .map(job -> job.siteId().equals(subject) || job.id().equals(subject)).orElse(false)
-                || lifecycle.phase() == ResourceSitePhase.HARVESTING && (lifecycle.siteId().equals(subject)
-                || lifecycle.harvestJobs().containsKey(subject)
-                || lifecycle.harvestJobs().values().stream()
-                .anyMatch(job -> job.actorAccountId().equals(subject) || job.depotAccountId().equals(subject)
-                        || job.outputItemId().equals(subject)))
-                || lifecycle.harvestLineages().values().stream().filter(ResourceSiteHarvestLineage::receiptPending).anyMatch(lineage ->
-                lifecycle.siteId().equals(subject) || lineage.predecessorJobId().equals(subject) || lineage.workerId().equals(subject)
-                        || lineage.actorAccountId().equals(subject) || lineage.depotAccountId().equals(subject)
-                        || lineage.outputItemId().equals(subject)));
+    /** Derived relation view for one immutable audit, not a second ownership register. */
+    static java.util.Set<SubjectId> nonterminalSubjects(ResourceSiteState sites) {
+        var subjects = new java.util.HashSet<SubjectId>();
+        for (var lifecycle : sites.sites().values()) {
+            if (lifecycle.phase() == ResourceSitePhase.UNPREPARED && lifecycle.preparationWork().isPresent()) {
+                var job = lifecycle.preparationWork().orElseThrow();
+                subjects.add(job.siteId()); subjects.add(job.id());
+            }
+            if (lifecycle.phase() == ResourceSitePhase.HARVESTING) {
+                subjects.add(lifecycle.siteId());
+                for (var job : lifecycle.harvestJobs().values()) {
+                    subjects.add(job.id()); subjects.add(job.actorAccountId());
+                    subjects.add(job.depotAccountId()); subjects.add(job.outputItemId());
+                }
+            }
+            for (var lineage : lifecycle.harvestLineages().values()) {
+                if (!lineage.receiptPending()) continue;
+                subjects.add(lifecycle.siteId()); subjects.add(lineage.predecessorJobId()); subjects.add(lineage.workerId());
+                subjects.add(lineage.actorAccountId()); subjects.add(lineage.depotAccountId()); subjects.add(lineage.outputItemId());
+            }
+        }
+        return subjects;
     }
 
     /** The terminal field disposition retains exact causal ownership without a resumable intent. */

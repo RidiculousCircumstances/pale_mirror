@@ -70,7 +70,7 @@ public final class FungiblePhysicalHandoff {
             else if (remainingQuantity > 0) remaining.add(new PhysicalStackBinding(binding.id(), binding.accountId(), binding.address(), binding.authorityEpoch(),
                     binding.itemKind(), retainedLots, retainedClaims, binding.playerSaveFence()));
         }
-        SubjectId bindingId = new SubjectId("binding:" + destination.id().value().replace(':', '-') + "-e" + destinationEpoch + "-s0");
+        SubjectId bindingId = PhysicalStackBinding.generatedId(destination.id(), destinationEpoch, 0);
         PhysicalStackBinding arrived = new PhysicalStackBinding(bindingId, destination.id(), destinationAddress, destinationEpoch,
                 sourceBinding.itemKind(), movedLots, movedClaims);
         return new FungibleResourceHandoffObserved(source.id(), destination, sourceEpoch, destinationEpoch, movedLots, movedClaims,

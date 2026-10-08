@@ -45,7 +45,7 @@ public final class KnownPedestrianNavigation {
     }
     public static PedestrianRouteGeometry geometry(FrontierBootstrap bootstrap, Set<BlockPosition> occupied,
                                                     BoundedPedestrianApproach.SurveyedSurface surveyed, Object version) {
-        var hard = java.util.Collections.unmodifiableSet(new java.util.HashSet<>(occupied));
+        var hard = Set.copyOf(occupied);
         return new PedestrianRouteGeometry() {
             @Override public Object version() { return version; }
             @Override public io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds() { return bootstrap.bounds(); }

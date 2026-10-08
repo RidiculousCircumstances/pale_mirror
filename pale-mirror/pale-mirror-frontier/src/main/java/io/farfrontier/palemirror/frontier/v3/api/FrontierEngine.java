@@ -17,6 +17,9 @@ public interface FrontierEngine<P extends FrontierProjection> {
     /** Ordinary execution reads must not request serialized persistence state. */
     FrontierExecutionView executionView();
 
+    /** Exact read-only continuation fence, without materializing the whole schedule queue. */
+    boolean retainsScheduledAction(io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction action);
+
     /** Read-only current retention capacity; expired receipts count exactly as at command admission. */
     CommandAdmissionCapacity commandAdmissionCapacity();
 

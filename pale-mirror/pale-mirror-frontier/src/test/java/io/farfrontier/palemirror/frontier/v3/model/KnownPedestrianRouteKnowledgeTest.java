@@ -21,6 +21,34 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void fieldGeometrySurvivesBiologicalChangesButNotObstructionsOrRecovery() {
+        var state = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());
+        var site = state.resourceSite(new SubjectId("site:1-wheat-field"));
+        var port = SettlementServiceAccessPoints.depotPort(state, site.settlementId());
+        var start = port.exteriorApproach();
+        var cycle = state.resourceSites().cycle(site.id());
+        var base = KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start);
+        org.junit.jupiter.api.Assertions.assertSame(base,
+                KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start));
+        var cell = cycle.layout().cells().getFirst();
+        var replanted = cycle.cropReplanted(cell.id());
+        var changed = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site.id()), replanted));
+        org.junit.jupiter.api.Assertions.assertSame(base,
+                KnownPedestrianRouteKnowledge.forField(changed, site, replanted, port, start),
+                "crop age and generation do not change pedestrian geometry");
+        var blocked = replanted.cropObstructed(cell.id());
+        var damaged = changed.withResourceSites(changed.resourceSites().replace(changed.resourceSites().site(site.id()), blocked));
+        var rebuilt = KnownPedestrianRouteKnowledge.forField(damaged, site, blocked, port, start);
+        org.junit.jupiter.api.Assertions.assertNotSame(base, rebuilt);
+        assertTrue(!rebuilt.traversable(List.of(cell.soil())));
+        assertTrue(base.traversable(List.of(cell.soil())), "old immutable knowledge cannot be mutated by an overlay");
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var recovered = codec.decode(codec.encode(damaged));
+        assertTrue(!KnownPedestrianRouteKnowledge.forField(recovered, recovered.resourceSite(site.id()),
+                recovered.resourceSites().cycle(site.id()), port, start).traversable(List.of(cell.soil())));
+        org.junit.jupiter.api.Assertions.assertNotSame(rebuilt,
+                KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start));
+    }
     @Test void clearwaterPrivateStationCanBeExitedButCannotBecomeACourtesyRestingPosition() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:courtesy-private-station"), 20260918065L));

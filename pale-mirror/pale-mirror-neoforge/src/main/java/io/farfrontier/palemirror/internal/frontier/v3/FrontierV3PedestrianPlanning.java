@@ -39,7 +39,9 @@ final class FrontierV3PedestrianPlanning {
         deferredReady = continuations.readyCount();
     }
     static void admitReady(FrontierV3ServerRuntime<?, ?> runtime, PedestrianPlanningWakeIndex index) {
-        var ready = index.ready(runtime.executionView().orElseThrow());
+        if (index.waitingCount() == 0) return;
+        var ready = index.ready(runtime.canonicalState().orElseThrow().instant(), runtime::retainsScheduledAction);
+        if (ready.isEmpty()) return;
         int budget = runtime.commandAdmissionCapacity().orElseThrow().optionalCommands(MAX_WAKE_COMMANDS_PER_TURN);
         int admitted = 0;
         for (var action : ready) {

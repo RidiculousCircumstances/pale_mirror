@@ -11,6 +11,26 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void emptyWaitsDoNotReadTheQueueAndIndexedLookupFencesTheExactGeneration() {
+        var index = new PedestrianPlanningWakeIndex();
+        var owner = action("indexed", 6000);
+        var view = new FrontierScheduleView() {
+            public WorldId worldId() { return new WorldId("frontier:empty-waits"); }
+            public Revision revision() { return Revision.ZERO; }
+            public SimInstant instant() { return new SimInstant(20); }
+            public List<ScheduledAction> schedules() { fail("empty waits must not enumerate future work"); return List.of(); }
+        };
+        assertTrue(index.ready(view).isEmpty());
+        index.replace(owner, List.of(request(3)));
+        index.changed(List.of(new PedestrianPlanningChange(request(3), PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        assertEquals(List.of(owner), index.ready(new SimInstant(20), action -> {
+            calls.incrementAndGet(); return action.equals(owner);
+        }));
+        assertEquals(1, calls.get());
+        assertTrue(index.ready(new SimInstant(20), action -> action.equals(action("indexed", 7000))).isEmpty());
+        assertEquals(0, index.waitingCount());
+    }
     private static final PedestrianRouteGeometry GROUND = new PedestrianRouteGeometry() {
         public WorldBounds bounds() { return new WorldBounds(0, 0, 32, 32); }
         public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }

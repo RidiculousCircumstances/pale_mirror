@@ -21,6 +21,10 @@ public final class KnownPedestrianRouteKnowledge {
     private static Object geometryVersion = new Object();
     private static final java.util.Map<ViewKey, KnownPedestrianRouteKnowledge> VIEWS = new java.util.LinkedHashMap<>();
     private static KnownPedestrianRouteKnowledge frontierView;
+    private record FieldView(ResourceSite site, SettlementDepotServicePort port, ResourceFieldCycle cycle,
+                             Set<BlockPosition> obstructions, KnownPedestrianRouteKnowledge knowledge,
+                             java.util.Map<SurfaceAnchor, KnownPedestrianRouteKnowledge> witnessedDepartures) { }
+    private static final java.util.Map<SubjectId, FieldView> FIELDS = new java.util.LinkedHashMap<>();
     private final FrontierBootstrap bootstrap;
     private final Set<BlockPosition> hard;
     private final BoundedPedestrianApproach.SurveyedSurface surveyed;
@@ -67,7 +71,7 @@ public final class KnownPedestrianRouteKnowledge {
     private KnownPedestrianRouteKnowledge(FrontierBootstrap bootstrap, Set<BlockPosition> hard,
                                          BoundedPedestrianApproach.SurveyedSurface surveyed) {
         this.bootstrap = bootstrap;
-        this.hard = java.util.Collections.unmodifiableSet(new HashSet<>(hard));
+        this.hard = Set.copyOf(hard);
         this.surveyed = surveyed;
         this.geometry = KnownPedestrianNavigation.geometry(bootstrap, this.hard, surveyed, geometryVersion);
     }
@@ -113,6 +117,7 @@ public final class KnownPedestrianRouteKnowledge {
         if (viewBootstrap != state.bootstrap() || viewOrgans != state.hiveColony().addedOrgans()
                 || viewDeltas != state.physicalDeltas() || viewTopology != state.routeTopology()) {
             VIEWS.clear();
+            FIELDS.clear();
             geometryVersion = new Object();
             JOURNEYS.clear();
             frontierView = null;
@@ -210,9 +215,52 @@ public final class KnownPedestrianRouteKnowledge {
                 .orElseThrow(() -> new IllegalArgumentException("field route has no declared depot passage"));
         if (!SettlementDepotServicePort.forDepot(depot).equals(port))
             throw new IllegalArgumentException("field route depot passage differs from its plan");
-        Set<BlockPosition> hard = occupied(state, settlement,
-                List.of(new Passage(depot, Passage.Reach.PUBLIC_ACCESS)));
-        hard.addAll(site.irrigationSlots());
+        FieldView cached = FIELDS.get(site.id());
+        if (cached == null || cached.cycle() != cycle || !cached.site().equals(site) || !cached.port().equals(port)) {
+            Set<BlockPosition> obstructions = fieldObstructions(cycle);
+            if (cached != null && cached.site().equals(site) && cached.port().equals(port)
+                    && cached.cycle().layout() == cycle.layout() && cached.obstructions().equals(obstructions)) {
+                cached = new FieldView(site, port, cycle, cached.obstructions(), cached.knowledge(), cached.witnessedDepartures());
+            } else {
+                Set<BlockPosition> hard = occupied(state, settlement,
+                        List.of(new Passage(depot, Passage.Reach.PUBLIC_ACCESS)));
+                hard.addAll(site.irrigationSlots());
+                hard.addAll(obstructions);
+                var knowledge = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
+                        ResourceSiteHarvestKnownGeometry.surveyedSupports(state, site));
+                cached = new FieldView(site, port, cycle, obstructions, knowledge, new java.util.LinkedHashMap<>());
+            }
+            if (FIELDS.size() >= 64 && !FIELDS.containsKey(site.id())) FIELDS.clear();
+            FIELDS.put(site.id(), cached);
+        }
+        var knowledge = cached.knowledge();
+        SurfaceAnchor knownAtStart = knowledge.surveyed.at(witnessedStart.x(), witnessedStart.z());
+        if (!state.bootstrap().bounds().contains(witnessedStart.support())
+                || Math.abs(witnessedStart.y() - knownAtStart.y()) > 1
+                    && !port.ownedAccessSurfaces().contains(witnessedStart))
+            throw new KnownPedestrianNavigation.RouteUnavailable(
+                    "field worker body is not on retained known support");
+        if (!witnessedStart.equals(knownAtStart) && !port.ownedAccessSurfaces().contains(witnessedStart)) {
+            // Preserve the existing exact witnessed-column exception, never a remote passage.
+            var departure = cached.witnessedDepartures().get(witnessedStart);
+            if (departure != null) return departure;
+            var hard = new HashSet<>(knowledge.hard);
+            clear(hard, witnessedStart);
+            departure = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, knowledge.surveyed);
+            if (cached.witnessedDepartures().size() >= 32)
+                cached.witnessedDepartures().remove(cached.witnessedDepartures().keySet().iterator().next());
+            cached.witnessedDepartures().put(witnessedStart, departure);
+            return departure;
+        }
+        if (blocked(witnessedStart, knowledge.hard))
+            throw new KnownPedestrianNavigation.RouteUnavailable(
+                    "field worker's known support is no longer traversable");
+        return knowledge;
+    }
+
+    /** Only obstacle facts affect geometry; growth, yield and worker progress do not. */
+    private static Set<BlockPosition> fieldObstructions(ResourceFieldCycle cycle) {
+        Set<BlockPosition> hard = new HashSet<>();
         for (ResourceFieldLayout.Cell cell : cycle.layout().cells()) {
             ResourceFieldCycle.CellState condition = cycle.cell(cell.id());
             if (condition.crop() == ResourceFieldCycle.Crop.OBSTRUCTED
@@ -221,21 +269,7 @@ public final class KnownPedestrianRouteKnowledge {
             if (condition.workAccessBlocked())
                 hard.add(cell.workstation().support().offset(0, 2, 0));
         }
-        BoundedPedestrianApproach.SurveyedSurface surveyed = ResourceSiteHarvestKnownGeometry.surveyedSupports(state, site);
-        SurfaceAnchor knownAtStart = surveyed.at(witnessedStart.x(), witnessedStart.z());
-        if (!state.bootstrap().bounds().contains(witnessedStart.support())
-                || Math.abs(witnessedStart.y() - knownAtStart.y()) > 1
-                    && !port.ownedAccessSurfaces().contains(witnessedStart))
-            throw new KnownPedestrianNavigation.RouteUnavailable(
-                    "field worker body is not on retained known support");
-        if (!witnessedStart.equals(knownAtStart) && !port.ownedAccessSurfaces().contains(witnessedStart)) {
-            // A HOT-observed body is stronger than the immutable survey only at this exact column.
-            clear(hard, witnessedStart);
-        } else if (blocked(witnessedStart, hard)) {
-            throw new KnownPedestrianNavigation.RouteUnavailable(
-                    "field worker's known support is no longer traversable");
-        }
-        return new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, surveyed);
+        return Set.copyOf(hard);
     }
 
     public List<SurfaceAnchor> path(SurfaceAnchor start, MovementOrder order) {

@@ -34,6 +34,19 @@ public record PhysicalStackBinding(SubjectId id, SubjectId accountId, PhysicalSt
 
     public int quantity() { return lotQuantities.values().stream().mapToInt(Integer::intValue).sum(); }
 
+    /** A bounded derived identity; retaining the full account path can exceed SubjectId's limit. */
+    static SubjectId generatedId(SubjectId account, long epoch, int ordinal) {
+        Objects.requireNonNull(account, "binding account");
+        if (epoch < 1 || ordinal < 0) throw new IllegalArgumentException("binding identity needs a positive epoch and nonnegative ordinal");
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(account.value().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return new SubjectId("binding:account-" + java.util.HexFormat.of().formatHex(digest) + "-e" + epoch + "-s" + ordinal);
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new AssertionError("Java runtime lacks mandatory SHA-256", impossible);
+        }
+    }
+
     private static Map<SubjectId, Integer> quantities(Map<SubjectId, Integer> values, String label, boolean emptyAllowed) {
         if (values == null || (!emptyAllowed && values.isEmpty())) throw new IllegalArgumentException("physical stack binding must retain " + label + " quantities");
         Map<SubjectId, Integer> copy = Map.copyOf(values);

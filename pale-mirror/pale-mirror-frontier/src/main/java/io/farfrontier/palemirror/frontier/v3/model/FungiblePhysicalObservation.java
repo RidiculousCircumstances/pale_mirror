@@ -51,7 +51,7 @@ public final class FungiblePhysicalObservation {
                     LotPart part = lots.get(lotCursor); int used = Math.min(remaining, remainingLot); lotQuantities.merge(part.id(), used, Integer::sum);
                     remaining -= used; remainingLot -= used; if (remainingLot == 0 && ++lotCursor < lots.size()) remainingLot = lots.get(lotCursor).quantity();
                 }
-                SubjectId bindingId = new SubjectId("binding:" + accountId.value().replace(':', '-') + "-e" + authorityEpoch + "-s" + ordinal++);
+                SubjectId bindingId = PhysicalStackBinding.generatedId(accountId, authorityEpoch, ordinal++);
                 bindings.add(new PhysicalStackBinding(bindingId, accountId, stack.address(), authorityEpoch, kind, lotQuantities, Map.of()));
             }
             if (lotCursor != lots.size()) throw new IllegalArgumentException("physical observation omitted exact resource evidence");

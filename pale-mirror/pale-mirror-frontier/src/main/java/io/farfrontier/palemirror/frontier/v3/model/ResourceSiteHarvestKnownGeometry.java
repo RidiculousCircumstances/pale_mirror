@@ -24,7 +24,10 @@ public final class ResourceSiteHarvestKnownGeometry {
         Map<Long, SurfaceAnchor> field = new HashMap<>();
         for (BlockPosition crop : site.cropSlots())
             field.put(column(crop.x(), crop.z()), new SurfaceAnchor(crop.offset(0, -1, 0)));
-        return (x, z) -> field.getOrDefault(column(x, z), ground.at(x, z));
+        return (x, z) -> {
+            var known = field.get(column(x, z));
+            return known != null ? known : ground.at(x, z);
+        };
     }
 
     /** Historical traversal decoding has no current road topology; active goals use the state overload. */
@@ -35,8 +38,10 @@ public final class ResourceSiteHarvestKnownGeometry {
         for (BlockPosition crop : site.cropSlots())
             fieldSurfaces.put(column(crop.x(), crop.z()), new SurfaceAnchor(crop.offset(0, -1, 0)));
         Map<TerrainColumn, SurfaceAnchor> localGround = SettlementPedestrianGround.localSupports(bootstrap, site.settlementId());
-        return (x, z) -> fieldSurfaces.getOrDefault(column(x, z),
-                SettlementPedestrianGround.surveyedSupport(bootstrap, localGround, x, z));
+        return (x, z) -> {
+            var known = fieldSurfaces.get(column(x, z));
+            return known != null ? known : SettlementPedestrianGround.surveyedSupport(bootstrap, localGround, x, z);
+        };
     }
 
     private static long column(int x, int z) {

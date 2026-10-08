@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -77,8 +76,8 @@ public record ResidentCharacteristics(int version, int baseMetabolismPermille,
     public int effectiveMetabolismPermille(long tick) {
         if (tick < 0) throw new IllegalArgumentException("characteristic instant must be non-negative");
         long total = baseMetabolismPermille;
-        for (MetabolismModifier modifier : metabolismModifiers.values().stream()
-                .sorted(Comparator.comparing(MetabolismModifier::sourceId)).toList())
+        // At most 16 bounded integer deltas: exact addition is order-independent.
+        for (MetabolismModifier modifier : metabolismModifiers.values())
             total = Math.addExact(total, modifier.deltaPermille());
         return (int) Math.clamp(total, MIN_METABOLISM_PERMILLE, MAX_METABOLISM_PERMILLE);
     }

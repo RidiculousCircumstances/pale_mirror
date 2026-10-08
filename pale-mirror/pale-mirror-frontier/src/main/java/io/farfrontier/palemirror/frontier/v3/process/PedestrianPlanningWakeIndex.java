@@ -35,13 +35,21 @@ public final class PedestrianPlanningWakeIndex {
     }
     /** Exact schedule equality is the generation fence; stale/retired/due owners never receive a command. */
     public List<ScheduledAction> ready(FrontierScheduleView view) {
+        if (waits.isEmpty()) return List.of();
         var retained = new HashMap<ScheduleId, ScheduledAction>();
         for (var action : view.schedules()) retained.put(action.id(), action);
+        return ready(view.instant(), action -> action.equals(retained.get(action.id())));
+    }
+
+    /** Production uses the owning kernel's exact ID lookup, not a future-queue snapshot. */
+    public List<ScheduledAction> ready(io.farfrontier.palemirror.frontier.v3.api.SimInstant instant,
+                                       java.util.function.Predicate<ScheduledAction> retained) {
+        if (waits.isEmpty()) return List.of();
         for (var entry : List.copyOf(waits.entrySet())) {
             var action = entry.getValue().action();
-            if (!action.equals(retained.get(entry.getKey()))) remove(entry.getKey());
+            if (!retained.test(action)) remove(entry.getKey());
             else if (ready.contains(entry.getKey())) {
-                if (action.dueAt().ticks() <= view.instant().ticks() || action.dueAt().ticks() - view.instant().ticks() == 1L)
+                if (action.dueAt().ticks() <= instant.ticks() || action.dueAt().ticks() - instant.ticks() == 1L)
                     remove(entry.getKey());
             }
         }

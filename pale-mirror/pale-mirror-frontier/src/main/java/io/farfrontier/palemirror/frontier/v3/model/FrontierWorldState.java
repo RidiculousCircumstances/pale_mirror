@@ -360,6 +360,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         SettlementServiceWorkStateSupport.validate(bootstrap, humanPopulation, actorLocations, infection, serviceWorks, physicalIntents);
         FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
         if (physicalIntents.size() > MAX_PHYSICAL_INTENTS) throw new IllegalArgumentException("physical intent retention limit exceeded");
+        Set<SubjectId> fieldSubjects = ResourceSitePhysicalIntentStateSupport.nonterminalSubjects(resourceSites);
         for (Map.Entry<PhysicalIntentId, PhysicalIntent> entry : physicalIntents.entrySet()) {
             PhysicalIntent intent = entry.getValue();
             if (!entry.getKey().equals(intent.id())) throw new IllegalArgumentException("physical intent map key must match intent identity");
@@ -376,7 +377,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     && !strategicPlans.settlementAssaults().containsKey(intent.causeSubjectId()) && !SceneStrikeStateSupport.isSettlementAssaultCause(strategicPlans, intent)
                     && !bootstrap.hive().id().equals(intent.causeSubjectId())
                     && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId()) && !routeConstructions.containsKey(intent.causeSubjectId())
-                    && !RouteMaintenanceStateSupport.ownsMaintenance(routeMaintenances, intent.causeSubjectId()) && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, intent.causeSubjectId())) {
+                    && !RouteMaintenanceStateSupport.ownsMaintenance(routeMaintenances, intent.causeSubjectId()) && !fieldSubjects.contains(intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
             for (SubjectId subject : intent.roles().namedRoles().values()) {
@@ -403,7 +404,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
                         && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject) && !RouteMaintenanceStateSupport.ownsMaintenance(routeMaintenances, subject)
                         && !strategicPlans.settlementAssaults().containsKey(subject)
-                        && !reservedRouteConstructionCargo && !reservedRouteMaintenanceCargo && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, subject)) {
+                        && !reservedRouteConstructionCargo && !reservedRouteMaintenanceCargo && !fieldSubjects.contains(subject)) {
                     throw new IllegalArgumentException("physical intent references an unknown canonical subject");
                 }
             }
