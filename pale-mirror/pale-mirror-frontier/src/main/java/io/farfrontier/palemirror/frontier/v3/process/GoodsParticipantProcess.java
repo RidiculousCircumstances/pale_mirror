@@ -25,17 +25,19 @@ public final class GoodsParticipantProcess {
         if (participant == null) throw new IllegalArgumentException("goods review lost its exact declared participant");
         long now = executionInstant.ticks();
         var events = new ArrayList<ProposedEvent>();
+        // Retire only obligations already terminal in this transaction's pre-state.
+        // Newly withdrawn promises must retain their settlement until a later review.
+        var retirement = closedRetirement(state, now);
+        if (retirement.isPresent()) {
+            events.add(new ProposedEvent(GoodsTradeMarketIdentity.OWNER, retirement.orElseThrow()));
+            state = GoodsTradeStateSupport.retire(state, GoodsTradeMarketIdentity.OWNER, retirement.orElseThrow(), now);
+        }
         var commitments = GoodsCommitmentReview.plan(state, participant);
         state = commitments.state(); events.addAll(commitments.events());
         for (var withdrawal : commitments.events()) {
             var disposition = ((GoodsTradeCancelled) withdrawal.payload()).disposition();
             var contract = state.companies().goodsTrade().contracts().get(disposition.contractId());
             events.addAll(GoodsParticipantWakeup.party(state, contract.buyer().id(), disposition.id().value(), now));
-        }
-        var retirement = closedRetirement(state, now);
-        if (retirement.isPresent()) {
-            events.add(new ProposedEvent(GoodsTradeMarketIdentity.OWNER, retirement.orElseThrow()));
-            state = GoodsTradeStateSupport.retire(state, GoodsTradeMarketIdentity.OWNER, retirement.orElseThrow(), now);
         }
         // Same-container purchases transfer title only. Existing exact receiving custody
         // and the buyer's authorized order, not a fake round-trip, justify acceptance.

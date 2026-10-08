@@ -691,6 +691,31 @@ class GoodsTradeTest {
                         GoodsTradeDisposition.Reason.DISPATCH_UNFUNDED))));
     }
 
+    @Test void expiredWithdrawnContractSettlesBeforeALaterReviewRetiresIt() {
+        var state = breadReserved();
+        var resources = state.inventory().fungibleResources().destroy(SOURCE_ACCOUNT,
+                Map.of(id("lot:trade-bread"), SettlementFoodPolicy.reserveRequirement(state, SELLER)), Map.of());
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        long now = 10_001;
+        var action = io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(SELLER, now);
+        var events = FrontierWorldRuntimeDefinition.planScheduled(state, action, new SimInstant(now));
+        assertTrue(events.stream().anyMatch(event -> event.payload() instanceof GoodsTradeCancelled));
+        assertTrue(events.stream().noneMatch(event -> event.payload() instanceof GoodsTradeRetired retired
+                && retired.contractIds().contains(CONTRACT)));
+        var settled = applyEvents(state, events, now, "goods-trade");
+        var before = state;
+        assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(before, settled));
+        assertTrue(settled.companies().goodsTrade().contracts().get(CONTRACT).terminal());
+        var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(settled));
+        var next = io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(SELLER, now + 1);
+        var cleanup = FrontierWorldRuntimeDefinition.planScheduled(recovered, next, new SimInstant(now + 1));
+        assertTrue(cleanup.stream().anyMatch(event -> event.payload() instanceof GoodsTradeRetired retired
+                && retired.contractIds().contains(CONTRACT)));
+        var retired = applyEvents(recovered, cleanup, now + 1, "goods-trade");
+        assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(recovered, retired));
+        assertFalse(retired.companies().goodsTrade().contracts().containsKey(CONTRACT));
+    }
+
     private static FrontierWorldState breadReserved() {
         FrontierWorldState state = initial(); var resources = state.inventory().fungibleResources();
         resources = resources.destroy(SOURCE_ACCOUNT, Map.of(LOT, 64), Map.of());
