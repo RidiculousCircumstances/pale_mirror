@@ -76,7 +76,6 @@ public final class BakerySceneReconciliation {
         if (work.pendingPhysicalStep().isPresent()
                 || work.phase() != BakeryWorkState.Phase.STATION_LOAD && work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY
                 || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
-                || state.humanPopulation().meals().containsKey(job.workerId())
                 || state.actorMovements().containsKey(job.workerId())
                 || !ActorExecutionCoordinator.ambientAvailable(state, java.util.List.of(job.workerId()))
                 || !hand.actorId().equals(job.workerId()) || !hand.entityId().equals(lease.members().getFirst().entityId())
@@ -88,6 +87,10 @@ public final class BakerySceneReconciliation {
             throw new IllegalArgumentException("bakery recovery cannot replace or replay its cargo/effect");
         ActorCarriedResources.requireBinding(state.inventory().fungibleResources(), job.workerId(),
                 work.actorAccountId(), receipt.observedHand());
+        // A retained meal is waiting for this owner to yield, not an admitted
+        // ambient actuator. Restore the exact work scope so its ordinary
+        // safe-point release can run; retaining the meal must not prevent
+        // the very recovery that makes self-care possible.
         var recoveryId = ActorBodyId.recoveryBindingId(job.workerId());
         var fence = state.fencedRecovery().current().get(recoveryId);
         if (fence == null || fence.asset() != FencedRecoveryAsset.BODY

@@ -305,6 +305,16 @@ class BakeryHotVerticalTest {
         assertEquals(SceneLeaseStatus.HOT, resumed.sceneLeases().get(leaseId).status());
         assertEquals(state.inventory(), resumed.inventory(), "recovery cannot mint or move cargo");
         assertEquals(state.productionJobs(), resumed.productionJobs());
+        var waitingMeal = withRetainedMeal(state, job.workerId(), job.settlementId())
+                .transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
+        var hungryRecovery = io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation.reduce(
+                waitingMeal, task.ownerId(), reconciled);
+        assertEquals(SceneLeaseStatus.HOT, hungryRecovery.sceneLeases().get(leaseId).status());
+        assertEquals(waitingMeal.humanPopulation().meals(), hungryRecovery.humanPopulation().meals(),
+                "a pending meal cannot deadlock recovery or be canceled to recover work");
+        assertEquals(waitingMeal.inventory(), hungryRecovery.inventory(), "carried work stock stays exact");
+        assertTrue(ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(hungryRecovery, job.workerId(), 27_000L),
+                "the ordinary work owner must now yield to the retained meal");
         assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation.reduce(
                 conflicted, task.ownerId(), new BakerySceneReconciled(job.id(), leaseId, lease.revision(),
                         fence.authorityEpoch(), actor.body(), new FungiblePhysicalObservation.Stack(hand.address(), "minecraft:wheat", 63))));
@@ -568,20 +578,7 @@ class BakeryHotVerticalTest {
     private static void assertStationConflictCanReleaseHungryBaker(FrontierWorldState input, SubjectId jobId, SceneLeaseId leaseId) {
         var job = input.productionJobs().get(jobId);
         var actorId = job.workerId();
-        var prior = input.inventory().fungibleResources();
-        var breadId = new SubjectId("lot:station-recovery-food");
-        var depot = FrontierWorldState.depotId(job.settlementId());
-        var accountId = ReferenceContainerCustody.scopeId(depot);
-        var lots = new java.util.LinkedHashMap<>(prior.lots());
-        lots.put(breadId, new ResourceLot(breadId, job.settlementId(), "minecraft:bread", 4, "test", List.of()));
-        var accounts = new java.util.LinkedHashMap<>(prior.accounts());
-        accounts.put(accountId, new CustodyAccount(accountId, new ResourceCustody.Container(depot), Map.of(breadId, 4), Map.of()));
-        var hungry = input.withChanges(FrontierWorldStateUpdate.begin()
-                .inventory(input.inventory().withFungibleResources(new FungibleResourceLedger(lots, prior.claims(), accounts, prior.bindings())))
-                .humanPopulation(input.humanPopulation().accrueHunger(actorId, 27_000L)));
-        var meal = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
-                .selectSourceAtYield(hungry, actorId, 27_000L).orElseThrow();
-        hungry = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceStarted(hungry, actorId, meal);
+        var hungry = withRetainedMeal(input, actorId, job.settlementId());
         var conflicted = hungry.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
         var lease = conflicted.sceneLeases().get(leaseId);
         var actor = conflicted.actorLocations().get(actorId);
@@ -644,6 +641,34 @@ class BakeryHotVerticalTest {
         var pendingConflict = pending.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
         assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation
                 .reduce(pendingConflict, job.settlementId(), receipt), "a potentially applied recipe is never cleared by empty hands");
+    }
+
+    private static FrontierWorldState withRetainedMeal(FrontierWorldState input, SubjectId actorId, SubjectId settlementId) {
+        var prior = input.inventory().fungibleResources();
+        var breadId = new SubjectId("lot:station-recovery-food");
+        var depot = FrontierWorldState.depotId(settlementId);
+        var accountId = ReferenceContainerCustody.scopeId(depot);
+        var lots = new java.util.LinkedHashMap<>(prior.lots());
+        lots.put(breadId, new ResourceLot(breadId, settlementId, "minecraft:bread", 4, "test", List.of()));
+        var accounts = new java.util.LinkedHashMap<>(prior.accounts());
+        accounts.put(accountId, new CustodyAccount(accountId, new ResourceCustody.Container(depot), Map.of(breadId, 4), Map.of()));
+        var hungry = input.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(input.inventory().withFungibleResources(new FungibleResourceLedger(lots, prior.claims(), accounts, prior.bindings())))
+                .humanPopulation(input.humanPopulation().accrueHunger(actorId, 27_000L)));
+        // The meal is selected while the food source is canonical, before its
+        // physical depot is acquired. Loading it later must preserve this meal.
+        var canonicalSource = hungry.withChanges(FrontierWorldStateUpdate.begin()
+                .replicaCustody(PhysicalReplicaCustodyState.empty()));
+        var job = input.productionJobs().values().stream().filter(value -> value.workerId().equals(actorId))
+                .findFirst().orElseThrow();
+        canonicalSource = at(canonicalSource, null, actorId, BakeryWorkGoal.current(input, job).station().standingBody());
+        var meal = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
+                .selectSourceAtYield(canonicalSource, actorId, 27_000L).orElseThrow(() -> new AssertionError(
+                        "fixture meal unavailable: " + ResidentMealOpportunity.candidateAdmission(hungry, actorId, 27_000L)
+                        + " choice=" + ResidentActivityCoordinator.assess(hungry, actorId, 27_000L)));
+        return io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceStarted(canonicalSource, actorId, meal)
+                .withChanges(FrontierWorldStateUpdate.begin().replicaCustody(input.replicaCustody())
+                        .actorLocations(input.actorLocations()));
     }
 
     private static FrontierWorldState at(FrontierWorldState state, SceneLeaseId leaseId,
