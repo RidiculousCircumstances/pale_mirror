@@ -37,7 +37,9 @@ final class FrontierV3SceneTurnScheduler {
                                 Consumer<SceneLease> execute, BooleanSupplier admit) {
         var active = inventory.stream()
                 .filter(lease -> lease.cause().kind() == kind)
-                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
+                // CONFLICT retains bodies and cargo. Its owner may inspect fresh recovery
+                // evidence; only CLOSED is terminal. A turn never authorizes HOT effects.
+                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
                 .toList();
         return family(runtime, kind).active.run(active, SceneLease::id, execute, admit);
     }

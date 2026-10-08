@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Tests real family filtering/service cursors, not native scene effects or domain admission. */
 class FrontierV3SceneTurnSchedulerTest {
-    @Test void everyRegisteredFamilyServicesBDespiteWaitingAAndExcludesTerminalConflicts() {
+    @Test void everyRegisteredFamilyServicesRecoveryAndBDespiteWaitingAAndExcludesOnlyClosedScopes() {
         // Null is an isolated runtime key: this selector never calls the runtime. No domain
         // world or scene result is fabricated and presented as an integration acceptance.
         FrontierV3SceneTurnScheduler.forget(null);
@@ -28,7 +28,7 @@ class FrontierV3SceneTurnSchedulerTest {
             Collections.reverse(inventory);
             for (var cause : causes) {
                 var visited = new ArrayList<String>();
-                for (int turn = 0; turn < 4; turn++) {
+                for (int turn = 0; turn < 6; turn++) {
                     int before = visited.size();
                     assertTrue(FrontierV3SceneTurnScheduler.runInventory(null, inventory, cause.kind(), scene -> {
                         assertEquals(cause.kind(), scene.cause().kind());
@@ -36,13 +36,15 @@ class FrontierV3SceneTurnSchedulerTest {
                     }, () -> false));
                     assertEquals(before + 1, visited.size(), "exactly one active callback per turn");
                 }
-                assertEquals(List.of(id(cause, "a"), id(cause, "b"), id(cause, "a"), id(cause, "b")), visited);
+                assertEquals(List.of(id(cause, "0-conflict"), id(cause, "a"), id(cause, "b"),
+                        id(cause, "0-conflict"), id(cause, "a"), id(cause, "b")), visited,
+                        "retained conflict recovery must be reachable without starving waiting or HOT peers");
             }
             FrontierV3SceneTurnScheduler.forget(null);
             var visited = new ArrayList<String>();
             FrontierV3SceneTurnScheduler.runInventory(null, inventory, SceneCauseKind.SETTLEMENT_ASSAULT,
                     scene -> visited.add(scene.id().value()), () -> false);
-            assertEquals(List.of(id(causes.getFirst(), "a")), visited, "forget resets only ephemeral service order");
+            assertEquals(List.of(id(causes.getFirst(), "0-conflict")), visited, "forget resets only ephemeral service order");
         } finally { FrontierV3SceneTurnScheduler.forget(null); }
     }
 
