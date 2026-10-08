@@ -107,7 +107,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     @Override public FrontierWorldState decode(byte[] encoded) {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             FrontierStateSchema.read(input);
-            if (!FrontierDurationProcessDriverRegistry.inventoryFingerprint().equals(readString(input))) {
+            if (!FrontierSnapshotDescriptorInventory.accepts(readString(input))) {
                 throw new IllegalArgumentException("Frontier v3 state has an incompatible process/scene descriptor inventory");
             }
             if (!FrontierWorldProcessCatalog.physicalLifecycleFingerprint().equals(readString(input))) {

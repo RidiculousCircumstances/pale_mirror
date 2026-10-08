@@ -28,7 +28,7 @@ public record FrontierWorldSnapshotHeader(WorldId worldId, long seed, FrontierRu
             // hydration, but it must consume and validate that exact field too: otherwise the
             // fingerprint is misread as a WorldId and restart deterministically quarantines a
             // perfectly valid snapshot.
-            if (!FrontierDurationProcessDriverRegistry.inventoryFingerprint().equals(readString(input))) {
+            if (!FrontierSnapshotDescriptorInventory.accepts(readString(input))) {
                 throw new IllegalArgumentException("Frontier v3 header has an incompatible process/scene descriptor inventory");
             }
             if (!FrontierWorldProcessCatalog.physicalLifecycleFingerprint().equals(readString(input))) {
