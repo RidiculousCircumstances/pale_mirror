@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "id": "live_settlement_boundary_diagnostic",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": {
+        "status": "ok", "diagnosticVerdict": "green", "sceneConflicts": 0,
+        "requiredConflicts": 0, "inventoryConflicts": 0
+      } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:7-depot", "field": "position" } },
+      "offset": { "x": -8, "y": -1, "z": -8 }, "settleMs": 0,
+      "causalMilestone": "ordinary_clearwater_ingress" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:7-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } },
+      "timeoutMs": 60000 },
+    { "type": "inspect", "view": "process", "id": "settlement:7" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:8-depot", "field": "position" } },
+      "offset": { "x": -8, "y": -1, "z": -8 }, "settleMs": 0,
+      "causalMilestone": "clearwater_exit_ironmeadow_ingress" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:8-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } },
+      "timeoutMs": 60000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:7-depot", "field": "position" } },
+      "offset": { "x": -8, "y": -1, "z": -8 }, "settleMs": 0,
+      "causalMilestone": "clearwater_reentry_after_native_unload" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:7-depot",
+      "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } },
+      "timeoutMs": 60000 },
+    { "type": "inspect", "view": "process", "id": "settlement:7" },
+    { "type": "visit", "dimension": "minecraft:overworld",
+      "position": { "x": 24, "y": 64, "z": -132 }, "settleMs": 0 },
+    { "type": "wait", "ms": 5000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 11, "view": "summary", "id": "", "expect": {
+      "status": "ok", "diagnosticVerdict": "green", "sceneConflicts": 0,
+      "requiredConflicts": 0, "inventoryConflicts": 0, "replicaCustodyDiagnostics": 0
+    } }
+  ],
+  "frames": []
+}
