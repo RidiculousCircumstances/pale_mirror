@@ -160,12 +160,18 @@ public final class ProductionProcess {
     }
 
     public static List<ProposedEvent> planCompletion(FrontierWorldState state, ScheduledAction action) {
+        return planCompletion(state, action, action.dueAt().ticks());
+    }
+
+    public static List<ProposedEvent> planCompletion(FrontierWorldState state, ScheduledAction action, long currentTick) {
         ProductionJob job = state.productionJobs().get(action.subject());
         // A blocked scene retires its job durably before this one-shot action becomes due.
         // The consumed schedule must then be a harmless deterministic no-op, not a quarantine.
         if (job == null) return List.of();
         if (state.humanPopulation().meals().containsKey(job.workerId()))
-            return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
+            // This is a present ownership wait, not missed historical work. Replaying
+            // old retry deadlines can starve the meal that must release this job.
+            return List.of(reschedule(action, complete(job, Math.addExact(Math.max(currentTick, action.dueAt().ticks()), 20L))));
         if (!state.actorExecutions().owns(job.workerId(),
                     io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id())
                 || !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), action.dueAt().ticks()))

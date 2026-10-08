@@ -225,6 +225,10 @@ public final class FrontierWorldProcessCatalog {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ProductionProcess.planCompletion(state, action);
                 }
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                                         io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
+                    return ProductionProcess.planCompletion(state, action, currentInstant.ticks());
+                }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                     return ProductionProcess.completionHeld(state, action);
                 }

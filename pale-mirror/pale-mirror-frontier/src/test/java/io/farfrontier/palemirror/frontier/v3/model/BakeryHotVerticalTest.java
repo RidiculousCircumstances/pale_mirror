@@ -603,6 +603,14 @@ class BakeryHotVerticalTest {
         assertTrue(FrontierSceneAdmission.available(closed, List.of(actorId)), "the exact body is now available for its retained meal");
         assertFalse(closed.sceneLeases().get(leaseId).retainsMemberCustody(actorId));
         assertEquals(closed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(closed)));
+        var oldReview = ProductionProcess.complete(closed.productionJobs().get(jobId), 400L);
+        var retry = base.scheduledPlanner().plan(closed, oldReview, new SimInstant(27_100L));
+        assertEquals(1, retry.size());
+        var rescheduled = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                retry.getFirst().payload());
+        assertEquals(oldReview.id(), rescheduled.scheduleId());
+        assertEquals(27_120L, rescheduled.replacement().dueAt().ticks(),
+                "a resumed job must yield the queue to its meal, not replay historical retries");
         assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation
                 .reduce(conflicted, job.settlementId(), new BakeryStationSceneReconciled(jobId, leaseId, lease.revision(),
                         fence.authorityEpoch() + 1, receipt.entityId(), actor.body(), receipt.phase())));
