@@ -68,6 +68,13 @@ public final class GroupMovementProvider implements ActorMovementProvider {
         return mission.allowed() ? io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assess(
                 state, group, movement.order().actorId(), actual, positions) : mission;
     }
+    @Override public MovementPermission movementPermission(FrontierWorldState state, ActorMovement movement, SurfaceAnchor actual, long tick,
+                                       ActorPositionView positions, MovementPermission previous) {
+        var group = group(state, movement);
+        var mission = UnitGroupMissionPorts.require(group).movementPermission(state, group);
+        return mission.allowed() ? io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assessCurrent(
+                state, group, movement.order().actorId(), positions, previous) : mission;
+    }
     @Override public ActorExecutionState arrivalAuthority(FrontierWorldState state, ActorMovement movement) { validate(state, movement); return state.actorExecutions(); }
     @Override public Optional<BodyPosition> interruptionCheckpoint(FrontierWorldState state, ActorMovement movement, long tick) {
         validate(state, movement); return Optional.of(ActorMovementProcess.bodyAt(state, movement.order().actorId(), tick));

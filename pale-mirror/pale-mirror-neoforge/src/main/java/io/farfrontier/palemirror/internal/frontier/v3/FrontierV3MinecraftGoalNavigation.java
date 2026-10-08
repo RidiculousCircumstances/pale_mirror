@@ -55,7 +55,7 @@ final class FrontierV3MinecraftGoalNavigation {
 
     static Result pursue(ServerLevel level, Mob actor, List<SurfaceAnchor> legalStations,
                          FrontierV3NavigationScope scope, Optional<MovementOrder> order,
-                         FrontierV3GoalNavigation.ProviderPermission permission) {
+                         FrontierV3GoalNavigation.ProviderPermission permission, boolean brakeOnArrival) {
         Objects.requireNonNull(permission, "physical provider permission");
         if (!permission.current(actor)) return new Result(Status.AMBIGUOUS, "stale-provider-authority");
         Objects.requireNonNull(level); Objects.requireNonNull(actor);
@@ -72,9 +72,7 @@ final class FrontierV3MinecraftGoalNavigation {
             return new Result(Status.AMBIGUOUS, "multiple-legal-stations-observed");
         }
         if (observedStations.size() == 1) {
-            stop(actor);
-            actor.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
-            actor.stopInPlace();
+            finishStation(actor, brakeOnArrival);
             return new Result(Status.ARRIVED, "physical-goal-observed", Optional.empty(),
                     Optional.of(observedStations.getFirst()));
         }
@@ -109,7 +107,9 @@ final class FrontierV3MinecraftGoalNavigation {
                 stopPath(actor);
                 activePath = null;
             }
-            if (current.lastProgressAt() + STALLED_TICKS <= level.getGameTime()) {
+            long progressBudget = permission.pace().map(pace -> Math.max((long) STALLED_TICKS,
+                    (long) Math.ceil(0.5 / pace.blocksPerTick()))).orElse((long) STALLED_TICKS);
+            if (current.lastProgressAt() + progressBudget <= level.getGameTime()) {
                 stopPath(actor);
                 return new Result(Status.BLOCKED, "minecraft-path-stalled",
                         Optional.of(FrontierV3GoalNavigation.BlockReason.PATH_STALLED));
@@ -191,7 +191,7 @@ final class FrontierV3MinecraftGoalNavigation {
                     unloaded ? FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED : rejectionReason);
         }
         FrontierV3PedestrianYieldRequests.clear(actor);
-        if (!actor.getNavigation().moveTo(path, SPEED))
+        if (!actor.getNavigation().moveTo(path, speed(actor, permission)))
             return retry(level, actor, legalStations, scope, order, permission, level.getGameTime(),
                     "minecraft-path-refused", FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE);
         // Finding another path is not progress. Keep the same no-motion deadline
@@ -201,10 +201,10 @@ final class FrontierV3MinecraftGoalNavigation {
                 ? current : null;
         ACTIVE.put(actor, retained == null
                 ? new Control(legalStations, target, scope, FrontierV3PhysicalPathPolicy.corridor(path, target), order, permission,
-                    level.getGameTime(), level.getGameTime(), actor.position(), path, remainingDistance(path, actor.position()))
+                    level.getGameTime(), level.getGameTime(), actor.position(), path, remainingDistance(path, actor.position()), brakeOnArrival)
                 : new Control(legalStations, target, scope, FrontierV3PhysicalPathPolicy.corridor(path, target), order, permission,
                     level.getGameTime(), retained.lastProgressAt(),
-                        actor.position(), path, remainingDistance(path, actor.position())));
+                        actor.position(), path, remainingDistance(path, actor.position()), brakeOnArrival));
         return new Result(Status.IN_PROGRESS, "minecraft-path-started");
     }
 
@@ -247,9 +247,8 @@ final class FrontierV3MinecraftGoalNavigation {
             ACTIVE.put(actor, control);
         }
         if (FrontierV3SemanticMovement.arrived(level, actor, control.target())) {
-            stop(actor);
-            actor.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
-            actor.stopInPlace();
+            if (control.brakeOnArrival()) finishStation(actor, true);
+            else actor.getNavigation().stop(); // Keep provider/ordinary travel until the next local leg is installed.
             return true;
         }
         actor.setNoAi(true);
@@ -257,6 +256,7 @@ final class FrontierV3MinecraftGoalNavigation {
         // supplies its own gravity/collision. Applying the old NoAI gravity bridge
         // here as well would double-integrate each HOT pedestrian turn.
         FrontierV3BodyObservation.refreshGroundContact(level, actor);
+        actor.getNavigation().setSpeedModifier(speed(actor, control.permission()));
         actor.getNavigation().tick();
         if (actor.getNavigation().isDone()) settleObservedStation(level, actor, control);
         actor.getMoveControl().tick();
@@ -271,7 +271,7 @@ final class FrontierV3MinecraftGoalNavigation {
                     != io.farfrontier.palemirror.frontier.v3.model.SemanticTraversalArrival.Disposition.ARRIVED
                 || !FrontierV3SemanticMovement.targetIsNavigable(level, actor, control.target())) return false;
         Vec3 point = FrontierV3SemanticMovement.point(level, control.target());
-        actor.getMoveControl().setWantedPosition(point.x, point.y, point.z, SPEED);
+        actor.getMoveControl().setWantedPosition(point.x, point.y, point.z, speed(actor, control.permission()));
         return true;
     }
 
@@ -288,7 +288,9 @@ final class FrontierV3MinecraftGoalNavigation {
     static Observation observation(Mob actor) {
         var control = ACTIVE.get(actor);
         if (control != null && control.permission().current(actor))
-            return new Observation("MOVING", "", control.legalStations(), List.of());
+            return new Observation("MOVING", control.permission().pace().map(pace -> "pace-blocks-per-tick="
+                    + pace.blocksPerTick() + ";native-speed-modifier=" + speed(actor, control.permission())).orElse(""),
+                    control.legalStations(), List.of());
         var failure = FAILURES.get(actor);
         return failure != null && failure.permission().current(actor)
                 ? new Observation(failure.blockReason().name(), failure.reason(), failure.legalStations(),
@@ -318,6 +320,27 @@ final class FrontierV3MinecraftGoalNavigation {
     private static void stopPath(Mob actor) {
         ACTIVE.remove(actor);
         actor.getNavigation().stop();
+    }
+
+    private static void finishStation(Mob actor, boolean brake) {
+        if (brake) {
+            stop(actor);
+            actor.setDeltaMovement(Vec3.ZERO);
+        } else {
+            // Replacing a completed advisory leg must not zero momentum or stop
+            // the body. The same turn installs its successor under the same owner.
+            stopPath(actor);
+            FAILURES.remove(actor);
+        }
+    }
+
+    private static double speed(Mob actor, FrontierV3GoalNavigation.ProviderPermission permission) {
+        return permission.pace().map(pace -> {
+            var support = actor.getBlockPosBelowThatAffectsMyMovement();
+            double friction = actor.level().getBlockState(support).getFriction(actor.level(), support, actor);
+            return FrontierV3NavigationPace.speedModifier(pace,
+                    actor.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED), friction, SPEED);
+        }).orElse(SPEED);
     }
 
     private static Result retry(ServerLevel level, Mob actor, List<SurfaceAnchor> legalStations, FrontierV3NavigationScope scope,
@@ -355,7 +378,7 @@ final class FrontierV3MinecraftGoalNavigation {
     private record Control(List<SurfaceAnchor> legalStations, SurfaceAnchor target, FrontierV3NavigationScope scope,
                            LocalNavigationEnvelope corridor,
                            Optional<MovementOrder> order, FrontierV3GoalNavigation.ProviderPermission permission, long refreshedAt,
-                           long lastProgressAt, Vec3 lastProgressPosition, Path progressPath, double bestRemaining) {
+                           long lastProgressAt, Vec3 lastProgressPosition, Path progressPath, double bestRemaining, boolean brakeOnArrival) {
         private Control observed(Path path, Vec3 position, long tick) {
             double remaining = path == null ? goalDistance(position, target) : remainingDistance(path, position);
             // A legal building detour can initially move AWAY from the final goal.
@@ -363,19 +386,19 @@ final class FrontierV3MinecraftGoalNavigation {
             // decreasing straight-line goal distance or mere path recomputation.
             if (progressPath != path)
                 return new Control(legalStations, target, scope, corridor, order, permission, refreshedAt,
-                        lastProgressAt, position, path, remaining);
+                        lastProgressAt, position, path, remaining, brakeOnArrival);
             double displacement = Math.hypot(position.x - lastProgressPosition.x, position.z - lastProgressPosition.z);
             if (bestRemaining - remaining >= 0.25D && displacement >= 0.25D)
-                return new Control(legalStations, target, scope, corridor, order, permission, refreshedAt, tick, position, path, remaining);
+                return new Control(legalStations, target, scope, corridor, order, permission, refreshedAt, tick, position, path, remaining, brakeOnArrival);
             return this;
         }
         private Control refreshed(long tick, FrontierV3GoalNavigation.ProviderPermission currentPermission) {
             return new Control(legalStations, target, scope, corridor, order, currentPermission, tick, lastProgressAt,
-                    lastProgressPosition, progressPath, bestRemaining);
+                    lastProgressPosition, progressPath, bestRemaining, brakeOnArrival);
         }
         private Control withCorridor(LocalNavigationEnvelope value) {
             return new Control(legalStations, target, scope, value, order, permission, refreshedAt, lastProgressAt,
-                    lastProgressPosition, progressPath, bestRemaining);
+                    lastProgressPosition, progressPath, bestRemaining, brakeOnArrival);
         }
     }
     static double remainingDistance(Path path, Vec3 position) {

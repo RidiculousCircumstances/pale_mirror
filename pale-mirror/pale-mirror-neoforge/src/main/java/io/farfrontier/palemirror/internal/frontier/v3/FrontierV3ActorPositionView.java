@@ -15,14 +15,24 @@ final class FrontierV3ActorPositionView {
 
     static ActorPositionView observed(ServerLevel level, FrontierWorldState state, long tick) {
         var canonical = ActorPositionView.canonical(state, tick);
-        return actorId -> {
+        return new ActorPositionView() {
+          private Mob observed(io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId) {
             var binding = state.fencedRecovery().current().get(ActorBodyId.recoveryBindingId(actorId));
             var entity = level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(), actorId));
             if (binding != null && entity instanceof Mob body && body.isAlive() && !body.isRemoved()
                     && FrontierV3ActorBodyController.readyForExecution(level, state,
                         List.of(ActorBodyAuthority.current(state, actorId))))
-                return FrontierV3BodyObservation.position(body);
-            return canonical.bodyAt(actorId);
+                return body;
+            return null;
+          }
+          @Override public io.farfrontier.palemirror.frontier.v3.model.BodyPosition bodyAt(io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId) {
+            var body = observed(actorId);
+            return body == null ? canonical.bodyAt(actorId) : FrontierV3BodyObservation.position(body);
+          }
+          @Override public TravelPoint pointAt(io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId) {
+            var body = observed(actorId);
+            return body == null ? canonical.pointAt(actorId) : new TravelPoint(body.getX(), body.getY(), body.getZ());
+          }
         };
     }
 }

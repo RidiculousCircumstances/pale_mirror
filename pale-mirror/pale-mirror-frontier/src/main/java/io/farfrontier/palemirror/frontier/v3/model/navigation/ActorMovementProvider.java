@@ -31,6 +31,11 @@ public interface ActorMovementProvider {
     }
     default MovementPermission movementPermission(FrontierWorldState state, ActorMovement movement, SurfaceAnchor actual,
                                                    long tick, ActorPositionView positions) { return MovementPermission.allow(); }
+    /** Previous decision is local steering memory under the same exact command, not domain progress. */
+    default MovementPermission movementPermission(FrontierWorldState state, ActorMovement movement, SurfaceAnchor actual,
+                                                   long tick, ActorPositionView positions, MovementPermission previous) {
+        return movementPermission(state, movement, actual, tick, positions);
+    }
     /** Registered owner declares a service approach; navigation owns waiting/clearance, never its transaction. */
     default java.util.Optional<ServiceAccessDemand.Identity> serviceApproach(FrontierWorldState state, ActorMovement movement) {
         return java.util.Optional.empty();

@@ -106,6 +106,29 @@ class ExpeditionSupplyFlowTest {
         assertFalse(io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.permits(formationState, formed, fast,
                 route.get(26), physicallyBehind), "physical lag must still hold the advancing member");
         assertSame(retainedPositions, lagging.actorLocations(), "the read-only gate cannot journal or change poses");
+        var soft = io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assess(formationState, formed, fast,
+                route.get(8), physicallyBehind);
+        assertTrue(soft.allowed(), "ordinary elastic lag reduces pace instead of canceling the path");
+        double basePace = 1.0 / formationState.bootstrap().ruleset().expedition().ticksPerRouteEdge();
+        assertTrue(soft.pace().orElseThrow().blocksPerTick() > 0);
+        assertTrue(soft.pace().orElseThrow().blocksPerTick() < basePace);
+        // Hard separation retains a hysteresis latch local to this exact travel command.
+        var heldPositions = formationPositions(formed, route, fast, 8.0);
+        var recovering = io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assessCurrent(
+                formationState, formed, fast, heldPositions, hold);
+        assertFalse(recovering.allowed(), "a hard hold must not resume at one cell below its stop threshold");
+        var reunited = io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assessCurrent(
+                formationState, formed, fast, formationPositions(formed, route, fast, 2.0), recovering);
+        assertTrue(reunited.allowed());
+        assertEquals(basePace, reunited.pace().orElseThrow().blocksPerTick(), 1e-12);
+        var continuousA = io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assessCurrent(
+                formationState, formed, fast, formationPositions(formed, route, fast, 8.499), reunited);
+        var continuousB = io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assessCurrent(
+                formationState, formed, fast, formationPositions(formed, route, fast, 8.501), continuousA);
+        assertTrue(continuousA.allowed() && continuousB.allowed());
+        assertTrue(Math.abs(continuousA.pace().orElseThrow().blocksPerTick()
+                - continuousB.pace().orElseThrow().blocksPerTick()) < 0.0001,
+                "crossing a physical cell centre cannot toggle travel or step its pace");
         var departureState = travelling;
         var donor = group.members().stream().filter(m -> departureState.humanPopulation().resident(m.actorId()) != null)
                 .min(Comparator.comparingLong(m -> {
@@ -385,6 +408,23 @@ class ExpeditionSupplyFlowTest {
         assertNotNull(missionId, "accepted contract must dispatch its feasible provisioned group");
         assertTrue(recovered, "checkpoint splits actual provisioning receipts, not a fabricated loaded fixture");
         assertTrue(departed, "members must load, clear the depot and gather before departure");
+    }
+    private static io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView formationPositions(
+            io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup group, List<SurfaceAnchor> route,
+            SubjectId fast, double progress) {
+        return new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView() {
+            @Override public BodyPosition bodyAt(SubjectId actor) {
+                group.member(actor);
+                return route.get(actor.equals(fast) ? (int) progress : 0).standingBody();
+            }
+            @Override public TravelPoint pointAt(SubjectId actor) {
+                if (!actor.equals(fast)) return TravelPoint.at(bodyAt(actor));
+                var a = TravelPoint.at(route.get((int) progress).standingBody());
+                var b = TravelPoint.at(route.get((int) progress + 1).standingBody());
+                double part = progress - (int) progress;
+                return new TravelPoint(a.x() + part * (b.x() - a.x()), a.y() + part * (b.y() - a.y()), a.z() + part * (b.z() - a.z()));
+            }
+        };
     }
     private static int bread(FrontierWorldState state) {
         return state.inventory().fungibleResources().accounts().values().stream().mapToInt(account -> account.lotQuantities().entrySet().stream()

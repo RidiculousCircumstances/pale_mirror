@@ -5,12 +5,23 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** One read-only decision consumed by both execution and explanation; never an arrival receipt. */
-public record MovementPermission(Reason reason, Optional<SubjectId> waitingFor) {
+public record MovementPermission(Reason reason, Optional<SubjectId> waitingFor, Optional<TravelPace> pace) {
     public enum Reason { ALLOWED, INACTIVE_MEMBER, GROUP_SPATIAL_STRETCH, GROUP_PROGRESS_STRETCH,
         MISSION_STOP_REQUESTED, REFILL_TRANSFER, FOOD_STOCK_REQUIRED }
-    public MovementPermission { Objects.requireNonNull(reason); waitingFor = Objects.requireNonNull(waitingFor); }
+    public MovementPermission {
+        Objects.requireNonNull(reason); waitingFor = Objects.requireNonNull(waitingFor);
+        pace = Objects.requireNonNull(pace);
+        if (reason != Reason.ALLOWED && pace.isPresent())
+            throw new IllegalArgumentException("a held movement cannot request a walking pace");
+    }
+    public MovementPermission(Reason reason, Optional<SubjectId> waitingFor) {
+        this(reason, waitingFor, Optional.empty());
+    }
     public boolean allowed() { return reason == Reason.ALLOWED; }
     public static MovementPermission allow() { return new MovementPermission(Reason.ALLOWED, Optional.empty()); }
+    public static MovementPermission allow(TravelPace pace) {
+        return new MovementPermission(Reason.ALLOWED, Optional.empty(), Optional.of(pace));
+    }
     public static MovementPermission hold(Reason reason) {
         if (reason == Reason.ALLOWED) throw new IllegalArgumentException("hold requires a reason");
         return new MovementPermission(reason, Optional.empty());

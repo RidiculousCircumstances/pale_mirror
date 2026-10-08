@@ -20,6 +20,9 @@ final class FrontierV3ActorMovementNavigation {
     private record Wait(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution,
                         MovementOrder order, String reason) { }
     private static final Map<Mob, Wait> BLOCKED = new WeakHashMap<>();
+    private record Steering(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId actuation,
+                            MovementOrder order, MovementPermission permission) { }
+    private static final Map<Mob, Steering> STEERING = new WeakHashMap<>();
 
     private FrontierV3ActorMovementNavigation() { }
 
@@ -29,6 +32,7 @@ final class FrontierV3ActorMovementNavigation {
         if (movement == null) {
             ROUTES.remove(body);
             BLOCKED.remove(body);
+            STEERING.remove(body);
             return;
         }
         var provider = ActorMovementProviders.require(movement);
@@ -52,8 +56,12 @@ final class FrontierV3ActorMovementNavigation {
             return; // Local clearance is not arrival at the retained service/work goal.
         }
         long tick = runtime.calendarInstant().orElseThrow();
+        var previous = STEERING.get(body);
         var permission = provider.movementPermission(state, movement, FrontierV3SurfaceObservation.observedBody(body).supportingSurface(), tick,
-                FrontierV3ActorPositionView.observed(level, state, tick));
+                FrontierV3ActorPositionView.observed(level, state, tick),
+                previous != null && previous.actuation().equals(actuation.id()) && previous.order().equals(movement.order())
+                        ? previous.permission() : MovementPermission.allow());
+        STEERING.put(body, new Steering(actuation.id(), movement.order(), permission));
         if (!permission.allowed()) {
             blocked(body, movement, "permission:" + permission.reason() + ":peer="
                     + permission.waitingFor().map(value -> value.value()).orElse("none"));
@@ -83,7 +91,7 @@ final class FrontierV3ActorMovementNavigation {
         }
         try {
             FrontierV3GoalNavigation.Result result = FrontierV3GoalNavigation.pursue(level, body,
-                    FrontierV3GoalNavigation.Goal.routed(movement.order(), route.waypoints(), state.bootstrap().bounds()), actuation);
+                    FrontierV3GoalNavigation.Goal.routed(movement.order(), route.waypoints(), state.bootstrap().bounds()), actuation, permission.pace());
             if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
                 blocked(body, movement, "minecraft_path:" + result.reason());
             else BLOCKED.remove(body);

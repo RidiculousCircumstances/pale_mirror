@@ -33,7 +33,7 @@ final class FrontierV3RouteNavigation {
         if (route.isEmpty() || goal.legalStations().stream().anyMatch(station ->
                 FrontierV3SemanticMovement.arrived(level, actor, station))) {
             LEGS.remove(actor);
-            return FrontierV3MinecraftGoalNavigation.pursue(level, actor, goal.legalStations(), goal.scope(), goal.order(), permission);
+            return FrontierV3MinecraftGoalNavigation.pursue(level, actor, goal.legalStations(), goal.scope(), goal.order(), permission, true);
         }
         Leg leg = LEGS.get(actor);
         if (leg == null || !leg.goal().equals(goal)) {
@@ -41,7 +41,7 @@ final class FrontierV3RouteNavigation {
             leg = leg(goal, nearest(actor, route));
             LEGS.put(actor, leg);
         }
-        var result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order(), permission);
+        var result = pursueLeg(level, actor, leg, permission);
         if (leg.retryHints(level.getGameTime(), result.status())) {
             // A failed distant fallback is not a permanent replacement for the
             // route. Reconsider nearby hints at the provider's bounded retry
@@ -49,7 +49,7 @@ final class FrontierV3RouteNavigation {
             // a fallback path that is actually progressing.
             leg = leg(goal, nearest(actor, route));
             LEGS.put(actor, leg);
-            result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order(), permission);
+            result = pursueLeg(level, actor, leg, permission);
         }
         if (result.status() == FrontierV3MinecraftGoalNavigation.Status.BLOCKED
                 && !leg.stations().equals(goal.legalStations())
@@ -62,7 +62,7 @@ final class FrontierV3RouteNavigation {
             leg = new Leg(goal, leg.startIndex(), goal.legalStations(),
                     level.getGameTime() + FrontierV3MinecraftGoalNavigation.retryIntervalTicks());
             LEGS.put(actor, leg);
-            result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order(), permission);
+            result = pursueLeg(level, actor, leg, permission);
         }
         if (result.status() != FrontierV3MinecraftGoalNavigation.Status.ARRIVED) return result;
         SurfaceAnchor arrived = result.arrivedStation().orElseThrow();
@@ -71,9 +71,18 @@ final class FrontierV3RouteNavigation {
         for (int index = reached; index < route.size(); index++) {
             if (route.get(index).equals(arrived)) { reached = index; break; }
         }
-        LEGS.put(actor, leg(goal, reached));
-        return new FrontierV3MinecraftGoalNavigation.Result(FrontierV3MinecraftGoalNavigation.Status.IN_PROGRESS,
-                "local-leg-arrived-final-goal-retained");
+        var next = leg(goal, reached);
+        LEGS.put(actor, next);
+        // Start the successor in this same physical refresh. Local arrival is
+        // never semantic completion, and creates no stop/wait frame.
+        return pursueLeg(level, actor, next, permission);
+    }
+
+    private static FrontierV3MinecraftGoalNavigation.Result pursueLeg(ServerLevel level, Mob actor, Leg leg,
+                                                                     FrontierV3GoalNavigation.ProviderPermission permission) {
+        boolean finalLeg = leg.stations().stream().allMatch(leg.goal().legalStations()::contains);
+        return FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), leg.goal().scope(),
+                leg.goal().order(), permission, finalLeg);
     }
 
     /** Several later hints permit bypass of a blocked micro-waypoint without changing the task. */

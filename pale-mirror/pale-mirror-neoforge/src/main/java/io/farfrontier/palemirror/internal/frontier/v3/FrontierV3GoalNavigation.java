@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.model.TraversalCapability;
 import io.farfrontier.palemirror.frontier.v3.model.WorldBounds;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
@@ -19,14 +20,18 @@ final class FrontierV3GoalNavigation {
     abstract static sealed class ProviderPermission permits CapturedPermission, UnmodeledPermission {
         private ProviderPermission() { }
         abstract boolean current(Mob actor);
+        Optional<TravelPace> pace() { return Optional.empty(); }
     }
     private static final class CapturedPermission extends ProviderPermission {
         private final Mob actor;
         private final FrontierV3ActorActuation actuation;
-        private CapturedPermission(Mob actor, FrontierV3ActorActuation actuation) {
+        private final Optional<TravelPace> pace;
+        private CapturedPermission(Mob actor, FrontierV3ActorActuation actuation, Optional<TravelPace> pace) {
             this.actor = Objects.requireNonNull(actor); this.actuation = Objects.requireNonNull(actuation);
+            this.pace = Objects.requireNonNull(pace);
         }
         @Override boolean current(Mob candidate) { return candidate == actor && actuation.current(candidate); }
+        @Override Optional<TravelPace> pace() { return pace; }
     }
     /** Unmodeled physical fixtures have no canonical identity and cannot acquire one through this permission. */
     private static final class UnmodeledPermission extends ProviderPermission {
@@ -123,21 +128,26 @@ final class FrontierV3GoalNavigation {
 
     /** A successor may replace a path, but stale authority cannot refresh or cancel that path. */
     static Result pursue(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation) {
+        return pursue(level, actor, goal, actuation, Optional.empty());
+    }
+    static Result pursue(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation,
+                          Optional<TravelPace> pace) {
         Objects.requireNonNull(actuation, "navigation actuation");
         if (!actuation.current(actor))
             return new Result(Status.AMBIGUOUS, "stale-body-or-execution-authority", Optional.empty(), Optional.empty());
         if (FrontierV3PedestrianCourtesy.active(actor))
             return new Result(Status.IN_PROGRESS, "owner-authorized-spatial-yield", Optional.empty(), Optional.empty());
-        return pursueCaptured(level, actor, goal, actuation);
+        return pursueCaptured(level, actor, goal, actuation, pace);
     }
 
     static Result pursueCourtesy(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation) {
         if (!FrontierV3PedestrianCourtesy.active(actor))
             throw new IllegalArgumentException("courtesy motion requires its admitted owner checkpoint");
-        return pursueCaptured(level, actor, goal, actuation);
+        return pursueCaptured(level, actor, goal, actuation, Optional.empty());
     }
 
-    private static Result pursueCaptured(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation) {
+    private static Result pursueCaptured(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation,
+                                          Optional<TravelPace> pace) {
         Objects.requireNonNull(actuation, "navigation actuation");
         if (!actuation.current(actor))
             return new Result(Status.AMBIGUOUS, "stale-body-or-execution-authority", Optional.empty(), Optional.empty());
@@ -147,7 +157,7 @@ final class FrontierV3GoalNavigation {
             FrontierV3ControlledMobMotion.retireLocalActuation(actor);
         }
         ACTUATIONS.put(actor, actuation);
-        return pursueProvider(level, actor, goal, new CapturedPermission(actor, actuation));
+        return pursueProvider(level, actor, goal, new CapturedPermission(actor, actuation, pace));
     }
 
     private static Result pursueProvider(ServerLevel level, Mob actor, Goal goal, ProviderPermission permission) {

@@ -31,7 +31,8 @@ final class FrontierV3GroupDiagnosticJson {
                     : target.filter(body.supportingSurface()::equals).isPresent() ? "AT_FORMATION_STATION"
                     : target.isPresent() ? "FORMATION_MOVE_PENDING" : "MISSION_BOUNDARY";
             var permission = movement == null ? null : io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(movement)
-                    .movementPermission(state, movement, body.supportingSurface(), checkpoint.instant().ticks(), positions);
+                    .movementPermission(state, movement, body.supportingSurface(), checkpoint.instant().ticks(), positions,
+                            io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission.allow());
             var calculation = movement == null ? java.util.Optional.<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult>empty()
                     : movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.GroupLeg
                         ? routeEvidence(state, group, body.supportingSurface(), movement.order().legalStations().getFirst())
@@ -50,6 +51,8 @@ final class FrontierV3GroupDiagnosticJson {
                     + ",\"disposition\":" + string(wait) + ",\"coldArrivalTick\":"
                     + (movement == null ? -1 : movement.coldTravel().map(TimedKnownRoute::arrivalTick).orElse(-1L))
                     + ",\"waitingFor\":" + (permission == null ? "null" : permission.waitingFor().map(peer -> string(peer.value())).orElse("null"))
+                    + ",\"requestedPaceBlocksPerTick\":" + (permission == null ? "null"
+                        : permission.pace().map(pace -> Double.toString(pace.blocksPerTick())).orElse("null"))
                     + ",\"nativeWait\":" + physicalWait.map(FrontierV3GroupDiagnosticJson::string).orElse("null")
                     + ",\"routeReason\":" + calculation.map(result -> string(result.reason())).orElse("null") + "}";
         }).collect(Collectors.joining(","));

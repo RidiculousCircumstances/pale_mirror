@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
+import io.farfrontier.palemirror.frontier.v3.model.TraversalCapability;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -19,6 +20,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import java.util.LinkedHashSet;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -28,6 +30,51 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class FrontierV3LocalNavigationGameTests {
     private FrontierV3LocalNavigationGameTests() { }
 
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/treasure/big_air_full", timeoutTicks = 110)
+    public static void intermediateRouteHintPreservesMomentumAndStartsItsSuccessor(GameTestHelper helper) {
+        var level = helper.getLevel();
+        List<SurfaceAnchor> hints = new ArrayList<>();
+        // This template is 38x48x38; the entire physical fixture stays inside
+        // its own bounds rather than overwriting adjacent concurrently run tests.
+        for (int x = 4; x <= 9; x++) for (int z = 3; z <= 5; z++) {
+            var support = helper.absolutePos(new BlockPos(x, 30, z));
+            level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+            if (z == 4) hints.add(SurfaceAnchor.at(support.getX(), support.getY(), support.getZ()));
+        }
+        var target = hints.getLast(); var intermediate = hints.get(4);
+        var envelope = LocalNavigationEnvelope.along(hints, List.of(target));
+        var goal = new FrontierV3GoalNavigation.Goal(List.of(target), TraversalCapability.PEDESTRIAN,
+                new FrontierV3NavigationScope.Restricted(envelope), Optional.empty(), hints);
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5, 31.0, 4.5));
+        helper.runAfterDelay(1, () -> {
+            boolean crossed = false;
+            for (int turn = 0; turn < 75 && !FrontierV3SemanticMovement.arrived(level, worker, target); turn++) {
+                boolean atHint = FrontierV3SemanticMovement.arrived(level, worker, intermediate);
+                double before = worker.getDeltaMovement().horizontalDistance();
+                var result = FrontierV3GoalNavigation.pursue(level, worker, goal);
+                if (atHint && !crossed) {
+                    helper.assertTrue(before > 0, "the real body must arrive at the hint with momentum");
+                    helper.assertTrue(worker.getDeltaMovement().horizontalDistance() > 0,
+                            "local route handoff cannot erase motion before the final goal");
+                    var observed = FrontierV3MinecraftGoalNavigation.observation(worker);
+                    helper.assertTrue(FrontierV3GoalNavigation.controls(worker) && observed.targets().contains(target),
+                            "the successor must own motion in the same refresh, including native final centering: " + observed);
+                    crossed = true;
+                }
+                helper.assertTrue(result.status() == FrontierV3GoalNavigation.Status.IN_PROGRESS,
+                        "an intermediate route hint cannot report final arrival: " + result);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(worker);
+                worker.aiStep();
+            }
+            helper.assertTrue(crossed && FrontierV3SemanticMovement.arrived(level, worker, target),
+                    "the physical navigator must cross its local hint and reach the retained final goal");
+            FrontierV3GoalNavigation.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 65)

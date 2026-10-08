@@ -89,7 +89,7 @@ class FrontierV3ActorActuationTest {
         }
         assertThrows(NullPointerException.class, () -> FrontierV3RouteNavigation.pursue(null, null, null, null));
         assertThrows(NullPointerException.class, () -> FrontierV3MinecraftGoalNavigation.pursue(
-                null, null, null, null, null, null));
+                null, null, null, null, null, null, true));
     }
 
     @Test void retainedCommandCannotAcquireSuccessorExecutionOrNewBodyEpochAtTheDeferredTick() {
