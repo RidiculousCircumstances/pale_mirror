@@ -34,19 +34,15 @@ final class FrontierV3ProductionWorkSceneExecutor {
     }
 
     private static boolean admit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
-        Optional<FrontierProductionWorkSceneSupport.Candidate> candidate = FrontierV3SceneTurnScheduler.candidate(
-                runtime, SceneCauseKind.PRODUCTION_WORK, FrontierProductionWorkSceneSupport.candidates(state).stream()
+        Optional<FrontierProductionWorkSceneSupport.Candidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
+                level, runtime, SceneCauseKind.PRODUCTION_WORK, FrontierProductionWorkSceneSupport.candidates(state).stream()
                 .filter(value -> !ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, value.workerId(),
                         runtime.canonicalState().orElseThrow().instant().ticks()))
-                // A current exact depot custody epoch is physical eligibility, not presentation
-                // demand.  It may therefore admit the same retained worker/workshop cycle while
-                // the naturally loaded depot is ticking without a nearby player.  Both anchors
-                // must still be naturally loaded; this selector never creates a ticket.
-                .filter(value -> FrontierV3SceneExecutor.demandSnapshot(level, value.demandPosition()).active()
-                        || ReferenceContainerCustody.hasOperationalCustody(state, FrontierWorldState.depotId(value.settlementId())))
-                .filter(value -> level.hasChunkAt(new net.minecraft.core.BlockPos(value.demandPosition().x(), value.demandPosition().y(), value.demandPosition().z()))
-                        && level.hasChunkAt(new net.minecraft.core.BlockPos(value.handoffPosition().x(), value.handoffPosition().y(), value.handoffPosition().z())))
-                .toList(), FrontierProductionWorkSceneSupport.Candidate::jobId);
+                // Container custody prevents a competing inventory writer, but cannot create
+                // worker presentation demand. Admission and no-demand drain must agree.
+                .filter(value -> FrontierV3ServerLifecycle.newSceneAdmissionReady(level, value.handoffPosition()))
+                .toList(), FrontierProductionWorkSceneSupport.Candidate::demandPosition,
+                FrontierProductionWorkSceneSupport.Candidate::jobId);
         if (candidate.isEmpty()) return false;
         FrontierProductionWorkSceneSupport.Candidate work = candidate.orElseThrow(); SceneLease lease = lease(runtime, work);
         if (FrontierSceneAdmission.available(state, work.memberPositions().keySet())) prepare(level, runtime, lease); else handoff(level, runtime, state, lease);

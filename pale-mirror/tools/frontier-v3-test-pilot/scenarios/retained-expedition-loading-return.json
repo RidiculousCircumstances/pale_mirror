@@ -1,13 +1,9 @@
 {
   "schema": 1,
-  "id": "disposable_accelerated_expedition_boundary",
-  "isolation": {
-    "mode": "disposable_lite",
-    "seed": 41
-  },
+  "id": "retained_expedition_loading_return",
   "server": {
     "host": "127.0.0.1",
-    "port": 25575,
+    "port": 26720,
     "profile": "expedition-provisioning",
     "viewDistance": 6
   },
@@ -16,7 +12,7 @@
   },
   "restart": {
     "mode": "graceful",
-    "afterAction": 9,
+    "afterAction": 7,
     "resumeSetup": [
       {
         "type": "command",
@@ -28,6 +24,25 @@
     {
       "type": "command",
       "command": "/tick rate 20"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "process",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "availableMoneyRaw": 80000000,
+            "expeditions": {
+              "activeMissions": 1,
+              "reservedAnimals": 1,
+              "allocatedBudgets": 1
+            }
+          }
+        }
+      ]
     }
   ],
   "actions": [
@@ -46,26 +61,7 @@
         "y": -1,
         "z": -8
       },
-      "settleMs": 0,
-      "causalMilestone": "ordinary_player_observes_real_provision_loading"
-    },
-    {
-      "type": "release_fast_forward_hold"
-    },
-    {
-      "type": "wait_until_diagnostic",
-      "view": "process",
-      "id": "settlement:1",
-      "expect": {
-        "status": "ok",
-        "expeditions": {
-          "activeMissions": 1,
-          "reservedAnimals": 1,
-          "allocatedBudgets": 1
-        }
-      },
-      "timeoutMs": 120000,
-      "causalMilestone": "actual_mission_admission_before_physical_loading"
+      "settleMs": 0
     },
     {
       "type": "wait_until_diagnostic",
@@ -250,7 +246,7 @@
   ],
   "assertions": [
     {
-      "after": 16,
+      "after": 14,
       "view": "process",
       "id": "settlement:1",
       "expect": {
@@ -264,7 +260,7 @@
       }
     },
     {
-      "after": 18,
+      "after": 16,
       "view": "process",
       "id": "settlement:10",
       "expect": {
@@ -273,7 +269,7 @@
       }
     },
     {
-      "after": 22,
+      "after": 20,
       "view": "summary",
       "id": "",
       "expect": {
@@ -287,11 +283,11 @@
   ],
   "frames": [
     {
-      "after": 6,
+      "after": 4,
       "name": "actual-pack-travel"
     },
     {
-      "after": 21,
+      "after": 19,
       "name": "same-pack-returned-home"
     }
   ]

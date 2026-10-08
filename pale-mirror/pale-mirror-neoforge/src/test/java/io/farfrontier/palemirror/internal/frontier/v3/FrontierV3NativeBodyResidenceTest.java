@@ -5,6 +5,15 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3NativeBodyResidenceTest {
+    @Test void bodyBirthCannotRaceAHiddenOrUnloadingNativeSection() {
+        assertTrue(FrontierV3NativeBodyResidence.admissionReady(true, true, false, false, true, false));
+        assertTrue(FrontierV3NativeBodyResidence.admissionReady(true, true, false, false, false, true));
+        assertFalse(FrontierV3NativeBodyResidence.admissionReady(true, true, true, false, true, true));
+        assertFalse(FrontierV3NativeBodyResidence.admissionReady(true, true, false, true, true, true));
+        assertFalse(FrontierV3NativeBodyResidence.admissionReady(true, true, false, false, false, false));
+        assertFalse(FrontierV3NativeBodyResidence.admissionReady(true, false, false, false, true, true));
+        assertFalse(FrontierV3NativeBodyResidence.admissionReady(false, true, false, false, true, true));
+    }
     @Test void inaccessibleTerrainAllowsOnlyNativeUnloadRequest() {
         assertTrue(FrontierV3NativeBodyResidence.needsNativeUnload(false, FullChunkStatus.INACCESSIBLE));
         assertFalse(FrontierV3NativeBodyResidence.needsNativeUnload(true, FullChunkStatus.INACCESSIBLE));

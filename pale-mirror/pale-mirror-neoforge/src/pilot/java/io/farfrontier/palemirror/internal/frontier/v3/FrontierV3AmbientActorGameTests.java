@@ -403,7 +403,7 @@ public final class FrontierV3AmbientActorGameTests {
             firstBody.discard();
             helper.runAfterDelay(1L, () -> {
                 helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, recovered, state(recovered), actor, bodyAt(feet)),
-                        FrontierV3AmbientActorExecutor.Result.CONFLICT, "loaded absence cannot duplicate a pending first body");
+                        FrontierV3AmbientActorExecutor.Result.DEFERRED, "loaded absence must await the pending first body, not duplicate it or conflict");
                 net.minecraft.world.entity.Mob returned = bioform
                         ? new Zombie(net.minecraft.world.entity.EntityType.ZOMBIE, level)
                         : new Villager(net.minecraft.world.entity.EntityType.VILLAGER, level);

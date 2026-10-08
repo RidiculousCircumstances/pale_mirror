@@ -198,7 +198,7 @@ class FrontierV3ActorCarrierCompositionTest {
                 "an absent lookup cannot reconstruct a still-running incarnation");
         assertTrue(ledger.beginFirstAdmission(binding));
         var recovered = FrontierV3AmbientCarrierLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
-        assertEquals(FrontierV3ActorBodyController.Admission.CONFLICT,
+        assertEquals(FrontierV3ActorBodyController.Admission.DEFERRED,
                 FrontierV3ActorBodyController.admission(state, binding, recovered, false),
                 "interrupted insertion must be recovered, not issued again");
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorBodyController.admission(state,
@@ -223,6 +223,12 @@ class FrontierV3ActorCarrierCompositionTest {
         assertEquals(FrontierV3ActorBodyController.Admission.CONFLICT,
                 FrontierV3ActorBodyController.admission(next, reconstruction, reconstructionLedger, true),
                 "inactive evidence plus an indexed body is concurrent custody, not a reconstruction opportunity");
+        assertTrue(reconstructionLedger.adopt(reconstruction));
+        var pendingReconstruction = FrontierV3AmbientCarrierLedger.load(
+                reconstructionLedger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertEquals(FrontierV3ActorBodyController.Admission.DEFERRED,
+                FrontierV3ActorBodyController.admission(next, reconstruction, pendingReconstruction, false),
+                "await exact insertion recovery rather than conflict or duplicate a pending physical effect");
         // The same canonical epoch allocation also occurs when preparation was
         // cancelled before insertion. It must not strand the unused birth permit.
         var unused = FrontierV3AmbientCarrierLedger.emptyForTest();

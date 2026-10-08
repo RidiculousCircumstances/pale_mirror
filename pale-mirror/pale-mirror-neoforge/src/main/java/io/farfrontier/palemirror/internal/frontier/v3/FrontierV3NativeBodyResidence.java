@@ -12,6 +12,27 @@ final class FrontierV3NativeBodyResidence {
     private static final java.util.Map<ServerLevel, java.util.Set<Long>> HIDDEN_COLUMNS = new java.util.WeakHashMap<>();
     private FrontierV3NativeBodyResidence() { }
 
+    /** An unindexed native section can still be draining; UUID absence is not insertion readiness. */
+    static boolean admissionReady(ServerLevel level,
+                                  io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
+        var support = surface.support();
+        var column = new ChunkPos(new net.minecraft.core.BlockPos(support.x(), support.y(), support.z()));
+        var hidden = HIDDEN_COLUMNS.get(level);
+        var manager = ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3ServerEntityManagerAccessor) level)
+                .frontierV3$getEntityManager();
+        var storage = (io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3EntityPermanentStorageAccessor) manager;
+        return admissionReady(level.getChunkSource().getChunkNow(column.x, column.z) != null,
+                level.areEntitiesLoaded(column.toLong()), hidden != null && hidden.contains(column.toLong()),
+                storage.frontierV3$getChunksToUnload().contains(column.toLong()),
+                level.getChunkSource().chunkMap.getDistanceManager().inEntityTickingRange(column.toLong()),
+                FrontierV3SceneDemand.observerWithinColumn(level, column, FrontierV3SceneDemand.RADIUS_BLOCKS));
+    }
+
+    static boolean admissionReady(boolean terrainPresent, boolean entitiesLoaded, boolean hidden,
+                                  boolean unloading, boolean entityTicking, boolean observed) {
+        return terrainPresent && entitiesLoaded && !hidden && !unloading && (entityTicking || observed);
+    }
+
     /** Tracking stops before vanilla's queued store pass emits its departure receipt. */
     static boolean departurePending(ServerLevel level, java.util.UUID entityId) {
         var manager = ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3ServerEntityManagerAccessor) level)

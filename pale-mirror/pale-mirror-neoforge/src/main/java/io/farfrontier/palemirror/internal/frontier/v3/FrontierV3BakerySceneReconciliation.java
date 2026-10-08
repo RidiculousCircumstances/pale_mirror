@@ -7,7 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
-/** Fresh inspection of naturally loaded owned bodies; no spawning, inventory repair or force-load. */
+/** Family recovery from common body-owner evidence; no inventory repair or force-load. */
 final class FrontierV3BakerySceneReconciliation {
     private FrontierV3BakerySceneReconciliation() { }
     static void inspect(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -17,7 +17,13 @@ final class FrontierV3BakerySceneReconciliation {
         var entity = level.getEntity(member.entityId());
         if (entity == null) {
             inspectSavedStation(level, runtime, state, lease, member);
-            return;
+            state = runtime.decodedState().orElseThrow();
+            // Saved-body reconciliation may already have opened ordinary release. Otherwise
+            // an aborted PREPARED scene may retain an unused exact birth/reconstruction permit.
+            // Ask the common owner, never reset the fence or infer absence from this lookup.
+            if (!lease.equals(state.sceneLeases().get(lease.id())) || !restoreStationBody(level, runtime, state, lease)) return;
+            state = runtime.decodedState().orElseThrow();
+            entity = level.getEntity(member.entityId());
         }
         if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3SceneExecutor.owned(body, state, lease, member)
                 || !FrontierV3BakeryHandProjection.matchesCurrent(state, lease, member, body)) return;
@@ -56,6 +62,22 @@ final class FrontierV3BakerySceneReconciliation {
         }
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_scene_reconciled", lease,
                 FrontierV3CommandSubmission.submit(runtime, "bakery-scene-reconciled", lease.id().value(), receipt));
+    }
+
+    private static boolean restoreStationBody(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+        var job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
+        if (job == null || job.bakeryWork().isEmpty() || job.inputHold() instanceof ProductionInputHold.Materialized) return false;
+        var work = job.bakeryWork().orElseThrow();
+        if (work.phase() != BakeryWorkState.Phase.PROCESSING && work.phase() != BakeryWorkState.Phase.STATION_UNLOAD
+                || work.pendingPhysicalStep().isPresent()
+                || !FrontierV3ServerLifecycle.newSceneAdmissionReady(level, lease.handoffPosition())
+                || !FrontierV3SceneDemand.observe(level, lease.handoffPosition()).active()) return false;
+        // This restores only ordinary body presentation. CONFLICT still fences all job
+        // execution, and the existing family receipt must prove batch/cargo/effect closure.
+        return FrontierV3SceneExecutor.materializeBodies(level, runtime, state, lease,
+                FrontierV3ActorCarrierComposition.InventoryEntry.PRODUCTION_WORK)
+                == FrontierV3SceneExecutor.BodyMaterialization.COMPLETE;
     }
 
     /** The common body owner supplies the same unload/write/sync/read proof used by ordinary release. */

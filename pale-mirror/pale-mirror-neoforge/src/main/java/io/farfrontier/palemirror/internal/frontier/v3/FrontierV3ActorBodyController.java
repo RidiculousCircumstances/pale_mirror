@@ -27,7 +27,7 @@ final class FrontierV3ActorBodyController {
     /** Source firewall and the Forge join event may observe the same object twice. */
     private static final java.util.Map<Mob, Long> JOINED_RESIDENCES = new java.util.WeakHashMap<>();
     enum Result { APPLIED, DEFERRED, CONFLICT }
-    enum Admission { FIRST, RECONSTRUCTION, CONFLICT }
+    enum Admission { FIRST, RECONSTRUCTION, DEFERRED, CONFLICT }
 
     @FunctionalInterface
     interface NewBodyProjection {
@@ -334,7 +334,13 @@ final class FrontierV3ActorBodyController {
                 || !ledger.permitsRecordedOwner(FrontierV3ActorOwnerBinding.body(declaration))) return false;
         var phase = ActorBodyAuthority.require(state, ActorBodyAuthority.current(state, declaration.actorId())).phase();
         return phase == FencedRecoveryPhase.RUNNING || phase == FencedRecoveryPhase.AMBIGUOUS
-                || phase == FencedRecoveryPhase.PREPARED && retainsRecordedBody(level, state, entity);
+                // A native save can settle the insertion ledger before supported admission
+                // is observed. The same saved PREPARED body must still be indexable so the
+                // common observer can confirm it. Completed insertion is not a new birth
+                // permission; exact canonical epoch, recorded owner, absence of competing
+                // custody and current residence were/are all required here.
+                || phase == FencedRecoveryPhase.PREPARED && ledger.currentBodyResidence(declaration.actorId(),
+                    entity.getPersistentData().getLong(RESIDENCE_KEY));
     }
 
     /**
@@ -575,6 +581,8 @@ final class FrontierV3ActorBodyController {
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         Admission admission = admission(state, request.binding(), ledger, level.getEntity(declaration.entityId()) != null);
         if (admission == Admission.CONFLICT) return Result.CONFLICT;
+        if (admission == Admission.DEFERRED
+                || !FrontierV3NativeBodyResidence.admissionReady(level, request.surfaces().getFirst())) return Result.DEFERRED;
         // Only the controller has the producer capability. Families supply exact
         // demand and owned projections, never their own creation permission.
         Mob body = FrontierV3ActorCarrierFactory.create(
@@ -604,7 +612,10 @@ final class FrontierV3ActorBodyController {
                     ledger.persist(level, state.bootstrap().worldId());
                     return level.addFreshEntity(body);
                 });
-        return added ? Result.APPLIED : Result.CONFLICT;
+        // Both admission boundaries restore the exact unused permission on a synchronous
+        // false, or throw if that absence is not provable. A canceled, uncreated insertion
+        // is retryable, not a family conflict. Unknown outcomes remain durable and fenced.
+        return added ? Result.APPLIED : Result.DEFERRED;
     }
 
     /** Exact physical incarnation plus durable history, never UUID absence alone. */
@@ -621,11 +632,15 @@ final class FrontierV3ActorBodyController {
             throw new IllegalArgumentException("birth declaration has a stale physical incarnation");
         if (actor.condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE
                 || ActorBodyAuthority.require(state, bodyId).phase() != FencedRecoveryPhase.PREPARED
-                || bodyPresent || ledger.pendingAdoption(declaration.actorId()).isPresent()
-) return Admission.CONFLICT;
+                || bodyPresent) return Admission.CONFLICT;
+        if (ledger.hasDepartureConflict(declaration.actorId())) return Admission.CONFLICT;
+        var pending = ledger.pendingAdoption(declaration.actorId()).orElse(null);
+        if (pending != null) return pending.matches(binding) ? Admission.DEFERRED : Admission.CONFLICT;
+        var first = ledger.firstAdmission(declaration.actorId()).orElse(null);
+        if (first != null && first.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING)
+            return binding.equals(first.attempt().orElseThrow()) ? Admission.DEFERRED : Admission.CONFLICT;
         var reconciliation = ledger.reconciliation(declaration, bodyPresent);
         if (reconciliation == FrontierV3AmbientCarrierLedger.Reconciliation.READY) {
-            var first = ledger.firstAdmission(declaration.actorId()).orElse(null);
             return first != null && first.identity().matches(declaration)
                     && first.phase() == FrontierV3ActorFirstAdmission.Phase.ESTABLISHED
                     ? Admission.RECONSTRUCTION : Admission.CONFLICT;
@@ -647,7 +662,7 @@ final class FrontierV3ActorBodyController {
         return switch (admission) {
             case FIRST -> FrontierV3ActorFirstAdmissionBoundary.admit(ledger, binding, persist, insert);
             case RECONSTRUCTION -> FrontierV3ActorAdoptionAdmission.admit(ledger, binding, persist, insert);
-            case CONFLICT -> false;
+            case DEFERRED, CONFLICT -> false;
         };
     }
 }
