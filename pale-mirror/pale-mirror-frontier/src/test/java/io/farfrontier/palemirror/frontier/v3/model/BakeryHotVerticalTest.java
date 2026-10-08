@@ -481,6 +481,20 @@ class BakeryHotVerticalTest {
                 "an occupied depot slot cannot be selected for bread delivery");
         state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
                 new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.DEPOT_DELIVERY, deliverySlot));
+        var pendingDelivery = state;
+        var blockedInventory = pendingDelivery.inventory();
+        while (blockedInventory.firstFreeSlot(depot).isPresent()) {
+            int slot = blockedInventory.firstFreeSlot(depot).orElseThrow();
+            blockedInventory = blockedInventory.store(new ExactItemStack(
+                    new SubjectId("item:prepared-delivery-capacity-" + slot), task.ownerId(),
+                    "minecraft:stone", 1, new InventoryCustody.ContainerSlot(depot, slot)));
+        }
+        var pendingFull = pendingDelivery.withInventory(blockedInventory);
+        assertTrue(ProductionOutputCapacity.deliverySlot(pendingFull, pendingFull.productionJobs().get(job.id())).isEmpty());
+        assertTrue(ProductionServiceAccess.available(pendingFull, pendingFull.productionJobs().get(job.id())),
+                "external capacity loss cannot revoke an already prepared physical transfer's service fence");
+        assertFalse(ActorSpatialCourtesy.assess(pendingFull,
+                pendingFull.actorExecutions().actors().get(job.workerId()).current().orElseThrow()).ready());
         FrontierWorldState beforeObservedDelivery = state;
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectObserved(
                 beforeObservedDelivery, task.ownerId(), new BakeryHotEffectObserved(

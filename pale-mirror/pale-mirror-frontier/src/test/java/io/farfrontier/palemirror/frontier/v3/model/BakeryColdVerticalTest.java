@@ -270,6 +270,17 @@ class BakeryColdVerticalTest {
         }
         FrontierWorldState full = state.withInventory(inventory);
         assertFalse(full.inventory().canReceiveFungible(depot, "minecraft:bread", job.outputCount()));
+        var atFullDepot = full.withActorBody(job.workerId(), BakeryWorkGoal.current(full,
+                full.productionJobs().get(job.id())).station().standingBody());
+        assertTrue(new ProductionServiceAccess().demands(atFullDepot, depot).isEmpty(),
+                "an impossible delivery cannot retain an incumbent service turn merely by standing there");
+        assertFalse(ProductionServiceAccess.available(atFullDepot, atFullDepot.productionJobs().get(job.id())));
+        var otherVisitor = atFullDepot.bootstrap().settlements().getFirst().residents().stream()
+                .map(Resident::id).filter(id -> !id.equals(job.workerId())).findFirst().orElseThrow();
+        assertTrue(ResidentMealServiceAccess.available(atFullDepot, depot, otherVisitor),
+                "storage backpressure must not prevent the next food visitor's service turn");
+        assertEquals(full.productionJobs(), atFullDepot.productionJobs());
+        assertEquals(full.inventory(), atFullDepot.inventory(), "releasing access must retain exact output custody");
         assertEquals(Optional.of("DEPOT_STORAGE_FULL"), BakeryProcess.coldBlocker(full, full.productionJobs().get(job.id())));
         // A MOVE already committed to the old WAL remains replayable after this planner change.
         full = ProductionProcess.reduceBakeryColdStep(full, task.ownerId(), historicalMove);
@@ -285,6 +296,8 @@ class BakeryColdVerticalTest {
                 .findFirst().orElseThrow().id();
         FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(full));
         FrontierWorldState withSpace = recovered.withInventory(recovered.inventory().consumeOne(freed));
+        assertFalse(new ProductionServiceAccess().demands(withSpace, depot).isEmpty(),
+                "fresh capacity re-enables the same retained delivery without recreating its job");
         while (BakeryKnownNavigation.path(withSpace, withSpace.productionJobs().get(job.id())).size() > 1) {
             BakeryColdStep move = ProductionProcess.planCompletion(withSpace, retry).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)

@@ -15,7 +15,8 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
         for (var job : state.productionJobs().values()) {
             if (job.bakeryWork().isEmpty() || !job.settlementId().equals(port.settlementId())
                     || state.humanPopulation().meals().containsKey(job.workerId())
-                    || state.actorMovements().containsKey(job.workerId())) continue;
+                    || state.actorMovements().containsKey(job.workerId())
+                    || !operationEligible(state, job)) continue;
             var phase = job.bakeryWork().orElseThrow().phase();
             boolean occupied = ServiceAccessCoordinator.occupies(state, port.accessBoundary(), job.workerId());
             if (phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY || occupied)
@@ -30,10 +31,24 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
     }
 
     public static boolean available(FrontierWorldState state, ProductionJob job) {
-        return ServiceAccessCoordinator.available(state, identity(job, FrontierWorldState.depotId(job.settlementId())));
+        return operationEligible(state, job)
+                && ServiceAccessCoordinator.available(state, identity(job, FrontierWorldState.depotId(job.settlementId())));
+    }
+
+    /** Storage backpressure retains the job/cargo, not an exclusive service turn. */
+    private static boolean operationEligible(FrontierWorldState state, ProductionJob job) {
+        var work = job.bakeryWork().orElseThrow();
+        if (work.pendingPhysicalStep().isPresent() || work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY) return true;
+        var depot = FrontierWorldState.depotId(job.settlementId());
+        return ReferenceContainerCustody.hasLiveCustody(state, depot)
+                ? ProductionOutputCapacity.deliverySlot(state, job).isPresent()
+                : !ProductionOutputCapacity.depotDeliveryUnavailable(state, job);
     }
 
     public static boolean mayAdvance(FrontierWorldState state, ProductionJob job, SurfaceAnchor destination) {
+        if (!operationEligible(state, job))
+            return ServiceAccessCoordinator.boundary(state, FrontierWorldState.depotId(job.settlementId()))
+                    .cleared(destination.standingBody());
         return ServiceAccessCoordinator.mayAdvance(state,
                 identity(job, FrontierWorldState.depotId(job.settlementId())), destination);
     }
