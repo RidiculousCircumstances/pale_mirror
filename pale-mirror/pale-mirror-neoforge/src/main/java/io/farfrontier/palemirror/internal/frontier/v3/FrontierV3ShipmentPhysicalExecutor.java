@@ -77,7 +77,7 @@ final class FrontierV3ShipmentPhysicalExecutor {
             if (containerDestination && pending == null && destination == null) return false;
             var lots = pending != null ? pending.lotQuantities() : destination != null ? destination.lots() : shipment.lotQuantities();
             var order = shipment.itemOrder(lots);
-            var source = pending == null ? MaterialSourceSelection.select(state.inventory().fungibleResources(), order) : pending.source();
+            var source = pending == null ? MaterialSourcePreparation.review(state, order).requireReady() : pending.source();
             int destinationSlot = !containerDestination ? -1
                     : pending == null ? destination.slot() : pending.destinationSlot();
             if (shipment.status() == Shipment.Status.CARRYING && destinationSlot < 0) return false;

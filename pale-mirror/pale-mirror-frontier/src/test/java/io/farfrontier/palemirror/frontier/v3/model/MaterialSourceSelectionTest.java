@@ -64,6 +64,17 @@ class MaterialSourceSelectionTest {
         assertEquals(1, selected.size());
         assertEquals(24, selected.getFirst().before());
         assertEquals(20, selected.getFirst().moved());
+        var waiting = MaterialSourcePreparation.review(cold, order, 1L);
+        assertEquals(MaterialSourcePreparation.Status.WAITING_FOR_LAYOUT, waiting.status());
+        assertEquals(ACCOUNT, waiting.accountId());
+        assertEquals(1L, waiting.expectedEpoch());
+        assertThrows(IllegalArgumentException.class, waiting::requireReady);
+        assertEquals(selected, MaterialSourcePreparation.review(hot, order, 1L).requireReady());
+        var stale = assertThrows(IllegalStateException.class, () -> MaterialSourcePreparation.review(hot, order, 2L));
+        org.junit.jupiter.api.Assertions.assertTrue(stale.getMessage().contains("expectedEpoch=2"));
+        org.junit.jupiter.api.Assertions.assertTrue(stale.getMessage().contains(ACCOUNT.value()));
+        // An absent account is corruption, not an indefinitely unpublished layout.
+        assertThrows(IllegalStateException.class, () -> MaterialSourcePreparation.review(FungibleResourceLedger.empty(), order, 1L));
     }
 
     private static FungiblePhysicalObservation.Stack stack(int slot, int quantity) {

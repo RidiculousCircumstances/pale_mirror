@@ -29,7 +29,11 @@ final class FrontierV3ExpeditionReplenishmentExecutor {
                 || !ReferenceContainerCustody.hasLiveCustody(state, transfer.containerId())) return false;
         var order = transfer.order(mission.id(), mission.revision());
         var pending = transfer.pending().orElse(null);
-        var slices = pending == null ? MaterialSourceSelection.select(state.inventory().fungibleResources(), order) : pending.source();
+        if (pending == null && (!ReferenceContainerCustody.hasOperationalCustody(state, transfer.containerId())
+                || !io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.accessAvailable(state, mission, transfer))) return false;
+        var preparation = pending == null ? MaterialSourcePreparation.review(state, order) : null;
+        if (preparation != null && preparation.status() != MaterialSourcePreparation.Status.READY) return false;
+        var slices = pending == null ? preparation.requireReady() : pending.source();
         var step = pending == null ? new ActorItemTransferStep(new ActorHotObservation(actuation.id(), lease.revision()), slices,
                 actuation.id().body().physicalEpoch()) : pending;
         var effect = new FrontierV3ActorItemTransfer.FungibleStep(order, source, null, actor, actor.getUUID(), slices, -1, 0);

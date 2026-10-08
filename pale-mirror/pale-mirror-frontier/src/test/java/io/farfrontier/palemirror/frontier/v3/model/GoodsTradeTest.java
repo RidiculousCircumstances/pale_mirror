@@ -340,6 +340,19 @@ class GoodsTradeTest {
         assertThrows(IllegalArgumentException.class, () -> shipmentFact(unprepared, shipment.id(), receipt));
         assertEquals(ShipmentPhysicalStateSupport.PreparationAdmission.READY,
                 ShipmentPhysicalStateSupport.preparationAdmission(state, shipment));
+        // Acquisition and slot observation are separate turns in the real physical registry.
+        // Restart may also restore this exact interval. It must wait without changing custody.
+        var awaitingLayout = state.withInventory(state.inventory().withFungibleResources(
+                resources.releaseBindings(SOURCE_ACCOUNT, 7L)));
+        var layoutCodec = new FrontierWorldStateCodec();
+        awaitingLayout = layoutCodec.decode(layoutCodec.encode(awaitingLayout));
+        assertEquals(ShipmentPhysicalStateSupport.PreparationAdmission.WAITING_FOR_RESOURCE_LAYOUT,
+                ShipmentPhysicalStateSupport.preparationAdmission(awaitingLayout, shipment));
+        assertTrue(ReferenceContainerCustody.hasOperationalCustody(awaitingLayout, SOURCE));
+        assertFalse(ReferenceContainerCustody.blocksCanonicalUse(awaitingLayout, SOURCE));
+        var notReady = awaitingLayout;
+        assertThrows(IllegalArgumentException.class, () -> ShipmentPhysicalStateSupport.prepare(notReady,
+                shipment.id(), new ShipmentHotPrepared(shipment.id(), step)));
         if (busyService) {
             // Arbitration fixture: a different resident has eaten but still occupies the
             // service throat. This is not a synthetic receipt or full meal acceptance.

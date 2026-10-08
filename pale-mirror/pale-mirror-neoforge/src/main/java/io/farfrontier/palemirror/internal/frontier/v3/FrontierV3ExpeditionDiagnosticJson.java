@@ -26,6 +26,10 @@ final class FrontierV3ExpeditionDiagnosticJson {
                     + ",\"plannedPersonalFood\":" + planned + ",\"loadedFood\":" + loaded
                     + ",\"provisioned\":" + m.supplies().map(s -> s.complete()).orElse(false)
                     + ",\"refillPending\":" + m.replenishment().isPresent()
+                    + ",\"materialPreparation\":" + (m.stage() != TransportMission.Stage.LOADING ? "null"
+                        : m.supplies().flatMap(s -> s.next().filter(a -> a.pending().isEmpty())
+                        .map(a -> FrontierV3MaterialPreparationDiagnosticJson.render(state, s.order(m.id(), m.sender(), a))))
+                        .orElse("null"))
                     + ",\"navigationStatus\":" + string(readiness.status()) + ",\"navigationReason\":" + string(readiness.reason())
                     + ",\"memberView\":" + string(group.id().value())
                     + ",\"asset\":" + m.transportAssetId().map(id -> string(id.value())).orElse("null")

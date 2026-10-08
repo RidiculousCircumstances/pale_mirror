@@ -48,8 +48,13 @@ final class FrontierV3ExpeditionSupplyExecutor {
         if (chest == null || ReferenceContainerCustody.blocksCanonicalUse(state, mission.sender().containerId())
                 || !ReferenceContainerCustody.hasLiveCustody(state, mission.sender().containerId())) return false;
         var pending = a.pending().orElse(null);
+        if (pending == null && (!ReferenceContainerCustody.hasOperationalCustody(state, mission.sender().containerId())
+                || attached != null && !ReferenceContainerCustody.hasOperationalCustody(state, attached.containerId())
+                || !ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, a)))) return false;
         try {
-            var source = pending == null ? MaterialSourceSelection.select(state.inventory().fungibleResources(), order) : pending.source();
+            var preparation = pending == null ? MaterialSourcePreparation.review(state, order) : null;
+            if (preparation != null && preparation.status() != MaterialSourcePreparation.Status.READY) return false;
+            var source = pending == null ? preparation.requireReady() : pending.source();
             var destination = attached == null || pending != null ? null : ExpeditionSupplyAuthority.destination(state, load, a).orElse(null);
             if (attached != null && pending == null && destination == null) return false;
             var step = pending == null ? new ActorItemTransferStep(new ActorHotObservation(actuation.id(), lease.revision()),

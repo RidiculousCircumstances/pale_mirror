@@ -165,7 +165,7 @@ public final class ExpeditionSupplyAuthority {
         if (lease == null || lease.status() != AmbientLeaseStatus.HOT || state.actorMovements().containsKey(a.actorId())
                 || !ReferenceContainerCustody.hasOperationalCustody(state, mission.sender().containerId())
                 || !ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, a))
-                || !MaterialSourceSelection.select(state.inventory().fungibleResources(), order).equals(step.source())
+                || !MaterialSourcePreparation.review(state, order).requireReady().equals(step.source())
                 || step.destinationEpoch() != destinationEpoch(state, a, step.observation().actuation().body().physicalEpoch())
                 || a.slot() instanceof ActorItemSlot.AttachedStorage && !destination(state, load, a).equals(Optional.of(
                     new ContainerMaterialDestination(step.destinationSlot(), step.destinationBefore(), a.lots())))

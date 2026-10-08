@@ -139,7 +139,7 @@ public final class ExpeditionReplenishmentAuthority {
         if (lease == null || lease.status() != AmbientLeaseStatus.HOT || !ReferenceContainerCustody.hasOperationalCustody(state, transfer.containerId())
                 || step.destinationSlot() != -1 || step.destinationBefore() != 0
                 || step.destinationEpoch() != step.observation().actuation().body().physicalEpoch()
-                || !step.source().equals(MaterialSourceSelection.select(state.inventory().fungibleResources(), transfer.order(mission.id(), mission.revision()))))
+                || !step.source().equals(MaterialSourcePreparation.review(state, transfer.order(mission.id(), mission.revision())).requireReady()))
             throw new IllegalArgumentException("refill lacks exact body/source physical preimage");
         step.observation().require(state, transfer.execution(), lease.revision(), transfer.station().standingBody());
         return state.withChanges(FrontierWorldStateUpdate.begin().shipments(state.shipments().replaceReplenishment(mission, Optional.of(transfer.prepare(step)))));
