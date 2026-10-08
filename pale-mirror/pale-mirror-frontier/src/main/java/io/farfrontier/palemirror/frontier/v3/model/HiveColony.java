@@ -21,6 +21,11 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
     public static final int MAX_NUTRIENT_TRANSFERS = 128;
     public static final int MAX_NUTRIENT_RECEIPTS = 512;
     public static final int MAX_MOBILIZATIONS = 128;
+    private record ValidatedColony(FrontierBootstrap bootstrap, HiveColony colony) { }
+    // Both inputs are deeply immutable. Only an already successful exact pair may
+    // reuse this proof; deserialization, organ growth or lifecycle changes revalidate.
+    // One entry is sufficient for ordinary unrelated resident/world transitions.
+    private static volatile ValidatedColony validatedColony;
 
     public HiveColony {
         addedOrgans = immutable(addedOrgans, "added hive organs");
@@ -310,6 +315,9 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
     }
 
     void validateAgainst(FrontierBootstrap bootstrap) {
+        Objects.requireNonNull(bootstrap, "hive validation bootstrap");
+        var previous = validatedColony;
+        if (previous != null && previous.bootstrap() == bootstrap && previous.colony() == this) return;
         var hive = bootstrap.hive();
         var organIds = hive.organs().stream().map(HiveOrgan::id).collect(java.util.stream.Collectors.toSet());
         var bioformIds = hive.bioforms().stream().map(Bioform::id).collect(java.util.stream.Collectors.toSet());
@@ -385,6 +393,7 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
             }
             organIds.add(organ.id()); bioformIds.add(bioform.id());
         }
+        validatedColony = new ValidatedColony(bootstrap, this);
     }
 
     private static <T> Map<SubjectId, T> immutable(Map<SubjectId, T> source, String label) {

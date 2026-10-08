@@ -10,11 +10,14 @@ final class BakeryWorkValidation {
 
     static void validate(ExactInventory inventory, ProductionJob job, Settlement settlement) {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
-        ProductionStationSpec station = inventory.containers().values().stream()
-                .flatMap(container -> container.productionStation().stream())
-                .filter(candidate -> candidate.id().equals(work.stationId())).reduce((left, right) -> {
-                    throw new IllegalArgumentException("bakery work has duplicate station identity");
-                }).orElseThrow(() -> new IllegalArgumentException("bakery work has no current declared station"));
+        ProductionStationSpec station = null;
+        for (ContainerRecord container : inventory.containers().values()) {
+            var candidate = container.productionStation();
+            if (candidate.isEmpty() || !candidate.orElseThrow().id().equals(work.stationId())) continue;
+            if (station != null) throw new IllegalArgumentException("bakery work has duplicate station identity");
+            station = candidate.orElseThrow();
+        }
+        if (station == null) throw new IllegalArgumentException("bakery work has no current declared station");
         if (!station.facilityId().equals(job.facilityId()) || station.capability() != ProductionStationSpec.Capability.BAKING)
             throw new IllegalArgumentException("bakery work station differs from the job facility or capability");
         if (job.inputHold() instanceof ProductionInputHold.Materialized) validateExact(inventory, job, station, work);

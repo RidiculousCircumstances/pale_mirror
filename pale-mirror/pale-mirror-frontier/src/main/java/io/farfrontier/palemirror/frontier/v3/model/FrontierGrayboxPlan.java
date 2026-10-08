@@ -20,6 +20,10 @@ import java.util.function.Supplier;
  */
 public final class FrontierGrayboxPlan {
     private static final int MAX_CELLS = 65_536;
+    // Exact immutable organ declarations, not current damage or cocoon occupancy.
+    // Keep the few recurring seed/expanded views without recompiling their cells
+    // on every colony validation or navigation query. Failed derivations never enter.
+    private static final Map<List<HiveOrgan>, Set<BlockPosition>> ORGAN_OCCUPANCY = new LinkedHashMap<>();
     /** Admission reads may only consume an already-published projection snapshot. */
     private static final ThreadLocal<Integer> STRUCTURAL_DERIVATION_FORBIDDEN = ThreadLocal.withInitial(() -> 0);
     private final Map<BlockPosition, GrayboxCell> cells;
@@ -443,11 +447,16 @@ public final class FrontierGrayboxPlan {
     }
 
     /** Full-intact organ occupancy used by the canonical hive actor slot compiler. */
-    static java.util.Set<BlockPosition> intactOrganOccupancy(java.util.List<HiveOrgan> organs) {
-        Objects.requireNonNull(organs, "organs");
+    static synchronized java.util.Set<BlockPosition> intactOrganOccupancy(java.util.List<HiveOrgan> organs) {
+        organs = List.copyOf(Objects.requireNonNull(organs, "organs"));
+        var previous = ORGAN_OCCUPANCY.get(organs);
+        if (previous != null) return previous;
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         organs.forEach(organ -> addOrgan(cells, organ));
-        return java.util.Set.copyOf(cells.keySet());
+        var result = java.util.Set.copyOf(cells.keySet());
+        if (ORGAN_OCCUPANCY.size() >= 8) ORGAN_OCCUPANCY.remove(ORGAN_OCCUPANCY.keySet().iterator().next());
+        ORGAN_OCCUPANCY.put(organs, result);
+        return result;
     }
 
     /**
