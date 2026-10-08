@@ -129,20 +129,20 @@ public final class FrontierSceneLeaseStateSupport {
         return copy(releaseReady, releaseReady.actorLocations(), leases, state.ambientLeases(), plans, confirmRecovery(releaseReady, releaseReady.fencedRecovery(), current));
     }
 
-    /** Ordinary scene release cannot discard a body while its physical offhand still owns stock. */
+    /** Work-hand settlement precedes scope closure; personal pockets remain with the common body owner. */
     public static void requireNoBoundActorHand(FrontierWorldState state, SceneLease lease) {
         if (hasBoundActorHand(state, lease)) {
             throw new IllegalArgumentException("scene release requires typed actor-hand custody transfer");
         }
     }
 
-    /** A scene with physically bound stock must retain local custody through any conflict. */
+    /** Bound hands need a typed release; pocket bindings are not work-scene custody. */
     public static boolean hasBoundActorHand(FrontierWorldState state, SceneLease lease) {
         Set<SubjectId> members = lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
         return state.inventory().fungibleResources().bindings().values().stream()
                 .map(PhysicalStackBinding::address)
-                .filter(PhysicalStackAddress.ActorStack.class::isInstance)
-                .map(PhysicalStackAddress.ActorStack.class::cast)
+                .filter(PhysicalStackAddress.ActorHand.class::isInstance)
+                .map(PhysicalStackAddress.ActorHand.class::cast)
                 .anyMatch(hand -> members.contains(hand.actorId()));
     }
 

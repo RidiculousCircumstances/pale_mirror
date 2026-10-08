@@ -46,7 +46,9 @@ public final class SettlementStaffingPolicy {
             for (var id : demand.retainedWorkers()) {
                 var resident = state.humanPopulation().resident(id);
                 if (resident == null || !resident.settlementId().equals(home) || !old.permits(demand.kind(), id)
-                        || assignments.idle(id)) throw new IllegalArgumentException("staffing demand lost its exact retained worker");
+                        || assignments.idle(id)) throw new IllegalArgumentException("staffing demand lost its exact retained worker"
+                        + "; home=" + home.value() + "; kind=" + demand.kind() + "; actor=" + id.value()
+                        + "; permitted=" + old.permits(demand.kind(), id) + "; assignment=" + assignments.assignments().get(id));
             }
             Set<SubjectId> selected = new HashSet<>();
             demand.retainedWorkers().stream().filter(id -> !away.contains(id))

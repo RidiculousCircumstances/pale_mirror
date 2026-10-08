@@ -63,7 +63,8 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
         state.humanPopulation().residentIds().stream().sorted().forEach(id -> values.put(id, HumanAssignment.idle(id)));
         state.productionJobs().values().stream().sorted(Comparator.comparing(ProductionJob::id))
                 .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.PRODUCTION, job.id()));
-        state.resourceSites().sites().values().stream().filter(site -> site.phase() == ResourceSitePhase.HARVESTING).sorted(Comparator.comparing(ResourceSiteLifecycle::siteId))
+        // A conflict suspends execution, not the retained job's exclusive worker claim.
+        state.resourceSites().sites().values().stream().sorted(Comparator.comparing(ResourceSiteLifecycle::siteId))
                 .flatMap(site -> site.harvestJobs().values().stream())
                 .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.FIELD_HARVEST, job.id()));
         state.strategicPlans().routePatrols().values().stream().sorted(Comparator.comparing(RoutePatrol::taskId))

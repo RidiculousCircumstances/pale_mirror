@@ -732,8 +732,14 @@ class ResourceSiteHarvestProcessTest {
                 worked.humanPopulation().schedule(new SubjectId("settlement:1")).windowAt(22_301L));
         assertFalse(ResidentActivityCoordinator.requestsYield(worked, completed.workerId(), 22_301L));
         assertTrue(ResidentActivityCoordinator.ordinaryWorkPermitted(worked, completed.workerId(), 22_301L));
+        worked = withBoundPersonalFood(worked, completed.workerId(), hot.lease().members().getFirst().entityId());
+        var pocketBefore = worked.inventory().fungibleResources().bindings().values().stream()
+                .filter(value -> value.address() instanceof PhysicalStackAddress.ActorPocket).toList();
         var body = worked.actorLocations().get(completed.workerId());
         var draining = worked.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.DRAINING);
+        assertThrows(IllegalArgumentException.class, () -> draining.releaseSceneLease(hot.lease().id(),
+                List.of(new SceneMemberPosition(completed.workerId(), body.body(), body.condition().health()))),
+                "personal pockets do not waive typed release of the actual wheat hand");
         var released = ResourceSiteHarvestProcess.reduceHandRelease(draining, worked.resourceSite(hot.site()).settlementId(),
                 new ResourceSiteHarvestHandRelease(hot.site(), completed.id(), completed.actorAccountId(),
                         hot.lease().revision(), new FungiblePhysicalObservation.Stack(
@@ -741,6 +747,9 @@ class ResourceSiteHarvestProcessTest {
                         "minecraft:wheat", completed.progress().totalCropSlots()),
                         new SceneLeaseReleased(hot.lease().id(), List.of(new SceneMemberPosition(
                                 completed.workerId(), body.body(), body.condition().health())))));
+        assertEquals(pocketBefore, released.inventory().fungibleResources().bindings().values().stream()
+                .filter(value -> value.address() instanceof PhysicalStackAddress.ActorPocket).toList(),
+                "scene closure cannot discard or rebind personal pocket food");
         assertFalse(ActorExecutionCoordinator.coldAvailable(released, completed.workerId()),
                 "process release alone is not physical body absence");
         released = ActorBodyAuthority.released(released, ActorBodyAuthority.current(released, completed.workerId()));
@@ -755,7 +764,8 @@ class ResourceSiteHarvestProcessTest {
         ResourceSiteHarvestJob job = hot.job();
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(hot.state(), job);
         BodyPosition next = ResourceSiteHarvestKnownNavigation.path(hot.state(), job).get(1).standingBody();
-        FrontierWorldState observed = ModeledActorBodyFacts.inspected(hot.state(), job.workerId(), next);
+        FrontierWorldState observed = ModeledActorBodyFacts.inspected(withBoundPersonalFood(hot.state(),
+                job.workerId(), hot.lease().members().getFirst().entityId()), job.workerId(), next);
         assertEquals(job.progress(), ((ResourceSiteHarvestJob) observed.resourceSites().site(hot.site())
                 .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow()).progress());
         FrontierWorldState draining = observed.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.DRAINING);
@@ -763,8 +773,21 @@ class ResourceSiteHarvestProcessTest {
                 List.of(new SceneMemberPosition(job.workerId(), next,
                         draining.actorLocations().get(job.workerId()).condition().health())));
         assertEquals(next, released.actorLocations().get(job.workerId()).body());
+        assertEquals(observed.inventory(), released.inventory(), "an empty work hand leaves bound personal pockets untouched");
         assertEquals(next.supportingSurface(), ResourceSiteHarvestKnownNavigation.path(released, job).getFirst());
         assertEquals(released, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released)));
+    }
+    private static FrontierWorldState withBoundPersonalFood(FrontierWorldState state, SubjectId actor, java.util.UUID body) {
+        var account = new SubjectId("custody:release-personal-food");
+        var lot = new SubjectId("lot:release-personal-food");
+        var resources = state.inventory().fungibleResources().issue(new ResourceLot(lot,
+                state.humanPopulation().resident(actor).settlementId(), "minecraft:bread", 2, "test:personal-food", List.of()),
+                new CustodyAccount(account, new ResourceCustody.Actor(actor), Map.of(lot, 2), Map.of(),
+                        Optional.of(new ActorItemSlot.Pocket(0))));
+        resources = resources.rebind(account, 37L, FungiblePhysicalObservation.bind(resources, account, 37L,
+                List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorPocket(actor, body, 0),
+                        "minecraft:bread", 2))));
+        return state.withInventory(state.inventory().withFungibleResources(resources));
     }
     /** Independent modeled physical fact; the field receipt only clears its own blocked goal. */
     static FrontierWorldState inspectGoal(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job,
