@@ -47,16 +47,30 @@ public final class GroupMovementProvider implements ActorMovementProvider {
         validate(state, movement); return List.copyOf(route.subList(0, Math.min(route.size(), TimedKnownRoute.MAX_SURFACES)));
     }
     @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {
+        return coldSegment(state, movement, route, tick, ActorPositionView.canonical(state, tick));
+    }
+    @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route,
+                                                   long tick, ActorPositionView positions) {
         var group = group(state, movement);
+        if (!UnitGroupMissionPorts.require(group).movementPermission(state, group).allowed()) return List.of(route.getFirst());
         return io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.segment(state, group,
-                movement.order().actorId(), coldSegment(state, movement, route), tick);
+                movement.order().actorId(), coldSegment(state, movement, route), positions);
     }
     @Override public void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {
+        requireColdRoute(state, movement, route, tick, ActorPositionView.canonical(state, tick));
+    }
+    @Override public void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route,
+                                          long tick, ActorPositionView positions) {
         var group = group(state, movement); UnitGroupMissionPorts.require(group).knowledge(state, group).requireRoute(route);
-        if (route.size() > TimedKnownRoute.MAX_SURFACES
+        if (!UnitGroupMissionPorts.require(group).movementPermission(state, group).allowed()
+                || route.size() > TimedKnownRoute.MAX_SURFACES
                 || !io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.permits(state, group,
-                    movement.order().actorId(), route.getLast(), tick))
+                    movement.order().actorId(), route.getLast(), positions))
             throw new IllegalArgumentException("group COLD leg exceeds its current elastic formation envelope");
+    }
+    @Override public List<io.farfrontier.palemirror.frontier.v3.api.SubjectId> positionSubjects(FrontierWorldState state, ActorMovement movement) {
+        return group(state, movement).members().stream().filter(m -> state.actorLocations().get(m.actorId()).condition().status() == ActorLifeStatus.ALIVE)
+                .map(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member::actorId).toList();
     }
     @Override public long ticksPerEdge(FrontierWorldState state, ActorMovement movement) {
         var group = group(state, movement); return UnitGroupMissionPorts.require(group).travelPolicy(state, group).ticksPerEdge();

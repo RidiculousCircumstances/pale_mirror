@@ -9,6 +9,11 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdA
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementHotObserved;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdRequested;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdRouteStarted;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPositionSnapshot;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
 
 import java.util.List;
 import java.util.Optional;
@@ -17,7 +22,56 @@ import java.util.Optional;
 final class ActorMovementPayloadCodecs {
     private ActorMovementPayloadCodecs() { }
 
-    static PayloadCodecs create() { return new PayloadCodecs(List.of(coldAdvanced(), hotObserved(), interrupted(), started())); }
+    static PayloadCodecs create() { return new PayloadCodecs(List.of(coldAdvanced(), coldRequested(), coldRouteStarted(), hotObserved(), interrupted(), started())); }
+
+    private static void writePositions(java.io.DataOutputStream out, MovementPositionSnapshot value) throws java.io.IOException {
+        out.writeLong(value.atTick()); out.writeInt(value.hotPoints().size());
+        for (var point : value.hotPoints()) {
+            FrontierWorldPayloadCodecs.writeSubject(out, point.body().actorId()); out.writeLong(point.body().physicalEpoch());
+            out.writeDouble(point.point().x()); out.writeDouble(point.point().y()); out.writeDouble(point.point().z());
+        }
+    }
+    private static MovementPositionSnapshot readPositions(java.io.DataInputStream in) throws java.io.IOException {
+        long at = in.readLong(); int count = in.readInt();
+        if (count < 0 || count > MovementPositionSnapshot.MAX_POINTS) throw new IllegalArgumentException("unbounded movement positions");
+        var points = new java.util.ArrayList<MovementPositionSnapshot.HotPoint>();
+        for (int index = 0; index < count; index++) points.add(new MovementPositionSnapshot.HotPoint(
+                new ActorBodyId(FrontierWorldPayloadCodecs.readSubject(in).value(), in.readLong()),
+                new ActorPositionView.TravelPoint(in.readDouble(), in.readDouble(), in.readDouble())));
+        return new MovementPositionSnapshot(at, points);
+    }
+    private static PayloadCodec coldRequested() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.actor_movement_cold_requested"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            var value = (ActorMovementColdRequested) payload;
+            return FrontierWorldPayloadCodecs.encodeProduction(out -> {
+                ActorExecutionStateCodec.writeId(out, value.execution()); out.writeLong(value.goalRevision()); writePositions(out, value.positions());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new ActorMovementColdRequested(
+                    ActorExecutionStateCodec.readId(in), in.readLong(), readPositions(in)));
+        }
+    }; }
+    private static PayloadCodec coldRouteStarted() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.actor_movement_cold_route_started"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            var value = (ActorMovementColdRouteStarted) payload;
+            return FrontierWorldPayloadCodecs.encodeProduction(out -> {
+                byte[] advance = coldAdvanced().encode(value.advance());
+                out.writeInt(advance.length); out.write(advance); writePositions(out, value.positions());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> {
+                int length = in.readInt();
+                if (length < 0 || length > 262_144) throw new IllegalArgumentException("unbounded observed movement route");
+                byte[] advance = in.readNBytes(length);
+                if (advance.length != length) throw new IllegalArgumentException("truncated observed movement route");
+                return new ActorMovementColdRouteStarted((ActorMovementColdAdvanced) coldAdvanced().decode(advance), readPositions(in));
+            });
+        }
+    }; }
 
     private static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.actor_movement_started"; }

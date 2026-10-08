@@ -56,6 +56,8 @@ final class FrontierV3ActorMovementNavigation {
             return; // Local clearance is not arrival at the retained service/work goal.
         }
         long tick = runtime.calendarInstant().orElseThrow();
+        FrontierV3MovementPositionIngress.observe(level, runtime, state, movement, tick);
+        state = runtime.decodedState().orElseThrow();
         var previous = STEERING.get(body);
         var permission = provider.movementPermission(state, movement, FrontierV3SurfaceObservation.observedBody(body).supportingSurface(), tick,
                 FrontierV3ActorPositionView.observed(level, state, tick),
@@ -115,5 +117,17 @@ final class FrontierV3ActorMovementNavigation {
         var wait = BLOCKED.get(body);
         return wait != null && wait.execution().equals(movement.executionId()) && wait.order().equals(movement.order())
                 ? java.util.Optional.of(wait.reason()) : java.util.Optional.empty();
+    }
+    /** The actual latched steering decision, not a second hypothetical permission calculation. */
+    static java.util.Optional<MovementPermission> currentPermission(ServerLevel level, FrontierWorldState state, ActorMovement movement) {
+        var entity = level.getEntity(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(
+                state.bootstrap().worldId(), movement.order().actorId()));
+        if (!(entity instanceof Mob body)) return java.util.Optional.empty();
+        var steering = STEERING.get(body);
+        return steering != null && ActorBodyAuthority.retainsPhysicalCustody(state, movement.order().actorId())
+                && steering.actuation().body().equals(ActorBodyAuthority.current(state, movement.order().actorId()))
+                && FrontierV3ActorBodyController.readyForExecution(level, state, List.of(steering.actuation().body()))
+                && steering.actuation().execution().equals(movement.executionId())
+                && steering.order().equals(movement.order()) ? java.util.Optional.of(steering.permission()) : java.util.Optional.empty();
     }
 }

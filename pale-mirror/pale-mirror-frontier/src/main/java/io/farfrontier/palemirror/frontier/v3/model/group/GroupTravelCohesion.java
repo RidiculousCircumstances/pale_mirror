@@ -25,7 +25,9 @@ public final class GroupTravelCohesion {
     }
     public static MovementPermission assessCurrent(FrontierWorldState state, UnitGroup group, SubjectId actorId,
                                                     ActorPositionView positions, MovementPermission previous) {
-        return assess(state, group, actorId, positions.pointAt(actorId), positions, previous);
+        var current = positions.currentPointAt(actorId);
+        return current.isEmpty() ? MovementPermission.hold(MovementPermission.Reason.POSITION_UNAVAILABLE, actorId)
+                : assess(state, group, actorId, current.orElseThrow(), positions, previous);
     }
     private static MovementPermission assess(FrontierWorldState state, UnitGroup group, SubjectId actorId,
                                               ActorPositionView.TravelPoint position, ActorPositionView positions,
@@ -42,20 +44,23 @@ public final class GroupTravelCohesion {
         double slowest = Double.POSITIVE_INFINITY;
         SubjectId slowestPeer = null;
         double rosterSpan = (double) (living.size() - 1) * policy.spacing();
-        double remaining = distance(position, ActorPositionView.TravelPoint.at(route.getLast().standingBody())) - slot * policy.spacing();
         double spatialGap = 0;
         SubjectId spatialPeer = null;
         for (int index = 0; index < living.size(); index++) {
             if (index == slot) continue;
-            var actual = positions.pointAt(living.get(index).actorId());
-            // Nearest-route projection alone loses perpendicular detour distance. The
-            // nearer member waits; the lagging member is still allowed to close the gap.
+            var observation = positions.currentPointAt(living.get(index).actorId());
+            if (observation.isEmpty())
+                return MovementPermission.hold(MovementPermission.Reason.POSITION_UNAVAILABLE, living.get(index).actorId());
+            var actual = observation.orElseThrow();
+            double peerProgress = projection(route, actual) + index * policy.spacing();
+            // Along-route progress alone orders the members, including U bends. Lateral
+            // distance may stretch the envelope but may never reverse who yields.
+            // Deterministic slot order breaks exact ties; the lagging member can always close.
             double separation = distance(position, actual) - rosterSpan;
             if (separation > spatialGap
-                    && remaining <= distance(actual, ActorPositionView.TravelPoint.at(route.getLast().standingBody())) - index * policy.spacing()) {
+                    && (progress > peerProgress || progress == peerProgress && slot < index)) {
                 spatialGap = separation; spatialPeer = living.get(index).actorId();
             }
-            double peerProgress = projection(route, actual) + index * policy.spacing();
             if (peerProgress < slowest) { slowest = peerProgress; slowestPeer = living.get(index).actorId(); }
         }
         // The hard envelope is unchanged. A held member resumes only after closing
@@ -63,15 +68,16 @@ public final class GroupTravelCohesion {
         boolean recovering = previous.reason() == MovementPermission.Reason.GROUP_PROGRESS_STRETCH
                 || previous.reason() == MovementPermission.Reason.GROUP_SPATIAL_STRETCH;
         double holdLimit = recovering ? policy.spacing() / 2.0 : policy.maximumStretch();
-        if (spatialGap > holdLimit)
-            return MovementPermission.hold(MovementPermission.Reason.GROUP_SPATIAL_STRETCH, Objects.requireNonNull(spatialPeer));
         double progressGap = progress - slowest;
+        var evidence = new MovementPermission.Spacing(progressGap, spatialGap, holdLimit, policy.spacing());
+        if (spatialGap > holdLimit)
+            return MovementPermission.hold(MovementPermission.Reason.GROUP_SPATIAL_STRETCH, Objects.requireNonNull(spatialPeer)).withSpacing(evidence);
         if (progressGap > holdLimit)
-            return MovementPermission.hold(MovementPermission.Reason.GROUP_PROGRESS_STRETCH, Objects.requireNonNull(slowestPeer));
+            return MovementPermission.hold(MovementPermission.Reason.GROUP_PROGRESS_STRETCH, Objects.requireNonNull(slowestPeer)).withSpacing(evidence);
         // A continuous positive pace closes ordinary elastic lag without STOP,
         // path replacement or a new arrival. The slowest member keeps base pace.
         double excess = Math.max(0, Math.max(progressGap, spatialGap) - policy.spacing());
-        return MovementPermission.allow(new TravelPace(basePace * policy.spacing() / (policy.spacing() + excess)));
+        return MovementPermission.allow(new TravelPace(basePace * policy.spacing() / (policy.spacing() + excess))).withSpacing(evidence);
     }
     private static double distance(ActorPositionView.TravelPoint left, ActorPositionView.TravelPoint right) {
         double x = left.x() - right.x(), y = left.y() - right.y(), z = left.z() - right.z();
@@ -79,12 +85,16 @@ public final class GroupTravelCohesion {
     }
     public static List<SurfaceAnchor> segment(FrontierWorldState state, UnitGroup group, SubjectId actor,
                                              List<SurfaceAnchor> path, long tick) {
+        return segment(state, group, actor, path, ActorPositionView.canonical(state, tick));
+    }
+    public static List<SurfaceAnchor> segment(FrontierWorldState state, UnitGroup group, SubjectId actor,
+                                             List<SurfaceAnchor> path, ActorPositionView positions) {
         int end = 1;
-        while (end < path.size() && permits(state, group, actor, path.get(end), tick)) end++;
+        while (end < path.size() && permits(state, group, actor, path.get(end), positions)) end++;
         return List.copyOf(path.subList(0, end));
     }
     private static double projection(List<SurfaceAnchor> route, ActorPositionView.TravelPoint position) {
-        double best = 0, distance = Double.POSITIVE_INFINITY;
+        double best = 0, distance = Double.POSITIVE_INFINITY, travelled = 0;
         for (int index = 0; index < route.size() - 1; index++) {
             var a = route.get(index); var b = route.get(index + 1);
             double ax = a.x() + 0.5, ay = a.y() + 1.0, az = a.z() + 0.5;
@@ -94,7 +104,9 @@ public final class GroupTravelCohesion {
                     ((position.x() - ax) * dx + (position.y() - ay) * dy + (position.z() - az) * dz) / lengthSquared, 0, 1);
             double x = ax + fraction * dx - position.x(), y = ay + fraction * dy - position.y(), z = az + fraction * dz - position.z();
             double candidate = x * x + y * y + z * z;
-            if (candidate < distance) { best = index + fraction; distance = candidate; }
+            double length = Math.sqrt(lengthSquared);
+            if (candidate < distance) { best = travelled + fraction * length; distance = candidate; }
+            travelled += length;
         }
         return best;
     }

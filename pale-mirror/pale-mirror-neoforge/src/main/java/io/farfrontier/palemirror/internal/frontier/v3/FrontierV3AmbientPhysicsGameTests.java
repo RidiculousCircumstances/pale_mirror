@@ -46,6 +46,44 @@ public final class FrontierV3AmbientPhysicsGameTests {
     private FrontierV3AmbientPhysicsGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void nativeFollowingPreservesThePathWhileStoppedPedestrianRequiresAnActualDetour(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var start = helper.absolutePos(new BlockPos(2, 4, 2));
+        var supports = new java.util.HashSet<BlockPosition>();
+        for (int x = 0; x < 7; x++) for (int z = -1; z <= 1; z++) {
+            supports.add(new BlockPosition(start.getX() + x, start.getY(), start.getZ() + z));
+            level.setBlockAndUpdate(start.offset(x, 0, z), Blocks.STONE.defaultBlockState());
+            for (int y = 1; y <= 3; y++) level.setBlockAndUpdate(start.offset(x, y, z), Blocks.AIR.defaultBlockState());
+        }
+        var actor = EntityType.VILLAGER.create(level); var peer = EntityType.VILLAGER.create(level);
+        if (actor == null || peer == null) throw new IllegalStateException("native following fixture unavailable");
+        actor.setNoAi(true); peer.setNoAi(true);
+        actor.setPos(start.getX() + .5, start.getY() + 1, start.getZ() + .5);
+        peer.setPos(start.getX() + 1.5, start.getY() + 1, start.getZ() + .5);
+        helper.assertTrue(level.addFreshEntity(actor) && level.addFreshEntity(peer), "two real pedestrian bodies are indexed");
+        FrontierV3BodyObservation.refreshGroundContact(level, actor);
+        FrontierV3BodyObservation.refreshGroundContact(level, peer);
+        var scope = new FrontierV3NavigationScope.Restricted(new LocalNavigationEnvelope(supports));
+        var goal = start.offset(6, 1, 0);
+        peer.setDeltaMovement(new Vec3(.05, 0, 0));
+        var following = FrontierV3PedestrianTraffic.query(level, actor, goal, scope);
+        helper.assertTrue(following.path() != null && following.path().canReach() && following.blockers().isEmpty(),
+                "a moving same-direction neighbour does not become a static route wall: path=" + following.path()
+                        + "; rejection=" + FrontierV3PhysicalPathPolicy.reject(level, following.path(), scope)
+                        + "; blockers=" + following.blockers());
+        helper.assertTrue(!FrontierV3PedestrianTraffic.blockedAhead(level, actor, following.path()),
+                "refresh preserves the accepted path instead of restarting around the poputchik");
+        helper.assertTrue(FrontierV3PedestrianTraffic.followingPace(level, actor, following.path()) < 1,
+                "near following uses headway without path cancellation");
+        peer.setDeltaMovement(Vec3.ZERO);
+        helper.assertTrue(FrontierV3PedestrianTraffic.blockedAhead(level, actor, following.path()), "a real stationary blocker still triggers avoidance");
+        var stopped = FrontierV3PedestrianTraffic.query(level, actor, goal, scope);
+        helper.assertTrue(stopped.blockers().stream().anyMatch(body -> body.id().equals(peer.getUUID()))
+                        && stopped.path() != null && stopped.path().canReach(), "the same goal has a real native detour around the stationary body");
+        actor.discard(); peer.discard(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void quarantinedPendingLifetimeSurvivesHistoricalJoinWithoutExecution(GameTestHelper helper) {
         verifyQuarantinedReturn(helper, false);
     }

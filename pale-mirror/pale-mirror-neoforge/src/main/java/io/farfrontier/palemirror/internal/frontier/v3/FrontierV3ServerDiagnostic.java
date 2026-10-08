@@ -30,7 +30,8 @@ final class FrontierV3ServerDiagnostic {
         if ("process".equals(view)) return FrontierV3DiagnosticJson.bounded(view, id, checkpoint,
                 FrontierV3ProcessDiagnosticJson.render(id, checkpoint, state,
                     FrontierV3ActorPositionView.observed(FrontierV3PhysicalWorld.require(server), state, checkpoint.instant().ticks()), "OBSERVED_HOT_OR_CANONICAL_COLD",
-                    movement -> FrontierV3ActorMovementNavigation.waitReason(FrontierV3PhysicalWorld.require(server), state, movement)));
+                    movement -> FrontierV3ActorMovementNavigation.waitReason(FrontierV3PhysicalWorld.require(server), state, movement),
+                    movement -> FrontierV3ActorMovementNavigation.currentPermission(FrontierV3PhysicalWorld.require(server), state, movement)));
         if ("field_physical".equals(view)) return FrontierV3DiagnosticJson.bounded(view, id, checkpoint,
                 FrontierV3ResourceFieldPhysicalDiagnostic.render(checkpoint, state,
                         FrontierV3ResourceSiteLedger.get(FrontierV3PhysicalWorld.require(server)), id,

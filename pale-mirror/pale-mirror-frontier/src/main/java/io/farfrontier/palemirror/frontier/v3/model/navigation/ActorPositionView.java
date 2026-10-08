@@ -21,7 +21,20 @@ public interface ActorPositionView {
     }
     default TravelPoint pointAt(SubjectId actorId) { return TravelPoint.at(bodyAt(actorId)); }
 
+    /** Empty means a physically held body has no current observation, not a distant pedestrian. */
+    default java.util.Optional<TravelPoint> currentPointAt(SubjectId actorId) {
+        return java.util.Optional.of(pointAt(actorId));
+    }
+
     static ActorPositionView canonical(FrontierWorldState state, long tick) {
-        return actorId -> ActorMovementProjection.bodyAt(state, actorId, tick);
+        return new ActorPositionView() {
+            @Override public BodyPosition bodyAt(SubjectId actorId) {
+                return ActorMovementProjection.bodyAt(state, actorId, tick);
+            }
+            @Override public java.util.Optional<TravelPoint> currentPointAt(SubjectId actorId) {
+                return io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.retainsPhysicalCustody(state, actorId)
+                        ? java.util.Optional.empty() : java.util.Optional.of(pointAt(actorId));
+            }
+        };
     }
 }

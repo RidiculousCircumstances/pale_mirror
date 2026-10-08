@@ -33,6 +33,26 @@ final class FrontierV3ActorPositionView {
             var body = observed(actorId);
             return body == null ? canonical.pointAt(actorId) : new TravelPoint(body.getX(), body.getY(), body.getZ());
           }
+          @Override public java.util.Optional<TravelPoint> currentPointAt(io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId) {
+            var body = observed(actorId);
+            return body == null ? canonical.currentPointAt(actorId)
+                    : java.util.Optional.of(new TravelPoint(body.getX(), body.getY(), body.getZ()));
+          }
         };
+    }
+
+    /** Exact live witnesses only. Missing physical facts remain explicitly unknown. */
+    static io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPositionSnapshot snapshot(
+            ServerLevel level, FrontierWorldState state, long tick,
+            java.util.Collection<io.farfrontier.palemirror.frontier.v3.api.SubjectId> subjects) {
+        var positions = observed(level, state, tick);
+        var points = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPositionSnapshot.HotPoint>();
+        for (var actor : subjects) {
+            if (!ActorBodyAuthority.retainsPhysicalCustody(state, actor)) continue;
+            positions.currentPointAt(actor).ifPresent(point -> points.add(
+                    new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPositionSnapshot.HotPoint(
+                            ActorBodyAuthority.current(state, actor), point)));
+        }
+        return new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPositionSnapshot(tick, points);
     }
 }

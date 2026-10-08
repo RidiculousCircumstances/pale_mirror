@@ -84,7 +84,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff");
     private static final Set<String> ACTOR_MOVEMENT = types(
-            "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted", "frontier.actor_movement_started");
+            "frontier.actor_movement_cold_advanced", "frontier.actor_movement_cold_route_started",
+            "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted", "frontier.actor_movement_started");
     private static final Set<String> ACTOR_EXECUTION = types("frontier.actor_execution_resumed", "frontier.actor_presence_started");
     private static final Set<String> ACTOR_BODY = types("frontier.actor_body_released", "frontier.actor_body_unloaded", "frontier.actor_body_present", "frontier.actor_body_inspected", "frontier.actor_body_died");
     private static final Set<String> ECONOMY = types(
@@ -400,8 +401,8 @@ public final class FrontierWorldProcessCatalog {
                 descriptor("ambient-actors", ambientCommands(), Set.of(), AMBIENT, emissions("ambient-actors"), AMBIENT),
                 descriptor("scene-lifecycle", sceneCommands(), sceneSchedules(), SCENES, emissions("scene-lifecycle"), SCENES),
                 descriptor("population", populationCommands(), populationSchedules(), POPULATION, emissions("population"), POPULATION),
-                descriptor("actor-movement", types("frontier.actor_movement_hot_observed"), types(ActorMovementProcess.PROGRESS),
-                        ACTOR_MOVEMENT, emissions("actor-movement"), ACTOR_MOVEMENT),
+                descriptor("actor-movement", types("frontier.actor_movement_hot_observed", "frontier.actor_movement_cold_requested"), types(ActorMovementProcess.PROGRESS),
+                        ACTOR_MOVEMENT, emissions("actor-movement"), union(ACTOR_MOVEMENT, types("frontier.actor_movement_cold_requested"))),
                 descriptor("actor-execution", Set.of(), Set.of(), ACTOR_EXECUTION, Set.of(), ACTOR_EXECUTION),
                 descriptor("actor-body", ACTOR_BODY, Set.of(), ACTOR_BODY, union(ACTOR_BODY,
                         types("frontier.production_blocked",
@@ -829,6 +830,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged", "frontier.resource_deposited",
                     "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition");
             case "actor-movement" -> types("frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted",
+                    "frontier.actor_movement_cold_route_started",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
             case "economy" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",

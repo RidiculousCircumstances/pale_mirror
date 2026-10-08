@@ -111,6 +111,13 @@ final class FrontierV3AmbientActorExecutor {
             FrontierV3ActorBodyController.progressDeparture(level, runtime, state, actorId);
             state = runtime.decodedState().orElse(null);
             if (state == null) return;
+            var pendingMovement = state.actorMovements().get(actorId);
+            if (pendingMovement != null && pendingMovement.coldTravel().isEmpty()
+                    && io.farfrontier.palemirror.frontier.v3.model.ActorExecutionCoordinator.coldAvailable(state, actorId)) {
+                FrontierV3MovementPositionIngress.observe(level, runtime, state, pendingMovement,
+                        runtime.canonicalState().orElseThrow().instant().ticks());
+                state = runtime.decodedState().orElseThrow();
+            }
             var location = state.actorLocations().get(actorId);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE) {
                 forgetColdDemand(runtime, actorId);

@@ -16,8 +16,20 @@ public interface ActorMovementProvider {
     default List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {
         return coldSegment(state, movement, route);
     }
+    default List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route,
+                                           long tick, ActorPositionView positions) {
+        return coldSegment(state, movement, route, tick);
+    }
+    /** Explicit position dependencies; the physical adapter does not discover family rosters. */
+    default List<io.farfrontier.palemirror.frontier.v3.api.SubjectId> positionSubjects(FrontierWorldState state, ActorMovement movement) {
+        return List.of(movement.order().actorId());
+    }
     default void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {
         requireRoute(state, movement, route);
+    }
+    default void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route,
+                                  long tick, ActorPositionView positions) {
+        requireColdRoute(state, movement, route, tick);
     }
     default long ticksPerEdge(FrontierWorldState state, ActorMovement movement) { return 20L; }
     /** Read-only caller constraint; the common navigator remains the only physical actuator. */

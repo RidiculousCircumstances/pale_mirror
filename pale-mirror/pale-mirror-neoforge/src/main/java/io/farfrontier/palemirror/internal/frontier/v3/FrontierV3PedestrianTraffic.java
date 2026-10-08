@@ -54,7 +54,8 @@ final class FrontierV3PedestrianTraffic {
         for (int index = path.getNextNodeIndex(); index < end; index++) {
             AABB body = nativeNodeBodyAt(actor, path.getNode(index).asBlockPos());
             if (!level.getEntitiesOfClass(LivingEntity.class, body,
-                    other -> other != actor && other.isAlive() && !other.isSpectator()).isEmpty()) return true;
+                    other -> other != actor && other.isAlive() && !other.isSpectator()
+                            && !following(actor, other, path)).isEmpty()) return true;
         }
         return false;
     }
@@ -74,7 +75,7 @@ final class FrontierV3PedestrianTraffic {
             var feet = ordinary.getNode(index).asBlockPos();
             passage.add(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(feet.getX(), feet.getY() - 1, feet.getZ()));
             for (var other : level.getEntitiesOfClass(LivingEntity.class, nativeNodeBodyAt(actor, feet),
-                    entity -> entity != actor && entity.isAlive() && !entity.isSpectator())) {
+                    entity -> entity != actor && entity.isAlive() && !entity.isSpectator() && !following(actor, entity, ordinary))) {
                 if (blockers.size() >= MAX_BODIES) return new Query(null, List.of(), List.of(), true);
                 blockers.putIfAbsent(other.getUUID(), new Body(other.getUUID(), other.getBoundingBox()));
             }
@@ -88,7 +89,7 @@ final class FrontierV3PedestrianTraffic {
         AABB query = new AABB(origin.getX() - radius, origin.getY() - radius, origin.getZ() - radius,
                 origin.getX() + radius + 1, origin.getY() + radius + 1, origin.getZ() + radius + 1);
         List<AABB> bodies = level.getEntitiesOfClass(LivingEntity.class, query,
-                other -> other != actor && other.isAlive() && !other.isSpectator())
+                other -> other != actor && other.isAlive() && !other.isSpectator() && !following(actor, other, ordinary))
                 .stream().limit(MAX_BODIES + 1L).map(LivingEntity::getBoundingBox).toList();
         if (bodies.size() > MAX_BODIES) return new Query(null, List.of(), List.of(), true);
         WalkNodeEvaluator evaluator = new WalkNodeEvaluator() {
@@ -108,6 +109,35 @@ final class FrontierV3PedestrianTraffic {
                 new PathNavigationRegion(level, origin.offset(-radius, -radius, -radius), origin.offset(radius, radius, radius)),
                 actor, Set.of(target), radius, 0, 1.0F);
         return new Query(detour, List.copyOf(blockers.values()), passage);
+    }
+
+    private static boolean following(Mob actor, LivingEntity other, Path path) {
+        if (path == null || path.isDone()) return false;
+        for (int index = path.getNextNodeIndex(); index < path.getNodeCount(); index++) {
+            var direction = path.getEntityPosAtNode(actor, index).subtract(actor.position());
+            // A newly created native path can begin exactly under this body.
+            // Its zero-length first node is not a heading or a stationary intent.
+            if (direction.horizontalDistanceSqr() <= actor.getBbWidth() * actor.getBbWidth() / 4) continue;
+            return FrontierV3PedestrianFollowing.coFlow(actor.position(), direction, other.position(), other.getDeltaMovement());
+        }
+        return false;
+    }
+
+    /** Local following preserves the native path; only a real stationary/crossing blocker replans it. */
+    static double followingPace(ServerLevel level, Mob actor, Path path) {
+        if (path == null || path.isDone()) return 1;
+        double result = 1;
+        int end = Math.min(path.getNodeCount(), path.getNextNodeIndex() + 2);
+        for (int index = path.getNextNodeIndex(); index < end; index++) {
+            for (var other : level.getEntitiesOfClass(LivingEntity.class,
+                    nativeNodeBodyAt(actor, path.getNode(index).asBlockPos()),
+                    entity -> entity != actor && entity.isAlive() && !entity.isSpectator())) {
+                if (following(actor, other, path)) result = Math.min(result,
+                        FrontierV3PedestrianFollowing.paceFraction(actor.position().distanceTo(other.position()),
+                                actor.getBbWidth(), other.getBbWidth()));
+            }
+        }
+        return result;
     }
 
     private static AABB stationBodyAt(Mob actor, BlockPos feet) {

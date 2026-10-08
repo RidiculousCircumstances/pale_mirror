@@ -8,10 +8,16 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdA
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementHotObserved;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdRequested;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdRouteStarted;
 
 /** Single canonical reducer for purpose-independent actor goal travel. */
 final class FrontierActorMovementProcessModule implements FrontierWorldProcessModule {
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
+        if (command.payload() instanceof ActorMovementColdRequested requested) {
+            try { return new CommandPlan.Accepted(ActorMovementProcess.planColdRequested(state, requested, command.submittedAt().ticks())); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (!(command.payload() instanceof ActorMovementHotObserved observed))
             return FrontierWorldCommandPlanner.rejected("actor movement does not admit command: " + command.payload().type());
         try {
@@ -26,6 +32,11 @@ final class FrontierActorMovementProcessModule implements FrontierWorldProcessMo
         return switch (event.payload()) {
             case ActorMovementStarted started -> ActorMovementProcess.reduceStarted(state, event.subject(), started);
             case ActorMovementColdAdvanced advanced -> ActorMovementProcess.reduceColdAdvanced(state, event.subject(), advanced);
+            case ActorMovementColdRouteStarted started -> {
+                if (event.instant().ticks() != started.advance().atTick())
+                    throw new IllegalArgumentException("observed COLD route start belongs to another event instant");
+                yield ActorMovementProcess.reduceColdRouteStarted(state, event.subject(), started);
+            }
             case ActorMovementHotObserved observed -> ActorMovementProcess.reduceHotObserved(state, event.subject(), observed,
                     event.instant().ticks());
             case ActorMovementInterrupted interrupted -> ResidentActivityProcess.retargetHotResident(

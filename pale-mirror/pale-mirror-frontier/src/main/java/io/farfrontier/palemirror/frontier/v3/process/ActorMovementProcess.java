@@ -107,6 +107,10 @@ public final class ActorMovementProcess {
 
     private static Optional<ActorMovementColdAdvanced> coldStep(FrontierWorldState state,
                                                                   ActorMovement movement, long now) {
+        return coldStep(state, movement, now, ActorPositionView.canonical(state, now));
+    }
+    private static Optional<ActorMovementColdAdvanced> coldStep(FrontierWorldState state,
+                                                                ActorMovement movement, long now, ActorPositionView positions) {
         SubjectId actorId = movement.order().actorId();
         ActorLocation actor = state.actorLocations().get(actorId);
         if (actor == null) return Optional.empty();
@@ -125,7 +129,7 @@ public final class ActorMovementProcess {
         if (movement.order().arrivedAt(actor.supportingSurface()))
             return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now, movement.executionId()));
         try {
-            var travel = segmentRoute(state, movement, now);
+            var travel = segmentRoute(state, movement, now, positions);
             if (travel.route().size() <= 1) return Optional.empty();
             return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now,
                     Optional.empty(), movement.executionId(), Optional.of(new PedestrianRouteReceipt(travel.route()))));
@@ -136,6 +140,10 @@ public final class ActorMovementProcess {
 
     public static FrontierWorldState reduceColdAdvanced(FrontierWorldState state, SubjectId subject,
                                                          ActorMovementColdAdvanced step) {
+        return reduceColdAdvanced(state, subject, step, ActorPositionView.canonical(state, step.atTick()));
+    }
+    private static FrontierWorldState reduceColdAdvanced(FrontierWorldState state, SubjectId subject,
+                                                          ActorMovementColdAdvanced step, ActorPositionView positions) {
         ActorMovement movement = state.actorMovements().get(step.actorId());
         if (!subject.equals(step.actorId()) || movement == null
                 || !movement.executionId().equals(step.executionId())
@@ -149,7 +157,7 @@ public final class ActorMovementProcess {
             if (movement.coldTravel().isPresent() || actor.condition().status() != ActorLifeStatus.ALIVE
                     || !route.getFirst().equals(actor.supportingSurface()) || step.atTick() < movement.issuedAtTick())
                 throw new IllegalArgumentException("accepted route lacks its exact current departure");
-            ActorMovementProviders.require(movement).requireColdRoute(state, movement, route, step.atTick());
+            ActorMovementProviders.require(movement).requireColdRoute(state, movement, route, step.atTick(), positions);
         } else if ((movement.coldTravel().isEmpty() && actor.condition().status() == ActorLifeStatus.ALIVE
                 && !movement.order().arrivedAt(actor.supportingSurface()))
                 || !step.equals(coldStep(state, movement, step.atTick()).orElse(null)))
@@ -225,11 +233,37 @@ public final class ActorMovementProcess {
         return List.copyOf(events);
     }
 
-    private static TimedKnownRoute segmentRoute(FrontierWorldState state, ActorMovement movement, long now) {
+    /** The same movement owner accepts one observed mixed-provider route; no physical actor is advanced. */
+    public static List<ProposedEvent> planColdRequested(FrontierWorldState state, ActorMovementColdRequested request, long now) {
+        var movement = state.actorMovements().get(request.execution().actorId());
+        if (movement == null || !movement.executionId().equals(request.execution())
+                || movement.order().goalRevision() != request.goalRevision() || movement.coldTravel().isPresent())
+            throw new IllegalArgumentException("movement observation has no exact unstarted COLD leg");
+        var subjects = ActorMovementProviders.require(movement).positionSubjects(state, movement);
+        var positions = request.positions().positions(state, now, subjects);
+        var step = coldStep(state, movement, now, positions).filter(value -> value.plannedRoute().isPresent())
+                .orElseThrow(() -> new IllegalArgumentException("movement observation cannot start a COLD leg"));
+        var started = new ActorMovementColdRouteStarted(step, request.positions());
+        reduceColdRouteStarted(state, movement.order().actorId(), started);
+        var due = timedSegment(state, movement, step.plannedRoute().orElseThrow().route(), now).arrivalTick();
+        var action = progress(movement, due);
+        return List.of(new ProposedEvent(movement.order().actorId(), started),
+                new ProposedEvent(movement.order().actorId(), new ScheduleEffect.Rescheduled(action.id(), action)));
+    }
+    public static FrontierWorldState reduceColdRouteStarted(FrontierWorldState state, SubjectId subject,
+                                                            ActorMovementColdRouteStarted started) {
+        var movement = state.actorMovements().get(subject);
+        if (movement == null) throw new IllegalArgumentException("observed route lost its exact movement");
+        var positions = started.positions().positions(state, started.advance().atTick(),
+                ActorMovementProviders.require(movement).positionSubjects(state, movement));
+        return reduceColdAdvanced(state, subject, started.advance(), positions);
+    }
+
+    private static TimedKnownRoute segmentRoute(FrontierWorldState state, ActorMovement movement, long now, ActorPositionView positions) {
         MovementOrder order = movement.order();
         var provider = ActorMovementProviders.require(movement);
         List<SurfaceAnchor> route = provider.coldSegment(state, movement,
-                provider.route(state, movement, state.actorLocations().get(order.actorId()).supportingSurface()), now);
+                provider.route(state, movement, state.actorLocations().get(order.actorId()).supportingSurface()), now, positions);
         return timedSegment(state, movement, route, now);
     }
 
