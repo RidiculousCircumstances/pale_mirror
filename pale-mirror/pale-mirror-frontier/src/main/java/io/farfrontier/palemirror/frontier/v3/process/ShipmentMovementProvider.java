@@ -41,7 +41,33 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     }
     @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);
-        return List.copyOf(route.subList(0, Math.min(route.size(), TimedKnownRoute.MAX_SURFACES)));
+        var access = serviceApproach(state, movement).orElseThrow();
+        int end = Math.min(route.size(), TimedKnownRoute.MAX_SURFACES);
+        if (!ServiceAccessCoordinator.available(state, access)) {
+            var boundary = ServiceAccessCoordinator.boundary(state, access.pointId());
+            for (int index = 1; index < end; index++) {
+                if (boundary.occupied(route.get(index).standingBody())) { end = index; break; }
+            }
+        }
+        return List.copyOf(route.subList(0, end));
+    }
+    @Override public java.util.Optional<ServiceAccessDemand.Identity> serviceApproach(FrontierWorldState state, ActorMovement movement) {
+        validate(state, movement);
+        var shipment = state.shipments().shipments().get(movement.order().ownerId());
+        return java.util.Optional.of(ShipmentServiceAccess.identity(shipment));
+    }
+    @Override public void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {
+        validate(state, movement);
+        var shipment = state.shipments().shipments().get(movement.order().ownerId());
+        KnownPedestrianRouteKnowledge.forJourney(state,
+                List.of(passage(state, shipment.sender()), passage(state, shipment.receiver()))).requireRoute(route);
+        var access = serviceApproach(state, movement).orElseThrow();
+        boolean waitingOutside = !ServiceAccessCoordinator.available(state, access)
+                && ServiceAccessCoordinator.boundary(state, access.pointId()).cleared(route.getLast().standingBody())
+                && ServiceAccessCoordinator.boundary(state, access.pointId()).allowsWaitingRoute(route);
+        if (route.size() > TimedKnownRoute.MAX_SURFACES || !waitingOutside
+                && !movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)
+            throw new IllegalArgumentException("shipment COLD segment lacks its bounded goal or service-wait boundary");
     }
     private static KnownPedestrianRouteKnowledge.SettlementPassage passage(FrontierWorldState state, ShipmentEndpoint endpoint) {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), endpoint.settlementId());

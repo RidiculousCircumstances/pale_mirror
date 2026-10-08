@@ -129,7 +129,7 @@ public final class ServiceAccessCoordinator {
         return actor.body();
     }
 
-    static SettlementDepotServicePort port(FrontierWorldState state, SubjectId depotId) {
+    public static SettlementDepotServicePort port(FrontierWorldState state, SubjectId depotId) {
         ContainerRecord container = Objects.requireNonNull(state.inventory().containers().get(depotId),
                 "unknown depot service container");
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), container.ownerId());

@@ -216,6 +216,8 @@ class GoodsTradeTest {
         assertEquals(43, state.inventory().fungibleResources().claims().get(CLAIM).quantity());
         assertTrue(state.shipments().shipments().get(shipment.id()).reception().isEmpty());
         assertFalse(ShipmentStateSupport.coldTransferAvailable(state, state.shipments().shipments().get(shipment.id())));
+        assertTrue(new ShipmentServiceAccess().demands(state, RECEIVER).isEmpty(),
+                "a full receiver retains cargo and contract, not an exclusive unloading turn");
         var retry = io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.plan(state,
                 io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(shipment.id(), 11), 11);
         var next = (io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled) retry.getFirst().payload();
@@ -224,6 +226,8 @@ class GoodsTradeTest {
         resources = state.inventory().fungibleResources().destroy(RECEIVER_ACCOUNT, Map.of(filler, 43), Map.of());
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         partial = state.shipments().shipments().get(shipment.id());
+        assertFalse(new ShipmentServiceAccess().demands(state, RECEIVER).isEmpty(),
+                "new room re-enables the same partially delivered shipment");
         state = shipmentFact(state, shipment.id(), new ShipmentColdTransferred(shipment.id(), partial.revision(), Shipment.Status.CARRYING));
         assertEquals(Shipment.Status.DELIVERED, state.shipments().shipments().get(shipment.id()).status());
         assertEquals(beforeBuyer.minus(FixedScalar.whole(17)), state.inventory().economics().require(BUYER).balance());
@@ -385,6 +389,21 @@ class GoodsTradeTest {
             assertTrue(blocked.shipments().shipments().get(shipment.id()).pendingPhysicalStep().isEmpty());
             assertEquals(state.inventory(), blocked.inventory(), "waiting cannot move or lose cargo");
             var port = ServiceAccessCoordinator.port(blocked, SOURCE);
+            var waitingCourier = atStation(blocked, actor, port.exteriorApproach());
+            var movement = new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(
+                    shipment.movementOrder(), 1L,
+                    new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ShipmentLeg(
+                            shipment.id(), shipment.revision()), shipment.execution());
+            var provider = new io.farfrontier.palemirror.frontier.v3.process.ShipmentMovementProvider();
+            var approach = provider.serviceApproach(waitingCourier, movement).orElseThrow();
+            assertEquals(actor, approach.actorId());
+            assertEquals(shipment.id(), approach.ownerId());
+            assertFalse(ServiceAccessCoordinator.available(waitingCourier, approach),
+                    "the same declared service permit gates physical approach, not only item transfer");
+            var heldRoute = provider.coldSegment(waitingCourier, movement,
+                    List.of(port.exteriorApproach(), shipment.sender().station()));
+            assertEquals(List.of(port.exteriorApproach()), heldRoute,
+                    "COLD approach cannot enter another visitor's occupied service station");
             state = atStation(blocked, visitor, unprepared.actorLocations().get(visitor).supportingSurface());
             assertTrue(port.accessBoundary().cleared(state.actorLocations().get(visitor).body()));
             assertEquals(ShipmentPhysicalStateSupport.PreparationAdmission.READY,

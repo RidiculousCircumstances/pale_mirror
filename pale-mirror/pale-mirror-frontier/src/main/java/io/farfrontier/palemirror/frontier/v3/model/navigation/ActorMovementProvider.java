@@ -31,6 +31,10 @@ public interface ActorMovementProvider {
     }
     default MovementPermission movementPermission(FrontierWorldState state, ActorMovement movement, SurfaceAnchor actual,
                                                    long tick, ActorPositionView positions) { return MovementPermission.allow(); }
+    /** Registered owner declares a service approach; navigation owns waiting/clearance, never its transaction. */
+    default java.util.Optional<ServiceAccessDemand.Identity> serviceApproach(FrontierWorldState state, ActorMovement movement) {
+        return java.util.Optional.empty();
+    }
     ActorExecutionState arrivalAuthority(FrontierWorldState state, ActorMovement movement);
     java.util.Optional<BodyPosition> interruptionCheckpoint(FrontierWorldState state, ActorMovement movement, long atTick);
     ActorExecutionState interruptionAuthority(FrontierWorldState state, ActorMovement movement);

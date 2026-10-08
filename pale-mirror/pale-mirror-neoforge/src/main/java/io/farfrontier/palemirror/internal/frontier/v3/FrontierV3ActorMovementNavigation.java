@@ -35,6 +35,22 @@ final class FrontierV3ActorMovementNavigation {
         provider.validate(state, movement);
         var actuation = FrontierV3AmbientActuation.capture(state, runtime, body, lease, movement.executionId()).orElse(null);
         if (actuation == null || !actuation.current(body)) return;
+        var service = provider.serviceApproach(state, movement);
+        if (service.isPresent()) {
+            var identity = service.orElseThrow();
+            if (!identity.actorId().equals(movement.order().actorId())
+                    || !identity.ownerId().equals(movement.order().ownerId()))
+                throw new IllegalArgumentException("movement service approach lost its exact actor/owner declaration");
+        }
+        if (service.isPresent() && !ServiceAccessCoordinator.available(state, service.orElseThrow())) {
+            var identity = service.orElseThrow();
+            var port = ServiceAccessCoordinator.port(state, identity.pointId());
+            var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, body, state,
+                    port.settlementId(), identity.pointId(), identity.ownerId(), identity.actorId(),
+                    Math.toIntExact(movement.order().goalOrdinal()), movement.executionId().generation(), actuation);
+            blocked(body, movement, "service-access:" + waiting.reason());
+            return; // Local clearance is not arrival at the retained service/work goal.
+        }
         long tick = runtime.calendarInstant().orElseThrow();
         var permission = provider.movementPermission(state, movement, FrontierV3SurfaceObservation.observedBody(body).supportingSurface(), tick,
                 FrontierV3ActorPositionView.observed(level, state, tick));

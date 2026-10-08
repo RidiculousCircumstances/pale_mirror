@@ -5,14 +5,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Shipment declares its access need; the existing shared coordinator arbitrates every family. */
-final class ShipmentServiceAccess implements ServiceAccessCapability {
+public final class ShipmentServiceAccess implements ServiceAccessCapability {
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.COURIER; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var boundary = ServiceAccessCoordinator.boundary(state, pointId);
         var result = new ArrayList<ServiceAccessDemand>();
         for (Shipment shipment : state.shipments().shipments().values()) {
-            if (shipment.terminal()) continue;
+            if (shipment.terminal() || !operationEligible(state, shipment)) continue;
             if (shipment.transportMissionId().map(state.shipments().missions()::get)
                     .flatMap(TransportMission::supplies).filter(load -> !load.complete()).isPresent()) continue;
             boolean occupied = ServiceAccessCoordinator.occupies(state, boundary, shipment.execution().actorId());
@@ -29,7 +29,19 @@ final class ShipmentServiceAccess implements ServiceAccessCapability {
     static boolean available(FrontierWorldState state, Shipment shipment) {
         SubjectId point = shipment.status() == Shipment.Status.AWAITING_LOAD
                 ? shipment.sender().containerId() : shipment.receiver().containerId();
-        return ServiceAccessCoordinator.available(state, identity(shipment, point));
+        return operationEligible(state, shipment) && ServiceAccessCoordinator.available(state, identity(shipment, point));
+    }
+    private static boolean operationEligible(FrontierWorldState state, Shipment shipment) {
+        if (shipment.pendingPhysicalStep().isPresent()) return true;
+        if (shipment.reception().isPresent()) return false;
+        if (shipment.status() == Shipment.Status.CARRYING
+                && ReferenceContainerCustody.hasLiveCustody(state, shipment.receiver().containerId()))
+            return ShipmentPhysicalStateSupport.destination(state, shipment).isPresent();
+        return !ShipmentStateSupport.coldTransferLots(state, shipment).isEmpty();
+    }
+    public static ServiceAccessDemand.Identity identity(Shipment shipment) {
+        var endpoint = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sender() : shipment.receiver();
+        return identity(shipment, endpoint.containerId());
     }
     private static ServiceAccessDemand.Identity identity(Shipment shipment, SubjectId point) {
         return new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.COURIER, shipment.id(), shipment.execution().actorId(), point);
