@@ -23,13 +23,21 @@ class GoodsTradeTest {
                 "cargo waiting for its group cannot retain a completed source service transaction");
         assertEquals(shipment.receiver().containerId(),
                 service.demands(state, shipment.receiver().containerId()).getFirst().identity().pointId());
+        long now = 30_001;
+        state = applyEvents(state, io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.plan(state,
+                io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(shipment.id(), now), now), now, "shipments");
+        var movement = state.actorMovements().get(actor);
+        assertNotNull(movement, "the regression needs an active courier approach, not an idle carrier");
+        assertFalse(ActorExecutionComposition.CAPABILITIES.require(shipment.execution().activityKind())
+                .checkpoint(state, shipment.execution()).ready(), "interruption still needs its route checkpoint");
         var checkpoint = ActorSpatialCourtesy.assess(state, shipment.execution());
-        assertTrue(checkpoint.ready(), "waiting for a companion does not pin a loaded carrier to a passage");
+        assertTrue(checkpoint.ready(), "an unfinished approach must not prohibit local spatial avoidance");
         assertSame(state, checkpoint.basis());
         assertEquals(Map.of(LOT, 60), state.inventory().fungibleResources().accounts().get(shipment.carriedAccountId()).lotQuantities());
         assertEquals(shipment.execution(), state.actorExecutions().actors().get(actor).current().orElseThrow());
         var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertTrue(ActorSpatialCourtesy.assess(restored, shipment.execution()).ready());
+        assertEquals(movement, restored.actorMovements().get(actor), "courtesy admission cannot cancel or replace the route");
         assertTrue(service.demands(restored, shipment.sender().containerId()).isEmpty());
         var foreign = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,
                 shipment.execution().activityKind(), id("shipment:foreign"), shipment.execution().generation());

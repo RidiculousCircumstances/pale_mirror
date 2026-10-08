@@ -66,6 +66,14 @@ final class ShipmentExecutionCapability implements ActorActivityCapability {
                 : Optional.<ActorActivityCheckpoint.Reason>empty();
         return new ActorActivityCheckpoint(state, execution, reason.map(value -> new ActorActivityCheckpoint.Wait(value, execution.activityOwnerId())));
     }
+    @Override public ActorActivityCheckpoint spatialYieldCheckpoint(FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution);
+        var shipment = state.shipments().shipments().get(execution.activityOwnerId());
+        // Local avoidance retains the same execution, movement goal and resource custody.
+        // Waiting for that movement to finish would deadlock mutually blocked couriers.
+        return new ActorActivityCheckpoint(state, execution, shipment.pendingPhysicalStep().map(step ->
+                new ActorActivityCheckpoint.Wait(ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION, shipment.id())));
+    }
     @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease) {
         validateReference(state, execution);
         var movement = state.actorMovements().get(execution.actorId());

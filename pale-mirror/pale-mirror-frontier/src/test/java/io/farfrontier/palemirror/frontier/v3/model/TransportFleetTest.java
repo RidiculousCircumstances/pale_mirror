@@ -16,6 +16,10 @@ class TransportFleetTest {
                 "minecraft:wheat", 70, "test", java.util.List.of());
         state = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources().issue(lot,
                 new CustodyAccount(account, new ResourceCustody.Container(asset.containerId()), java.util.Map.of(lot.id(), 70), java.util.Map.of()))));
+        var execution = state.actorExecutions().next(asset.actorId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, asset.actorId());
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorExecutions(state.actorExecutions().begin(execution, 0)));
+        assertTrue(ActorSpatialCourtesy.assess(state, execution).ready());
         assertTrue(ReferenceContainerCustody.isReferenceContainer(state, asset.containerId()));
         assertEquals("container.mobile-storage", ReferenceContainerCustody.semanticKind(state, asset.containerId()));
         assertEquals(MaterialContainerImage.Layout.BULK, ReferenceContainerCustody.layout(state, asset.containerId()));
@@ -39,6 +43,11 @@ class TransportFleetTest {
         assertFalse(ReferenceContainerCustody.hasOperationalCustody(prepared, asset.containerId()));
         assertEquals(java.util.Optional.of(asset.containerId()), ActorInventoryInteractionFences.pendingOwner(prepared, asset.actorId()));
         assertTrue(ActorInventoryInteractionFences.pending(prepared, asset.actorId()));
+        var courtesy = ActorSpatialCourtesy.assess(prepared, execution);
+        assertFalse(courtesy.ready(), "local avoidance must honor a separately owned mobile inventory operation");
+        assertEquals(asset.containerId(), courtesy.waiting().orElseThrow().dependencyOwner());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION,
+                courtesy.waiting().orElseThrow().reason());
         var expected = prepared.replicaCustody().replicas().get(asset.containerId());
         // Model receipt only, not a claim about native donkey inventory or body admission.
         assertInstanceOf(CommandResult.Accepted.class, submit(engine, "mobile-confirm",
@@ -50,6 +59,7 @@ class TransportFleetTest {
         assertTrue(ReferenceContainerCustody.hasOperationalCustody(confirmed, asset.containerId()));
         assertFalse(ActorInventoryInteractionFences.pending(confirmed, asset.actorId()),
                 "observed mobile storage may move with its body; a normal inventory lease is not a movement lock");
+        assertTrue(ActorSpatialCourtesy.assess(confirmed, execution).ready());
         assertEquals(before.inventory().fungibleResources(), confirmed.inventory().fungibleResources());
         var checkpoint = engine.checkpoint();
         assertInstanceOf(CommandResult.Rejected.class, submit(engine, "mobile-double-prepare",
@@ -57,7 +67,8 @@ class TransportFleetTest {
         assertArrayEquals(checkpoint.canonicalState(), engine.checkpoint().canonicalState());
         var actors = new LinkedHashMap<>(before.actorLocations()); var body = actors.get(asset.actorId());
         actors.put(asset.actorId(), new ActorLocation(body.body(), ActorCondition.dead(), body.kind()));
-        var lost = before.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+        var retired = ActorExecutionComposition.LIFECYCLE.retire(before, asset.actorId(), execution.activityKind(), asset.actorId());
+        var lost = before.withChanges(FrontierWorldStateUpdate.begin().actorExecutions(retired).actorLocations(actors));
         assertTrue(ReferenceContainerCustody.blocksCanonicalUse(lost, asset.containerId()));
         assertThrows(IllegalArgumentException.class, () -> ReferenceProjectionStateSupport.prepare(lost,
                 new PhysicalReplicaCustodyPayloads.ReferenceProjectionPrepared(asset.containerId(), 1, 0, "", ""), 1));
