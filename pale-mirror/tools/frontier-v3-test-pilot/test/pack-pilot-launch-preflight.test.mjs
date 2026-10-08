@@ -9,7 +9,7 @@ test('the pack pilot binds one materialized pack source and records the loader i
   const [runner, build, client] = await Promise.all([
     readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-scenario.mjs'), 'utf8'),
     readFile(resolve(project, 'pale-mirror-neoforge/build.gradle'), 'utf8'),
-    readFile(resolve(project, 'pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/client/FrontierV3TestPilotClient.java'), 'utf8')
+    readFile(resolve(project, 'pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/client/FrontierV3FullPackPreflight.java'), 'utf8')
   ]);
   assert.match(runner, /FRONTIER_V3_PILOT_PACK_DIRECTORY must name an absolute materialized full-pack directory/);
   assert.match(runner, /-PfrontierV3PilotPackSource=\$\{packPilotDirectory\}/);
@@ -17,6 +17,7 @@ test('the pack pilot binds one materialized pack source and records the loader i
   assert.match(runner, /PMV3_PILOT_LOADED_MODS\\s\+\(\\\{\.\*\\\}\)/);
   assert.match(runner, /\(!packPilot \|\| loadedModInventory !== null\)/);
   assert.match(build, /frontierV3PilotPackSource/);
+  assert.match(build, /include 'mods\/\*\*', 'config\/\*\*', 'defaultconfigs\/\*\*', 'resourcepacks\/\*\*', 'shaderpacks\/\*\*'/);
   assert.match(build, /pack source must be a materialized directory, not a symbolic link/);
   assert.match(build, /pale_mirror\.frontier_v3\.test_pilot\.required_mods/);
   assert.match(build, /materialized pack is immutable release input/);

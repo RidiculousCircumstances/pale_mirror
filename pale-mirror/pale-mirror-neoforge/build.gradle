@@ -1031,6 +1031,10 @@ tasks.named('runMillenaireClient') { dependsOn prepareMillenaireClientMods }
 def syncFrontierV3PilotPackClient = tasks.register('syncFrontierV3PilotPackClient', Sync) {
     dependsOn tasks.named('classes')
     from(frontierV3PilotPackSourceDirectory) {
+        // A pack source may be an installed server. Only client runtime inputs
+        // belong here: copying its worlds/logs/caches can consume the entire
+        // connection deadline before Minecraft even starts.
+        include 'mods/**', 'config/**', 'defaultconfigs/**', 'resourcepacks/**', 'shaderpacks/**'
         // NeoForge ModDev contributes the current Pale Mirror source set to the
         // run. Leaving this pack artifact beside it silently wins class lookup.
         exclude 'mods/pale_mirror-hosted.jar'
@@ -1041,7 +1045,8 @@ def syncFrontierV3PilotPackClient = tasks.register('syncFrontierV3PilotPackClien
         frontierV3GrayboxDisabledMods.each { exclude "mods/${it}" }
     }
     into(frontierV3PilotPackClientDirectory)
-    inputs.dir(frontierV3PilotPackSourceDirectory)
+    // Sync already fingerprints the filtered source tree. Registering the
+    // unfiltered root again would hash live worlds and invalidate every run.
     inputs.property('frontierV3PilotPackSource', frontierV3PilotPackSourceDirectory.absolutePath)
     doFirst {
         if (!new File(frontierV3PilotPackSourceDirectory, 'mods').isDirectory()) {
