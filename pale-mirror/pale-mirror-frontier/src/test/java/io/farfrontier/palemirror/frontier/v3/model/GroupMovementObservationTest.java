@@ -105,4 +105,42 @@ class GroupMovementObservationTest {
         assertFalse(first.allowed()); assertTrue(second.allowed(), "straight-line closeness to the destination is not travel progress");
         assertEquals(Optional.of(back), first.waitingFor());
     }
+    @Test void coincidentColdMembersHaveConnectedBirthSpaceWithoutChangingTheirJourneyOrCargo() {
+        var state = travelling();
+        var group = state.unitGroups().groups().values().stream().filter(g -> g.phase() == UnitGroup.Phase.TRAVELLING).findFirst().orElseThrow();
+        var origin = group.journey().orElseThrow().route().get(20);
+        var first = group.members().getFirst().actorId();
+        var second = group.members().getLast().actorId();
+        state = state.withActorBody(first, origin.standingBody()).withActorBody(second, origin.standingBody());
+        long tick = state.actorMovements().get(first).issuedAtTick() + 1;
+        for (var actor : List.of(first, second)) state = io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess.prepare(
+                state, io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess.nextLease(state, actor, new SimInstant(tick)));
+        var lease = state.ambientLeases().get(second);
+        var candidates = AmbientPlacementPolicy.candidates(state, lease);
+        assertEquals(origin, candidates.getFirst(), "retain the exact projected position as the preferred birth");
+        assertTrue(candidates.size() > 1, "an occupied road cell must not be the only declared birth surface");
+        var alternative = candidates.get(1);
+        assertTrue(LocalNavigationEnvelope.around(origin.standingBody(), origin.standingBody()).contains(alternative.support()));
+        state = ModeledActorBodyFacts.present(state, first);
+        state = ModeledActorBodyFacts.present(state, second);
+        var inspected = ModeledActorBodyFacts.inspected(state, second, alternative.standingBody());
+        var admitted = io.farfrontier.palemirror.frontier.v3.process.AmbientBodyConfirmationProcess.reduce(inspected,
+                new AmbientBodyConfirmed(second, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION,
+                        origin.standingBody(), alternative.standingBody(), ActorBodyAuthority.current(inspected, second)));
+        assertEquals(AmbientLeaseStatus.HOT, admitted.ambientLeases().get(second).status());
+        assertEquals(state.actorMovements(), admitted.actorMovements(), "birth grants no route progress or arrival");
+        assertEquals(state.shipments(), admitted.shipments(), "birth cannot deliver, sell or release cargo");
+        assertEquals(state.inventory(), admitted.inventory());
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(admitted));
+        assertEquals(admitted, recovered);
+        assertTrue(GroupTravelCohesion.assessCurrent(recovered, group, second,
+                actor -> actor.equals(second) ? alternative.standingBody() : origin.standingBody(), MovementPermission.allow()).allowed());
+        var foreign = origin.support().offset(8, 0, 0);
+        var finalState = inspected;
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.AmbientBodyConfirmationProcess.reduce(
+                finalState.withActorBody(second, BodyPosition.above(new SurfaceAnchor(foreign))),
+                new AmbientBodyConfirmed(second, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION,
+                        origin.standingBody(), BodyPosition.above(new SurfaceAnchor(foreign)), ActorBodyAuthority.current(finalState, second))),
+                "local placement never authorizes a remote birth");
+    }
 }

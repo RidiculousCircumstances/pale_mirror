@@ -10,6 +10,8 @@ public interface ActorMovementProvider {
     ActorMovementContext.Provider key();
     void validate(FrontierWorldState state, ActorMovement movement);
     FrontierWorldState start(FrontierWorldState state, ActorMovement movement, FrontierWorldStateUpdate movementUpdate);
+    /** The owner declares passages; shared placement alone selects a connected local birth surface. */
+    KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement);
     List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start);
     void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route);
     List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route);

@@ -33,6 +33,10 @@ public final class GroupMovementProvider implements ActorMovementProvider {
         return current != null && current.current().equals(Optional.of(movement.executionId())) ? state.withChanges(update)
                 : ActorExecutionComposition.LIFECYCLE.prepareVacant(state, movement.executionId()).commit(state, update);
     }
+    @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
+        var group = group(state, movement);
+        return UnitGroupMissionPorts.require(group).knowledge(state, group);
+    }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         var group = group(state, movement);
         return UnitGroupMissionPorts.require(group).knowledge(state, group).plannedPath(start, movement.order(),

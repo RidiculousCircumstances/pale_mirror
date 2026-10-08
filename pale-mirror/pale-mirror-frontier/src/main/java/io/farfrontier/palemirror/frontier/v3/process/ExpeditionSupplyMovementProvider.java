@@ -46,6 +46,10 @@ public final class ExpeditionSupplyMovementProvider implements ActorMovementProv
         return mission;
     }
     @Override public void validate(FrontierWorldState state, ActorMovement movement) { mission(state, movement); }
+    @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
+        var m = mission(state, movement);
+        return TransportGroupMissionPort.knowledgeForEndpoints(state, m.sender(), m.receiver());
+    }
     @Override public FrontierWorldState start(FrontierWorldState state, ActorMovement movement, FrontierWorldStateUpdate update) {
         validate(state, movement); state.actorExecutions().requireCurrent(movement.executionId()); return state.withChanges(update);
     }

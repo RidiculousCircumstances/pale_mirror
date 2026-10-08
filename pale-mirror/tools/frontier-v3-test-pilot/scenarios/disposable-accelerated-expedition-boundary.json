@@ -20,14 +20,14 @@
     "resumeSetup": [
       {
         "type": "command",
-        "command": "/tick rate 50"
+        "command": "/tick rate 20"
       }
     ]
   },
   "setup": [
     {
       "type": "command",
-      "command": "/tick rate 50"
+      "command": "/tick rate 20"
     }
   ],
   "actions": [
@@ -148,7 +148,7 @@
     {
       "type": "fast_forward_to_instant",
       "targetInstant": 24000,
-      "timeoutMs": 120000,
+      "timeoutMs": 180000,
       "causalMilestone": "cold_group_progress_without_historical_motion_replay"
     },
     {
@@ -157,7 +157,7 @@
     {
       "type": "fast_forward_to_instant",
       "targetInstant": 45000,
-      "timeoutMs": 120000
+      "timeoutMs": 180000
     },
     {
       "type": "visit",

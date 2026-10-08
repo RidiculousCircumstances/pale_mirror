@@ -133,6 +133,25 @@ public final class KnownPedestrianRouteKnowledge {
     public List<SurfaceAnchor> plannedPath(SurfaceAnchor start, MovementOrder order) {
         return KnownPedestrianNavigation.plannedRoute(geometryFrom(start), start, order);
     }
+    /** Connected known supports inside the existing one-cell local collision latitude.
+     * No task goal, route clock, arrival or physical actor position is changed. */
+    public List<SurfaceAnchor> localPlacement(SurfaceAnchor origin) {
+        var geometry = geometryFrom(origin);
+        var scope = LocalNavigationEnvelope.around(origin.standingBody(), origin.standingBody());
+        var queue = new java.util.ArrayDeque<SurfaceAnchor>();
+        var seen = new java.util.LinkedHashSet<SurfaceAnchor>();
+        queue.add(origin); seen.add(origin);
+        while (!queue.isEmpty()) {
+            var current = queue.removeFirst();
+            for (int[] offset : List.of(new int[]{0, -1}, new int[]{-1, 0}, new int[]{1, 0}, new int[]{0, 1})) {
+                var next = geometry.supportAt(current.x() + offset[0], current.z() + offset[1]);
+                if (next != null && scope.contains(next.support()) && geometry.bounds().contains(next.support())
+                        && !geometry.blocked(next) && Math.abs((long) next.y() - current.y()) <= 1 && seen.add(next))
+                    queue.addLast(next);
+            }
+        }
+        return List.copyOf(seen);
+    }
     public List<SurfaceAnchor> plannedPath(SurfaceAnchor start, MovementOrder order, List<SurfaceAnchor> hint) {
         return KnownPedestrianNavigation.plannedRoute(geometryFrom(start), start, order, hint);
     }

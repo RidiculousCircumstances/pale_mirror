@@ -24,12 +24,14 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
         validate(state, movement);
         return state.withChanges(update); // Same retained COURIER generation; movement is not a new job.
     }
-    @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
+    @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
         validate(state, movement);
         Shipment shipment = state.shipments().shipments().get(movement.order().ownerId());
-        var knowledge = KnownPedestrianRouteKnowledge.forJourney(state,
+        return KnownPedestrianRouteKnowledge.forJourney(state,
                 List.of(passage(state, shipment.sender()), passage(state, shipment.receiver())));
-        return knowledge.plannedPath(start, movement.order());
+    }
+    @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
+        return placementKnowledge(state, movement).plannedPath(start, movement.order());
     }
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);

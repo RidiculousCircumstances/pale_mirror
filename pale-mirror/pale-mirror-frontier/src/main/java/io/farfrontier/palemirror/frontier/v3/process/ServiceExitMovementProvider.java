@@ -42,6 +42,14 @@ public final class ServiceExitMovementProvider implements ActorMovementProvider 
         if (exit(movement).retainsCaller()) return state.withChanges(update);
         return ActorExecutionComposition.LIFECYCLE.prepareBegin(state, movement.executionId(), movement.issuedAtTick()).commit(state, update);
     }
+    @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
+        validate(state, movement);
+        var exit = exit(movement);
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), exit.settlementId());
+        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        return KnownPedestrianRouteKnowledge.forSettlement(state, exit.settlementId(), List.of(
+                new KnownPedestrianRouteKnowledge.Passage(depot, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+    }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         validate(state, movement);
         var exit = exit(movement);

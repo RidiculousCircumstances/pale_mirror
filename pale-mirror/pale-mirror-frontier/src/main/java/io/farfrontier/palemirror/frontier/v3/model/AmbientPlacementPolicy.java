@@ -23,7 +23,7 @@ public final class AmbientPlacementPolicy {
                     return ResidentMealAdmissionPlacement.confirmed(state, lease.actorId(), body);
                 }
             }),
-            Map.entry(AmbientGoalKind.ACTOR_MOVEMENT, AmbientPlacementPolicy::serviceZone),
+            Map.entry(AmbientGoalKind.ACTOR_MOVEMENT, AmbientPlacementPolicy::movementZone),
             Map.entry(AmbientGoalKind.WORK, AmbientPlacementPolicy::serviceZone),
             Map.entry(AmbientGoalKind.GUARD, AmbientPlacementPolicy::serviceZone),
             Map.entry(AmbientGoalKind.PATROL, AmbientPlacementPolicy::serviceZone),
@@ -47,6 +47,21 @@ public final class AmbientPlacementPolicy {
     }
     private static List<SurfaceAnchor> exact(FrontierWorldState state, AmbientActorLease lease) {
         return List.of(lease.handoffBody().supportingSurface());
+    }
+    private static List<SurfaceAnchor> movementZone(FrontierWorldState state, AmbientActorLease lease) {
+        var result = new ArrayList<>(serviceZone(state, lease));
+        var movement = state.actorMovements().get(lease.actorId());
+        if (movement != null) {
+            var knowledge = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(movement)
+                    .placementKnowledge(state, movement);
+            try {
+                for (var candidate : knowledge.localPlacement(lease.handoffBody().supportingSurface()))
+                    if (!result.contains(candidate)) result.add(candidate);
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                // Unknown or changed support does not authorize invented neighbouring geometry.
+            }
+        }
+        return List.copyOf(result);
     }
     private static List<SurfaceAnchor> serviceZone(FrontierWorldState state, AmbientActorLease lease) {
         ResidentProfile resident = state.humanPopulation().resident(lease.actorId());
