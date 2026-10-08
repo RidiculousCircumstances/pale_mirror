@@ -761,9 +761,21 @@ public final class FrontierV3ServerLifecycle {
             PaleMirrorMod.LOGGER.warn("PMV3_BODY_JOIN_REJECTED entity={} actor={} reason=JOIN_CANCELED; temporary admission withdrawn, durable custody retained",
                     entity.getUUID(), entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.ACTOR_KEY));
         } else if (entity.getPersistentData().contains(FrontierV3ActorCarrierComposition.ACTOR_KEY)) {
-            PaleMirrorMod.LOGGER.error("PMV3_BODY_JOIN_REJECTED entity={} actor={} reason=HISTORICAL_JOIN_CANCELED runtime={}",
+            var state = runtime == null ? null : runtime.decodedState().orElse(null);
+            var declaration = FrontierV3ActorCarrierComposition.declaredBy(entity).orElse(null);
+            var indexed = level.getEntity(entity.getUUID());
+            var evidence = state == null ? null : FrontierV3BodyJoinRejection.inspect(state,
+                    FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()), declaration,
+                    entity.getPersistentData().getLong(FrontierV3ActorBodyController.RESIDENCE_KEY),
+                    indexed != null && indexed != entity);
+            // A positively retired incarnation is normal late native storage, not loss of a current body.
+            // Every other canceled managed body remains an error with its exact fencing context.
+            var logger = evidence != null && evidence.expectedRetirement()
+                    ? PaleMirrorMod.LOGGER.atInfo() : PaleMirrorMod.LOGGER.atError();
+            logger.log("PMV3_BODY_JOIN_REJECTED entity={} actor={} reason={} runtime={} declaration={} evidence={}",
                     entity.getUUID(), entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.ACTOR_KEY),
-                    runtime == null ? "ABSENT" : runtime.status().kind());
+                    evidence == null ? "OWNERSHIP_UNAVAILABLE" : evidence.reason(),
+                    runtime == null ? "ABSENT" : runtime.status().kind(), declaration, evidence);
         }
     }
     public static boolean recognizesManagedCarrier(ServerLevel level, Entity entity) {

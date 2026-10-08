@@ -67,7 +67,7 @@ import java.util.Optional;
 /** Stable bounded JSON emitted by the v3 operator diagnostic command; it only reads one immutable checkpoint. */
 final class FrontierV3DiagnosticJson {
     static final String PREFIX = "PMV3_DIAG ";
-    private static final int MAX_BYTES = 8_192;
+    static final int MAX_BYTES = 8_192;
     private FrontierV3DiagnosticJson() { }
 
     static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,

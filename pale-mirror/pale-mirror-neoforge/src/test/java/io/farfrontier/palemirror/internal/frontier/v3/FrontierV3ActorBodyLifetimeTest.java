@@ -68,6 +68,37 @@ class FrontierV3ActorBodyLifetimeTest {
         return ledger;
     }
 
+    @Test void rejectedJoinDistinguishesPositiveRetirementFromCurrentMissingAndForeignBodies() {
+        var state = running(); var receipt = receipt(state); var ledger = ledger(receipt);
+        var live = receipt.identity().liveBody(Owner.ACTOR_BODY, 0L, receipt.identity().epoch());
+        var current = FrontierV3BodyJoinRejection.inspect(state, ledger, live, 1L, false);
+        assertEquals(FrontierV3BodyJoinRejection.Reason.CURRENT_BODY_CANCELED, current.reason());
+        assertFalse(current.expectedRetirement());
+        assertEquals(FrontierV3BodyJoinRejection.Reason.DUPLICATE_UUID,
+                FrontierV3BodyJoinRejection.inspect(state, ledger, live, 1L, true).reason());
+        var retired = ActorBodyAuthority.released(state, ActorBodyAuthority.current(state, live.actorId()));
+        var next = ActorBodyAuthority.demand(retired, live.actorId());
+        for (var image : java.util.List.of(retired, next)) {
+            var stale = FrontierV3BodyJoinRejection.inspect(image, ledger, live, 1L, false);
+            assertEquals(FrontierV3BodyJoinRejection.Reason.RETIRED_INCARNATION, stale.reason());
+            assertTrue(stale.expectedRetirement());
+            assertFalse(FrontierV3ActorBodyController.recognizesDeclaration(image, live));
+            assertEquals(FrontierV3BodyJoinRejection.Reason.UNKNOWN_RESIDENCE,
+                    FrontierV3BodyJoinRejection.inspect(image, ledger, live, 999L, false).reason());
+            var foreign = new Declaration(live.actorId(), live.kind(), live.owner(), java.util.UUID.randomUUID(),
+                    live.representation(), 0L, live.epoch());
+            assertEquals(FrontierV3BodyJoinRejection.Reason.FOREIGN_IDENTITY,
+                    FrontierV3BodyJoinRejection.inspect(image, ledger, foreign, 1L, false).reason());
+        }
+        assertEquals(FrontierV3BodyJoinRejection.Reason.INVALID_DECLARATION,
+                FrontierV3BodyJoinRejection.inspect(next, ledger, null, 1L, false).reason());
+        var future = live.liveBody(Owner.ACTOR_BODY, 0L, live.epoch() + 2L);
+        assertEquals(FrontierV3BodyJoinRejection.Reason.EPOCH_MISMATCH,
+                FrontierV3BodyJoinRejection.inspect(next, ledger, future, 1L, false).reason());
+        assertTrue(ledger.permitsRecordedOwner(FrontierV3ActorOwnerBinding.body(live)),
+                "explanation cannot consume residence, admission or custody evidence");
+    }
+
     @Test void changingActivityPreservesPhysicalProofButDoesNotBlessItsOldActuator() {
         var state = running(); var receipt = receipt(state); var actor = receipt.identity().actorId();
         var predecessor = receipt.executionAtCapture().orElseThrow();
