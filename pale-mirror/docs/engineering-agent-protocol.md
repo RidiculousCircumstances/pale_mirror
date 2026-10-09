@@ -120,6 +120,16 @@ ceremony. Apply them while choosing and implementing work:
    to that owner when needed. Record what became obsolete and what coverage
    remains. Compiling the retained test inventory and focused affected checks
    suffice for test sanitation; this alone is not native/product acceptance.
+   Native GameTestServer advances ticks without wall-clock pacing. For an
+   asynchronous disk or external boundary, advance the test from its actual
+   observed readiness, not an assumed callback number or immediate return.
+   Keep a finite real no-progress watchdog, started after batch construction
+   yields, and an outer finite test bound; GameTest tick count alone is not an
+   I/O deadline. Do not block the server thread or force synchronous persistence
+   merely to restore a retired fixture assumption. Supply ordinary local demand
+   before admission when the production boundary requires observation.
+   All fixture block writes and body positions must fit the actual decoded
+   template envelope, not a size assumed from its name.
 6. At each coherent increment, ask what now works through the active call graph
    that did not before. If only tools, tests, receipts or inactive APIs advanced,
    report plainly that no product result was delivered. Do not start another
@@ -247,6 +257,14 @@ the complete relevant story through its terminal/successor outcome, capture
 readable distinct frames and inspect them. Require the existing semantic
 progress oracle/correlated evidence, not logs or endpoint snapshots alone.
 Passing this preflight does not infer human M3, co-op or clean-room acceptance.
+
+Task-owned graphical test clients are on-demand, not background observers.
+Limit disposable pilot clients to20 FPS, including after profile preparation;
+leave human players' profiles unchanged. After each bounded check, stop the
+task-owned client and its private display and verify their processes exited.
+Keep them connected only during a named ongoing check or explicit user request,
+not while reading code, preparing fixes or waiting between checks. Do not stop
+the live server or other users' clients as part of this cleanup.
 
 Correlate user observations to source/JAR/service/world identity. A mismatch is
 a delivery incident; a matching observation is product contradiction. Do not

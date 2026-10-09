@@ -394,7 +394,7 @@ v2.
 
 ## Autonomous humans and hive
 
-Settlements own residents, households, capabilities, professions, assignments,
+Settlements own named residents, households, capabilities, work permissions, assignments,
 organizations, exact disease state, quarantine policy, facilities, inventories,
 production processes, needs, governance, security, companies, contracts,
 credit, investment, prices, trade, migration, diplomacy and operations. A
@@ -410,14 +410,16 @@ local activity under settlement policy, not a new strategic decision authority.
 
 The normative human capability and unit model is defined by
 `frontier-v3-human-capabilities.md`. A resident's profile/condition, learned
-skills, profession/employment, current assignment, equipment and organization
+skills, work authorization, current assignment, equipment and organization
 are separate canonical concerns. Tactical functions such as scout, sapper,
 rifle fighter or fixed-weapon crew are derived from those facts, never permanent
 human classes. Mobilizing an exact worker therefore suspends or terminates
 their conflicting civilian work explicitly and removes that labour from its
 settlement capacity; it cannot produce civilian output and military action at
 once. The existing six-value `ResidentRole` is provisional bootstrap affinity,
-not the final assignment model.
+not the final assignment model. Accepted2026-10-09: residents have no profession
+field or profession-based admission; displayed roles derive from current work
+or group membership, independently of the resident's current activity.
 
 Accepted labour/economic cut (2026-10-06): settlement-owned work permissions
 declare enabled kinds, per-resident priorities and the minimum local roster to
@@ -982,6 +984,19 @@ manual HOT/COLD and physical-causality audits, and user acceptance of the
 graybox's seamlessness/readability. Release readiness additionally retains the
 clean-room comprehension and cooperative-player gates defined for Living
 Frontier.
+
+## Shared block-resource work boundary
+
+Resource-producing block work uses the reusable prepared-effect contract in
+[block extraction](frontier-v3-block-extraction.md). Work policy selects the
+source/profile; the Minecraft adapter owns loot evaluation and bounded block
+mutation; the existing durable work witness fences the effect; existing
+resource accounting alone records accepted output. No farm/settlement branches
+belong in the common adapter or resource ledger. Sowing, biology, navigation
+and inventory transfer remain their separate owners. Native HOT output must
+agree with the explicitly declared deterministic COLD rule. The first farming
+profile preserves one grain and separate seed-free replant, not complete Vanilla
+wheat/seed economy; arbitrary mod loot and future quarry tooling are not implied.
 
 ## Legacy removal gate
 
