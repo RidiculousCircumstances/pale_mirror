@@ -22,7 +22,8 @@ final class FirstVisibilityWork {
     GrayboxCell next() { return current = pending.removeFirst(); }
     void observe(ProjectionResult result) {
         if (result == ProjectionResult.YIELDED) {
-            pending.addLast(current);
+            // Resume this attempt before repeating a previously deferred cell in the same pass.
+            pending.addFirst(current);
             current = null;
             return;
         }

@@ -70,6 +70,20 @@ class FrontierV3FirstVisibilityAdmissionTest {
         assertFalse(work.complete());
     }
 
+    @Test void yieldCannotCountAPreviouslyDeferredCellTwiceAsAWholeBlockedPass() {
+        var cells = cells(2);
+        var work = new FirstVisibilityWork(cells);
+        assertEquals(cells.getFirst(), work.next());
+        work.observe(FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED);
+        assertEquals(cells.get(1), work.next());
+        work.observe(FrontierV3GrayboxExecutor.ProjectionResult.YIELDED);
+        assertEquals(cells.get(1), work.next(), "resume the budget-yielded attempt before repeating the old deferred cell");
+        work.observe(FrontierV3GrayboxExecutor.ProjectionResult.APPLIED);
+        assertFalse(work.blocked());
+        work.next(); work.observe(FrontierV3GrayboxExecutor.ProjectionResult.CURRENT);
+        assertTrue(work.complete());
+    }
+
     @Test void admissionIsBoundedByBothReadCountAndTimeButCannotStarveFirstAttempt() {
         var clock = new AtomicLong();
         var timeBudget = new FrontierV3FirstVisibilityBudget(256, 8, 3_000_000, clock::get);
