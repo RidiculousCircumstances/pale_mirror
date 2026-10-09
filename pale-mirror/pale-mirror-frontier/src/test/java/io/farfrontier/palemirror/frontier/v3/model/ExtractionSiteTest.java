@@ -9,15 +9,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Contract: authored finite fronts, real initial storage/tools and no depletion replay after hydration. */
 class ExtractionSiteTest {
-    @Test void admittedMinersAndSeparateCouriersCloseTheirActualKernelCustodyCycle() {
+    @Test void deliveredMiningBatchContinuesTheSameMandateWhileSeparateCouriersDeliverStock() {
         var configuration = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(
                 new WorldId("frontier:quarry-work-kernel"), 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r1"));
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
         var initial = engine.canonicalState().state();
         var site = initial.extractionSites().deposits().values().stream().sorted(Comparator.comparing(value -> value.site().id())).findFirst().orElseThrow().site();
-        long retiredOrdinal = 0;
+        boolean deliveredHome = false;
         io.farfrontier.palemirror.frontier.v3.api.SubjectId firstJob = null, firstTool = null;
-        boolean returnedTool = false;
+        boolean continuedWithSameTool = false, recoveredDelivery = false;
+        FrontierWorldState continuation = null;
         for (int boundary = 0; boundary < 5000; boundary++) {
             var current = engine.canonicalState().state();
             if (firstJob == null) {
@@ -25,14 +26,26 @@ class ExtractionSiteTest {
                         .min(Comparator.comparing(ExtractionWork::id));
                 if (started.isPresent()) { firstJob = started.orElseThrow().id(); firstTool = started.orElseThrow().toolId(); }
             }
-            if (firstJob != null && !current.extractionSites().work().containsKey(firstJob)) {
-                var custody = current.inventory().items().get(firstTool).custody();
-                returnedTool |= custody instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(site.containerId());
+            var retained = firstJob == null ? null : current.extractionSites().work().get(firstJob);
+            if (retained != null && retained.batch() > 0) {
+                assertEquals(firstTool, retained.toolId());
+                assertEquals(new InventoryCustody.Actor(retained.execution().actorId()), current.inventory().items().get(firstTool).custody());
+                if (retained.phase() == ExtractionWork.Phase.SELECT_SOURCE && !recoveredDelivery) {
+                    assertEquals(0, ExtractionWorkAuthority.carried(current, retained));
+                    assertFalse(ExtractionServiceAccess.needsAccess(retained));
+                    assertEquals(current, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(current)));
+                    recoveredDelivery = true;
+                }
+                if (retained.phase() == ExtractionWork.Phase.EXTRACT && ExtractionWorkAuthority.carried(current, retained) > 0
+                        && !current.actorMovements().containsKey(retained.execution().actorId())) {
+                    continuedWithSameTool = true;
+                    if (continuation == null) continuation = current;
+                }
             }
             var homeStock = FungibleResourceCustodySupport.accountAtContainer(current, FrontierWorldState.depotId(site.settlementId()));
-            if (returnedTool && homeStock.isPresent() && current.inventory().fungibleResources().unclaimedQuantity(
+            if (continuedWithSameTool && recoveredDelivery && homeStock.isPresent() && current.inventory().fungibleResources().unclaimedQuantity(
                     homeStock.orElseThrow().id(), site.settlementId(), "minecraft:cobblestone") >= 64) {
-                retiredOrdinal = current.extractionSites().nextWorkOrdinal(); break;
+                deliveredHome = true; break;
             }
             var next = engine.checkpoint().schedules().stream().filter(action ->
                     !io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.scheduledHeld(current, action))
@@ -47,13 +60,25 @@ class ExtractionSiteTest {
             }
         }
         var state = engine.canonicalState().state();
-        assertTrue(retiredOrdinal > 1, () -> "mining did not store its finite batch; tick=" + engine.checkpoint().instant()
+        assertTrue(deliveredHome, () -> "mining did not continue after its delivered batch; tick=" + engine.checkpoint().instant()
                 + " work=" + state.extractionSites().work());
-        assertTrue(returnedTool);
+        assertTrue(continuedWithSameTool, "a delivered stack must not retire the worker/tool mandate");
+        assertTrue(recoveredDelivery, "the settled batch/select-source boundary must survive recovery");
         assertNotNull(state.inventory().items().get(firstTool));
         assertTrue(state.extractionSites().deposits().get(site.id()).cells().values().stream()
                 .filter(cell -> cell.disposition() == ExtractionDeposit.Disposition.EXTRACTED).count() >= 64);
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        var running = Objects.requireNonNull(continuation).extractionSites().work().get(firstJob);
+        var policy = SettlementWorkPolicy.permissions(continuation, site.settlementId());
+        var withdrawn = continuation.withStrategicPlans(continuation.strategicPlans().withWorkPermissions(
+                site.settlementId(), policy.withoutResident(running.execution().actorId())));
+        var stop = new ExtractionWorkProgressed(running.id(), running.revision(), ExtractionWorkProgressed.Operation.END_WORK);
+        var drained = ExtractionColdWork.apply(withdrawn, running.id(), stop, engine.checkpoint().instant().ticks());
+        assertEquals(ExtractionWork.Phase.STORE, drained.extractionSites().work().get(firstJob).phase());
+        assertEquals(withdrawn.inventory(), drained.inventory(), "withdrawal must not discard or fake delivery of held stone");
+        assertThrows(IllegalArgumentException.class, () -> ExtractionColdWork.apply(drained, stop.jobId(), stop, 0));
+        var live = continuation;
+        assertThrows(IllegalArgumentException.class, () -> ExtractionColdWork.apply(live, stop.jobId(), stop, 0));
     }
     @Test void sixExteriorDepositsKeepTheirFiniteHistoryAndStarterToolsThroughRecovery() {
         var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:quarry-test"), 20260918065L,

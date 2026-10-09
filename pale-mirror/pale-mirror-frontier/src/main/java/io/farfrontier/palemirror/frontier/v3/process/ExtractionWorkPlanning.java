@@ -10,7 +10,7 @@ final class ExtractionWorkPlanning {
     private ExtractionWorkPlanning() { }
     static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
         boolean work = state.extractionSites().deposits().values().stream()
-                .filter(deposit -> deposit.site().settlementId().equals(home)).anyMatch(ExtractionWorkPlanning::remaining);
+                .filter(deposit -> deposit.site().settlementId().equals(home)).anyMatch(ExtractionWorkPolicy::remaining);
         return new SettlementStaffingPort.Demand(ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION,
                 work ? rules.targetWorkers() : 0, work ? rules.minimumLocalStaff() : 0, rules.priority(),
                 state.extractionSites().work().values().stream().filter(job -> !job.terminal()
@@ -29,8 +29,5 @@ final class ExtractionWorkPlanning {
                             && slot.containerId().equals(deposit.site().containerId()))
                         && state.bootstrap().ruleset().extraction().source().coldOutput().stream().allMatch(output ->
                             state.canReceiveFungible(deposit.site().containerId(), output.itemKind(), output.quantity())));
-    }
-    private static boolean remaining(ExtractionDeposit deposit) {
-        return deposit.cells().values().stream().anyMatch(cell -> cell.disposition() == ExtractionDeposit.Disposition.PRESENT);
     }
 }

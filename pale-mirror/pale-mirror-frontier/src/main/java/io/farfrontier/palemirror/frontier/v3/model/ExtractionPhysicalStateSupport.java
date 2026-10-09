@@ -86,7 +86,7 @@ public final class ExtractionPhysicalStateSupport {
                     throw new IllegalArgumentException("mining delivery did not settle its whole held batch in the declared storage slot");
                 changes.inventory(ActorItemCustody.transferObserved(state, order, cargo.transfer().sourceEpoch(), cargo.transfer().destinationEpoch(),
                         event.remainingSource(), event.destination()));
-                sites = sites.replaceWork(job, job.transition(ExtractionWork.Phase.RETURN_TOOL, Optional.empty()));
+                sites = sites.replaceWork(job, job.delivered());
             }
             case ExtractionPhysicalStep.BlockWork block -> {
                 var target = job.target().orElseThrow();

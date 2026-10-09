@@ -9,7 +9,8 @@ public final class ExtractionServiceAccess implements ServiceAccessCapability {
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.EXTRACTION; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
     public static boolean needsAccess(ExtractionWork work) {
-        return !work.terminal() && work.phase() != ExtractionWork.Phase.EXTRACT;
+        return work.phase() == ExtractionWork.Phase.TAKE_TOOL || work.phase() == ExtractionWork.Phase.STORE
+                || work.phase() == ExtractionWork.Phase.RETURN_TOOL;
     }
     public static ServiceAccessDemand.Identity identity(FrontierWorldState state, ExtractionWork work) {
         return new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.EXTRACTION, work.id(), work.execution().actorId(),

@@ -10,6 +10,17 @@ import java.util.Objects;
 sealed interface FrontierV3NavigationScope {
     boolean permits(BlockPosition support);
 
+    /** A service permit fences its access footprint, not the journey towards it. */
+    record OutsideService(FrontierV3NavigationScope parent,
+                          io.farfrontier.palemirror.frontier.v3.model.ServiceAccessBoundary boundary)
+            implements FrontierV3NavigationScope {
+        public OutsideService { Objects.requireNonNull(parent); Objects.requireNonNull(boundary); }
+        @Override public boolean permits(BlockPosition support) {
+            return parent.permits(support) && !boundary.occupiedSurfaces().contains(
+                    new io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor(support));
+        }
+    }
+
     /** Explicit topology/formation restrictions remain binding for their existing owners. */
     record Restricted(LocalNavigationEnvelope envelope) implements FrontierV3NavigationScope {
         public Restricted { Objects.requireNonNull(envelope, "restricted navigation scope"); }

@@ -50,6 +50,15 @@ final class ExtractionWorkProcess {
         if (job == null || job.terminal()) return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         long now = Math.max(tick, action.dueAt().ticks());
         if (held(state, action)) throw new IllegalArgumentException("mining awaits its exact custody or continuation boundary");
+        if (!ExtractionWorkPolicy.requested(state, job)
+                && (job.phase() == ExtractionWork.Phase.TAKE_TOOL || job.phase() == ExtractionWork.Phase.EXTRACT))
+            return advance(state, job, ExtractionWorkProgressed.Operation.END_WORK, action, now);
+        if (job.phase() == ExtractionWork.Phase.SELECT_SOURCE) {
+            if (!ExtractionWorkPolicy.finished(state, job)
+                    && (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.execution().actorId(), now)
+                        || ExtractionWorkPolicy.nextTarget(state, job).isEmpty())) return retry(state, job, now);
+            return advance(state, job, ExtractionWorkProgressed.Operation.SELECT_SOURCE, action, now);
+        }
         if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.execution().actorId(), now)) return retry(state, job, now);
         var site = ExtractionWorkAuthority.site(state, job); var order = job.movementOrder(site);
         if (!order.arrivedAt(state.actorLocations().get(order.actorId()).supportingSurface())) {
@@ -93,6 +102,10 @@ final class ExtractionWorkProcess {
             if (job.phase() == ExtractionWork.Phase.RETURN_TOOL && state.inventory().firstFreeSlot(site.containerId()).isEmpty())
                 return retry(state, job, now);
         }
+        return advance(state, job, operation, action, now);
+    }
+    private static List<ProposedEvent> advance(FrontierWorldState state, ExtractionWork job,
+            ExtractionWorkProgressed.Operation operation, ScheduledAction action, long now) {
         var event = new ExtractionWorkProgressed(job.id(), job.revision(), operation);
         var preview = ExtractionColdWork.apply(state, job.id(), event, now);
         if (!preview.extractionSites().work().containsKey(job.id())) return List.of(new ProposedEvent(job.id(), event),

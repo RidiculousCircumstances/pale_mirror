@@ -6,6 +6,8 @@ import java.util.Objects;
 
 /** Personal resource custody survives an activity switch. Job claims and physical slots stay separate. */
 public final class ActorCarriedResources {
+    /** One physical stack is a carrying boundary, never a work-completion criterion. */
+    public static final int MAX_STACK_ITEMS = 64;
     public static final int MAX_STACK_ACCOUNTS = 10;
     private record AccountIndex(java.util.Map<SubjectId, CustodyAccount> source,
                                 java.util.Map<SubjectId, List<CustodyAccount>> actors) { }
@@ -50,7 +52,7 @@ public final class ActorCarriedResources {
                 throw new IllegalArgumentException("stack quantity has foreign resource identity or ownership");
             quantity = Math.addExact(quantity, entry.getValue());
         }
-        if (quantity > 64) throw new IllegalArgumentException("stack account exceeds bounded carrying capacity");
+        if (quantity > MAX_STACK_ITEMS) throw new IllegalArgumentException("stack account exceeds bounded carrying capacity");
         return quantity;
     }
 
@@ -64,7 +66,7 @@ public final class ActorCarriedResources {
             CustodyAccount account = ledger.accounts().get(accountId);
             if (account == null || !account.custody().equals(new ResourceCustody.Actor(actorId)))
                 throw new IllegalArgumentException("carried presentation has no exact actor custody");
-            if (account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() > 64
+            if (account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() > MAX_STACK_ITEMS
                     || account.lotQuantities().keySet().stream().map(id -> ledger.lots().get(id).itemKind())
                         .distinct().count() != 1)
                 throw new IllegalArgumentException("carried presentation must represent one bounded stack");

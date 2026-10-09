@@ -53,7 +53,7 @@ public final class ExtractionWorkEffects {
     public static ExtractionWork afterBlock(FrontierWorldState state, ExtractionWork job, ExtractionDeposit nextDeposit, int carried) {
         var reserved = new HashSet<>(state.extractionSites().reservedCells(job.siteId()));
         reserved.remove(job.target().orElseThrow().key().cell());
-        var next = carried < state.bootstrap().ruleset().extraction().haulBatch()
+        var next = carried < ActorCarriedResources.MAX_STACK_ITEMS && ExtractionWorkPolicy.requested(state, job)
                 ? nextDeposit.available(reserved).stream().min(Comparator.comparingLong((ExtractionLayout.Cell cell) -> distance(
                     state.actorLocations().get(job.execution().actorId()).supportingSurface(), cell.workstation())).thenComparingLong(ExtractionLayout.Cell::id))
                 : Optional.<ExtractionLayout.Cell>empty();

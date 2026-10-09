@@ -12,7 +12,7 @@ public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId ex
         SubjectId outputLotId, long batch, Phase phase, long revision, Optional<ExtractionTarget> target,
         Optional<WorkProgress> labour, Optional<ExtractionPhysicalStep> pending) {
     public enum Phase {
-        TAKE_TOOL(1), EXTRACT(2), STORE(3), RETURN_TOOL(4), FINISHED(5);
+        TAKE_TOOL(1), EXTRACT(2), STORE(3), RETURN_TOOL(4), FINISHED(5), SELECT_SOURCE(6);
         private final int tag;
         Phase(int tag) { this.tag = tag; }
         public int wireTag() { return tag; }
@@ -74,14 +74,25 @@ public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId ex
     public ExtractionWork transition(Phase next, Optional<ExtractionTarget> nextTarget) {
         if (terminal()) throw new IllegalArgumentException("finished extraction cannot restart");
         boolean legal = switch (phase) {
-            case TAKE_TOOL -> next == Phase.EXTRACT || next == Phase.RETURN_TOOL;
-            case EXTRACT -> next == Phase.EXTRACT || next == Phase.STORE || next == Phase.RETURN_TOOL;
-            case STORE -> next == Phase.RETURN_TOOL;
+            case TAKE_TOOL -> next == Phase.EXTRACT || next == Phase.RETURN_TOOL || next == Phase.FINISHED;
+            case EXTRACT -> next == Phase.EXTRACT || next == Phase.STORE || next == Phase.RETURN_TOOL || next == Phase.SELECT_SOURCE;
+            case STORE -> false; // Only a settled whole-batch receipt may start the next part.
+            case SELECT_SOURCE -> next == Phase.EXTRACT || next == Phase.RETURN_TOOL;
             case RETURN_TOOL -> next == Phase.FINISHED;
             case FINISHED -> false;
         };
         if (!legal) throw new IllegalArgumentException("invalid extraction lifecycle transition");
         return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, outputKind, carriedAccountId,
                 outputLotId, batch, next, Math.addExact(revision, 1), nextTarget, Optional.empty(), Optional.empty());
+    }
+    /** The job and tool survive delivery; only the bounded resource part receives new identities. */
+    public ExtractionWork delivered() {
+        if (phase != Phase.STORE) throw new IllegalArgumentException("only stored extraction can roll its resource part");
+        long nextBatch = Math.addExact(batch, 1);
+        String part = id.value().replace(':', '/') + "/batch-" + nextBatch;
+        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, outputKind,
+                new SubjectId("custody:extraction/" + part),
+                new SubjectId("lot:extraction/" + part),
+                nextBatch, Phase.SELECT_SOURCE, Math.addExact(revision, 1), Optional.empty(), Optional.empty(), Optional.empty());
     }
 }

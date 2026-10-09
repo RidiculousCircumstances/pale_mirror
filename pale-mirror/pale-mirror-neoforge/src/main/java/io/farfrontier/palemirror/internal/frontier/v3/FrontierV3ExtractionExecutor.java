@@ -56,6 +56,10 @@ final class FrontierV3ExtractionExecutor {
             return false;
         var step = job.pending().orElse(null);
         if (step == null) {
+            if (job.phase() == ExtractionWork.Phase.SELECT_SOURCE
+                    || !ExtractionWorkPolicy.requested(state, job)
+                        && (job.phase() == ExtractionWork.Phase.TAKE_TOOL || job.phase() == ExtractionWork.Phase.EXTRACT))
+                return false; // Semantic continuation/withdrawal belongs to the extraction process, not a native effect.
             long tick = runtime.checkpointImage().orElseThrow().instant().ticks();
             if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, actor, tick)) return false;
             try {

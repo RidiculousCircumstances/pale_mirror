@@ -81,8 +81,13 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
                 || !expected.siteId().equals(next.siteId()) || !expected.toolId().equals(next.toolId())
                 || !expected.execution().actorId().equals(next.execution().actorId())
                 || !expected.toolReturnSlot().equals(next.toolReturnSlot()) || !expected.outputKind().equals(next.outputKind())
-                || !expected.carriedAccountId().equals(next.carriedAccountId()) || !expected.outputLotId().equals(next.outputLotId()))
+                || !sameResourcePart(expected, next))
             throw new IllegalArgumentException("extraction continuation has a stale or changed retained relationship");
+    }
+    private static boolean sameResourcePart(ExtractionWork expected, ExtractionWork next) {
+        if (expected.phase() == ExtractionWork.Phase.STORE && expected.delivered().equals(next)) return true;
+        return expected.batch() == next.batch() && expected.carriedAccountId().equals(next.carriedAccountId())
+                && expected.outputLotId().equals(next.outputLotId());
     }
     /** Depletion and the next source declaration settle atomically; no stale intermediate target is published. */
     public ExtractionSiteState settle(ExtractionWork expected, ExtractionWork next, ExtractionDeposit deposit) {

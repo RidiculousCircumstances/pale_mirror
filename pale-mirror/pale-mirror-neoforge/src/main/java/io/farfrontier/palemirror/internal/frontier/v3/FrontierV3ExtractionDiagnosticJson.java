@@ -66,6 +66,7 @@ final class FrontierV3ExtractionDiagnosticJson {
                 + ",\"goal\":" + FrontierV3DiagnosticJson.position(job.movementOrder(ExtractionWorkAuthority.site(state, job)).legalStations().getFirst().standingBody())
                 + ",\"lease\":" + (lease == null || lease.status() == AmbientLeaseStatus.CLOSED ? "null" : string(lease.status().name()))
                 + ",\"result\":{\"stage\":" + string(job.phase().name()) + ",\"revision\":" + job.revision() + ",\"wait\":" + string(wait)
+                + ",\"deliveredBatches\":" + job.batch() + ",\"mandateActive\":" + ExtractionWorkPolicy.requested(state, job)
                 + ",\"labourMilliWork\":" + labour + ",\"carried\":" + ExtractionWorkAuthority.carried(state, job)
                 + ",\"pendingPhysicalEffect\":" + job.pending().isPresent() + "}"
                 + ",\"progressObligation\":{\"schema\":1,\"rule\":\"frontier.extraction.progress.v1\",\"subject\":" + string(job.id().value())

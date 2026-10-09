@@ -10,6 +10,23 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3NavigationScopeTest {
+    @Test void busyServiceRestrictsOnlyEntryNotTheWholeApproachOrItsDetours() {
+        var start = SurfaceAnchor.at(1, 63, 1);
+        var waiting = SurfaceAnchor.at(4, 63, 1);
+        var station = SurfaceAnchor.at(5, 63, 1);
+        var boundary = new ServiceAccessBoundary(java.util.Set.of(station));
+        var goal = FrontierV3ServiceApproachNavigation.outsideGoal(List.of(start, waiting, station), boundary,
+                new WorldBounds(0, 0, 10, 10)).orElseThrow();
+        assertEquals(List.of(waiting), goal.legalStations());
+        assertEquals(List.of(start, waiting), goal.routeHint());
+        assertTrue(goal.scope().permits(start.support()));
+        assertTrue(goal.scope().permits(new BlockPosition(3, 63, 3)));
+        assertFalse(goal.scope().permits(station.support()));
+        assertFalse(goal.scope().permits(new BlockPosition(-1, 63, 1)));
+        assertTrue(goal.order().isEmpty(), "waiting arrival cannot be the retained owner goal arrival");
+        assertTrue(FrontierV3ServiceApproachNavigation.outsideGoal(List.of(station, waiting), boundary,
+                new WorldBounds(0, 0, 10, 10)).isEmpty(), "an occupant must use witnessed egress instead");
+    }
     @Test void progressAlongADetourCanIncreaseStraightLineDistanceToTheGoal() {
         var nodes = List.of(new net.minecraft.world.level.pathfinder.Node(2, 64, 4),
                 new net.minecraft.world.level.pathfinder.Node(6, 64, 4),

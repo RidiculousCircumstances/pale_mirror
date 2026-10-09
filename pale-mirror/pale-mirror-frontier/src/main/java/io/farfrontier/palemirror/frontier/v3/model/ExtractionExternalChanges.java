@@ -53,7 +53,8 @@ public final class ExtractionExternalChanges {
             } else {
                 var nextTarget = nextCell.map(value -> ExtractionWorkEffects.target(changed, value));
                 var phase = nextTarget.isPresent() ? job.phase() : ExtractionWorkAuthority.carried(state, job) > 0
-                        ? ExtractionWork.Phase.STORE : ExtractionWork.Phase.RETURN_TOOL;
+                        ? ExtractionWork.Phase.STORE : ExtractionWorkPolicy.remaining(changed)
+                            ? ExtractionWork.Phase.SELECT_SOURCE : ExtractionWork.Phase.RETURN_TOOL;
                 jobs.put(job.id(), new ExtractionWork(job.id(), job.siteId(), job.execution(), job.toolId(), job.toolReturnSlot(),
                         job.outputKind(), job.carriedAccountId(), job.outputLotId(), job.batch(), phase, job.revision() + 1,
                         nextTarget, Optional.empty(), Optional.empty()));

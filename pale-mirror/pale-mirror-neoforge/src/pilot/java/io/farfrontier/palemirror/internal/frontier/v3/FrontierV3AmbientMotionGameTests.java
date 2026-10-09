@@ -65,11 +65,14 @@ public final class FrontierV3AmbientMotionGameTests {
         prepareFloor(level, feet);
         helper.assertFalse(FrontierV3ActorBodyController.readyForExecution(level, prepared, java.util.List.of(id)),
                 "prepared demand cannot grant activity readiness before its body exists");
-        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, prepared, actor, lease.handoffBody()),
-                FrontierV3AmbientActorExecutor.Result.APPLIED, "the common body producer must insert its exact declared incarnation");
-        helper.assertFalse(FrontierV3ActorBodyController.readyForExecution(level, state(runtime), java.util.List.of(id)),
-                "insertion alone does not confirm a body in an isolated runtime");
-        helper.runAfterDelay(2, () -> {
+        helper.startSequence().thenWaitUntil(() -> helper.assertValueEqual(
+                FrontierV3BodyAdmissionGameTestFixture.ambient(level, prepared, actor, lease.handoffBody()),
+                FrontierV3AmbientActorExecutor.Result.APPLIED,
+                "await the exact insertion after chunk/entity readiness and durable admission"))
+                .thenExecute(() -> {
+            helper.assertFalse(FrontierV3ActorBodyController.readyForExecution(level, state(runtime), java.util.List.of(id)),
+                    "insertion alone does not confirm a body in an isolated runtime");
+            helper.runAfterDelay(2, () -> {
             var body = level.getEntity(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(bootstrap.worldId(), actor));
             helper.assertTrue(body instanceof Villager, "the real object must be indexed before common observation");
             var proof = FrontierV3ServerLifecycle.observeSourceJoin(level, runtime, body);
@@ -85,6 +88,7 @@ public final class FrontierV3AmbientMotionGameTests {
             helper.assertFalse(FrontierV3ActorBodyController.readyForExecution(level, state(runtime), java.util.List.of(stale)),
                     "an older/newer incarnation cannot borrow readiness from this indexed body");
             body.discard(); FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
+            });
         });
     }
 

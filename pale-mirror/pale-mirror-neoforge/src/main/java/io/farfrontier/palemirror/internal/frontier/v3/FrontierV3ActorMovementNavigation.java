@@ -46,7 +46,9 @@ final class FrontierV3ActorMovementNavigation {
                     || !identity.ownerId().equals(movement.order().ownerId()))
                 throw new IllegalArgumentException("movement service approach lost its exact actor/owner declaration");
         }
-        if (service.isPresent() && !ServiceAccessCoordinator.available(state, service.orElseThrow())) {
+        boolean waitingForService = service.isPresent() && !ServiceAccessCoordinator.available(state, service.orElseThrow());
+        if (waitingForService && ServiceAccessCoordinator.boundary(state, service.orElseThrow().pointId())
+                .occupied(FrontierV3SurfaceObservation.observedBody(body))) {
             var identity = service.orElseThrow();
             var point = ServiceBoundaryComposition.declaration(state, identity.pointId());
             var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, body, state,
@@ -85,6 +87,19 @@ final class FrontierV3ActorMovementNavigation {
                 return;
             }
             ROUTES.put(body, route);
+        }
+        if (waitingForService) {
+            var boundary = ServiceAccessCoordinator.boundary(state, service.orElseThrow().pointId());
+            var approach = FrontierV3ServiceApproachNavigation.outsideGoal(route.waypoints(), boundary, state.bootstrap().bounds());
+            if (approach.isEmpty()) {
+                FrontierV3GoalNavigation.stop(body, actuation);
+                blocked(body, movement, "service-access:no-outside-approach");
+                return;
+            }
+            var result = FrontierV3GoalNavigation.pursue(level, body, approach.orElseThrow(), actuation, permission.pace());
+            blocked(body, movement, result.status() == FrontierV3GoalNavigation.Status.ARRIVED
+                    ? "service-access:waiting-outside" : "service-approach:" + result.reason());
+            return; // Arrival at this temporary outside point is never the retained semantic arrival.
         }
         if (FrontierV3SemanticMovement.arrived(level, body, route.waypoints().getLast())) {
             BLOCKED.remove(body);

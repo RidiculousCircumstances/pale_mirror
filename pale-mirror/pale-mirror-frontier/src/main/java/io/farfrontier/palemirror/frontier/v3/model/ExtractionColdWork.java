@@ -13,6 +13,33 @@ public final class ExtractionColdWork {
                 || state.actorMovements().containsKey(job.execution().actorId())) throw new IllegalArgumentException("stale mining work operation");
         state.actorExecutions().requireCurrent(job.execution());
         var site = ExtractionWorkAuthority.site(state, job);
+        if (event.operation() == ExtractionWorkProgressed.Operation.END_WORK) {
+            if (ExtractionWorkPolicy.requested(state, job)
+                    || job.phase() != ExtractionWork.Phase.TAKE_TOOL && job.phase() != ExtractionWork.Phase.EXTRACT)
+                throw new IllegalArgumentException("mining shutdown lacks a withdrawn settlement mandate");
+            if (job.phase() == ExtractionWork.Phase.TAKE_TOOL) {
+                var tool = state.inventory().items().get(job.toolId());
+                if (tool == null || !(tool.custody() instanceof InventoryCustody.ContainerSlot slot)
+                        || !slot.containerId().equals(site.containerId()) || ExtractionWorkAuthority.carried(state, job) != 0)
+                    throw new IllegalArgumentException("unstarted mining cannot release retained actor resources");
+                var next = job.transition(ExtractionWork.Phase.FINISHED, Optional.empty());
+                return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
+                        state.extractionSites().replaceWork(job, next).retire(next.id(), next.revision()))
+                        .actorExecutions(state.actorExecutions().finish(job.execution())));
+            }
+            return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
+                    job, job.transition(ExtractionWorkAuthority.carried(state, job) > 0
+                            ? ExtractionWork.Phase.STORE : ExtractionWork.Phase.RETURN_TOOL, Optional.empty()))));
+        }
+        if (event.operation() == ExtractionWorkProgressed.Operation.SELECT_SOURCE) {
+            if (job.phase() != ExtractionWork.Phase.SELECT_SOURCE || ExtractionWorkAuthority.carried(state, job) != 0)
+                throw new IllegalArgumentException("next mining source requires a settled delivered resource part");
+            var target = ExtractionWorkPolicy.nextTarget(state, job);
+            if (target.isEmpty() && !ExtractionWorkPolicy.finished(state, job))
+                throw new IllegalArgumentException("temporarily unavailable mining frontier is not completion");
+            return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
+                    job, job.transition(target.isPresent() ? ExtractionWork.Phase.EXTRACT : ExtractionWork.Phase.RETURN_TOOL, target))));
+        }
         if (event.operation() == ExtractionWorkProgressed.Operation.SELECT_REACHABLE) {
             var target = ExtractionWorkTargets.alternative(state, job).orElseThrow(
                     () -> new IllegalArgumentException("no reachable alternative extraction cell"));
@@ -37,7 +64,7 @@ public final class ExtractionColdWork {
                     if (!state.canReceiveFungible(site.containerId(), job.outputKind(), ExtractionWorkAuthority.carried(state, job)))
                         throw new IllegalArgumentException("mining storage capacity is unavailable");
                     update.inventory(ActorItemCustody.transferCold(state, ExtractionWorkEffects.cargo(state, job)));
-                    update.extractionSites(state.extractionSites().replaceWork(job, job.transition(ExtractionWork.Phase.RETURN_TOOL, Optional.empty())));
+                    update.extractionSites(state.extractionSites().replaceWork(job, job.delivered()));
                 } else {
                     boolean take = event.operation() == ExtractionWorkProgressed.Operation.TAKE_TOOL;
                     if (job.phase() != (take ? ExtractionWork.Phase.TAKE_TOOL : ExtractionWork.Phase.RETURN_TOOL))
