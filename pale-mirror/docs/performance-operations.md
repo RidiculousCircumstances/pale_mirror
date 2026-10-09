@@ -36,6 +36,83 @@ Multiple arrivals share current indexed work; they cannot multiply canonical
 progress. Bounded admission must have an explicit outcome, never invisible
 starvation. No thread pool substitutes for eliminating redundant/unbounded work.
 
+## Physical carrier journal (2026-10-09)
+
+The generic keyed-image journal owns storage ordering, checksummed frames,
+durable receipts and checkpoint publication. The carrier codec alone owns its
+closed actor facets; the body controller alone owns permission to insert bodies.
+Canonical simulation/WAL and Minecraft-world mutation remain single-writer on
+the host. This is an I/O lane, not parallel world mutation or a second authority.
+
+Carrier format11 replaces full compressed registry writes with dirty-actor
+images and explicit tombstones. The compressed `.dat` is only a checkpoint;
+the sibling `.dat.journal` contains the required ordered tail. Every recovery,
+offline repair and diagnostic file reader must combine both. Existing disposable
+format10 worlds are rejected; deployment needs a new test world, not inferred
+migration or a checkpoint-only fallback.
+
+An ordered bounded writer groups up to16 queued requests within one64-record
+segment and acknowledges them only after file force and required directory
+force. Each request retains its exact sequence and immutable submitted bytes.
+The queue admits at most64 requests/16MiB per store; the shared disk executor
+is bounded. Writer failure latches visibly and fails outstanding receipts;
+capacity pressure never drops a critical cause or silently declares success.
+Only one writing store owns a path at a time; offline publication requires a
+stopped writer, not simultaneous repair of an active server ledger.
+
+At128 new records a separate bounded checkpoint lane compresses an immutable
+image. Atomic checkpoint publication precedes retirement of complete covered
+segments; the active tail remains authoritative. Retained journal bytes are
+bounded at64MiB; the keyed image is bounded at4096 rows/32MiB and keys at256
+characters, so a published snapshot remains within its recovery budget.
+Compression may overlap appends; file publication/deletion is
+serialized with recovery reads. A truncated final frame is not an acknowledged
+cause and is ignored read-only on recovery; the next authorized append repairs
+that exact tail. Complete corruption, a sequence gap or missing checkpoint
+fails closed. Orderly shutdown drains admitted writes and pending checkpoints.
+
+Body insertion now retains an explicitly declared unstarted ticket containing
+exact identity/epoch, admission predecessor, residence generation and receipt.
+The first request returns DEFERRED without inserting. A later server turn checks
+the receipt, current declaration, geometry and resource projection again before
+consuming the ticket and attempting insertion once. A proven unattempted request
+can be cancelled on demand loss or shutdown; cancellation itself is durably
+ordered. Unknown physical insertion outcomes retain the existing ambiguity
+protocol, never a fabricated absence or a retry permission. Required departure,
+entity-write acknowledgement and canonical WAL fences still wait synchronously
+where their current caller requires the result; their safety is not weakened.
+
+`v3 inspect performance.physicalJournal` reports durable/checkpoint sequence,
+queued writes/bytes, retained bytes, forced groups and appended bytes. The
+counts are observed work, not a measured speedup. No speculative parallel
+navigation/calculation pool is introduced: immutable candidate computation may
+be delegated later only for an evidenced CPU bottleneck, with revision-bound
+validation and canonical commit on the single owner.
+
+Implementation evidence: active checkout `pm-f06r3-facility-lane-recovery`,
+implementation commit `57f0278e` (base `e55cb673`). Focused selection104 cases:
+103 passed initially, one obsolete compiled-owner expectation corrected and
+its complete five-case suite passed. Generic journal tests cover shared force
+receipts (two requests/one force), immutable submission, row/tombstone recovery,
+checkpoint preservation, torn tails including a full segment boundary, corruption,
+publication failure, background snapshot plus later tail and image capacity.
+`guardrails`/`verifyPackagedJar` pass; canonical governance validators pass.
+Native `runFrontierV3SceneGameTestServer -PfrontierV3GameTestSlice=body-lifetime`
+executed20 nonempty cases, all passed, including real async acknowledgement and
+proven unstarted cancellation. An earlier failure exposed the missing world
+identity in the ticket key; corrected before the green native run. Storage
+capacity hardening and explicit test-only crash-fixture renaming were verified
+locally afterward, not claimed as another native artifact run. The native
+server saved all dimensions and exited. Clean detached release was deployed as
+R75 with a fresh format11 world. Controlled five-pair real-file A/B measured
+32 identical synchronous durable actor mutations against the baseline JAR:
+median20.824ms old versus2.714ms new (7.67x), encoded bytes291562 versus19904
+(93.17% reduction). This excludes checkpoint rollover and is not total TPS,
+physical disk-device bytes or whole-pack speedup. Ordinary full-pack boundary
+and actual indexed actor-admission scenarios passed; see
+`frontier-v3-carrier-journal-r75-20261009.md` for identity, JFR and limits.
+No full player acceptance or asynchronous canonical-WAL change is claimed.
+
 ## Legacy runtime and Visuals reference
 
 The following schema-v40/Visuals values describe their respective historical
