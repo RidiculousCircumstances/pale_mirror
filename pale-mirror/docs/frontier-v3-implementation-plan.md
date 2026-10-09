@@ -4,6 +4,16 @@ Status: approved product execution plan for
 [`frontier-v3-contract.md`](frontier-v3-contract.md).
 This document owns product sequencing, not agent workflow.
 
+2026-10-09 accepted and implemented: [complete shared-storage adoption and legacy
+retirement](work-orders/PM-SHARED-STORAGE-20261009.md) inventories all ten v3
+physical ledgers, canonical/native/development storage boundaries and reachable
+historical runtime construction. Source63a7c011 connects all eight remaining
+current adapters, preserves exact durability, retires the obsolete field protocol,
+and closes common recovery/drain and legacy launch reachability. Technical
+checks passed; the receipt owns their actual scope. User-authorized R76 fresh-world
+deployment and same-world restart passed; [delivery receipt](frontier-v3-shared-storage-r76-20261009.md)
+and CONTINUITY.md own current runtime and bounded evidence status.
+
 2026-10-06 accepted current cut: [community labour](work-orders/PM-COMMUNITY-LABOUR-20261006.md)
 finishes the six shared labour mechanisms for agriculture, baking and logistics.
 Public production/distribution supersedes resident wages and paid food; external

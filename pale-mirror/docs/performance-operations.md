@@ -36,6 +36,72 @@ Multiple arrivals share current indexed work; they cannot multiply canonical
 progress. Bounded admission must have an explicit outcome, never invisible
 starvation. No thread pool substitutes for eliminating redundant/unbounded work.
 
+## Shared physical journals (2026-10-09 adoption)
+
+All nine current physical SavedData families use the same bounded journal core:
+actors, fields, block provenance, depot/player clicks, object boards, hopper
+identities, external observations, managed effects and infection provenance.
+They remain separate explicitly typed world/dimension/store streams. The family
+adapter owns codecs, immutable evidence, physical admission and retirement;
+storage never chooses a crop, actor, effect, conflict or canonical transition.
+The obsolete stage-field explosion registry and its writer are removed, not
+migrated. Canonical transaction WAL and Minecraft region/entity/player storage
+retain their existing owners and non-interchangeable contracts.
+
+`FrontierV3PhysicalStoreKind` declares stable store/table wire tags; composition
+rejects duplicate table tags, store tags and paths. `FrontierV3PhysicalStores`
+registers exact owners, flushes them at physical turn exit and drains every
+registered level on orderly server release, including stores opened without a
+canonical runtime. An explicit owner handoff drains before replacing a ledger;
+ordinary lookup cannot silently replace a competing writer.
+
+Actor streams retain the4096-row/32MiB profile. Other physical streams use the
+explicit131072-row/64MiB profile, allowing65536 block/patch records plus headers
+without globally increasing actor capacity. The hard recovery ceiling is the
+same declared profile; checkpoint NBT accounting permits128MiB structural
+overhead for physical streams. The frame, queue and retained-tail bounds below
+remain unchanged. Aggregate capacity is checked before durable admission; an
+oversized effect fails visibly rather than admitting an unrecoverable witness.
+This is a bounded refusal, not a promise that every theoretical combination of
+per-effect maxima fits one stream.
+
+Field initialization/ownership use immutable256-cell ID buckets plus small
+headers. External/managed observation queues retain immutable256-record shards
+and absolute cursors: advancing one candidate changes a header, not a copied
+whole remaining list. Tombstones retire completed shards and codec caches.
+The player-click stream journals only the exact changed container witness.
+Initial population and recovery may inspect the complete image; ordinary
+progress does not re-compress/re-encode an unchanged registry. Background
+checkpointing still compresses immutable complete images at rollover.
+
+Player edits, external/managed explosion capture and infection replacement
+require a forced journal receipt before their non-replayable physical action.
+Result publication and canonical acknowledgement remain separate boundaries;
+managed effect evidence retires only after canonical confirmation. Infection
+replacement retains its exact predecessor in PREPARED evidence. `setDirty` or
+queue submission alone is never durability. Co-publication of metadata and
+facets is atomic only inside one stream, not across PM/native files.
+
+All live and read-only file readers recover checkpoint plus tail and validate
+kind/world/dimension/schema and record key/content. Vanilla failed-load fallback
+uses that same recovery and cannot fabricate an empty ledger. Old field15,
+observation2, managed-effect4 and infection5 schemas are rejected; deployment
+requires a fresh disposable world, with no dual write or compatibility decoder.
+Supported unchanged schemas still use the new physical journal envelope.
+
+`v3 inspect performance.physicalJournal` is now an array of registered entries:
+`world`, `kind`, `journal` pressure (durable/checkpoint sequence, queued writes
+and bytes, retained bytes, force groups, appended bytes). Consumers must not
+treat it as the former actor-only object. Legacy simulation startup/preflight
+and broad callbacks are excluded before runtime construction during a selected
+v3 launch; the actually shared DH service has its own lifetime.
+
+Implementation and verification receipt:
+`work-orders/PM-SHARED-STORAGE-20261009.md`. Source63a7c011 is deployed to fresh
+test world R76; its delivery receipt records live validation. This adoption has
+no comparable before/after TPS or whole-path speedup measurement. The R75 actor
+measurement below does not establish a speedup for the other eight streams.
+
 ## Physical carrier journal (2026-10-09)
 
 The generic keyed-image journal owns storage ordering, checksummed frames,
