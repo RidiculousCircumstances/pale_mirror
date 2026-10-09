@@ -480,7 +480,7 @@ final class FrontierV3DiagnosticJson {
         ResidentProfile resident = state.humanPopulation().resident(subject);
         Bioform bioform = bioform(state, subject).orElse(null);
         var pack = state.transportFleet().assets().get(subject);
-        String role = resident != null ? resident.profession().name() : bioform != null ? bioform.chassis().name() + "/" + bioform.assignment().name()
+        String role = resident != null ? io.farfrontier.palemirror.frontier.v3.model.ResidentPresentation.from(state, subject).role() : bioform != null ? bioform.chassis().name() + "/" + bioform.assignment().name()
                 : pack != null ? pack.kind().name() : "UNKNOWN";
         String owner = resident != null ? resident.settlementId().value() : bioform != null ? bioform.hiveId().value()
                 : pack != null ? pack.homeSettlementId().value() : "";
@@ -496,6 +496,7 @@ final class FrontierV3DiagnosticJson {
         String goalPosition = lease == null ? "null" : position(lease.goalBody().supportingSurface().support());
         return base("actor", id, checkpoint) + ",\"status\":\"ok\",\"actorKind\":\"" + location.kind().name()
                 + "\",\"owner\":\"" + quote(owner) + "\",\"role\":\"" + role + "\",\"life\":\"" + location.condition().status()
+                + "\",\"name\":\"" + quote(resident == null ? "" : resident.name())
                 + "\",\"healthRaw\":" + location.condition().health().raw() + ",\"position\":" + position(
                     io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.bodyAt(state, subject, checkpoint.instant().ticks()))
                 + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""

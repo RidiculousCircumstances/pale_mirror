@@ -16,10 +16,32 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FungibleResourceLedgerTest {
+    private static io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Output grain() {
+        return new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Output("minecraft:wheat", 1);
+    }
     private static final SubjectId OWNER = new SubjectId("settlement:one");
     private static final SubjectId LOT = new SubjectId("lot:bread-genesis");
     private static final SubjectId DEPOT = new SubjectId("container:depot");
     private static final SubjectId DEPOT_ACCOUNT = new SubjectId("custody:depot");
+
+    @Test void genericExtractionAccruesAnExactNonGrainBatchInColdAndObservedPocketWithoutChangingOwnership() {
+        var output = new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Output("minecraft:cobblestone", 2);
+        var actor = new SubjectId("resident:miner");
+        var account = new SubjectId("custody:miner");
+        var lot = new ResourceLot(new SubjectId("lot:stone"), OWNER, output.itemKind(), 2, "extraction:stone", List.of());
+        var cold = FungibleResourceLedger.empty().accrueColdActorExtractionPart(output, lot, account, actor);
+        assertEquals(4, cold.accrueColdActorExtractionPart(output, lot.withQuantity(4), account, actor).lots().get(lot.id()).quantity());
+        assertThrows(IllegalArgumentException.class, () -> cold.accrueColdActorExtractionPart(output, lot.withQuantity(3), account, actor));
+        var address = new PhysicalStackAddress.ActorPocket(actor, UUID.randomUUID(), 0);
+        var hot = FungibleResourceLedger.empty().accrueObservedActorExtractionPart(output, lot, account, actor, 7,
+                new FungiblePhysicalObservation.Stack(address, output.itemKind(), 2));
+        var next = hot.accrueObservedActorExtractionPart(output, lot.withQuantity(4), account, actor, 7,
+                new FungiblePhysicalObservation.Stack(address, output.itemKind(), 4));
+        assertEquals(OWNER, next.lots().get(lot.id()).economicOwnerId());
+        assertEquals(Map.of(lot.id(), 4), next.accounts().get(account).lotQuantities());
+        assertThrows(IllegalArgumentException.class, () -> hot.accrueObservedActorExtractionPart(output, lot.withQuantity(4), account, actor, 8,
+                new FungiblePhysicalObservation.Stack(address, output.itemKind(), 4)));
+    }
 
     @Test
     void bakerColdOrderCarriesClaimedWheatThroughRecipeAndReturnsUnclaimedBread() {
@@ -175,20 +197,20 @@ class FungibleResourceLedgerTest {
         ResourceLot first = new ResourceLot(new SubjectId("lot:field-part"), OWNER,
                 "minecraft:wheat", 1, "field:one:epoch-1:part-0", List.of());
         FungibleResourceLedger one = FungibleResourceLedger.empty()
-                .accrueColdActorHarvestPart(first, account, farmer);
+                .accrueColdActorExtractionPart(grain(), first, account, farmer);
         ResourceLot second = first.withQuantity(2);
-        FungibleResourceLedger two = one.accrueColdActorHarvestPart(second, account, farmer);
+        FungibleResourceLedger two = one.accrueColdActorExtractionPart(grain(), second, account, farmer);
         assertEquals(2, two.totalQuantity(OWNER, "minecraft:wheat"));
         assertEquals(Map.of(first.id(), 2), two.accounts().get(account).lotQuantities());
-        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorHarvestPart(first, account, farmer),
+        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorExtractionPart(grain(), first, account, farmer),
                 "replaying one cell cannot credit the same unit again");
-        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorHarvestPart(first.withQuantity(3), account, farmer),
+        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorExtractionPart(grain(), first.withQuantity(3), account, farmer),
                 "a missing cell receipt cannot jump the held amount");
-        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorHarvestPart(
+        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorExtractionPart(grain(),
                 new ResourceLot(first.id(), OWNER, first.itemKind(), 2, "field:forged-source", List.of()), account, farmer));
-        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorHarvestPart(second, account,
+        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorExtractionPart(grain(), second, account,
                 new SubjectId("resident:other-farmer")));
-        var independent = one.accrueColdActorHarvestPart(
+        var independent = one.accrueColdActorExtractionPart(grain(),
                 new ResourceLot(new SubjectId("lot:another-field-part"), OWNER, "minecraft:wheat", 1,
                         "field:one:epoch-1:part-1", List.of()), new SubjectId("custody:second-harvest"), farmer);
         assertEquals(2, ActorCarriedResources.accounts(independent, farmer).size(),
@@ -203,22 +225,22 @@ class FungibleResourceLedgerTest {
                 "minecraft:wheat", 1, "field:hot:epoch-1:part-0", List.of());
         PhysicalStackAddress.ActorHand hand = new PhysicalStackAddress.ActorHand(farmer, uuid(7));
         FungiblePhysicalObservation.Stack observedOne = new FungiblePhysicalObservation.Stack(hand, "minecraft:wheat", 1);
-        FungibleResourceLedger one = FungibleResourceLedger.empty().accrueObservedActorHarvestPart(
+        FungibleResourceLedger one = FungibleResourceLedger.empty().accrueObservedActorExtractionPart(grain(),
                 first, account, farmer, 4L, observedOne);
         ResourceLot second = first.withQuantity(2);
         FungiblePhysicalObservation.Stack observedTwo = new FungiblePhysicalObservation.Stack(hand, "minecraft:wheat", 2);
-        FungibleResourceLedger two = one.accrueObservedActorHarvestPart(second, account, farmer, 4L, observedTwo);
+        FungibleResourceLedger two = one.accrueObservedActorExtractionPart(grain(), second, account, farmer, 4L, observedTwo);
         assertEquals(2, two.totalQuantity(OWNER, "minecraft:wheat"));
         assertEquals(hand, two.bindings().values().iterator().next().address());
-        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorHarvestPart(
+        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorExtractionPart(grain(),
                 first, account, farmer, 4L, observedOne), "one observed cell must not be credited twice");
-        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorHarvestPart(
+        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorExtractionPart(grain(),
                 second, account, farmer, 5L, observedTwo), "a stale or invented authority epoch cannot add wheat");
-        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorHarvestPart(
+        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorExtractionPart(grain(),
                 second, account, farmer, 4L, new FungiblePhysicalObservation.Stack(
                         new PhysicalStackAddress.ActorHand(farmer, uuid(8)), "minecraft:wheat", 2)),
                 "a different body requires an explicit handoff, not a crop receipt");
-        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorHarvestPart(
+        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorExtractionPart(grain(),
                 second, account, farmer, 4L, new FungiblePhysicalObservation.Stack(
                         new PhysicalStackAddress.PlayerSlot(uuid(7), 0), "minecraft:wheat", 2)));
     }

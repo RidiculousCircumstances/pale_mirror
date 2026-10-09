@@ -222,13 +222,13 @@ class RouteTopologyTest {
                 baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3));
         ResidentProfile guard = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement.id()))
-                .filter(resident -> resident.profession() == ResidentProfession.SECURITY_WORKER).findFirst().orElseThrow();
+                .filter(resident -> resident.capability(HumanCapability.SECURITY) >= 50).findFirst().orElseThrow();
         SubjectId patrolTask = new SubjectId("task:cutover-patrol");
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:cutover-patrol"), settlement.id(),
                 StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(patrolTask, objective.id(), settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE);
-        List<ResidentProfile> patrolMembers = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        List<ResidentProfile> patrolMembers = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
         RoutePatrol active = RoutePatrol.planned(state, patrolTask, settlement,
                 RouteUnitManifest.patrol(patrolTask, patrolMembers.getFirst().id(), List.of(patrolMembers.get(1).id())));
         StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective).addTask(task).startPatrol(active)

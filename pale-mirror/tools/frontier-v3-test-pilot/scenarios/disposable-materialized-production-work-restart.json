@@ -8,7 +8,7 @@
     { "type": "command", "command": "/clear PMTestPilot" },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -385, "y": 65, "z": -326 }, "settleMs": 1000 },
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
-      { "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "ALIVE", "role": "CRAFTER" } },
+      { "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "ALIVE", "role": "Production worker" } },
       { "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "ACCEPTED", "jobActive": true, "reservationActive": true, "taskStatus": "ACTIVE" } }
     ] }
   ],
@@ -16,7 +16,7 @@
     { "type": "wait_until_diagnostic", "view": "scene", "id": "job:production-development-input-theft", "expect": { "status": "ok", "sceneKind": "PRODUCTION_WORK", "leaseStatus": "HOT", "primaryActor": "resident:1-15" }, "timeoutMs": 60000 },
     { "type": "wait_until_diagnostic", "view": "scene", "id": "job:production-development-input-theft", "expect": { "status": "ok", "sceneKind": "PRODUCTION_WORK", "leaseStatus": "HOT", "primaryActor": "resident:1-15", "productionStage": "PROCESSING" }, "timeoutMs": 60000 },
     { "type": "look", "at": { "diagnostic": { "view": "scene", "id": "job:production-development-input-theft", "field": "productionCurrent" } } },
-    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "INDUSTRIAL WORKER", "maxDistance": 32, "maxAngleDeg": 50, "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": {"diagnostic":{"view":"actor","id":"resident:1-15","field":"name"}}, "maxDistance": 32, "maxAngleDeg": 50, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "FULFILLED", "jobActive": false, "reservationActive": false, "taskStatus": "COMPLETED" }, "timeoutMs": 120000 },
     { "type": "wait_until_diagnostic", "view": "item", "id": "item:development-production-input-theft-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "CONTAINER_SLOT" } }, "timeoutMs": 30000 },
     { "type": "inspect", "view": "container", "id": "container:1-depot" }

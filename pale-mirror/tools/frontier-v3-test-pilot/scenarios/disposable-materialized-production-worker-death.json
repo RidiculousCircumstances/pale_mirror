@@ -9,7 +9,7 @@
     { "type": "command", "command": "/item replace entity PMTestPilot weapon.mainhand with minecraft:diamond_sword" },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -385, "y": 65, "z": -326 }, "settleMs": 1000 },
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
-      { "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "ALIVE", "role": "CRAFTER" } },
+      { "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "ALIVE", "role": "Production worker" } },
       { "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "ACCEPTED", "jobActive": true, "reservationActive": true, "taskStatus": "ACTIVE" } }
     ] }
   ],

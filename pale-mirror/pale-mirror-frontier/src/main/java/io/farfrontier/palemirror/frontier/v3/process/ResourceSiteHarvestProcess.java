@@ -193,8 +193,14 @@ public final class ResourceSiteHarvestProcess {
                 || !job.target().current(field))
             throw new IllegalArgumentException("resource-site harvest receipt targets a stale or foreign field cell");
         ResourceFieldCycle worked = field.worked(cell.id(), progressed.outcome());
-        int carriedAfter = Math.addExact(ResourceSiteHarvestCargo.quantity(state, job),
-                worked.harvestedCount() - field.harvestedCount());
+        var extraction = progressed.outcome() == ResourceFieldCycle.WorkOutcome.HARVESTED
+                ? FieldHarvestExtraction.prepareKnown(field, cell.id(),
+                    "harvest-cell:" + job.id().value() + ':' + field.epoch() + ':' + cell.id().value(),
+                    state.actorExecutions().current(
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId()))
+                    : null;
+        int extractedQuantity = extraction == null ? 0 : extraction.quantity(FieldHarvestExtraction.ITEM);
+        int carriedAfter = Math.addExact(ResourceSiteHarvestCargo.quantity(state, job), extractedQuantity);
         SurfaceAnchor workerStation = state.actorLocations().get(job.workerId()).supportingSurface();
         int nextSelected = lifecycle.nextHarvestTarget(job, worked);
         ResourceSiteLifecycle advanced = lifecycle.advanceHarvest(job, progressed.completedCropSlots(),
@@ -227,11 +233,11 @@ public final class ResourceSiteHarvestProcess {
                     || hand.quantity() != carriedAfter)
                 throw new IllegalArgumentException("HOT crop work disagrees with its exact actor hand and custody epoch");
             FungibleResourceLedger resources = inventory.fungibleResources();
-            if (worked.harvestedCount() != field.harvestedCount()) {
+            if (extractedQuantity > 0) {
                 ResourceLot carried = ResourceSiteHarvestCargo.newPart(state, job, carriedAfter);
-                inventory = inventory.withFungibleResources(resources.accrueObservedActorHarvestPart(carried,
+                inventory = inventory.withFungibleResources(resources.accrueObservedActorExtractionPart(extraction.output().getFirst(), carried,
                         actorAccount, job.workerId(), hand.authorityEpoch(),
-                        new FungiblePhysicalObservation.Stack(hand.address(), "minecraft:wheat", hand.quantity())));
+                        new FungiblePhysicalObservation.Stack(hand.address(), FieldHarvestExtraction.ITEM, hand.quantity())));
             } else if (hand.quantity() == 0) {
                 if (resources.accounts().containsKey(actorAccount))
                     throw new IllegalArgumentException("zero-yield HOT hand retains an unexpected actor part");
@@ -249,10 +255,10 @@ public final class ResourceSiteHarvestProcess {
         } else {
             if (progressed.observedHand().isPresent())
                 throw new IllegalArgumentException("COLD crop work cannot carry a forged Minecraft hand observation");
-            if (worked.harvestedCount() != field.harvestedCount()) {
+            if (extractedQuantity > 0) {
                 ResourceLot carried = ResourceSiteHarvestCargo.newPart(state, job, carriedAfter);
                 inventory = inventory.withFungibleResources(inventory.fungibleResources()
-                        .accrueColdActorHarvestPart(carried, actorAccount, job.workerId()));
+                        .accrueColdActorExtractionPart(extraction.output().getFirst(), carried, actorAccount, job.workerId()));
             }
         }
         if (!hot.isEmpty() && field.physicalWorkTransition(cell.id()).isPresent()) {

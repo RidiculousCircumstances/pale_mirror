@@ -42,7 +42,7 @@ public final class MedicalEvacuationStateSupport {
                 for (SubjectId member : operation.team().memberIds()) {
                     ResidentProfile medic = population.resident(member);
                     ActorLocation actor = actors.get(member);
-                    if (medic == null || medic.profession() != ResidentProfession.MEDICAL_WORKER
+                    if (medic == null || medic.capability(HumanCapability.MEDICINE) <= 0
                             || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) {
                         throw new IllegalArgumentException("active medical operation needs living local medical workers");
                     }

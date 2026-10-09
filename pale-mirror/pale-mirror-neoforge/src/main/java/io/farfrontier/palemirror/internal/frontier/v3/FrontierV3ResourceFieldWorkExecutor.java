@@ -96,9 +96,15 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 return projectPredecessor(level, runtime, job, id);
             if (outcome == ResourceFieldCycle.WorkOutcome.HARVESTED) {
                 var handBefore = FrontierV3ActorHandObservation.observe(level, state, lease, job);
+                // Preparation reads standard Minecraft loot. Persist the complete result
+                // with the existing crop/hand witness BEFORE either physical effect.
+                var extraction = extractionPort(level, runtime, state, lease, worker, job).prepare(
+                        cause(job, cycle, id), state.actorExecutions().current(
+                            io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId()), cell.crop(),
+                        io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.DEFINITION);
                 var effect = new FrontierV3ResourceFieldWitness.HandEffect(job.siteId(), job.id(), job.workerId(),
                         lease.members().getFirst().entityId(), ResourceSiteHarvestCargo.handEpoch(state, job, lease),
-                        ResourceSiteHarvestCargo.quantity(state, job));
+                        ResourceSiteHarvestCargo.quantity(state, job), extraction);
                 if (!handBefore.matchesBefore(effect))
                     return Result.conflict("hand-before-" + handBefore.disposition().name().toLowerCase(java.util.Locale.ROOT));
                 witness = witness.beginHarvest(transition.orElseThrow(), cause(job, cycle, id), effect, before, handBefore);
@@ -110,6 +116,14 @@ final class FrontierV3ResourceFieldWorkExecutor {
             return Result.pending();
         }
         var pending = retained.pending().orElseThrow();
+        if (pending.handEffect().isPresent()) {
+            var extraction = pending.handEffect().orElseThrow().extraction();
+            var execution = state.actorExecutions().current(
+                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId());
+            if (!extraction.target().equals(cell.crop()) || !extraction.operationId().equals(pending.causationId())
+                    || !extraction.execution().equals(execution))
+                return Result.conflict("extraction-target-operation-or-execution-mismatch");
+        }
         if (!pending.causationId().equals(cause(job, cycle, id))
                 || !pending.transition().equals(transition.orElseThrow())
                 || pending.canonicalSource().isPresent()
@@ -131,7 +145,16 @@ final class FrontierV3ResourceFieldWorkExecutor {
             ResourceFieldCellTransition.Step step = pending.transition().steps().get(pending.completedSteps());
             BlockPos position = step.part() == ResourceFieldCellTransition.Part.SOIL
                     ? minecraft(cell.soil().support()) : minecraft(cell.crop());
-            if (!level.setBlock(position, block(step), 3)) return Result.pending();
+            if (pending.handEffect().isPresent() && pending.completedSteps() == 0) {
+                var extraction = pending.handEffect().orElseThrow().extraction();
+                var applied = extractionPort(level, runtime, state, lease, worker, job).apply(extraction);
+                if (applied == io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtractionPort.Result.UNAVAILABLE)
+                    return Result.pending();
+                if (applied == io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtractionPort.Result.SOURCE_CHANGED)
+                    return Result.conflict("extraction-source-changed");
+                if (applied == io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtractionPort.Result.TOOL_CHANGED)
+                    return Result.conflict("extraction-tool-changed");
+            } else if (!level.setBlock(position, block(step), 3)) return Result.pending();
             var afterWrite = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
             if (afterWrite.disposition() != FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED)
                 return Result.conflict("written-cell-step-unconfirmed");
@@ -211,6 +234,17 @@ final class FrontierV3ResourceFieldWorkExecutor {
 
     private static BlockPos minecraft(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
         return new BlockPos(position.x(), position.y(), position.z());
+    }
+
+    private static io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtractionPort extractionPort(
+            ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierWorldState state, SceneLease lease, Mob worker, ResourceSiteHarvestJob job) {
+        var execution = state.actorExecutions().current(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId());
+        if (execution == null || !execution.activityOwnerId().equals(job.id()))
+            throw new IllegalArgumentException("extraction lost its exact field execution");
+        return new FrontierV3MinecraftBlockExtraction(level, worker,
+                FrontierV3ResourceSiteHarvestSceneExecutor.workActuation(state, runtime, lease, job, worker));
     }
 
     private static BlockState block(ResourceFieldCellTransition.Step step) {

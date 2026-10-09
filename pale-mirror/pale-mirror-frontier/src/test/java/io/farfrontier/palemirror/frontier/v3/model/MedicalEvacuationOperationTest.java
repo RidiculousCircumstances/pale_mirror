@@ -42,7 +42,7 @@ class MedicalEvacuationOperationTest {
         Settlement settlement = state.bootstrap().settlements().getFirst();
         HumanPopulation initialPopulation = state.humanPopulation();
         SubjectId medic = settlement.residents().stream().map(Resident::id)
-                .filter(id -> initialPopulation.resident(id).profession() == ResidentProfession.MEDICAL_WORKER).findFirst().orElseThrow();
+                .filter(id -> initialPopulation.resident(id).capability(HumanCapability.MEDICINE) >= 50).findFirst().orElseThrow();
         SubjectId patient = settlement.residents().stream().map(Resident::id).filter(id -> !id.equals(medic)).findFirst().orElseThrow();
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         SubjectId supply = new SubjectId("item:medical-owner-remedy");
@@ -61,6 +61,9 @@ class MedicalEvacuationOperationTest {
                 new MedicalTreatmentStarted(operation, MedicalExecutionAuthority.admission(state, operation)));
 
         assertEquals(HumanAssignmentKind.MEDICAL_EVACUATION, HumanAssignmentProjection.compile(admitted).assignment(medic).kind());
+        assertEquals("Medical worker", ResidentPresentation.from(admitted, medic).role());
+        assertEquals("Patient", ResidentPresentation.from(admitted, patient).role());
+        assertEquals("Receive medical care", ResidentPresentation.from(admitted, patient).task());
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(admitted));
         assertEquals(operation, restored.humanPopulation().medicalOperations().get(operationId));
         assertEquals(HumanAssignmentKind.MEDICAL_EVACUATION, HumanAssignmentProjection.compile(restored).assignment(medic).kind());
@@ -95,10 +98,10 @@ class MedicalEvacuationOperationTest {
         FrontierWorldState state = treatmentReadyState();
         Settlement settlement = state.bootstrap().settlements().getFirst();
         SubjectId patient = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
-                .filter(resident -> resident.profession() != ResidentProfession.MEDICAL_WORKER)
+                .filter(resident -> resident.capability(HumanCapability.MEDICINE) < 50)
                 .map(ResidentProfile::id).findFirst().orElseThrow();
         SubjectId medic = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
-                .filter(resident -> resident.profession() == ResidentProfession.MEDICAL_WORKER)
+                .filter(resident -> resident.capability(HumanCapability.MEDICINE) >= 50)
                 .map(ResidentProfile::id).findFirst().orElseThrow();
         List<SubjectId> alternatives = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
                 .map(ResidentProfile::id).filter(id -> !id.equals(patient) && !id.equals(medic)).limit(2).toList();
@@ -113,7 +116,9 @@ class MedicalEvacuationOperationTest {
         MedicalEvacuationOperation unknown = operation(settlement.id(), patient, medic, infirmary, "unknown", MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART, -1L);
         completed.put(unknown.id(), unknown);
         LinkedHashMap<SubjectId, ResidentProfile> residents = new LinkedHashMap<>(state.humanPopulation().residents());
-        residents.put(nextMedic, residents.get(nextMedic).withProfession(ResidentProfession.MEDICAL_WORKER));
+        var learned = new java.util.EnumMap<>(residents.get(nextMedic).capabilities());
+        learned.put(HumanCapability.MEDICINE, 100);
+        residents.put(nextMedic, residents.get(nextMedic).withCapabilities(learned));
         HumanPopulation retained = new HumanPopulation(state.humanPopulation().households(), residents, state.humanPopulation().birthJobs(),
                 state.humanPopulation().health(), state.humanPopulation().quarantines(), state.humanPopulation().migrations(), state.humanPopulation().provisions(),
                 state.humanPopulation().nutrition(), completed).startMedicalOperation(operation(settlement.id(), nextPatient, nextMedic, infirmary, "new", MedicalEvacuationStatus.PREPARED, -1L));
@@ -462,7 +467,7 @@ class MedicalEvacuationOperationTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 42L));
         Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
         SubjectId supply = new SubjectId("item:medical-lifecycle-remedy");
-        SubjectId patient = settlement.residents().stream().map(Resident::id).filter(id -> state.humanPopulation().resident(id).profession() != ResidentProfession.MEDICAL_WORKER).findFirst().orElseThrow();
+        SubjectId patient = settlement.residents().stream().map(Resident::id).filter(id -> state.humanPopulation().resident(id).capability(HumanCapability.MEDICINE) < 50).findFirst().orElseThrow();
         ExactInventory inventory = state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
                 .store(new ExactItemStack(supply, settlement.id(), MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY, 1, new InventoryCustody.ContainerSlot(depot, 1)));
         return state.withInventory(inventory).withHumanPopulation(state.humanPopulation().transitionHealth(patient, ResidentHealthStatus.EXPOSED, 100L)

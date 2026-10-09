@@ -51,7 +51,8 @@ public final class PaleMirrorPlayerPresentation {
                 .computeIfAbsent(player.getUUID(), ignored -> new PlayerNoticeGate());
         if (gate.admit(new PlayerNoticeGate.Notice(key, PlayerNoticeGate.Channel.CONTEXT_CARD,
                 PlayerNoticeGate.Priority.CONTEXT, PlayerNoticeGate.Origin.PLAYER_ACTION, 20), player.serverLevel().getGameTime()) != PlayerNoticeGate.Decision.DELIVER) return;
-        PaleMirrorNetwork.sendContextCard(player, new PlayerContextCardPayload(card.title(), card.lines(), CONTEXT_DURATION_TICKS, card.accentRgb()));
+        int duration = card.lines().size() > 2 ? 200 : CONTEXT_DURATION_TICKS;
+        PaleMirrorNetwork.sendContextCard(player, new PlayerContextCardPayload(card.title(), card.lines(), duration, card.accentRgb()));
     }
 
     /** Clears the only ephemeral state at server shutdown; no player/world state is retained. */

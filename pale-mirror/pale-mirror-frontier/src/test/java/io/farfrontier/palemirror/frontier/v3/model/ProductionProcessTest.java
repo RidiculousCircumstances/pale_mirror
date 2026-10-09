@@ -671,7 +671,7 @@ class ProductionProcessTest {
         FrontierWorldState starving = admitted.withHumanPopulation(population);
 
         assertEquals(ResidentNutritionStatus.STARVING, starving.humanPopulation().nutrition(workerId).status());
-        assertFalse(FrontierWorldStateSupport.availableWorkResident(starving, prepared.settlementId(), ResidentProfession.INDUSTRIAL_WORKER)
+        assertFalse(FrontierWorldStateSupport.availableWorkResident(starving, prepared.settlementId(), HumanCapability.INDUSTRY)
                         .map(ResidentProfile::id).filter(workerId::equals).isPresent(),
                 "the retained production assignment, not hunger, excludes a second owner");
         assertTrue(FrontierProductionWorkSceneSupport.candidate(starving, retained).isPresent(),

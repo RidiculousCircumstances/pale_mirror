@@ -6,7 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-/** Bounded typed metabolism and work-stat modifiers; capability scores and profession are separate. */
+/** Bounded typed metabolism and work-stat modifiers; capability scores and assignments are separate. */
 public record ResidentCharacteristics(int version, int baseMetabolismPermille,
                                       Map<SubjectId, MetabolismModifier> metabolismModifiers,
                                       ResidentWorkModifiers workModifiers) {

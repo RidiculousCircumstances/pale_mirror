@@ -323,7 +323,7 @@ final class FrontierV3TestPilotScenario {
     private static boolean validVisibleEntity(JsonObject action) {
         return action.has("entityType") && action.get("entityType").isJsonPrimitive()
                 && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
-                && action.has("nameContains") && action.get("nameContains").isJsonPrimitive() && !action.get("nameContains").getAsString().isBlank()
+                && validEntityName(action.get("nameContains"))
                 && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D)
                 && boundedOptionalNumber(action, "maxAngleDeg", 1.0D, 90.0D);
     }
@@ -332,7 +332,7 @@ final class FrontierV3TestPilotScenario {
     private static boolean validLookNearestEntity(JsonObject action) {
         return action.has("entityType") && action.get("entityType").isJsonPrimitive()
                 && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
-                && action.has("nameContains") && action.get("nameContains").isJsonPrimitive() && !action.get("nameContains").getAsString().isBlank()
+                && validEntityName(action.get("nameContains"))
                 && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D);
     }
 
@@ -346,7 +346,8 @@ final class FrontierV3TestPilotScenario {
     private static boolean validEntityInteraction(JsonObject action) {
         return action.has("entityType") && action.get("entityType").isJsonPrimitive()
                 && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
-                && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 64.0D);
+                && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 64.0D)
+                && (!action.has("nameContains") || validEntityName(action.get("nameContains")));
     }
 
     /** Bounded ordinary local attacks; the scenario deliberately contains no entity identity. */
@@ -357,8 +358,24 @@ final class FrontierV3TestPilotScenario {
                 && (!action.has("requireDamage") || action.get("requireDamage").isJsonPrimitive()
                     && action.get("requireDamage").getAsJsonPrimitive().isBoolean()
                     && (!action.get("requireDamage").getAsBoolean() || !action.has("requireRemoval") || !action.get("requireRemoval").getAsBoolean()))
-                && (!action.has("nameContains") || action.get("nameContains").isJsonPrimitive()
-                && !action.get("nameContains").getAsString().isBlank() && action.get("nameContains").getAsString().length() <= 72);
+                && (!action.has("nameContains") || validEntityName(action.get("nameContains")));
+    }
+
+    /** Match the Node declaration contract; a diagnostic name is presentation, not actor authority. */
+    private static boolean validEntityName(JsonElement selector) {
+        if (selector == null) return false;
+        if (selector.isJsonPrimitive()) return selector.getAsJsonPrimitive().isString()
+                && !selector.getAsString().isBlank() && selector.getAsString().length() <= 72;
+        if (!selector.isJsonObject() || selector.getAsJsonObject().size() != 1
+                || !selector.getAsJsonObject().has("diagnostic")
+                || !selector.getAsJsonObject().get("diagnostic").isJsonObject()) return false;
+        var reference = selector.getAsJsonObject().getAsJsonObject("diagnostic");
+        if (reference.size() != 3 || !validDiagnosticIdentity(reference) || !reference.has("field")
+                || !reference.get("field").isJsonPrimitive() || !reference.get("field").getAsJsonPrimitive().isString()) return false;
+        String view = reference.get("view").getAsString(), field = reference.get("field").getAsString();
+        return (view.equals("actor") && field.equals("name") && requiredId(reference, "id", "resident:"))
+                || (view.equals("scene") && field.equals("primaryActorName"))
+                || (view.equals("site") && field.equals("workerPresentation"));
     }
 
     private static boolean boundedOptionalNumber(JsonObject action, String field, double minimum, double maximum) {

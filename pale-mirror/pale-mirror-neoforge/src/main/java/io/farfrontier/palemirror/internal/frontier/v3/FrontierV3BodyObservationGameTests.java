@@ -19,14 +19,14 @@ public final class FrontierV3BodyObservationGameTests {
     private FrontierV3BodyObservationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-harvest-support", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 20)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void farmerReleaseCapturesRealCollisionSupportButNotAnAirborneBody(GameTestHelper helper) {
-        BlockPos support = helper.absolutePos(new BlockPos(2, 0, 2));
+        BlockPos support = helper.absolutePos(new BlockPos(2, 8, 2));
         helper.getLevel().setBlock(support, Blocks.FARMLAND.defaultBlockState(), 3);
         helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
         helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
         Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER,
-                new Vec3(2.5D, 0.9375D, 2.5D));
+                new Vec3(2.5D, 8.9375D, 2.5D));
         helper.runAtTickTime(2, () -> {
             helper.assertValueEqual(FrontierV3SupportedBodyCapture.observe(helper.getLevel(), worker),
                     java.util.Optional.of(new BodyPosition(support.getX(), support.getY() + 1, support.getZ())),
@@ -39,7 +39,7 @@ public final class FrontierV3BodyObservationGameTests {
             helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, expected.supportingSurface()),
                     "supported farmland feet satisfy the common semantic arrival contract");
             Villager neighbour = helper.spawnWithNoFreeWill(EntityType.VILLAGER,
-                    new Vec3(2.5D, 0.9375D, 2.5D));
+                    new Vec3(2.5D, 8.9375D, 2.5D));
             helper.assertTrue(!FrontierV3SemanticMovement.targetIsNavigable(helper.getLevel(), worker, expected.supportingSurface()),
                     "another living body still blocks prospective admission to the station");
             helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, expected.supportingSurface()),
@@ -51,7 +51,11 @@ public final class FrontierV3BodyObservationGameTests {
             helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
             helper.assertValueEqual(FrontierV3SupportedBodyCapture.observeDeparting(helper.getLevel(), worker),
                     java.util.Optional.of(expected), "departure uses the same supported body");
-            worker.getPersistentData().putString(FrontierV3ActorCarrierComposition.ACTOR_KEY, "resident:body-observation");
+            FrontierV3ActorCarrierComposition.stamp(worker, new FrontierV3ActorCarrierComposition.Declaration(
+                    new io.farfrontier.palemirror.frontier.v3.api.SubjectId("resident:body-observation"),
+                    io.farfrontier.palemirror.frontier.v3.model.ActorKind.RESIDENT,
+                    FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, worker.getUUID(),
+                    FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 1L));
             var saved = worker.saveWithoutId(new net.minecraft.nbt.CompoundTag());
             helper.assertValueEqual(FrontierV3BodyObservationSave.read(saved, worker.getX(), worker.getY(), worker.getZ()),
                     java.util.Optional.of(expected), "vanilla save carries the exact support-normalized observation");

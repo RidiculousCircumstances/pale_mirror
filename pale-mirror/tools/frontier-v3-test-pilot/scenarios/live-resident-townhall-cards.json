@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "live_resident_townhall_cards",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "settlements": 12, "requiredConflicts": 0, "inventoryConflicts": 0 } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 64, "z": -348 }, "settleMs": 1000 },
+    { "type": "look", "at": { "x": -360, "y": 68, "z": -344 } },
+    { "type": "interact_board", "text": "TOWN HALL", "title": "Northwatch · Town Hall", "position": { "x": -360, "y": 68, "z": -344 }, "blockPosition": { "x": -360, "y": 66, "z": -343 }, "radius": 3, "maxDistance": 16, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "actor", "id": "resident:1-1", "field": "position" } }, "settleMs": 1000 },
+    { "type": "interact_nearest_entity", "entityType": "minecraft:villager", "maxDistance": 8, "expectContextCard": true, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 6, "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0, "replicaCustodyDiagnostics": 0 } }
+  ],
+  "frames": [
+    { "after": 3, "name": "live-townhall-finances", "presentation": "player" },
+    { "after": 5, "name": "live-resident-inspection", "presentation": "player" }
+  ]
+}

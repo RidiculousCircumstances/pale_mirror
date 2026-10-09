@@ -5,10 +5,11 @@ import java.util.Objects;
 
 /** Pure bounded content for the one replace-not-stack contextual card. */
 public record PlayerContextCard(String title, List<String> lines, int accentRgb) {
+    public static final int MAX_LINES = 10;
     public PlayerContextCard {
         title = bounded(title, 72, "card title");
         lines = List.copyOf(Objects.requireNonNull(lines, "card lines"));
-        if (lines.size() > 2) throw new IllegalArgumentException("context card may contain at most two detail lines");
+        if (lines.size() > MAX_LINES) throw new IllegalArgumentException("context card exceeds bounded detail lines");
         lines = lines.stream().map(line -> bounded(line, 112, "card line")).toList();
     }
 

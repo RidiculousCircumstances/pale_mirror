@@ -78,41 +78,26 @@ public final class FrontierWorldStateSupport {
         return resident;
     }
 
-    public static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
-        return SettlementWorkforce.candidates(state, settlementId, profession).stream().findFirst();
+    public static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId, HumanCapability capability) {
+        return SettlementWorkforce.candidates(state, settlementId, capability).stream().findFirst();
     }
 
-    public static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
-        return availableRouteResidents(state, settlementId, profession).stream().findFirst();
+    public static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, HumanCapability capability) {
+        return availableRouteResidents(state, settlementId, capability).stream().findFirst();
     }
 
     /** Deterministic exact candidates for one route owner; callers choose a bounded named formation. */
-    public static List<ResidentProfile> availableRouteResidents(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
-        return SettlementWorkforce.candidates(state, settlementId, profession);
+    public static List<ResidentProfile> availableRouteResidents(FrontierWorldState state, SubjectId settlementId, HumanCapability capability) {
+        return SettlementWorkforce.candidates(state, settlementId, capability);
     }
 
-    public static Optional<ResidentProfile> availableFieldResident(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
-        return SettlementWorkforce.candidates(state, settlementId, profession).stream().findFirst();
+    public static Optional<ResidentProfile> availableFieldResident(FrontierWorldState state, SubjectId settlementId, HumanCapability capability) {
+        return SettlementWorkforce.candidates(state, settlementId, capability).stream().findFirst();
     }
 
     public static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId,
                                                                  ResidentWorkKind work, HumanCapability capability) {
         return SettlementWorkforce.candidates(state, settlementId, work, capability).stream().findFirst();
-    }
-
-    /** Compatibility selection for callers still holding only the legacy bootstrap affinity. */
-    public static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
-        return availableWorkResident(state, settlementId, ResidentProfession.fromBootstrapAffinity(role));
-    }
-
-    /** Compatibility selection for callers still holding only the legacy bootstrap affinity. */
-    public static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
-        return availableRouteResident(state, settlementId, ResidentProfession.fromBootstrapAffinity(role));
-    }
-
-    /** Compatibility selection for callers still holding only the legacy bootstrap affinity. */
-    public static Optional<ResidentProfile> availableFieldResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
-        return availableFieldResident(state, settlementId, ResidentProfession.fromBootstrapAffinity(role));
     }
 
     /** Hunger requests a feasible meal; only actual loss of life removes work capability. */
@@ -134,11 +119,6 @@ public final class FrontierWorldStateSupport {
     public static boolean activePatrolClaim(FrontierWorldState state, SubjectId residentId) {
         return state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.active()
                 && patrol.memberIds().contains(residentId));
-    }
-
-    private static Comparator<ResidentProfile> byProfessionCapability(ResidentProfession profession) {
-        return Comparator.comparingInt((ResidentProfile resident) -> resident.capability(profession.primaryCapability())).reversed()
-                .thenComparing(ResidentProfile::id);
     }
 
     public static void requirePosition(WorldBounds bounds, BlockPosition position) {

@@ -79,6 +79,15 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-field-turns")
                     || batchName.equals("pm-frontier-v3-scene-body-lifetime");
             case "field-turns" -> batchName.equals("pm-frontier-v3-field-turns");
+            case "block-extraction" -> batchName.equals("pm-frontier-v3-block-extraction");
+            case "native-regressions" -> batchName.equals("pm-frontier-v3-block-extraction")
+                    || batchName.equals("pm-frontier-v3-scene-harvest-support")
+                    || batchName.equals("pm-frontier-v3-field-turns")
+                    || batchName.equals("pm-frontier-v3-ambient-physics")
+                    || batchName.equals("pm-frontier-v3-scene-route-patrol")
+                    || batchName.startsWith("pm-frontier-v3-scene-z-route-patrol-")
+                    || batchName.equals("pm-frontier-v3-scene-strikes")
+                    || batchName.equals("pm-frontier-v3-scene-observer-combat-calibration");
             case "service-death" -> batchName.equals("pm-frontier-v3-service-death")
                     || batchName.equals("pm-frontier-v3-settlement-service-input") || batchName.equals("pm-frontier-v3-equipment-death");
             case "physical-ownership-fences" -> batchName.equals("pm-frontier-v3-object-boards")

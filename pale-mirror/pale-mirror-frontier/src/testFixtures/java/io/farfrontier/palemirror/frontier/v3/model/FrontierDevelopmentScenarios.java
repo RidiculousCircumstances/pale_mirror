@@ -32,7 +32,7 @@ final class FrontierDevelopmentScenarios {
     static RoutePatrolFixture routePatrolFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
         if (guards.size() < 2) throw new IllegalStateException("route-patrol fixture needs two exact security residents");
         SubjectId objectiveId = new SubjectId("objective:development-route-patrol");
         SubjectId taskId = new SubjectId("task:development-route-patrol");
@@ -115,7 +115,7 @@ final class FrontierDevelopmentScenarios {
         // This boundary fixture requires a disjoint worker, not the bootstrap farmers
         // already serving as defenders. Declare the fixture roster before admission.
         ResidentProfile participant = SettlementWorkforce.candidates(assault.state(), settlement,
-                ResidentProfession.AGRICULTURAL_WORKER).getFirst();
+                HumanCapability.AGRICULTURE).getFirst();
         FrontierWorldState ingress = HarvestFixtureOwners.withSingleParticipant(assault.state(), settlement, participant.id());
         FrontierResourceSiteHarvestFixture.Fixture harvest = FrontierResourceSiteHarvestFixture.create(ingress);
         SettlementAssault retained = harvest.state().strategicPlans().settlementAssaults().get(assault.assaultId());
@@ -416,7 +416,7 @@ final class FrontierDevelopmentScenarios {
         Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
         HumanPopulation population = state.humanPopulation();
         SubjectId patient = settlement.residents().stream().map(Resident::id).sorted()
-                .filter(id -> population.resident(id).profession() != ResidentProfession.MEDICAL_WORKER).findFirst()
+                .filter(id -> population.resident(id).capability(HumanCapability.MEDICINE) < 50).findFirst()
                 .orElseThrow(() -> new IllegalStateException("medical fixture needs one non-medic patient"));
         SubjectId supply = new SubjectId("item:development-medical-remedy");
         ExactInventory inventory = state.inventory().store(new ExactItemStack(supply, settlement.id(), MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY, 1,

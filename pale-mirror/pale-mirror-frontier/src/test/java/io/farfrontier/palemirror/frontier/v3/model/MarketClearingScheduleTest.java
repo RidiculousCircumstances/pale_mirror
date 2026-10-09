@@ -34,7 +34,7 @@ class MarketClearingScheduleTest {
         pending = pending.withInventory(pending.inventory().withFungibleResources(food));
         MarketDemand demand = MarketClearingProcess.foodDemand(pending, task, 43_000L);
         pending = pending.withCompanies(pending.companies().withMarket(MarketOrderBook.empty().open(demand)));
-        var baker = FrontierWorldStateSupport.availableWorkResident(pending, settlement, ResidentProfession.BAKER).orElseThrow();
+        var baker = FrontierWorldStateSupport.availableWorkResident(pending, settlement, HumanCapability.INDUSTRY).orElseThrow();
         assertFalse(ResidentActivityCoordinator.mayStartOrdinaryWork(pending, baker.id(), 43_000L));
         assertInstanceOf(ScheduleEffect.Rescheduled.class,
                 ProductionProcess.planStart(pending, ProductionProcess.start(task, 43_000L)).getFirst().payload());

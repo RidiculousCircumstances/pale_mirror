@@ -813,7 +813,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (!accepted) conflict(level, runtime, lease, "field-work-route-" + FrontierV3SemanticMovement.detail(disposition));
     }
 
-    private static FrontierV3ActorActuation workActuation(FrontierWorldState state,
+    static FrontierV3ActorActuation workActuation(FrontierWorldState state,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, ResourceSiteHarvestJob job, Mob worker) {
         var execution = state.actorExecutions().current(
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId());

@@ -280,8 +280,7 @@ public final class RouteConstructionProcess {
                 .filter(resident -> assignments.idle(resident.id()))
                 .filter(resident -> FrontierWorldStateSupport.availableForNewAssignment(state, resident))
                 .filter(resident -> resident.capability(HumanCapability.ENGINEERING) > 0)
-                .sorted(Comparator.comparing((ResidentProfile resident) -> resident.profession() != ResidentProfession.ENGINEER)
-                        .thenComparing(Comparator.comparing((ResidentProfile resident) -> resident.capability(HumanCapability.ENGINEERING)).reversed())
+                .sorted(Comparator.comparingInt((ResidentProfile resident) -> resident.capability(HumanCapability.ENGINEERING)).reversed()
                         .thenComparing(ResidentProfile::id))
                 .limit(INITIAL_ROUTE_REPAIR_CREW_SIZE).map(ResidentProfile::id).toList();
         return members.isEmpty() ? null : EngineeringRecoveryTeam.forWorkOrder(projectId, settlementId, members);

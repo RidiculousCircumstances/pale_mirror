@@ -27,7 +27,7 @@ public final class RoutePatrolProcess {
     static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
-        List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
         if (state.routeTopology().routePassable(state.bootstrap(), settlement.id())) {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         }

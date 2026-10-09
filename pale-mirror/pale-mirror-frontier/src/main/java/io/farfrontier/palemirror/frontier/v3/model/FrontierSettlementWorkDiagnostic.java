@@ -50,9 +50,9 @@ public record FrontierSettlementWorkDiagnostic(
                 .sorted(Comparator.comparing(action -> action.dueAt()))
                 .map(action -> action.id().value() + "@" + action.dueAt().ticks()).toList();
         int livingFarmers = (int) state.humanPopulation().residents().values().stream()
-                .filter(value -> value.settlementId().equals(settlementId) && value.profession() == ResidentProfession.AGRICULTURAL_WORKER)
+                .filter(value -> value.settlementId().equals(settlementId) && SettlementWorkPolicy.permissions(state, value.settlementId()).permits(ResidentWorkKind.AGRICULTURE, value.id()) && value.capability(HumanCapability.AGRICULTURE) > 0)
                 .filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE).count();
-        String availableFarmer = FrontierWorldStateSupport.availableFieldResident(state, settlementId, ResidentProfession.AGRICULTURAL_WORKER)
+        String availableFarmer = FrontierWorldStateSupport.availableWorkResident(state, settlementId, ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE)
                 .map(value -> value.id().value()).orElse("");
         String farmStatus = sites.stream().map(site -> state.structureConditions().get(site.facilityId()).name()).distinct().sorted()
                 .reduce((left, right) -> left.equals(right) ? left : "MIXED").orElse("MISSING");
@@ -78,7 +78,7 @@ public record FrontierSettlementWorkDiagnostic(
                                            String depotSurface, boolean depotHasFreeSlot, List<String> pendingSchedules) {
         if (readySites.isEmpty()) return "NO_READY_SITE";
         String recoveringFarmer = state.humanPopulation().residents().values().stream()
-                .filter(value -> value.settlementId().equals(settlementId) && value.profession() == ResidentProfession.AGRICULTURAL_WORKER)
+                .filter(value -> value.settlementId().equals(settlementId) && SettlementWorkPolicy.permissions(state, value.settlementId()).permits(ResidentWorkKind.AGRICULTURE, value.id()) && value.capability(HumanCapability.AGRICULTURE) > 0)
                 .filter(value -> FrontierWorldStateSupport.workCapable(state, value))
                 .filter(value -> HumanAssignmentProjection.compile(state).idle(value.id()))
                 .map(ResidentProfile::id).sorted()

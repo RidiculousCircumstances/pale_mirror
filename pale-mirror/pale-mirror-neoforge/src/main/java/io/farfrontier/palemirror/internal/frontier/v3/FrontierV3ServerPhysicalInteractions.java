@@ -51,7 +51,48 @@ final class FrontierV3ServerPhysicalInteractions {
         if (owner.isBlank()) return false;
         var board = FrontierReadabilityPlan.compile(state).boards().get(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(owner));
         if (board == null || !FrontierV3ObjectBoardExecutor.isCurrentOwnedBoard(level, entity, board)) return false;
-        PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + owner, FrontierV3ObjectBoardCard.fromBoard(board));
+        var hall = state.bootstrap().settlements().stream().flatMap(home -> home.structures().stream())
+                .filter(structure -> structure.id().equals(board.ownerId())
+                        && structure.kind() == io.farfrontier.palemirror.frontier.v3.model.StructureKind.HALL).findFirst();
+        var card = hall.isPresent() ? FrontierV3TownHallCard.from(state, hall.orElseThrow())
+                : FrontierV3ObjectBoardCard.fromBoard(board);
+        PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + owner, card);
+        return true;
+    }
+    static boolean presentTownHall(ServerLevel level, ServerPlayer player, BlockPos position) {
+        var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null
+                || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE
+                || player.level() != level || !player.getMainHandItem().isEmpty()
+                || player.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(position)) > 64.0
+                || !level.hasChunkAt(position)) return false;
+        var state = runtime.decodedState().orElse(null);
+        if (state == null) return false;
+        var claim = FrontierV3GrayboxLedger.get(level).claim(position);
+        if (claim == null || claim.deferred() || claim.targetTag()
+                != io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE.wireTag()) return false;
+        var hall = state.bootstrap().settlements().stream().flatMap(home -> home.structures().stream())
+                .filter(structure -> structure.id().value().equals(claim.owner())
+                        && structure.kind() == io.farfrontier.palemirror.frontier.v3.model.StructureKind.HALL).findFirst();
+        if (hall.isEmpty() || !level.getBlockState(position).equals(FrontierV3GrayboxExecutor.material(
+                io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial.valueOf(claim.material())))) return false;
+        PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + claim.owner(),
+                FrontierV3TownHallCard.from(state, hall.orElseThrow()));
+        return true;
+    }
+    static boolean presentResident(ServerLevel level, ServerPlayer player, Entity entity) {
+        var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null
+                || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE
+                || entity.level() != level || player.level() != level || !player.getMainHandItem().isEmpty()
+                || entity.distanceToSqr(player) > 64.0) return false;
+        var state = runtime.decodedState().orElse(null);
+        if (state == null || !FrontierV3ActorBodyController.recognizesRecordedBody(level, state, entity)) return false;
+        String declared = entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.ACTOR_KEY);
+        var actor = new io.farfrontier.palemirror.frontier.v3.api.SubjectId(declared);
+        if (state.humanPopulation().resident(actor) == null) return false;
+        PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:resident:" + actor.value(),
+                FrontierV3ResidentCard.from(state, actor, runtime.checkpointImage().orElseThrow().instant().ticks()));
         return true;
     }
     public static ExactCustodyObservation observeExactItemPickup(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {

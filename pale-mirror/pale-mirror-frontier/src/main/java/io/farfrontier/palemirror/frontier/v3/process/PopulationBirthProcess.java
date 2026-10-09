@@ -56,7 +56,7 @@ public final class PopulationBirthProcess {
         ResidentBirthJob job = job(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
                 Math.toIntExact(SettlementFacilityCapability.housingCapacity(state, settlement.id())), household, food.orElseThrow(), ordinal, placementOrdinal,
                 action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay(),
-                state.bootstrap().ruleset().residentLife());
+                state.bootstrap().ruleset().residentLife(), state.bootstrap().seed());
         events.add(new ProposedEvent(settlement.id(), new ResidentBirthStarted(job)));
         events.add(schedule(complete(job, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay())));
         return List.copyOf(events);
@@ -124,9 +124,11 @@ public final class PopulationBirthProcess {
 
     private static ResidentBirthJob job(WorldBounds bounds, TerrainSurfacePlan terrain, Settlement settlement, int housingBeds,
                                         Household household, ExactItemStack food, int ordinal, int placementOrdinal, long birthTick,
-                                        FrontierRuleset.ResidentLife residentLife) {
+                                        FrontierRuleset.ResidentLife residentLife, long seed) {
         String suffix = suffix(settlement.id()) + "-" + ordinal;
-        ResidentProfile resident = new ResidentProfile(new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal), household.id(), settlement.id(), ResidentRole.FARMER,
+        SubjectId residentId = new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal);
+        ResidentProfile resident = new ResidentProfile(residentId, household.id(), settlement.id(), ResidentRole.FARMER,
+                ResidentNames.create(seed, residentId),
                 birthTick, HumanPopulation.birthSkills(ordinal))
                 .withCharacteristics(ResidentCharacteristics.initial(residentLife,
                         new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal)));

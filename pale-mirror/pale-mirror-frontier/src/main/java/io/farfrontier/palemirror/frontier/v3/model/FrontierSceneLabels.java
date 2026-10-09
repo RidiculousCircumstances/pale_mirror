@@ -21,8 +21,7 @@ public final class FrontierSceneLabels {
         if (resident != null) {
             Settlement settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(resident.settlementId()))
                     .findFirst().orElseThrow(() -> new IllegalStateException("resident settlement is missing: " + actorId.value()));
-            HumanTacticalFunction tactical = HumanTacticalFunctionProjection.derive(state, resident.id());
-            String label = settlement.displayName() + " " + words(tactical == HumanTacticalFunction.CIVILIAN ? resident.profession().name() : tactical.name());
+            String label = resident.name();
             return SettlementDefenderReadinessProjection.owningActiveAssault(state, resident.id())
                     .map(assault -> label + "\nUNIT " + words(SettlementDefenderReadinessProjection.derive(state, assault).status().name()))
                     .orElse(label);

@@ -408,7 +408,7 @@ final class HumanPopulationStateCodec {
     private static void writeProfile(DataOutputStream output, ResidentProfile resident) throws IOException {
         FrontierWorldStateCodec.writeString(output, resident.id().value()); FrontierWorldStateCodec.writeString(output, resident.householdId().value());
         FrontierWorldStateCodec.writeString(output, resident.settlementId().value()); output.writeByte(resident.role().wireTag());
-        output.writeByte(resident.profession().wireTag()); output.writeLong(resident.birthTick());
+        FrontierWorldStateCodec.writeString(output, resident.name()); output.writeLong(resident.birthTick());
         for (ResidentSkill skill : ResidentSkill.values()) output.writeByte(resident.skill(skill));
         for (HumanCapability capability : HumanCapability.values()) output.writeByte(resident.capability(capability));
         ResidentCharacteristics characteristics = resident.characteristics();
@@ -425,15 +425,10 @@ final class HumanPopulationStateCodec {
         SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId household = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input)); int role = input.readUnsignedByte();
         if (role >= ResidentRole.values().length) throw new IllegalArgumentException("unknown resident role");
-        ResidentProfession profession = null;
-        if (hasCapabilityProfile) {
-            int professionTag = input.readUnsignedByte();
-            if (professionTag >= ResidentProfession.values().length) throw new IllegalArgumentException("unknown resident profession");
-            profession = FrontierWireTags.require(ResidentProfession.class, professionTag);
-        }
+        if (!hasCapabilityProfile) throw new IllegalArgumentException("unnamed resident schema is unsupported");
+        String name = FrontierWorldStateCodec.readString(input);
         long birthTick = input.readLong(); var skills = new java.util.EnumMap<ResidentSkill, Integer>(ResidentSkill.class);
         for (ResidentSkill skill : ResidentSkill.values()) skills.put(skill, input.readUnsignedByte());
-        if (!hasCapabilityProfile) return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), birthTick, skills);
         var capabilities = new java.util.EnumMap<HumanCapability, Integer>(HumanCapability.class);
         for (HumanCapability capability : HumanCapability.values()) capabilities.put(capability, input.readUnsignedByte());
         int version = input.readUnsignedByte(); int base = input.readInt();
@@ -443,7 +438,7 @@ final class HumanPopulationStateCodec {
             var modifier = new ResidentCharacteristics.MetabolismModifier(source, input.readInt());
             if (modifiers.put(source, modifier) != null) throw new IllegalArgumentException("duplicate resident characteristic modifier");
         }
-        return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), profession,
+        return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), name,
                 birthTick, skills, capabilities, new ResidentCharacteristics(version, base, modifiers, WorkStateCodec.readModifiers(input)));
     }
 }

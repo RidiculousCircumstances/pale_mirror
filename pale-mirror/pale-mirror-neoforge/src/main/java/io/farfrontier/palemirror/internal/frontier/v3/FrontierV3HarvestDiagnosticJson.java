@@ -159,6 +159,8 @@ final class FrontierV3HarvestDiagnosticJson {
         ResourceSiteLifecycle lifecycle = subject == null ? null : state.resourceSites().sites().get(subject);
         ResourceSite site = subject == null ? null : state.resourceSiteDescriptors().get(subject);
         if (lifecycle == null || site == null) return unavailable("site", id, checkpoint, "not_found");
+        String workerName = lifecycle.harvestJobs().values().stream().sorted(java.util.Comparator.comparing(ResourceSiteHarvestJob::id))
+                .findFirst().map(job -> FrontierSceneLabels.actor(state, job.workerId(), false)).orElse("");
         String work = java.util.stream.Stream.concat(lifecycle.preparationWork().stream().map(value -> value.id().value()),
                 lifecycle.harvestJobs().keySet().stream().sorted().map(SubjectId::value))
                 .map(value -> "\"" + quote(value) + "\"").collect(java.util.stream.Collectors.joining(",", "[", "]"));
@@ -187,6 +189,7 @@ final class FrontierV3HarvestDiagnosticJson {
         }).collect(java.util.stream.Collectors.joining(",", "[", "]"));
         BlockPosition boardPosition = FrontierReadabilityPlan.compile(state).boards().get(subject).position();
         return base("site", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(site.settlementId().value())
+                + "\",\"workerPresentation\":\"" + quote(workerName)
                 + "\",\"facility\":\"" + quote(site.facilityId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"growthEpoch\":" + lifecycle.growthEpoch() + ",\"growthStage\":" + lifecycle.growthStage()
                 + ",\"activeWork\":" + work + ",\"conflictDisposition\":" + conflict + ",\"terminalHarvest\":" + terminal + ",\"firstCrop\":" + position(site.cropSlots().getFirst())

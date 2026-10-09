@@ -45,7 +45,7 @@ import java.util.Optional;
 public final class FrontierV3AmbientPhysicsGameTests {
     private FrontierV3AmbientPhysicsGameTests() { }
 
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void nativeFollowingPreservesThePathWhileStoppedPedestrianRequiresAnActualDetour(GameTestHelper helper) {
         var level = helper.getLevel();
         var start = helper.absolutePos(new BlockPos(2, 4, 2));
@@ -83,12 +83,12 @@ public final class FrontierV3AmbientPhysicsGameTests {
         actor.discard(); peer.discard(); helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void quarantinedPendingLifetimeSurvivesHistoricalJoinWithoutExecution(GameTestHelper helper) {
         verifyQuarantinedReturn(helper, false);
     }
 
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void quarantinedSavedDepartureSurvivesWithoutConsumingItsFence(GameTestHelper helper) {
         verifyQuarantinedReturn(helper, true);
     }
@@ -159,7 +159,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 40)
     public static void savedAirborneReturnPassesJoinAndFallsWithoutGrantingStationArrival(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos support = helper.absolutePos(new BlockPos(2, 4, 2));
@@ -215,7 +215,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void canceledJoinWithdrawsOnlyItsExactPendingObject(GameTestHelper helper) {
         var fixture = fixture(helper.absolutePos(new BlockPos(2, 4, 2)), helper.absolutePos(new BlockPos(5, 4, 2)));
         var runtime = runtime(helper.getLevel(), fixture.state());
@@ -236,7 +236,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
      * obstruction, not permission to place a second body, select an apron cell, or change the
      * actor's durable location.  Clearing that observed occupant permits the same exact body.
      */
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full")
     public static void freshAmbientAdmissionDefersForOccupiedExactBodyColumn(GameTestHelper helper) {
         BlockPos support = helper.absolutePos(new BlockPos(2, 4, 2));
         BlockPos otherSupport = helper.absolutePos(new BlockPos(5, 4, 2));
@@ -263,20 +263,31 @@ public final class FrontierV3AmbientPhysicsGameTests {
             helper.assertTrue(helper.getLevel().getEntity(FrontierV3AmbientActorExecutor.entityId(prepared, fixture.resident())) == null,
                     "a deferred exact admission must leave no replacement or duplicate UUID body");
             occupant.discard();
-            helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(helper.getLevel(), prepared, fixture.resident(), expected),
-                    FrontierV3AmbientActorExecutor.Result.APPLIED,
-                    "the unchanged canonical body must materialize once the observed local obstruction clears");
-            Mob admitted = (Mob) helper.getLevel().getEntity(FrontierV3AmbientActorExecutor.entityId(prepared, fixture.resident()));
+            finishUnobstructedAdmission(helper, runtime, fixture.resident(), expected, support);
+        });
+    }
+
+    private static void finishUnobstructedAdmission(GameTestHelper helper,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId actor,
+            BodyPosition expected, BlockPos support) {
+            var prepared = runtime.decodedState().orElseThrow();
+            var result = FrontierV3AmbientActorExecutor.materialize(helper.getLevel(), prepared, actor, expected);
+            if (result == FrontierV3AmbientActorExecutor.Result.DEFERRED) {
+                helper.runAfterDelay(1, () -> finishUnobstructedAdmission(helper, runtime, actor, expected, support));
+                return;
+            }
+            helper.assertValueEqual(result, FrontierV3AmbientActorExecutor.Result.APPLIED,
+                    "clearing the obstruction must admit the same body through the durable asynchronous boundary");
+            Mob admitted = (Mob) helper.getLevel().getEntity(FrontierV3AmbientActorExecutor.entityId(prepared, actor));
             helper.assertTrue(admitted != null && admitted.blockPosition().equals(support.above()),
                     "the admitted body must retain its exact canonical column rather than an alternate physical placement");
             admitted.discard();
             runtime.shutdown();
             helper.succeed();
-        });
     }
 
     /** A recovered grounded body must not turn a serialized historical fall counter into a new death. */
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full")
     public static void groundedRecoveredBodyClearsHistoricalFallDistanceBeforePhysics(GameTestHelper helper) {
         BlockPos support = helper.absolutePos(new BlockPos(2, 4, 2));
         prepareFallArena(helper.getLevel(), support);
@@ -297,7 +308,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full")
     public static void airborneRecoveredBodyRetainsOrdinaryFallEvidence(GameTestHelper helper) {
         BlockPos support = helper.absolutePos(new BlockPos(2, 4, 2));
         prepareFallArena(helper.getLevel(), support);
@@ -317,7 +328,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 80)
     public static void retainedResidentAndBioformFallAfterSupportRemovalWithoutCoordinateReset(GameTestHelper helper) {
         // Raise the temporary supports above the bastion template's own floor.  The lower owned
         // floor leaves an unambiguous three-block ordinary fall rather than a one-block fixture

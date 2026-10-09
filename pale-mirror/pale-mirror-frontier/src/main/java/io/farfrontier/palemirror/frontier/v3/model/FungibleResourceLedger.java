@@ -53,34 +53,37 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     }
 
     /**
-     * Accounts one new COLD field yield in the same bounded actor-held part.
-     * The resource-site reducer must derive {@code next} from its exact cell
+     * Accounts confirmed COLD extraction output in the same bounded actor-held part.
+     * The producer must derive {@code next} from its exact effect
      * receipt; this owner rejects metadata changes, skipped quantities and a
      * second live cargo lot instead of converting them into new stock.
      */
-    public FungibleResourceLedger accrueColdActorHarvestPart(ResourceLot next, SubjectId accountId, SubjectId actorId) {
-        Objects.requireNonNull(next, "next actor-held harvest part");
-        Objects.requireNonNull(accountId, "actor harvest account");
-        Objects.requireNonNull(actorId, "harvest actor");
-        if (!next.itemKind().equals("minecraft:wheat") || next.quantity() > 64 || !next.lineage().isEmpty()) {
-            throw new IllegalArgumentException("field harvest part must be one bounded original wheat lot");
+    public FungibleResourceLedger accrueColdActorExtractionPart(
+            io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Output extracted,
+            ResourceLot next, SubjectId accountId, SubjectId actorId) {
+        Objects.requireNonNull(extracted, "confirmed extraction output");
+        Objects.requireNonNull(next, "next actor-held extraction part");
+        Objects.requireNonNull(accountId, "actor extraction account");
+        Objects.requireNonNull(actorId, "extraction actor");
+        if (!next.itemKind().equals(extracted.itemKind()) || next.quantity() > 64 || !next.lineage().isEmpty()) {
+            throw new IllegalArgumentException("extraction part must match its bounded original output");
         }
         CustodyAccount account = accounts.get(accountId);
         if (account == null) {
             ActorCarriedResources.requireNewAccountCapacity(this, actorId, accountId);
-            if (next.quantity() != 1 || lots.containsKey(next.id())) {
-                throw new IllegalArgumentException("first actor harvest yield must create one new unit and account");
+            if (next.quantity() != extracted.quantity() || lots.containsKey(next.id())) {
+                throw new IllegalArgumentException("first actor extraction must create its exact output and account");
             }
             return issue(next, new CustodyAccount(accountId, new ResourceCustody.Actor(actorId),
-                    Map.of(next.id(), 1), Map.of()));
+                    Map.of(next.id(), extracted.quantity()), Map.of()));
         }
         ResourceLot prior = lots.get(next.id());
         if (!(account.custody() instanceof ResourceCustody.Actor actor) || !actor.actorId().equals(actorId)
                 || prior == null || !account.lotQuantities().equals(Map.of(next.id(), prior.quantity()))
                 || !account.claimQuantities().isEmpty() || bindings.values().stream().anyMatch(binding -> binding.accountId().equals(accountId))
-                || prior.quantity() >= 64 || next.quantity() != prior.quantity() + 1
+                || prior.quantity() >= 64 || next.quantity() != Math.addExact(prior.quantity(), extracted.quantity())
                 || !next.withQuantity(prior.quantity()).equals(prior)) {
-            throw new IllegalArgumentException("actor harvest accrual lacks its exact unbound predecessor part");
+            throw new IllegalArgumentException("actor extraction accrual lacks its exact unbound predecessor part");
         }
         Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots);
         nextLots.put(next.id(), next);
@@ -90,28 +93,31 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     }
 
     /**
-     * The HOT counterpart retains the same actor hand, entity and authority
-     * epoch while an actually observed stack grows by one. The physical
+     * The HOT counterpart retains the same actor slot, entity and authority
+     * epoch while an actually observed stack grows by the exact extracted quantity. The physical
      * adapter must prove the Vanilla postcondition before submitting this
      * trusted observation; this transition never fabricates that proof.
      */
-    public FungibleResourceLedger accrueObservedActorHarvestPart(ResourceLot next, SubjectId accountId,
+    public FungibleResourceLedger accrueObservedActorExtractionPart(
+                                                                 io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Output extracted,
+                                                                 ResourceLot next, SubjectId accountId,
                                                                  SubjectId actorId, long authorityEpoch,
                                                                  FungiblePhysicalObservation.Stack observed) {
-        Objects.requireNonNull(next, "next observed harvest part");
-        Objects.requireNonNull(accountId, "observed actor harvest account");
-        Objects.requireNonNull(actorId, "observed harvest actor");
-        Objects.requireNonNull(observed, "observed actor hand stack");
-        if (authorityEpoch < 1 || !(observed.address() instanceof PhysicalStackAddress.ActorHand hand)
-                || !hand.actorId().equals(actorId) || hand.hand() != ActorContainerItemOrder.Hand.OFF
-                || !observed.itemKind().equals("minecraft:wheat")
+        Objects.requireNonNull(extracted, "observed extraction output");
+        Objects.requireNonNull(next, "next observed extraction part");
+        Objects.requireNonNull(accountId, "observed actor extraction account");
+        Objects.requireNonNull(actorId, "observed extraction actor");
+        Objects.requireNonNull(observed, "observed actor stack");
+        if (authorityEpoch < 1 || !(observed.address() instanceof PhysicalStackAddress.ActorStack hand)
+                || !hand.actorId().equals(actorId)
+                || !observed.itemKind().equals(extracted.itemKind())
                 || observed.quantity() != next.quantity() || next.quantity() > 64 || !next.lineage().isEmpty()
-                || !next.itemKind().equals("minecraft:wheat")) {
-            throw new IllegalArgumentException("observed harvest part lacks its exact actor hand or bounded wheat quantity");
+                || !next.itemKind().equals(extracted.itemKind())) {
+            throw new IllegalArgumentException("observed extraction part lacks its exact actor slot or bounded output quantity");
         }
         CustodyAccount account = accounts.get(accountId);
         if (account == null) {
-            FungibleResourceLedger first = accrueColdActorHarvestPart(next, accountId, actorId);
+            FungibleResourceLedger first = accrueColdActorExtractionPart(extracted, next, accountId, actorId);
             return first.rebind(accountId, authorityEpoch,
                     FungiblePhysicalObservation.bind(first, accountId, authorityEpoch, List.of(observed)));
         }
@@ -121,16 +127,16 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         if (!(account.custody() instanceof ResourceCustody.Actor actor) || !actor.actorId().equals(actorId)
                 || prior == null || !account.lotQuantities().equals(Map.of(next.id(), prior.quantity()))
                 || !account.claimQuantities().isEmpty() || prior.quantity() >= 64
-                || next.quantity() != prior.quantity() + 1 || !next.withQuantity(prior.quantity()).equals(prior)
+                || next.quantity() != Math.addExact(prior.quantity(), extracted.quantity()) || !next.withQuantity(prior.quantity()).equals(prior)
                 || current.size() != 1 || current.getFirst().authorityEpoch() != authorityEpoch
                 || !current.getFirst().address().equals(observed.address())
                 || !current.getFirst().lotQuantities().equals(Map.of(next.id(), prior.quantity()))
                 || !current.getFirst().claimQuantities().isEmpty()) {
-            throw new IllegalArgumentException("observed harvest accrual lacks its exact bound predecessor part");
+            throw new IllegalArgumentException("observed extraction accrual lacks its exact bound predecessor part");
         }
         PhysicalStackBinding old = current.getFirst();
         PhysicalStackBinding replacement = new PhysicalStackBinding(old.id(), accountId, old.address(), authorityEpoch,
-                "minecraft:wheat", Map.of(next.id(), next.quantity()), Map.of());
+                extracted.itemKind(), Map.of(next.id(), next.quantity()), Map.of());
         Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots);
         nextLots.put(next.id(), next);
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);

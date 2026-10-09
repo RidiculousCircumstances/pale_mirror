@@ -4,7 +4,8 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    static final int VERSION = 262;
+    // Named residents replace the profession tag in snapshot and birth-event grammar.
+    static final int VERSION = 263;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

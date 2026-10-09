@@ -365,6 +365,14 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+        if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && event.getEntity() instanceof ServerPlayer player
+                && io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.presentTownHall(
+                        player.serverLevel(), player, event.getPos())) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return;
+        }
         if (denyReservedTransfer(event.getEntity(), event.getItemStack())
                 || denyExcludedItem(event.getEntity(), event.getItemStack(), "use on block")) {
             event.setCanceled(true);
@@ -401,7 +409,8 @@ public final class PaleMirrorEvents {
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
                 && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
-            if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.presentObjectBoard(level, player, event.getTarget())) {
+            if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.presentResident(level, player, event.getTarget())
+                    || io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.presentObjectBoard(level, player, event.getTarget())) {
                 event.setCanceled(true); event.setCancellationResult(InteractionResult.SUCCESS); return;
             }
         }
@@ -431,7 +440,8 @@ public final class PaleMirrorEvents {
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
                 && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
-            if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.presentObjectBoard(level, player, event.getTarget())) {
+            if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.presentResident(level, player, event.getTarget())
+                    || io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.presentObjectBoard(level, player, event.getTarget())) {
                 event.setCanceled(true); event.setCancellationResult(InteractionResult.SUCCESS); return;
             }
         }

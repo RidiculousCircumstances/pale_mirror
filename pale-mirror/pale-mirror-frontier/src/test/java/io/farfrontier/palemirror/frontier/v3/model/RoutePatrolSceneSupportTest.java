@@ -443,7 +443,7 @@ class RoutePatrolSceneSupportTest {
     private static FrontierWorldState patrolState(WorldId world) {
         FrontierWorldState state = FrontierV3FixtureCatalog.steppedRouteConfiguration(world, 41L).initialState();
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
         SubjectId taskId = new SubjectId("task:route-patrol-scene");
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:route-patrol-scene"), settlement.id(),
                 StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);

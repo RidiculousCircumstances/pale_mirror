@@ -71,8 +71,8 @@ class AmbientActorProcessTest {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         SubjectId resident = state.humanPopulation().residents().values().stream()
-                .filter(profile -> profile.profession() != ResidentProfession.AGRICULTURAL_WORKER
-                        && profile.profession() != ResidentProfession.SECURITY_WORKER)
+                .filter(profile -> profile.capability(HumanCapability.AGRICULTURE) < 50
+                        && profile.capability(HumanCapability.SECURITY) < 50)
                 .map(ResidentProfile::id).findFirst().orElseThrow();
 
         AmbientActorProcess.AmbientGoal goal = AmbientActorProcess.goalFor(state, resident, 1L);

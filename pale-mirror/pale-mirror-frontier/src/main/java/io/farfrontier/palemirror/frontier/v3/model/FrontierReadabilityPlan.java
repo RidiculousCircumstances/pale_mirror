@@ -441,11 +441,11 @@ public final class FrontierReadabilityPlan {
     private static String readyFieldText(FrontierWorldState state, ResourceSite site) {
         long livingFarmers = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(site.settlementId()))
-                .filter(resident -> resident.profession() == ResidentProfession.AGRICULTURAL_WORKER)
+                .filter(resident -> SettlementWorkPolicy.permissions(state, resident.settlementId()).permits(ResidentWorkKind.AGRICULTURE, resident.id()) && resident.capability(HumanCapability.AGRICULTURE) > 0)
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count();
         boolean unknownFarmer = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(site.settlementId()))
-                .filter(resident -> resident.profession() == ResidentProfession.AGRICULTURAL_WORKER)
+                .filter(resident -> SettlementWorkPolicy.permissions(state, resident.settlementId()).permits(ResidentWorkKind.AGRICULTURE, resident.id()) && resident.capability(HumanCapability.AGRICULTURE) > 0)
                 .filter(resident -> FrontierWorldStateSupport.workCapable(state, resident))
                 .filter(resident -> HumanAssignmentProjection.compile(state).idle(resident.id()))
                 .map(ResidentProfile::id).map(state.ambientLeases()::get)
@@ -464,7 +464,7 @@ public final class FrontierReadabilityPlan {
                         && objective.lane() == StrategicObjectiveLane.FACILITY
                         && objective.status() == StrategicObjectiveStatus.ACTIVE);
         if (facilityLaneActive) return "READY TO HARVEST · FACILITY LANE BUSY";
-        return FrontierWorldStateSupport.availableFieldResident(state, site.settlementId(), ResidentProfession.AGRICULTURAL_WORKER).isPresent()
+        return FrontierWorldStateSupport.availableWorkResident(state, site.settlementId(), ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE).isPresent()
                 ? "READY TO HARVEST · FARMER ASSIGNMENT PENDING"
                 : "READY TO HARVEST · FARMERS NEEDED";
     }

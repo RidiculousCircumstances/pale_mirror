@@ -291,6 +291,11 @@ test('native pilot may right-click one visible v3 board and await only its local
   assert.doesNotThrow(() => validateScenario(interaction));
   assert.throws(() => validateScenario({ ...interaction, actions: [{ ...interaction.actions[0], title: '' }] }), /interact_board/);
   assert.throws(() => validateScenario({ ...interaction, actions: [{ ...interaction.actions[0], maxDistance: 129 }] }), /interact_board/);
+  const resident = { ...interaction, actions: [{ type: 'look_nearest_entity', entityType: 'minecraft:villager',
+    nameContains: { diagnostic: { view: 'actor', id: 'resident:1-15', field: 'name' } }, timeoutMs: 30000 }] };
+  assert.doesNotThrow(() => validateScenario(resident));
+  assert.throws(() => validateScenario({ ...resident, actions: [{ ...resident.actions[0],
+    nameContains: { diagnostic: { view: 'actor', id: 'resident:1-15', field: 'role' } } }] }), /look_nearest_entity/);
 });
 
 test('restart runner slices action-relative assertions without a second scenario language', () => {

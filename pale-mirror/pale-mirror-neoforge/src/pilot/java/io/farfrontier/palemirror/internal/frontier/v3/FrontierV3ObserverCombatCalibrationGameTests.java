@@ -68,22 +68,26 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
     private FrontierV3ObserverCombatCalibrationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-observer-combat-calibration", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 100)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 20000)
     public static void fixedSeedSettlementAssaultUsesIndependentColdPlansAndHotReceipts(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(2, 8, 2));
         List<Sample> cold = new ArrayList<>(SAMPLES), hot = new ArrayList<>(SAMPLES);
-        List<Session> sessions = new ArrayList<>(java.util.Collections.nCopies(SAMPLES, null));
         for (int index = 0; index < SAMPLES; index++) cold.add(coldSample(seed(index)));
-        for (int index = 0; index < SAMPLES; index++) {
-            int sample = index;
-            long start = 1L + sample * 5L;
-            helper.runAtTickTime(start, () -> sessions.set(sample, startHotSample(helper, origin, seed(sample))));
-            helper.runAtTickTime(start + 1L, () -> prepareHotStrike(helper, sessions.get(sample)));
-            helper.runAtTickTime(start + 2L, () -> runHotStrike(helper, sessions.get(sample)));
-            helper.runAtTickTime(start + 3L, () -> hot.add(confirmAndRelease(helper, sessions.get(sample))));
-            helper.runAtTickTime(start + 4L, () -> close(sessions.get(sample)));
-        }
-        helper.runAtTickTime(1L + SAMPLES * 5L, () -> assertComparable(helper, cold, hot));
+        runSample(helper, origin, 0, cold, hot);
+    }
+
+    private static void runSample(GameTestHelper helper, BlockPos origin, int index,
+                                  List<Sample> cold, List<Sample> hot) {
+        if (index == SAMPLES) { assertComparable(helper, cold, hot); return; }
+        startHotSample(helper, origin, seed(index), session -> {
+            helper.runAfterDelay(1, () -> prepareHotStrike(helper, session));
+            helper.runAfterDelay(2, () -> runHotStrike(helper, session));
+            helper.runAfterDelay(3, () -> hot.add(confirmAndRelease(helper, session)));
+            helper.runAfterDelay(4, () -> {
+                close(session);
+                runSample(helper, origin, index + 1, cold, hot);
+            });
+        });
     }
 
     private static long seed(int sample) { return 201L + sample; }
@@ -106,7 +110,8 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
                         .hiveSettlementAssaultCombatInterval());
     }
 
-    private static Session startHotSample(GameTestHelper helper, BlockPos origin, long seed) {
+    private static void startHotSample(GameTestHelper helper, BlockPos origin, long seed,
+                                       java.util.function.Consumer<Session> complete) {
         var configuration = FrontierV3SceneBodyGameTestFixture.assaultConfiguration(helper, world(seed), seed);
         var store = new EphemeralStore();
         FrontierV3SceneBodyGameTestFixture.initializeAdmission(helper, configuration, store);
@@ -123,14 +128,15 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
             prepareFloor(helper.getLevel(), position);
             positions.put(lease.members().get(index).actorId(), new BodyPosition(position.getX(), position.getY(), position.getZ()));
         }
-        List<Entity> bodies = FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease, positions);
+        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, lease, positions, bodies -> {
         FrontierV3CommandSubmission.submit(runtime, "observer-combat-hot", lease.id().value(),
                 new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         for (int index = 0; index < bodies.size(); index++) {
             Entity body = bodies.get(index);
             body.setPos(origin.getX() + .25D + (index % 3) * .4D, origin.getY(), origin.getZ() + .25D + (index / 3) * .4D);
         }
-        return new Session(seed, runtime, lease, bodies);
+        complete.accept(new Session(seed, runtime, lease, bodies));
+        });
     }
 
     private static void prepareHotStrike(GameTestHelper helper, Session session) {

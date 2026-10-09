@@ -313,8 +313,7 @@ public final class HiveSettlementAssaultProcess {
         List<SubjectId> defenders = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(sighting.settlementId()))
                 .filter(value -> assignments.idle(value.id()) || ProductionProcess.interruptibleForSettlementDefence(state, value.id()).isPresent())
                 .filter(value -> FrontierWorldStateSupport.availableForNewAssignment(state, value))
-                .sorted(Comparator.comparing((ResidentProfile value) -> value.profession() != ResidentProfession.SECURITY_WORKER)
-                        .thenComparing(Comparator.comparing((ResidentProfile value) -> value.capability(HumanCapability.SECURITY)).reversed())
+                .sorted(Comparator.comparingInt((ResidentProfile value) -> value.capability(HumanCapability.SECURITY)).reversed()
                         .thenComparing(Comparator.comparing((ResidentProfile value) -> value.capability(HumanCapability.CIVIC)).reversed())
                         .thenComparing(ResidentProfile::id))
                 .limit(SettlementAssault.MAX_DEFENDERS).map(ResidentProfile::id).toList();

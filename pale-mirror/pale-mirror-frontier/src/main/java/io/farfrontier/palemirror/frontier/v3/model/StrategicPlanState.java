@@ -311,7 +311,7 @@ public final class StrategicPlanState {
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, patrol.settlementId());
             StrategicTask task = tasks.get(patrol.taskId());
             if (patrol.memberIds().stream().map(humanPopulation::resident).anyMatch(resident -> resident == null || !resident.settlementId().equals(settlement.id())
-                    || resident.profession() != ResidentProfession.SECURITY_WORKER)) {
+                    || resident.capability(HumanCapability.SECURITY) <= 0)) {
                 throw new IllegalArgumentException("route patrol has a foreign or non-security member");
             }
             // An in-flight patrol is navigation state and must still follow the exact current

@@ -136,7 +136,7 @@ class ResourceSiteHarvestProcessTest {
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
         ResidentProfile farmer = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement)
-                        && resident.profession() == ResidentProfession.AGRICULTURAL_WORKER)
+                        && resident.capability(HumanCapability.AGRICULTURE) >= 50)
                 .findFirst().orElseThrow();
         var meal = ResidentMealProcess.selectSourceAtYield(state, farmer.id(), 27_000L).orElseThrow();
         state = ResidentMealProcess.reduceStarted(state, farmer.id(), meal);

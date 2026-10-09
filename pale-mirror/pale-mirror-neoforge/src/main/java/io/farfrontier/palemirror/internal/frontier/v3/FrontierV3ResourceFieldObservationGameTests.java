@@ -38,11 +38,11 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     private FrontierV3ResourceFieldObservationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 100)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 100)
     public static void firstProjectionWritesMatureAndAbsentColdCellsWithoutHistoricalGrowth(GameTestHelper helper) {
         var level = helper.getLevel();
-        var first = helper.absolutePos(new BlockPos(4, 0, 4));
-        var second = helper.absolutePos(new BlockPos(5, 0, 4));
+        var first = helper.absolutePos(new BlockPos(4, 8, 4));
+        var second = helper.absolutePos(new BlockPos(5, 8, 4));
         for (var soil : List.of(first, second)) {
             level.setBlock(soil.below(), Blocks.STONE.defaultBlockState(), 3);
             level.setBlock(soil, Blocks.DIRT.defaultBlockState(), 3);
@@ -74,11 +74,11 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 30)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 30)
     public static void growthBatchRecoversIndividuallyAfterPartialPhysicalApplication(GameTestHelper helper) {
         var level = helper.getLevel();
-        var first = helper.absolutePos(new BlockPos(4, 0, 4));
-        var second = helper.absolutePos(new BlockPos(5, 0, 4));
+        var first = helper.absolutePos(new BlockPos(4, 8, 4));
+        var second = helper.absolutePos(new BlockPos(5, 8, 4));
         for (var soil : List.of(first, second)) {
             level.setBlock(soil.below(), Blocks.STONE.defaultBlockState(), 3);
             level.setBlock(soil, Blocks.DIRT.defaultBlockState(), 3);
@@ -135,10 +135,10 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 30)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 30)
     public static void soundCropWithBlockedWorkerHeadroomHasAnIndependentAccessObservation(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos soil = helper.absolutePos(new BlockPos(4, 0, 4));
+        BlockPos soil = helper.absolutePos(new BlockPos(4, 8, 4));
         var cell = cell(1, soil);
         level.setBlock(soil, Blocks.FARMLAND.defaultBlockState(), 3);
         level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState()
@@ -158,7 +158,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 30)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 30)
     public static void growthAdmissionRejectsForeignDimensionAndUnregisteredRuntime(GameTestHelper helper) {
         var configuration = FrontierWorldRuntimeDefinition.configuration(FrontierV3PhysicalWorld.WORLD_ID, 91L);
         var unregistered = FrontierV3ServerRuntime.failedStart(configuration,
@@ -177,10 +177,10 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 100)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 100)
     public static void initialFieldWriterPersistsItsBoundedProjectionBeforeActivation(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos soil = helper.absolutePos(new BlockPos(4, 0, 4));
+        BlockPos soil = helper.absolutePos(new BlockPos(4, 8, 4));
         level.setBlock(soil.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(soil, Blocks.DIRT.defaultBlockState(), 3);
         level.setBlock(soil.above(), Blocks.AIR.defaultBlockState(), 3);
@@ -341,12 +341,12 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 30)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 30)
     public static void initialFieldPlanReadsRealNeutralSoilAndIrrigation(GameTestHelper helper) {
         var level = helper.getLevel();
-        BlockPos water = helper.absolutePos(new BlockPos(5, 0, 4));
-        BlockPos firstSoil = helper.absolutePos(new BlockPos(4, 0, 4));
-        BlockPos secondSoil = helper.absolutePos(new BlockPos(6, 0, 4));
+        BlockPos water = helper.absolutePos(new BlockPos(5, 8, 4));
+        BlockPos firstSoil = helper.absolutePos(new BlockPos(4, 8, 4));
+        BlockPos secondSoil = helper.absolutePos(new BlockPos(6, 8, 4));
         var layout = new ResourceFieldLayout(1, 3, List.of(cell(1, firstSoil), cell(2, secondSoil)),
                 List.of(new BlockPosition(water.getX(), water.getY(), water.getZ())));
         var site = new ResourceSite(SITE, new SubjectId("settlement:field-observation-test"),
@@ -386,11 +386,11 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 30)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 30)
     public static void initialFieldCursorRecoversMidWriteWithoutAdoptingForeignBlocks(GameTestHelper helper) {
         var level = helper.getLevel();
-        BlockPos firstSoil = helper.absolutePos(new BlockPos(4, 0, 4));
-        BlockPos secondSoil = helper.absolutePos(new BlockPos(6, 0, 4));
+        BlockPos firstSoil = helper.absolutePos(new BlockPos(4, 8, 4));
+        BlockPos secondSoil = helper.absolutePos(new BlockPos(6, 8, 4));
         var first = cell(1, firstSoil);
         var second = cell(2, secondSoil);
         var layout = new ResourceFieldLayout(1, 3, List.of(first, second), List.of());
@@ -474,10 +474,10 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 30)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 30)
     public static void loadedCellIsTypedWithoutAdoptingForeignBlocksOrLoadingAnotherChunk(GameTestHelper helper) {
         var level = helper.getLevel();
-        BlockPos soil = helper.absolutePos(new BlockPos(4, 0, 4));
+        BlockPos soil = helper.absolutePos(new BlockPos(4, 8, 4));
         BlockPos crop = soil.above();
         level.setBlock(soil, Blocks.FARMLAND.defaultBlockState(), 3);
         level.setBlock(crop, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 5), 3);
@@ -515,10 +515,10 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 30)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 30)
     public static void onlyActualLoadedWorldStepsAdvanceTheDurableCellCursor(GameTestHelper helper) {
         var level = helper.getLevel();
-        BlockPos soil = helper.absolutePos(new BlockPos(4, 0, 4));
+        BlockPos soil = helper.absolutePos(new BlockPos(4, 8, 4));
         BlockPos crop = soil.above();
         var cell = cell(1, soil);
         var layout = new ResourceFieldLayout(1, 2, List.of(cell), List.of());
@@ -582,10 +582,10 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 30)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 30)
     public static void canonicalFirstGrowthProjectionRetiresOnlyAfterRealBlockAndSameWorld(GameTestHelper helper) {
         var level = helper.getLevel();
-        BlockPos soil = helper.absolutePos(new BlockPos(4, 0, 4));
+        BlockPos soil = helper.absolutePos(new BlockPos(4, 8, 4));
         var cell = cell(1, soil);
         var layout = new ResourceFieldLayout(1, 2, List.of(cell), List.of());
         var seeded = ResourceFieldCycle.seeded(SITE, layout, 1);
@@ -635,10 +635,10 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 30)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 30)
     public static void restartAfterBothPhysicalWritesCanConfirmTheExactLaterPrefix(GameTestHelper helper) {
         var level = helper.getLevel();
-        BlockPos soil = helper.absolutePos(new BlockPos(4, 0, 4));
+        BlockPos soil = helper.absolutePos(new BlockPos(4, 8, 4));
         BlockPos crop = soil.above();
         var cell = cell(1, soil);
         var layout = new ResourceFieldLayout(1, 2, List.of(cell), List.of());

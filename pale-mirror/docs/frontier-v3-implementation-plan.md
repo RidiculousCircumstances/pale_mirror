@@ -763,7 +763,7 @@ remains present because breadth, balance and product comprehension are not done.
 ### Deliverables
 
 - Implement `frontier-v3-human-capabilities.md`: residents, households,
-  age/condition, trainable skills, profession/employment, exclusive current
+  names, age/condition, trainable skills, work authorization, exclusive current
   assignment, exact equipment and work/tactical organization remain separate
   canonical components.
 - Replace the provisional six-value `ResidentRole` bootstrap model through a
@@ -800,7 +800,7 @@ remains present because breadth, balance and product comprehension are not done.
   committed civilian work or model every future equipment/supply role or leader
   replacement.
 - The first pure tactical read model now makes the retained unit legible without
-  adding a second roster: exact assignment, leader identity, profession and
+  adding a second roster: exact assignment, leader identity, capabilities and
   actor-held equipment derive only `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`,
   `GUARD` or `SQUAD_LEADER`. It owns no equipment mutation.
 - The first owning human-mobilization slice is complete for exact outbound

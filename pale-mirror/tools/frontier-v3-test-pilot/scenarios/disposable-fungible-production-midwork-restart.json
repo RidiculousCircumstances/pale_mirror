@@ -61,7 +61,7 @@
     {
       "type": "assert_visible_entity",
       "entityType": "minecraft:villager",
-      "nameContains": "INDUSTRIAL WORKER",
+      "nameContains": {"diagnostic":{"view":"actor","id":"resident:1-15","field":"name"}},
       "maxDistance": 32,
       "maxAngleDeg": 50,
       "timeoutMs": 30000

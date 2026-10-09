@@ -72,7 +72,7 @@ class FrontierWorldStateTest {
         FrontierWorldState baseline = initial();
         ResidentProfile medic = baseline.humanPopulation().residents().values().stream()
                 .filter(value -> value.settlementId().equals(new SubjectId("settlement:1")))
-                .filter(value -> value.profession() == ResidentProfession.MEDICAL_WORKER).findFirst().orElseThrow();
+                .filter(value -> value.capability(HumanCapability.MEDICINE) >= 50).findFirst().orElseThrow();
         SubjectId workId = new SubjectId("service:decontamination-1");
         SubjectId facility = new SubjectId("structure:1-infirmary");
         ActorLocation medicLocation = baseline.actorLocations().get(medic.id());

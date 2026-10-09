@@ -86,6 +86,16 @@ write blocks, change WAL or repair a mismatch.
 
 ## Evidence and gates
 
+Resident inspection uses an empty-hand ordinary entity interaction; Town Hall
+inspection uses an empty-hand ordinary click on an owned building block.
+`disposable-resident-townhall-cards.json` captures both contextual cards.
+The negotiated `player_context_card_v2` channel is needed on the client;
+resident names require fresh snapshot schema263 and remain durable profile data.
+Camera/entity actions may select `nameContains` from an explicit read-only
+diagnostic: `actor/name`, `scene/primaryActorName`, or `site/workerPresentation`.
+They must not search for retired profession labels. Motion evidence still binds
+to the exact actor's admitted entity UUID, not its potentially duplicate name.
+
 Each scenario emits a manifest and a sibling `*.pmv3.jsonl`. JSONL contains
 only PMV3 records such as `run_started`, `action_started`,
 `diagnostic_received`, `action_completed`, `frame_captured` and `run_finished`.

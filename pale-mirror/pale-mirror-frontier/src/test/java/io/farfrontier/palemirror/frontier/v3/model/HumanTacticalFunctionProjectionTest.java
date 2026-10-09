@@ -42,7 +42,7 @@ class HumanTacticalFunctionProjectionTest {
 
         SubjectId leader = assault.defenderUnit().leaderId();
         assertEquals(HumanTacticalFunction.SQUAD_LEADER, HumanTacticalFunctionProjection.derive(state, leader));
-        assertEquals("Northwatch SQUAD LEADER\nUNIT IMPROVISED", FrontierSceneLabels.actor(state, leader, false));
+        assertEquals(state.humanPopulation().resident(leader).name() + "\nUNIT IMPROVISED", FrontierSceneLabels.actor(state, leader, false));
 
         SubjectId depot = FrontierWorldState.depotId(assault.settlementId());
         int slot = state.inventory().firstFreeSlot(depot).orElseThrow();
@@ -68,7 +68,7 @@ class HumanTacticalFunctionProjectionTest {
         state = PhysicalIntentLifecycleFixture.transition(state, assault.settlementId(), issue, PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
 
         assertEquals(HumanTacticalFunction.ARMED_DEFENDER, HumanTacticalFunctionProjection.derive(state, militia));
-        assertEquals("Northwatch ARMED DEFENDER\nUNIT READY", FrontierSceneLabels.actor(state, militia, false));
+        assertEquals(state.humanPopulation().resident(militia).name() + "\nUNIT READY", FrontierSceneLabels.actor(state, militia, false));
         assertEquals(receipt, ((PhysicalIntentTransition) FrontierWorldRuntimeDefinition.payloadCodecs().decode(
                 new PhysicalIntentTransition(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)).type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(new PhysicalIntentTransition(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)))))
@@ -83,7 +83,7 @@ class HumanTacticalFunctionProjectionTest {
     void exactWeaponWithoutAnOwnedTacticalAssignmentDoesNotCreateACombatClass() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:tactical-idle"), 91L));
         ResidentProfile resident = state.humanPopulation().residents().values().stream()
-                .filter(value -> value.profession() != ResidentProfession.SECURITY_WORKER).findFirst().orElseThrow();
+                .filter(value -> value.capability(HumanCapability.SECURITY) < 50).findFirst().orElseThrow();
         SubjectId depot = FrontierWorldState.depotId(resident.settlementId());
         int slot = state.inventory().firstFreeSlot(depot).orElseThrow();
         SubjectId sword = new SubjectId("item:tactical-idle-sword");
@@ -129,7 +129,7 @@ class HumanTacticalFunctionProjectionTest {
         state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         assertEquals(SettlementDefenderReadinessStatus.DEGRADED, SettlementDefenderReadinessProjection.derive(state, assault).status());
         assertEquals(FixedScalar.ONE, FrontierCombatRules.damage(state, fighter), "leader loss degrades survivors without replacing them");
-        assertEquals("Northwatch MILITIA\nUNIT DEGRADED", FrontierSceneLabels.actor(state, fighter, false));
+        assertEquals(state.humanPopulation().resident(fighter).name() + "\nUNIT DEGRADED", FrontierSceneLabels.actor(state, fighter, false));
         assertEquals(state, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state)));
     }

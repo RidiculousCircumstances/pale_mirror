@@ -201,8 +201,7 @@ public final class AmbientActorProcess {
                         state.actorLocations().get(harvest.workerId()).supportingSurface().support());
             }
             Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
-            if (resident.profession() == ResidentProfession.SECURITY_WORKER) return new AmbientGoal(AmbientGoalKind.GUARD, settlement.anchor());
-            // Only a retained process owns purposeful work travel.  Profession is neither a
+            // Only a retained process owns purposeful work travel.  Bootstrap affinity is neither a
             // route nor a work assignment: using the agricultural fallback to send a newly
             // admitted body to the field-edge return surface made every idle farmer visibly
             // converge there on first ingress.  PATROL keeps the physical body at its exact

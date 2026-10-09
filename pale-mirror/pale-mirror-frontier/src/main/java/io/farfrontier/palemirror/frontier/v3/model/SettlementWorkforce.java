@@ -24,14 +24,14 @@ public final class SettlementWorkforce {
                         .thenComparing(ResidentProfile::id)).toList();
     }
     public static List<ResidentProfile> candidates(FrontierWorldState state, SubjectId settlementId,
-                                                    ResidentProfession profession) {
+                                                    HumanCapability capability) {
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         return state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == profession)
+                .filter(resident -> resident.settlementId().equals(settlementId) && resident.capability(capability) > 0)
                 .filter(resident -> availableForNewAssignment(state, resident))
                 .filter(resident -> assignments.idle(resident.id()))
                 .sorted(Comparator.comparingInt((ResidentProfile resident) ->
-                        resident.capability(profession.primaryCapability())).reversed().thenComparing(ResidentProfile::id))
+                        resident.capability(capability)).reversed().thenComparing(ResidentProfile::id))
                 .toList();
     }
 

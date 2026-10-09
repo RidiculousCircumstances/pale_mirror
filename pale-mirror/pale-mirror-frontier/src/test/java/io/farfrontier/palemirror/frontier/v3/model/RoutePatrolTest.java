@@ -15,7 +15,7 @@ class RoutePatrolTest {
     void clearAndFailedPatrolsRetainNoFictitiousObstructionEvidence() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:patrol-model"), 41L));
         Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId task = new SubjectId("task:patrol");
-        List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
         RoutePatrol patrol = RoutePatrol.planned(state, task, settlement, RouteUnitManifest.patrol(task, guards.getFirst().id(), List.of(guards.get(1).id())));
         RoutePatrol active = patrol;
         while (patrol.active()) patrol = patrol.advance(patrol.safeAdvances().getFirst());

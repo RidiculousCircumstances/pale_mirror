@@ -23,7 +23,7 @@ import java.util.Map;
 
 /** One current cell-owned field journal; no stage/prefix compatibility authority. */
 final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
-    private static final int FORMAT = 16;
+    private static final int FORMAT = 17;
     static final int MAX_SITES = 12;
     private final Map<SubjectId, FieldClaim> fieldClaims;
     /** A positive cell-owned delivery is fenced before either Vanilla inventory is edited. */

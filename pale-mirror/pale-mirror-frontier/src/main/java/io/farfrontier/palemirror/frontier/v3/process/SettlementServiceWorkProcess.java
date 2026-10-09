@@ -187,7 +187,7 @@ public final class SettlementServiceWorkProcess {
         InfectionCell cell = task.infectionTarget().orElseThrow();
         Optional<SettlementStructure> facility = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
                 .filter(structure -> state.structureConditions().get(structure.id()) == StructureCondition.INTACT).min(Comparator.comparing(SettlementStructure::id));
-        Optional<ResidentProfile> worker = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentProfession.MEDICAL_WORKER);
+        Optional<ResidentProfile> worker = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), HumanCapability.MEDICINE);
         Optional<ExactItemStack> material = state.inventory().items().values().stream().filter(item -> item.itemKind().equals(DecontaminationPolicy.REAGENT))
                 .filter(item -> activeDepotMaterial(state, settlement, item)).sorted(Comparator.comparing(ExactItemStack::id)).findFirst();
         if (facility.isEmpty() || worker.isEmpty() || material.isEmpty() || !state.infection().containsKey(cell)

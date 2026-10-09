@@ -14,10 +14,10 @@ import net.minecraft.resources.ResourceLocation;
 public record PlayerContextCardPayload(String title, List<String> lines, int durationTicks, int accentRgb)
         implements CustomPacketPayload {
     private static final int MAX_TITLE = 72;
-    private static final int MAX_LINES = 2;
+    private static final int MAX_LINES = io.farfrontier.palemirror.internal.presentation.PlayerContextCard.MAX_LINES;
     private static final int MAX_LINE = 112;
     public static final Type<PlayerContextCardPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(
-            PaleMirrorMod.MOD_ID, "player_context_card"));
+            PaleMirrorMod.MOD_ID, "player_context_card_v2"));
     public static final StreamCodec<RegistryFriendlyByteBuf, PlayerContextCardPayload> STREAM_CODEC = StreamCodec.of(
             (buffer, payload) -> {
                 buffer.writeUtf(payload.title, MAX_TITLE);

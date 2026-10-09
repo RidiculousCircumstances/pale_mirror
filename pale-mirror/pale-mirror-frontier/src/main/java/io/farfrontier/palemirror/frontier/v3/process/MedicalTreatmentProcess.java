@@ -35,13 +35,14 @@ public final class MedicalTreatmentProcess {
                         && !state.actorMovements().containsKey(resident.id()))
                 .min(Comparator.comparing(ResidentProfile::id));
         Optional<ResidentProfile> medic = state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == ResidentProfession.MEDICAL_WORKER)
+                .filter(resident -> resident.settlementId().equals(settlementId) && resident.capability(HumanCapability.MEDICINE) > 0)
                 .filter(resident -> patient.isEmpty() || !resident.id().equals(patient.orElseThrow().id()))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .filter(resident -> assignments.idle(resident.id()))
                 .filter(resident -> !state.humanPopulation().meals().containsKey(resident.id())
                         && !state.actorMovements().containsKey(resident.id()))
-                .min(Comparator.comparing(ResidentProfile::id));
+                .min(Comparator.comparingInt((ResidentProfile resident) -> resident.capability(HumanCapability.MEDICINE))
+                        .reversed().thenComparing(ResidentProfile::id));
         Optional<ExactItemStack> supply = state.inventory().items().values().stream()
                 .filter(item -> MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY.equals(item.itemKind()) && item.count() >= 1)
                 .filter(item -> item.economicOwnerId().equals(settlementId) && item.custody() instanceof InventoryCustody.ContainerSlot slot

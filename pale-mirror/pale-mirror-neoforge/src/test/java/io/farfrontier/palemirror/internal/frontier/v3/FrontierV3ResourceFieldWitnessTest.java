@@ -349,7 +349,7 @@ class FrontierV3ResourceFieldWitnessTest {
         var actor = new SubjectId("resident:1-1");
         var body = UUID.fromString("00000000-0000-0000-0000-000000000125");
         var hand = new FrontierV3ResourceFieldWitness.HandEffect(SITE,
-                new SubjectId("job:site-harvest-1"), actor, body, 3, 36);
+                new SubjectId("job:site-harvest-1"), actor, body, 3, 36, extraction());
         var transition = ResourceFieldCellTransition.harvestAndReplant(SITE, 1, 1, FIRST, RIPE);
         var original = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.restore(
                 layout, Map.of(FIRST, RIPE, SECOND, PLANTED)));
@@ -366,6 +366,7 @@ class FrontierV3ResourceFieldWitnessTest {
         handTag.putLong("authorityEpoch", hand.authorityEpoch());
         handTag.putInt("before", hand.beforeCount());
         handTag.putInt("after", hand.afterCount());
+        handTag.put("extraction", FrontierV3BlockExtractionCodec.write(hand.extraction()));
         pendingTag.getList("cells", Tag.TAG_COMPOUND).getCompound(0).getCompound("pending").put("hand", handTag);
         var recovered = FrontierV3ResourceFieldWitness.read(pendingTag);
         assertEquals(hand, recovered.cell(FIRST).pending().orElseThrow().handEffect().orElseThrow());
@@ -391,13 +392,13 @@ class FrontierV3ResourceFieldWitnessTest {
                 .getCompound("hand").putString("site", "site:foreign");
         assertThrows(IllegalStateException.class, () -> FrontierV3ResourceFieldWitness.read(foreignSite));
         assertThrows(IllegalArgumentException.class, () -> new FrontierV3ResourceFieldWitness.HandEffect(
-                SITE, hand.jobId(), actor, body, 3, 64), "one offhand cannot hold an unbounded next part");
+                SITE, hand.jobId(), actor, body, 3, 64, extraction()), "one offhand cannot hold an unbounded next part");
     }
 
     @Test void physicallyConfirmedPairRemainsPendingAcrossRecoveryUntilCanonicalReceipt() {
         var layout = layout();
         var hand = new FrontierV3ResourceFieldWitness.HandEffect(SITE, new SubjectId("job:site-harvest-1"),
-                new SubjectId("resident:1-1"), UUID.fromString("00000000-0000-0000-0000-000000000125"), 3, 36);
+                new SubjectId("resident:1-1"), UUID.fromString("00000000-0000-0000-0000-000000000125"), 3, 36, extraction());
         var transition = ResourceFieldCellTransition.harvestAndReplant(SITE, 1, 1, FIRST, RIPE);
         var claimed = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.restore(
                 layout, Map.of(FIRST, RIPE, SECOND, PLANTED)));
@@ -413,6 +414,7 @@ class FrontierV3ResourceFieldWitnessTest {
         handTag.putLong("authorityEpoch", hand.authorityEpoch());
         handTag.putInt("before", hand.beforeCount());
         handTag.putInt("after", hand.afterCount());
+        handTag.put("extraction", FrontierV3BlockExtractionCodec.write(hand.extraction()));
         effect.put("hand", handTag);
         physicallyReady.getList("cells", Tag.TAG_COMPOUND).getCompound(0)
                 .put("committed", effect.getCompound("after").copy());
@@ -436,6 +438,10 @@ class FrontierV3ResourceFieldWitnessTest {
         assertThrows(IllegalArgumentException.class, () -> recovered.retireWork(acceptance), "foreign cause must fail before retirement");
         var exactTag = recovered.write();
         exactTag.getList("cells", Tag.TAG_COMPOUND).getCompound(0).getCompound("pending").putString("cause", acceptance.causationId());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceFieldWitness.read(exactTag),
+                "recovery cannot substitute the cause of an already prepared extraction");
+        exactTag.getList("cells", Tag.TAG_COMPOUND).getCompound(0).getCompound("pending")
+                .getCompound("hand").getCompound("extraction").putString("operation", acceptance.causationId());
         var exact = FrontierV3ResourceFieldWitness.read(exactTag);
         var retired = exact.retireWork(acceptance);
         assertTrue(retired.cell(FIRST).pending().isEmpty());
@@ -548,6 +554,15 @@ class FrontierV3ResourceFieldWitnessTest {
 
     private static CompoundTag block(String id) {
         var tag = new CompoundTag(); tag.putString("Name", id); return tag;
+    }
+
+    private static io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction extraction() {
+        var definition = io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.DEFINITION;
+        var execution = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                new SubjectId("resident:1-1"), io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST,
+                new SubjectId("job:site-harvest-1"), 1);
+        return io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.prepareKnown(
+                "farmer:paired:1", execution, layout().cells().getFirst().crop(), definition, definition.before());
     }
 
     private static FrontierV3ResourceFieldObservation.Review review(FrontierV3ResourceFieldWitness witness,

@@ -14,7 +14,7 @@ class PatrolAssemblyCorridorTest {
     void compilesDistinctResidentIngressesThroughTheNamedHallPortAndFirstRouteEdge() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:patrol-ingress"), 41L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
         RouteUnitManifest unit = RouteUnitManifest.patrol(new SubjectId("task:patrol-ingress"), candidates.getFirst().id(), List.of(candidates.get(1).id()));
 
         PatrolAssembly assembly = PatrolAssemblyCorridor.compile(state, unit.ownerId(), settlement, unit);
@@ -38,7 +38,7 @@ class PatrolAssemblyCorridorTest {
         TraversalEdgeId edge = route.edges().getFirst().id();
         FrontierWorldState blocked = initial.withRouteTopology(new RouteTopology(initial.routeTopology().replacementRoutes(),
                 java.util.Map.of(settlement.id(), java.util.Map.of(edge, TraversalAvailability.BLOCKED))));
-        List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(blocked, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(blocked, settlement.id(), HumanCapability.SECURITY);
         RouteUnitManifest unit = RouteUnitManifest.patrol(new SubjectId("task:patrol-ingress-blocked"), candidates.getFirst().id(), List.of(candidates.get(1).id()));
 
         PatrolAssembly assembly = PatrolAssemblyCorridor.compile(blocked, unit.ownerId(), settlement, unit);

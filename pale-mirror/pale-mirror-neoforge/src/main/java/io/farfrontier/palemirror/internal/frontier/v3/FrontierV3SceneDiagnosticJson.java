@@ -63,6 +63,7 @@ final class FrontierV3SceneDiagnosticJson {
                 + "\",\"patrolTask\":\"" + FrontierV3DiagnosticJson.quote(routePatrol == null ? "" : routePatrol.taskId().value())
                 + "\"" + productionTraversal(state, productionJob) + serviceTraversal(serviceWork) + patrolTraversal(state, patrol)
                 + ",\"members\":" + lease.members().size() + ",\"primaryActor\":\"" + FrontierV3DiagnosticJson.quote(primaryMember.actorId().value())
+                + "\",\"primaryActorName\":\"" + FrontierV3DiagnosticJson.quote(io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLabels.actor(state, primaryMember.actorId(), false))
                 + "\",\"primaryEntityUuid\":\"" + primaryMember.entityId() + "\""
                 + ",\"strikeStatus\":\"" + (strike == null ? "NONE" : strike.status()) + "\""
                 + ",\"strikeCause\":\"" + FrontierV3DiagnosticJson.quote(strike == null ? "" : strike.causeSubjectId().value())

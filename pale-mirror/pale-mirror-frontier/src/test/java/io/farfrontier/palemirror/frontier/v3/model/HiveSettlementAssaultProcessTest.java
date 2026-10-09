@@ -57,7 +57,7 @@ class HiveSettlementAssaultProcessTest {
         Fixture fixture = fixture(true);
         ResidentProfile resident = fixture.state().humanPopulation().residents().values().stream()
                 .filter(value -> value.settlementId().equals(fixture.sighting().settlementId()))
-                .filter(value -> value.profession() == ResidentProfession.BAKER).findFirst().orElseThrow();
+                .filter(value -> value.capability(HumanCapability.INDUSTRY) >= 50).findFirst().orElseThrow();
         SubjectId productionOwner = resident.settlementId();
         StrategicObjective productionObjective = new StrategicObjective(new SubjectId("objective:assault-occupied-production"),
                 productionOwner, StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 2,

@@ -99,7 +99,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         Settlement settlement = state.bootstrap().settlements().getFirst();
         ResidentProfile worker = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement.id())
-                        && resident.profession() == ResidentProfession.INDUSTRIAL_WORKER)
+                        && resident.capability(HumanCapability.INDUSTRY) >= 50)
                 .findFirst().orElseThrow();
         SettlementStructure workshop = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP)
                 .findFirst().orElseThrow();
@@ -122,7 +122,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         Settlement settlement = state.bootstrap().settlements().getFirst();
         ResidentProfile worker = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement.id())
-                        && resident.profession() == ResidentProfession.INDUSTRIAL_WORKER)
+                        && resident.capability(HumanCapability.INDUSTRY) >= 50)
                 .findFirst().orElseThrow();
         SettlementStructure workshop = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP)
                 .findFirst().orElseThrow();
@@ -291,8 +291,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         TerminalProductionReceipt receipt = order.terminalReceipt().orElseThrow();
 
         HarvestLineage harvest = completedHarvestAndSuccessor(terminal, new SubjectId("site:1-wheat-field"));
-        assertEquals(ResidentProfession.AGRICULTURAL_WORKER,
-                harvest.state().humanPopulation().resident(harvest.farmerId()).profession());
+        assertTrue(harvest.state().humanPopulation().resident(harvest.farmerId()).capability(HumanCapability.AGRICULTURE) > 0);
         assertTrue(harvest.state().humanPopulation().provisions().isEmpty());
         FrontierDomainRelationships.View view = FrontierDomainRelationships.view(harvest.state(), 160L);
         FrontierDomainRelationships.Endpoint terminalJob = new FrontierDomainRelationships.SubjectEndpoint(

@@ -145,7 +145,6 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         Map<SubjectId, Household> households = new LinkedHashMap<>();
         Map<SubjectId, ResidentProfile> residents = new LinkedHashMap<>();
         for (Settlement settlement : bootstrap.settlements()) {
-            ResidentWorkPermissions initialWork = SettlementWorkPolicy.initial(settlement, bootstrap.ruleset().labour());
             int householdOrdinal = 0;
             for (int ordinal = 0; ordinal < settlement.residents().size(); ordinal++) {
                 if (ordinal % 4 == 0) householdOrdinal++;
@@ -153,13 +152,11 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                 SubjectId householdId = new SubjectId("household:" + settlement.id().value().substring("settlement:".length()) + "-" + householdOrdinal);
                 households.putIfAbsent(householdId, new Household(householdId, settlement.id()));
                 ResidentProfile profile = new ResidentProfile(resident.id(), householdId, settlement.id(), resident.role(),
+                        ResidentNames.create(bootstrap.seed(), resident.id()),
                         -((long) (18 + (ordinal % 43)) * 24_000L * 360L), skills(resident.role(), ordinal));
-                // Vocational presentation follows fresh staffing. Authorization remains
-                // independently persisted under the settlement decision owner.
                 profile = profile.withCharacteristics(ResidentCharacteristics.initial(
                         bootstrap.ruleset().residentLife(), resident.id()));
-                residents.put(resident.id(), initialWork.permits(ResidentWorkKind.BAKING, resident.id())
-                        ? profile.withProfession(ResidentProfession.BAKER) : profile);
+                residents.put(resident.id(), profile);
             }
         }
         return new HumanPopulation(households, residents, Map.of(), healthy(residents), normalQuarantines(residents),
@@ -326,6 +323,8 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
         if (current == null || !current.householdId().equals(resident.householdId()) || !current.settlementId().equals(resident.settlementId())) {
             throw new IllegalArgumentException("resident profile replacement must preserve exact household and settlement membership");
         }
+        if (!current.name().equals(resident.name()))
+            throw new IllegalArgumentException("profile updates must preserve the resident's declared name");
         Map<SubjectId, ResidentProfile> next = new LinkedHashMap<>(residents); next.put(resident.id(), resident);
         return new HumanPopulation(households, next, birthJobs, health, quarantines, migrations, provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligations);
     }

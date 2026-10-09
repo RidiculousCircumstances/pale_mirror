@@ -24,7 +24,7 @@ import java.util.UUID;
 
 /** Versioned value for the replacement SavedData field claim; not a second runtime owner. */
 final class FrontierV3ResourceFieldWitness {
-    private static final int FORMAT = 8;
+    private static final int FORMAT = 9;
 
     /** Raw block-state NBT is retained verbatim, never guessed from an OBSTRUCTED enum. */
     static final class ForeignIncident {
@@ -54,16 +54,25 @@ final class FrontierV3ResourceFieldWitness {
 
     /** The output half of one harvest effect; it does not itself mint canonical wheat. */
     record HandEffect(SubjectId siteId, SubjectId jobId, SubjectId actorId, UUID entityId,
-                      long authorityEpoch, int beforeCount) {
+                      long authorityEpoch, int beforeCount,
+                      io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction extraction) {
         HandEffect {
             Objects.requireNonNull(siteId, "harvest hand site");
             Objects.requireNonNull(jobId, "harvest hand job");
             Objects.requireNonNull(actorId, "harvest hand actor");
             Objects.requireNonNull(entityId, "harvest hand body");
+            Objects.requireNonNull(extraction, "prepared block extraction");
+            if (!extraction.definition().equals(io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.DEFINITION))
+                throw new IllegalArgumentException("field hand effect borrows a foreign extraction profile");
+            if (!extraction.execution().actorId().equals(actorId)
+                    || !extraction.execution().activityOwnerId().equals(jobId)
+                    || extraction.execution().activityKind() != io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST)
+                throw new IllegalArgumentException("field hand effect borrows another extraction execution");
             if (!siteId.value().startsWith("site:") || authorityEpoch < 1 || beforeCount < 0 || beforeCount >= 64)
                 throw new IllegalArgumentException("harvest hand effect lacks a bounded predecessor or authority");
         }
-        int afterCount() { return beforeCount + 1; }
+        int afterCount() { return Math.addExact(beforeCount, extraction.quantity(
+                io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.ITEM)); }
     }
 
     record CanonicalSource(WorldId worldId, Revision revision) {
@@ -86,6 +95,8 @@ final class FrontierV3ResourceFieldWitness {
                 throw new IllegalArgumentException("pending field projection has a terminal or invalid cursor");
             if (handEffect.isPresent() && !transition.isHarvestAndReplant())
                 throw new IllegalArgumentException("only a yielding harvest may retain an actor-hand effect");
+            if (handEffect.isPresent() && !handEffect.orElseThrow().extraction().operationId().equals(causationId))
+                throw new IllegalArgumentException("retained harvest has a foreign extraction operation");
             if (handConfirmed && (handEffect.isEmpty() || completedSteps != transition.steps().size()))
                 throw new IllegalArgumentException("confirmed harvest hand lacks its complete paired crop effect");
             if (canonicalSource.isPresent() && (handEffect.isPresent() || handConfirmed || transition.isHarvestAndReplant()))
@@ -407,6 +418,8 @@ final class FrontierV3ResourceFieldWitness {
         Objects.requireNonNull(handEffect, "harvest hand effect");
         if (!siteId.equals(handEffect.siteId()))
             throw new IllegalArgumentException("paired harvest declares another site owner");
+        if (!causationId.equals(handEffect.extraction().operationId()))
+            throw new IllegalArgumentException("paired harvest has a foreign extraction operation");
         Objects.requireNonNull(fieldBefore, "harvest field predecessor observation");
         Objects.requireNonNull(handBefore, "harvest hand predecessor observation");
         if (!fieldBefore.matchesWorkPredecessor(this, transition) || !handBefore.matchesBefore(handEffect))
@@ -601,6 +614,7 @@ final class FrontierV3ResourceFieldWitness {
                             handTag.putLong("authorityEpoch", hand.authorityEpoch());
                             handTag.putInt("before", hand.beforeCount());
                             handTag.putInt("after", hand.afterCount());
+                            handTag.put("extraction", FrontierV3BlockExtractionCodec.write(hand.extraction()));
                             effect.put("hand", handTag);
                         });
                         value.put("pending", effect);
@@ -685,12 +699,14 @@ final class FrontierV3ResourceFieldWitness {
                     if (!handTag.contains("site", Tag.TAG_STRING) || !handTag.contains("job", Tag.TAG_STRING)
                             || !handTag.contains("actor", Tag.TAG_STRING)
                             || !handTag.hasUUID("entity") || !handTag.contains("authorityEpoch", Tag.TAG_LONG)
-                            || !handTag.contains("before", Tag.TAG_INT) || !handTag.contains("after", Tag.TAG_INT))
+                            || !handTag.contains("before", Tag.TAG_INT) || !handTag.contains("after", Tag.TAG_INT)
+                            || !handTag.contains("extraction", Tag.TAG_COMPOUND))
                         throw new IllegalStateException("pending harvest hand omits its exact predecessor or owner");
                     var restored = new HandEffect(new SubjectId(handTag.getString("site")),
                             new SubjectId(handTag.getString("job")),
                             new SubjectId(handTag.getString("actor")), handTag.getUUID("entity"),
-                            handTag.getLong("authorityEpoch"), handTag.getInt("before"));
+                            handTag.getLong("authorityEpoch"), handTag.getInt("before"),
+                            FrontierV3BlockExtractionCodec.read(handTag.getCompound("extraction")));
                     if (!restored.siteId().value().equals(tag.getString("site")))
                         throw new IllegalStateException("pending harvest hand has a foreign site owner");
                     if (handTag.getInt("after") != restored.afterCount())

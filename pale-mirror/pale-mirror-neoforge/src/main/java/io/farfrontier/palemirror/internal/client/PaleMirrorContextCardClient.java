@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.internal.network.PlayerContextCardPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 
 /** Client-only, replace-not-stack rendering for one short contextual object card. */
 public final class PaleMirrorContextCardClient {
@@ -37,15 +38,17 @@ public final class PaleMirrorContextCardClient {
         Font font = minecraft.font;
         int textWidth = Math.max(font.width(card.title()), card.lines().stream().mapToInt(font::width).max().orElse(0));
         int width = layout(graphics.guiWidth(), textWidth).width();
-        int height = 24 + card.lines().size() * 11;
+        var rows = card.lines().stream()
+                .flatMap(line -> font.split(Component.literal(line), width - 16).stream()).toList();
+        int height = 24 + rows.size() * 11;
         int x = graphics.guiWidth() - MARGIN - width;
         int y = MARGIN;
         graphics.fill(x - 1, y - 1, x + width + 1, y + height + 1, 0xA5000000);
         graphics.fill(x, y, x + 3, y + height, 0xFF000000 | card.accentRgb());
         graphics.fill(x + 3, y, x + width, y + height, 0xD91A1A1A);
         graphics.drawString(font, fit(font, card.title(), width - 16), x + 10, y + 7, 0xFFFFFFFF, false);
-        for (int index = 0; index < card.lines().size(); index++) {
-            graphics.drawString(font, fit(font, card.lines().get(index), width - 16), x + 10, y + 19 + index * 11, 0xFFD6D6D6, false);
+        for (int index = 0; index < rows.size(); index++) {
+            graphics.drawString(font, rows.get(index), x + 10, y + 19 + index * 11, 0xFFD6D6D6, false);
         }
     }
 

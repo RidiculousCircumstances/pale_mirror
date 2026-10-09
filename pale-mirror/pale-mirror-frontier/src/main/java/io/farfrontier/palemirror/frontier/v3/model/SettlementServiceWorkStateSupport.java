@@ -36,14 +36,14 @@ final class SettlementServiceWorkStateSupport {
                 throw new IllegalArgumentException("active service work must retain one living resident of its settlement");
             }
             if (work.kind() == SettlementServiceWorkKind.DECONTAMINATION
-                    && (facility.kind() != StructureKind.INFIRMARY || worker.profession() != ResidentProfession.MEDICAL_WORKER
+                    && (facility.kind() != StructureKind.INFIRMARY || worker.capability(HumanCapability.MEDICINE) <= 0
                     || !infection.containsKey(((SettlementServiceTarget.Infection) work.target()).cell())
                     || !InfectionTreatmentWorksite.candidates(bootstrap, ((SettlementServiceTarget.Infection) work.target()).cell())
                     .contains(work.workStation()))) {
                 throw new IllegalArgumentException("decontamination service work must retain an active infirmary, medic and infection cell");
             }
             if (work.kind() == SettlementServiceWorkKind.STRUCTURAL_REPAIR
-                    && (worker.profession() != ResidentProfession.ENGINEER || !(work.target() instanceof SettlementServiceTarget.StructureCell cell)
+                    && (worker.capability(HumanCapability.ENGINEERING) <= 0 || !(work.target() instanceof SettlementServiceTarget.StructureCell cell)
                     || !cell.structureId().equals(work.facilityId())
                     || FrontierGrayboxPlan.intactStructureCell(bootstrap.terrain(), facility, cell.position()) == null)) {
                 throw new IllegalArgumentException("structural service work must retain one engineer and exact settlement structure cell");

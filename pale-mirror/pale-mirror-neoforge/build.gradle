@@ -383,7 +383,9 @@ neoForge {
             // Quick Play is eligible to connect.  Ordinary source-only development runs leave
             // this blank and retain their existing composition.
             systemProperty 'pale_mirror.frontier_v3.test_pilot.required_mods', frontierV3PilotRequiredMods
-            programArgument '--fullscreen'
+            // Match the lite pilot: XWayland monitor takeover can fail before
+            // the first client tick and block in Minecraft's native error dialog.
+            // Full-pack composition does not require a fullscreen window.
             programArgument '--username'
             programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
             programArgument '--quickPlayMultiplayer'

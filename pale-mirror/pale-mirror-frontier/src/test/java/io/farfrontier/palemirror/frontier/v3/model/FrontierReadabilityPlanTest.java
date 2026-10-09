@@ -185,8 +185,10 @@ class FrontierReadabilityPlanTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:field-restart-recovery-board"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(new SubjectId("site:1-wheat-field"));
+        var authorizedFarmers = SettlementWorkPolicy.permissions(state, settlement.id()).workers(ResidentWorkKind.AGRICULTURE);
         SubjectId farmer = state.humanPopulation().residents().values().stream()
-                .filter(value -> value.settlementId().equals(settlement.id()) && value.profession() == ResidentProfession.AGRICULTURAL_WORKER)
+                .filter(value -> value.settlementId().equals(settlement.id())
+                        && authorizedFarmers.contains(value.id()))
                 .findFirst().orElseThrow().id();
         state = state.withResourceSites(matureReadyField(state, site));
         AmbientActorLease lease = AmbientActorProcess.nextLease(state, farmer, new SimInstant(22_000L));
@@ -225,7 +227,7 @@ class FrontierReadabilityPlanTest {
         HumanPopulation population = state.humanPopulation();
         for (int cycle = 1; cycle <= ResidentNutrition.STARVING_AFTER_MISSED_CYCLES; cycle++) {
             for (ResidentProfile resident : population.residents().values()) {
-                if (resident.settlementId().equals(settlement.id()) && resident.profession() == ResidentProfession.AGRICULTURAL_WORKER) {
+                if (resident.settlementId().equals(settlement.id()) && resident.capability(HumanCapability.AGRICULTURE) >= 50) {
                     population = population.resolveNutrition(resident.id(), cycle, false);
                 }
             }

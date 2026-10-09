@@ -495,7 +495,7 @@ class ResourceSiteColdHarvestReceiptTest {
         var fieldWorkers = SettlementWorkPolicy.permissions(state, owner).workers(ResidentWorkKind.AGRICULTURE);
         ResidentProfile otherFarmer = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(owner)
-                        && resident.profession() == ResidentProfession.AGRICULTURAL_WORKER
+                        && resident.capability(HumanCapability.AGRICULTURE) >= 50
                         && fieldWorkers.contains(resident.id())
                         && !resident.id().equals(complete.workerId()))
                 .findFirst().orElseThrow();
@@ -512,7 +512,7 @@ class ResourceSiteColdHarvestReceiptTest {
                 population.quarantines(), population.migrations(), population.provisions(),
                 population.nutrition(), population.medicalOperations(), population.schedules(), population.meals(), population.mealResourceObligations())));
         assertEquals(otherFarmer.id(), FrontierWorldStateSupport.availableFieldResident(state, owner,
-                ResidentProfession.AGRICULTURAL_WORKER).orElseThrow().id());
+                HumanCapability.AGRICULTURE).orElseThrow().id());
 
         FrontierWorldState composed = state;
         assertThrows(IllegalArgumentException.class,

@@ -3,7 +3,7 @@
 Status: accepted normative Frontier v3 design.
 
 This document defines how exact human residents work, specialize, organize and
-fight. It prevents a resident's identity, profession, current task and visible
+fight. It prevents a resident's identity, abilities, current task and visible
 combat presentation from collapsing into one permanent class.
 
 ## Player promise
@@ -18,13 +18,13 @@ defence it gained and the production, transport or medical capacity it gave up.
 One resident is one canonical person. A human unit is an organization of exact
 resident IDs, never a cohort multiplier or a substitute population counter.
 
-`profession`, `assignment`, `equipment` and `unit membership` answer different
+`profile`, `assignment`, `equipment` and `unit membership` answer different
 questions and must remain distinct:
 
 - **profile and condition:** who the person is and whether they can act;
 - **skills:** what the person has learned;
-- **profession and employment:** what work normally supports them and under
-  which exact agreement;
+- **work authorization:** which tasks settlement permissions and any exact
+  retained company agreement authorize;
 - **assignment:** what bounded task they are doing now;
 - **equipment:** what physical capabilities they currently possess;
 - **organization:** which household, company, work crew or tactical unit
@@ -37,9 +37,12 @@ model.
 
 ## Resident profile and condition
 
-A resident retains a stable ID, household, home settlement, birth instant and
-bounded learned skills. Health, disease, nutrition, wounds, fatigue and stress
-are mutable condition, not professions. Death remains an exact terminal fact.
+A resident retains a stable ID, explicit bounded human name, household, home
+settlement, birth instant and bounded learned skills. Names are produced at
+genesis/birth and encoded in snapshot and birth-event data; they are never
+regenerated on inspection, reassignment, HOT/COLD handoff or recovery. Duplicate
+names are legal: only the ID identifies a person. Health, disease, nutrition,
+wounds, fatigue and stress are mutable condition. Death remains an exact terminal fact.
 
 Condition constrains admission and effectiveness. It must not silently erase a
 resident from an already acknowledged physical effect or committed work:
@@ -76,28 +79,23 @@ identity layer or bypass training, equipment and assignment. Skill gain is
 bounded and caused by training or completed work; a materialized costume never
 grants canonical proficiency.
 
-## Profession and employment
+## Work authorization and current role
 
-Profession is a durable vocational affinity. Employment is the exact legal and
-economic relationship that reserves work, invoices an owner and pays the named
-resident. Neither one states the person's current physical action.
+Accepted2026-10-09: there is no resident profession field, profession admission
+gate or profession wire tag. Work selects exact people by explicit capabilities,
+settlement permissions and availability. The retained bootstrap affinity only
+seeds genesis data; it is neither a live worker class nor a display role.
+Farmer, baker, carrier, escort and similar labels describe the current owning
+task/group role, not a permanent profession. Eating/moving is a separate current
+activity and does not rename or reclassify the person.
 
-The initial profession families mirror the capability families:
-
-- agricultural worker;
-- extractor;
-- industrial worker;
-- builder/engineer;
-- logistician or rail worker;
-- medical worker;
-- security worker;
-- civic worker.
-
-A resident may retrain, change employer or become unemployed. Mobilization does
-not rewrite their profession: a mobilized machinist remains a machinist whose
-current assignment is military. Existing contracts and committed jobs must be
-settled, suspended or terminated through explicit events; mobilization cannot
-silently confiscate labour or delete wages and inputs.
+A resident may train, change assignment or have no assignment. Existing company
+agreements and committed jobs must be settled, suspended or terminated through
+explicit events; mobilization cannot silently confiscate labour or discard
+committed inputs/service obligations.
+The current community-production cut has no resident wages or monetary balances:
+settlement permissions authorize public work; optional company agreements retain
+worker authorization and inter-owner commercial terms, not an internal salary.
 
 ## Assignments
 
@@ -287,7 +285,7 @@ Historical schema-83 construction records deliberately retain an empty team.
 They are explicit autonomous legacy work and may finish only through their
 existing owner; recovery must never manufacture residents to modernize them.
 New construction instead chooses idle, living local people by engineering
-capability, then profession and stable ID. The common exact-equipment owner now
+capability, then stable ID. The common exact-equipment owner now
 issues one real `minecraft:iron_pickaxe` from that settlement's active depot to
 each retained living member, and returns the same tagged stack to one named
 free depot slot only after construction reaches `READY`. A route builder with
@@ -325,7 +323,7 @@ in the owner history rather than blocking on an invented hand-off.
 The first exact tactical organization is the defender unit owned by one
 `SettlementAssault`. It has a deterministic stable ID derived from that assault,
 an ordered exact member list and a fixed initial leader: the best available
-security resident, then civic/security capability and canonical ID. Its members
+security/civic capabilities, then canonical ID. Its members
 derive `SETTLEMENT_DEFENCE` only from that active assault; they are not copied
 into a second roster. Admission excludes dead, starving and already assigned
 residents, so the current foundation refuses an assault rather than silently
@@ -372,7 +370,7 @@ that identity; later player pickup remains the ordinary `WorldCarrier` to
 The implemented first read model is intentionally narrower than the full
 future roster. It derives `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`, `GUARD` and
 `SQUAD_LEADER` solely from an exact current assignment, retained defender-unit
-leadership, profession and actor-held exact weapon. `SQUAD_LEADER` identifies
+leadership and actor-held exact weapon. `SQUAD_LEADER` identifies
 the retained unit leader; it does not grant a weapon or replace their ordinary
 equipment truth. An exact weapon without an owning tactical assignment remains
 `CIVILIAN`. The projection is pure and persisted nowhere, so loss, theft or
@@ -420,7 +418,7 @@ perceived threat and doctrine
   -> casualty, return, reassignment or recovery
 ```
 
-Emergency militia may draw from civilian professions, but their effectiveness
+Emergency militia may draw from civilian workers, but their effectiveness
 reflects actual skills and equipment. Removing farmers, machinists, medics or
 rail crews from work reduces the corresponding settlement throughput. A
 settlement cannot receive both their civilian output and their military action
@@ -438,7 +436,7 @@ in both execution locations.
 - COLD advances bounded work, travel and combat from canonical state.
 - HOT leases the exact people and items to Minecraft for ordinary movement,
   collision, item use, combat and physical consequences.
-- HOT admission cannot manufacture a better profession, skill, weapon or crew.
+- HOT admission cannot manufacture a better skill, weapon or crew.
 - departure captures exact position, health, equipment/custody and operation
   continuation before COLD resumes;
 - restart inspects uncertain physical effects instead of replaying or replacing
@@ -453,7 +451,7 @@ assignments physical while the exact resident, employment, item custody and
 operation remain canonical Frontier state.
 
 Breaking a machine or railway can make an assignment impossible. It cannot
-convert the operator into another profession, silently finish their work or
+replace the operator's identity, silently finish their work or
 grant a COLD output while the physical lease remains active.
 
 ## Migration from the provisional model
@@ -464,8 +462,9 @@ must:
 
 - introduce explicit stable, non-reused wire tags for every persisted family;
 - version snapshot and WAL payloads rather than reinterpret old bytes;
-- map the old six bootstrap affinities deterministically into initial
-  profession and skill values;
+- seed fresh bootstrap affinities deterministically into initial skill and
+  capability values; incompatible unnamed/profession snapshots are rejected
+  at the fresh-world-only schema boundary, never translated during recovery;
 - create no current assignment or military membership merely from an old role;
 - preserve exact resident IDs, households, health, nutrition, contracts and
   custody;

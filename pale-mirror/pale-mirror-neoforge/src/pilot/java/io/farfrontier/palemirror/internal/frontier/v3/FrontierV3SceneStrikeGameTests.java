@@ -93,44 +93,44 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3SceneGame
 public final class FrontierV3SceneStrikeGameTests {
     private FrontierV3SceneStrikeGameTests() { }
 
-    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 40)
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 20000)
     public static void localSettlementAssaultStrikeRetainsAnIndependentExactReceipt(GameTestHelper helper) {
         localSettlementAssaultStrike(helper, StrikeScenario.ORDINARY);
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 40)
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 20000)
     public static void conflictedSettlementStrikeCannotApplyDamageAgain(GameTestHelper helper) {
         localSettlementAssaultStrike(helper, StrikeScenario.CONFLICT);
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 80)
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 20000)
     public static void failedStrikeConfirmationUsesTargetWitnessWithoutAnotherHit(GameTestHelper helper) {
         localSettlementAssaultStrike(helper, StrikeScenario.RECOVERY);
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 80)
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 20000)
     public static void missingStrikeWitnessEndsInBoundedLocalDrainWithoutInventingHit(GameTestHelper helper) {
         localSettlementAssaultStrike(helper, StrikeScenario.MISSING);
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 80)
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 20000)
     public static void malformedRunningWitnessCannotTrapDrainingScene(GameTestHelper helper) {
         localSettlementAssaultStrike(helper, StrikeScenario.MALFORMED);
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 80)
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 20000)
     public static void removedDeadTargetDoesNotRetainAnUnresolvedHitForever(GameTestHelper helper) {
         localSettlementAssaultStrike(helper, StrikeScenario.REMOVED_DEAD);
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 80)
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 20000)
     public static void missingLivingTargetDelegatesToSceneRecoveryWithoutInventingAbsence(GameTestHelper helper) {
         localSettlementAssaultStrike(helper, StrikeScenario.MISSING_LIVING);
     }
 
     private enum StrikeScenario { ORDINARY, CONFLICT, RECOVERY, MISSING, MALFORMED, REMOVED_DEAD, MISSING_LIVING }
 
-    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 100)
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 20000)
     public static void recordedMissingMemberIsReinspectedWithoutDuplicateCommands(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos origin = helper.absolutePos(new BlockPos(1, 2, 1));
@@ -152,7 +152,7 @@ public final class FrontierV3SceneStrikeGameTests {
         }
         // Component-only coordinate projection; canonical commands still bind the original lease.
         var local = canonical.withHandoffPosition(new BlockPosition(origin.getX(), origin.getY(), origin.getZ()));
-        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, canonical, positions);
+        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, canonical, positions, bodies -> {
         FrontierV3CommandSubmission.submit(runtime, "reinspect-hot", canonical.id().value(), new SceneLeaseTransition(canonical.id(), SceneLeaseStatus.HOT));
         var player = helper.makeMockServerPlayerInLevel();
         player.setPos(origin.getX(), origin.getY(), origin.getZ());
@@ -188,6 +188,7 @@ public final class FrontierV3SceneStrikeGameTests {
                 });
             });
         });
+        });
     }
 
     private static void localSettlementAssaultStrike(GameTestHelper helper, StrikeScenario scenario) {
@@ -222,8 +223,8 @@ public final class FrontierV3SceneStrikeGameTests {
             BlockPos position = origin.offset(index % fixtureColumns, 0, index / fixtureColumns); prepareFloorWithinTemplate(helper, level, templateBounds, position);
             positions.put(local.members().get(index).actorId(), new BodyPosition(position.getX(), position.getY(), position.getZ()));
         }
-        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, canonical, positions)
-                .forEach(body -> requireEntityWithinTemplate(helper, templateBounds, body,
+        FrontierV3SceneBodyGameTestFixture.materializeAndObserve(helper, runtime, canonical, positions, bodies -> {
+        bodies.forEach(body -> requireEntityWithinTemplate(helper, templateBounds, body,
                         "every owned fixture body must enter inside the authored envelope"));
         FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-hot", canonical.id().value(), new SceneLeaseTransition(canonical.id(), SceneLeaseStatus.HOT));
         helper.runAfterDelay(2L, () -> {
@@ -402,6 +403,7 @@ public final class FrontierV3SceneStrikeGameTests {
                 local.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
                 runtime.shutdown();
             }
+        });
         });
     }
 

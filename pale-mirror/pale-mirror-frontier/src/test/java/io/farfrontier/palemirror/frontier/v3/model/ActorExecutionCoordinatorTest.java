@@ -17,7 +17,7 @@ class ActorExecutionCoordinatorTest {
     @Test void historicalHandoffDoesNotPreventNextHarvestAtReachedHome() {
         FrontierWorldState state = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());
         ResidentProfile farmer = FrontierWorldStateSupport.availableFieldResident(state, SETTLEMENT,
-                ResidentProfession.AGRICULTURAL_WORKER).orElseThrow();
+                HumanCapability.AGRICULTURE).orElseThrow();
         BodyPosition home = state.actorLocations().get(farmer.id()).body();
         BodyPosition oldDepot = new BodyPosition(home.x() + 3, home.y(), home.z());
         AmbientActorLease lease = new AmbientActorLease(farmer.id(), oldDepot, new SimInstant(1),
@@ -47,7 +47,7 @@ class ActorExecutionCoordinatorTest {
     @Test void unresolvedAmbientEpochAndForeignPurposeCannotBeTakenByWork() {
         FrontierWorldState initial = ResourceSiteHarvestProcessTest.initial();
         ResidentProfile farmer = FrontierWorldStateSupport.availableFieldResident(initial, SETTLEMENT,
-                ResidentProfession.AGRICULTURAL_WORKER).orElseThrow();
+                HumanCapability.AGRICULTURE).orElseThrow();
         BodyPosition body = initial.actorLocations().get(farmer.id()).body();
         for (AmbientLeaseStatus status : new AmbientLeaseStatus[]{AmbientLeaseStatus.PREPARED,
                 AmbientLeaseStatus.DRAINING, AmbientLeaseStatus.UNKNOWN_AFTER_RESTART}) {

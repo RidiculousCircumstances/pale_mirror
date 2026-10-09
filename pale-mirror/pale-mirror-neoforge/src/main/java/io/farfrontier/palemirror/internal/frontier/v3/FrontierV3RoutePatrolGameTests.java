@@ -37,7 +37,7 @@ public final class FrontierV3RoutePatrolGameTests {
      * fixture creates only canonical COLD patrol state and ordinary scene demand; the registered
      * executor must materialize, move, observe and commit the one shared formation edge.
      */
-    @GameTest(batch = "pm-frontier-v3-scene-route-patrol", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 140)
+    @GameTest(batch = "pm-frontier-v3-scene-route-patrol", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 140)
     public static void demandedCloseFormationAdvancesOnlyAfterBothExactBodiesLeaveAndArrive(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "ordinary");
         RoutePatrolSceneObservation observation = new RoutePatrolSceneObservation();
@@ -66,7 +66,7 @@ public final class FrontierV3RoutePatrolGameTests {
     }
 
     /** Ordinary observer loss releases the same exact HOT checkpoint; it is not a new patrol admission. */
-    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-return", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 285)
+    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-return", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 285)
     public static void ordinaryDemandLossReturnsTheUnchangedFormationAndCursorToCold(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "ordinary-return"); prepareRouteFloor(level, fixture);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state()); ServerPlayer observer = demand(helper, fixture);
@@ -111,19 +111,24 @@ public final class FrontierV3RoutePatrolGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-blocked", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-blocked", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 140)
     public static void occupiedRetainedNextBodyBlocksTheSameDemandedPatrol(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "occupied"); prepareRouteFloor(level, fixture);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state()); ServerPlayer observer = demand(helper, fixture);
-        for (int turn = 1; turn <= 20; turn++) {
-            int current = turn;
+        boolean[] obstructedHotPatrol = {false};
+        for (int turn = 1; turn <= 120; turn++) {
             helper.runAtTickTime(turn, () -> {
-                if (current == 3) level.setBlock(new BlockPos(fixture.nextLeaderBody().x(), fixture.nextLeaderBody().y(), fixture.nextLeaderBody().z()),
-                        Blocks.STONE.defaultBlockState(), 3);
+                if (!obstructedHotPatrol[0] && runtime.decodedState().orElseThrow().sceneLeases().values().stream()
+                        .filter(FrontierSceneBehaviors::isRoutePatrol).anyMatch(lease -> lease.status() == SceneLeaseStatus.HOT)) {
+                    level.setBlock(new BlockPos(fixture.nextLeaderBody().x(), fixture.nextLeaderBody().y(), fixture.nextLeaderBody().z()),
+                            Blocks.STONE.defaultBlockState(), 3);
+                    obstructedHotPatrol[0] = true;
+                }
                 drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation());
             });
         }
-        helper.runAtTickTime(21, () -> {
+        helper.runAtTickTime(121, () -> {
+            helper.assertTrue(obstructedHotPatrol[0], "the obstruction must target an admitted HOT patrol");
             RoutePatrol patrol = runtime.decodedState().orElseThrow().strategicPlans().routePatrols().get(fixture.taskId());
             helper.assertTrue(patrol.status() == RoutePatrolStatus.BLOCKED
                             && patrol.blockReason().orElseThrow() == RoutePatrolBlockReason.OCCUPIED_NEXT_BODY,
@@ -132,12 +137,12 @@ public final class FrontierV3RoutePatrolGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-body-loss", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-body-loss", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 140)
     public static void missingOwnedHotBodyBlocksTheSameDemandedPatrol(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "body-loss"); prepareRouteFloor(level, fixture);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state()); ServerPlayer observer = demand(helper, fixture);
         boolean[] removedHotBody = {false};
-        for (int turn = 1; turn <= 20; turn++) {
+        for (int turn = 1; turn <= 120; turn++) {
             helper.runAtTickTime(turn, () -> {
                 if (!removedHotBody[0]) runtime.decodedState().orElseThrow().sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol)
                         .filter(lease -> lease.status() == SceneLeaseStatus.HOT)
@@ -146,7 +151,7 @@ public final class FrontierV3RoutePatrolGameTests {
                 drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation());
             });
         }
-        helper.runAtTickTime(21, () -> {
+        helper.runAtTickTime(121, () -> {
             RoutePatrol patrol = runtime.decodedState().orElseThrow().strategicPlans().routePatrols().get(fixture.taskId());
             helper.assertTrue(removedHotBody[0], "the intervention must remove an actually HOT body, not a pending insertion");
             helper.assertTrue(patrol.status() == RoutePatrolStatus.BLOCKED
@@ -217,7 +222,7 @@ public final class FrontierV3RoutePatrolGameTests {
         FrontierBootstrap bootstrap = translatedBootstrap(source.bootstrap(), localOrigin.getX() - sourceOrigin.x(),
                 localOrigin.getY() - sourceOrigin.y(), localOrigin.getZ() - sourceOrigin.z());
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap); Settlement settlement = initial.bootstrap().settlements().getFirst();
-        List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(initial, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(initial, settlement.id(), HumanCapability.SECURITY);
         if (guards.size() < 2) throw new IllegalStateException("route-patrol fixture needs a two-person security roster");
         SubjectId leader = guards.getFirst().id(), scout = guards.get(1).id();
         SubjectId objectiveId = new SubjectId("objective:route-patrol-game-test-" + scenario), taskId = new SubjectId("task:route-patrol-game-test-" + scenario);

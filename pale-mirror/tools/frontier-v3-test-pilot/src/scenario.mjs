@@ -251,7 +251,7 @@ export function validateScenario(scenario) {
           || (action.maxAngleDeg !== undefined && (!Number.isFinite(action.maxAngleDeg) || action.maxAngleDeg < 1 || action.maxAngleDeg > 90)))) {
         throw new Error('assert_visible_board needs text, position and bounded visibility limits');
       }
-      if (action.type === 'assert_visible_entity' && (!validItemKind(action.entityType) || typeof action.nameContains !== 'string' || !action.nameContains
+      if (action.type === 'assert_visible_entity' && (!validItemKind(action.entityType) || !validEntityName(action.nameContains)
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
           || (action.maxAngleDeg !== undefined && (!Number.isFinite(action.maxAngleDeg) || action.maxAngleDeg < 1 || action.maxAngleDeg > 90)))) {
@@ -261,7 +261,7 @@ export function validateScenario(scenario) {
           || !Number.isInteger(action.durationTicks) || action.durationTicks < 1 || action.durationTicks > 12_000
           || !Number.isInteger(action.sampleEveryTicks) || action.sampleEveryTicks < 1 || action.sampleEveryTicks > 20
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 180_000
-          || (action.nameContains !== undefined && (typeof action.nameContains !== 'string' || !action.nameContains || action.nameContains.length > 72))
+          || (action.nameContains !== undefined && !validEntityName(action.nameContains))
           || (action.workerId !== undefined && !requiredId(action.workerId, 'resident:') && !requiredId(action.workerId, 'actor:'))
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
           || (action.anchor !== undefined && !validPosition(action.anchor)))) {
@@ -273,12 +273,13 @@ export function validateScenario(scenario) {
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128)))) {
         throw new Error('observe_settlement_population needs one settlement and bounded first-ingress sampling');
       }
-      if (action.type === 'look_nearest_entity' && (!validItemKind(action.entityType) || typeof action.nameContains !== 'string' || !action.nameContains
+      if (action.type === 'look_nearest_entity' && (!validItemKind(action.entityType) || !validEntityName(action.nameContains)
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128)))) {
         throw new Error('look_nearest_entity needs one bounded locally rendered named entity');
       }
       if (action.type === 'interact_board' && (typeof action.text !== 'string' || !action.text || typeof action.title !== 'string' || !action.title
+          || (action.blockPosition !== undefined && !validPosition(action.blockPosition))
           || action.title.length > 72 || !validPosition(action.position) || !Number.isInteger(action.timeoutMs)
           || action.timeoutMs < 0 || action.timeoutMs > 120_000
           || (action.radius !== undefined && (!Number.isFinite(action.radius) || action.radius < 0 || action.radius > 16))
@@ -288,6 +289,7 @@ export function validateScenario(scenario) {
       }
       if (action.type === 'interact_nearest_entity' && (!validItemKind(action.entityType) || !Number.isInteger(action.timeoutMs)
           || action.timeoutMs < 0 || action.timeoutMs > 120_000
+          || (action.expectContextCard !== undefined && typeof action.expectContextCard !== 'boolean')
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 64)))) {
         throw new Error('interact_nearest_entity needs a namespaced entity type and bounded local range');
       }
@@ -296,7 +298,7 @@ export function validateScenario(scenario) {
           || action.maxAttacks < 1 || action.maxAttacks > 40
           || (action.requireRemoval !== undefined && typeof action.requireRemoval !== 'boolean')
           || (action.requireDamage !== undefined && (typeof action.requireDamage !== 'boolean' || action.requireDamage && action.requireRemoval === true))
-          || (action.nameContains !== undefined && (typeof action.nameContains !== 'string' || !action.nameContains || action.nameContains.length > 72))
+          || (action.nameContains !== undefined && !validEntityName(action.nameContains))
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 64)))) {
         throw new Error('attack_nearest_entity needs a namespaced entity type, bounded local range and 1..40 attacks');
       }
@@ -522,6 +524,16 @@ function validPosition(value) {
  * normal player packet may still place or break there, which is evidence rather
  * than test authority.
  */
+function validEntityName(value) {
+  if (typeof value === 'string') return Boolean(value) && value.length <= 72;
+  const reference = value?.diagnostic;
+  return value && Object.keys(value).length === 1 && reference && Object.keys(reference).length === 3
+    && validDiagnosticIdentity(reference)
+    && ((reference.view === 'actor' && reference.field === 'name' && requiredId(reference.id, 'resident:'))
+      || (reference.view === 'scene' && reference.field === 'primaryActorName')
+      || (reference.view === 'site' && reference.field === 'workerPresentation'));
+}
+
 function validResolvablePosition(value) {
   if (validPosition(value)) return true;
   const reference = value?.diagnostic;

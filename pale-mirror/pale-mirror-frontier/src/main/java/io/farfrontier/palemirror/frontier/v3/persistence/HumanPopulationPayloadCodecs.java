@@ -11,7 +11,7 @@ import java.io.IOException;
 
 /** Wire codecs owned by the human-population boundary. */
 final class HumanPopulationPayloadCodecs {
-    private static final int BORN_FORMAT = 0x52424f32;
+    private static final int BORN_FORMAT = 0x52424f33; // RBO3: explicit named profile, no profession byte.
     private HumanPopulationPayloadCodecs() { }
 
     static PayloadCodec starvationIntegrated() {
@@ -491,7 +491,7 @@ final class HumanPopulationPayloadCodecs {
     private static void writeProfile(DataOutputStream output, ResidentProfile resident) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, resident.id()); FrontierWorldPayloadCodecs.writeSubject(output, resident.householdId());
         FrontierWorldPayloadCodecs.writeSubject(output, resident.settlementId()); output.writeByte(resident.role().wireTag());
-        output.writeByte(resident.profession().wireTag()); output.writeLong(resident.birthTick());
+        FrontierWorldPayloadCodecs.writeString(output, resident.name()); output.writeLong(resident.birthTick());
         for (ResidentSkill skill : ResidentSkill.values()) output.writeByte(resident.skill(skill));
         for (HumanCapability capability : HumanCapability.values()) output.writeByte(resident.capability(capability));
         writeCharacteristics(output, resident.characteristics());
@@ -499,14 +499,13 @@ final class HumanPopulationPayloadCodecs {
     private static ResidentProfile readProfile(DataInputStream input) throws IOException {
         var id = FrontierWorldPayloadCodecs.readSubject(input); var household = FrontierWorldPayloadCodecs.readSubject(input); var settlement = FrontierWorldPayloadCodecs.readSubject(input);
         int role = input.readUnsignedByte(); if (role >= ResidentRole.values().length) throw new IllegalArgumentException("unknown resident role");
-        int professionTag = input.readUnsignedByte();
-        ResidentProfession profession = FrontierWireTags.require(ResidentProfession.class, professionTag);
+        String name = FrontierWorldPayloadCodecs.readString(input);
         long birthTick = input.readLong(); var skills = new java.util.EnumMap<ResidentSkill, Integer>(ResidentSkill.class);
         for (ResidentSkill skill : ResidentSkill.values()) skills.put(skill, input.readUnsignedByte());
         var capabilities = new java.util.EnumMap<HumanCapability, Integer>(HumanCapability.class);
         for (HumanCapability capability : HumanCapability.values()) capabilities.put(capability, input.readUnsignedByte());
         return new ResidentProfile(id.value(), household.value(), settlement.value(), FrontierWireTags.require(ResidentRole.class, role),
-                profession, birthTick, skills, capabilities, readCharacteristics(input));
+                name, birthTick, skills, capabilities, readCharacteristics(input));
     }
 
     private static void writeBirthJob(DataOutputStream output, ResidentBirthJob job) throws IOException {

@@ -29,11 +29,11 @@ class HumanPopulationProcessTest {
         assertEquals(state.bootstrap().residentCount(), state.humanPopulation().residents().size());
         assertEquals(state.actorLocations().keySet().stream().filter(id -> id.value().startsWith("resident:")).count(), state.humanPopulation().residents().size());
         for (Settlement settlement : state.bootstrap().settlements()) {
-            assertEquals(2L, state.humanPopulation().residents().values().stream()
-                    .filter(resident -> resident.settlementId().equals(settlement.id()) && resident.profession() == ResidentProfession.BAKER).count());
+            var authorized = SettlementWorkPolicy.permissions(state, settlement.id()).workers(ResidentWorkKind.BAKING);
+            assertEquals(2, authorized.size());
             assertTrue(state.humanPopulation().residents().values().stream()
                     .anyMatch(resident -> resident.settlementId().equals(settlement.id())
-                            && resident.profession() == ResidentProfession.INDUSTRIAL_WORKER));
+                            && authorized.contains(resident.id()) && resident.capability(HumanCapability.INDUSTRY) > 0));
         }
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
@@ -53,20 +53,20 @@ class HumanPopulationProcessTest {
         assertTrue(workers.stream().allMatch(worker -> hungry.humanPopulation().nutrition(worker.id()).status() == ResidentNutritionStatus.STARVING));
         assertTrue(workers.stream().allMatch(worker -> hungry.actorLocations().get(worker.id()).condition().status() == ActorLifeStatus.ALIVE));
         assertTrue(workers.stream().allMatch(worker -> hungry.humanPopulation().health(worker.id()).status() == ResidentHealthStatus.HEALTHY));
-        assertTrue(FrontierWorldStateSupport.availableRouteResident(hungry, settlement.id(), ResidentRole.HAULER).isPresent());
-        assertTrue(FrontierWorldStateSupport.availableRouteResident(hungry, settlement.id(), ResidentRole.GUARD).isPresent());
-        assertTrue(FrontierWorldStateSupport.availableFieldResident(hungry, settlement.id(), ResidentRole.FARMER).isPresent());
-        assertTrue(FrontierWorldStateSupport.availableWorkResident(hungry, settlement.id(), ResidentRole.CRAFTER).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(hungry, settlement.id(), HumanCapability.LOGISTICS).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(hungry, settlement.id(), HumanCapability.SECURITY).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableFieldResident(hungry, settlement.id(), HumanCapability.AGRICULTURE).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableWorkResident(hungry, settlement.id(), HumanCapability.INDUSTRY).isPresent());
         FrontierWorldState afterRecovery = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(hungry));
-        assertTrue(FrontierWorldStateSupport.availableRouteResident(afterRecovery, settlement.id(), ResidentRole.HAULER).isPresent());
-        assertTrue(FrontierWorldStateSupport.availableFieldResident(afterRecovery, settlement.id(), ResidentRole.FARMER).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(afterRecovery, settlement.id(), HumanCapability.LOGISTICS).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableFieldResident(afterRecovery, settlement.id(), HumanCapability.AGRICULTURE).isPresent());
 
         for (ResidentProfile worker : workers) population = population.resolveNutrition(worker.id(), 4, true);
         FrontierWorldState recovered = state.withHumanPopulation(population);
-        assertTrue(FrontierWorldStateSupport.availableRouteResident(recovered, settlement.id(), ResidentRole.HAULER).isPresent());
-        assertTrue(FrontierWorldStateSupport.availableRouteResident(recovered, settlement.id(), ResidentRole.GUARD).isPresent());
-        assertTrue(FrontierWorldStateSupport.availableFieldResident(recovered, settlement.id(), ResidentRole.FARMER).isPresent());
-        assertTrue(FrontierWorldStateSupport.availableWorkResident(recovered, settlement.id(), ResidentRole.CRAFTER).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(recovered, settlement.id(), HumanCapability.LOGISTICS).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(recovered, settlement.id(), HumanCapability.SECURITY).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableFieldResident(recovered, settlement.id(), HumanCapability.AGRICULTURE).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableWorkResident(recovered, settlement.id(), HumanCapability.INDUSTRY).isPresent());
     }
 
     @Test
@@ -77,7 +77,7 @@ class HumanPopulationProcessTest {
         ResidentProfile existing = initial.humanPopulation().resident(new SubjectId("resident:1-1"));
         ResidentBorn forged = new ResidentBorn(new SubjectId("job:resident-birth-forged"),
                 new ResidentProfile(new SubjectId("resident:forged"), existing.householdId(), existing.settlementId(), ResidentRole.FARMER,
-                0L, existing.skills()), initial.bootstrap().settlements().getFirst().anchor(),
+                "Test Resident", 0L, existing.skills()), initial.bootstrap().settlements().getFirst().anchor(),
                 new io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity(new SubjectId("resident:forged"),
                         io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity.Kind.RESIDENT));
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(world, engine, "command:forged-birth", forged)));
@@ -125,6 +125,7 @@ class HumanPopulationProcessTest {
                 started.job().settlementId(), replayedForeignJob));
         FrontierWorldState completed = PopulationBirthProcess.reduceBorn(active, started.job().settlementId(), born);
         assertEquals(born.resident(), completed.humanPopulation().resident(born.resident().id()));
+        assertEquals(ResidentNames.create(completed.bootstrap().seed(), born.resident().id()), born.resident().name());
         assertEquals(born.position(), FrontierTestPositions.supportOf(completed.actorLocations().get(born.resident().id())));
         assertEquals(63, completed.inventory().items().get(started.job().foodItemId()).count());
         assertTrue(completed.humanPopulation().birthJobs().isEmpty());
@@ -259,7 +260,7 @@ class HumanPopulationProcessTest {
         assertEquals(0, SettlementFacilityCapability.housingCapacity(destroyed, settlement.id()));
         ResidentProfile parent = destroyed.humanPopulation().resident(settlement.residents().getFirst().id());
         ResidentProfile newborn = new ResidentProfile(new SubjectId("resident:1-housing-blocked"), parent.householdId(), settlement.id(),
-                ResidentRole.FARMER, 0L, parent.skills());
+                ResidentRole.FARMER, "Test Resident", 0L, parent.skills());
         ResidentBirthJob permit = new ResidentBirthJob(new SubjectId("job:resident-birth-housing-blocked"), settlement.id(), parent.householdId(),
                 new SubjectId("item:bootstrap-1-wheat"), new SubjectId("commitment:resident-birth-housing-blocked"), newborn, settlement.anchor());
         assertThrows(IllegalArgumentException.class, () -> destroyed.startResidentBirth(permit));

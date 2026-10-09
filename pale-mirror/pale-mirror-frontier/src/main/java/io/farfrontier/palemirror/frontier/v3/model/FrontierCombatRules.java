@@ -29,7 +29,7 @@ public final class FrontierCombatRules {
                     && readiness.armedLivingAssignedMembers().contains(resident.id())
                     ? combat.residentGuardDamage() : combat.residentWorkerDamage();
         }
-        return resident.profession() == ResidentProfession.SECURITY_WORKER || HumanTacticalFunctionProjection.hasWeapon(state, resident.id())
+        return HumanTacticalFunctionProjection.hasWeapon(state, resident.id())
                 ? combat.residentGuardDamage() : combat.residentWorkerDamage();
     }
     public static SubjectId choose(List<SubjectId> candidates, int epoch) {

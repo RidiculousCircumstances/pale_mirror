@@ -9,7 +9,7 @@
     { "type": "command", "command": "/clear PMTestPilot" },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -388, "y": 64, "z": -326 }, "settleMs": 0 },
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
-      { "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "ALIVE", "healthRaw": 20000000, "role": "CRAFTER" } },
+      { "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "ALIVE", "healthRaw": 20000000, "role": "Production worker" } },
       { "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "ACCEPTED", "jobActive": true } }
     ] }
   ],
@@ -20,7 +20,7 @@
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {
       "diagnostic": { "view": "scene", "id": "job:production-development-input-theft", "field": "productionCurrent" }
     }, "offset": { "x": 2, "y": 1, "z": 0 }, "settleMs": 0 },
-    { "type": "attack_nearest_entity", "entityType": "minecraft:villager", "nameContains": "INDUSTRIAL WORKER", "maxDistance": 4, "maxAttacks": 1, "requireRemoval": false, "timeoutMs": 30000 },
+    { "type": "attack_nearest_entity", "entityType": "minecraft:villager", "nameContains": {"diagnostic":{"view":"actor","id":"resident:1-15","field":"name"}}, "maxDistance": 4, "maxAttacks": 1, "requireRemoval": false, "timeoutMs": 30000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 1500, "y": 80, "z": 1500 }, "settleMs": 0 },
     { "type": "wait_until_diagnostic", "view": "scene", "id": "job:production-development-input-theft", "expect": {
       "status": "ok", "leaseStatus": "CLOSED", "primaryActor": "resident:1-15"

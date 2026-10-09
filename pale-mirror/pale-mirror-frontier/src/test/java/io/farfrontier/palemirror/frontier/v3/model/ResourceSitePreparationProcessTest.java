@@ -44,7 +44,7 @@ class ResourceSitePreparationProcessTest {
     void readyFieldCanAdmitItsFarmerInFreeWithoutCompetingFood() {
         FrontierWorldState state = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial(47L));
         var farmer = FrontierWorldStateSupport.availableFieldResident(state, new SubjectId("settlement:1"),
-                ResidentProfession.AGRICULTURAL_WORKER).orElseThrow();
+                HumanCapability.AGRICULTURE).orElseThrow();
         assertEquals(ResourceSitePhase.READY, state.resourceSites().site(new SubjectId("site:1-wheat-field")).phase());
         assertEquals(SettlementDailySchedule.Window.FREE,
                 state.humanPopulation().schedule(new SubjectId("settlement:1")).windowAt(21_140L));

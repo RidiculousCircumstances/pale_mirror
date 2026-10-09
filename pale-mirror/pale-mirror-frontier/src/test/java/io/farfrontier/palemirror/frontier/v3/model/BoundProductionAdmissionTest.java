@@ -15,7 +15,7 @@ class BoundProductionAdmissionTest {
     void exactPermissionsSurviveSnapshotAndDoNotCancelAnAlreadyAdmittedExecution() {
         var state = twoBakerFixture();
         var owner = new SubjectId("settlement:1");
-        var bakers = SettlementWorkforce.candidates(state, owner, ResidentProfession.BAKER);
+        var bakers = SettlementWorkforce.candidates(state, owner, ResidentWorkKind.BAKING, HumanCapability.INDUSTRY);
         var selected = bakers.get(1).id();
         var permissions = new ResidentWorkPermissions(Map.of(ResidentWorkKind.BAKING, java.util.Set.of(selected)));
         state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(owner, permissions));
@@ -26,10 +26,13 @@ class BoundProductionAdmissionTest {
         var planned = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L));
         var started = planned.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
                 .map(ProductionStarted.class::cast).findFirst().orElseThrow();
-        assertEquals(selected, started.job().workerId(), "profession alone must not authorize the preferred baker");
+        assertEquals(selected, started.job().workerId(), "capability alone must not authorize the preferred baker");
         state = StrategicObjectiveProcess.reduceTaskTransition(state, owner,
                 new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = ProductionProcess.reduceStarted(state, owner, started);
+        var presentation = ResidentPresentation.from(state, selected);
+        assertEquals("Baker", presentation.role());
+        assertEquals(state.humanPopulation().resident(selected).name(), presentation.name());
         state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(owner, ResidentWorkPermissions.none()));
         var restored = codec.decode(codec.encode(state));
         assertEquals(started.job(), restored.productionJobs().get(started.job().id()));
@@ -61,7 +64,7 @@ class BoundProductionAdmissionTest {
         for (var worker : SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.BAKING))
             state = SettlementEmploymentProcess.reduceEmployment(state, settlement, new EmploymentContractOpened(
                     SettlementEmploymentProcess.agreement(state, WorkEmployer.company(company), worker, 0)));
-        var candidates = SettlementWorkforce.candidates(state, settlement, ResidentProfession.BAKER);
+        var candidates = SettlementWorkforce.candidates(state, settlement, ResidentWorkKind.BAKING, HumanCapability.INDUSTRY);
         assertEquals(2, candidates.size());
         var preferred = candidates.getFirst();
         var body = state.actorLocations().get(preferred.id()).body();
@@ -119,9 +122,10 @@ class BoundProductionAdmissionTest {
         assertSame(stock, state.inventory());
         assertEquals(1, state.productionJobs().size());
         var assignments = HumanAssignmentProjection.compile(state);
+        var authorizedBakers = SettlementWorkPolicy.permissions(state, task.ownerId()).workers(ResidentWorkKind.BAKING);
         assertEquals(1, state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(task.ownerId())
-                        && resident.profession() == ResidentProfession.BAKER)
+                        && authorizedBakers.contains(resident.id()))
                 .filter(resident -> assignments.idle(resident.id())).count());
     }
 

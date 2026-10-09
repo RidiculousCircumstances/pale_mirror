@@ -84,7 +84,7 @@ class RoutePatrolProcessTest {
     void activePatrolGuardCannotBeSelectedForConcurrentRouteWork() {
         FrontierWorldState state = FrontierV3FixtureCatalog.steppedRouteConfiguration(new WorldId("frontier:patrol-claim"), 713L).initialState();
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        java.util.List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        java.util.List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
         SubjectId guard = guards.getFirst().id(), scout = guards.get(1).id();
         SubjectId objectiveId = new SubjectId("objective:patrol-claim"), taskId = new SubjectId("task:patrol-claim");
         StrategicObjective objective = new StrategicObjective(objectiveId, settlement.id(), StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
@@ -100,7 +100,7 @@ class RoutePatrolProcessTest {
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)),
                 "a patrol on a persisted surveyed grade must hydrate from the same exact topology");
 
-        SubjectId selected = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow().id();
+        SubjectId selected = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), HumanCapability.SECURITY).orElseThrow().id();
 
         assertNotEquals(guard, selected, "a COLD patrol owns its exact guard until its terminal result");
     }

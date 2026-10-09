@@ -32,11 +32,11 @@ class HumanRoleAssignmentTest {
         ResidentProfile higher = born(state, "resident:1-guard-skilled-high", ResidentRole.GUARD, ResidentSkill.SECURITY, 100);
         state = HumanPopulationTestFixtures.withResident(state, higher, settlement.anchor());
 
-        assertEquals(higher, FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow());
+        assertEquals(higher, FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), HumanCapability.SECURITY).orElseThrow());
     }
 
     @Test
-    void professionAndCapabilitiesDriveWorkSelectionWithoutReplacingThePerson() {
+    void capabilitiesDriveWorkSelectionWithoutReplacingThePersonOrName() {
         FrontierWorldState state = initial("frontier:human-profession");
         Settlement settlement = state.bootstrap().settlements().getFirst();
         ResidentProfile original = state.humanPopulation().residents().values().stream()
@@ -44,25 +44,26 @@ class HumanRoleAssignmentTest {
         Map<HumanCapability, Integer> capabilities = new EnumMap<>(original.capabilities());
         capabilities.put(HumanCapability.SECURITY, 100);
         ResidentProfile retrained = new ResidentProfile(original.id(), original.householdId(), original.settlementId(), original.role(),
-                ResidentProfession.SECURITY_WORKER, original.birthTick(), original.skills(), capabilities);
+                original.name(), original.birthTick(), original.skills(), capabilities);
         state = state.withHumanPopulation(state.humanPopulation().withProfile(retrained));
 
         assertEquals(original.id(), state.humanPopulation().resident(original.id()).id());
-        assertEquals(retrained, FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.SECURITY_WORKER).orElseThrow());
+        assertEquals(original.name(), retrained.name());
+        assertEquals(retrained, FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), HumanCapability.SECURITY).orElseThrow());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
     @Test
-    void legacyBootstrapProfileDeterministicallyMigratesAndCannotMoveAResidentThroughProfileReplacement() {
+    void genesisSkillsProduceCapabilitiesAndProfileReplacementCannotMoveAResident() {
         FrontierWorldState state = initial("frontier:human-profile-migration");
         ResidentProfile original = state.humanPopulation().resident(new SubjectId("resident:1-1"));
         ResidentProfile legacy = new ResidentProfile(original.id(), original.householdId(), original.settlementId(), ResidentRole.CRAFTER,
-                original.birthTick(), original.skills());
+                original.name(), original.birthTick(), original.skills());
 
-        assertEquals(ResidentProfession.INDUSTRIAL_WORKER, legacy.profession());
+        assertEquals(original.name(), legacy.name());
         assertEquals(legacy.skill(ResidentSkill.CRAFTING), legacy.capability(HumanCapability.INDUSTRY));
         assertThrows(IllegalArgumentException.class, () -> state.humanPopulation().withProfile(new ResidentProfile(original.id(),
-                new SubjectId("household:foreign"), original.settlementId(), original.role(), original.profession(), original.birthTick(),
+                new SubjectId("household:foreign"), original.settlementId(), original.role(), original.name(), original.birthTick(),
                 original.skills(), original.capabilities())));
     }
 
@@ -74,8 +75,7 @@ class HumanRoleAssignmentTest {
                 .filter(value -> value.settlementId().equals(settlement.id()) && value.role() == ResidentRole.CRAFTER).findFirst().orElseThrow();
         BlockPosition replacementSurface = state.actorLocations().get(departed.id()).supportingSurface().support();
         state = killRole(state, ResidentRole.CRAFTER);
-        ResidentProfile born = born(state, "resident:1-crafter-born", ResidentRole.CRAFTER)
-                .withProfession(ResidentProfession.BAKER);
+        ResidentProfile born = born(state, "resident:1-crafter-born", ResidentRole.CRAFTER);
         state = HumanPopulationTestFixtures.withResident(state, born, replacementSurface);
         StrategicTask task = productionTask(settlement.id());
         state = state.withStrategicPlans(state.strategicPlans().addObjective(objective(task, StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD))
@@ -97,7 +97,7 @@ class HumanRoleAssignmentTest {
     void exactActorHeldWeaponChangesTheSameCivilianCombatCapability() {
         FrontierWorldState state = initial("frontier:human-equipped-worker");
         ResidentProfile worker = state.humanPopulation().residents().values().stream()
-                .filter(value -> value.profession() != ResidentProfession.SECURITY_WORKER).findFirst().orElseThrow();
+                .filter(value -> value.capability(HumanCapability.SECURITY) < 50).findFirst().orElseThrow();
         assertEquals(FixedScalar.whole(1), FrontierCombatRules.damage(state, worker.id()));
         SubjectId depot = FrontierWorldState.depotId(worker.settlementId());
         int slot = state.inventory().firstFreeSlot(depot).orElseThrow();
@@ -127,14 +127,14 @@ class HumanRoleAssignmentTest {
 
     private static ResidentProfile born(FrontierWorldState state, String id, ResidentRole role) {
         ResidentProfile parent = state.humanPopulation().resident(new SubjectId("resident:1-1"));
-        return new ResidentProfile(new SubjectId(id), parent.householdId(), parent.settlementId(), role, 0L, parent.skills());
+        return new ResidentProfile(new SubjectId(id), parent.householdId(), parent.settlementId(), role, "Test Resident", 0L, parent.skills());
     }
 
     private static ResidentProfile born(FrontierWorldState state, String id, ResidentRole role, ResidentSkill skill, int value) {
         ResidentProfile parent = state.humanPopulation().resident(new SubjectId("resident:1-1"));
         Map<ResidentSkill, Integer> skills = new EnumMap<>(parent.skills());
         skills.put(skill, value);
-        return new ResidentProfile(new SubjectId(id), parent.householdId(), parent.settlementId(), role, 0L, skills);
+        return new ResidentProfile(new SubjectId(id), parent.householdId(), parent.settlementId(), role, "Test Resident", 0L, skills);
     }
 
     private static ExactInventory withBread(ExactInventory inventory, SubjectId settlement) {

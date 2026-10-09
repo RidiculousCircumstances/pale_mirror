@@ -78,6 +78,7 @@ public final class FrontierV3TestPilotClient {
     private static boolean boardInteractionAttempted;
     private static String currentCausalMilestone;
     private static boolean entityInteractionAttempted;
+    private static String interactedEntityCardTitle;
     private static int attackedEntityRuntimeId = -1;
     private static int entityAttackAttempts;
     private static float attackedEntityInitialHealth = Float.NaN;
@@ -234,6 +235,9 @@ public final class FrontierV3TestPilotClient {
             FrontierV3PersistentPilotTransport.closeIfRequested(minecraft);
             return;
         }
+        // Receiving the target chunk is not the same as a player-ready viewport.
+        // Do not interact or publish evidence behind Minecraft's terrain-loading screen.
+        if (minecraft.screen instanceof net.minecraft.client.gui.screens.ReceivingLevelScreen) return;
         FrontierV3TestPilotPresentation.clear(minecraft);
         if (FrontierV3PilotSessionControl.expectedCrashSegment() && !FrontierV3PilotSessionControl.expectedLossArmed()) {
             try { if (FrontierV3PilotSessionControl.armExpectedLoss(runningSetup ? 0 : index)) return; }
@@ -538,7 +542,8 @@ public final class FrontierV3TestPilotClient {
     /** Presentation-only proof: the player camera sees a locally rendered ordinary entity, not a server-selected UUID. */
     private static void assertVisibleEntity(Minecraft minecraft, JsonObject action) {
         ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
-        String expectedName = action.get("nameContains").getAsString();
+        String expectedName = FrontierV3PilotPresentationName.resolve(minecraft, action);
+        if (expectedName == null) { timeout(minecraft, action, "entity name diagnostic unavailable"); return; }
         double maxDistance = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
         double maxAngle = Math.cos(Math.toRadians(action.has("maxAngleDeg") ? action.get("maxAngleDeg").getAsDouble() : 50.0D));
         Vec3 eye = minecraft.player.getEyePosition(); Vec3 view = minecraft.player.getViewVector(1.0F).normalize();
@@ -558,7 +563,8 @@ public final class FrontierV3TestPilotClient {
     /** Rotates only the local test camera towards one locally rendered named body. */
     private static void lookNearestEntity(Minecraft minecraft, JsonObject action) {
         ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
-        String expectedName = action.get("nameContains").getAsString();
+        String expectedName = FrontierV3PilotPresentationName.resolve(minecraft, action);
+        if (expectedName == null) { timeout(minecraft, action, "entity name diagnostic unavailable"); return; }
         double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
         Entity target = FrontierV3TestPilotPresentation.nearestVisibleNamedEntity(minecraft, expectedType, expectedName, maximum);
         if (target == null) {
@@ -587,7 +593,12 @@ public final class FrontierV3TestPilotClient {
                 .stream().findFirst().orElse(null);
         if (board == null) { timeout(minecraft, action, "no visible named board was available for ordinary interaction"); return; }
         if (!boardInteractionAttempted) {
-            minecraft.gameMode.interact(minecraft.player, board, InteractionHand.MAIN_HAND);
+            if (action.has("blockPosition")) {
+                BlockPos clicked = position(action, "blockPosition");
+                minecraft.gameMode.useItemOn(minecraft.player, InteractionHand.MAIN_HAND,
+                        new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(clicked),
+                                net.minecraft.core.Direction.NORTH, clicked, false));
+            } else minecraft.gameMode.interact(minecraft.player, board, InteractionHand.MAIN_HAND);
             boardInteractionAttempted = true;
         }
         if (PaleMirrorContextCardClient.hasActiveTitle(action.get("title").getAsString())) {
@@ -609,8 +620,17 @@ public final class FrontierV3TestPilotClient {
                         .thenComparing(Entity::getUUID)).findFirst().orElse(null);
         if (target == null) { timeout(minecraft, action, "no nearby ordinary entity of type " + expectedType); return; }
         if (!entityInteractionAttempted) {
+            interactedEntityCardTitle = target.getCustomName() == null ? null
+                    : target.getCustomName().getString().split("\n", 2)[0];
             minecraft.gameMode.interact(minecraft.player, target, InteractionHand.MAIN_HAND);
             entityInteractionAttempted = true;
+        }
+        if (action.has("expectContextCard") && action.get("expectContextCard").getAsBoolean()) {
+            if (PaleMirrorContextCardClient.hasActiveTitle(interactedEntityCardTitle)) {
+                advance("interact_nearest_entity"); return;
+            }
+            timeout(minecraft, action, "timed out receiving the inspected entity's named contextual card");
+            return;
         }
         if (minecraft.player.containerMenu != minecraft.player.inventoryMenu) { advance("interact_nearest_entity"); return; }
         timeout(minecraft, action, "timed out opening ordinary entity container " + expectedType);
@@ -625,7 +645,8 @@ public final class FrontierV3TestPilotClient {
      */
     private static void attackNearestEntity(Minecraft minecraft, JsonObject action) {
         ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
-        String expectedName = action.has("nameContains") ? action.get("nameContains").getAsString() : null;
+        String expectedName = FrontierV3PilotPresentationName.resolve(minecraft, action);
+        if (action.has("nameContains") && expectedName == null) { timeout(minecraft, action, "entity name diagnostic unavailable"); return; }
         double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 8.0D;
         int maximumAttempts = action.get("maxAttacks").getAsInt();
         boolean requireRemoval = action.has("requireRemoval") && action.get("requireRemoval").getAsBoolean();

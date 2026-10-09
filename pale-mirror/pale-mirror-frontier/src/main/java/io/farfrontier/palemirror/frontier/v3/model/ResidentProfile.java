@@ -12,7 +12,7 @@ import java.util.Objects;
  */
 public record ResidentProfile(
         SubjectId id, SubjectId householdId, SubjectId settlementId, ResidentRole role,
-        ResidentProfession profession, long birthTick, Map<ResidentSkill, Integer> skills,
+        String name, long birthTick, Map<ResidentSkill, Integer> skills,
         Map<HumanCapability, Integer> capabilities, ResidentCharacteristics characteristics
 ) {
     public static final int MAX_SKILL = 100;
@@ -22,7 +22,10 @@ public record ResidentProfile(
         Objects.requireNonNull(householdId, "resident household id");
         Objects.requireNonNull(settlementId, "resident settlement id");
         Objects.requireNonNull(role, "resident role");
-        Objects.requireNonNull(profession, "resident profession");
+        Objects.requireNonNull(name, "resident name");
+        if (name.isBlank() || name.length() > 48 || !name.equals(name.strip())
+                || name.chars().anyMatch(Character::isISOControl))
+            throw new IllegalArgumentException("resident name must be 1..48 printable characters");
         if (!id.value().startsWith("resident:")) throw new IllegalArgumentException("resident id must use resident: namespace");
         if (!householdId.value().startsWith("household:")) throw new IllegalArgumentException("resident household must use household: namespace");
         if (!settlementId.value().startsWith("settlement:")) throw new IllegalArgumentException("resident settlement must use settlement: namespace");
@@ -46,43 +49,39 @@ public record ResidentProfile(
     }
 
     public ResidentProfile(SubjectId id, SubjectId householdId, SubjectId settlementId, ResidentRole role,
-                           ResidentProfession profession, long birthTick, Map<ResidentSkill, Integer> skills,
+                           String name, long birthTick, Map<ResidentSkill, Integer> skills,
                            Map<HumanCapability, Integer> capabilities) {
-        this(id, householdId, settlementId, role, profession, birthTick, skills, capabilities,
+        this(id, householdId, settlementId, role, name, birthTick, skills, capabilities,
                 ResidentCharacteristics.initial());
     }
 
-    /** Compatibility constructor for snapshots and WAL payloads before the human-capability migration. */
+    /** Genesis constructor: capability baselines are explicit products of the supplied skills. */
     public ResidentProfile(SubjectId id, SubjectId householdId, SubjectId settlementId, ResidentRole role,
-                           long birthTick, Map<ResidentSkill, Integer> skills) {
-        this(id, householdId, settlementId, role, ResidentProfession.fromBootstrapAffinity(role), birthTick, skills, legacyCapabilities(skills));
+                           String name, long birthTick, Map<ResidentSkill, Integer> skills) {
+        this(id, householdId, settlementId, role, name, birthTick, skills, initialCapabilities(skills));
     }
 
     public int skill(ResidentSkill skill) { return skills.get(Objects.requireNonNull(skill, "skill")); }
     public int capability(HumanCapability capability) { return capabilities.get(Objects.requireNonNull(capability, "capability")); }
 
     public ResidentProfile relocated(SubjectId nextSettlementId, SubjectId nextHouseholdId) {
-        return new ResidentProfile(id, nextHouseholdId, nextSettlementId, role, profession, birthTick, skills, capabilities, characteristics);
+        return new ResidentProfile(id, nextHouseholdId, nextSettlementId, role, name, birthTick, skills, capabilities, characteristics);
     }
 
     public ResidentProfile withRole(ResidentRole nextRole) {
-        return new ResidentProfile(id, householdId, settlementId, nextRole, profession, birthTick, skills, capabilities, characteristics);
-    }
-
-    public ResidentProfile withProfession(ResidentProfession nextProfession) {
-        return new ResidentProfile(id, householdId, settlementId, role, nextProfession, birthTick, skills, capabilities, characteristics);
+        return new ResidentProfile(id, householdId, settlementId, nextRole, name, birthTick, skills, capabilities, characteristics);
     }
 
     public ResidentProfile withCapabilities(Map<HumanCapability, Integer> nextCapabilities) {
-        return new ResidentProfile(id, householdId, settlementId, role, profession, birthTick, skills, nextCapabilities, characteristics);
+        return new ResidentProfile(id, householdId, settlementId, role, name, birthTick, skills, nextCapabilities, characteristics);
     }
 
     public ResidentProfile withCharacteristics(ResidentCharacteristics nextCharacteristics) {
-        return new ResidentProfile(id, householdId, settlementId, role, profession, birthTick, skills,
+        return new ResidentProfile(id, householdId, settlementId, role, name, birthTick, skills,
                 capabilities, nextCharacteristics);
     }
 
-    private static Map<HumanCapability, Integer> legacyCapabilities(Map<ResidentSkill, Integer> skills) {
+    private static Map<HumanCapability, Integer> initialCapabilities(Map<ResidentSkill, Integer> skills) {
         Objects.requireNonNull(skills, "resident skills");
         EnumMap<HumanCapability, Integer> values = new EnumMap<>(HumanCapability.class);
         for (HumanCapability capability : HumanCapability.values()) values.put(capability, 10);

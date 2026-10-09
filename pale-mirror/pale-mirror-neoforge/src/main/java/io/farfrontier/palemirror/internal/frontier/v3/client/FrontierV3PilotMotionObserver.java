@@ -36,7 +36,7 @@ final class FrontierV3PilotMotionObserver {
         // the carrier can prove that completion/release did not silently despawn and recreate
         // the worker between two diagnostic polls.
         String worker = workerId(action);
-        String expectedName = entityRuntimeId < 0 ? expectedName(action) : "";
+        String expectedName = entityRuntimeId < 0 ? expectedName(minecraft, action) : "";
         if (expectedName == null) {
             if (clientTick * 50L >= action.get("timeoutMs").getAsLong()) {
                 throw new IllegalStateException("motion observation lacks the exact worker presentation diagnostic: " + action.get("id").getAsString());
@@ -118,8 +118,8 @@ final class FrontierV3PilotMotionObserver {
     }
 
     /** Never fall back to nearest-of-type: a motion receipt belongs to the current exact lease worker. */
-    private static String expectedName(JsonObject action) {
-        if (action.has("nameContains")) return action.get("nameContains").getAsString();
+    private static String expectedName(Minecraft minecraft, JsonObject action) {
+        if (action.has("nameContains")) return FrontierV3PilotPresentationName.resolve(minecraft, action);
         JsonObject process = receivedDiagnostic("process", action.get("id").getAsString());
         if (process == null || !process.has("identity") || !process.get("identity").isJsonObject()) return null;
         JsonObject identity = process.getAsJsonObject("identity");

@@ -948,6 +948,12 @@ public final class FrontierV3ServerLifecycle {
     public static boolean presentObjectBoard(ServerLevel level, ServerPlayer player, Entity entity) {
         return FrontierV3ServerPhysicalInteractions.presentObjectBoard(level, player, entity);
     }
+    public static boolean presentTownHall(ServerLevel level, ServerPlayer player, BlockPos position) {
+        return FrontierV3ServerPhysicalInteractions.presentTownHall(level, player, position);
+    }
+    public static boolean presentResident(ServerLevel level, ServerPlayer player, Entity entity) {
+        return FrontierV3ServerPhysicalInteractions.presentResident(level, player, entity);
+    }
     public static ExactCustodyObservation observeExactItemPickup(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
         return FrontierV3ServerPhysicalInteractions.observeExactItemPickup(level, player, itemEntity);
     }
