@@ -26,6 +26,14 @@ No infinite quarry, invented consumer, invisible transfer or automatic money
 creation is permitted to keep trade moving. Exhaustion, adequate stock and
 insufficient funds can correctly stop new trade, with a readable explanation.
 
+The settlement's extraction mandate is not a one-stack job. Confirmed unloading
+keeps the same work identity, resident execution and exact tool and selects the
+next available source. Carry capacity and hauling batch size are independent.
+Each new extracted resource part has distinct lot/custody identities; previously
+delivered or sold output cannot become new production. Depletion or explicit
+mandate withdrawal ends work after actual cargo settlement and tool return;
+temporary reservations, blocked access, hunger and storage pressure are waits.
+
 ## Single owners and dependency boundaries
 
 | Owner | Responsibility | Must not own |

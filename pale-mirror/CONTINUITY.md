@@ -5,17 +5,74 @@ Canonical governance is here; sole workflow docs/engineering-agent-protocol.md.
 
 ## Current assignment and result
 
-Current authority: user requested commit and push after the fresh test world.
-Implementation committed1437cbb08a12bd075b8352a3e605b9449c9d146d and pushed to
-origin/feat/baker-carry-orders-20260926 without force. This preserves the verified
-R83c production source; only three reviewed declarative scenarios differ from
-that frozen tree. Those scenarios passed the existing loadScenario validator;
-unchanged build/native evidence is reused, not rerun. Implementation is clean.
-Scoped governance receipts/ledger are being committed separately on main;
-unrelated older governance WIP and both original repositories remain untouched.
-No server restart/build change for this publication. Main alone, no subagents.
-The former R81 world remains intact as a diagnostic fixture. Latest live identity
-below supersedes old receipts.
+Current authority: ongoing extraction while the settlement requests it; user
+also reports a roughly5s pause after the courier takes stone. Main alone fixes
+the connected source path, verifies and deploys by standing test delivery policy.
+Prior commit/push request completed1437cbb08a12bd075b8352a3e605b9449c9d146d to
+origin/feat/baker-carry-orders-20260926; governance scoped publication completed
+b6265a053e4d9f8d721fc5c1c6b5299d017cb840. Latest user requested local commit,
+not push. Implementation5455bb5c54620b0f3c5316a18b02beaa452fb3a4 committed;
+its tree exactly matches verified/deployed R84b22f81c1268865808c0d8281c93bf5e72ffa374e3.
+
+R84 retains one extraction job/tool across delivery with fresh per-part
+lot/custody IDs, independent physical carry capacity/haul batch, semantic source
+selection and safe mandate withdrawal. HOT and COLD receipts use that same
+successor. Schema266 rejects old STORE history (oldmeaning RETURN_TOOL/retire);
+a fresh disposable world is required. Source selection uses deterministic shared
+navigation in the reducer, not volatile cooperative readiness. Existing focused
+extraction/external/source/shipment checks16/17 passed; initial failure was invalid
+new-ID spelling and then a wrongly retained test requirement to exhaust the entire
+deposit. Corrected continuous-job test passes with actual first delivery and next
+extraction, selected-part snapshot recovery and cargo-preserving withdrawal.
+No huge exhaustion or timing proof campaign is needed for this requirement.
+
+The shared HOT movement adapter formerly called waitForAccess anywhere if a
+destination service permit was busy, so a loaded carrier could wait at the mine
+for the remote depot. Fixed common outside approach with a hard service-entry
+fence, separate incumbent egress and no fake semantic arrival. Scope4cases PASS14s;
+this establishes the code contradiction, not an exact5s measured attribution.
+Site new-work admission still has200tick periodic review; accepted transfer wakes
+the exact continuation next tick. No task-specific movement actuator introduced.
+
+Frozen production candidate4d0ba26ff25779073346c644b2f2ac749042e9de/tree
+5eeabbcacfe48685b458ef0b3ba1085b68ccc95a in pm-quarry-r84-release-20261010:
+guardrails/domain29cases PASS. Full native354cases had2 failures; retained original
+log /tmp/pm-quarry-r84-release-gates.log, not labelled wholly green. Existing
+admission fixture assumed immediate APPLIED despite legal async DEFERRED. Corrected
+only its wait for exact insertion before unchanged confirmation assertions; no
+production fallback. Test-only successor8cd0c567485ca7fd07e0be082c71bdc9c31b5f5b /
+tree22f81c1268865808c0d8281c93bf5e72ffa374e3 in pm-quarry-r84b-release-20261010:
+guardrails/native-unit690(0fail,1existing skip)/build/package/pilot PASS3m6s;
+targeted harvest-support3native PASS. The second full-suite failure was the
+ambient support-loss fixture's CLOSED expectation in the shared player level;
+unchanged ambient-physics10cases PASS in isolated slice35s, no code weakening.
+Logs /tmp/pm-quarry-r84b-test-correction.log and
+/tmp/pm-quarry-r84b-ambient-isolation.log. Unaffected checks reused, no full rerun.
+Implementation22task-owned paths committed, worktree clean. Old governance
+WIP and both original repositories preserved. No graphical acceptance/measured
+latency improvement is claimed; exact reported5s attribution remains unmeasured.
+
+### Latest live deployment — R84 continuous extraction, 2026-10-10 03:07+05
+
+Graceful save/stop R83 completed; old world retained for diagnosis, nothing deleted.
+Published/installed exact R84b core SHA512
+3b9185985f07c4128e19d530cfcd6cca6676db68a058507b3505238cb18a5a3d70a0d10d5626f49b4dfa6bf1d56b9116ef1a8d37ac4e0557d7f440ac0c5c496c.
+Visuals unchanged2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601.
+New world frontier-v3-quarry-r84-20261010 received only required datapacks before
+genesis; same seed20260918065/quarry-graybox-r1/Java22, no stock injection.
+Source-ref/checksum/absent-level.dat preflight PASS; post-start verifier PASS.
+Runtime /home/rd/far-frontier-server, far-frontier-v3-live.service wrapper1447562,
+start1791583646/invocationb66fbb063bf54ca49e3729e51321ee7c; Done03:07:37.
+Read-only RCON performance statusok revision1282/tick838,12settlements/no
+physical admission hold; fresh logs contain no new ERROR/quarantine. No native
+client launched. Existing site admission/retry200tick cadence unchanged; sparse
+transfer continuations wake next tick but scheduler wall latency is not measured.
+Client can update through normal updater for checksum-pinned new core. Human may
+check that successive miner batches retain the pick and that a carrier approaches
+a busy destination instead of waiting at the quarry. Root pack only unrelated
+.f0v-baseline, original nested23WIP untouched. Scoped governance continuity and
+mandate paragraph committed separately; unrelated earlier documentation WIP
+excluded. No push for this latest publication, and no server restart required.
 
 ### Latest live world — fresh quarry reset, 2026-10-10 02:31+05
 
