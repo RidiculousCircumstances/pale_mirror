@@ -11,6 +11,15 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ActorCarr
 
 /** Replaces owner-transfer chain tests: activities cannot transfer the body in the first place. */
 class FrontierV3ActorBodyLifetimeTest {
+    @Test void commonBodyDepartureRetainsTheExactEquipmentIdentity() {
+        var original = receipt(running());
+        var held = new FrontierV3ActorBodyDeparture.HandStack("minecraft:stone_pickaxe", 1, Optional.of(new SubjectId("item:body-tool")));
+        var equipped = new FrontierV3ActorBodyDeparture(original.identity(), original.residenceGeneration(), original.observed(),
+                original.canonicalBody(), original.canonicalHealth(), original.executionAtCapture(), original.offhand(), Optional.of(held));
+        assertEquals(equipped, FrontierV3ActorBodyDeparture.load(equipped.save()));
+        var malformed = equipped.save(); malformed.getCompound("mainhand").putInt("exactItemId", 2);
+        assertThrows(IllegalStateException.class, () -> FrontierV3ActorBodyDeparture.load(malformed));
+    }
     @Test void resourceDeathCompositionRejectsMissingOrCompetingOwners() {
         FrontierV3ActorDeathResourceComposition.Preparation noop = (level, runtime, body, id) -> () -> { };
         var equipment = new FrontierV3ActorDeathResourceComposition.Handler(

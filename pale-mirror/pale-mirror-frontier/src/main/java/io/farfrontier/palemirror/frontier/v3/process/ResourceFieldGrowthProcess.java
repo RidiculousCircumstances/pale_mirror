@@ -47,8 +47,6 @@ public final class ResourceFieldGrowthProcess {
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, ResourceSiteGrowthAdvanced event) {
         if (!subject.equals(event.siteId())) throw new IllegalArgumentException("plant growth has a foreign event owner");
-        if (state.resourceSites().hasPendingWorldChange(subject))
-            throw new IllegalArgumentException("plant growth overlaps an unresolved world field change");
         var site = state.resourceSites().site(subject);
         if (!eligible(site) || site.growthEpoch() != event.growthEpoch() || site.growthStage() != event.growthStage())
             throw new IllegalArgumentException("plant growth has a stale site boundary");
@@ -67,6 +65,18 @@ public final class ResourceFieldGrowthProcess {
         return List.of(new ProposedEvent(site.siteId(), new ScheduleEffect.Created(
                 StrategicObjectiveProcess.resourceHarvestOpportunity(after, site, Math.addExact(now, 1L),
                         "observation|" + observation.cellId().value() + "|" + observation.causationId()))));
+    }
+
+    /** External replacement/clearance uses the same readiness opportunity as ordinary growth. */
+    static List<ProposedEvent> afterObservedInterference(FrontierWorldState before, FrontierWorldState after,
+                                                        ResourceFieldForeignChangeHeld hold, long now) {
+        var site = after.resourceSites().site(hold.siteId());
+        if (site.phase() != ResourceSitePhase.READY && site.phase() != ResourceSitePhase.HARVESTING
+                || !newlyActionable(before.resourceSites().cycle(site.siteId()), after.resourceSites().cycle(site.siteId())))
+            return List.of();
+        return List.of(new ProposedEvent(site.siteId(), new ScheduleEffect.Created(
+                StrategicObjectiveProcess.resourceHarvestOpportunity(after, site, Math.addExact(now, 1L),
+                        "external|" + hold.cellId().value() + "|" + hold.causationId()))));
     }
 
     /** Work completion retires accounting only; it does not replant or reset plant age. */

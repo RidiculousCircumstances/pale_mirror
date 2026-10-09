@@ -41,17 +41,13 @@ public final class ServiceAccessCoordinator {
         var movement = state.actorMovements().get(actorId);
         if (movement != null) movement.context().clearancePoint().ifPresent(points::add);
         var actor = state.actorLocations().get(actorId);
-        if (actor != null) state.bootstrap().settlements().stream()
-                .flatMap(settlement -> settlement.structures().stream())
-                .filter(structure -> structure.kind() == StructureKind.DEPOT)
-                .map(SettlementDepotServicePort::forDepot)
-                .filter(port -> port.accessBoundary().occupied(actor.body()))
-                .forEach(port -> points.add(FrontierWorldState.depotId(port.settlementId())));
+        if (actor != null) ServiceBoundaryComposition.declarations(state).values().stream()
+                .filter(point -> point.boundary().occupied(actor.body())).forEach(point -> points.add(point.pointId()));
         return java.util.Set.copyOf(points);
     }
 
     public static ServiceAccessBoundary boundary(FrontierWorldState state, SubjectId pointId) {
-        return port(state, pointId).accessBoundary();
+        return ServiceBoundaryComposition.boundary(state, pointId);
     }
 
     public static boolean witnessedActorMovementExit(FrontierWorldState state,
@@ -129,29 +125,14 @@ public final class ServiceAccessCoordinator {
         return actor.body();
     }
 
-    public static SettlementDepotServicePort port(FrontierWorldState state, SubjectId depotId) {
-        ContainerRecord container = Objects.requireNonNull(state.inventory().containers().get(depotId),
-                "unknown depot service container");
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), container.ownerId());
-        if (!FrontierWorldState.depotId(settlement.id()).equals(depotId))
-            throw new IllegalArgumentException("service container is not the settlement's declared depot");
-        SettlementStructure depot = settlement.structures().stream()
-                .filter(structure -> structure.kind() == StructureKind.DEPOT)
-                .reduce((left, right) -> { throw new IllegalArgumentException("duplicate depot service identity"); })
-                .orElseThrow(() -> new IllegalArgumentException("unknown depot service identity"));
-        return SettlementDepotServicePort.forDepot(depot);
-    }
-
     /** Derived turnover request; activity owns whether and when this occupant may leave. */
-    public static Optional<ServiceAccessPoint> turnoverPoint(FrontierWorldState state, SubjectId residentId) {
+    public static Optional<ServiceBoundaryProvider.Declaration> turnoverPoint(FrontierWorldState state, SubjectId residentId) {
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         ActorLocation actor = state.actorLocations().get(residentId);
         if (resident == null || actor == null) return Optional.empty();
         // A service visitor need not belong to the facility's settlement.
         // The declared point owns geometry; residence owns neither occupancy nor exit.
-        return state.bootstrap().settlements().stream()
-                .flatMap(settlement -> SettlementServiceAccessPoints.forSettlement(state, settlement.id()).stream())
-                .filter(point -> ServiceAreaDestinations.temporary(point, actor.supportingSurface())).findFirst();
+        return ServiceBoundaryComposition.turnoverPoint(state, actor.supportingSurface());
     }
 
     /**
@@ -160,16 +141,10 @@ public final class ServiceAccessCoordinator {
      */
     public static Optional<SurfaceAnchor> mealClearingSurface(FrontierWorldState state, SubjectId residentId) {
         ResidentProfile resident = Objects.requireNonNull(state.humanPopulation().resident(residentId), "service resident");
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
-        SettlementDepotServicePort port = port(state, FrontierWorldState.depotId(settlement.id()));
-        SettlementStructure depot = settlement.structures().stream()
-                .filter(structure -> structure.id().equals(port.depotId())).findFirst().orElseThrow();
+        var point = ServiceBoundaryComposition.declaration(state, FrontierWorldState.depotId(resident.settlementId())).identity();
         java.util.Set<SurfaceAnchor> excluded = ServiceDestinationClaims.excludedFor(state, residentId);
-        var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
-                        new KnownPedestrianRouteKnowledge.Passage(depot,
-                                KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
-        return ServiceClearanceTargets.select(SettlementServiceAccessPoints.forDepot(state, settlement, depot),
-                residentId, knowledge, excluded);
+        return ServiceClearanceTargets.select(ServiceBoundaryComposition.geometry(state, point),
+                residentId, ServiceBoundaryComposition.knowledge(state, point), excluded);
     }
 
 }

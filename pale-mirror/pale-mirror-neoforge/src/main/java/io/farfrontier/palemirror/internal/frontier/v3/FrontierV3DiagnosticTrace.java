@@ -160,7 +160,13 @@ final class FrontierV3DiagnosticTrace {
     private static void record(MinecraftServer server, String correlation, String kind, SubjectId subject, CommandResult result, Context context) {
         Objects.requireNonNull(server, "server"); Objects.requireNonNull(correlation, "correlation");
         Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(subject, "subject"); Objects.requireNonNull(result, "result"); Objects.requireNonNull(context, "context");
-        if (!(result instanceof CommandResult.Accepted accepted)) return;
+        if (result instanceof CommandResult.Rejected rejected) {
+            PaleMirrorMod.LOGGER.warn("PMV3_TRACE_REJECTED correlation={} kind={} subject={} command={} revision={} code={} detail={} operation={} lease={} cargo={} actors={}",
+                    correlation, kind, subject.value(), rejected.commandId().value(), rejected.revision().value(),
+                    rejected.rejection().code(), rejected.rejection().detail(), context.operationId(), context.leaseId(), context.cargoId(), context.actorIds());
+            return;
+        }
+        CommandResult.Accepted accepted = (CommandResult.Accepted) result;
         Deque<Entry> entries = ENTRIES.computeIfAbsent(server, unused -> new ArrayDeque<>());
         List<String> previous = entries.stream().filter(candidate -> candidate.correlation().equals(correlation)).map(Entry::kind).toList();
         List<String> lineage = java.util.stream.Stream.concat(previous.subList(Math.max(0, previous.size() - 7), previous.size()).stream(),

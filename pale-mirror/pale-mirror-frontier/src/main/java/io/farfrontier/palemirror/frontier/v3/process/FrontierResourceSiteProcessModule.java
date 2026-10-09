@@ -487,8 +487,11 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
         }
         if (command.payload() instanceof ResourceFieldForeignCellObserved observed) {
             try {
-                ResourceSiteProcess.reduceForeignCellObserved(state, observed.hold().siteId(), observed);
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.hold().siteId(), observed)));
+                var next = ResourceSiteProcess.reduceForeignCellObserved(state, observed.hold().siteId(), observed);
+                var events = new java.util.ArrayList<ProposedEvent>();
+                events.add(new ProposedEvent(observed.hold().siteId(), observed));
+                events.addAll(ResourceFieldGrowthProcess.afterObservedInterference(state, next, observed.hold(), command.submittedAt().ticks()));
+                return new CommandPlan.Accepted(events);
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ResourceFieldForeignChangeAcknowledged acknowledged) {
@@ -596,7 +599,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 || state.resourceSites().site(aborted.siteId()).harvestJob(aborted.jobId())
                         .filter(job -> job.id().equals(aborted.jobId())
                                 && !job.progress().hasPendingPhysicalWork()
-                                && !state.resourceSites().hasPendingWorldChange(aborted.siteId())
+                                && !state.resourceSites().harvestMutationPending(job)
                                 && lease.members().getFirst().actorId().equals(job.workerId())).isEmpty()) {
             throw new IllegalArgumentException("field preparation abort lacks one exact body-free job scene");
         }

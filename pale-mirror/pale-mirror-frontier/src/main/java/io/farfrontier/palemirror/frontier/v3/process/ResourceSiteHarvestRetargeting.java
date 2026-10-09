@@ -43,14 +43,14 @@ public final class ResourceSiteHarvestRetargeting {
                 || job.navigationBlock().filter(block -> !block.reroutable()).isPresent()
                 || retargeted.layoutRevision() != cycle.layout().revision()
                 || retargeted.fromSlot() != job.progress().nextCropSlotIndex()
-                || state.resourceSites().hasPendingWorldChange(subject)
+                || state.resourceSites().harvestMutationPending(job)
                 || retargeted.toSlot() >= cycle.layout().cells().size())
             throw new IllegalArgumentException("area work retarget has a stale or unresolved work boundary");
         ResourceFieldLayout.CellId target = cycle.layout().cells().get(retargeted.toSlot()).id();
         ResourceFieldCycle.CellState condition = cycle.cell(target);
         if (!lifecycle.targetAvailable(retargeted.toSlot(), job.id()) || condition.accounted() || condition.workAccessBlocked()
                 || condition.crop() == ResourceFieldCycle.Crop.OBSTRUCTED
-                || cycle.pendingPlayerBreaks().containsKey(target))
+                || state.resourceSites().hasPendingCellMutation(subject, target))
             throw new IllegalArgumentException("area work retarget has no eligible alternate cell");
         ResourceSiteHarvestPlanning.requireContinuationBinding(job, new ScheduledAction(retargeted.coldScheduleId(),
                 new SimInstant(retargeted.coldDueAt()), 0, subject, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, 1));

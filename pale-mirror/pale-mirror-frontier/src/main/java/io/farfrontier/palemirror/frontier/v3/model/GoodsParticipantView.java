@@ -34,6 +34,8 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
                     .filter(contract -> !contract.terminal() && contract.buyer().equals(participant.party())
                             && contract.itemKind().equals(commodity.itemKind()) && contract.receiverContainerId().equals(participant.endpoint().containerId()))
                     .mapToInt(GoodsTradeContract::remainingQuantity).reduce(0, Math::addExact);
+            incoming = Math.addExact(incoming, InternalShipmentIncomingStock.quantity(state.shipments(), participant.party().id(),
+                    participant.endpoint().containerId(), commodity.itemKind()));
             int protectedMinimum = participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
                     && commodity.itemKind().equals(SettlementFoodPolicy.BREAD)
                     ? SettlementFoodPolicy.reserveRequirement(state, participant.party().id()) : 0;

@@ -112,7 +112,7 @@ public final class ResourceSiteProcess {
                 || lifecycle.phase() == ResourceSitePhase.DESTROYED)
             throw new IllegalArgumentException("prepared field break has no active owned field");
         ResourceFieldCycle cycle = state.resourceSites().cycle(prepared.siteId());
-        if (state.resourceSites().hasPendingWorldChange(prepared.siteId()))
+        if (state.resourceSites().hasPendingCellMutation(prepared.siteId(), prepared.cellId()))
             throw new IllegalArgumentException("player break overlaps an unresolved world field change");
         if (cycle.epoch() != prepared.epoch() || cycle.layout().revision() != prepared.layoutRevision())
             throw new IllegalArgumentException("prepared field break has a stale epoch or layout revision");
@@ -150,7 +150,7 @@ public final class ResourceSiteProcess {
                                                                     ResourceFieldWorldChangeAcknowledged acknowledged) {
         ResourceFieldCellObserved observation = acknowledged.observation();
         if (!subject.equals(observation.siteId())
-                || !observation.equals(state.resourceSites().pendingWorldChange(subject)))
+                || !observation.equals(state.resourceSites().pendingWorldChange(subject, observation.cellId())))
             throw new IllegalArgumentException("world field acknowledgement has no exact held owner");
         ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
         if (cycle.epoch() != observation.epoch() || cycle.layout().revision() != observation.layoutRevision()
@@ -183,7 +183,7 @@ public final class ResourceSiteProcess {
     public static FrontierWorldState reduceForeignCellObserved(FrontierWorldState state, SubjectId subject,
                                                                 ResourceFieldForeignCellObserved observed) {
         ResourceFieldForeignChangeHeld held = observed.hold();
-        if (!subject.equals(held.siteId()) || !held.equals(state.resourceSites().pendingForeignChange(subject)))
+        if (!subject.equals(held.siteId()) || !held.equals(state.resourceSites().pendingForeignChange(subject, held.cellId())))
             throw new IllegalArgumentException("foreign field observation lacks its exact retained cause");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
         ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
@@ -197,7 +197,7 @@ public final class ResourceSiteProcess {
     public static FrontierWorldState reduceForeignChangeAcknowledged(FrontierWorldState state, SubjectId subject,
                                                                       ResourceFieldForeignChangeAcknowledged acknowledged) {
         ResourceFieldForeignChangeHeld held = acknowledged.hold();
-        if (!subject.equals(held.siteId()) || !held.equals(state.resourceSites().pendingForeignChange(subject)))
+        if (!subject.equals(held.siteId()) || !held.equals(state.resourceSites().pendingForeignChange(subject, held.cellId())))
             throw new IllegalArgumentException("foreign field acknowledgement lacks its exact retained cause");
         ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
         if (cycle.epoch() != held.epoch() || cycle.layout().revision() != held.layoutRevision()
@@ -222,9 +222,9 @@ public final class ResourceSiteProcess {
         if (!ResourceFieldPhysicalSurface.Condition.of(prior).equals(observed.before()))
             throw new IllegalArgumentException("field cell observation has a stale canonical predecessor");
         ResourceFieldCycle ready = cycle;
-        ResourceFieldCellObserved heldWorld = state.resourceSites().pendingWorldChange(observed.siteId());
+        ResourceFieldCellObserved heldWorld = state.resourceSites().pendingWorldChange(observed.siteId(), observed.cellId());
         if (observed.source() == ResourceFieldCellObserved.Source.PLAYER) {
-            if (state.resourceSites().hasPendingWorldChange(observed.siteId()))
+            if (state.resourceSites().pendingWorldChange(observed.siteId(), observed.cellId()) != null || state.resourceSites().pendingForeignChange(observed.siteId(), observed.cellId()) != null)
                 throw new IllegalArgumentException("player field action overlaps a held world change");
             var pending = cycle.pendingPlayerBreaks().get(observed.cellId());
             if (pending == null || !pending.actionId().equals(observed.causationId())
@@ -232,7 +232,7 @@ public final class ResourceSiteProcess {
                 throw new IllegalArgumentException("player field observation lacks its exact durable break permission");
             ready = cycle.closePlayerBreak(observed.cellId(), observed.causationId());
         } else {
-            if (state.resourceSites().pendingForeignChange(observed.siteId()) != null
+            if (state.resourceSites().pendingForeignChange(observed.siteId(), observed.cellId()) != null
                     || heldWorld == null || !heldWorld.causationId().equals(observed.causationId())
                     || !heldWorld.siteId().equals(observed.siteId()) || heldWorld.epoch() != observed.epoch()
                     || heldWorld.layoutRevision() != observed.layoutRevision()
@@ -299,7 +299,7 @@ public final class ResourceSiteProcess {
                 || lifecycle.phase() == ResourceSitePhase.CONFLICT
                 || observed.epoch() != cycle.epoch() || observed.layoutRevision() != cycle.layout().revision()
                 || !observed.headroom().equals(cell.workstation().support().offset(0, 2, 0))
-                || state.resourceSites().hasPendingWorldChange(subject)
+                || state.resourceSites().hasPendingCellMutation(subject, cell.id())
                 || cycle.pendingPlayerBreaks().containsKey(cell.id()))
             throw new IllegalArgumentException("field work access has a stale or unresolved cell observation");
         if (observed.hotLeaseId().isPresent()) {

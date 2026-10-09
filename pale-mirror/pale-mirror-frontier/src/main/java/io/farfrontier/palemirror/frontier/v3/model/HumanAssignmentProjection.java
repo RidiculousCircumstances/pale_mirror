@@ -25,7 +25,7 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
             return new Dependencies(List.of(state.humanPopulation().residents(), state.productionJobs(),
                     state.resourceSites().sites(), state.strategicPlans().routePatrols(),
                     state.strategicPlans().settlementAssaults(), state.routeConstructions(), state.routeMaintenances(),
-                    state.serviceWorks(), state.humanPopulation().medicalOperations(), state.humanPopulation().migrations(), state.shipments(), state.unitGroups()));
+                    state.serviceWorks(), state.humanPopulation().medicalOperations(), state.humanPopulation().migrations(), state.shipments(), state.unitGroups(), state.extractionSites().work()));
         }
         @Override public boolean equals(Object other) {
             if (!(other instanceof Dependencies value) || sources.size() != value.sources.size()) return false;
@@ -63,6 +63,9 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
         state.humanPopulation().residentIds().stream().sorted().forEach(id -> values.put(id, HumanAssignment.idle(id)));
         state.productionJobs().values().stream().sorted(Comparator.comparing(ProductionJob::id))
                 .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.PRODUCTION, job.id()));
+        state.extractionSites().work().values().stream().filter(job -> !job.terminal()).sorted(Comparator.comparing(
+                io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWork::id))
+                .forEach(job -> claim(values, job.execution().actorId(), HumanAssignmentKind.EXTRACTION, job.id()));
         // A conflict suspends execution, not the retained job's exclusive worker claim.
         state.resourceSites().sites().values().stream().sorted(Comparator.comparing(ResourceSiteLifecycle::siteId))
                 .flatMap(site -> site.harvestJobs().values().stream())

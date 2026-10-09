@@ -335,6 +335,9 @@ class FrontierV3ServerRuntimeTest {
                 runtime.submit(command("command:before-quarantine", Revision.ZERO, SimInstant.ZERO, 3)).orElseThrow());
         Counter retained = runtime.decodedState().orElseThrow();
         runtime.quarantine(new IllegalStateException("test physical executor failure"));
+        var primaryStatus = runtime.status();
+        runtime.quarantine(new IllegalStateException("secondary inactive runtime failure"));
+        assertSame(primaryStatus, runtime.status(), "secondary failures cannot replace the primary quarantine");
         assertTrue(runtime.decodedState().isEmpty());
         assertTrue(runtime.canonicalState().isEmpty());
         assertSame(retained, runtime.passiveOwnershipState().orElseThrow());

@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.CellMutationKey;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout;
@@ -18,6 +19,7 @@ record FrontierV3ResourceFieldWorldChangeWitness(ResourceFieldCellObserved obser
             throw new IllegalArgumentException("world field witness has a foreign source");
     }
 
+    CellMutationKey mutationKey() { return new CellMutationKey(CellMutationKey.OwnerFamily.RESOURCE_SITE, siteId(), cellId().value()); }
     SubjectId siteId() { return observation.siteId(); }
     ResourceFieldLayout.CellId cellId() { return observation.cellId(); }
     ResourceFieldPhysicalSurface.Condition before() { return observation.before(); }
@@ -31,6 +33,7 @@ record FrontierV3ResourceFieldWorldChangeWitness(ResourceFieldCellObserved obser
 
     CompoundTag write() {
         CompoundTag tag = new CompoundTag();
+        tag.putInt("mutationFamily", mutationKey().family().wireTag());
         tag.putString("site", siteId().value());
         tag.putLong("epoch", observation.epoch());
         tag.putLong("layout", observation.layoutRevision());
@@ -48,6 +51,9 @@ record FrontierV3ResourceFieldWorldChangeWitness(ResourceFieldCellObserved obser
     }
 
     static FrontierV3ResourceFieldWorldChangeWitness read(CompoundTag tag) {
+        if (!tag.contains("mutationFamily", Tag.TAG_INT)
+                || CellMutationKey.OwnerFamily.decode(tag.getInt("mutationFamily")) != CellMutationKey.OwnerFamily.RESOURCE_SITE)
+            throw new IllegalStateException("missing or foreign mutation family");
         if (!tag.contains("site", Tag.TAG_STRING) || !tag.contains("epoch", Tag.TAG_LONG)
                 || !tag.contains("layout", Tag.TAG_LONG) || !tag.contains("cell", Tag.TAG_LONG)
                 || !tag.contains("beforeSoil", Tag.TAG_STRING) || !tag.contains("beforeCrop", Tag.TAG_STRING)

@@ -21,10 +21,18 @@ record FrontierV3ActorBodyDeparture(FrontierV3ActorCarrierComposition.Declaratio
             Optional<HandStack> offhand, Optional<HandStack> mainhand) {
         this(identity, residenceGeneration, observed, canonicalBody, canonicalHealth, execution, offhand, mainhand, Optional.empty());
     }
-    record HandStack(String itemKind, int quantity) {
+    record HandStack(String itemKind, int quantity, Optional<SubjectId> exactItemId) {
+        HandStack(String itemKind, int quantity) { this(itemKind, quantity, Optional.empty()); }
         HandStack {
+            Objects.requireNonNull(exactItemId);
             if (itemKind == null || !itemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")
                     || quantity < 1 || quantity > 64) throw new IllegalArgumentException("invalid saved actor hand");
+        }
+        void writeIdentity(CompoundTag tag) { exactItemId.ifPresent(id -> tag.putString("exactItemId", id.value())); }
+        static Optional<SubjectId> readIdentity(CompoundTag tag) {
+            if (!tag.contains("exactItemId")) return Optional.empty();
+            if (!tag.contains("exactItemId", Tag.TAG_STRING)) throw new IllegalStateException("invalid exact hand identity");
+            return Optional.of(new SubjectId(tag.getString("exactItemId")));
         }
     }
     FrontierV3ActorBodyDeparture {
@@ -120,6 +128,7 @@ record FrontierV3ActorBodyDeparture(FrontierV3ActorCarrierComposition.Declaratio
         tag.putBoolean(key + "Present", hand.isPresent());
         hand.ifPresent(stack -> {
             var value = new CompoundTag(); value.putString("item", stack.itemKind()); value.putInt("count", stack.quantity());
+            stack.writeIdentity(value);
             tag.put(key, value);
         });
     }
@@ -133,6 +142,6 @@ record FrontierV3ActorBodyDeparture(FrontierV3ActorCarrierComposition.Declaratio
         var value = tag.getCompound(key);
         if (!value.contains("item", Tag.TAG_STRING) || !value.contains("count", Tag.TAG_INT))
             throw new IllegalStateException("incomplete hand evidence");
-        return Optional.of(new FrontierV3ActorBodyDeparture.HandStack(value.getString("item"), value.getInt("count")));
+        return Optional.of(new FrontierV3ActorBodyDeparture.HandStack(value.getString("item"), value.getInt("count"), HandStack.readIdentity(value)));
     }
 }

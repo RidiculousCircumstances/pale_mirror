@@ -31,6 +31,7 @@ final class FrontierV3AmbientHotAdmission {
         if (supported.isEmpty()) return;
         var bodyId = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(current, actorId);
         if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, admittedBody)) return;
+        if (!FrontierV3ReferenceContainerCustodyExecutor.confirmAdmittedAttachment(level, runtime, actorId)) return;
         var result = FrontierV3AmbientActorExecutor.submit(runtime, "ambient-hot-body-confirmed", actorId.value(),
                 new AmbientBodyConfirmed(actorId, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION,
                         lease.handoffBody(), supported.orElseThrow(), bodyId));

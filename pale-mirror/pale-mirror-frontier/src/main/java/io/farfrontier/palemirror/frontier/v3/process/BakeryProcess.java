@@ -332,6 +332,46 @@ public final class BakeryProcess {
         return FrontierProductionWorkSceneSupport.replaceJob(state, job.withBakeryWork(work.preparePhysical(step)));
     }
 
+    static FrontierWorldState abortHotDelivery(FrontierWorldState state, SubjectId subject, BakeryHotDeliveryAborted aborted) {
+        var job = state.productionJobs().get(aborted.jobId());
+        if (job == null || !job.settlementId().equals(subject) || job.bakeryWork().isEmpty())
+            throw new IllegalArgumentException("delivery cancellation has no exact owner");
+        var work = job.bakeryWork().orElseThrow();
+        var pending = work.pendingPhysicalStep().orElseThrow(() -> new IllegalArgumentException("delivery was not prepared"));
+        var lease = state.sceneLeases().get(aborted.leaseId());
+        if (work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY || pending.phase() != work.phase()
+                || !pending.leaseId().equals(aborted.leaseId()) || pending.destinationSlot() != aborted.destinationSlot()
+                || work.block().isPresent() || lease == null
+                || lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING
+                || !FrontierSceneBehaviors.isProductionWork(lease)
+                || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id())
+                || lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId())
+                || !aborted.occupiedDestination().scopeId().equals(FrontierWorldState.depotId(job.settlementId())))
+            throw new IllegalArgumentException("delivery cancellation has a foreign, ambiguous or stale prepared step");
+        var hand = (PhysicalStackAddress.ActorHand) aborted.unchangedHand().address();
+        if (!hand.actorId().equals(job.workerId()) || !hand.entityId().equals(lease.members().getFirst().entityId())
+                || hand.hand() != ActorContainerItemOrder.Hand.MAIN
+                || !aborted.unchangedHand().itemKind().equals(job.outputItemKind())
+                || aborted.unchangedHand().quantity() != job.outputCount())
+            throw new IllegalArgumentException("delivery cancellation lacks its unchanged complete source");
+        if (job.inputHold() instanceof ProductionInputHold.Materialized) {
+            var item = state.inventory().items().get(job.outputItemId());
+            if (!aborted.exactItemId().equals(Optional.of(job.outputItemId())) || aborted.sourceEpoch() != 0L
+                    || item == null || !item.custody().equals(new InventoryCustody.Actor(job.workerId())))
+                throw new IllegalArgumentException("delivery cancellation has foreign exact source custody");
+        } else {
+            if (aborted.exactItemId().isPresent()) throw new IllegalArgumentException("fungible delivery cannot cancel an exact item");
+            var binding = ActorCarriedResources.requireBinding(state.inventory().fungibleResources(), job.workerId(),
+                    work.actorAccountId(), aborted.unchangedHand());
+            if (binding.authorityEpoch() != aborted.sourceEpoch())
+                throw new IllegalArgumentException("delivery cancellation has a stale source epoch");
+        }
+        // Stock, claims, phase and worker are unchanged. Releasing the fence allows the
+        // ordinary container observer to classify the player change before a new preparation.
+        return FrontierProductionWorkSceneSupport.replaceJob(state,
+                job.withBakeryWork(work.withoutPhysical().withBlock(Optional.of(aborted.occupiedDestination()))));
+    }
+
     static FrontierWorldState hotWorkTick(FrontierWorldState state, SubjectId subject, BakeryHotWorkTick tick) {
         ProductionJob job = state.productionJobs().get(tick.jobId());
         if (job == null || !job.settlementId().equals(subject) || job.bakeryWork().isEmpty())

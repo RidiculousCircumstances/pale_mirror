@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "quarry_existing_world_delivery_return",
+  "server": { "host": "127.0.0.1", "port": 25585, "profile": "quarry-world" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+        "expect": { "status": "ok", "result": { "hasExtraction": true, "workersCold": true, "liveSourceRegions": 0 } } }
+    ] }
+  ],
+  "actions": [
+    { "type": "fast_forward_to_instant", "targetInstant": 40000, "timeoutMs": 180000,
+      "causalMilestone": "retained_couriers_finish_self_care_resume_and_deliver" },
+    { "type": "release_fast_forward_hold" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": { "status": "ok", "result": { "homeReserveSupplied": true } }, "timeoutMs": 60000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "position" } },
+      "offset": { "x": 12, "y": 3, "z": -3 }, "settleMs": 0,
+      "causalMilestone": "existing_saved_world_shows_current_depletion_without_replay" },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "firstSource" } },
+      "block": "minecraft:air", "timeoutMs": 60000 },
+    { "type": "look", "at": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "firstSource" } } }
+  ],
+  "assertions": [],
+  "frames": [ { "after": 6, "name": "same-world-depleted-quarry-after-delivery" } ]
+}

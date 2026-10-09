@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "live_quarry_remaining_import_admission",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "requiredConflicts": 0, "inventoryConflicts": 0 } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -350, "y": 65, "z": -253 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:1-24", "expect": { "status": "ok", "ambientLease": "HOT", "life": "ALIVE" }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "process", "id": "shipment:goods/claim-goods/21c6654d3278a06ee66b3b94a0ef2f57" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "container", "id": "container:10-depot", "field": "position" } }, "offset": { "x": -2, "y": -1, "z": -2 }, "settleMs": 0 },
+    { "type": "inspect", "view": "resource", "id": "custody:container-10-depot" },
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:10-depot", "field": "position" } }, "timeoutMs": 15000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "requiredConflicts": 0, "inventoryConflicts": 0, "replicaCustodyDiagnostics": 0 } }
+  ],
+  "frames": [
+    { "after": 6, "name": "accepted-stone-depot-and-recovery-health", "presentation": "player" }
+  ]
+}

@@ -50,7 +50,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 || !FrontierV3ActorHandObservation.ownsCurrentHarvest(state, lease, job))
             return Result.conflict("harvest-owner-mismatch");
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-        if (state.resourceSites().hasPendingWorldChange(job.siteId())) return Result.pending();
+        if (state.resourceSites().harvestMutationPending(job)) return Result.pending();
         ResourceFieldLayout.Cell cell = cycle.layout().cells().get(job.progress().pendingCropSlotIndex());
         ResourceFieldLayout.CellId id = cell.id();
         if (cycle.pendingPlayerBreaks().containsKey(id)) return Result.conflict("player-break-pending");

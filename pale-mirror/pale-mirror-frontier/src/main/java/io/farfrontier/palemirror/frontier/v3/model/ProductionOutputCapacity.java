@@ -34,7 +34,7 @@ public final class ProductionOutputCapacity {
         Objects.requireNonNull(state, "production output state");
         ProductionStationRecipe.breadOutputQuantity(quantity);
         SubjectId depot = rights.destinationContainerId();
-        var pending = ContainerInboundCapacity.incoming(pendingInbound(state.productionJobs()), depot, java.util.Optional.empty());
+        var pending = state.pendingContainerInbound(depot);
         return state.canReceiveFungible(depot, "minecraft:bread", quantity)
                 || state.inventory().canTransformFungible(depot, "minecraft:wheat", quantity,
                     "minecraft:bread", quantity, state.reservedContainerSlots(depot), pending)

@@ -32,6 +32,17 @@ public final class ShipmentServiceAccess implements ServiceAccessCapability {
         return operationEligible(state, shipment) && ServiceAccessCoordinator.available(state, identity(shipment, point));
     }
     private static boolean operationEligible(FrontierWorldState state, Shipment shipment) {
+        var execution = state.actorExecutions().actors().get(shipment.execution().actorId());
+        if (execution == null || !execution.current().equals(java.util.Optional.of(shipment.execution()))) return false;
+        if (shipment.transportMissionId().isPresent()) {
+            var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());
+            if (mission == null) throw new IllegalArgumentException("shipment service lost its exact transport mission");
+            var operation = shipment.status() == Shipment.Status.AWAITING_LOAD
+                    ? TransportMission.Stage.LOADING : TransportMission.Stage.UNLOADING;
+            // A retained cargo claim is not a service turn. During assembly, travel,
+            // replenishment or return the workflow owns a different operation.
+            if (mission.stage() != operation || mission.replenishment().isPresent()) return false;
+        }
         if (shipment.pendingPhysicalStep().isPresent()) return true;
         if (shipment.reception().isPresent()) return false;
         if (shipment.status() == Shipment.Status.CARRYING

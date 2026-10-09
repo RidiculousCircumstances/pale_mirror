@@ -6,7 +6,7 @@ import java.util.Objects;
 /** Explicit permission to use an allocation without changing its claimant or title. */
 public record ResourceClaimDelegation(Kind kind, SubjectId claimId, SubjectId claimantId,
                                       SubjectId executorId, long authorizationRevision) {
-    public enum Kind { GOODS_CONTRACT_SHIPMENT }
+    public enum Kind { GOODS_CONTRACT_SHIPMENT, INTERNAL_SHIPMENT }
     public ResourceClaimDelegation {
         Objects.requireNonNull(kind); Objects.requireNonNull(claimId); Objects.requireNonNull(claimantId);
         Objects.requireNonNull(executorId);

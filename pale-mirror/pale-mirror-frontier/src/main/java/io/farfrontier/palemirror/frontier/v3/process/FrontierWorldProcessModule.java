@@ -15,6 +15,9 @@ import java.util.List;
  * composition never rediscovers a domain by payload classpath scanning.</p>
  */
 interface FrontierWorldProcessModule {
+    /** Data-only family bootstrap timers, composed deterministically by the catalog. */
+    default List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> initialSchedules(
+            io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrap bootstrap) { return List.of(); }
     /** Same registered event owner closes exact scheduled references removed by its reduction. */
     default List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
             FrontierWorldState previous, FrontierWorldState next,

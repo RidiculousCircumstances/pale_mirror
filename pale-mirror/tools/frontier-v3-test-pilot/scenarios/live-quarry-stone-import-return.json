@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "live_quarry_stone_import_return",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "requiredConflicts": 0, "inventoryConflicts": 0 } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "container", "id": "container:10-depot", "field": "position" } }, "offset": { "x": -2, "y": -1, "z": -2 }, "settleMs": 0 },
+    { "type": "inspect", "view": "resource", "id": "custody:container-10-depot" },
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:10-depot", "field": "position" } }, "timeoutMs": 15000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 2, "view": "resource", "id": "custody:container-10-depot", "expect": { "status": "ok", "custody": { "kind": "CONTAINER", "container": "container:10-depot" } } },
+    { "after": 4, "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "requiredConflicts": 0, "inventoryConflicts": 0, "replicaCustodyDiagnostics": 0 } }
+  ],
+  "frames": [
+    { "after": 3, "name": "accepted-import-after-cold-return", "presentation": "player" }
+  ]
+}

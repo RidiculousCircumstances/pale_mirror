@@ -242,19 +242,10 @@ final class FrontierV3SceneDeparturePersistence {
                 if (hands.size() != 2) return Optional.empty();
                 CompoundTag held = hands.getCompound(1);
                 CompoundTag main = hands.getCompound(0);
-                if (main.contains("id", Tag.TAG_STRING) && main.contains("count", Tag.TAG_INT)
-                        && !main.contains("components")) {
-                    try {
-                        mainhand = Optional.of(new FrontierV3ActorBodyDeparture.HandStack(main.getString("id"), main.getInt("count")));
-                    } catch (IllegalArgumentException invalidHand) { return Optional.empty(); }
-                }
-                if (held.contains("id", Tag.TAG_STRING) && held.contains("count", Tag.TAG_INT)
-                        && !held.contains("components")) {
-                    try {
-                        offhand = Optional.of(new FrontierV3ActorBodyDeparture.HandStack(
-                                held.getString("id"), held.getInt("count")));
-                    } catch (IllegalArgumentException invalidHand) { return Optional.empty(); }
-                }
+                try {
+                    mainhand = FrontierV3ActorHandEvidence.saved(main);
+                    offhand = FrontierV3ActorHandEvidence.saved(held);
+                } catch (IllegalArgumentException invalidHand) { return Optional.empty(); }
             }
             return Optional.of(new SavedBody(entity.getUUID("UUID"), type, actor, kind, owner, representation,
                     tag.getLong(FrontierV3ActorCarrierComposition.REVISION_KEY),

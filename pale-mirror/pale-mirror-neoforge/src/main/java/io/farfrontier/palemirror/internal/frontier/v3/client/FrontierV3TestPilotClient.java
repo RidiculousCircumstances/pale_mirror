@@ -168,7 +168,13 @@ public final class FrontierV3TestPilotClient {
             }
             return;
         }
-        if (!FrontierV3PilotSessionControl.failUnexpectedActiveLoss()) reset();
+        if (!FrontierV3PilotSessionControl.failUnexpectedActiveLoss()) {
+            if (actions != null && (runningSetup || index < actions.size())) {
+                PaleMirrorMod.LOGGER.error("PMV3_PILOT failed step={} type=disconnect reason=unexpected-active-connection-loss", index + 1);
+                Minecraft.getInstance().execute(Minecraft.getInstance()::stop);
+            }
+            reset();
+        }
     }
     /**
      * Retains pilot diagnostics but never renders server command feedback in

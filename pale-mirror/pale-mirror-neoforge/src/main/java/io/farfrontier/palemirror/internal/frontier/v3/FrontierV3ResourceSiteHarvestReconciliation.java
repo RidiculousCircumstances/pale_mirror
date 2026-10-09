@@ -25,7 +25,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             var job = lifecycle.harvestJob(cause.jobId()).orElse(null);
             if (job == null || !job.id().equals(cause.jobId())
                     || job.navigationBlock().isPresent()
-                    || state.resourceSites().hasPendingWorldChange(job.siteId())) continue;
+                    || state.resourceSites().harvestMutationPending(job)) continue;
             var cycle = state.resourceSites().cycle(job.siteId());
             if (!cycle.pendingPlayerBreaks().isEmpty()
                     || !currentField(level, lease, job, cycle)) continue;

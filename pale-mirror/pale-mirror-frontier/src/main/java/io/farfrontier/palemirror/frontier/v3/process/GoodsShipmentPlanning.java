@@ -154,17 +154,10 @@ final class GoodsShipmentPlanning {
         var order = new MovementOrder(owner, owner, 0, 1, List.of(receiver.station()),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         try {
-            KnownPedestrianRouteKnowledge.forJourney(state, List.of(passage(state, sender), passage(state, receiver)))
+            ShipmentEndpointComposition.knowledge(state, List.of(sender, receiver))
                     .plannedPath(sender.station(), order);
             return PedestrianRouteResult.Status.FOUND;
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return unavailable.status(); }
-    }
-    private static KnownPedestrianRouteKnowledge.SettlementPassage passage(FrontierWorldState state, ShipmentEndpoint endpoint) {
-        ShipmentEndpointComposition.validate(state, endpoint);
-        var facility = FrontierWorldStateSupport.settlement(state.bootstrap(), endpoint.settlementId()).structures().stream()
-                .filter(value -> value.id().equals(endpoint.facilityId())).findFirst().orElseThrow();
-        return new KnownPedestrianRouteKnowledge.SettlementPassage(endpoint.settlementId(),
-                new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS));
     }
     private GoodsShipmentPlanning() { }
 }

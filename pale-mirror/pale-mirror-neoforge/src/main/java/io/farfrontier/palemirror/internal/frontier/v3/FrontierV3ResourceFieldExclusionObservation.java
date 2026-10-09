@@ -10,7 +10,7 @@ final class FrontierV3ResourceFieldExclusionObservation {
     static boolean immatureCellCurrent(ServerLevel level, FrontierWorldState state,
             io.farfrontier.palemirror.frontier.v3.model.ResourceSite site,
             io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId id) {
-        if (state.resourceSites().hasPendingWorldChange(site.id())) return false;
+        if (state.resourceSites().hasPendingCellMutation(site.id(), id)) return false;
         var cycle = state.resourceSites().cycle(site.id());
         if (cycle.pendingPlayerBreaks().containsKey(id)) return false;
         var claim = FrontierV3ResourceSiteLedger.get(level).siteClaim(site.id());

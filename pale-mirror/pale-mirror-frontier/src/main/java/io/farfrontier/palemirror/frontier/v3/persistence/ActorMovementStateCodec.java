@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.persistence;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
+import io.farfrontier.palemirror.frontier.v3.model.ServicePointId;
 import io.farfrontier.palemirror.frontier.v3.model.TraversalCapability;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext;
@@ -21,6 +22,15 @@ import java.util.Map;
 /** Schema-owned durable actor orders; no pathfinder or live entity state is serialized. */
 final class ActorMovementStateCodec {
     private ActorMovementStateCodec() { }
+    private static void writePoint(DataOutputStream output, ServicePointId point) throws IOException {
+        output.writeByte(point.kind().wireTag());
+        FrontierWorldStateCodec.writeString(output, point.settlementId().value());
+        FrontierWorldStateCodec.writeString(output, point.containerId().value());
+    }
+    private static ServicePointId readPoint(DataInputStream input) throws IOException {
+        return new ServicePointId(ServicePointId.Kind.fromWireTag(input.readUnsignedByte()),
+                new SubjectId(FrontierWorldStateCodec.readString(input)), new SubjectId(FrontierWorldStateCodec.readString(input)));
+    }
 
     static void write(DataOutputStream output, Map<SubjectId, ActorMovement> movements) throws IOException {
         FrontierWorldStateCodec.writeCount(output, movements.size());
@@ -39,16 +49,18 @@ final class ActorMovementStateCodec {
             output.writeLong(movement.issuedAtTick());
             ActorExecutionStateCodec.writeId(output, movement.executionId());
             switch (movement.context()) {
+                case ActorMovementContext.ExtractionLeg leg -> {
+                    output.writeByte(7); FrontierWorldStateCodec.writeString(output, leg.jobId().value());
+                    output.writeLong(leg.jobRevision());
+                }
                 case ActorMovementContext.ResourceAccessExit exit -> {
                     output.writeByte(6);
-                    FrontierWorldStateCodec.writeString(output, exit.settlementId().value());
-                    FrontierWorldStateCodec.writeString(output, exit.depotId().value());
+                    writePoint(output, exit.point());
                     FrontierWorldStateCodec.writeString(output, exit.executionOwnerId().value());
                 }
                 case ActorMovementContext.ServiceExit exit -> {
                     output.writeByte(0); // stable ServiceExit provider tag, never inferred from an ID
-                    FrontierWorldStateCodec.writeString(output, exit.settlementId().value());
-                    FrontierWorldStateCodec.writeString(output, exit.depotId().value());
+                    writePoint(output, exit.point());
                 }
                 case ActorMovementContext.ShipmentLeg leg -> {
                     output.writeByte(1); // stable declared Shipment provider, never an ID-prefix classifier
@@ -101,9 +113,8 @@ final class ActorMovementStateCodec {
             long issuedAt = input.readLong();
             var executionId = ActorExecutionStateCodec.readId(input);
             ActorMovementContext context = switch (input.readUnsignedByte()) {
-                case 0 -> new ActorMovementContext.ServiceExit(
-                        new SubjectId(FrontierWorldStateCodec.readString(input)),
-                        new SubjectId(FrontierWorldStateCodec.readString(input)));
+                case 7 -> new ActorMovementContext.ExtractionLeg(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
+                case 0 -> new ActorMovementContext.ServiceExit(readPoint(input));
                 case 1 -> new ActorMovementContext.ShipmentLeg(
                         new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
                 case 2 -> new ActorMovementContext.GroupLeg(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
@@ -111,8 +122,7 @@ final class ActorMovementStateCodec {
                         new SubjectId(FrontierWorldStateCodec.readString(input)));
                 case 4 -> new ActorMovementContext.ExpeditionAssembly(new SubjectId(FrontierWorldStateCodec.readString(input)));
                 case 5 -> new ActorMovementContext.ExpeditionReplenishment(new SubjectId(FrontierWorldStateCodec.readString(input)));
-                case 6 -> new ActorMovementContext.ResourceAccessExit(new SubjectId(FrontierWorldStateCodec.readString(input)),
-                        new SubjectId(FrontierWorldStateCodec.readString(input)), new SubjectId(FrontierWorldStateCodec.readString(input)));
+                case 6 -> new ActorMovementContext.ResourceAccessExit(readPoint(input), new SubjectId(FrontierWorldStateCodec.readString(input)));
                 default -> throw new IllegalArgumentException("unknown actor movement provider tag");
             };
             ActorMovement movement = new ActorMovement(order, issuedAt, context, executionId);

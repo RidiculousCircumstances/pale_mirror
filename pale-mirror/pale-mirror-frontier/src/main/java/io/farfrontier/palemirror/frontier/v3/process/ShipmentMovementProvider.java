@@ -27,8 +27,7 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
         validate(state, movement);
         Shipment shipment = state.shipments().shipments().get(movement.order().ownerId());
-        return KnownPedestrianRouteKnowledge.forJourney(state,
-                List.of(passage(state, shipment.sender()), passage(state, shipment.receiver())));
+        return ShipmentEndpointComposition.knowledge(state, List.of(shipment.sender(), shipment.receiver()));
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         return placementKnowledge(state, movement).plannedPath(start, movement.order());
@@ -36,8 +35,7 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);
         Shipment shipment = state.shipments().shipments().get(movement.order().ownerId());
-        KnownPedestrianRouteKnowledge.forJourney(state,
-                List.of(passage(state, shipment.sender()), passage(state, shipment.receiver()))).requireRoute(route);
+        ShipmentEndpointComposition.knowledge(state, List.of(shipment.sender(), shipment.receiver())).requireRoute(route);
         if (!movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)
             throw new IllegalArgumentException("shipment segment is neither a bounded prefix nor its declared goal");
     }
@@ -61,8 +59,7 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     @Override public void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {
         validate(state, movement);
         var shipment = state.shipments().shipments().get(movement.order().ownerId());
-        KnownPedestrianRouteKnowledge.forJourney(state,
-                List.of(passage(state, shipment.sender()), passage(state, shipment.receiver()))).requireRoute(route);
+        ShipmentEndpointComposition.knowledge(state, List.of(shipment.sender(), shipment.receiver())).requireRoute(route);
         var access = serviceApproach(state, movement).orElseThrow();
         boolean waitingOutside = !ServiceAccessCoordinator.available(state, access)
                 && ServiceAccessCoordinator.boundary(state, access.pointId()).cleared(route.getLast().standingBody())
@@ -70,13 +67,6 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
         if (route.size() > TimedKnownRoute.MAX_SURFACES || !waitingOutside
                 && !movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)
             throw new IllegalArgumentException("shipment COLD segment lacks its bounded goal or service-wait boundary");
-    }
-    private static KnownPedestrianRouteKnowledge.SettlementPassage passage(FrontierWorldState state, ShipmentEndpoint endpoint) {
-        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), endpoint.settlementId());
-        var facility = settlement.structures().stream().filter(value -> value.id().equals(endpoint.facilityId()))
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("shipment lost its declared facility passage"));
-        return new KnownPedestrianRouteKnowledge.SettlementPassage(endpoint.settlementId(),
-                new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS));
     }
     @Override public ActorExecutionState arrivalAuthority(FrontierWorldState state, ActorMovement movement) {
         validate(state, movement);

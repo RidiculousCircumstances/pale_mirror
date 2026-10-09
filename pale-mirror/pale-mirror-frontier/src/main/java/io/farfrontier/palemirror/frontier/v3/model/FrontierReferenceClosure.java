@@ -84,6 +84,7 @@ final class FrontierReferenceClosure {
                 || state.productionJobs().containsKey(id) || state.serviceWorks().containsKey(id)
                 || state.routeConstructions().containsKey(id) || state.routeMaintenances().containsKey(id)
                 || state.resourceSites().sites().containsKey(id)
+                || state.extractionSites().deposits().containsKey(id) || state.extractionSites().work().containsKey(id)
                 || state.humanPopulation().residents().containsKey(id)
                 || state.humanPopulation().birthJobs().containsKey(id) || state.humanPopulation().migrations().containsKey(id)
                 || state.humanPopulation().provisions().containsKey(id) || state.hiveColony().growthJobs().containsKey(id)

@@ -417,6 +417,8 @@ final class FrontierV3TestPilotScenario {
                 || (view.equals("process") && requiredId(reference, "id", "job:")
                 && (diagnosticField.equals("cursor.retainedBody") || diagnosticField.equals("goal.station")))
                 || (view.equals("process") && requiredId(reference, "id", "shipment:") && diagnosticField.equals("actorBody"))
+                || (view.equals("process") && requiredId(reference, "id", "extraction:") && Set.of("position", "firstSource").contains(diagnosticField))
+                || (view.equals("process") && requiredId(reference, "id", "work:") && Set.of("actorBody", "goal").contains(diagnosticField))
                 || (view.equals("scene") && requiredId(reference, "id", "job:")
                 && (diagnosticField.equals("productionCurrent") || diagnosticField.equals("productionNext") || diagnosticField.equals("productionNextBody")
                 || diagnosticField.equals("productionFutureBody")))

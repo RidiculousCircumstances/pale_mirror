@@ -24,7 +24,8 @@ class ActorMovementProcessTest {
         var actor = home.residents().getFirst().id();
         var point = SettlementServiceAccessPoints.forSettlement(state, host.id()).getFirst();
         state = state.withActorBody(actor, point.station().standingBody());
-        assertEquals(point, ServiceAccessCoordinator.turnoverPoint(state, actor).orElseThrow());
+        var occupied = ServiceAccessCoordinator.turnoverPoint(state, actor).orElseThrow();
+        assertEquals(point, ServiceBoundaryComposition.geometry(state, occupied.identity()));
         var movement = ResidentServiceTurnover.select(state, actor, 1L).orElseThrow();
         assertEquals(new ActorMovementContext.ServiceExit(host.id(), FrontierWorldState.depotId(host.id())), movement.context());
         ActorMovementProviders.require(movement).validate(state, movement);

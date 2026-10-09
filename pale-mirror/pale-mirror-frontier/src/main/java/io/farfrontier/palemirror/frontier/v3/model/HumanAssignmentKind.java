@@ -12,5 +12,6 @@ public enum HumanAssignmentKind {
     ENGINEERING_RECOVERY,
     SETTLEMENT_SERVICE,
     MEDICAL_EVACUATION,
-    TRANSIT
+    TRANSIT,
+    EXTRACTION
 }

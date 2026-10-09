@@ -11,6 +11,9 @@ public final class SettlementWorkPolicy {
         return initial(settlement, SettlementLabourRules.initial());
     }
     public static ResidentWorkPermissions initial(Settlement settlement, SettlementLabourRules rules) {
+        return initial(settlement, rules, rules.entries().containsKey(ResidentWorkKind.EXTRACTION));
+    }
+    public static ResidentWorkPermissions initial(Settlement settlement, SettlementLabourRules rules, boolean extractionSite) {
         var agriculture = rules.entries().get(ResidentWorkKind.AGRICULTURE);
         var baking = rules.entries().get(ResidentWorkKind.BAKING);
         var hauling = rules.entries().get(ResidentWorkKind.LOGISTICS);
@@ -24,11 +27,26 @@ public final class SettlementWorkPolicy {
             throw new IllegalArgumentException("initial settlement cannot satisfy configured local staffing reserves");
         var logistics = settlement.residents().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
                 Resident::id, resident -> hauling.priority()));
-        return new ResidentWorkPermissions(Map.of(
+        var priorities = new java.util.EnumMap<ResidentWorkKind, Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Integer>>(ResidentWorkKind.class);
+        priorities.putAll(Map.of(
                 ResidentWorkKind.AGRICULTURE, farmers.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(id -> id, id -> agriculture.priority())),
                 ResidentWorkKind.BAKING, bakers.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(id -> id, id -> baking.priority())),
-                ResidentWorkKind.LOGISTICS, logistics),
-                Map.of(ResidentWorkKind.AGRICULTURE, agriculture.minimumLocalStaff(), ResidentWorkKind.BAKING, baking.minimumLocalStaff()));
+                ResidentWorkKind.LOGISTICS, logistics));
+        var reserves = new java.util.EnumMap<ResidentWorkKind, Integer>(ResidentWorkKind.class);
+        reserves.put(ResidentWorkKind.AGRICULTURE, agriculture.minimumLocalStaff());
+        reserves.put(ResidentWorkKind.BAKING, baking.minimumLocalStaff());
+        var extraction = rules.entries().get(ResidentWorkKind.EXTRACTION);
+        if (extractionSite) {
+            if (extraction == null) throw new IllegalArgumentException("extraction staffing has no declared content rules");
+            var miners = settlement.residents().stream().filter(resident -> !farmers.contains(resident.id()) && !bakers.contains(resident.id()))
+                    .sorted(java.util.Comparator.comparing(Resident::id)).limit(extraction.targetWorkers())
+                    .collect(java.util.stream.Collectors.toUnmodifiableMap(Resident::id, resident -> extraction.priority()));
+            if (miners.size() < extraction.minimumLocalStaff())
+                throw new IllegalArgumentException("initial settlement cannot satisfy extraction staffing reserve");
+            priorities.put(ResidentWorkKind.EXTRACTION, miners);
+            reserves.put(ResidentWorkKind.EXTRACTION, extraction.minimumLocalStaff());
+        }
+        return new ResidentWorkPermissions(priorities, reserves);
     }
 
     public static ResidentWorkPermissions permissions(FrontierWorldState state,

@@ -24,7 +24,7 @@ final class ShipmentStateCodec {
     }
     static void writeShipment(DataOutputStream out, Shipment value) throws IOException {
         id(out, value.id());
-        switch (value.authorization().kind()) { case GOODS_CONTRACT_SHIPMENT -> out.writeByte(1); }
+        switch (value.authorization().kind()) { case GOODS_CONTRACT_SHIPMENT -> out.writeByte(1); case INTERNAL_SHIPMENT -> out.writeByte(2); }
         id(out, value.authorization().claimId()); id(out, value.authorization().claimantId()); id(out, value.authorization().executorId());
         out.writeLong(value.authorization().authorizationRevision()); ActorExecutionStateCodec.writeId(out, value.execution());
         endpoint(out, value.sender()); endpoint(out, value.receiver()); id(out, value.sourceAccountId()); id(out, value.carriedAccountId()); id(out, value.receivingAccountId());
@@ -40,7 +40,11 @@ final class ShipmentStateCodec {
     }
     static Shipment readShipment(DataInputStream in) throws IOException {
         SubjectId shipment = id(in);
-        var kind = switch (in.readUnsignedByte()) { case 1 -> ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT; default -> throw new IllegalArgumentException("unknown delegation provider tag"); };
+        var kind = switch (in.readUnsignedByte()) {
+            case 1 -> ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT;
+            case 2 -> ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT;
+            default -> throw new IllegalArgumentException("unknown delegation provider tag");
+        };
         var grant = new ResourceClaimDelegation(kind, id(in), id(in), id(in), in.readLong());
         var execution = ActorExecutionStateCodec.readId(in); ShipmentEndpoint sender = endpoint(in), receiver = endpoint(in);
         SubjectId source = id(in), carried = id(in), receiving = id(in); String item = in.readUTF();
@@ -76,13 +80,25 @@ final class ShipmentStateCodec {
         };
     }
     static void endpoint(DataOutputStream out, ShipmentEndpoint endpoint) throws IOException {
-        switch (endpoint.kind()) { case SETTLEMENT_DEPOT -> out.writeByte(1); }
-        id(out, endpoint.settlementId()); id(out, endpoint.facilityId()); id(out, endpoint.containerId());
+        switch (endpoint.kind()) { case SETTLEMENT_DEPOT -> out.writeByte(1); case EXTRACTIVE_SITE -> out.writeByte(2); }
+        id(out, endpoint.settlementId());
+        switch (endpoint) {
+            case ShipmentEndpoint.Depot depot -> id(out, depot.facilityId());
+            case ShipmentEndpoint.ExtractiveSite site -> id(out, site.siteId());
+        }
+        id(out, endpoint.containerId());
         FrontierWorldStateCodec.writePosition(out, endpoint.station().support());
     }
     static ShipmentEndpoint endpoint(DataInputStream in) throws IOException {
-        var kind = switch (in.readUnsignedByte()) { case 1 -> ShipmentEndpoint.Kind.SETTLEMENT_DEPOT; default -> throw new IllegalArgumentException("unknown shipment endpoint tag"); };
-        return new ShipmentEndpoint(kind, id(in), id(in), id(in), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)));
+        int tag = in.readUnsignedByte();
+        if (tag != 1 && tag != 2) throw new IllegalArgumentException("unknown shipment endpoint tag");
+        var home = id(in); var declared = id(in); var container = id(in);
+        var station = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
+        return switch (tag) {
+            case 1 -> new ShipmentEndpoint.Depot(home, declared, container, station);
+            case 2 -> new ShipmentEndpoint.ExtractiveSite(home, declared, container, station);
+            default -> throw new IllegalArgumentException("unknown shipment endpoint tag");
+        };
     }
     private static void id(DataOutputStream out, SubjectId id) throws IOException { out.writeUTF(id.value()); }
     private static SubjectId id(DataInputStream in) throws IOException { return new SubjectId(in.readUTF()); }

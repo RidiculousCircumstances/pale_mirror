@@ -138,6 +138,26 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
     }
 
     /** Confirm only matching actual evidence; a mismatch retains the fence for explicit recovery. */
+    public PhysicalReplicaCustodyState supersedeProjection(SubjectId scopeId, long epoch, long canonicalRevision,
+            long replicaRevision, long successorRevision, String fingerprint, String provenance) {
+        var lease = requireLive(scopeId, epoch); var replica = requireReplica(lease.objectId());
+        if (lease.status() != PhysicalCustodyLeaseStatus.PREPARING || replica.state() != PhysicalReplicaState.EXPECTED
+                || canonicalRevision != lease.expectedCanonicalRevision() || replicaRevision != lease.expectedReplicaRevision()
+                || successorRevision <= canonicalRevision || fingerprint.isBlank() || provenance.isBlank())
+            throw new IllegalArgumentException("projection supersession lacks its exact preparing fence and successor");
+        // This changes the owner's expected projection. It does NOT assert observation,
+        // release authority, or certify a partially written old projection as complete.
+        var nextReplica = new PhysicalReplicaRecord(replica.objectId(), replica.semanticKind(), successorRevision,
+                successorRevision, Math.addExact(replica.replicaRevision(), 1), fingerprint, provenance,
+                PhysicalReplicaState.EXPECTED, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty());
+        var nextReplicas = new LinkedHashMap<>(replicas); nextReplicas.put(replica.objectId(), nextReplica);
+        var nextLeases = new LinkedHashMap<>(custodyByScope);
+        nextLeases.put(scopeId, new PhysicalCustodyLease(scopeId, lease.objectId(), lease.providerId(), Math.addExact(epoch, 1),
+                successorRevision, nextReplica.replicaRevision(), PhysicalCustodyLeaseStatus.PREPARING, null));
+        return new PhysicalReplicaCustodyState(nextReplicas, nextLeases, withoutDiagnostic(scopeId));
+    }
+
+    /** Confirm only matching actual evidence; a mismatch retains the fence for explicit recovery. */
     public PhysicalReplicaCustodyState confirmProjection(SubjectId scopeId, long epoch, long canonicalRevision,
                                                          long replicaRevision, String fingerprint, String provenance) {
         PhysicalCustodyLease lease = requireLive(scopeId, epoch);

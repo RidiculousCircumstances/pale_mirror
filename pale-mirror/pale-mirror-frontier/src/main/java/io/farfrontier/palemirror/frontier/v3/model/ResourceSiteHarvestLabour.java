@@ -26,13 +26,7 @@ public final class ResourceSiteHarvestLabour {
                 || !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), tick))
             throw new IllegalArgumentException("labour start needs a working farmer at the selected cell");
         var resident = state.humanPopulation().resident(job.workerId());
-        long until = state.humanPopulation().schedule(resident.settlementId()).nextWindowBoundaryAfter(tick);
-        var nutrition = state.humanPopulation().nutrition(resident.id()).accrueThrough(tick,
-                state.bootstrap().ruleset().residentLife(), resident.characteristics().effectiveMetabolismPermille(tick));
-        long threshold = nutrition.nextThresholdTick(state.bootstrap().ruleset().residentLife(),
-                resident.characteristics().effectiveMetabolismPermille(tick));
-        // An admitted interval cannot secretly accrue across a known personal/day boundary.
-        if (threshold > tick) until = Math.min(until, threshold);
+        long until = ResidentWorkIntervals.permittedUntil(state, resident.id(), tick);
         return prior.resume(tick, ResidentWorkStatistics.speedPermille(resident, definition,
                 state.bootstrap().ruleset().workCatalog()), until);
     }

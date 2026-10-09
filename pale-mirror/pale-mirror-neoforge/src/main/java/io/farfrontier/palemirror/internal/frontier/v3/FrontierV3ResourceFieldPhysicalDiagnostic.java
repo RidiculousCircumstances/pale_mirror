@@ -35,15 +35,22 @@ final class FrontierV3ResourceFieldPhysicalDiagnostic {
             return base + "OWNERSHIP\",\"epoch\":" + owner.witness().epoch()
                     + ",\"layoutRevision\":" + owner.witness().layoutRevision()
                     + ",\"layoutCurrent\":false,\"worldChangePending\":"
-                    + (ledger.fieldWorldChange(siteId) != null)
-                    + ",\"foreignChangePending\":" + (ledger.fieldForeignChange(siteId) != null) + "}";
+                    + ledger.pendingFieldWorldChanges().stream().anyMatch(change -> change.siteId().equals(siteId))
+                    + ",\"foreignChangePending\":" + ledger.pendingFieldForeignChanges().stream().anyMatch(change -> change.siteId().equals(siteId))
+                + ",\"mutations\":" + mutations(state, ledger, siteId, level) + "}";
         var first = cycle.layout().cells().getFirst().id();
         String mismatch = "null";
         int mismatches = 0;
         for (var cell : cycle.layout().cells()) {
             var retained = owner.witness().cell(cell.id());
-            var target = io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell.id()));
-            if (retained.pending().isEmpty() && retained.committed().equals(target)) continue;
+            var target = cycle.cell(cell.id());
+            boolean owned = target.soil() != io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.Soil.UNKNOWN
+                    && target.soil() != io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.Soil.OBSTRUCTED
+                    && target.crop() != io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.Crop.UNKNOWN
+                    && target.crop() != io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.Crop.OBSTRUCTED;
+            if (retained.pending().isEmpty() && (owned
+                    ? retained.committed().equals(io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface.Condition.of(target))
+                    : retained.foreign().isPresent())) continue;
             mismatches++;
             if (!mismatch.equals("null")) continue;
             var reading = FrontierV3ResourceFieldObservation.read(level, cell, "diagnostic:field-mismatch");
@@ -83,7 +90,25 @@ final class FrontierV3ResourceFieldPhysicalDiagnostic {
                 + ",\"projectionDemanded\":" + FrontierV3GrayboxExecutor.resourceSiteProjectionDemanded(runtime, level, state.resourceSite(siteId))
                 + ",\"restartPending\":" + FrontierV3ResourceSiteExecutor.RECOVERY_SITES.getOrDefault(runtime, java.util.Set.of()).contains(siteId)
                 + ",\"mismatchedCells\":" + mismatches + ",\"firstMismatch\":" + mismatch
-                + ",\"worldChangePending\":" + (ledger.fieldWorldChange(siteId) != null)
-                + ",\"foreignChangePending\":" + (ledger.fieldForeignChange(siteId) != null) + "}";
+                + ",\"worldChangePending\":" + ledger.pendingFieldWorldChanges().stream().anyMatch(change -> change.siteId().equals(siteId))
+                + ",\"foreignChangePending\":" + ledger.pendingFieldForeignChanges().stream().anyMatch(change -> change.siteId().equals(siteId)) + "}";
+    }
+
+    private static String mutations(FrontierWorldState state, FrontierV3ResourceSiteLedger ledger, SubjectId site,
+                                    net.minecraft.server.level.ServerLevel level) {
+        var rows = new java.util.ArrayList<String>();
+        for (var witness : ledger.pendingFieldForeignChanges()) {
+            if (!witness.siteId().equals(site)) continue;
+            var cell = state.resourceSites().cycle(site).layout().requireCell(witness.cellId());
+            boolean loaded = level.hasChunkAt(new net.minecraft.core.BlockPos(cell.crop().x(), cell.crop().y(), cell.crop().z()))
+                    && level.hasChunkAt(new net.minecraft.core.BlockPos(cell.soil().support().x(), cell.soil().support().y(), cell.soil().support().z()));
+            rows.add("{\"family\":\"" + witness.mutationKey().family().name() + "\",\"cell\":" + witness.cellId().value()
+                    + ",\"cause\":\"" + FrontierV3DiagnosticJson.quote(witness.hold().causationId())
+                    + "\",\"observationVersion\":" + witness.observationVersion()
+                    + ",\"reason\":\"" + (!loaded ? "UNLOADED" : witness.observed().isEmpty() ? "AWAITING_CAPTURE" : "AWAITING_RECEIPT") + "\""
+                    + witness.observed().map(blocks -> ",\"soil\":\"" + FrontierV3DiagnosticJson.quote(blocks.soil().getString("Name"))
+                            + "\",\"crop\":\"" + FrontierV3DiagnosticJson.quote(blocks.crop().getString("Name")) + "\"").orElse("") + "}");
+        }
+        return "[" + String.join(",", rows) + "]";
     }
 }

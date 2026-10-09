@@ -40,6 +40,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
             throw new IllegalArgumentException("growth projection runtime owns another Frontier world");
         ResourceSite site = current.state().resourceSite(siteId);
         ResourceFieldCycle cycle = current.state().resourceSites().cycle(siteId);
+        if (current.state().resourceSites().hasPendingCellMutation(siteId, cellId)) return Result.PENDING_WORK;
         return projectAccepted(level, site,
                 new FrontierCanonicalState<>(current.worldId(), current.revision(), current.instant(), cycle), cellId);
     }
@@ -62,7 +63,8 @@ final class FrontierV3ResourceFieldGrowthProjector {
         var site = current.state().resourceSite(siteId);
         var cycle = current.state().resourceSites().cycle(siteId);
         var accepted = new FrontierCanonicalState<>(current.worldId(), current.revision(), current.instant(), cycle);
-        projectAcceptedBatch(level, site, accepted, cells);
+        var available = cells.stream().filter(id -> !current.state().resourceSites().hasPendingCellMutation(siteId, id)).toList();
+        if (!available.isEmpty()) projectAcceptedBatch(level, site, accepted, available);
     }
 
     /** Component seam; production admission is the registered runtime boundary above. */
@@ -81,7 +83,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
         var witness = owner.witness();
         var admitted = new java.util.ArrayList<ResourceFieldLayout.CellId>();
         for (var id : cells) {
-            if (cycle.pendingPlayerBreaks().containsKey(id)) continue;
+            if (cycle.pendingPlayerBreaks().containsKey(id) || ledger.hasPendingFieldMutation(siteId, id)) continue;
             var canonical = cycle.cell(id);
             var cell = witness.cell(id);
             if (cell.foreign().isPresent() || canonical.soil() != ResourceFieldCycle.Soil.FARMLAND
@@ -144,6 +146,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
         FrontierV3ResourceFieldWitness witness = owner.witness();
         if (!witness.matchesCycle(cycle)) return Result.STALE_CANONICAL;
         if (cycle.pendingPlayerBreaks().containsKey(cellId)) return Result.PENDING_PLAYER;
+        if (ledger.hasPendingFieldMutation(site.id(), cellId)) return Result.PENDING_WORK;
         var canonicalCell = cycle.cell(cellId);
         if (canonicalCell.soil() != ResourceFieldCycle.Soil.FARMLAND
                 || canonicalCell.crop() != ResourceFieldCycle.Crop.GROWING

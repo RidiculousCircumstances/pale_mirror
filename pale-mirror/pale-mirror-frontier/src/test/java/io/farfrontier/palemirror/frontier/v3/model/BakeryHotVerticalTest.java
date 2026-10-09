@@ -481,6 +481,7 @@ class BakeryHotVerticalTest {
                 "an occupied depot slot cannot be selected for bread delivery");
         state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
                 new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.DEPOT_DELIVERY, deliverySlot));
+        assertPreparedDeliveryReservationAndCancellation(state, job.id(), leaseId, deliverySlot);
         var pendingDelivery = state;
         var blockedInventory = pendingDelivery.inventory();
         while (blockedInventory.firstFreeSlot(depot).isPresent()) {
@@ -613,6 +614,92 @@ class BakeryHotVerticalTest {
         assertEquals(personalBinding, state.inventory().fungibleResources().bindings().get(personalBinding.id()));
         assertEquals(personalBinding, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state))
                 .inventory().fungibleResources().bindings().get(personalBinding.id()));
+    }
+
+    private static void assertPreparedDeliveryReservationAndCancellation(FrontierWorldState pending, SubjectId jobId,
+                                                                        SceneLeaseId leaseId, int slot) {
+        var job = pending.productionJobs().get(jobId);
+        var depot = FrontierWorldState.depotId(job.settlementId());
+        var address = new InventoryCustody.ContainerSlot(depot, slot);
+        assertTrue(pending.reservedContainerSlots(depot).contains(slot));
+        assertFalse(pending.containerSlotAvailable(address), "other owners cannot steal a prepared destination");
+        assertTrue(pending.containerSlotAvailableForOutput(address, jobId), "the declaring owner can finish its own effect");
+        assertFalse(pending.pendingContainerInbound(depot).containsKey(job.outputItemKind()),
+                "one slot-backed batch must not also consume pooled inbound capacity");
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(pending));
+        assertEquals(pending.reservedContainerSlots(depot), recovered.reservedContainerSlots(depot));
+
+        // The real historical interleave: prepare baker destination, then admit a field job.
+        var concurrent = ResourceSiteHarvestProcessTest.ready(pending);
+        var siteId = new SubjectId("site:1-wheat-field");
+        var opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(concurrent,
+                StrategicObjectiveProcess.resourceHarvestOpportunity(concurrent, concurrent.resourceSites().site(siteId), 6_000L));
+        concurrent = StrategicObjectiveProcess.reduceObjective(concurrent, job.settlementId(),
+                (StrategicObjectiveSelected) opportunity.getFirst().payload());
+        concurrent = StrategicObjectiveProcess.reduceTask(concurrent, job.settlementId(),
+                (StrategicTaskPlanned) opportunity.get(1).payload());
+        var fieldTask = concurrent.strategicPlans().tasks().values().stream()
+                .filter(task -> task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
+        var start = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.plan(concurrent,
+                io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.start(fieldTask, 6_100L));
+        var field = start.stream().map(ProposedEvent::payload).filter(ResourceSiteHarvestStarted.class::isInstance)
+                .map(ResourceSiteHarvestStarted.class::cast).findFirst().orElseThrow().job();
+        assertNotEquals(address, field.outputSlot(), "new field admission must choose another exact slot");
+        concurrent = StrategicObjectiveProcess.reduceTaskTransition(concurrent, job.settlementId(),
+                start.stream().map(ProposedEvent::payload).filter(StrategicTaskTransition.class::isInstance)
+                        .map(StrategicTaskTransition.class::cast).findFirst().orElseThrow());
+        concurrent = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceStarted(concurrent, siteId,
+                new ResourceSiteHarvestStarted(field));
+        var deliveredLayout = new java.util.ArrayList<FungiblePhysicalObservation.Stack>();
+        for (var value : concurrent.inventory().fungibleResources().bindings().values()) {
+            if (value.accountId().equals(ReferenceContainerCustody.scopeId(depot)))
+                deliveredLayout.add(new FungiblePhysicalObservation.Stack(value.address(), value.itemKind(), value.quantity()));
+        }
+        deliveredLayout.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(address),
+                job.outputItemKind(), job.outputCount()));
+        var confirmed = ProductionProcess.reduceBakeryHotEffectObserved(concurrent, job.settlementId(),
+                new BakeryHotEffectObserved(jobId, leaseId, BakeryWorkState.Phase.DEPOT_DELIVERY,
+                        concurrent.actorLocations().get(job.workerId()).body(), 1L, 1L, List.of(), deliveredLayout));
+        assertEquals(BakeryWorkState.Phase.DELIVERED, confirmed.productionJobs().get(jobId).bakeryWork().orElseThrow().phase());
+        assertTrue(confirmed.reservedContainerSlots(depot).contains(field.outputSlot().slot()));
+        assertEquals(confirmed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(confirmed)));
+
+        var work = job.bakeryWork().orElseThrow();
+        var binding = pending.inventory().fungibleResources().bindings().values().stream()
+                .filter(value -> value.accountId().equals(work.actorAccountId())).findFirst().orElseThrow();
+        var hand = new FungiblePhysicalObservation.Stack(binding.address(), binding.itemKind(), binding.quantity());
+        var abort = new BakeryHotDeliveryAborted(jobId, leaseId, slot, binding.authorityEpoch(), hand, Optional.empty(),
+                new BakeryWorkBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED, depot, slot, "minecraft:stone", 1));
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(abort, codecs.decode(abort.type(), codecs.encode(abort)));
+        var cancelled = ProductionProcess.reduceBakeryHotDeliveryAborted(recovered, job.settlementId(), abort);
+        assertEquals(recovered.inventory(), cancelled.inventory(), "cancellation cannot debit cargo or credit player stock");
+        assertEquals(job.workerId(), cancelled.productionJobs().get(jobId).workerId());
+        assertTrue(cancelled.productionJobs().get(jobId).bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty());
+        assertFalse(cancelled.reservedContainerSlots(depot).contains(slot));
+        assertEquals(Map.of(job.outputItemKind(), (long) job.outputCount()), cancelled.pendingContainerInbound(depot));
+        var classifiedPlayerStock = cancelled.withInventory(cancelled.inventory().store(new ExactItemStack(
+                new SubjectId("item:player-occupied-bakery-slot"), job.settlementId(), "minecraft:stone", 1, address)));
+        int replacement = ProductionOutputCapacity.deliverySlot(classifiedPlayerStock,
+                classifiedPlayerStock.productionJobs().get(jobId)).orElseThrow();
+        assertNotEquals(slot, replacement, "a classified occupied slot must be excluded from the new preparation");
+        var reopened = ProductionProcess.reduceBakeryHotBlockChanged(classifiedPlayerStock, job.settlementId(),
+                new BakeryHotBlockChanged(jobId, leaseId, work.phase(), Optional.empty()));
+        var replanned = ProductionProcess.reduceBakeryHotEffectPrepared(reopened, job.settlementId(),
+                new BakeryHotEffectPrepared(jobId, leaseId, work.phase(), replacement));
+        assertEquals(replacement, replanned.productionJobs().get(jobId).bakeryWork().orElseThrow()
+                .pendingPhysicalStep().orElseThrow().destinationSlot());
+        assertEquals(binding, replanned.inventory().fungibleResources().bindings().get(binding.id()));
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotDeliveryAborted(
+                cancelled, job.settlementId(), abort), "the same cancellation is not replayable");
+        var stale = new BakeryHotDeliveryAborted(jobId, leaseId, slot, binding.authorityEpoch() + 1, hand, Optional.empty(), abort.occupiedDestination());
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotDeliveryAborted(
+                recovered, job.settlementId(), stale));
+        var ambiguous = ProductionProcess.reduceBakeryHotBlockChanged(recovered, job.settlementId(),
+                new BakeryHotBlockChanged(jobId, leaseId, work.phase(), Optional.of(new BakeryWorkBlock(
+                        BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT, depot, slot, "minecraft:air", 0))));
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotDeliveryAborted(
+                ambiguous, job.settlementId(), abort), "an already ambiguous effect must never be retargeted");
     }
 
     private static void assertStationConflictCanReleaseHungryBaker(FrontierWorldState input, SubjectId jobId, SceneLeaseId leaseId) {

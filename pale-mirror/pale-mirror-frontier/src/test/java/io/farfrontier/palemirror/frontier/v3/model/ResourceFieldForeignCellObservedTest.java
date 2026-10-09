@@ -16,6 +16,41 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ResourceFieldForeignCellObservedTest {
     private static final SubjectId SITE = new SubjectId("site:1-wheat-field");
 
+    @Test void twoHeldCellsDoNotParkTheirNeighboursAndKeepExactSnapshotOwners() {
+        var initial = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());
+        var field = initial.resourceSites().cycle(SITE);
+        var cells = new java.util.LinkedHashMap<ResourceFieldLayout.CellId, ResourceFieldCycle.CellState>();
+        for (var cell : field.layout().cells()) cells.put(cell.id(), new ResourceFieldCycle.CellState(
+                ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.GROWING, 6, false, false));
+        field = ResourceFieldCycle.restore(SITE, field.layout(), field.epoch(), cells);
+        var ready = initial.withResourceSites(initial.resourceSites().replace(initial.resourceSites().site(SITE).withPlantReadiness(field), field));
+        var a = field.layout().cells().get(0).id(); var b = field.layout().cells().get(1).id(); var c = field.layout().cells().get(2).id();
+        var first = new ResourceFieldForeignChangeHeld(SITE, field.epoch(), field.layout().revision(), a, field.cell(a), "world:cell-a");
+        var second = new ResourceFieldForeignChangeHeld(SITE, field.epoch(), field.layout().revision(), b, field.cell(b), "world:cell-b");
+        var waiting = snapshot(ResourceSiteProcess.reduceForeignChangeHeld(
+                ResourceSiteProcess.reduceForeignChangeHeld(ready, SITE, first), SITE, second));
+        assertEquals(2, waiting.resourceSites().pendingForeignChanges().size());
+        var advanced = ResourceSiteProcess.reduceGrowth(waiting, SITE,
+                new ResourceSiteGrowthAdvanced(SITE, field.epoch(), waiting.resourceSites().site(SITE).growthStage()));
+        assertEquals(6, advanced.resourceSites().cycle(SITE).cell(a).growthStage());
+        assertEquals(6, advanced.resourceSites().cycle(SITE).cell(b).growthStage());
+        assertEquals(7, advanced.resourceSites().cycle(SITE).cell(c).growthStage());
+        var player = new ResourceFieldPlayerBreakPrepared(SITE, field.epoch(), field.layout().revision(), c,
+                ResourceFieldPhysicalSurface.Condition.of(advanced.resourceSites().cycle(SITE).cell(c)),
+                java.util.UUID.fromString("00000000-0000-0000-0000-000000000080"), "action:independent-cell-c");
+        var withPlayer = snapshot(ResourceSiteProcess.reducePlayerBreakPrepared(advanced, SITE, player));
+        assertTrue(withPlayer.resourceSites().cycle(SITE).pendingPlayerBreaks().containsKey(c));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceForeignChangeHeld(waiting, SITE, first));
+        var changed = ResourceSiteProcess.reduceForeignCellObserved(withPlayer, SITE,
+                new ResourceFieldForeignCellObserved(first, blockedSoil(first.before()), "minecraft:stone", "minecraft:air"));
+        var closed = snapshot(ResourceSiteProcess.reduceForeignChangeAcknowledged(changed, SITE,
+                new ResourceFieldForeignChangeAcknowledged(first, changed.resourceSites().cycle(SITE).cell(a))));
+        assertNull(closed.resourceSites().pendingForeignChange(SITE, a));
+        assertEquals(second, closed.resourceSites().pendingForeignChange(SITE, b));
+        assertEquals(7, closed.resourceSites().cycle(SITE).cell(c).growthStage());
+        assertEquals(0, closed.resourceSites().cycle(SITE).harvestedCount());
+    }
+
     @Test void foreignCropObservationPreservesIndependentBlockedHeadroomAcrossWalAndSnapshot() {
         FrontierWorldState ready = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());
         ResourceFieldCycle cycle = ready.resourceSites().cycle(SITE);
@@ -89,11 +124,12 @@ class ResourceFieldForeignCellObservedTest {
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceForeignCellObserved(ready, SITE,
                 new ResourceFieldForeignCellObserved(held, blockedSoil(before), "minecraft:stone", "minecraft:air")));
         FrontierWorldState waiting = snapshot(ResourceSiteProcess.reduceForeignChangeHeld(ready, SITE, held));
-        assertEquals(held, waiting.resourceSites().pendingForeignChange(SITE));
+        assertEquals(held, waiting.resourceSites().pendingForeignChange(SITE, first));
         assertTrue(waiting.resourceSites().hasPendingWorldChange(SITE));
         assertFalse(waiting.resourceSites().hasPendingWorldChange(new SubjectId("site:2-wheat-field")));
-        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceGrowth(waiting, SITE,
-                new ResourceSiteGrowthAdvanced(SITE, cycle.epoch(), ready.resourceSites().site(SITE).growthStage())));
+        assertEquals(before, ResourceSiteProcess.reduceGrowth(waiting, SITE,
+                new ResourceSiteGrowthAdvanced(SITE, cycle.epoch(), ready.resourceSites().site(SITE).growthStage()))
+                .resourceSites().cycle(SITE).cell(first), "growth protects the exact cell, not its entire site");
         var observed = new ResourceFieldForeignCellObserved(held, blockedSoil(before),
                 "minecraft:stone", "minecraft:air");
         assertEquals(observed, roundTrip(observed));
@@ -101,13 +137,13 @@ class ResourceFieldForeignCellObservedTest {
         assertEquals(ResourceFieldCycle.Soil.OBSTRUCTED, applied.resourceSites().cycle(SITE).cell(first).soil());
         assertEquals(before, applied.resourceSites().cycle(SITE).cell(neighbor));
         assertEquals(0, applied.resourceSites().cycle(SITE).harvestedCount());
-        assertEquals(held, applied.resourceSites().pendingForeignChange(SITE));
+        assertEquals(held, applied.resourceSites().pendingForeignChange(SITE, first));
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceForeignChangeAcknowledged(applied, SITE,
                 new ResourceFieldForeignChangeAcknowledged(held, before)));
         var acknowledged = new ResourceFieldForeignChangeAcknowledged(held, blockedSoil(before));
         assertEquals(acknowledged, roundTrip(acknowledged));
         FrontierWorldState closed = snapshot(ResourceSiteProcess.reduceForeignChangeAcknowledged(applied, SITE, acknowledged));
-        assertNull(closed.resourceSites().pendingForeignChange(SITE));
+        assertNull(closed.resourceSites().pendingForeignChange(SITE, first));
         assertEquals(ResourceFieldCycle.Soil.OBSTRUCTED, closed.resourceSites().cycle(SITE).cell(first).soil());
     }
 
@@ -121,7 +157,7 @@ class ResourceFieldForeignCellObservedTest {
         FrontierWorldState cancelled = ResourceSiteProcess.reduceForeignChangeAcknowledged(held, SITE,
                 new ResourceFieldForeignChangeAcknowledged(initial, cycle.cell(first)));
         assertEquals(cycle, cancelled.resourceSites().cycle(SITE));
-        assertNull(cancelled.resourceSites().pendingForeignChange(SITE));
+        assertNull(cancelled.resourceSites().pendingForeignChange(SITE, first));
         var obstructed = new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.FARMLAND,
                 ResourceFieldCycle.Crop.OBSTRUCTED, 0, false, false);
         FrontierWorldState changed = ResourceSiteProcess.reduceForeignCellObserved(held, SITE,

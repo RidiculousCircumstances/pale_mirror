@@ -8,12 +8,14 @@ import java.util.List;
 
 /** Optional post-service journey policy, not part of the general movement algorithm. */
 public final class ServiceExitMovementProvider implements ActorMovementProvider {
-    private record Exit(io.farfrontier.palemirror.frontier.v3.api.SubjectId settlementId,
-                        io.farfrontier.palemirror.frontier.v3.api.SubjectId depotId, boolean retainsCaller) { }
+    private record Exit(ServicePointId point, boolean retainsCaller) {
+        io.farfrontier.palemirror.frontier.v3.api.SubjectId settlementId() { return point.settlementId(); }
+        io.farfrontier.palemirror.frontier.v3.api.SubjectId depotId() { return point.containerId(); }
+    }
     private static Exit exit(ActorMovement movement) {
         return switch (movement.context()) {
-            case ActorMovementContext.ServiceExit e -> new Exit(e.settlementId(), e.depotId(), false);
-            case ActorMovementContext.ResourceAccessExit e -> new Exit(e.settlementId(), e.depotId(), true);
+            case ActorMovementContext.ServiceExit e -> new Exit(e.point(), false);
+            case ActorMovementContext.ResourceAccessExit e -> new Exit(e.point(), true);
             default -> throw new IllegalArgumentException("foreign service-clearance context");
         };
     }
@@ -32,9 +34,8 @@ public final class ServiceExitMovementProvider implements ActorMovementProvider 
                 || !movement.order().ownerId().equals(movement.order().actorId()))
             throw new IllegalArgumentException("standalone service exit has a foreign activity authority");
         ResidentProfile resident = state.humanPopulation().resident(movement.order().actorId());
-        var container = state.inventory().containers().get(exit.depotId());
-        if (resident == null || container == null || !container.ownerId().equals(exit.settlementId())
-                || !FrontierWorldState.depotId(exit.settlementId()).equals(exit.depotId()))
+        ServiceBoundaryComposition.require(state, exit.point());
+        if (resident == null)
             throw new IllegalArgumentException("service exit does not match its declared resident and depot");
     }
     @Override public FrontierWorldState start(FrontierWorldState state, ActorMovement movement, FrontierWorldStateUpdate update) {
@@ -45,10 +46,7 @@ public final class ServiceExitMovementProvider implements ActorMovementProvider 
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
         validate(state, movement);
         var exit = exit(movement);
-        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), exit.settlementId());
-        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        return KnownPedestrianRouteKnowledge.forSettlement(state, exit.settlementId(), List.of(
-                new KnownPedestrianRouteKnowledge.Passage(depot, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+        return ServiceBoundaryComposition.knowledge(state, exit.point());
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         validate(state, movement);
@@ -69,10 +67,7 @@ public final class ServiceExitMovementProvider implements ActorMovementProvider 
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);
         var exit = exit(movement);
-        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), exit.settlementId());
-        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        KnownPedestrianRouteKnowledge.forSettlement(state, exit.settlementId(), List.of(
-                new KnownPedestrianRouteKnowledge.Passage(depot, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS))).requireRoute(route);
+        ServiceBoundaryComposition.knowledge(state, exit.point()).requireRoute(route);
         if (!movement.order().arrivedAt(route.getLast())
                 && !(ServiceAccessCoordinator.boundary(state, exit.depotId()).occupied(route.getFirst().standingBody())
                     && ServiceAccessCoordinator.boundary(state, exit.depotId()).cleared(route.getLast().standingBody())))

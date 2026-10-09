@@ -13,8 +13,8 @@ public record SettlementLabourRules(Map<ResidentWorkKind, Entry> entries) {
     }
     public SettlementLabourRules {
         entries = Map.copyOf(entries);
-        if (!entries.keySet().equals(EnumSet.allOf(ResidentWorkKind.class)))
-            throw new IllegalArgumentException("staffing rules must name every registered work kind");
+        if (!entries.keySet().containsAll(EnumSet.of(ResidentWorkKind.AGRICULTURE, ResidentWorkKind.BAKING, ResidentWorkKind.LOGISTICS)))
+            throw new IllegalArgumentException("staffing rules must name every baseline work kind");
     }
     public static SettlementLabourRules initial() {
         return new SettlementLabourRules(Map.of(
@@ -27,5 +27,12 @@ public record SettlementLabourRules(Map<ResidentWorkKind, Entry> entries) {
                 .map(value -> value.getKey().wireTag() + ":" + value.getValue().targetWorkers() + ":"
                         + value.getValue().minimumLocalStaff() + ":" + value.getValue().priority())
                 .collect(java.util.stream.Collectors.joining(";"));
+    }
+    /** Optional content families must be declared explicitly by the selecting profile. */
+    public SettlementLabourRules with(ResidentWorkKind kind, Entry entry) {
+        var next = new EnumMap<ResidentWorkKind, Entry>(ResidentWorkKind.class); next.putAll(entries);
+        if (next.putIfAbsent(Objects.requireNonNull(kind), Objects.requireNonNull(entry)) != null)
+            throw new IllegalArgumentException("duplicate staffing family");
+        return new SettlementLabourRules(next);
     }
 }

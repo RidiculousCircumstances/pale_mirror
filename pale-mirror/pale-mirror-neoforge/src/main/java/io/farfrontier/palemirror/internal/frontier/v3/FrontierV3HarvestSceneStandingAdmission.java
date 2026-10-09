@@ -36,7 +36,7 @@ final class FrontierV3HarvestSceneStandingAdmission {
             var field = FrontierV3ResourceSiteLedger.get(level);
             var position = lease.memberBody(state.actorLocations(), member.actorId());
             if (job == null || job.progress().hasPendingPhysicalWork()
-                    || state.resourceSites().hasPendingWorldChange(cause.siteId())
+                    || state.resourceSites().harvestMutationPending(job)
                     || field.fieldDelivery(cause.siteId()) != null || field.fieldHandProjection(cause.siteId()) != null
                     || FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)
                     || !FrontierV3SceneExecutor.entityStorageReady(level, new BlockPos(position.x(), position.y() - 1, position.z()))

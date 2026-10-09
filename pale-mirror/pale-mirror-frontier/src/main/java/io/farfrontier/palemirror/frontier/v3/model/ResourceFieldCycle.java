@@ -381,22 +381,22 @@ public final class ResourceFieldCycle {
         return replaceGeneration(id, after);
     }
 
-    /** A foreign-intended write can physically settle as an ordinary owned loss. */
+    /** A versioned external fact changes plant/ground only, never execution accounting or resources. */
     public ResourceFieldCycle observedInterference(ResourceFieldLayout.CellId id, CellState after) {
         CellState prior = cell(id);
-        if (prior.soil() == Soil.OBSTRUCTED || prior.crop() == Crop.OBSTRUCTED
-                || after.soil() == Soil.OBSTRUCTED || after.crop() == Crop.OBSTRUCTED)
-            return observedForeignTransition(id, after);
-        ResourceFieldCycle next;
-        if (after.soil() == Soil.DIRT && after.crop() == Crop.ABSENT && prior.soil() == Soil.FARMLAND)
-            next = soilBecameDirt(id);
-        else if (after.soil() == Soil.FARMLAND && after.crop() == Crop.ABSENT
-                && prior.soil() == Soil.FARMLAND)
-            next = cropRemoved(id);
-        else throw new IllegalArgumentException("foreign-intended field write produced no admitted owned change");
-        if (!next.cell(id).equals(after))
-            throw new IllegalArgumentException("foreign-intended field write changed work or yield without evidence");
-        return next;
+        Objects.requireNonNull(after, "external cell postcondition");
+        if (prior.soil() == Soil.UNKNOWN || prior.crop() == Crop.UNKNOWN
+                || after.soil() == Soil.UNKNOWN || after.crop() == Crop.UNKNOWN
+                || after.accounted() != prior.accounted() || after.yielded() != prior.yielded()
+                || after.workAccessBlocked() != prior.workAccessBlocked())
+            throw new IllegalArgumentException("external cell observation cannot invent work, yield or unknown terrain");
+        if (prior.equals(after)) return this;
+        if (prior.soil() == Soil.FARMLAND && after.soil() == Soil.FARMLAND
+                && prior.crop() == Crop.GROWING
+                && (after.crop() == Crop.GROWING || after.crop() == Crop.MATURE)
+                && after.growthStage() > prior.growthStage())
+            return replace(id, after); // Same plant generation.
+        return replaceGeneration(id, after); // An observed loss, obstruction or replacement generation.
     }
 
     /** The current work plan accounts for an inaccessible cell without changing its block. */

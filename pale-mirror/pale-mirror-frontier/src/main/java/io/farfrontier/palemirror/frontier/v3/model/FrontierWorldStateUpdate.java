@@ -54,7 +54,8 @@ public final class FrontierWorldStateUpdate {
         ACTOR_EXECUTIONS,
         SHIPMENTS,
         UNIT_GROUPS,
-        TRANSPORT_FLEET
+        TRANSPORT_FLEET,
+        EXTRACTION_SITES
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -87,6 +88,7 @@ public final class FrontierWorldStateUpdate {
     private ShipmentState shipments;
     private io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState unitGroups;
     private io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet;
+    private io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extractionSites;
 
     private FrontierWorldStateUpdate() { }
 
@@ -139,6 +141,7 @@ public final class FrontierWorldStateUpdate {
                 case SHIPMENTS -> shipments(contribution.shipments);
                 case UNIT_GROUPS -> unitGroups(contribution.unitGroups);
                 case TRANSPORT_FLEET -> transportFleet(contribution.transportFleet);
+                case EXTRACTION_SITES -> extractionSites(contribution.extractionSites);
             }
         }
         return this;
@@ -231,6 +234,9 @@ public final class FrontierWorldStateUpdate {
     public FrontierWorldStateUpdate transportFleet(io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet next) {
         mark(Component.TRANSPORT_FLEET); transportFleet = require(next, "transport fleet"); return this;
     }
+    public FrontierWorldStateUpdate extractionSites(io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState next) {
+        mark(Component.EXTRACTION_SITES); extractionSites = require(next, "extraction sites"); return this;
+    }
 
     Map<SubjectId, ActorLocation> actorLocations(FrontierWorldState state) { return changed(Component.ACTOR_LOCATIONS, actorLocations, state.actorLocations()); }
     Map<SubjectId, StructureCondition> structureConditions(FrontierWorldState state) { return changed(Component.STRUCTURE_CONDITIONS, structureConditions, state.structureConditions()); }
@@ -264,6 +270,9 @@ public final class FrontierWorldStateUpdate {
     }
     io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet(FrontierWorldState state) {
         return changed(Component.TRANSPORT_FLEET, transportFleet, state.transportFleet());
+    }
+    io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extractionSites(FrontierWorldState state) {
+        return changed(Component.EXTRACTION_SITES, extractionSites, state.extractionSites());
     }
 
     private void mark(Component component) {

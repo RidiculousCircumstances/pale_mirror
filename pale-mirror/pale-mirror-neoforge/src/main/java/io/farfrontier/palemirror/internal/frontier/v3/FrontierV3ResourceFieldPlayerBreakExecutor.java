@@ -42,15 +42,28 @@ final class FrontierV3ResourceFieldPlayerBreakExecutor {
             return FrontierV3ResourceSiteExecutor.BlockBreakObservation.REJECTED;
         var owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(site.id());
         if (owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                || !owner.witness().matchesCycle(cycle)
-                || state.resourceSites().hasPendingWorldChange(site.id())
-                || ledger.fieldWorldChange(site.id()) != null || ledger.fieldForeignChange(site.id()) != null
-                || ledger.fieldPlayerBreak(site.id()) != null
-                || !cycle.pendingPlayerBreaks().isEmpty())
+                || !owner.witness().matchesCycle(cycle))
             return FrontierV3ResourceSiteExecutor.BlockBreakObservation.REJECTED;
+        if (state.resourceSites().hasPendingCellMutation(site.id(), cell.id())
+                || ledger.hasPendingFieldMutation(site.id(), cell.id())) {
+            var foreign = ledger.fieldForeignChange(site.id(), cell.id());
+            var world = ledger.fieldWorldChange(site.id(), cell.id());
+            var ownBreak = ledger.fieldPlayerBreak(site.id(), cell.id());
+            String cause = foreign != null ? foreign.hold().causationId()
+                    : world != null ? world.observation().causationId()
+                    : ownBreak != null ? ownBreak.actionId() : "canonical_cell_obligation";
+            io.farfrontier.palemirror.internal.presentation.PaleMirrorPlayerPresentation.actionRejected(player,
+                    "field-mutation|" + site.id().value() + "|" + cell.id().value() + "|" + cause);
+            return FrontierV3ResourceSiteExecutor.BlockBreakObservation.REJECTED;
+        }
         var retained = owner.witness().cell(cell.id());
         var canonical = cycle.cell(cell.id());
-        if (retained.pending().isPresent()) return FrontierV3ResourceSiteExecutor.BlockBreakObservation.REJECTED;
+        if (retained.pending().isPresent()) {
+            io.farfrontier.palemirror.internal.presentation.PaleMirrorPlayerPresentation.actionRejected(player,
+                    "field-effect|" + site.id().value() + "|" + cell.id().value() + "|"
+                            + retained.pending().orElseThrow().causationId());
+            return FrontierV3ResourceSiteExecutor.BlockBreakObservation.REJECTED;
+        }
         if (canonical.soil() == ResourceFieldCycle.Soil.OBSTRUCTED
                 || canonical.crop() == ResourceFieldCycle.Crop.OBSTRUCTED) {
             var reading = FrontierV3ResourceFieldObservation.read(level, cell, "player-foreign-break");
@@ -135,8 +148,8 @@ final class FrontierV3ResourceFieldPlayerBreakExecutor {
         for (var lifecycle : state.resourceSites().sites().values().stream()
                 .sorted(Comparator.comparing(value -> value.siteId().value())).toList()) {
             ResourceFieldCycle cycle = state.resourceSites().cycle(lifecycle.siteId());
-            if (ledger.fieldPlayerBreak(lifecycle.siteId()) != null) continue;
             for (var entry : cycle.pendingPlayerBreaks().entrySet()) {
+                if (ledger.fieldPlayerBreak(lifecycle.siteId(), entry.getKey()) != null) continue;
                 ResourceFieldLayout.Cell cell = cycle.layout().requireCell(entry.getKey());
                 if (!level.hasChunkAt(minecraft(cell.crop()))) continue;
                 if (!(ledger.fieldClaim(lifecycle.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)

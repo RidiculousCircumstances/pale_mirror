@@ -45,13 +45,13 @@ class FrontierV3ResourceSiteCellClaimTest {
                         io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Source.WORLD, "world:lagging-growth"));
         ledger.beginFieldWorldChange(change);
         var recovered = FrontierV3ResourceSiteLedger.load(ledger.save(new CompoundTag(), null), null);
-        assertEquals(change, recovered.fieldWorldChange(SITE));
+        assertEquals(change, recovered.fieldWorldChange(SITE, id));
         var owner = (FrontierV3ResourceSiteLedger.FieldOwnership) recovered.fieldClaim(SITE);
         var acknowledged = owner.witness().acknowledgeWorldChange(change, actual,
                 new FrontierV3ResourceFieldObservation.Owned(after));
         recovered.replaceFieldClaim(owner, owner.withWitness(acknowledged));
         var afterAcknowledgement = FrontierV3ResourceSiteLedger.load(recovered.save(new CompoundTag(), null), null);
-        assertEquals(change, afterAcknowledgement.fieldWorldChange(SITE));
+        assertEquals(change, afterAcknowledgement.fieldWorldChange(SITE, id));
         afterAcknowledgement.retireFieldWorldChange(change);
         assertEquals(after, ((FrontierV3ResourceSiteLedger.FieldOwnership) afterAcknowledgement.fieldClaim(SITE))
                 .witness().cell(id).committed());
@@ -84,8 +84,14 @@ class FrontierV3ResourceSiteCellClaimTest {
     }
 
     @Test void currentSavedDataRetainsOnlyTheCellOwnerAndRejectsLegacyMutation() {
-        var site = site();
-        var cycle = ResourceFieldCycle.seeded(SITE, layout(), 1);
+        var firstCell = layout().cells().getFirst();
+        var support = firstCell.soil().support().offset(1, 0, 0);
+        var secondSoil = SurfaceAnchor.at(support.x(), support.y(), support.z());
+        var twoCells = new ResourceFieldLayout(1, 3, List.of(firstCell,
+                new ResourceFieldLayout.Cell(new ResourceFieldLayout.CellId(2),
+                        support.offset(0, 1, 0), secondSoil, secondSoil)), List.of());
+        var site = new ResourceSite(SITE, site().settlementId(), site().facilityId(), ResourceSiteKind.WHEAT_FIELD, twoCells);
+        var cycle = ResourceFieldCycle.seeded(SITE, site.layout(), 1);
         var witness = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.fromCycle(cycle));
         var ledger = FrontierV3ResourceSiteLedger.fixture();
         ledger.reserveFieldInitialization(site, INTENT);
@@ -126,7 +132,7 @@ class FrontierV3ResourceSiteCellClaimTest {
         var playerFence = FrontierV3ResourceFieldPlayerBreakWitness.prepared(playerPrepared);
         activeLedger.beginFieldPlayerBreak(playerFence);
         var recoveredPlayer = FrontierV3ResourceSiteLedger.load(activeLedger.save(new CompoundTag(), null), null);
-        assertEquals(playerFence, recoveredPlayer.fieldPlayerBreak(SITE));
+        assertEquals(playerFence, recoveredPlayer.fieldPlayerBreak(SITE, first.id()));
         assertThrows(IllegalStateException.class, () -> recoveredPlayer.beginFieldPlayerBreak(
                 FrontierV3ResourceFieldPlayerBreakWitness.prepared(new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPlayerBreakPrepared(
                         SITE, cycle.epoch(), cycle.layout().revision(), first.id(), playerPrepared.before(),
@@ -134,7 +140,7 @@ class FrontierV3ResourceSiteCellClaimTest {
         var playerObserved = playerFence.observed(io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved.Change.CROP_REMOVED);
         recoveredPlayer.observeFieldPlayerBreak(playerFence, playerObserved);
         assertEquals(playerObserved, FrontierV3ResourceSiteLedger.load(recoveredPlayer.save(new CompoundTag(), null), null)
-                .fieldPlayerBreak(SITE));
+                .fieldPlayerBreak(SITE, first.id()));
         recoveredPlayer.retireFieldPlayerBreak(playerObserved);
         activeLedger.observeFieldPlayerBreak(playerFence, playerObserved);
         activeLedger.retireFieldPlayerBreak(playerObserved);
@@ -149,7 +155,7 @@ class FrontierV3ResourceSiteCellClaimTest {
                         "world:cell-claim-test"));
         activeLedger.beginFieldWorldChange(worldChange);
         var restoredWorldChange = FrontierV3ResourceSiteLedger.load(activeLedger.save(new CompoundTag(), null), null);
-        assertEquals(worldChange, restoredWorldChange.fieldWorldChange(SITE));
+        assertEquals(worldChange, restoredWorldChange.fieldWorldChange(SITE, first.id()));
         assertThrows(IllegalStateException.class, () -> restoredWorldChange.beginFieldWorldChange(
                 new FrontierV3ResourceFieldWorldChangeWitness(
                         new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved(SITE,
@@ -165,15 +171,31 @@ class FrontierV3ResourceSiteCellClaimTest {
         var foreignBefore = new FrontierV3ResourceFieldForeignChangeWitness(foreignHold, java.util.Optional.empty());
         activeLedger.beginFieldForeignChange(foreignBefore);
         var recoveredForeign = FrontierV3ResourceSiteLedger.load(activeLedger.save(new CompoundTag(), null), null);
-        assertEquals(foreignBefore, recoveredForeign.fieldForeignChange(SITE));
+        assertEquals(foreignBefore, recoveredForeign.fieldForeignChange(SITE, first.id()));
         var foreignAfter = foreignBefore.observe(new FrontierV3ResourceFieldForeignChangeWitness.Blocks(
                 block("minecraft:farmland"), block("minecraft:stone")));
         recoveredForeign.observeFieldForeignChange(foreignBefore, foreignAfter);
         assertEquals(foreignAfter, FrontierV3ResourceSiteLedger.load(
-                recoveredForeign.save(new CompoundTag(), null), null).fieldForeignChange(SITE));
+                recoveredForeign.save(new CompoundTag(), null), null).fieldForeignChange(SITE, first.id()));
         assertThrows(IllegalStateException.class, () -> recoveredForeign.beginFieldWorldChange(worldChange),
                 "one site cannot retain owned and foreign world causes at once");
-        recoveredForeign.retireFieldForeignChange(foreignAfter);
+        var recaptured = foreignAfter.observe(new FrontierV3ResourceFieldForeignChangeWitness.Blocks(
+                block("minecraft:stone"), block("minecraft:air")));
+        recoveredForeign.observeFieldForeignChange(foreignAfter, recaptured);
+        var afterSupersession = FrontierV3ResourceSiteLedger.load(recoveredForeign.save(new CompoundTag(), null), null);
+        assertEquals(2L, afterSupersession.fieldForeignChange(SITE, first.id()).observationVersion());
+        assertEquals(recaptured, afterSupersession.fieldForeignChange(SITE, first.id()));
+        assertThrows(IllegalStateException.class, () -> afterSupersession.observeFieldForeignChange(foreignAfter, recaptured),
+                "a stale capture cannot replace the next durable observation version");
+        var neighbor = cycle.layout().cells().get(1);
+        var neighborHold = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldForeignChangeHeld(
+                SITE, cycle.epoch(), cycle.layout().revision(), neighbor.id(), cycle.cell(neighbor.id()), "world:neighbor-cell");
+        afterSupersession.beginFieldForeignChange(new FrontierV3ResourceFieldForeignChangeWitness(neighborHold, java.util.Optional.empty()));
+        assertEquals(2, FrontierV3ResourceSiteLedger.load(afterSupersession.save(new CompoundTag(), null), null)
+                .pendingFieldForeignChanges().size(), "distinct cells in one site own independent causes");
+        var badFamily = recaptured.write(); badFamily.putInt("mutationFamily", 255);
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceFieldForeignChangeWitness.read(badFamily));
+        recoveredForeign.retireFieldForeignChange(recaptured);
         activeLedger.retireFieldForeignChange(foreignBefore);
         var hand = new FrontierV3ResourceSiteHandProjectionWitness(SITE,
                 new SubjectId("job:site-harvest-cell-claim-test"), new SubjectId("custody:field-actor-test"),
@@ -216,14 +238,14 @@ class FrontierV3ResourceSiteCellClaimTest {
         conflictedCopy.conflict(SITE);
         assertEquals(FrontierV3ResourceSiteLedger.Status.CONFLICT, conflictedCopy.fieldClaim(SITE).status(),
                 "an accepted cell-owned incident must stay local instead of throwing at the legacy claim API");
-        var successor = claim.withWitness(witness.rebaseColdEpoch(ResourceFieldCycle.seeded(SITE, layout(), 3)));
+        var successor = claim.withWitness(witness.rebaseColdEpoch(ResourceFieldCycle.seeded(SITE, site.layout(), 3)));
         activeLedger.replaceFieldClaim(claim, successor);
         assertThrows(IllegalStateException.class, () -> activeLedger.replaceFieldClaim(claim, successor),
                 "a stale cell owner cannot replace a later epoch");
         var recovered = FrontierV3ResourceSiteLedger.load(activeLedger.save(new CompoundTag(), null), null);
         assertEquals(INTENT, recovered.fieldClaim(SITE).intentId());
         assertTrue(((FrontierV3ResourceSiteLedger.FieldOwnership) recovered.fieldClaim(SITE)).witness()
-                .matchesCycle(ResourceFieldCycle.seeded(SITE, layout(), 3)));
+                .matchesCycle(ResourceFieldCycle.seeded(SITE, site.layout(), 3)));
         var owned = (FrontierV3ResourceSiteLedger.FieldOwnership) recovered.fieldClaim(SITE);
         recovered.replaceFieldClaim(owned, owned.conflicted());
         var conflicted = (FrontierV3ResourceSiteLedger.FieldOwnership) recovered.fieldClaim(SITE);

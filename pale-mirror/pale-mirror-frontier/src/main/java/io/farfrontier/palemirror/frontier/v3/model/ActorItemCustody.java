@@ -35,8 +35,10 @@ public final class ActorItemCustody {
         if (ReferenceContainerCustody.hasLiveCustody(state, container.id())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container.id()))
             throw new IllegalArgumentException("cold actor item handoff competes with physical container authority");
-        if (order.portion() instanceof ActorContainerItemOrder.Portion.Exact)
+        if (order.portion() instanceof ActorContainerItemOrder.Portion.Exact) {
+            requireExactDestinationSlot(state, order);
             return FrontierWorldStateUpdate.begin().inventory(inventory.transferActorOrder(order));
+        }
         if (order.direction() == ActorContainerItemOrder.Direction.TAKE
                 && order.actorSlot().equals(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN))
                 && !inventory.actorItems(order.actorId()).isEmpty())
@@ -74,6 +76,7 @@ public final class ActorItemCustody {
                 || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation)
             order.requireCurrentStation(inventory);
         if (order.portion() instanceof ActorContainerItemOrder.Portion.Exact) {
+            requireExactDestinationSlot(state, order);
             if (!remainingSource.isEmpty() || !destination.isEmpty())
                 throw new IllegalArgumentException("exact actor handoff may not retain fungible witness layouts");
             return FrontierWorldStateUpdate.begin().inventory(inventory.transferActorOrder(order));
@@ -115,5 +118,12 @@ public final class ActorItemCustody {
         }
         // Fungible custody and title are independent. The calling owner authorizes the order;
         // the resource ledger validates quantities/claims and preserves each lot's actual owner.
+    }
+    private static void requireExactDestinationSlot(FrontierWorldState state, ActorContainerItemOrder order) {
+        if (!(order.actorSlot() instanceof ActorItemSlot.Hand hand) || hand.hand() != ActorContainerItemOrder.Hand.MAIN)
+            throw new IllegalArgumentException("exact equipment declares the common primary equipment slot");
+        if (order.direction() == ActorContainerItemOrder.Direction.TAKE && UnitInventoryPresentation.inventory(state, order.actorId()).values()
+                .stream().anyMatch(stack -> stack.slot().equals(order.actorSlot())))
+            throw new IllegalArgumentException("equipment pickup would overwrite a resource in its actual actor slot");
     }
 }

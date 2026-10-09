@@ -47,6 +47,13 @@ final class FrontierV3CommandSubmission {
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload,
                 binding.map(action -> new EngineScheduleBinding(checkpoint.revision(), action))))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) {
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.error(
+                    "PMV3_PHYSICAL_REJECTED phase={} owner={} payload={} result={} primary={}",
+                    phase, id, payload.type(), result, runtime.status().detail().orElse(""));
+            throw new IllegalStateException("Frontier v3 canonical transaction quarantined: "
+                    + runtime.status().detail().orElse("unknown primary failure") + "; result=" + result);
+        }
         return result;
     }
 }

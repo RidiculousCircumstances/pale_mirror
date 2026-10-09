@@ -1,6 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 
 import java.util.Objects;
 
@@ -8,7 +7,7 @@ import java.util.Objects;
 public record ResourceFieldForeignCellObserved(ResourceFieldForeignChangeHeld hold,
                                                ResourceFieldCycle.CellState after,
                                                String soilBlockName, String cropBlockName)
-        implements FrontierPayload {
+        implements CellMutationReceipt {
     public ResourceFieldForeignCellObserved {
         Objects.requireNonNull(hold, "foreign field held cause");
         Objects.requireNonNull(after, "foreign field canonical postcondition");
@@ -37,5 +36,7 @@ public record ResourceFieldForeignCellObserved(ResourceFieldForeignChangeHeld ho
             throw new IllegalArgumentException("foreign field block names disagree with the observed cell category");
     }
 
+    @Override public CellMutationKey mutationKey() { return ResourceSiteState.mutationKey(hold.siteId(), hold.cellId()); }
+    @Override public String mutationCause() { return hold.causationId(); }
     @Override public String type() { return "frontier.resource_field_foreign_cell_observed"; }
 }

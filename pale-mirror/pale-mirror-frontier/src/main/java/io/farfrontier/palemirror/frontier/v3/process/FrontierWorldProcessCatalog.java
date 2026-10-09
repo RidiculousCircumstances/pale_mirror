@@ -95,7 +95,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
             "frontier.production_cold_work_advanced", "frontier.bakery_cold_step", "frontier.bakery_input_reallocated",
-            "frontier.bakery_hot_effect_prepared", "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick",
+            "frontier.bakery_hot_effect_prepared", "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_hot_work_tick",
             "frontier.bakery_hot_hand_release", "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
             "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff", "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized",
@@ -151,8 +151,9 @@ public final class FrontierWorldProcessCatalog {
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
     private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, SCENES, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
-            UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES);
+            UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
+            Map.entry("extraction", new ExtractionWorkProcessModule()),
             Map.entry("physical-observation", new FrontierPhysicalProcessModule()),
             Map.entry("replica-custody", new FrontierReplicaCustodyProcessModule()),
             Map.entry("ambient-actors", new FrontierAmbientProcessModule()),
@@ -211,6 +212,16 @@ public final class FrontierWorldProcessCatalog {
         };
     }
     private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
+            Map.entry(ExtractionContinuation.REVIEW, withPlanningRecovery(atExecutionTime((state, action, instant) -> ExtractionWorkProcess.review(state, action, instant.ticks())))),
+            Map.entry(ExtractionContinuation.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+                    return ExtractionWorkProcess.progress(state, action, action.dueAt().ticks());
+                }
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
+                    return ExtractionWorkProcess.progress(state, action, instant.ticks());
+                }
+                @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return ExtractionWorkProcess.held(state, action); }
+            })),
             Map.entry(HivePresenceProcess.INITIALIZE, new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return HivePresenceProcess.planInitialization(state, action);
@@ -277,6 +288,7 @@ public final class FrontierWorldProcessCatalog {
                 }
             })),
             Map.entry(GoodsTradeReceiptProcess.REVIEW, atExecutionTime(GoodsTradeReceiptProcess::plan)),
+            Map.entry(InternalShipmentReceipts.RECEIVE, atExecutionTime(InternalShipmentReceipts::receive)),
             Map.entry(GoodsParticipantProcess.REVIEW, withPlanningRecovery(atExecutionTime(GoodsParticipantProcess::plan))),
             Map.entry(GoodsParticipantWakeup.OPPORTUNITY, withPlanningRecovery(atExecutionTime(GoodsParticipantProcess::plan))),
             Map.entry(ShipmentProcess.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {
@@ -323,7 +335,7 @@ public final class FrontierWorldProcessCatalog {
                     return ResourceSiteProcess.planGrowth(state, action);
                 }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
-                    return state.resourceSites().hasPendingWorldChange(action.subject());
+                    return false;
                 }
             }),
             Map.entry("frontier.resource_site.prepare", (state, action) -> ResourceSiteProcess.planPreparation(state, action)),
@@ -332,9 +344,7 @@ public final class FrontierWorldProcessCatalog {
                     return ResourceSiteHarvestProcess.plan(state, action);
                 }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
-                    var task = state.strategicPlans().tasks().get(action.subject());
-                    return task != null && task.resourceSiteTarget().isPresent()
-                            && state.resourceSites().hasPendingWorldChange(task.resourceSiteTarget().orElseThrow());
+                    return false;
                 }
             }),
             Map.entry("frontier.resource_site.harvest.cold_progress", new ScheduledPlanner() {
@@ -414,7 +424,7 @@ public final class FrontierWorldProcessCatalog {
                 descriptor("settlement-service-work", serviceWorkCommands(), serviceWorkSchedules(), SETTLEMENT_SERVICE_WORK,
                         emissions("settlement-service-work"), SETTLEMENT_SERVICE_WORK),
                 descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emissions("strategy"), STRATEGY),
-                GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR,
+                GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR, ExtractionWorkProcessModule.DESCRIPTOR,
                 TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
                 PedestrianPlanningProcessModule.DESCRIPTOR);
     }
@@ -461,7 +471,14 @@ public final class FrontierWorldProcessCatalog {
     public static List<ScheduledAction> retiredSchedules(DeterministicProcessRegistry registry,
             FrontierWorldState previous, FrontierWorldState next, FrontierEvent event,
             java.util.function.Supplier<List<ScheduledAction>> pending) {
-        return module(registry.requireReducedEventOwner(event.payload().type()))
+        String owner = registry.requireReducedEventOwner(event.payload().type());
+        // Kernel receipts have no domain-process module and retire no domain schedule.
+        // Validate their exact registered type instead of falling through to an unknown module.
+        if (owner.equals("kernel-schedule")) {
+            if (!KERNEL.contains(event.payload().type())) throw new IllegalArgumentException("undeclared kernel event");
+            return List.of();
+        }
+        return module(owner)
                 .retiredSchedules(previous, next, pending);
     }
 
@@ -471,6 +488,7 @@ public final class FrontierWorldProcessCatalog {
         List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, cadence.structuralRepairInitialScanTick()),
                 RouteConstructionProcess.scan(1, cadence.routeConstructionInitialScanTick()), RouteMaintenanceProcess.scan(1, cadence.routeConstructionInitialScanTick()),
                 SettlementServiceWorkProcess.scan(1, cadence.decontaminationInitialScanTick())));
+        MODULES.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> actions.addAll(entry.getValue().initialSchedules(bootstrap)));
         for (int index = 0; index < bootstrap.settlements().size(); index++) {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1,
                     cadence.settlementStrategicInitialReviewTick() + index * cadence.settlementInitialStagger()));
@@ -676,7 +694,7 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> economyCommands() { return types(
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
             "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_effect_prepared",
-            "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
+            "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
             "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
             "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff"); }
@@ -839,7 +857,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
                     "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
                     "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_effect_prepared",
-                    "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
+                    "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
                     "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
                     "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
                     "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff",

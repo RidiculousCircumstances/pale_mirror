@@ -21,7 +21,10 @@ public final class KnownPedestrianGround {
         ChunkSurfaceIndex roads = roads(state.bootstrap(), state.routeTopology());
         ChunkSurfaceIndex local = local(state.bootstrap(), settlementId);
         var terrain = state.bootstrap().terrain();
+        var sites = KnownSiteGeometry.forState(state);
         return (x, z) -> {
+            var site = sites.supports().get(new TerrainColumn(x, z));
+            if (site != null) return site;
             SurfaceAnchor road = roads.at(x, z), settlement = local.at(x, z);
             // Both solid authored floors are physically projected. Only their upper exposed
             // collision surface is standable; selecting the lower puts feet inside the upper.
@@ -39,7 +42,12 @@ public final class KnownPedestrianGround {
 
     /** Cross-settlement movement uses all authored local floors, not one origin's datum. */
     public static BoundedPedestrianApproach.SurveyedSurface forFrontier(FrontierWorldState state) {
-        return frontierSurvey(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()));
+        var base = frontierSurvey(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()));
+        var sites = KnownSiteGeometry.forState(state);
+        return (x, z) -> {
+            var site = sites.supports().get(new TerrainColumn(x, z));
+            return site != null ? site : base.at(x, z);
+        };
     }
 
     private static BoundedPedestrianApproach.SurveyedSurface frontierSurvey(FrontierBootstrap bootstrap, ChunkSurfaceIndex roads) {

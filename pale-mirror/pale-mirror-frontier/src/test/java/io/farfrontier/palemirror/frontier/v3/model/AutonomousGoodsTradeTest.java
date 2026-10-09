@@ -15,6 +15,33 @@ class AutonomousGoodsTradeTest {
     private static final SubjectId COMPANY = CompanyFoundationProcess.companyId(HOME);
     private static final SubjectId DEPOT = FrontierWorldState.depotId(HOME);
 
+    @Test void quarryCatalogOffersItsRealDepotSurplusToANonProducerThroughOrdinaryPublicTrading() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:stone-trade-policy"),
+                20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r1")));
+        var seller = state.companies().goodsTrade().participants().participants().get(HOME);
+        var producers = GrayboxQuarryPlan.producerSettlements(state.bootstrap()).stream().map(Settlement::id).toList();
+        var buyer = seller.known().stream().filter(peer -> !producers.contains(peer.party().id()))
+                .findFirst().orElseThrow().party().id();
+        // Isolated policy input, not native mining evidence: the separate kernel/native
+        // mining-haul checks establish how the same endpoint acquires this stock.
+        state = issue(state, HOME, "minecraft:cobblestone", 128, "stone-policy-fixture");
+        state = issue(state, HOME, "minecraft:bread", 384, "dispatch-provisions-fixture");
+        var view = GoodsParticipantView.read(state, state.companies().goodsTrade().participants().participants().get(HOME));
+        var stoneOffer = GoodsParticipantPolicies.require(view.participant()).decide(view, state.bootstrap().ruleset().goodsTrade()).stream()
+                .filter(intent -> intent.itemKind().equals("minecraft:cobblestone")).findFirst().orElseThrow();
+        assertEquals(GoodsTradeOrder.Side.SELL, stoneOffer.side()); assertEquals(64, stoneOffer.quantity());
+        var treasury = state.inventory().economics().require(buyer).balance();
+        state = review(state, HOME, 400); state = review(state, buyer, 400);
+        var contract = state.companies().goodsTrade().contracts().values().stream().filter(value ->
+                value.itemKind().equals("minecraft:cobblestone") && value.buyer().id().equals(buyer)).findFirst().orElseThrow();
+        assertTrue(contract.quantity() > 0 && contract.quantity() <= 64, "normal funds/cargo limits may split the reserve purchase");
+        assertEquals(HOME, contract.seller().id());
+        assertEquals(treasury, state.inventory().economics().require(buyer).balance(), "dispatch is not acceptance/payment");
+        assertEquals(contract.quantity(), GoodsParticipantView.read(state, state.companies().goodsTrade().participants().participants().get(buyer))
+                .stocks().get("minecraft:cobblestone").expectedIncoming());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
     @Test void ordinarySettlementBootstrapExecutesItsTradeReviewWithoutACompany() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:goods-company-foundation"), 47L);
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);

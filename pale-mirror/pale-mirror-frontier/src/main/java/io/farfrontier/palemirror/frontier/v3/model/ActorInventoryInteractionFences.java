@@ -9,7 +9,8 @@ import java.util.function.BiFunction;
 /** Inventory interaction owners declare their fences; shared activity/body code knows no job phases. */
 public final class ActorInventoryInteractionFences {
     private static final List<BiFunction<FrontierWorldState, SubjectId, Optional<SubjectId>>> OWNERS = List.of(
-            ExpeditionSupplyAuthority::pendingOwnerForActor, ReferenceContainerCustody::pendingOwnerForActor);
+            ExpeditionSupplyAuthority::pendingOwnerForActor, ReferenceContainerCustody::pendingOwnerForActor,
+            ExtractionWorkAuthority::pendingOwner);
     private ActorInventoryInteractionFences() { }
     public static boolean pending(FrontierWorldState state, SubjectId actor) {
         return pendingOwner(state, actor).isPresent();

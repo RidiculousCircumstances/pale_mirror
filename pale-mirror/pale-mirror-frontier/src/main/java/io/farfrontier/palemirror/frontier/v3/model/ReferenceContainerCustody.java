@@ -19,10 +19,6 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayload
  */
 public final class ReferenceContainerCustody {
     public static final SubjectId PROVIDER_ID = new SubjectId("provider:reference-container-adapter");
-    private static final String DEPOT_KIND = "container.settlement-depot";
-    private static final String HIVE_STORE_KIND = "container.hive-store";
-    private static final String PRODUCTION_STATION_KIND = "container.production-station";
-    private static final String MOBILE_STORAGE_KIND = "container.mobile-storage";
 
     private ReferenceContainerCustody() { }
 
@@ -47,19 +43,13 @@ public final class ReferenceContainerCustody {
     public static boolean isReferenceContainer(FrontierWorldState state, SubjectId containerId) {
         Objects.requireNonNull(state, "world state"); Objects.requireNonNull(containerId, "container id");
         ContainerRecord container = state.inventory().containers().get(containerId);
-        return state.bootstrap().settlements().stream().anyMatch(settlement -> FrontierWorldState.depotId(settlement.id()).equals(containerId))
-                || state.isHiveStore(containerId)
-                || container != null && container.productionStation().isPresent()
-                || state.inventory().surfaces().get(containerId) instanceof ContainerSurface surface
-                    && surface.location() instanceof ContainerLocation.Mobile;
+        return container != null && container.purpose().referenceScope();
     }
 
     public static String semanticKind(FrontierWorldState state, SubjectId containerId) {
         if (!isReferenceContainer(state, containerId)) throw new IllegalArgumentException("container is not an F0.2B reference scope");
         ContainerRecord container = state.inventory().containers().get(containerId);
-        if (state.inventory().surfaces().get(containerId).location() instanceof ContainerLocation.Mobile) return MOBILE_STORAGE_KIND;
-        if (container != null && container.productionStation().isPresent()) return PRODUCTION_STATION_KIND;
-        return state.isHiveStore(containerId) ? HIVE_STORE_KIND : DEPOT_KIND;
+        return container.purpose().referenceKind();
     }
 
     /** The authority scope is the exact container, never its settlement or carrying body. */

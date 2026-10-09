@@ -32,10 +32,12 @@ public final class DecisionAuthorityState {
         var image = INITIAL_IMAGE.get();
         if (image != null && image.bootstrap() == bootstrap) return image.state();
         Map<SubjectId, DecisionAuthority> initial = new LinkedHashMap<>();
+        var extractionHomes = GrayboxQuarryPlan.producerSettlements(bootstrap).stream().map(Settlement::id)
+                .collect(java.util.stream.Collectors.toSet());
         bootstrap.settlements().stream().sorted(java.util.Comparator.comparing(Settlement::id)).forEach(settlement ->
                 initial.put(settlement.id(), new DecisionAuthority(settlement.id(), DecisionAuthorityKind.SETTLEMENT,
                         new DecisionPolicyDescriptor("frontier:settlement", 1), 0L, java.util.List.of(), java.util.List.of(),
-                        SettlementWorkPolicy.initial(settlement, bootstrap.ruleset().labour()))));
+                        SettlementWorkPolicy.initial(settlement, bootstrap.ruleset().labour(), extractionHomes.contains(settlement.id())))));
         SubjectId hive = bootstrap.hive().id();
         initial.put(hive, new DecisionAuthority(hive, DecisionAuthorityKind.HIVEMIND,
                 new DecisionPolicyDescriptor("frontier:hivemind", 1), 0L, java.util.List.of(), java.util.List.of()));

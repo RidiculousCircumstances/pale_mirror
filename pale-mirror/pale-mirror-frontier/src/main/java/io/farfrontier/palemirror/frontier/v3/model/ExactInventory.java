@@ -38,6 +38,9 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         if (!containers.keySet().equals(surfaces.keySet())) throw new IllegalArgumentException("every exact container requires one physical surface");
         for (Map.Entry<SubjectId, ContainerSurface> entry : surfaces.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().containerId()) || !containers.containsKey(entry.getKey())) throw new IllegalArgumentException("container surface must own one known container");
+            var purpose = containers.get(entry.getKey()).purpose();
+            if (purpose.referenceScope() && (purpose == ContainerPurpose.MOBILE_STORAGE) != !entry.getValue().fixed())
+                throw new IllegalArgumentException("container purpose and physical attachment disagree");
         }
         for (Map.Entry<SubjectId, ExactItemStack> entry : items.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("item map key does not match item identity");
@@ -685,9 +688,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         InventoryCustody.Actor actor = new InventoryCustody.Actor(order.actorId());
         InventoryCustody.ContainerSlot slot = order.exactSlot();
         if (order.direction() == ActorContainerItemOrder.Direction.TAKE) {
-            if (items.values().stream().anyMatch(item -> item.custody().equals(actor))
-                    || fungibleResources.accounts().values().stream().anyMatch(account ->
-                    account.custody().equals(new ResourceCustody.Actor(order.actorId())))) {
+            if (items.values().stream().anyMatch(item -> item.custody().equals(actor))) {
                 throw new IllegalArgumentException("actor already carries a stack");
             }
             return moveObservedItem(current.id(), slot, actor);

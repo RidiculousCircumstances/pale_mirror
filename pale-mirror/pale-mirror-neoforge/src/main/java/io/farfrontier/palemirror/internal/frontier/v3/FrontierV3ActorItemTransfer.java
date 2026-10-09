@@ -144,6 +144,12 @@ final class FrontierV3ActorItemTransfer {
             return destinationBefore == 0 ? target.isEmpty() : plain(target, destinationBefore);
         }
 
+        /** Source retained in full, zero-based destination changed: no transfer was applied. */
+        boolean unappliedDestinationOccupied() {
+            return order.direction() == ActorContainerItemOrder.Direction.PLACE && destinationBefore == 0
+                    && sourceMatches(false) && !destination().isEmpty();
+        }
+
         boolean after() {
             if (!sourceMatches(true)) return false;
             return plain(destination(), destinationBefore + order.portion().quantity());

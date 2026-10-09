@@ -85,14 +85,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     }
     public static KnownPedestrianRouteKnowledge knowledgeForEndpoints(FrontierWorldState state,
             ShipmentEndpoint sender, ShipmentEndpoint receiver) {
-        return KnownPedestrianRouteKnowledge.forJourney(state, List.of(passage(state, sender), passage(state, receiver)));
-    }
-    private static KnownPedestrianRouteKnowledge.SettlementPassage passage(FrontierWorldState state, ShipmentEndpoint endpoint) {
-        ShipmentEndpointComposition.validate(state, endpoint);
-        var facility = FrontierWorldStateSupport.settlement(state.bootstrap(), endpoint.settlementId()).structures().stream()
-                .filter(value -> value.id().equals(endpoint.facilityId())).findFirst().orElseThrow();
-        return new KnownPedestrianRouteKnowledge.SettlementPassage(endpoint.settlementId(),
-                new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS));
+        return ShipmentEndpointComposition.knowledge(state, List.of(sender, receiver));
     }
     @Override public SurfaceAnchor destination(FrontierWorldState state, UnitGroup group, long ordinal) {
         var mission = mission(state, group);
@@ -101,17 +94,15 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
         else throw new IllegalArgumentException("transport has no declared journey ordinal");
     }
     public static SurfaceAnchor rendezvous(FrontierWorldState state, ShipmentEndpoint endpoint, int members) {
-        var passage = passage(state, endpoint);
-        var service = SettlementDepotServicePort.forDepot(passage.passage().facility());
         return io.farfrontier.palemirror.frontier.v3.model.group.GroupRendezvous.select(
-                KnownPedestrianRouteKnowledge.forJourney(state, List.of(passage)), service.exteriorApproach(),
-                service.accessBoundary().occupiedSurfaces(), members);
+                ShipmentEndpointComposition.knowledge(state, List.of(endpoint)), ShipmentEndpointComposition.exteriorApproach(state, endpoint),
+                ServiceAccessCoordinator.boundary(state, endpoint.containerId()).occupiedSurfaces(), members);
     }
     public static void validateRendezvous(FrontierWorldState state, ShipmentEndpoint endpoint, SurfaceAnchor target, int members) {
-        var passage = passage(state, endpoint); var service = SettlementDepotServicePort.forDepot(passage.passage().facility());
-        var geometry = KnownPedestrianRouteKnowledge.forJourney(state, List.of(passage)).geometry();
+        var geometry = ShipmentEndpointComposition.knowledge(state, List.of(endpoint)).geometry();
+        var boundary = ServiceAccessCoordinator.boundary(state, endpoint.containerId());
         if (!geometry.bounds().contains(target.support()) || !target.equals(geometry.supportAt(target.x(), target.z())) || geometry.blocked(target)
-                || service.accessBoundary().occupiedSurfaces().stream().anyMatch(surface -> Math.abs((long) surface.x() - target.x())
+                || boundary.occupiedSurfaces().stream().anyMatch(surface -> Math.abs((long) surface.x() - target.x())
                     + Math.abs((long) surface.z() - target.z()) < members * 2L))
             throw new IllegalArgumentException("transport admission lacks a known assembly point outside its service boundary");
     }

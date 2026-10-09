@@ -45,12 +45,12 @@ final class FrontierV3BlockExtractionCodec {
                     definition, readOutputs(tag, "output"));
         } catch (IllegalArgumentException invalid) { throw new IllegalStateException("invalid retained extraction preparation", invalid); }
     }
-    private static CompoundTag block(BlockExtraction.Block value) {
+    static CompoundTag block(BlockExtraction.Block value) {
         var tag = new CompoundTag(); tag.putString("kind", value.kind());
         var properties = new CompoundTag(); value.properties().forEach(properties::putString); tag.put("properties", properties);
         return tag;
     }
-    private static BlockExtraction.Block readBlock(CompoundTag tag) {
+    static BlockExtraction.Block readBlock(CompoundTag tag) {
         require(tag, "kind", Tag.TAG_STRING); require(tag, "properties", Tag.TAG_COMPOUND);
         var properties = tag.getCompound("properties"); var values = new TreeMap<String, String>();
         if (properties.getAllKeys().size() > 32) throw new IllegalStateException("unbounded extraction properties");

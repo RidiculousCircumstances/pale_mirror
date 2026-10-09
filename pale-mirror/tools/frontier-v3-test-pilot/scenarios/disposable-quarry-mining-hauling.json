@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "id": "disposable_quarry_mining_hauling",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "quarry-world", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "restart": { "mode": "graceful", "afterAction": 10 },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+        "expect": { "status": "ok", "family": "frontier.extraction.site", "result": { "total": 256, "extracted": 0, "homeQuantity": 0 } } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "position" } },
+      "offset": { "x": 20, "y": 3, "z": -6 }, "settleMs": 0,
+      "causalMilestone": "ordinary_player_exposes_finite_quarry" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": { "status": "ok", "surface": "ACTIVE" }, "timeoutMs": 90000,
+      "causalMilestone": "authored_floor_and_opening_admit_owned_tool_container" },
+    { "type": "look", "at": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "firstSource" } } },
+    { "type": "release_fast_forward_hold" },
+    { "type": "fast_forward_to_instant", "targetInstant": 1800, "timeoutMs": 180000 },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "causalMilestone": "actual_source_depletion_and_retained_worker_set" },
+    { "type": "release_fast_forward_hold" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": { "status": "ok", "result": { "hasExtraction": true } }, "timeoutMs": 90000,
+      "causalMilestone": "hot_miner_changes_actual_source_through_owned_effect" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 64, "z": -132 },
+      "settleMs": 0, "causalMilestone": "ordinary_player_leaves_worksite" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": { "status": "ok", "result": { "liveSourceRegions": 0, "workersCold": true } }, "timeoutMs": 90000,
+      "causalMilestone": "natural_departure_releases_exact_source_and_actor_custody" },
+    { "type": "fast_forward_to_instant", "targetInstant": 24000, "timeoutMs": 180000,
+      "causalMilestone": "cold_mining_and_separate_transport_no_fixture_outcomes" },
+    { "type": "release_fast_forward_hold" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": { "status": "ok", "result": { "homeReserveSupplied": true } }, "timeoutMs": 180000,
+      "causalMilestone": "separate_carrier_delivers_real_mined_resource_to_home_depot" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "position" } },
+      "offset": { "x": 20, "y": 3, "z": -6 }, "settleMs": 0,
+      "causalMilestone": "return_projects_current_depleted_quarry_not_cold_replay" },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "firstSource" } },
+      "block": "minecraft:air", "timeoutMs": 60000 },
+    { "type": "look", "at": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "firstSource" } } }
+  ],
+  "assertions": [
+    { "after": 13, "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": { "status": "ok", "result": { "outputKind": "minecraft:cobblestone", "homeReserveSupplied": true } } }
+  ],
+  "frames": [ { "after": 3, "name": "finite-quarry-before-mining" }, { "after": 8, "name": "hot-mining-frontier" },
+    { "after": 16, "name": "recovered-cold-depleted-quarry" } ]
+}

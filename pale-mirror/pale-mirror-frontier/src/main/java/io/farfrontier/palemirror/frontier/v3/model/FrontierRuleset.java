@@ -20,7 +20,18 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                               ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
                               GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks,
                               SettlementLabourRules labour,
-                              io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition) {
+                              io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition,
+                              io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction) {
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                           ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
+                           GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks,
+                           SettlementLabourRules labour,
+                           io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand, residentLife,
+                resourceHarvestColdTravelTicksPerEdge, workCatalog, goodsTrade, initialSettlementStocks, labour,
+                expedition, io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules.disabled());
+    }
     public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                            FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
                            ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
@@ -81,6 +92,18 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         goodsTrade = Objects.requireNonNull(goodsTrade, "goods trade rules");
         labour = Objects.requireNonNull(labour, "labour rules");
         expedition = Objects.requireNonNull(expedition, "expedition rules");
+        extraction = Objects.requireNonNull(extraction, "extraction rules");
+        if (schemaVersion < 18 && !extraction.equals(
+                io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules.disabled()))
+            throw new IllegalArgumentException("custom extraction rules require hashed schema18");
+        if (extraction.enabled() != labour.entries().containsKey(ResidentWorkKind.EXTRACTION))
+            throw new IllegalArgumentException("extraction content and staffing must be explicitly enabled together");
+        if (extraction.enabled()) {
+            var operation = workCatalog.require(extraction.source().before().kind(), WorkOperation.EXTRACT);
+            if (operation.capability() != HumanCapability.EXTRACTION
+                    || labour.entries().get(ResidentWorkKind.EXTRACTION).targetWorkers() != extraction.minersPerSite())
+                throw new IllegalArgumentException("extraction work rate or staffing differs from its content declaration");
+        }
         if (schemaVersion < 17 && !expedition.equals(
                 io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules.initial()))
             throw new IllegalArgumentException("custom expedition policy requires hashed schema17");
@@ -122,7 +145,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 + (schemaVersion >= 15 ? "|" + initialSettlementStocks.stream()
                     .map(InitialSettlementStock::canonicalText).sorted().collect(java.util.stream.Collectors.joining(";")) : "")
                 + (schemaVersion >= 16 ? "|" + labour.canonicalText() : "")
-                + (schemaVersion >= 17 ? "|" + expedition.canonicalText() : "");
+                + (schemaVersion >= 17 ? "|" + expedition.canonicalText() : "")
+                + (schemaVersion >= 18 ? "|" + extraction.canonicalText() : "");
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */

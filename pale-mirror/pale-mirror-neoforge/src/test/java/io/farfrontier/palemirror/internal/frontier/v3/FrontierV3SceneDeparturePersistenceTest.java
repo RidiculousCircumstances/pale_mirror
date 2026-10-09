@@ -143,7 +143,26 @@ class FrontierV3SceneDeparturePersistenceTest {
         bread.putInt("count", 4); bread.putString("id", "minecraft:wheat");
         assertFalse(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(bakery));
         bread.putString("id", "minecraft:bread"); bread.put("components", new CompoundTag());
-        assertFalse(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(bakery));
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).isEmpty(), "unsupported components are not an empty hand");
+    }
+
+    @Test void savedExactEquipmentRetainsIdentityRatherThanRejectingAllComponentBearingHands() {
+        var base = receipt(9); var toolId = new SubjectId("item:starter-pick");
+        var held = new FrontierV3ActorBodyDeparture.HandStack("minecraft:stone_pickaxe", 1, java.util.Optional.of(toolId));
+        var equipped = new FrontierV3SceneDeparture(base.carrier(), base.residenceGeneration(), base.leaseId(), base.sceneRevision(),
+                base.observed(), base.canonicalHealthAtCapture(), java.util.Optional.empty(), java.util.Optional.of(held));
+        assertEquals(equipped, FrontierV3SceneDeparture.load(equipped.save()));
+        var entity = storedChunkWithWheat(4).getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
+        var hands = entity.getList("HandItems", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        var tool = new CompoundTag(); tool.putString("id", held.itemKind()); tool.putInt("count", 1);
+        var data = new CompoundTag(); data.putString(FrontierV3ExactItemPresentation.ITEM_ID_KEY, toolId.value());
+        var components = new CompoundTag(); components.put("minecraft:custom_data", data); tool.put("components", components);
+        hands.set(0, tool); hands.set(1, new CompoundTag());
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(equipped));
+        data.putString(FrontierV3ExactItemPresentation.ITEM_ID_KEY, "item:other-pick");
+        assertFalse(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(equipped));
+        components.putInt("minecraft:damage", 1);
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).isEmpty());
     }
 
     @Test void unloadReceiptWaitsForExactWriteAndSuccessfulSync() {

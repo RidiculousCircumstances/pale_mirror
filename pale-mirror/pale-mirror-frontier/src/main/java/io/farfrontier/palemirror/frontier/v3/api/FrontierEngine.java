@@ -33,4 +33,7 @@ public interface FrontierEngine<P extends FrontierProjection> {
     void compact(Revision coveredRevision);
 
     EngineStatus status();
+
+    /** Original failure, retained only in memory for the host's stack trace; never execution authority. */
+    default Optional<RuntimeException> failureCause() { return Optional.empty(); }
 }

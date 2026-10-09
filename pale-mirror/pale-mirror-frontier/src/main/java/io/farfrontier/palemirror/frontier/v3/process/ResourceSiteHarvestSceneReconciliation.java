@@ -42,7 +42,7 @@ public final class ResourceSiteHarvestSceneReconciliation {
                     != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
                     && state.physicalIntents().get(job.intentId()).status()
                     != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING
-                || state.resourceSites().hasPendingWorldChange(subject) || !cycle.pendingPlayerBreaks().isEmpty()
+                || state.resourceSites().harvestMutationPending(job)
                 || lease == null || lease.status() != SceneLeaseStatus.CONFLICT
                 || lease.revision() != receipt.leaseRevision() || lease.members().size() != 1
                 || !FrontierSceneBehaviors.isResourceSiteHarvest(lease)

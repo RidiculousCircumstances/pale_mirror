@@ -49,8 +49,8 @@ class ProductionStationSpecTest {
                 container, ProductionStationSpec.Capability.BAKING,
                 SurfaceAnchor.at(1, 64, 1), SurfaceAnchor.at(2, 64, 1), 0, 1);
         assertThrows(IllegalArgumentException.class, () -> new ContainerRecord(
-                new SubjectId("container:other"), owner, 27, Optional.of(station)));
-        assertThrows(IllegalArgumentException.class, () -> new ContainerRecord(container, owner, 1, Optional.of(station)));
+                new SubjectId("container:other"), owner, 27, ContainerPurpose.PRODUCTION_STATION, Optional.of(station)));
+        assertThrows(IllegalArgumentException.class, () -> new ContainerRecord(container, owner, 1, ContainerPurpose.PRODUCTION_STATION, Optional.of(station)));
         assertThrows(IllegalArgumentException.class, () -> new ProductionStationSpec(station.id(), facility, container,
                 station.capability(), station.workerStation(), station.workerStation(), 0, 1));
     }

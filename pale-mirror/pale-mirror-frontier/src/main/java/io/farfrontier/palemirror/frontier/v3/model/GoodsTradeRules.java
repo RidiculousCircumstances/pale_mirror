@@ -41,6 +41,16 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
                         new Commodity("minecraft:wheat", 0, 64, FixedScalar.ONE, FixedScalar.ONE),
                         new Commodity("minecraft:bread", 0, 0, FixedScalar.whole(2), FixedScalar.whole(2)))));
     }
+    /** Content catalog amendment; matching and shipment algorithms remain commodity-neutral. */
+    public GoodsTradeRules withCommodity(GoodsPolicyKind policy, Commodity commodity) {
+        var next = new EnumMap<GoodsPolicyKind, List<Commodity>>(GoodsPolicyKind.class);
+        next.putAll(policies);
+        var values = new ArrayList<>(Objects.requireNonNull(policies.get(policy), "declared goods policy"));
+        if (values.stream().anyMatch(value -> value.itemKind().equals(commodity.itemKind())))
+            throw new IllegalArgumentException("goods commodity already declared for this policy");
+        values.add(commodity); next.put(policy, List.copyOf(values));
+        return new GoodsTradeRules(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, next);
+    }
     public String canonicalText() {
         var result = new StringBuilder(reviewInterval + "," + orderLifetime + "," + maximumBatch + "," + maximumPairReviews);
         policies.entrySet().stream().sorted(Comparator.comparingInt(e -> e.getKey().wireTag())).forEach(entry -> {

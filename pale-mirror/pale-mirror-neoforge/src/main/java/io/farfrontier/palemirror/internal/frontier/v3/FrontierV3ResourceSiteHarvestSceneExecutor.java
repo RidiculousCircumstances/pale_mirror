@@ -97,7 +97,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             FrontierWorldState state, FrontierResourceSiteHarvestSceneSupport.Candidate candidate) {
         var job = state.resourceSites().site(candidate.siteId()).harvestJob(candidate.jobId()).orElseThrow();
         if (job.navigationBlock().isPresent() || job.progress().complete() || job.returningForBatch()
-                || state.resourceSites().hasPendingWorldChange(job.siteId())) return;
+                || state.resourceSites().harvestMutationPending(job)) return;
         var cycle = state.resourceSites().cycle(candidate.siteId());
         var claim = FrontierV3ResourceSiteLedger.get(level).fieldClaim(candidate.siteId());
         if (!(claim instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
@@ -111,10 +111,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                                                     FrontierResourceSiteHarvestSceneSupport.Candidate candidate) {
         var lifecycle = state.resourceSites().sites().get(candidate.siteId());
         var site = state.resourceSite(candidate.siteId());
-        if (lifecycle == null || site == null || state.resourceSites().hasPendingWorldChange(candidate.siteId()))
+        if (lifecycle == null || site == null)
             return false;
         var job = lifecycle.harvestJob(candidate.jobId()).orElse(null);
-        if (job == null || !job.id().equals(candidate.jobId())) return false;
+        if (job == null || !job.id().equals(candidate.jobId()) || state.resourceSites().harvestMutationPending(job)) return false;
         // Once every crop result is canonical, this scene only follows the retained
         // worker route. It must not force the remote field to load for a depot-side
         // observer to see that exact worker at the current station.
@@ -170,8 +170,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                                 FrontierWorldState state, SceneLease lease) {
         FrontierV3SceneExecutor.requireRegisteredSceneTurn(state, lease);
         if ((lease.status() == SceneLeaseStatus.PREPARED || lease.status() == SceneLeaseStatus.HOT)
-                && state.resourceSites().hasPendingWorldChange(
-                FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId())) return;
+                && state.resourceSites().site(FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId())
+                        .harvestJob(FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId())
+                        .map(state.resourceSites()::harvestMutationPending).orElse(false)) return;
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
@@ -330,7 +331,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return;
         }
         if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()
-                && !state.resourceSites().hasPendingWorldChange(job.siteId())) {
+                && !state.resourceSites().harvestMutationPending(job)) {
             ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
             var cell = cycle.layout().cells().get(job.progress().nextCropSlotIndex());
             var head = cell.workstation().support().offset(0, 2, 0);
@@ -367,7 +368,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 return;
             }
             if (cycle.expectedWorkOutcome(blockedCell.id()) == ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED) {
-                if (state.resourceSites().hasPendingWorldChange(job.siteId())) return;
+                if (state.resourceSites().harvestMutationPending(job)) return;
                 // One witnessed unavailable target cannot hold the whole area task.
                 var blockedIds = List.of(blockedCell.id());
                 if (!blockedCellsPhysicallyCurrent(level, state, site, blockedIds)) return;
@@ -389,7 +390,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             var goal = blocked.target();
             if (blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE) {
                 FrontierV3GoalNavigation.stop(worker, actuation);
-                if (state.resourceSites().hasPendingWorldChange(job.siteId())) return;
+                if (state.resourceSites().harvestMutationPending(job)) return;
                 var cycle = state.resourceSites().cycle(job.siteId());
                 var prefix = ResourceSiteHarvestProcess.blockedPrefix(cycle, job.progress().nextCropSlotIndex());
                 if (ResourceSiteHarvestProcess.blockedPrefixMeetsPendingPlayerBreak(
@@ -412,7 +413,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_goal_cleared", lease, accepted);
                 return;
             }
-            if (state.resourceSites().hasPendingWorldChange(job.siteId())) return;
+            if (state.resourceSites().harvestMutationPending(job)) return;
             if ((blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE
                     || blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.PATH_STALLED)
                     && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
@@ -616,7 +617,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                                                   FrontierWorldState state, SceneLease lease,
                                                   ResourceSiteHarvestJob job, Mob worker) {
         if (job.progress().complete() || job.returningForBatch() || job.progress().hasPendingCrop()
-                || state.resourceSites().hasPendingWorldChange(job.siteId())) return false;
+                || state.resourceSites().harvestMutationPending(job)) return false;
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
         var alternate = cycle.reachableWorkSlotAfter(job.progress().nextCropSlotIndex(), index -> {
                 var cell = cycle.layout().cells().get(index);
@@ -760,7 +761,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     private static boolean blockedCellsPhysicallyCurrent(ServerLevel level, FrontierWorldState state,
                                                         io.farfrontier.palemirror.frontier.v3.model.ResourceSite site,
                                                         List<io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId> ids) {
-        if (state.resourceSites().hasPendingWorldChange(site.id())) return false;
+        if (ids.stream().anyMatch(id -> state.resourceSites().hasPendingCellMutation(site.id(), id))) return false;
         var cycle = state.resourceSites().cycle(site.id());
         var siteClaim = FrontierV3ResourceSiteLedger.get(level).siteClaim(site.id());
         if (!(siteClaim instanceof FrontierV3ResourceSiteLedger.CellSiteClaim claimed)

@@ -11,6 +11,7 @@ final class FrontierV3PhysicalExecutors {
 
             executor("graybox-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("physical-observation"), "graybox-projection", FrontierV3AftermathOwnerComposition::projection),
             executor("resource-site-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("graybox-projection"), "resource-site-projection", FrontierV3ResourceSiteExecutor::tick),
+            executor("worksite-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("graybox-projection"), "worksite-projection", FrontierV3WorksiteProjection::tick),
             executor("decontamination-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("resource-site-projection"), "decontamination-projection", FrontierV3DecontaminationExecutor::tick),
             executor("infection-overlay-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("decontamination-projection"), "infection-overlay-projection", FrontierV3InfectionOverlayExecutor::tick),
             executor("object-boards", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("infection-overlay-projection"), "object-board-projection", FrontierV3ObjectBoardExecutor::tick),
@@ -29,7 +30,8 @@ final class FrontierV3PhysicalExecutors {
             // before a restart persisted its canonical receipt.  Reconcile that durable
             // physical effect before the generic surface drift audit: otherwise the audit
             // mistakes its own known recovery window for player/world tampering.
-            executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("inventory-observation"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
+            executor("extraction-effects", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("inventory-observation"), "extraction-effects", FrontierV3ExtractionExecutor::tick),
+            executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("extraction-effects"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
             // Resume an already-fenced farmer hand/chest pair before any generic observer
             // can misclassify its crash window as an unrelated fungible or reference drift.
             executor("resource-site-delivery", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,

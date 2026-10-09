@@ -28,7 +28,7 @@ public final class SettlementStaffingPolicy {
                 .flatMap(group -> group.members().stream()).forEach(member -> away.add(member.actorId()));
         state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal())
                 .forEach(shipment -> away.add(shipment.execution().actorId()));
-        var demands = ports.stream().map(port -> {
+        var demands = ports.stream().filter(port -> state.bootstrap().ruleset().labour().entries().containsKey(port.kind())).map(port -> {
             var demand = port.assess(state, home, state.bootstrap().ruleset().labour().entries().get(port.kind()));
             if (demand.kind() != port.kind() || demand.capability() != port.capability())
                 throw new IllegalArgumentException("forged staffing family or capability declaration");

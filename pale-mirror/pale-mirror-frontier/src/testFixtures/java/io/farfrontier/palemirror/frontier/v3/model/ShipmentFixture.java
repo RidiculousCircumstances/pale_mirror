@@ -42,7 +42,7 @@ final class ShipmentFixture {
     }
     private static ShipmentEndpoint endpoint(Settlement settlement) {
         var depot = settlement.structures().stream().filter(s -> s.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        return new ShipmentEndpoint(ShipmentEndpoint.Kind.SETTLEMENT_DEPOT, settlement.id(), depot.id(),
+        return new ShipmentEndpoint.Depot(settlement.id(), depot.id(),
                 FrontierWorldState.depotId(settlement.id()), SettlementDepotServicePort.forDepot(depot).serviceSurface());
     }
     private ShipmentFixture() { }

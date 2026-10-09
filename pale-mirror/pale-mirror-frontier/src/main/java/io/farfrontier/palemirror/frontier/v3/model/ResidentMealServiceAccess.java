@@ -9,8 +9,7 @@ public final class ResidentMealServiceAccess implements ServiceAccessCapability 
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.SELF_CARE; }
 
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
-        var port = ServiceAccessCoordinator.port(state, pointId);
-        var boundary = port.accessBoundary();
+        var boundary = ServiceAccessCoordinator.boundary(state, pointId);
         return state.humanPopulation().meals().values().stream().filter(meal -> !meal.portable() && meal.depotId().equals(pointId))
                 .map(meal -> new ServiceAccessDemand(identity(pointId, meal.residentId()), priority(),
                         ServiceAccessCoordinator.occupies(state, boundary, meal.residentId()) ? ServiceAccessDemand.Presence.OCCUPIED

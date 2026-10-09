@@ -28,15 +28,10 @@ public final class KnownServiceExitNavigation {
 
     private static List<SurfaceAnchor> exitStations(FrontierWorldState state, SubjectId settlementId,
             SubjectId depotId, SurfaceAnchor start, java.util.Set<SurfaceAnchor> excluded) {
-        if (!depotId.equals(FrontierWorldState.depotId(settlementId)))
-            throw new IllegalArgumentException("exit has a foreign service identity");
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
-        SettlementStructure depot = settlement.structures().stream()
-                .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlementId,
-                List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
-                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
-        return ServiceClearanceTargets.exits(SettlementDepotServicePort.forDepot(depot).accessBoundary(),
+        var point = ServiceBoundaryComposition.declaration(state, depotId);
+        if (!point.settlementId().equals(settlementId)) throw new IllegalArgumentException("exit has a foreign service identity");
+        var knowledge = ServiceBoundaryComposition.knowledge(state, point.identity());
+        return ServiceClearanceTargets.exits(point.boundary(),
                 start, knowledge, excluded);
     }
 
@@ -79,8 +74,9 @@ public final class KnownServiceExitNavigation {
         Objects.requireNonNull(state, "service exit state");
         Objects.requireNonNull(order, "service exit movement order");
         Objects.requireNonNull(start, "service exit start");
+        var point = ServiceBoundaryComposition.declaration(state, depotId);
         if (order.capability() != TraversalCapability.PEDESTRIAN
-                || !depotId.equals(FrontierWorldState.depotId(settlementId)))
+                || !point.settlementId().equals(settlementId))
             throw new IllegalArgumentException("service exit needs a local pedestrian goal");
         ActorLocation actor = state.actorLocations().get(order.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
@@ -94,11 +90,6 @@ public final class KnownServiceExitNavigation {
                     order.capability(), order.arrivalPolicy());
         }
         if (order.legalStations().contains(start)) return List.of(start);
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
-        SettlementStructure depot = settlement.structures().stream()
-                .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        return KnownPedestrianRouteKnowledge.path(state, settlementId, start, order,
-                List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
-                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+        return ServiceBoundaryComposition.knowledge(state, point.identity()).path(start, order);
     }
 }

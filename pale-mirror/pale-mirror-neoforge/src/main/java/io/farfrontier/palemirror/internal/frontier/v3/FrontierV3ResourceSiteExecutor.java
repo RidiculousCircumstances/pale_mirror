@@ -80,9 +80,7 @@ final class FrontierV3ResourceSiteExecutor {
         var ledger = FrontierV3ResourceSiteLedger.get(level);
         var cursors = WORLD_OBSERVATION_CURSORS.computeIfAbsent(runtime, ignored -> new HashMap<>());
         for (SubjectId siteId : state.resourceSites().sites().keySet().stream().sorted().toList()) {
-            if (state.resourceSites().hasPendingWorldChange(siteId)
-                    || ledger.fieldWorldChange(siteId) != null || ledger.fieldForeignChange(siteId) != null
-                    || !(ledger.fieldClaim(siteId) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
+            if (!(ledger.fieldClaim(siteId) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                     || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) continue;
             var cycle = state.resourceSites().cycle(siteId);
             if (!owner.witness().matchesCycle(cycle)) continue;
@@ -197,9 +195,7 @@ final class FrontierV3ResourceSiteExecutor {
         List<ResourceSiteLifecycle> candidates = projectionCandidates(state.resourceSites().sites().values(), pendingRecovery,
                 lifecycle -> {
                     ResourceSite site = state.resourceSite(lifecycle.siteId());
-                    return !state.resourceSites().hasPendingWorldChange(site.id())
-                            && ledger.fieldWorldChange(site.id()) == null
-                            && ledger.fieldForeignChange(site.id()) == null && loaded(level, site)
+                    return loaded(level, site)
                             && FrontierV3GrayboxExecutor.resourceSiteProjectionDemanded(runtime, level, site);
                 });
         if (candidates.isEmpty()) return;
@@ -224,7 +220,7 @@ final class FrontierV3ResourceSiteExecutor {
             var cycle = state.resourceSites().cycle(site.id());
             var predecessor = owner.witness();
             if (predecessor.matchesLayout(site.id(), cycle.layout()) && predecessor.epoch() < cycle.epoch()
-                    && ledger.fieldWorldChange(site.id()) == null && ledger.fieldForeignChange(site.id()) == null
+                    && !ledger.hasPendingFieldMutation(site.id())
                     && !state.resourceSites().hasPendingWorldChange(site.id())
                     && cycle.pendingPlayerBreaks().isEmpty()
                     && cycle.layout().cells().stream().noneMatch(cell -> predecessor.cell(cell.id()).pending().isPresent())) {

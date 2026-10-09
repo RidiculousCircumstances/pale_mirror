@@ -22,8 +22,7 @@ final class FrontierV3ResourceFieldHandoff {
             var cells = cycle.layout().cellsIn(new ResourceFieldLayout.ChunkColumn(chunk.x, chunk.z));
             if (cells.isEmpty()) continue;
             if (state.resourceSites().hasPendingWorldChange(entry.getKey()) || !cycle.pendingPlayerBreaks().isEmpty()
-                    || ledger.fieldWorldChange(entry.getKey()) != null || ledger.fieldPlayerBreak(entry.getKey()) != null
-                    || ledger.fieldForeignChange(entry.getKey()) != null) {
+                    || ledger.hasPendingFieldMutation(entry.getKey())) {
                 checks.add(new FrontierV3HotHandoff.Check(entry.getKey(), WAITING, "field_effect_recovery"));
                 continue;
             }

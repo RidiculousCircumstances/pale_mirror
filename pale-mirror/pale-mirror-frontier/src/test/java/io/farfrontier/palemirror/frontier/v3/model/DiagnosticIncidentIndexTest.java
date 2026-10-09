@@ -16,6 +16,32 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.EnumSet;
 
 class DiagnosticIncidentIndexTest {
+    @Test void realKernelQuarantineReporterCommitsItsIncidentWithoutLookingUpADomainModule() {
+        var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:quarantine-dispatch"), 93L);
+        var primary = new IllegalArgumentException("active harvest output slot lacks exclusive container capacity");
+        var failureCommand = new CommandId("command:quarantine-dispatch");
+        var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
+                base.worldId(), base.initialState(), base.initialInstant(),
+                (state, command) -> { throw primary; }, base.scheduledPlanner(), base.reducer(), base.stateCodec(),
+                base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(),
+                base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter());
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(configuration);
+        var result = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1,
+                failureCommand, base.worldId(), Revision.ZERO, SimInstant.ZERO,
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(failureCommand),
+                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(base.initialSchedules().getFirst().id())));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class, result);
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.QUARANTINED, engine.status().kind());
+        assertSame(primary, engine.failureCause().orElseThrow());
+        assertEquals(0, primary.getSuppressed().length, "kernel incident emission must not fail as an unknown domain module");
+        var saved = base.stateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(1, saved.diagnosticIncidents().incidents().size());
+        var incident = saved.diagnosticIncidents().incidents().values().iterator().next();
+        assertEquals(DiagnosticReason.FRONTIER_KERNEL_COMMAND_FAILURE, incident.diagnostic().reason());
+        assertEquals(failureCommand.value(), incident.firstCauseId());
+        assertEquals(incident, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(saved))
+                .diagnosticIncidents().incidents().values().iterator().next());
+    }
     @Test void distinctProductionJobsAtOneFacilityRetainIndependentIncidentsAcrossSnapshot() {
         var settlement = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("settlement:7");
         var facility = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("structure:7-workshop");

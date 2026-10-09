@@ -18,10 +18,11 @@ import java.util.TreeSet;
 
 /** Durable, bounded provenance for v3 graybox cells; it never grants overwrite authority. */
 final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
-    /* Format 5 removes adapter-authored terminal conflict from mirror persistence. */
-    private static final int FORMAT = 5;
+    /* Format 6 adds explicitly declared worksite cells in the same block-provenance store. */
+    private static final int FORMAT = 6;
     private static final int MAX_CELLS = 65_536;
     private final Map<Long, Claim> claims;
+    private final Map<Long, FrontierV3WorksiteBlockWitness> worksiteCells;
     /**
      * The only claim family that needs ordinary per-tick retirement.  Keeping its bounded
      * position index beside the durable provenance map prevents a global 65,536-cell scan just
@@ -30,10 +31,13 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
      */
     private final NavigableSet<Long> worksiteStagingPositions;
 
-    private FrontierV3GrayboxLedger() { this(new HashMap<>()); }
-    private FrontierV3GrayboxLedger(Map<Long, Claim> claims) {
+    private FrontierV3GrayboxLedger() { this(new HashMap<>(), new HashMap<>()); }
+    private FrontierV3GrayboxLedger(Map<Long, Claim> claims, Map<Long, FrontierV3WorksiteBlockWitness> worksiteCells) {
         super(FrontierV3PhysicalStoreKind.BLOCKS);
         this.claims = table("claims", claims, Object::toString, (position, claim) -> encodeClaim(position, claim));
+        this.worksiteCells = table("worksiteCells", worksiteCells, Object::toString, (position, witness) -> {
+            var encoded = witness.write(); encoded.putLong("pos", position); return encoded;
+        });
         this.worksiteStagingPositions = new TreeSet<>();
         claims.forEach((position, claim) -> {
             if (claim.semanticPart().equals(GrayboxSemanticPart.WORKSITE_STAGING.name())) worksiteStagingPositions.add(position);
@@ -45,8 +49,20 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     /** Same bounded provenance implementation for the physical-owner composition harness. */
     static FrontierV3GrayboxLedger inMemory() { return new FrontierV3GrayboxLedger(); }
     Claim claim(BlockPos position) { return claims.get(position.asLong()); }
+    FrontierV3WorksiteBlockWitness worksite(BlockPos position) { return worksiteCells.get(position.asLong()); }
+    void worksite(FrontierV3WorksiteBlockWitness witness) {
+        var position = witness.declaration().position();
+        long address = new BlockPos(position.x(), position.y(), position.z()).asLong();
+        var prior = worksiteCells.get(address);
+        if (claims.containsKey(address) || prior != null && !prior.declaration().key().equals(witness.declaration().key()))
+            throw new IllegalStateException("competing block provenance at worksite cell");
+        if (prior == null && claims.size() + worksiteCells.size() >= MAX_CELLS)
+            throw new IllegalStateException("bounded physical block provenance is full");
+        if (!witness.equals(prior)) { worksiteCells.put(address, witness); setDirty(); }
+    }
     void ensureCapacityFor(BlockPos position) {
-        if (!claims.containsKey(position.asLong()) && claims.size() >= MAX_CELLS) {
+        if (worksiteCells.containsKey(position.asLong())) throw new IllegalStateException("graybox write crosses declared worksite provenance");
+        if (!claims.containsKey(position.asLong()) && claims.size() + worksiteCells.size() >= MAX_CELLS) {
             throw new IllegalStateException("v3 graybox claim limit exceeded");
         }
     }
@@ -144,7 +160,19 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
             Claim claim = new Claim(requireText(entry.getString("owner"), "owner"), requireTargetTag(entry.getInt("targetTag")), requireText(entry.getString("material"), "material"),
                     requireText(entry.getString("part"), "semantic part"), entry.getLong("revision"), entry.getBoolean("deferred"));
             if (claims.put(position, claim) != null) throw new IllegalStateException("duplicate v3 graybox claim"); }
-        return new FrontierV3GrayboxLedger(claims);
+        if (!tag.contains("worksiteCells", Tag.TAG_LIST)) throw new IllegalStateException("current block journal lacks its worksite provenance table");
+        Map<Long, FrontierV3WorksiteBlockWitness> worksite = new HashMap<>();
+        ListTag cells = tag.getList("worksiteCells", Tag.TAG_COMPOUND);
+        if (entries.size() + cells.size() > MAX_CELLS) throw new IllegalStateException("bounded physical block provenance is full");
+        for (Tag value : cells) {
+            CompoundTag entry = (CompoundTag) value;
+            if (!entry.contains("pos", Tag.TAG_LONG)) throw new IllegalStateException("worksite cell lacks its physical address");
+            long address = entry.getLong("pos"); var witness = FrontierV3WorksiteBlockWitness.read(entry);
+            var position = witness.declaration().position();
+            if (address != new BlockPos(position.x(), position.y(), position.z()).asLong() || claims.containsKey(address)
+                    || worksite.put(address, witness) != null) throw new IllegalStateException("invalid/competing worksite block address");
+        }
+        return new FrontierV3GrayboxLedger(claims, worksite);
     }
 
     private static CompoundTag encodeClaim(long position, Claim claim) {
@@ -170,7 +198,12 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
             value.putBoolean("deferred", entry.getValue().deferred());
             entries.add(value);
         });
-        tag.put("claims", entries); return tag;
+        tag.put("claims", entries);
+        ListTag cells = new ListTag();
+        worksiteCells.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+            var value = entry.getValue().write(); value.putLong("pos", entry.getKey()); cells.add(value);
+        });
+        tag.put("worksiteCells", cells); return tag;
     }
     private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) throw new IllegalStateException("v3 graybox claim " + field + " is blank");

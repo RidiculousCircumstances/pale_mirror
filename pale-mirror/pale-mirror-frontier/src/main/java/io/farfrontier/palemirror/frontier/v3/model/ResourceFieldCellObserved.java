@@ -1,6 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
@@ -9,7 +8,7 @@ import java.util.Objects;
 public record ResourceFieldCellObserved(SubjectId siteId, long epoch, long layoutRevision, ResourceFieldLayout.CellId cellId,
                                         ResourceFieldPhysicalSurface.Condition before,
                                         ResourceFieldPhysicalSurface.Condition after,
-                                        Change change, Source source, String causationId) implements FrontierPayload {
+                                        Change change, Source source, String causationId) implements CellMutationReceipt {
     public enum Change { CROP_REMOVED, SOIL_BECAME_DIRT, UNCHANGED, CROP_REPLANTED, CROP_GROWN }
     public enum Source { PLAYER, WORLD }
 
@@ -64,5 +63,7 @@ public record ResourceFieldCellObserved(SubjectId siteId, long epoch, long layou
         if (!after.equals(required)) throw new IllegalArgumentException("field observation does not prove its exact changed postcondition");
     }
 
+    @Override public CellMutationKey mutationKey() { return ResourceSiteState.mutationKey(siteId, cellId); }
+    @Override public String mutationCause() { return causationId; }
     @Override public String type() { return "frontier.resource_field_cell_observed"; }
 }

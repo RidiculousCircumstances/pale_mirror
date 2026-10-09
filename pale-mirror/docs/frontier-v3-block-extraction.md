@@ -1,8 +1,57 @@
 # Shared block-resource extraction
 
 Accepted2026-10-09. Implemented in the ledger-named Java checkout; no subagents.
-The boundary is reusable for resource-producing block work. The current consumer
-is farming; this does not introduce a quarry, seed economy or new player action.
+The boundary is reusable for resource-producing block work. The original R78
+consumer was farming. The accepted finite-quarry cut now adopts the same port;
+its connected implementation and acceptance limits are recorded below.
+
+## Finite-worksite adoption — 2026-10-10, connected native evidence
+
+The opt-in `frontier-v3-quarry-graybox-r1` content declares six exterior deposits,
+finite source cells, ordinary ramps, real starter tools and site containers.
+`ExtractionSiteState` owns authored geometry, current source/depletion revisions
+and exact work. It does not own another inventory, body or pathfinding system.
+
+- Mining admission/labour select a source and retain its worker/tool/operation.
+  UAE owns current execution and interruption. Shared navigation moves the body.
+- `BlockExtractionPort` retains native loot once. The mining effect owner pairs
+  source and hand observations before the existing resource ledger accepts output.
+  A causal block-half witness in the common BLOCKS journal survives split recovery.
+- Chunk-sized `ExtractionRegion` boundaries use the existing replica-custody
+  registry. Projection PREPARING is not proof of a complete physical observation.
+  One cell's mining receipt leaves the successor region PREPARING until every
+  current cell is checked. Normal departure releases only exact resolved custody.
+- Shared worksite projection/handoff dispatch to registered family owners through
+  immutable point/chunk indices; they do not inspect concrete mining jobs.
+  Declared infrastructure has bounded current geometry observations. External
+  removals/replacements are acknowledged, not overwritten or treated as output.
+- Site storage delegates actual chest/inventory effects to the existing container
+  authority. Service arbitration and HOT waiting use the closed service-point
+  registry, not an assumption that every container is a settlement depot.
+- A separate eligible logistics worker requests INTERNAL_SHIPMENT through the
+  existing shipment/carrying/UAE protocol. Receipt keeps the economic owner and
+  does not invent a sale. Public cobblestone trade uses the ordinary goods catalog.
+
+Canonical mining/hauling and focused source/geometry/split-witness recovery checks
+pass. Native run8 reached HOT extraction, natural COLD departure and a separate
+carrier's accepted64-cobblestone home delivery at instant17827. Run10's retained
+world passed exact COLD departure and a graceful restart; its initial delivery
+wait ended while carriers were interrupted by normal meals, not at a terminal
+delivery. The checked-in existing-world follow-up completed home delivery at
+instant40020, returned to the same depleted quarry and observed AIR at the first
+extracted cell. The reviewed frame shows the excavated pit, remaining stone,
+ramp and sheltered chest. This is joined same-world evidence, not a claim that
+run10's original aggregate passed or every promised intervention was filmed.
+Affected integration checks cover1258 Frontier cases (11 stale registry/profile/
+descriptor fixtures corrected in a subsequent66-case green run),689 native unit
+cases (one existing skip),16 native field-turns cases, guardrails and packaged JAR.
+Ordinary catalog matching proves a funded partial stone contract, not yet a
+native importer delivery. Live remains R80 until the verified R81 deployment.
+Unobserved abrupt-recovery custody remains fenced until positive recovery evidence;
+absence of a loaded chunk must never manufacture confirmation or release.
+Tool manufacture/wear, subterranean planning, extra minerals and construction
+consumption are not promised by this cut. Old R78 evidence below remains scoped
+to its original farming integration and isolated adapter checks.
 
 ## Responsibilities and dependency direction
 

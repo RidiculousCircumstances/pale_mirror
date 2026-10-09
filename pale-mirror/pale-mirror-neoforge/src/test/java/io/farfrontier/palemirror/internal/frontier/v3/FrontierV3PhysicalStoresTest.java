@@ -48,6 +48,11 @@ class FrontierV3PhysicalStoresTest {
                 value.applied(new BlockPos(1,64,1),"structure:1-farm",PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE.wireTag(),
                     GrayboxMaterial.values()[0].name(),GrayboxSemanticPart.values()[0].name()); return value; },
                 tag -> FrontierV3GrayboxLedger.load(tag,null), value -> ((FrontierV3GrayboxLedger)value).defer(new BlockPos(1,64,1))),
+            new Case("worksite-blocks", () -> {
+                var ledger = FrontierV3GrayboxLedger.inMemory();
+                ledger.worksite(worksite(FrontierV3WorksiteBlockWitness.Phase.PREPARED, Optional.empty())); return ledger;
+            }, tag -> FrontierV3GrayboxLedger.load(tag, null), value -> ((FrontierV3GrayboxLedger) value).worksite(
+                    worksite(FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED, Optional.of("effect:mine-1")))),
             new Case("clicks", () -> { var value=FrontierV3DepotClickLedger.load(empty(1,"pending"),null); value.prepare(click()); return value; },
                 tag -> FrontierV3DepotClickLedger.load(tag,null), value -> ((FrontierV3DepotClickLedger)value).retire(click())),
             new Case("boards", () -> { var value=FrontierV3ObjectBoardLedger.load(empty(1,"claims"),null);
@@ -73,6 +78,12 @@ class FrontierV3PhysicalStoresTest {
                 ledger.prepare(new InfectionCell(0,0),positions,InfectionOverlayStage.values()[0]); return ledger; },
                 tag -> FrontierV3InfectionOverlayLedger.load(tag,null), value -> ((FrontierV3InfectionOverlayLedger)value).activate(new InfectionCell(0,0)))
         );
+    }
+    private static FrontierV3WorksiteBlockWitness worksite(FrontierV3WorksiteBlockWitness.Phase phase, Optional<String> effect) {
+        var block = new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block("minecraft:stone", Map.of());
+        return new FrontierV3WorksiteBlockWitness(new WorksiteBlock(new WorksiteBlock.Key(
+                CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, new SubjectId("extraction:test"), WorksiteBlock.Role.RESOURCE, 1),
+                new BlockPosition(2, 64, 1), 1, block), block, phase, effect);
     }
     @TestFactory Collection<DynamicTest> everyAdapterRecoversCheckpointAndTailAndNoopDoesNotWrite() {
         return cases().stream().map(item -> DynamicTest.dynamicTest(item.name, () -> {

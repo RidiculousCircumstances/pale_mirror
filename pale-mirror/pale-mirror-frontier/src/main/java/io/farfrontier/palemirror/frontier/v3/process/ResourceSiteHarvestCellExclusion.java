@@ -22,7 +22,7 @@ final class ResourceSiteHarvestCellExclusion {
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !job.id().equals(skipped.jobId())
                 || !job.workerId().equals(skipped.workerId()) || job.progress().complete()
                 || job.progress().hasPendingCrop() || job.returningForBatch()
-                || state.resourceSites().hasPendingWorldChange(subject)
+                || state.resourceSites().harvestMutationPending(job)
                 || skipped.layoutRevision() != cycle.layout().revision())
             throw new IllegalArgumentException("excluded field cell has a stale or physically unresolved work boundary");
         ResourceFieldLayout.Cell selected = cycle.layout().cells().get(job.progress().nextCropSlotIndex());

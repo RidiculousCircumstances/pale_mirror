@@ -13,6 +13,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
         String task = switch (assignment.kind()) {
             case IDLE -> "None";
             case FIELD_HARVEST -> "Harvest and deliver crops";
+            case EXTRACTION -> "Extract and store resources";
             case PRODUCTION -> "Production";
             case COURIER, GROUP_MEMBER -> "Expedition";
             case ROUTE_PATROL -> "Route patrol";
@@ -25,6 +26,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
         String role = switch (assignment.kind()) {
             case IDLE -> "Unassigned";
             case FIELD_HARVEST -> "Farmer";
+            case EXTRACTION -> "Miner";
             case PRODUCTION -> assignment.ownerId().map(state.productionJobs()::get)
                     .filter(job -> job.bakeryWork().isPresent()).isPresent() ? "Baker" : "Production worker";
             case COURIER -> "Carrier";

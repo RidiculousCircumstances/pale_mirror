@@ -7,9 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
-import static org.junit.jupiter.api.Assertions.*;
-
-/** Canonical commercial/ledger boundary, not native delivery or visual acceptance. */
+import static org.junit.jupiter.api.Assertions.*; // Canonical ledger boundary, not native/visual acceptance.
 class GoodsTradeTest {
     @Test void loadedCourierCanYieldSpatiallyWithoutChangingCargoOrItsRetainedExecution() {
         var state = reserved(); var shipment = shipment(state); var actor = shipment.execution().actorId();
@@ -35,8 +33,7 @@ class GoodsTradeTest {
         assertSame(state, checkpoint.basis());
         assertEquals(Map.of(LOT, 60), state.inventory().fungibleResources().accounts().get(shipment.carriedAccountId()).lotQuantities());
         assertEquals(shipment.execution(), state.actorExecutions().actors().get(actor).current().orElseThrow());
-        var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
-        assertTrue(ActorSpatialCourtesy.assess(restored, shipment.execution()).ready());
+        var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)); assertTrue(ActorSpatialCourtesy.assess(restored, shipment.execution()).ready());
         assertEquals(movement, restored.actorMovements().get(actor), "courtesy admission cannot cancel or replace the route");
         assertTrue(service.demands(restored, shipment.sender().containerId()).isEmpty());
         var foreign = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,
@@ -78,6 +75,8 @@ class GoodsTradeTest {
                 + " nutrition=" + state.humanPopulation().nutrition(actor).accrueThrough(now, state.bootstrap().ruleset().residentLife(),
                     state.humanPopulation().resident(actor).characteristics().effectiveMetabolismPermille(now)));
         assertEquals(shipment.execution(), state.actorExecutions().actors().get(actor).suspended().orElseThrow());
+        assertFalse(new ShipmentServiceAccess().demands(state, shipment.receiver().containerId()).stream().anyMatch(d -> d.identity().ownerId().equals(shipment.id())),
+                "a suspended courier's resource claim cannot reserve a service turn during its meal");
         assertEquals(checkpoint, state.actorLocations().get(actor).body());
         assertTrue(state.humanPopulation().meals().containsKey(actor));
         assertFalse(state.actorMovements().containsKey(actor));
@@ -388,7 +387,9 @@ class GoodsTradeTest {
                     shipment.id(), new ShipmentHotPrepared(shipment.id(), step)));
             assertTrue(blocked.shipments().shipments().get(shipment.id()).pendingPhysicalStep().isEmpty());
             assertEquals(state.inventory(), blocked.inventory(), "waiting cannot move or lose cargo");
-            var port = ServiceAccessCoordinator.port(blocked, SOURCE);
+            var port = SettlementDepotServicePort.forDepot(FrontierWorldStateSupport.settlement(blocked.bootstrap(),
+                    shipment.sender().settlementId()).structures().stream()
+                    .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
             var waitingCourier = atStation(blocked, actor, port.exteriorApproach());
             var movement = new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(
                     shipment.movementOrder(), 1L,
@@ -908,8 +909,8 @@ class GoodsTradeTest {
                 state.actorExecutions().generation(actor) + 1);
         return new Shipment(shipment, new ResourceClaimDelegation(ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT,
                 CLAIM, CONTRACT, shipment, 0), execution,
-                new ShipmentEndpoint(ShipmentEndpoint.Kind.SETTLEMENT_DEPOT, SELLER, depotStructure(state, SELLER), SOURCE, station(state, SELLER)),
-                new ShipmentEndpoint(ShipmentEndpoint.Kind.SETTLEMENT_DEPOT, BUYER, depotStructure(state, BUYER), RECEIVER, station(state, BUYER)),
+                new ShipmentEndpoint.Depot(SELLER, depotStructure(state, SELLER), SOURCE, station(state, SELLER)),
+                new ShipmentEndpoint.Depot(BUYER, depotStructure(state, BUYER), RECEIVER, station(state, BUYER)),
                 SOURCE_ACCOUNT, id("custody:shipment-carried"), RECEIVER_ACCOUNT, "minecraft:wheat", Map.of(LOT, 60),
                 Shipment.Status.AWAITING_LOAD, 1);
     }

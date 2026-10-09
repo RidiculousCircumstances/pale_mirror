@@ -9,6 +9,17 @@ final class ShipmentPayloadCodecs {
     private ShipmentPayloadCodecs() { }
     static PayloadCodecs create() {
         return new PayloadCodecs(List.of(
+                codec("frontier.internal_shipment_dispatched", (out, p) -> {
+                    var v = (InternalShipmentDispatched) p; ShipmentStateCodec.writeShipment(out, v.shipment());
+                    out.writeUTF(v.claim().id().value()); out.writeUTF(v.claim().claimantId().value()); out.writeUTF(v.claim().economicOwnerId().value());
+                    out.writeUTF(v.claim().itemKind()); out.writeInt(v.claim().quantity()); ShipmentStateCodec.lots(out, v.claim().lotQuantities());
+                    out.writeByte(FrontierWireTags.tag(v.claim().purpose()));
+                }, in -> new InternalShipmentDispatched(ShipmentStateCodec.readShipment(in), new ClaimAllocation(new SubjectId(in.readUTF()),
+                        new SubjectId(in.readUTF()), new SubjectId(in.readUTF()), in.readUTF(), in.readInt(), ShipmentStateCodec.lots(in),
+                        FrontierWireTags.require(ClaimPurpose.class, in.readUnsignedByte())))),
+                codec("frontier.internal_shipment_received", (out, p) -> {
+                    var v = (InternalShipmentReceived) p; out.writeUTF(v.shipmentId().value()); out.writeLong(v.expectedRevision()); out.writeUTF(v.receiptId().value());
+                }, in -> new InternalShipmentReceived(new SubjectId(in.readUTF()), in.readLong(), new SubjectId(in.readUTF()))),
                 codec("frontier.shipment_cargo_disposition_observed", (out, p) -> {
                     var v = (ShipmentCargoDispositionObserved) p;
                     out.writeUTF(v.shipmentId().value()); out.writeLong(v.expectedRevision());

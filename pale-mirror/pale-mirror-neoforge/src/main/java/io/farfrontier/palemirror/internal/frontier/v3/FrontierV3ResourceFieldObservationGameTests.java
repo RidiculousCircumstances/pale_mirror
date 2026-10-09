@@ -670,6 +670,52 @@ public final class FrontierV3ResourceFieldObservationGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
+            template = "bastion/treasure/big_air_full", timeoutTicks = 30)
+    public static void repeatedExternalCellWritesRetainLatestVersionWithoutReplayingEffects(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var soil = helper.absolutePos(new BlockPos(4, 8, 4));
+        var cell = cell(1, soil);
+        var layout = new ResourceFieldLayout(1, 2, List.of(cell), List.of());
+        var cycle = ResourceFieldCycle.seeded(SITE, layout, 1);
+        level.setBlock(soil, Blocks.FARMLAND.defaultBlockState(), 3);
+        level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState(), 3);
+        var hold = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldForeignChangeHeld(
+                SITE, 1, layout.revision(), cell.id(), cycle.cell(cell.id()), "world:native-chained-support");
+        var before = new FrontierV3ResourceFieldForeignChangeWitness(hold, java.util.Optional.empty());
+        helper.runAtTickTime(1, () -> {
+            level.setBlock(soil, Blocks.AIR.defaultBlockState(), 3);
+            var firstBlocks = new FrontierV3ResourceFieldForeignChangeWitness.Blocks(
+                    net.minecraft.nbt.NbtUtils.writeBlockState(level.getBlockState(soil)),
+                    net.minecraft.nbt.NbtUtils.writeBlockState(level.getBlockState(soil.above())));
+            var first = FrontierV3ResourceFieldForeignChangeWitness.read(before.observe(firstBlocks).write());
+            level.setBlock(soil, Blocks.STONE.defaultBlockState(), 3);
+            var secondBlocks = new FrontierV3ResourceFieldForeignChangeWitness.Blocks(
+                    net.minecraft.nbt.NbtUtils.writeBlockState(level.getBlockState(soil)),
+                    net.minecraft.nbt.NbtUtils.writeBlockState(level.getBlockState(soil.above())));
+            var decision = io.farfrontier.palemirror.frontier.v3.model.CellMutationProtocol.review(
+                    first.observed(), secondBlocks, false,
+                    io.farfrontier.palemirror.frontier.v3.model.CellMutationProtocol.Semantics.EXTERNAL_OBSERVATION);
+            helper.assertTrue(decision == io.farfrontier.palemirror.frontier.v3.model.CellMutationProtocol.Resolution.SUPERSEDE_CAPTURE,
+                    "a later actual support write must supersede an uncommitted capture instead of leaving an eternal hold");
+            var recovered = FrontierV3ResourceFieldForeignChangeWitness.read(first.observe(secondBlocks).write());
+            helper.assertTrue(recovered.observationVersion() == 2 && recovered.observed().orElseThrow().equals(secondBlocks)
+                            && recovered.hold().equals(hold) && level.getBlockState(soil).is(Blocks.STONE),
+                    "recovery retains the latest exact blocks, original cause and version without writing a replacement");
+            helper.assertTrue(io.farfrontier.palemirror.frontier.v3.model.CellMutationProtocol.review(
+                    first.observed(), secondBlocks, true,
+                    io.farfrontier.palemirror.frontier.v3.model.CellMutationProtocol.Semantics.EXTERNAL_OBSERVATION)
+                    == io.farfrontier.palemirror.frontier.v3.model.CellMutationProtocol.Resolution.FINISH_THEN_OBSERVE_SUCCESSOR,
+                    "accepted history closes before a successor; it cannot be silently replaced");
+            helper.assertTrue(io.farfrontier.palemirror.frontier.v3.model.CellMutationProtocol.review(
+                    first.observed(), secondBlocks, true,
+                    io.farfrontier.palemirror.frontier.v3.model.CellMutationProtocol.Semantics.NON_REPLAYABLE_EFFECT)
+                    == io.farfrontier.palemirror.frontier.v3.model.CellMutationProtocol.Resolution.EFFECT_AMBIGUOUS,
+                    "resource/work effects must retain ambiguity, never replay the observation protocol");
+            helper.succeed();
+        });
+    }
+
     private static boolean rejects(Runnable operation) {
         try { operation.run(); return false; }
         catch (IllegalArgumentException expected) { return true; }

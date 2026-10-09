@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.persistence;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerRecord;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerPurpose;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionStationSpec;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 
@@ -25,6 +26,7 @@ final class ContainerRecordStateCodec {
             writeString(output, value.id().value());
             writeString(output, value.ownerId().value());
             output.writeByte(value.slotCount());
+            output.writeByte(value.purpose().wireTag());
             output.writeBoolean(value.productionStation().isPresent());
             if (value.productionStation().isPresent()) {
                 ProductionStationSpec station = value.productionStation().orElseThrow();
@@ -46,13 +48,14 @@ final class ContainerRecordStateCodec {
             SubjectId id = new SubjectId(readString(input));
             SubjectId owner = new SubjectId(readString(input));
             int slots = input.readUnsignedByte();
+            ContainerPurpose purpose = ContainerPurpose.fromWireTag(input.readUnsignedByte());
             Optional<ProductionStationSpec> station = Optional.empty();
             if (input.readBoolean()) station = Optional.of(new ProductionStationSpec(new SubjectId(readString(input)),
                     new SubjectId(readString(input)), new SubjectId(readString(input)),
                     ProductionStationSpec.Capability.fromWireTag(input.readUnsignedByte()),
                     new SurfaceAnchor(readPosition(input)), new SurfaceAnchor(readPosition(input)),
                     input.readUnsignedByte(), input.readUnsignedByte()));
-            if (containers.put(id, new ContainerRecord(id, owner, slots, station)) != null)
+            if (containers.put(id, new ContainerRecord(id, owner, slots, purpose, station)) != null)
                 throw new IllegalArgumentException("duplicate container id");
         }
         return containers;

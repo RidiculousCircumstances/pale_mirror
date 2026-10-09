@@ -12,7 +12,8 @@ class ResourceAccessClearanceTest {
     @Test void occupiedExitRetainsCallerMovementInsteadOfPretendingThatServiceSpaceWasCleared() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:clearance-obligation"), 41));
         var home = new SubjectId("settlement:1"); var depot = FrontierWorldState.depotId(home);
-        var point = ServiceAccessCoordinator.port(state, depot);
+        var point = SettlementDepotServicePort.forDepot(FrontierWorldStateSupport.settlement(state.bootstrap(), home)
+                .structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
         var actors = state.humanPopulation().residents().values().stream().filter(r -> r.settlementId().equals(home))
                 .map(ResidentProfile::id).sorted().toList();
         var actor = actors.getFirst();

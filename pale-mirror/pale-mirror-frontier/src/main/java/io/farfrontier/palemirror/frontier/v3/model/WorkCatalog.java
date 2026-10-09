@@ -41,4 +41,8 @@ public record WorkCatalog(List<Definition> definitions, int baseSpeedPermille,
                 .map(value -> value.key() + ":" + value.capability().wireTag() + ":" + value.workUnits())
                 .collect(java.util.stream.Collectors.joining(";"));
     }
+    public WorkCatalog withDefinition(Definition definition) {
+        var next = new java.util.ArrayList<>(definitions); next.add(Objects.requireNonNull(definition));
+        return new WorkCatalog(next, baseSpeedPermille, skillGainPermille, minSpeedPermille, maxSpeedPermille);
+    }
 }

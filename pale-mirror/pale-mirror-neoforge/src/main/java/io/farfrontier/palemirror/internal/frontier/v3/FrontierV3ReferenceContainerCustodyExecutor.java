@@ -110,6 +110,15 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                             || FrontierV3ActorBodyController.departureReadPending(level, departure)
                             || level.getEntity(departure.identity().entityId()) != null || attached == null
                             || !attached.containerId().equals(lease.objectId())) continue;
+                    if (lease.status() == PhysicalCustodyLeaseStatus.PREPARING) {
+                        // A new attachment may unload between its durable write and the
+                        // first discovery turn. The verified serialized inventory closes
+                        // that SAME projection; it never rewrites or invents its contents.
+                        if (confirmSavedAttachmentProjection(runtime, state, lease, attached))
+                            rememberCurrentProcessObservation(level, runtime.decodedState().orElseThrow()
+                                    .replicaCustody().custodyByScope().get(lease.scopeId()));
+                        return;
+                    }
                     var replica = state.replicaCustody().replicas().get(lease.objectId());
                     if (replica == null || !attached.fingerprint(state).equals(replica.fingerprint())
                             || !attached.provenance().equals(replica.provenance())) {
@@ -309,8 +318,8 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
 
     /** Called only inside the controller's admitted private-body initializer. A successor
      * body is empty by construction, not a changed live inventory. Its attachment still
-     * requires the container owner's durable before-write fence. Confirmation occurs only
-     * after body admission, when ordinary reconciliation observes the actual inventory. */
+     * requires the container owner's durable before-write fence. Admission immediately
+     * observes and confirms the indexed inventory before publishing an ambient HOT lease. */
     static boolean initializeAttachment(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                         SubjectId actorId, net.minecraft.world.entity.Mob body) {
         var state = runtime.decodedState().orElseThrow();
@@ -338,6 +347,43 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         return true;
     }
 
+    /** Complete the independent attachment boundary before presentation can become HOT.
+     * The body controller supplies only an exact declared actor; this owner inspects stock. */
+    static boolean confirmAdmittedAttachment(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId actorId) {
+        var state = runtime.decodedState().orElseThrow();
+        var attachment = state.transportFleet().assets().get(actorId);
+        if (attachment == null) return true;
+        var container = attachment.containerId();
+        var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container));
+        if (lease == null) return false;
+        if (lease.status() == PhysicalCustodyLeaseStatus.PREPARING) {
+            var physical = FrontierV3PhysicalContainer.loaded(level, state, container).orElse(null);
+            if (physical == null || !reconcilePreparedProjection(runtime, state, lease, physical)) return false;
+            activateMobileProjection(runtime, state, container);
+        }
+        var confirmed = runtime.decodedState().orElseThrow();
+        if (!ReferenceContainerCustody.hasOperationalCustody(confirmed, container)) return false;
+        rememberCurrentProcessObservation(level, confirmed.replicaCustody().custodyByScope().get(lease.scopeId()));
+        return true;
+    }
+
+    /** Caller must have validated the exact body incarnation, residence, saved slots and
+     * absence. This container owner accepts only the pending projection's actual image. */
+    static boolean confirmSavedAttachmentProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierWorldState state, PhysicalCustodyLease lease, FrontierV3StoredAttachedStorage saved) {
+        if (!lease.equals(state.replicaCustody().custodyByScope().get(lease.scopeId()))
+                || lease.status() != PhysicalCustodyLeaseStatus.PREPARING
+                || !lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID)
+                || !lease.objectId().equals(saved.containerId())
+                || !(state.inventory().surfaces().get(saved.containerId()).location() instanceof ContainerLocation.Mobile))
+            throw new IllegalArgumentException("saved attachment has a foreign or stale projection boundary");
+        if (!confirmProjectionObservation(runtime, state, lease, new Observed(saved.fingerprint(state), saved.provenance())))
+            return false;
+        activateMobileProjection(runtime, state, saved.containerId());
+        return ReferenceContainerCustody.hasOperationalCustody(runtime.decodedState().orElseThrow(), saved.containerId());
+    }
+
     /** Only actual loaded slots may confirm or conflict the already durable write fence. */
     static boolean reconcilePreparedProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                PhysicalCustodyLease lease, ChestBlockEntity chest) {
@@ -348,8 +394,12 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     private static boolean reconcilePreparedProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                        FrontierWorldState state, PhysicalCustodyLease lease,
                                                        FrontierV3PhysicalContainer physical) {
+        return confirmProjectionObservation(runtime, state, lease, observedContainer(state, lease.objectId(), physical));
+    }
+
+    private static boolean confirmProjectionObservation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                        FrontierWorldState state, PhysicalCustodyLease lease, Observed actual) {
         PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(lease.objectId());
-        Observed actual = observedContainer(state, lease.objectId(), physical);
         if (replica.fingerprint().equals(actual.fingerprint()) && replica.provenance().equals(actual.provenance())) {
             return submit(runtime, "confirm-projection", lease.objectId(), replica.replicaRevision(),
                     new ProjectionCustodyConfirmed(lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(),

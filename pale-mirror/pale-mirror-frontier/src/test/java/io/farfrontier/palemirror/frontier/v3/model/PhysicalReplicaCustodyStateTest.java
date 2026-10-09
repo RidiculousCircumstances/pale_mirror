@@ -14,6 +14,18 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PhysicalReplicaCustodyStateTest {
+    @Test void supersedingExpectedProjectionNeverConfirmsOldPartialWritesAndRejectsStaleOrAcquiredAuthority() {
+        var pending = PhysicalReplicaCustodyState.empty().declare(replica(OBJECT_A)).prepareProjection(
+                new PhysicalCustodyLease(SCOPE_A, OBJECT_A, PROVIDER, 1, 10, 1, PhysicalCustodyLeaseStatus.PREPARING, null));
+        var next = pending.supersedeProjection(SCOPE_A, 1, 10, 1, 11, "sha256:b", "owned:successor");
+        assertEquals(PhysicalReplicaState.EXPECTED, next.replicas().get(OBJECT_A).state());
+        assertThrows(IllegalArgumentException.class, () -> next.confirmProjection(SCOPE_A, 1, 10, 1, "sha256:a", "owned:genesis"));
+        assertThrows(IllegalArgumentException.class, () -> next.release(SCOPE_A, 2, 11, 2));
+        assertThrows(IllegalArgumentException.class, () -> pending.supersedeProjection(SCOPE_A, 2, 10, 1, 11, "sha256:b", "owned:successor"));
+        assertThrows(IllegalArgumentException.class, () -> pending.supersedeProjection(SCOPE_A, 1, 10, 1, 10, "sha256:b", "owned:successor"));
+        var confirmed = next.confirmProjection(SCOPE_A, 2, 11, 2, "sha256:b", "owned:successor");
+        assertThrows(IllegalArgumentException.class, () -> confirmed.supersedeProjection(SCOPE_A, 2, 11, 3, 12, "sha256:c", "owned:next"));
+    }
     private static final SubjectId OBJECT_A = new SubjectId("container:replica-a");
     private static final SubjectId OBJECT_B = new SubjectId("container:replica-b");
     private static final SubjectId SCOPE_A = new SubjectId("scope:replica-a");

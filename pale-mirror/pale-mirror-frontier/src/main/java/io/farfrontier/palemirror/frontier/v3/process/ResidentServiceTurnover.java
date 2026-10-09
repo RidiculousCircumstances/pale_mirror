@@ -26,15 +26,11 @@ final class ResidentServiceTurnover {
         AmbientActorLease lease = state.ambientLeases().get(actorId);
         if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.HOT)
             return Optional.empty();
-        Optional<ServiceAccessPoint> occupied = ServiceAccessCoordinator.turnoverPoint(state, actorId);
+        var occupied = ServiceAccessCoordinator.turnoverPoint(state, actorId);
         if (occupied.isEmpty()) return Optional.empty();
-        ServiceAccessPoint point = occupied.orElseThrow();
-        List<ServiceAccessPoint> points = SettlementServiceAccessPoints.forSettlement(state, point.settlementId());
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), point.settlementId());
-        SettlementStructure facility = settlement.structures().stream()
-                .filter(value -> value.id().equals(point.facilityId())).findFirst().orElseThrow();
-        var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
-                new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+        var point = occupied.orElseThrow();
+        List<ServiceAccessPoint> points = ServiceBoundaryComposition.geometries(state);
+        var knowledge = ServiceBoundaryComposition.knowledge(state, point.identity());
         var excluded = new HashSet<SurfaceAnchor>();
         state.actorLocations().entrySet().stream().filter(entry -> !entry.getKey().equals(actorId))
                 .filter(entry -> entry.getValue().condition().status() == ActorLifeStatus.ALIVE)
@@ -45,8 +41,7 @@ final class ResidentServiceTurnover {
                 .map(destination -> new ActorMovement(new MovementOrder(actorId, actorId, 0L,
                         Math.addExact(atTick, 1L), List.of(destination), TraversalCapability.PEDESTRIAN,
                         MovementOrder.ArrivalPolicy.EXACT_STATION), atTick,
-                        new ActorMovementContext.ServiceExit(point.settlementId(),
-                                FrontierWorldState.depotId(point.settlementId())),
+                        new ActorMovementContext.ServiceExit(point.identity()),
                         state.actorExecutions().next(actorId, ActorActivityKind.SERVICE_EXIT, actorId)));
     }
 }

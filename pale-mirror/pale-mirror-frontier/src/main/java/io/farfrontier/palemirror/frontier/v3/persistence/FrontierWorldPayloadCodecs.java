@@ -42,7 +42,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             SettlementEconomyPayloadCodecs.employmentTerminated(), MarketPayloadCodecs.opened(),
             MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.relationshipIncident(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(),
             MarketPayloadCodecs.cancelled(), new BakeryColdStepCodec(), new BakeryInputReallocatedCodec(),
-            new BakeryHotEffectPreparedCodec(), new BakeryHotEffectObservedCodec(), new BakeryHotWorkTickCodec(),
+            new BakeryHotEffectPreparedCodec(), new BakeryHotEffectObservedCodec(), new BakeryHotDeliveryAbortedCodec(), new BakeryHotWorkTickCodec(),
             new BakeryHotHandReleaseCodec(), new BakeryHotHandMaterializedCodec(), new BakeryHotBlockChangedCodec(),
             new BakerySceneReconciledCodec(), new BakeryStationSceneReconciledCodec())),
             ProductionWorkScenePayloadCodecs.codecs(), ProductionWorkScenePayloadCodecs.productionEvents()); }

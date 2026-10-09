@@ -360,8 +360,7 @@ final class FrontierV3AmbientActorExecutor {
     }
     private static void hydrateExactHeldEquipment(Mob body, FrontierWorldState state, SubjectId actorId) {
         if (!body.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return;
-        state.inventory().actorItems(actorId).stream().filter(item -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind())
-                        || EngineeringToolCustody.isTool(item.itemKind()))
+        state.inventory().actorItems(actorId).stream()
                 .sorted(Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.ExactItemStack::id)).findFirst()
                 .ifPresent(item -> body.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3ExactItemPresentation.materializedStack(item)));
     }

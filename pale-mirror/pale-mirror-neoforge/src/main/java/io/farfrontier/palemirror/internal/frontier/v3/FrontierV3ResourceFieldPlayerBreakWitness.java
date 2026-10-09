@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.CellMutationKey;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout;
@@ -33,6 +34,10 @@ record FrontierV3ResourceFieldPlayerBreakWitness(SubjectId siteId, long epoch, l
             throw new IllegalArgumentException("player crop break has an invalid exact predecessor or outcome");
     }
 
+    CellMutationKey mutationKey() {
+        return new CellMutationKey(CellMutationKey.OwnerFamily.RESOURCE_SITE, siteId(), cellId().value());
+    }
+
     static FrontierV3ResourceFieldPlayerBreakWitness prepared(ResourceFieldPlayerBreakPrepared value) {
         return new FrontierV3ResourceFieldPlayerBreakWitness(value.siteId(), value.epoch(), value.layoutRevision(),
                 value.cellId(), value.playerId(), value.actionId(), value.before(), Optional.empty());
@@ -63,6 +68,7 @@ record FrontierV3ResourceFieldPlayerBreakWitness(SubjectId siteId, long epoch, l
 
     CompoundTag write() {
         CompoundTag tag = new CompoundTag();
+        tag.putInt("mutationFamily", mutationKey().family().wireTag());
         tag.putString("site", siteId.value()); tag.putLong("epoch", epoch); tag.putLong("layout", layoutRevision);
         tag.putLong("cell", cellId.value()); tag.putUUID("player", playerId); tag.putString("action", actionId);
         tag.putString("soil", before.soil().name()); tag.putString("crop", before.crop().name());
@@ -72,6 +78,9 @@ record FrontierV3ResourceFieldPlayerBreakWitness(SubjectId siteId, long epoch, l
     }
 
     static FrontierV3ResourceFieldPlayerBreakWitness read(CompoundTag tag) {
+        if (!tag.contains("mutationFamily", Tag.TAG_INT)
+                || CellMutationKey.OwnerFamily.decode(tag.getInt("mutationFamily")) != CellMutationKey.OwnerFamily.RESOURCE_SITE)
+            throw new IllegalStateException("missing or foreign mutation family");
         if (!tag.contains("site", Tag.TAG_STRING) || !tag.contains("epoch", Tag.TAG_LONG)
                 || !tag.contains("layout", Tag.TAG_LONG) || !tag.contains("cell", Tag.TAG_LONG)
                 || !tag.hasUUID("player") || !tag.contains("action", Tag.TAG_STRING)

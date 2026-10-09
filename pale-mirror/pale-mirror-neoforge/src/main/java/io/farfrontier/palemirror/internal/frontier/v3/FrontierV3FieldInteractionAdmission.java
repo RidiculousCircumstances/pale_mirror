@@ -20,10 +20,8 @@ public final class FrontierV3FieldInteractionAdmission {
             var cell = cycle.layout().cropAt(block).orElse(null);
             if (cell == null) continue;
             var ledger = FrontierV3ResourceSiteLedger.get(level);
-            if (state.resourceSites().hasPendingWorldChange(cycle.siteId())
-                    || ledger.fieldWorldChange(cycle.siteId()) != null
-                    || ledger.fieldForeignChange(cycle.siteId()) != null
-                    || ledger.fieldPlayerBreak(cycle.siteId()) != null) return false;
+            if (state.resourceSites().hasPendingCellMutation(cycle.siteId(), cell.id())
+                    || ledger.hasPendingFieldMutation(cycle.siteId(), cell.id())) return false;
             if (state.resourceSites().growthProtectedCells(cycle.siteId()).contains(cell.id())) return false;
             if (!(ledger.fieldClaim(cycle.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership)) return false;
             var projected = FrontierV3ResourceFieldGrowthProjector.projectCurrentOne(level, runtime, cycle.siteId(), cell.id());

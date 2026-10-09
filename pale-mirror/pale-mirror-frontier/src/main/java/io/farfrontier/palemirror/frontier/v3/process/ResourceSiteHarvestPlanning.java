@@ -152,7 +152,7 @@ final class ResourceSiteHarvestPlanning {
                 new InventoryCustody.ContainerSlot(depot, slot.getAsInt()), field);
         if (!ActorCarriedResources.canAddAccount(state.inventory().fungibleResources(),
                 farmer.id(), job.actorAccountId())) return java.util.Optional.empty();
-        var selected = lifecycle.selectHarvestStart(job, field, worker.supportingSurface(), index -> actionable(field, index));
+        var selected = lifecycle.selectHarvestStart(job, field, worker.supportingSurface(), index -> actionable(field, index) && !state.resourceSites().hasPendingCellMutation(site.id(), field.layout().cells().get(index).id()));
         if (selected.isEmpty()) return java.util.Optional.empty();
         job = job.withProgress(job.progress().withSelectedCropSlot(selected.getAsInt())).bindTarget(field);
         var outcome = field.expectedWorkOutcome(field.layout().cells().get(selected.getAsInt()).id());
@@ -289,7 +289,7 @@ final class ResourceSiteHarvestPlanning {
         if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()) {
             ResourceFieldLayout.Cell nextCell = currentField.layout().cells().get(job.progress().nextCropSlotIndex());
             if (currentField.expectedWorkOutcome(nextCell.id()) == ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE
-                    && !currentField.pendingPlayerBreaks().containsKey(nextCell.id())) {
+                    && !state.resourceSites().hasPendingCellMutation(job.siteId(), nextCell.id())) {
                 var skipped = new ResourceSiteHarvestImmatureCellSkipped(job.siteId(), job.id(), job.workerId(),
                         currentField.layout().revision(), List.of(nextCell.id()), action.id(), action.dueAt().ticks(), java.util.Optional.empty());
                 FrontierWorldState after = reduceCellSkipped(state, job.siteId(), skipped);
@@ -298,7 +298,7 @@ final class ResourceSiteHarvestPlanning {
                         reschedule(action, coldProgress(nextJob, Math.addExact(now, continuationInterval(after, nextJob)))));
             }
             if (currentField.expectedWorkOutcome(nextCell.id()) == ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED) {
-                if (currentField.pendingPlayerBreaks().containsKey(nextCell.id()))
+                if (state.resourceSites().hasPendingCellMutation(job.siteId(), nextCell.id()))
                     return List.of(reschedule(action, action));
                 ResourceSiteHarvestBlockedCellSkipped skipped = new ResourceSiteHarvestBlockedCellSkipped(
                         job.siteId(), job.id(), job.workerId(), currentField.layout().revision(), List.of(nextCell.id()),
@@ -430,7 +430,7 @@ final class ResourceSiteHarvestPlanning {
         return job != null && action.equals(coldProgress(job, action.dueAt().ticks()))
                 && state.resourceSites().site(job.siteId()).phase() == ResourceSitePhase.HARVESTING
                 && (job.progress().acceptance().isPresent()
-                    || state.resourceSites().hasPendingWorldChange(job.siteId())
+                    || state.resourceSites().harvestMutationPending(job)
                     || state.humanPopulation().meals().containsKey(job.workerId())
                     || state.actorMovements().containsKey(job.workerId())
                     || !ActorExecutionCoordinator.coldAvailable(state, job.workerId())

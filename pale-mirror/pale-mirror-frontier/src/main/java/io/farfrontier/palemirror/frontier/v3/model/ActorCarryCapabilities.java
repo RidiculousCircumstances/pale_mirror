@@ -11,7 +11,8 @@ public final class ActorCarryCapabilities {
             BiFunction<FrontierWorldState, HumanAssignment, Optional<ActorCarriedResources.Presentation>>> OWNERS = Map.of(
                     HumanAssignmentKind.FIELD_HARVEST, FrontierResourceSiteHarvestSceneSupport::carriedResources,
                     HumanAssignmentKind.PRODUCTION, FrontierProductionWorkSceneSupport::carriedResources,
-                    HumanAssignmentKind.COURIER, ShipmentStateSupport::carriedResources);
+                    HumanAssignmentKind.COURIER, ShipmentStateSupport::carriedResources,
+                    HumanAssignmentKind.EXTRACTION, ExtractionWorkAuthority::carriedResources);
     private ActorCarryCapabilities() { }
 
     public static Optional<ActorCarriedResources.Presentation> workCargo(FrontierWorldState state, SubjectId actorId) {

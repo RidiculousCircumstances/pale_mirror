@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.CellMutationKey;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteState;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
@@ -23,43 +25,47 @@ import java.util.Map;
 
 /** One current cell-owned field journal; no stage/prefix compatibility authority. */
 final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
-    private static final int FORMAT = 17;
+    private static final int FORMAT = 18;
     static final int MAX_SITES = 12;
     private final Map<SubjectId, FieldClaim> fieldClaims;
     /** A positive cell-owned delivery is fenced before either Vanilla inventory is edited. */
     private final Map<SubjectId, FrontierV3ResourceSiteDeliveryWitness> fieldDeliveries;
     /** A COLD actor part cannot first appear in a HOT hand without this before-effect owner. */
     private final Map<SubjectId, FrontierV3ResourceSiteHandProjectionWitness> fieldHandProjections;
-    /** One explicit player-action fence per site while Vanilla may change its crop cell. */
-    private final Map<SubjectId, FrontierV3ResourceFieldPlayerBreakWitness> fieldPlayerBreaks;
-    /** One observed world postcondition per site until its canonical receipt and cell claim agree. */
-    private final Map<SubjectId, FrontierV3ResourceFieldWorldChangeWitness> fieldWorldChanges;
-    /** A foreign-cell edit owns one site's physical cause until its local WAL/claim agree. */
-    private final Map<SubjectId, FrontierV3ResourceFieldForeignChangeWitness> fieldForeignChanges;
+    /** One explicit player-action fence per cell while Vanilla may change its crop cell. */
+    private final Map<CellMutationKey, FrontierV3ResourceFieldPlayerBreakWitness> fieldPlayerBreaks;
+    /** One observed world postcondition per cell until its canonical receipt and cell claim agree. */
+    private final Map<CellMutationKey, FrontierV3ResourceFieldWorldChangeWitness> fieldWorldChanges;
+    /** An external edit owns one cell's physical cause until its local WAL/claim agree. */
+    private final Map<CellMutationKey, FrontierV3ResourceFieldForeignChangeWitness> fieldForeignChanges;
 
     private FrontierV3ResourceSiteLedger() { this(new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(),
             new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>()); }
     private FrontierV3ResourceSiteLedger(Map<SubjectId, FieldClaim> fieldClaims,
             Map<SubjectId, FrontierV3ResourceSiteDeliveryWitness> deliveries,
             Map<SubjectId, FrontierV3ResourceSiteHandProjectionWitness> hands,
-            Map<SubjectId, FrontierV3ResourceFieldPlayerBreakWitness> breaks,
-            Map<SubjectId, FrontierV3ResourceFieldWorldChangeWitness> world,
-            Map<SubjectId, FrontierV3ResourceFieldForeignChangeWitness> foreign) {
+            Map<CellMutationKey, FrontierV3ResourceFieldPlayerBreakWitness> breaks,
+            Map<CellMutationKey, FrontierV3ResourceFieldWorldChangeWitness> world,
+            Map<CellMutationKey, FrontierV3ResourceFieldForeignChangeWitness> foreign) {
         super(FrontierV3PhysicalStoreKind.FIELDS);
         if (fieldClaims.size() > MAX_SITES || deliveries.size() > MAX_SITES || hands.size() > MAX_SITES
-                || breaks.size() > MAX_SITES || world.size() > MAX_SITES || foreign.size() > MAX_SITES
+                || breaks.size() + world.size() + foreign.size() > ResourceFieldLayout.MAX_CELLS
                 || hands.keySet().stream().anyMatch(deliveries::containsKey)
-                || breaks.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site))
-                || world.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site))
-                || foreign.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site)
+                || world.keySet().stream().anyMatch(breaks::containsKey)
+                || breaks.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().mutationKey()))
+                || world.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().mutationKey()))
+                || foreign.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().mutationKey()))
+                || breaks.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site.owner()))
+                || world.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site.owner()))
+                || foreign.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site.owner())
                     || world.containsKey(site) || breaks.containsKey(site)))
             throw new IllegalArgumentException("invalid cell-owned field evidence");
         this.fieldClaims = fragmentedTable("fieldClaims", fieldClaims, SubjectId::value, new FrontierV3FieldJournalCodec());
         fieldDeliveries = table("fieldDeliveries", deliveries, SubjectId::value, (id, value) -> value.write());
         fieldHandProjections = table("fieldHandProjections", hands, SubjectId::value, (id, value) -> value.write());
-        fieldPlayerBreaks = table("fieldPlayerBreaks", breaks, SubjectId::value, (id, value) -> value.write());
-        fieldWorldChanges = table("fieldWorldChanges", world, SubjectId::value, (id, value) -> value.write());
-        fieldForeignChanges = table("fieldForeignChanges", foreign, SubjectId::value, (id, value) -> value.write());
+        fieldPlayerBreaks = table("fieldPlayerBreaks", breaks, FrontierV3ResourceSiteLedger::mutationAddress, (id, value) -> value.write());
+        fieldWorldChanges = table("fieldWorldChanges", world, FrontierV3ResourceSiteLedger::mutationAddress, (id, value) -> value.write());
+        fieldForeignChanges = table("fieldForeignChanges", foreign, FrontierV3ResourceSiteLedger::mutationAddress, (id, value) -> value.write());
     }
     static FrontierV3ResourceSiteLedger get(ServerLevel level) {
         return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.FIELDS,
@@ -83,23 +89,41 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
         return new FrontierV3ResourceSiteLedger();
     }
 
+    private void requireMutationCapacity(CellMutationKey key) {
+        if (!fieldPlayerBreaks.containsKey(key) && !fieldWorldChanges.containsKey(key) && !fieldForeignChanges.containsKey(key)
+                && fieldPlayerBreaks.size() + fieldWorldChanges.size() + fieldForeignChanges.size() >= ResourceFieldLayout.MAX_CELLS)
+            throw new IllegalStateException("cell mutation register capacity exceeded: " + key);
+    }
+    private static String mutationAddress(CellMutationKey key) {
+        return key.family().wireTag() + "|" + key.owner().value() + "|" + key.cell();
+    }
+    boolean hasPendingFieldMutation(SubjectId site) {
+        return fieldPlayerBreaks.keySet().stream().anyMatch(key -> key.owner().equals(site))
+                || fieldWorldChanges.keySet().stream().anyMatch(key -> key.owner().equals(site))
+                || fieldForeignChanges.keySet().stream().anyMatch(key -> key.owner().equals(site));
+    }
+    boolean hasPendingFieldMutation(SubjectId site, ResourceFieldLayout.CellId cell) {
+        var key = ResourceSiteState.mutationKey(site, cell);
+        return fieldPlayerBreaks.containsKey(key) || fieldWorldChanges.containsKey(key) || fieldForeignChanges.containsKey(key);
+    }
     SiteClaim siteClaim(SubjectId siteId) {
         FieldClaim cells = fieldClaims.get(siteId); return cells == null ? null : new CellSiteClaim(cells);
     }
     FieldClaim fieldClaim(SubjectId siteId) { return fieldClaims.get(siteId); }
     FrontierV3ResourceSiteDeliveryWitness fieldDelivery(SubjectId siteId) { return fieldDeliveries.get(siteId); }
     FrontierV3ResourceSiteHandProjectionWitness fieldHandProjection(SubjectId siteId) { return fieldHandProjections.get(siteId); }
-    FrontierV3ResourceFieldPlayerBreakWitness fieldPlayerBreak(SubjectId siteId) { return fieldPlayerBreaks.get(siteId); }
-    FrontierV3ResourceFieldWorldChangeWitness fieldWorldChange(SubjectId siteId) { return fieldWorldChanges.get(siteId); }
-    FrontierV3ResourceFieldForeignChangeWitness fieldForeignChange(SubjectId siteId) { return fieldForeignChanges.get(siteId); }
+    FrontierV3ResourceFieldPlayerBreakWitness fieldPlayerBreak(SubjectId siteId, ResourceFieldLayout.CellId cell) { return fieldPlayerBreaks.get(ResourceSiteState.mutationKey(siteId, cell)); }
+    FrontierV3ResourceFieldWorldChangeWitness fieldWorldChange(SubjectId siteId, ResourceFieldLayout.CellId cell) { return fieldWorldChanges.get(ResourceSiteState.mutationKey(siteId, cell)); }
+    FrontierV3ResourceFieldForeignChangeWitness fieldForeignChange(SubjectId siteId, ResourceFieldLayout.CellId cell) { return fieldForeignChanges.get(ResourceSiteState.mutationKey(siteId, cell)); }
     java.util.List<FrontierV3ResourceFieldForeignChangeWitness> pendingFieldForeignChanges() {
         return fieldForeignChanges.values().stream()
-                .sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldForeignChangeWitness::siteId)).toList();
+                .sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldForeignChangeWitness::mutationKey)).toList();
     }
     void beginFieldForeignChange(FrontierV3ResourceFieldForeignChangeWitness change) {
+        requireMutationCapacity(change.mutationKey());
         if (!(fieldClaim(change.siteId()) instanceof FieldOwnership owner) || owner.status() != Status.ACTIVE
                 || owner.witness().cell(change.cellId()).pending().isPresent()
-                || fieldWorldChanges.containsKey(change.siteId()) || fieldPlayerBreaks.containsKey(change.siteId()))
+                || fieldWorldChanges.containsKey(change.mutationKey()) || fieldPlayerBreaks.containsKey(change.mutationKey()))
             throw new IllegalStateException("foreign field change lacks an unblocked physical site");
         var before = change.hold().before();
         var cell = owner.witness().cell(change.cellId());
@@ -108,53 +132,65 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
                 || cell.foreign().isEmpty()
                 && !cell.committed().equals(ResourceFieldPhysicalSurface.Condition.of(before)))
             throw new IllegalStateException("foreign field change has a different physical predecessor");
-        var prior = fieldForeignChanges.putIfAbsent(change.siteId(), change);
+        var prior = fieldForeignChanges.putIfAbsent(change.mutationKey(), change);
         if (prior != null && !prior.equals(change)) throw new IllegalStateException("another foreign cause owns this field");
         if (prior == null) setDirty();
     }
     void observeFieldForeignChange(FrontierV3ResourceFieldForeignChangeWitness before,
                                    FrontierV3ResourceFieldForeignChangeWitness observed) {
-        if (!before.hold().equals(observed.hold()) || before.observed().isPresent() || observed.observed().isEmpty()
-                || !fieldForeignChanges.replace(before.siteId(), before, observed))
+        if (!before.hold().equals(observed.hold()) || observed.observed().isEmpty()
+                || observed.observationVersion() != Math.addExact(before.observationVersion(), 1L)
+                || !fieldForeignChanges.replace(before.mutationKey(), before, observed))
             throw new IllegalStateException("foreign field postcondition lacks its exact retained cause");
         setDirty();
     }
+    /** Atomic durable successor: the old observation is retired only into its exact next cell cause. */
+    void replaceFieldForeignChange(FrontierV3ResourceFieldForeignChangeWitness before,
+                                   FrontierV3ResourceFieldForeignChangeWitness successor) {
+        if (!before.mutationKey().equals(successor.mutationKey())
+                || before.hold().causationId().equals(successor.hold().causationId())
+                || !fieldForeignChanges.replace(before.mutationKey(), before, successor))
+            throw new IllegalStateException("cell successor lacks its exact preceding cause");
+        setDirty();
+    }
     void retireFieldForeignChange(FrontierV3ResourceFieldForeignChangeWitness change) {
-        if (!fieldForeignChanges.remove(change.siteId(), change))
+        if (!fieldForeignChanges.remove(change.mutationKey(), change))
             throw new IllegalStateException("foreign field change has no exact retained witness");
         setDirty();
     }
     java.util.List<FrontierV3ResourceFieldWorldChangeWitness> pendingFieldWorldChanges() {
-        return fieldWorldChanges.values().stream().sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldWorldChangeWitness::siteId)).toList();
+        return fieldWorldChanges.values().stream().sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldWorldChangeWitness::mutationKey)).toList();
     }
     void beginFieldWorldChange(FrontierV3ResourceFieldWorldChangeWitness change) {
+        requireMutationCapacity(change.mutationKey());
         if (!(fieldClaim(change.siteId()) instanceof FieldOwnership owner) || owner.status() != Status.ACTIVE
                 || !owner.witness().admitsWorldChange(change)
-                || fieldPlayerBreaks.containsKey(change.siteId())
-                || fieldForeignChanges.containsKey(change.siteId()))
+                || fieldPlayerBreaks.containsKey(change.mutationKey())
+                || fieldForeignChanges.containsKey(change.mutationKey()))
             throw new IllegalStateException("world field change lacks an unblocked exact physical predecessor");
-        var prior = fieldWorldChanges.putIfAbsent(change.siteId(), change);
+        var prior = fieldWorldChanges.putIfAbsent(change.mutationKey(), change);
         if (prior != null && !prior.equals(change)) throw new IllegalStateException("another world change owns this field");
         if (prior == null) setDirty();
     }
     void retireFieldWorldChange(FrontierV3ResourceFieldWorldChangeWitness change) {
-        if (!fieldWorldChanges.remove(change.siteId(), change))
+        if (!fieldWorldChanges.remove(change.mutationKey(), change))
             throw new IllegalStateException("world field change has no exact retained witness");
         setDirty();
     }
     java.util.List<FrontierV3ResourceFieldPlayerBreakWitness> pendingFieldPlayerBreaks() {
-        return fieldPlayerBreaks.values().stream().sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldPlayerBreakWitness::siteId)).toList();
+        return fieldPlayerBreaks.values().stream().sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldPlayerBreakWitness::mutationKey)).toList();
     }
     void beginFieldPlayerBreak(FrontierV3ResourceFieldPlayerBreakWitness witness) {
+        requireMutationCapacity(witness.mutationKey());
         if (!(fieldClaim(witness.siteId()) instanceof FieldOwnership owner)
                 || owner.status() != Status.ACTIVE
                 || owner.witness().cell(witness.cellId()).pending().isPresent()
                 || owner.witness().cell(witness.cellId()).foreign().isPresent()
                 || !owner.witness().cell(witness.cellId()).committed().equals(witness.before())
-                || fieldWorldChanges.containsKey(witness.siteId())
-                || fieldForeignChanges.containsKey(witness.siteId()))
+                || fieldWorldChanges.containsKey(witness.mutationKey())
+                || fieldForeignChanges.containsKey(witness.mutationKey()))
             throw new IllegalStateException("player break lacks an active exact field predecessor");
-        var prior = fieldPlayerBreaks.putIfAbsent(witness.siteId(), witness);
+        var prior = fieldPlayerBreaks.putIfAbsent(witness.mutationKey(), witness);
         if (prior != null && !prior.equals(witness)) throw new IllegalStateException("another player break already owns this field");
         if (prior == null) setDirty();
     }
@@ -163,12 +199,12 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
         if (before.observedChange().isPresent() || observed.observedChange().isEmpty()
                 || !before.siteId().equals(observed.siteId()) || !before.cellId().equals(observed.cellId())
                 || !before.actionId().equals(observed.actionId())
-                || !fieldPlayerBreaks.replace(before.siteId(), before, observed))
+                || !fieldPlayerBreaks.replace(before.mutationKey(), before, observed))
             throw new IllegalStateException("player break observation lacks its exact before-effect witness");
         setDirty();
     }
     void retireFieldPlayerBreak(FrontierV3ResourceFieldPlayerBreakWitness witness) {
-        if (witness.observedChange().isEmpty() || !fieldPlayerBreaks.remove(witness.siteId(), witness))
+        if (witness.observedChange().isEmpty() || !fieldPlayerBreaks.remove(witness.mutationKey(), witness))
             throw new IllegalStateException("player break retirement lacks its accepted observed witness");
         setDirty();
     }
@@ -348,36 +384,36 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
             if (fieldHandProjections.put(witness.siteId(), witness) != null)
                 throw new IllegalStateException("field hand witness has no unique COLD crop owner");
         }
-        Map<SubjectId, FrontierV3ResourceFieldPlayerBreakWitness> fieldPlayerBreaks = new LinkedHashMap<>();
+        Map<CellMutationKey, FrontierV3ResourceFieldPlayerBreakWitness> fieldPlayerBreaks = new LinkedHashMap<>();
         ListTag playerRows = rows(tag, "fieldPlayerBreaks");
-        if (playerRows.size() > MAX_SITES) throw new IllegalStateException("field player-break witness limit exceeded");
+        if (playerRows.size() > ResourceFieldLayout.MAX_CELLS) throw new IllegalStateException("field player-break witness limit exceeded");
         for (Tag value : playerRows) {
             var witness = FrontierV3ResourceFieldPlayerBreakWitness.read((CompoundTag) value);
             if (!(fieldClaims.get(witness.siteId()) instanceof FieldOwnership owner)
                     || !owner.witness().cell(witness.cellId()).committed().equals(witness.before())
                     && witness.observedChange().isEmpty()
-                    || fieldPlayerBreaks.put(witness.siteId(), witness) != null)
+                    || fieldPlayerBreaks.put(witness.mutationKey(), witness) != null)
                 throw new IllegalStateException("field player-break witness has no unique exact cell owner");
         }
-        Map<SubjectId, FrontierV3ResourceFieldWorldChangeWitness> fieldWorldChanges = new LinkedHashMap<>();
-        // Format 14 retains the explicit owned-world and foreign-world cause registers.
+        Map<CellMutationKey, FrontierV3ResourceFieldWorldChangeWitness> fieldWorldChanges = new LinkedHashMap<>();
+        // Current schema retains explicit cell-keyed cause registers.
         ListTag worldRows = rows(tag, "fieldWorldChanges");
-        if (worldRows.size() > MAX_SITES) throw new IllegalStateException("field world-change witness limit exceeded");
+        if (worldRows.size() > ResourceFieldLayout.MAX_CELLS) throw new IllegalStateException("field world-change witness limit exceeded");
         for (Tag value : worldRows) {
             var change = FrontierV3ResourceFieldWorldChangeWitness.read((CompoundTag) value);
             if (!(fieldClaims.get(change.siteId()) instanceof FieldOwnership owner)
                     || !owner.witness().retainsWorldChange(change)
-                    || fieldWorldChanges.put(change.siteId(), change) != null)
+                    || fieldWorldChanges.put(change.mutationKey(), change) != null)
                 throw new IllegalStateException("field world-change witness has no unique exact cell owner");
         }
-        Map<SubjectId, FrontierV3ResourceFieldForeignChangeWitness> fieldForeignChanges = new LinkedHashMap<>();
+        Map<CellMutationKey, FrontierV3ResourceFieldForeignChangeWitness> fieldForeignChanges = new LinkedHashMap<>();
         ListTag foreignRows = rows(tag, "fieldForeignChanges");
-        if (foreignRows.size() > MAX_SITES) throw new IllegalStateException("field foreign-change witness limit exceeded");
+        if (foreignRows.size() > ResourceFieldLayout.MAX_CELLS) throw new IllegalStateException("field foreign-change witness limit exceeded");
         for (Tag value : foreignRows) {
             var change = FrontierV3ResourceFieldForeignChangeWitness.read((CompoundTag) value);
             if (!(fieldClaims.get(change.siteId()) instanceof FieldOwnership)
-                    || fieldWorldChanges.containsKey(change.siteId()) || fieldPlayerBreaks.containsKey(change.siteId())
-                    || fieldForeignChanges.put(change.siteId(), change) != null)
+                    || fieldWorldChanges.containsKey(change.mutationKey()) || fieldPlayerBreaks.containsKey(change.mutationKey())
+                    || fieldForeignChanges.put(change.mutationKey(), change) != null)
                 throw new IllegalStateException("field foreign-change witness has no unique exact cell owner");
         }
         return new FrontierV3ResourceSiteLedger(fieldClaims,
@@ -415,16 +451,16 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
                 .forEach(witness -> handRows.add(witness.write()));
         tag.put("fieldHandProjections", handRows);
         ListTag playerRows = new ListTag();
-        fieldPlayerBreaks.values().stream().sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldPlayerBreakWitness::siteId))
+        fieldPlayerBreaks.values().stream().sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldPlayerBreakWitness::mutationKey))
                 .forEach(witness -> playerRows.add(witness.write()));
         tag.put("fieldPlayerBreaks", playerRows);
         ListTag worldRows = new ListTag();
-        fieldWorldChanges.values().stream().sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldWorldChangeWitness::siteId))
+        fieldWorldChanges.values().stream().sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldWorldChangeWitness::mutationKey))
                 .forEach(change -> worldRows.add(change.write()));
         tag.put("fieldWorldChanges", worldRows);
         ListTag foreignRows = new ListTag();
         fieldForeignChanges.values().stream()
-                .sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldForeignChangeWitness::siteId))
+                .sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldForeignChangeWitness::mutationKey))
                 .forEach(change -> foreignRows.add(change.write()));
         tag.put("fieldForeignChanges", foreignRows);
         return tag;

@@ -15,8 +15,8 @@ public final class ResourceAccessClearance {
         if (body == null || body.condition().status() != ActorLifeStatus.ALIVE
                 || state.actorMovements().containsKey(execution.actorId()) || state.humanPopulation().meals().containsKey(execution.actorId()))
             throw new IllegalArgumentException("resource clearance lacks its current exclusive caller body");
-        var point = ServiceAccessCoordinator.port(state, pointId);
-        if (point.accessBoundary().cleared(body.body())) return Optional.empty();
+        var point = ServiceBoundaryComposition.declaration(state, pointId);
+        if (point.boundary().cleared(body.body())) return Optional.empty();
         var targets = KnownServiceExitNavigation.exitStations(state, point.settlementId(), pointId, execution.actorId(), body.supportingSurface());
         for (var target : targets) {
             var order = new MovementOrder(execution.activityOwnerId(), execution.actorId(), 0, tick + 1,
@@ -24,7 +24,7 @@ public final class ResourceAccessClearance {
             try {
                 KnownServiceExitNavigation.pathFrom(state, point.settlementId(), pointId, order, body.supportingSurface());
                 return Optional.of(new ActorMovement(order, tick, new ActorMovementContext.ResourceAccessExit(
-                        point.settlementId(), pointId, execution.activityOwnerId()), execution));
+                        point.identity(), execution.activityOwnerId()), execution));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 // Another bounded supported exit may still be reachable.
             }
@@ -37,6 +37,6 @@ public final class ResourceAccessClearance {
                 supported.subList(0, Math.min(supported.size(), MovementOrder.MAX_LEGAL_STATIONS)),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
         return Optional.of(new ActorMovement(order, tick, new ActorMovementContext.ResourceAccessExit(
-                point.settlementId(), pointId, execution.activityOwnerId()), execution));
+                point.identity(), execution.activityOwnerId()), execution));
     }
 }

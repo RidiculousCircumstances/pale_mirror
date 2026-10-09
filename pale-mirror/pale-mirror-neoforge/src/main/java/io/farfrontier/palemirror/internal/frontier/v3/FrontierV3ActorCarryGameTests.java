@@ -62,6 +62,28 @@ public final class FrontierV3ActorCarryGameTests {
         helper.assertTrue(restored.getOffhandItem().is(Items.WHEAT) && restored.getOffhandItem().getCount() == 37
                         && restored.getMainHandItem().is(Items.IRON_INGOT) && restored.getMainHandItem().getCount() == 21,
                 "consuming the pocket portion leaves work cargo and equipment untouched");
+        var workActor = new SubjectId("resident:prepared-place-test");
+        var cargo = new SubjectId("custody:prepared-place-cargo");
+        var bread = new SubjectId("lot:prepared-place-bread");
+        var place = new ActorContainerItemOrder(workActor, workActor, ActorContainerItemOrder.Direction.PLACE,
+                new ActorContainerItemOrder.Portion.Fungible(cargo, new ResourceCustody.Actor(workActor),
+                        new SubjectId("custody:prepared-place-depot"), new ResourceCustody.Container(container),
+                        Optional.empty(), "minecraft:bread", Map.of(bread, 64)),
+                new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(container), SurfaceAnchor.at(2, 2, 2),
+                new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN), 1, 1);
+        actor.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.BREAD, 64));
+        var delivery = new FrontierV3ActorItemTransfer.FungibleStep(place, chest, actor, actor.getUUID(),
+                List.of(new MaterialSourceSelection.Slice(new PhysicalStackAddress.ActorHand(workActor, actor.getUUID(),
+                        ActorContainerItemOrder.Hand.MAIN), 64, 64, 1)), 5);
+        helper.assertTrue(delivery.before(), "prepared destination starts empty");
+        chest.setItem(5, new ItemStack(Items.STONE, 1));
+        helper.assertTrue(delivery.unappliedDestinationOccupied() && !delivery.after() && !delivery.apply(),
+                "player occupancy is a provably unapplied transfer, not success or permission to overwrite");
+        helper.assertTrue(actor.getMainHandItem().getCount() == 64 && chest.getItem(5).is(Items.STONE),
+                "failed precondition preserves both cargo and player stock");
+        chest.setItem(5, ItemStack.EMPTY);
+        helper.assertTrue(delivery.apply() && delivery.after() && !delivery.unappliedDestinationOccupied(),
+                "after an actual effect cancellation is forbidden");
         helper.succeed();
     }
 }

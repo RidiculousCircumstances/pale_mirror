@@ -153,6 +153,15 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ProductionWorkProgressed progressed) return planHotProgress(state, command, progressed);
+        if (command.payload() instanceof BakeryHotDeliveryAborted aborted) {
+            if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR))
+                return FrontierWorldCommandPlanner.rejected("bakery delivery cancellation requires the physical executor");
+            try {
+                var job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(aborted.jobId()));
+                ProductionProcess.reduceBakeryHotDeliveryAborted(state, job.settlementId(), aborted);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), aborted)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof BakeryHotEffectPrepared prepared) {
             try {
                 ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(prepared.jobId()));
@@ -253,6 +262,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case BakeryColdStep step -> ProductionProcess.reduceBakeryColdStep(state, event.subject(), step);
             case BakeryInputReallocated reallocated -> ProductionProcess.reduceBakeryInputReallocated(state, event.subject(), reallocated);
             case BakeryHotEffectPrepared prepared -> ProductionProcess.reduceBakeryHotEffectPrepared(state, event.subject(), prepared);
+            case BakeryHotDeliveryAborted aborted -> ProductionProcess.reduceBakeryHotDeliveryAborted(state, event.subject(), aborted);
             case BakeryHotEffectObserved observed -> ProductionProcess.reduceBakeryHotEffectObserved(state, event.subject(), observed);
             case BakeryHotWorkTick tick -> ProductionProcess.reduceBakeryHotWorkTick(state, event.subject(), tick);
             case BakeryHotHandRelease released -> ProductionProcess.reduceBakeryHotHandRelease(state, event.subject(), released);

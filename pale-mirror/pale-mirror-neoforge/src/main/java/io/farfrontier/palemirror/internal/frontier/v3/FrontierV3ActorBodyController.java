@@ -134,6 +134,10 @@ final class FrontierV3ActorBodyController {
         var ambient = state.ambientLeases().get(actor);
         if (ambient != null && ambient.status() != io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED
                 || state.sceneLeases().values().stream().anyMatch(scene -> scene.retainsMemberCustody(actor))) return;
+        // Attached stores and other inventory owners outlive a presentation/activity.
+        // Their registered fence must settle before fencing this saved body, not after
+        // an irreversible ledger write followed by a rejected domain transition.
+        if (io.farfrontier.palemirror.frontier.v3.model.ActorInventoryInteractionFences.pending(state, actor)) return;
         var declaration = receipt.identity();
         if (!ledger.fence(declaration, declaration.epoch(), 0L)) return;
         ledger.persist(level, state.bootstrap().worldId());
@@ -267,22 +271,15 @@ final class FrontierV3ActorBodyController {
         var position = departing ? FrontierV3BodyObservation.captureForDeparture(body).position()
                 : FrontierV3BodyObservationSave.returnedPosition(body);
         var off = body.getOffhandItem(); var main = body.getMainHandItem();
-        if (!plainHand(off) || !plainHand(main)) return java.util.Optional.empty();
+        if (!FrontierV3ActorHandEvidence.capturable(off) || !FrontierV3ActorHandEvidence.capturable(main)) return java.util.Optional.empty();
         var actor = state.actorLocations().get(declaration.actorId());
         return java.util.Optional.of(new FrontierV3ActorBodyDeparture(declaration.inactiveCarrier(), residence,
                 new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(declaration.actorId(), position,
                     new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth()
                         * (double) io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE))),
                 actor.body(), actor.condition().health(), FrontierV3ActorBodyDeparture.execution(state, declaration.actorId()),
-                hand(off), hand(main), FrontierV3StoredAttachedStorage.capture(state, declaration.actorId(), body)));
-    }
-    private static boolean plainHand(net.minecraft.world.item.ItemStack stack) {
-        return stack.isEmpty() || net.minecraft.world.item.ItemStack.isSameItemSameComponents(stack,
-                new net.minecraft.world.item.ItemStack(stack.getItem(), stack.getCount()));
-    }
-    private static java.util.Optional<FrontierV3ActorBodyDeparture.HandStack> hand(net.minecraft.world.item.ItemStack stack) {
-        return stack.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(new FrontierV3ActorBodyDeparture.HandStack(
-                net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount()));
+                FrontierV3ActorHandEvidence.observed(off), FrontierV3ActorHandEvidence.observed(main),
+                FrontierV3StoredAttachedStorage.capture(state, declaration.actorId(), body)));
     }
 
     /** Body provenance is independent of the currently selected activity and its scene. */

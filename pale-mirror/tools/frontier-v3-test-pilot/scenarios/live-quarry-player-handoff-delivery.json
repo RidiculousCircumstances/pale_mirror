@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "id": "live_quarry_player_handoff_delivery",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "requiredConflicts": 0, "inventoryConflicts": 0 } },
+      { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": { "status": "ok", "result": { "total": 256, "extracted": 256, "external": 0 } } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "command", "command": "/give PMTestPilot minecraft:stone 1" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "position" } }, "offset": { "x": -5, "y": 3, "z": -5 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": -314, "y": 61, "z": -340 }, "block": "minecraft:air", "timeoutMs": 30000 },
+    { "type": "look", "at": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "firstSource" } } },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -316, "y": 61, "z": -340 }, "settleMs": 0 },
+    { "type": "place", "position": { "x": -314, "y": 61, "z": -340 }, "item": "minecraft:stone", "timeoutMs": 15000 },
+    { "type": "wait_until_block", "position": { "x": -314, "y": 61, "z": -340 }, "block": "minecraft:stone", "timeoutMs": 15000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": { "status": "ok", "result": { "external": 1, "extracted": 255 } }, "timeoutMs": 30000 },
+    { "type": "break", "position": { "x": -314, "y": 61, "z": -340 } },
+    { "type": "wait_until_block", "position": { "x": -314, "y": 61, "z": -340 }, "block": "minecraft:air", "timeoutMs": 15000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": { "status": "ok", "result": { "external": 1, "extracted": 255 } }, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 64, "z": 480 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": { "status": "ok", "result": { "liveSourceRegions": 0, "workersCold": true } }, "timeoutMs": 90000 },
+    { "type": "fast_forward_to_instant", "targetInstant": 50000, "timeoutMs": 180000 },
+    { "type": "release_fast_forward_hold" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "position" } }, "offset": { "x": -5, "y": 3, "z": -5 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": -314, "y": 61, "z": -340 }, "block": "minecraft:air", "timeoutMs": 30000 },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "offset": { "x": -2, "y": -1, "z": -2 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE" }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot" },
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "timeoutMs": 15000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "container", "id": "container:10-depot", "field": "position" } }, "offset": { "x": -2, "y": -1, "z": -2 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:10-depot", "expect": { "status": "ok", "surface": "ACTIVE" }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "resource", "id": "custody:container-10-depot" },
+    { "type": "inspect", "view": "process", "id": "settlement:10" },
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:10-depot", "field": "position" } }, "timeoutMs": 15000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 18, "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": { "status": "ok", "result": { "extracted": 255, "external": 1, "homeReserveSupplied": true } } },
+    { "after": 28, "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 4, "name": "cold-depleted-quarry-on-ordinary-ingress" },
+    { "after": 22, "name": "real-home-depot-stone", "presentation": "player" },
+    { "after": 27, "name": "nonproducer-import-depot", "presentation": "player" }
+  ]
+}

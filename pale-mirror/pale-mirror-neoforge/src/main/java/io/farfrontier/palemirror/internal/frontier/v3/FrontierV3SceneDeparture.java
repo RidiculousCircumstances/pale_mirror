@@ -55,12 +55,14 @@ record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, 
             CompoundTag held = new CompoundTag();
             held.putString("itemKind", hand.itemKind());
             held.putInt("quantity", hand.quantity());
+            hand.writeIdentity(held);
             tag.put("offhand", held);
         });
         mainhand.ifPresent(hand -> {
             CompoundTag held = new CompoundTag();
             held.putString("itemKind", hand.itemKind());
             held.putInt("quantity", hand.quantity());
+            hand.writeIdentity(held);
             tag.put("mainhand", held);
         });
         return tag;
@@ -82,7 +84,7 @@ record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, 
             CompoundTag held = tag.getCompound("offhand");
             if (!held.contains("itemKind", Tag.TAG_STRING) || !held.contains("quantity", Tag.TAG_INT))
                 throw new IllegalStateException("incomplete scene departure hand evidence");
-            hand = Optional.of(new HandStack(held.getString("itemKind"), held.getInt("quantity")));
+            hand = Optional.of(new HandStack(held.getString("itemKind"), held.getInt("quantity"), HandStack.readIdentity(held)));
         }
         Optional<HandStack> main = Optional.empty();
         if (tag.contains("mainhand")) {
@@ -90,7 +92,7 @@ record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, 
             CompoundTag held = tag.getCompound("mainhand");
             if (!held.contains("itemKind", Tag.TAG_STRING) || !held.contains("quantity", Tag.TAG_INT))
                 throw new IllegalStateException("incomplete scene main hand evidence");
-            main = Optional.of(new HandStack(held.getString("itemKind"), held.getInt("quantity")));
+            main = Optional.of(new HandStack(held.getString("itemKind"), held.getInt("quantity"), HandStack.readIdentity(held)));
         }
         return new FrontierV3SceneDeparture(carrier, tag.getLong("residenceGeneration"), new SceneLeaseId(tag.getString("lease")), tag.getLong("sceneRevision"),
                 new SceneMemberPosition(carrier.identity().actorId(), new BodyPosition(tag.getInt("x"), tag.getInt("y"), tag.getInt("z")),

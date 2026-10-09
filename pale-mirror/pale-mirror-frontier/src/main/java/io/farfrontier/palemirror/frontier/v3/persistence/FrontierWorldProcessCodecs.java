@@ -47,6 +47,7 @@ public final class FrontierWorldProcessCodecs {
         result.put("economy", FrontierWorldPayloadCodecs.economyCodecs());
         result.put("goods-trade", GoodsTradePayloadCodecs.create());
         result.put("shipments", ShipmentPayloadCodecs.create());
+        result.put("extraction", ExtractionPayloadCodecs.create());
         result.put("unit-groups", UnitGroupPayloadCodecs.groups());
         result.put("pedestrian-planning", PedestrianPlanningPayloadCodecs.create());
         result.put("transport-missions", UnitGroupPayloadCodecs.transport());

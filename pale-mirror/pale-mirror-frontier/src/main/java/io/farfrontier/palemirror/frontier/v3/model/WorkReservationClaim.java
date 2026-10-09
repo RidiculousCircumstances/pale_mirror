@@ -5,10 +5,14 @@ import java.util.Objects;
 
 /** Read-only admission contract. The execution/resource owner persists it, never a second reservation store. */
 public sealed interface WorkReservationClaim permits WorkReservationClaim.Cell,
+        WorkReservationClaim.ExtractionCell,
         WorkReservationClaim.StationPlace, WorkReservationClaim.ContainerCapacity,
         WorkReservationClaim.ExactResource, WorkReservationClaim.LotQuantity {
     record Cell(ResourceFieldWorkTarget target) implements WorkReservationClaim {
         public Cell { Objects.requireNonNull(target); }
+    }
+    record ExtractionCell(io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionTarget target) implements WorkReservationClaim {
+        public ExtractionCell { Objects.requireNonNull(target); }
     }
     record StationPlace(SubjectId stationId) implements WorkReservationClaim {
         public StationPlace { Objects.requireNonNull(stationId); }

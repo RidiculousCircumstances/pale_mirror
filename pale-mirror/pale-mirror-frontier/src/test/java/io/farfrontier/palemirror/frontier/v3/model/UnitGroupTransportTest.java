@@ -71,6 +71,12 @@ class UnitGroupTransportTest {
                     () -> "actual departure: deferred=" + result.deferredAction() + " lag=" + result.simulationLagTicks()
                             + " movements=" + state.actorMovements().keySet() + " meals=" + state.humanPopulation().meals().keySet());
             assertEquals(UnitGroup.Phase.READY, group.phase());
+            for (var id : state.shipments().missions().get(missionId).shipmentIds()) {
+                var outbound = state.shipments().shipments().get(id);
+                assertTrue(new ShipmentServiceAccess().demands(state, outbound.receiver().containerId()).stream()
+                        .noneMatch(demand -> demand.identity().ownerId().equals(outbound.id())),
+                        "a loaded outbound group cannot reserve the remote receiver's service turn");
+            }
             assertEquals("PLANNING", UnitGroupProcess.navigationReadiness(state, group).status());
             long work = planner.workUnits();
             for (int read = 0; read < 20; read++) assertEquals("PLANNING", UnitGroupProcess.navigationReadiness(state, group).status());

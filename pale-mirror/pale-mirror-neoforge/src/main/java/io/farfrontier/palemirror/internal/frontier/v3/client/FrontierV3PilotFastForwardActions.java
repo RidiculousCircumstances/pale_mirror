@@ -104,6 +104,6 @@ final class FrontierV3PilotFastForwardActions {
             minecraft.player.connection.sendCommand("pale_mirror v3 inspect performance");
             minecraft.player.connection.sendCommand("pale_mirror v3 inspect projection_work");
         }
-        if ((tick - actionStartedTick) * 50L >= 30_000L) throw new IllegalStateException("timed out releasing absolute canonical checkpoint");
+        if (elapsedWallMillis() >= 30_000L) throw new IllegalStateException("timed out releasing absolute canonical checkpoint");
     }
 }

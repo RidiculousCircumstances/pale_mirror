@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.CellMutationProtocol;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout;
@@ -83,9 +84,8 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
                     : cropReplant ? ResourceFieldCellObserved.Change.CROP_REPLANTED
                     : ResourceFieldCellObserved.Change.CROP_REMOVED)) return;
             var ledger = FrontierV3ResourceSiteLedger.get(level);
-            if (state.resourceSites().hasPendingWorldChange(owner.siteId())
-                    || ledger.fieldWorldChange(owner.siteId()) != null
-                    || ledger.fieldForeignChange(owner.siteId()) != null || ledger.fieldPlayerBreak(owner.siteId()) != null
+            if (state.resourceSites().hasPendingCellMutation(owner.siteId(), cell.id())
+                    || ledger.hasPendingFieldMutation(owner.siteId(), cell.id())
                     || cycle.pendingPlayerBreaks().containsKey(cell.id())
                     || !(ledger.fieldClaim(owner.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership claim)
                     || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
@@ -140,12 +140,21 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
             // A stale local witness still owns its site, but cannot starve a second site's
             // independently reconcilable physical cause while its recovery is unresolved.
             if (!change.matches(cycle)) continue;
-            var held = state.resourceSites().pendingWorldChange(change.siteId());
+            var held = state.resourceSites().pendingWorldChange(change.siteId(), change.cellId());
             if (held == null) {
                 var canonical = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(change.cellId()));
                 // In this schema a WORLD result cannot have entered the WAL without its
                 // retained hold. Equal blocks alone do not identify the witness's cause.
-                if (!canonical.equals(change.before())) continue;
+                if (canonical.equals(change.after())) {
+                    var owner = ledger.fieldClaim(change.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership value ? value : null;
+                    if (owner == null || owner.witness().cell(change.cellId()).pending().isPresent()
+                            || !owner.witness().cell(change.cellId()).committed().equals(change.after()))
+                        throw new IllegalStateException("released world cell receipt lacks its durable physical claim");
+                    ledger.retireFieldWorldChange(change); ledger.persist(level);
+                    observeOne(level, runtime, change.siteId(), change.cellId());
+                    return true;
+                }
+                if (!canonical.equals(change.before())) throw new IllegalStateException("world cell cause has a foreign canonical predecessor");
                 // The SavedData predecessor is durable already; publish its exact canonical
                 // hold even when the cell chunk is unloaded, before this server tick advances COLD.
                 hold(runtime, change);
@@ -161,7 +170,7 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         // was interrupted. The retained hold itself identifies the one cell to inspect.
         for (var held : state.resourceSites().pendingWorldChanges().values().stream()
                 .sorted(java.util.Comparator.comparing(ResourceFieldCellObserved::siteId)).toList()) {
-            if (ledger.fieldWorldChange(held.siteId()) != null) continue;
+            if (ledger.fieldWorldChange(held.siteId(), held.cellId()) != null) continue;
             var cycle = state.resourceSites().cycle(held.siteId());
             if (cycle.epoch() != held.epoch() || cycle.layout().revision() != held.layoutRevision()) continue;
             var reading = FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(held.cellId()),
@@ -194,10 +203,9 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         var canonical = cycle.cell(cellId);
         if (canonical.soil() == ResourceFieldCycle.Soil.OBSTRUCTED
                 || canonical.crop() == ResourceFieldCycle.Crop.OBSTRUCTED) return false;
-        if (state.resourceSites().hasPendingWorldChange(siteId)
-                || ledger.fieldWorldChange(siteId) != null || ledger.fieldForeignChange(siteId) != null
-                || ledger.fieldPlayerBreak(siteId) != null
-                || !cycle.pendingPlayerBreaks().isEmpty()
+        if (state.resourceSites().hasPendingCellMutation(siteId, cellId)
+                || ledger.hasPendingFieldMutation(siteId, cellId)
+                || cycle.pendingPlayerBreaks().containsKey(cellId)
                 || !(ledger.fieldClaim(siteId) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                 || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
                 || !owner.witness().matchesCycle(cycle)) return false;
@@ -240,15 +248,16 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
     /** Confirm actual growth immediately after a successful write so consecutive bone-meal uses do not overlap holds. */
     static void afterBlockWrite(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 BlockPos position, BlockState replacement) {
-        if (!replacement.is(Blocks.WHEAT)) return;
         var state = runtime.decodedState().orElse(null);
         if (state == null) return;
         var owners = CELL_OWNERS.computeIfAbsent(runtime, ignored -> cellOwners(state));
         var column = owners.get(ChunkPos.asLong(position.getX() >> 4, position.getZ() >> 4));
         if (column == null) return;
         for (var owner : column) {
-            if (!minecraft(owner.cell().crop()).equals(position)) continue;
-            var held = state.resourceSites().pendingWorldChange(owner.siteId());
+            if (!minecraft(owner.cell().crop()).equals(position)
+                    && !minecraft(owner.cell().soil().support()).equals(position)) continue;
+            FrontierV3ResourceFieldForeignChangeExecutor.captureAfterWrite(level, runtime, owner.siteId(), owner.cell());
+            var held = state.resourceSites().pendingWorldChange(owner.siteId(), owner.cell().id());
             if (held != null && held.cellId().equals(owner.cell().id())
                     && held.change() == ResourceFieldCellObserved.Change.CROP_GROWN)
                 reconcileOne(level, runtime);
@@ -280,11 +289,36 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         if (state == null) return false;
         var cycle = state.resourceSites().cycle(change.siteId());
         if (!change.matches(cycle)) return false;
-        var held = state.resourceSites().pendingWorldChange(change.siteId());
+        var held = state.resourceSites().pendingWorldChange(change.siteId(), change.cellId());
         var reading = FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(change.cellId()),
                 change.observation().causationId());
-        if (!(reading instanceof FrontierV3ResourceFieldObservation.Owned owned)) return false;
+        if (reading instanceof FrontierV3ResourceFieldObservation.Unloaded) return false;
         var canonical = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(change.cellId()));
+        var resolution = CellMutationProtocol.review(
+                java.util.Optional.of(new FrontierV3ResourceFieldObservation.Owned(change.after())), reading,
+                canonical.equals(change.after()), CellMutationProtocol.Semantics.EXTERNAL_OBSERVATION);
+        if (resolution == CellMutationProtocol.Resolution.SUPERSEDE_CAPTURE
+                || resolution == CellMutationProtocol.Resolution.FINISH_THEN_OBSERVE_SUCCESSOR) {
+            if (!canonical.equals(change.before()) && !canonical.equals(change.after()))
+                throw new IllegalStateException("world cell observation has no exact canonical version: " + change.mutationKey());
+            if (canonical.equals(change.after())) {
+                var owner = ledger.fieldClaim(change.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership value ? value : null;
+                if (owner == null) throw new IllegalStateException("world cell receipt lost its physical owner");
+                var next = owner.witness().acknowledgeWorldChange(change, cycle,
+                        new FrontierV3ResourceFieldObservation.Owned(change.after()));
+                if (next != owner.witness()) { ledger.replaceFieldClaim(owner, owner.withWitness(next)); ledger.persist(level); }
+            }
+            if (held != null && !acknowledge(runtime, held, canonical))
+                throw new IllegalStateException("world cell receipt could not release its exact cause");
+            ledger.retireFieldWorldChange(change); ledger.persist(level);
+            // The physical blocks themselves plus the retained old claim are the restart
+            // predecessor. Ordinary observation admits the new fact, never a replacement write.
+            observeOne(level, runtime, change.siteId(), change.cellId());
+            com.mojang.logging.LogUtils.getLogger().info("PMV3 cell_mutation_closed key={} cause={} result={} successor=true",
+                    change.mutationKey(), change.observation().causationId(), resolution);
+            return true;
+        }
+        var owned = (FrontierV3ResourceFieldObservation.Owned) reading;
         if (canonical.equals(change.before())) {
             if (!change.observation().equals(held)) return false;
             if (owned.condition().equals(change.before())) {

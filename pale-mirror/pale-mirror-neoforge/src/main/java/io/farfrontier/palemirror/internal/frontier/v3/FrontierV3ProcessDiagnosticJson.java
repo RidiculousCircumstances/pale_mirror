@@ -15,6 +15,10 @@ final class FrontierV3ProcessDiagnosticJson {
                          java.util.function.Function<io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement,
                                  java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission>> steering) {
         var subject = FrontierV3DiagnosticJson.subject(id).orElse(null);
+        var extraction = subject == null ? null : state.extractionSites().deposits().get(subject);
+        if (extraction != null) return FrontierV3ExtractionDiagnosticJson.site(checkpoint, state, extraction);
+        var mining = subject == null ? null : state.extractionSites().work().get(subject);
+        if (mining != null) return FrontierV3ExtractionDiagnosticJson.work(checkpoint, state, mining);
         var group = subject == null ? null : state.unitGroups().groups().get(subject);
         if (group != null) return FrontierV3GroupDiagnosticJson.render(checkpoint, state, group, positions, positionSource, nativeWait, steering);
         var mission = subject == null ? null : state.shipments().missions().get(subject);

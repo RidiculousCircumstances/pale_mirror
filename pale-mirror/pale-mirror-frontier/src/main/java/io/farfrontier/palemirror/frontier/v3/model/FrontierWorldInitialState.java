@@ -31,22 +31,36 @@ final class FrontierWorldInitialState {
         Map<SubjectId, StructureCondition> structures = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> structures.put(structure.id(), StructureCondition.INTACT)));
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
-        bootstrap.settlements().forEach(settlement -> { SubjectId id = FrontierWorldState.depotId(settlement.id()); containers.put(id, new ContainerRecord(id, settlement.id(), 27)); });
+        var extraction = GrayboxQuarryPlan.initial(bootstrap);
+        extraction.deposits().values().forEach(deposit -> containers.put(deposit.site().containerId(),
+                new ContainerRecord(deposit.site().containerId(), deposit.site().settlementId(), 27, ContainerPurpose.EXTRACTIVE_STORAGE)));
+        bootstrap.settlements().forEach(settlement -> { SubjectId id = FrontierWorldState.depotId(settlement.id()); containers.put(id, new ContainerRecord(id, settlement.id(), 27, ContainerPurpose.SETTLEMENT_DEPOT)); });
         bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
                 .filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().ifPresent(workshop -> {
                     ProductionStationSpec station = ProductionStationSpec.grayboxBakery(workshop);
-                    containers.put(station.containerId(), new ContainerRecord(station.containerId(), settlement.id(), 27,
+                    containers.put(station.containerId(), new ContainerRecord(station.containerId(), settlement.id(), 27, ContainerPurpose.PRODUCTION_STATION,
                             java.util.Optional.of(station)));
                 }));
-        bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container -> containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27))));
-        containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27));
+        bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container -> containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27, ContainerPurpose.HIVE_STORE))));
+        containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27, ContainerPurpose.ROUTE_MAINTENANCE));
         fleet.assets().values().forEach(asset -> containers.put(asset.containerId(),
-                new ContainerRecord(asset.containerId(), asset.homeSettlementId(), asset.stackSlots())));
+                new ContainerRecord(asset.containerId(), asset.homeSettlementId(), asset.stackSlots(), ContainerPurpose.MOBILE_STORAGE)));
         var surfaces = new LinkedHashMap<>(ContainerSurfaceManifest.initial(bootstrap));
+        extraction.deposits().values().forEach(deposit -> surfaces.put(deposit.site().containerId(),
+                new ContainerSurface(deposit.site().containerId(), deposit.site().layout().container(), ContainerSurfaceStatus.UNMATERIALIZED)));
         fleet.assets().values().forEach(asset -> surfaces.put(asset.containerId(),
                 new ContainerSurface(asset.containerId(), new ContainerLocation.Mobile(asset.actorId()),
                         ContainerSurfaceStatus.UNMATERIALIZED)));
         SubjectId firstDepot = FrontierWorldState.depotId(bootstrap.settlements().getFirst().id()); Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
+        for (var deposit : extraction.deposits().values()) {
+            var site = deposit.site();
+            for (int slot = 0; slot < bootstrap.ruleset().extraction().minersPerSite(); slot++) {
+                SubjectId tool = new SubjectId("item:quarry-tool-" + java.util.UUID.nameUUIDFromBytes(
+                        (site.id().value() + "|" + slot).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                items.put(tool, new ExactItemStack(tool, site.settlementId(), bootstrap.ruleset().extraction().source().toolKind(), 1,
+                        new InventoryCustody.ContainerSlot(site.containerId(), slot)));
+            }
+        }
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
         FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(new ResourceLot(wheat, bootstrap.settlements().getFirst().id(), "minecraft:wheat", 64,
                 "bootstrap", List.of()), new CustodyAccount(new SubjectId("custody:container-1-depot"), new ResourceCustody.Container(firstDepot), Map.of(wheat, 64), Map.of()));
@@ -96,7 +110,7 @@ final class FrontierWorldInitialState {
                         ResourceSiteState.initial(bootstrap), PhysicalReplicaCustodyState.empty(),
                         DeferredAftermathState.empty(), FencedRecoveryState.empty(), DiagnosticIncidentIndex.empty(),
                         Map.of(), io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState.empty(),
-                        ShipmentState.empty(), io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.empty(), fleet);
+                        ShipmentState.empty(), io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.empty(), fleet, extraction);
     }
 
     private static Map<SubjectId, BioformLifecycle> initialBioformLifecycles(FrontierBootstrap bootstrap) {

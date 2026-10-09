@@ -305,15 +305,15 @@ class ResourceFieldCellObservedTest {
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(held)));
         FrontierWorldState waiting = ResourceSiteProcess.reduceWorldChangeHeld(changed, site, held);
         waiting = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(waiting));
-        assertEquals(soilChanged, waiting.resourceSites().pendingWorldChange(site));
-        assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(waiting,
-                growthProbe(site)));
+        assertEquals(soilChanged, waiting.resourceSites().pendingWorldChange(site, cell));
+        assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(waiting,
+                growthProbe(site)), "one held cell must not park the site plant clock");
         SubjectId other = new SubjectId("site:2-wheat-field");
         assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(waiting,
                 growthProbe(other)),
                 "one unresolved field cannot hold an unrelated settlement's growth");
         FrontierWorldState applied = ResourceSiteProcess.reduceCellObserved(waiting, site, soilChanged);
-        assertEquals(soilChanged, applied.resourceSites().pendingWorldChange(site),
+        assertEquals(soilChanged, applied.resourceSites().pendingWorldChange(site, cell),
                 "WAL acceptance alone cannot retire an unacknowledged physical claim");
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceWorldChangeAcknowledged(
                 applied, site, new ResourceFieldWorldChangeAcknowledged(soilChanged, bare)),
@@ -324,7 +324,7 @@ class ResourceFieldCellObservedTest {
         FrontierWorldState damaged = ResourceSiteProcess.reduceWorldChangeAcknowledged(applied, site, acknowledged);
         FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(damaged));
         assertEquals(ResourceFieldCycle.Soil.DIRT, recovered.resourceSites().cycle(site).cell(cell).soil());
-        assertNull(recovered.resourceSites().pendingWorldChange(site));
+        assertNull(recovered.resourceSites().pendingWorldChange(site, cell));
         assertEquals(ResourceFieldCycle.Crop.MATURE, recovered.resourceSites().cycle(site).cell(neighbor).crop());
         assertEquals(ready.resourceSites().site(site), recovered.resourceSites().site(site));
     }
@@ -354,7 +354,7 @@ class ResourceFieldCellObservedTest {
                 held, site, new ResourceFieldWorldChangeAcknowledged(proposed, after)),
                 "an unaccepted physical successor cannot release the held canonical predecessor");
         FrontierWorldState closed = ResourceSiteProcess.reduceWorldChangeAcknowledged(held, site, acknowledged);
-        assertNull(closed.resourceSites().pendingWorldChange(site));
+        assertNull(closed.resourceSites().pendingWorldChange(site, cell));
         assertEquals(field, closed.resourceSites().cycle(site));
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceCellObserved(closed, site, proposed));
     }

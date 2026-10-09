@@ -127,7 +127,7 @@ public final class FungibleClaimForfeitureStateSupport {
                 yield hivePlan(state, job, claim);
             }
             case SETTLEMENT_RATION -> throw new IllegalArgumentException("settlement ration claim is retired");
-            case RESIDENT_MEAL, GOODS_TRADE, EXPEDITION_SUPPLY, EXTERNAL_RESERVATION ->
+            case RESIDENT_MEAL, GOODS_TRADE, EXPEDITION_SUPPLY, INTERNAL_LOGISTICS, EXTERNAL_RESERVATION ->
                     throw new IllegalArgumentException("physical theft has no declared retirement transition for " + claim.purpose());
         }).toList();
     }

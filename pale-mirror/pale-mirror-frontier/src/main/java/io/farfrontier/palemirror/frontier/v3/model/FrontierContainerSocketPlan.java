@@ -15,6 +15,14 @@ import java.util.Optional;
 public final class FrontierContainerSocketPlan {
     private FrontierContainerSocketPlan() { }
 
+    public static Optional<ContainerSocketSupport> declaredSupport(FrontierWorldState state, ContainerSurface surface) {
+        var record = state.inventory().containers().get(surface.containerId());
+        if (record == null || !surface.fixed()) return Optional.empty();
+        if (record.purpose() == ContainerPurpose.EXTRACTIVE_STORAGE)
+            return ExtractionWorksiteBlocks.socketSupport(state, surface).map(value -> value);
+        return support(state, surface).map(ContainerSocketSupport.Graybox::new);
+    }
+
     public static Optional<GrayboxCell> support(FrontierWorldState state, ContainerSurface surface) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(surface, "surface");
         if (!surface.fixed()) return Optional.empty(); // An actor attachment has no structural block socket.

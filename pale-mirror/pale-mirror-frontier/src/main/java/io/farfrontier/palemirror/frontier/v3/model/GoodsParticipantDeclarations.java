@@ -6,10 +6,10 @@ import java.util.*;
 /** Producer of explicit initial lawful knowledge. The market cannot discover arbitrary world stocks. */
 public final class GoodsParticipantDeclarations {
     private GoodsParticipantDeclarations() { }
-    public static ShipmentEndpoint endpoint(Settlement settlement) {
+    public static ShipmentEndpoint.Depot endpoint(Settlement settlement) {
         var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
                 .reduce((left, right) -> { throw new IllegalArgumentException("ambiguous settlement depot"); }).orElseThrow();
-        return new ShipmentEndpoint(ShipmentEndpoint.Kind.SETTLEMENT_DEPOT, settlement.id(), depot.id(),
+        return new ShipmentEndpoint.Depot(settlement.id(), depot.id(),
                 FrontierWorldState.depotId(settlement.id()), SettlementDepotServicePort.forDepot(depot).loadingSurface());
     }
     public static GoodsParticipantState initial(FrontierBootstrap bootstrap) {

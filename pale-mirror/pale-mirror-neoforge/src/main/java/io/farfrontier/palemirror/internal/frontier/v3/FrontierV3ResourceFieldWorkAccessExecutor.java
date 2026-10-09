@@ -34,7 +34,7 @@ final class FrontierV3ResourceFieldWorkAccessExecutor {
     static boolean observeOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                               SubjectId siteId, ResourceFieldLayout.CellId cellId) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null || state.resourceSites().hasPendingWorldChange(siteId)) return false;
+        if (state == null || state.resourceSites().hasPendingCellMutation(siteId, cellId)) return false;
         var cycle = state.resourceSites().cycle(siteId);
         if (cycle.pendingPlayerBreaks().containsKey(cellId)) return false;
         var claim = FrontierV3ResourceSiteLedger.get(level).siteClaim(siteId);

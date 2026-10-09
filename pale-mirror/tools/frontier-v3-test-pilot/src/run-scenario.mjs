@@ -130,6 +130,8 @@ timing.begin('client.jvm_boot_and_connect');
 const child = preparedIdentity === undefined
   ? launchViaGradle()
   : await launchPreparedClient();
+// Direct prepared launch owns this JVM. Never send F2 to a leftover client's window.
+if (preparedIdentity !== undefined) auditEnvironment.PALE_MIRROR_CLIENT_PID = String(child.pid);
 // Spawn identity plus the pre-launch prepared-build verification is the only authority for this
 // external barrier. Minecraft will separately acknowledge connection/fixture readiness.
 const initialLifecycleSegment = lifecycleSegment();

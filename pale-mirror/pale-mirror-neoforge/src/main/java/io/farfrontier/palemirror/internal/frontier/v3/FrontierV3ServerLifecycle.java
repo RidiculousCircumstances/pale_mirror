@@ -468,6 +468,7 @@ public final class FrontierV3ServerLifecycle {
                                        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         var physicalWorld = server.getLevel(FrontierV3PhysicalWorld.DIMENSION);
         if (physicalWorld != null) {
+            for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.shutdown(physicalWorld, runtime);
             var ledger = FrontierV3AmbientCarrierLedger.get(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID);
             FrontierV3BodyInsertionJournal.cancelAll(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID, ledger);
             ledger.persist(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID);
@@ -575,7 +576,7 @@ public final class FrontierV3ServerLifecycle {
         var state = runtime.decodedState().orElse(null);
         if (state == null) return null;
         return FrontierV3ResourceSiteLedger.get(physicalWorld).pendingFieldWorldChanges().stream()
-                .filter(change -> state.resourceSites().pendingWorldChange(change.siteId()) == null)
+                .filter(change -> state.resourceSites().pendingWorldChange(change.siteId(), change.cellId()) == null)
                 .findFirst().orElse(null);
     }
     private static FrontierV3ResourceFieldForeignChangeWitness unheldFieldForeignChange(
@@ -583,7 +584,7 @@ public final class FrontierV3ServerLifecycle {
         var state = runtime.decodedState().orElse(null);
         if (state == null) return null;
         return FrontierV3ResourceSiteLedger.get(physicalWorld).pendingFieldForeignChanges().stream()
-                .filter(change -> state.resourceSites().pendingForeignChange(change.siteId()) == null)
+                .filter(change -> state.resourceSites().pendingForeignChange(change.siteId(), change.cellId()) == null)
                 .findFirst().orElse(null);
     }
     static boolean fastForwardSliceTimeRemaining(long elapsedNanos) {
@@ -811,6 +812,7 @@ public final class FrontierV3ServerLifecycle {
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null
                 || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
         runtime.decodedState().ifPresent(state -> FrontierV3ActorBodyController.observeTerrainDeparture(level, state, chunk));
+        for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.departure(level, runtime, chunk);
     }
 
     /** Tracking-end precedes removal for hidden chunks and cannot certify final departure. */
@@ -894,9 +896,8 @@ public final class FrontierV3ServerLifecycle {
                                               net.minecraft.world.level.block.state.BlockState replacement, boolean committed) {
         if (!FrontierV3PhysicalWorld.isPhysical(level)) return;
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (runtime != null) FrontierV3ResourceFieldWorldChangeExecutor.observeBlockWrite(level, runtime, position, replacement, committed);
+        if (runtime != null) FrontierV3ManagedBlockWrites.observe(level, runtime, position, replacement, committed);
     }
-
     /** Cancels only vanilla soil reversion in an active exact managed field footprint. */
     public static boolean blocksNativeSoilReversion(ServerLevel level, BlockPos position) {
         return FrontierV3NativeFieldOwnership.blocksSoilReversion(level, position);

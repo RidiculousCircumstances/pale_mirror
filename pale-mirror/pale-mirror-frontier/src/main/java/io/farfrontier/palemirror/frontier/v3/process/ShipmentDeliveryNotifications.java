@@ -14,7 +14,8 @@ final class ShipmentDeliveryNotifications {
     }
     private static final Map<ResourceClaimDelegation.Kind, BiFunction<Shipment, Long, List<ProposedEvent>>> PORTS = Map.of(
             ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT,
-            (shipment, tick) -> List.of(GoodsTradeReceiptProcess.wake(shipment.authorization().claimantId(), shipment.reception().orElseThrow().id(), tick)));
+            (shipment, tick) -> List.of(GoodsTradeReceiptProcess.wake(shipment.authorization().claimantId(), shipment.reception().orElseThrow().id(), tick)),
+            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, InternalShipmentReceipts::wake);
     static {
         if (!PORTS.keySet().equals(EnumSet.allOf(ResourceClaimDelegation.Kind.class)))
             throw new IllegalArgumentException("missing shipment receiver-notification owner");

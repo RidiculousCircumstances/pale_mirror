@@ -481,7 +481,7 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("farmer goal block has a foreign semantic target");
         if (blocked.block().reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE) {
             ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
-            if (state.resourceSites().hasPendingWorldChange(subject))
+            if (state.resourceSites().harvestMutationPending(job))
                 throw new IllegalArgumentException("farmer continuation block cannot overtake pending physical field change");
             List<ResourceFieldLayout.CellId> prefix = blockedPrefix(cycle, job.progress().nextCropSlotIndex());
             if (prefix.isEmpty()
@@ -520,7 +520,7 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("farmer goal clearance has a foreign semantic target");
         if (cleared.expected().reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE) {
             ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
-            if (state.resourceSites().hasPendingWorldChange(subject))
+            if (state.resourceSites().harvestMutationPending(job))
                 throw new IllegalArgumentException("farmer continuation clearance cannot overtake pending physical field change");
             List<ResourceFieldLayout.CellId> prefix = blockedPrefix(cycle, job.progress().nextCropSlotIndex());
             if (blockedPrefixMeetsPendingPlayerBreak(state, job, prefix))
@@ -671,7 +671,7 @@ public final class ResourceSiteHarvestProcess {
         if (held.reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE) {
             ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
             blockedPrefix = blockedPrefix(cycle, job.progress().nextCropSlotIndex());
-            if (state.resourceSites().hasPendingWorldChange(subject)
+            if (state.resourceSites().harvestMutationPending(job)
                     || blockedPrefix.isEmpty()
                     || blockedPrefixMeetsPendingPlayerBreak(state, job, blockedPrefix))
                 throw new IllegalArgumentException("COLD continuation hold lacks a stable blocked work prefix");

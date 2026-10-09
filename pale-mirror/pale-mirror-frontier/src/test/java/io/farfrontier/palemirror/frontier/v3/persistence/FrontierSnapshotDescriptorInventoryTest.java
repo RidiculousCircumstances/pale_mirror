@@ -9,27 +9,25 @@ import java.nio.charset.StandardCharsets;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierSnapshotDescriptorInventoryTest {
-    @Test void exactReceiptAdditionPreservesHeaderAndFullStateAndPublishesCurrentInventory() {
+    @Test void currentCompositionPreservesHeaderAndFullState() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:station-recovery-upgrade"), 91L));
         var codec = new FrontierWorldStateCodec();
-        assertEquals(FrontierSnapshotDescriptorInventory.WITH_STATION_RECOVERY, FrontierDurationProcessDriverRegistry.inventoryFingerprint());
-        byte[] previous = replace(codec.encode(state), FrontierSnapshotDescriptorInventory.WITH_STATION_RECOVERY,
-                FrontierSnapshotDescriptorInventory.BEFORE_STATION_RECOVERY);
-        assertEquals(state.bootstrap().worldId(), FrontierWorldSnapshotHeader.read(previous).worldId());
-        assertEquals(state, codec.decode(previous));
-        assertArrayEquals(codec.encode(state), codec.encode(codec.decode(previous)), "normal persistence upgrades the exact descriptor header");
+        byte[] encoded = codec.encode(state);
+        assertTrue(FrontierSnapshotDescriptorInventory.accepts(FrontierDurationProcessDriverRegistry.inventoryFingerprint()));
+        assertEquals(state.bootstrap().worldId(), FrontierWorldSnapshotHeader.read(encoded).worldId());
+        assertEquals(state, codec.decode(encoded));
+        assertArrayEquals(encoded, codec.encode(codec.decode(encoded)));
     }
 
     @Test void previousInventoryCannotAuthorizeAnUnrelatedFutureComposition() {
-        assertFalse(FrontierSnapshotDescriptorInventory.accepts(FrontierSnapshotDescriptorInventory.BEFORE_STATION_RECOVERY,
-                "0".repeat(64)));
+        assertFalse(FrontierSnapshotDescriptorInventory.accepts("5f2691f35f4efbb5b339eaa50745e945a54149126d8fd0e0b18962f33d595003"));
         assertFalse(FrontierSnapshotDescriptorInventory.accepts("0".repeat(64)));
     }
 
-    @Test void additiveReceiptUpgradeDoesNotRelaxThePhysicalLifecycleOrUnknownInventoryFence() {
+    @Test void freshWorldDoesNotRelaxThePhysicalLifecycleOrUnknownInventoryFence() {
         var codec = new FrontierWorldStateCodec();
         var encoded = codec.encode(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:station-recovery-negative"), 91L)));
-        var unknown = replace(encoded, FrontierSnapshotDescriptorInventory.WITH_STATION_RECOVERY, "0".repeat(64));
+        var unknown = replace(encoded, FrontierDurationProcessDriverRegistry.inventoryFingerprint(), "0".repeat(64));
         assertThrows(IllegalArgumentException.class, () -> FrontierWorldSnapshotHeader.read(unknown));
         assertThrows(IllegalArgumentException.class, () -> codec.decode(unknown));
         var changedPhysical = replace(encoded, FrontierWorldProcessCatalog.physicalLifecycleFingerprint(), "0".repeat(64));

@@ -10,15 +10,15 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
 
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
-        var port = ServiceAccessCoordinator.port(state, pointId);
+        var boundary = ServiceAccessCoordinator.boundary(state, pointId);
         var result = new ArrayList<ServiceAccessDemand>();
         for (var job : state.productionJobs().values()) {
-            if (job.bakeryWork().isEmpty() || !job.settlementId().equals(port.settlementId())
+            if (job.bakeryWork().isEmpty() || !FrontierWorldState.depotId(job.settlementId()).equals(pointId)
                     || state.humanPopulation().meals().containsKey(job.workerId())
                     || state.actorMovements().containsKey(job.workerId())
                     || !operationEligible(state, job)) continue;
             var phase = job.bakeryWork().orElseThrow().phase();
-            boolean occupied = ServiceAccessCoordinator.occupies(state, port.accessBoundary(), job.workerId());
+            boolean occupied = ServiceAccessCoordinator.occupies(state, boundary, job.workerId());
             if (phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY || occupied)
                 result.add(new ServiceAccessDemand(identity(job, pointId), priority(), occupied
                         ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH, 0L, false));

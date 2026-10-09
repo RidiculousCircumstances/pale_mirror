@@ -100,7 +100,7 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
             throw new IllegalArgumentException("block entity extraction requires retained entity-state effects");
     }
 
-    private static BlockState block(BlockExtraction.Block descriptor) {
+    static BlockState block(BlockExtraction.Block descriptor) {
         var id = ResourceLocation.parse(descriptor.kind());
         if (!BuiltInRegistries.BLOCK.containsKey(id)) throw new IllegalArgumentException("unknown extraction block");
         BlockState state = BuiltInRegistries.BLOCK.get(id).defaultBlockState();

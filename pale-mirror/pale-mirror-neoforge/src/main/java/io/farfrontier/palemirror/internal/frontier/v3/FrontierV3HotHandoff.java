@@ -23,7 +23,7 @@ final class FrontierV3HotHandoff {
         List<Check> inspect(ServerLevel level, FrontierWorldState state, ChunkPos chunk);
     }
     private static final List<Participant> PARTICIPANTS = List.of(
-            FrontierV3ResourceFieldHandoff::inspect, FrontierV3ReferenceContainerHandoff::inspect);
+            FrontierV3ResourceFieldHandoff::inspect, FrontierV3ReferenceContainerHandoff::inspect, FrontierV3WorksiteHandoff::inspect);
     private FrontierV3HotHandoff() { }
     static Review inspect(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ChunkPos chunk) {
         var canonical = runtime.canonicalState().orElseThrow();

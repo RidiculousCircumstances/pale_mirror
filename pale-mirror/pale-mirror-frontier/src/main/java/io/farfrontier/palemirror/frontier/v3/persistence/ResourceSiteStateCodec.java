@@ -42,16 +42,20 @@ final class ResourceSiteStateCodec {
                     .sorted(Comparator.comparing(ResourceSiteHarvestLineage::predecessorIntentId)).toList())
                 writeHarvestLineage(output, lineage);
             ResourceFieldCycleStateCodec.write(output, state.cycle(lifecycle.siteId()));
-            ResourceFieldCellObserved held = state.pendingWorldChange(lifecycle.siteId());
-            output.writeBoolean(held != null);
-            if (held != null) {
-                byte[] encoded = ResourceSitePayloadCodecs.cellObserved().encode(held);
+            var worldHolds = state.pendingWorldChanges().entrySet().stream()
+                    .filter(entry -> entry.getKey().owner().equals(lifecycle.siteId())).sorted(Map.Entry.comparingByKey()).toList();
+            output.writeInt(worldHolds.size());
+            for (var entry : worldHolds) {
+                output.writeByte(entry.getKey().family().wireTag());
+                byte[] encoded = ResourceSitePayloadCodecs.cellObserved().encode(entry.getValue());
                 output.writeInt(encoded.length); output.write(encoded);
             }
-            ResourceFieldForeignChangeHeld foreign = state.pendingForeignChange(lifecycle.siteId());
-            output.writeBoolean(foreign != null);
-            if (foreign != null) {
-                byte[] encoded = ResourceSitePayloadCodecs.foreignChangeHeld().encode(foreign);
+            var foreignHolds = state.pendingForeignChanges().entrySet().stream()
+                    .filter(entry -> entry.getKey().owner().equals(lifecycle.siteId())).sorted(Map.Entry.comparingByKey()).toList();
+            output.writeInt(foreignHolds.size());
+            for (var entry : foreignHolds) {
+                output.writeByte(entry.getKey().family().wireTag());
+                byte[] encoded = ResourceSitePayloadCodecs.foreignChangeHeld().encode(entry.getValue());
                 output.writeInt(encoded.length); output.write(encoded);
             }
         }
@@ -61,8 +65,8 @@ final class ResourceSiteStateCodec {
         int count = input.readUnsignedByte(); if (count > MAX_SITES) throw new IllegalArgumentException("resource-site retention limit exceeded");
         Map<SubjectId, ResourceSiteLifecycle> sites = new LinkedHashMap<>();
         Map<SubjectId, ResourceFieldCycle> cycles = new LinkedHashMap<>();
-        Map<SubjectId, ResourceFieldCellObserved> heldWorldChanges = new LinkedHashMap<>();
-        Map<SubjectId, ResourceFieldForeignChangeHeld> heldForeignChanges = new LinkedHashMap<>();
+        Map<CellMutationKey, ResourceFieldCellObserved> heldWorldChanges = new LinkedHashMap<>();
+        Map<CellMutationKey, ResourceFieldForeignChangeHeld> heldForeignChanges = new LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
             SubjectId siteId = new SubjectId(FrontierWorldStateCodec.readString(input)); int phase = input.readUnsignedByte();
             long epoch = input.readLong(); int stage = input.readUnsignedByte(); boolean hasWork = input.readBoolean();
@@ -104,23 +108,32 @@ final class ResourceSiteStateCodec {
                     epoch, stage, work, disposition, jobs, histories, sequence);
             if (sites.put(siteId, lifecycle) != null) throw new IllegalArgumentException("duplicate resource-site lifecycle");
             cycles.put(siteId, ResourceFieldCycleStateCodec.read(input));
-            if (input.readBoolean()) {
+            int worldCount = input.readInt();
+            if (worldCount < 0 || worldCount > cycles.get(siteId).layout().cells().size())
+                throw new IllegalArgumentException("invalid cell mutation count");
+            for (int mutation = 0; mutation < worldCount; mutation++) {
+                var family = CellMutationKey.OwnerFamily.decode(input.readUnsignedByte());
                 int length = input.readInt();
                 if (length < 1 || length > 600) throw new IllegalArgumentException("invalid held world field change length");
-                ResourceFieldCellObserved held = (ResourceFieldCellObserved) ResourceSitePayloadCodecs.cellObserved()
-                        .decode(input.readNBytes(length));
-                if (held.source() != ResourceFieldCellObserved.Source.WORLD || !siteId.equals(held.siteId()))
-                    throw new IllegalArgumentException("held world field change has a foreign owner or source");
-                heldWorldChanges.put(siteId, held);
+                var held = (ResourceFieldCellObserved) ResourceSitePayloadCodecs.cellObserved().decode(input.readNBytes(length));
+                var key = new CellMutationKey(family, held.siteId(), held.cellId().value());
+                if (held.source() != ResourceFieldCellObserved.Source.WORLD || !siteId.equals(held.siteId())
+                        || !key.equals(ResourceSiteState.mutationKey(held.siteId(), held.cellId()))
+                        || heldWorldChanges.put(key, held) != null)
+                    throw new IllegalArgumentException("held world cell has a foreign declaration or duplicate address");
             }
-            if (input.readBoolean()) {
+            int foreignCount = input.readInt();
+            if (foreignCount < 0 || foreignCount > cycles.get(siteId).layout().cells().size())
+                throw new IllegalArgumentException("invalid foreign cell mutation count");
+            for (int mutation = 0; mutation < foreignCount; mutation++) {
+                var family = CellMutationKey.OwnerFamily.decode(input.readUnsignedByte());
                 int length = input.readInt();
                 if (length < 1 || length > 600) throw new IllegalArgumentException("invalid held foreign field change length");
-                var held = (ResourceFieldForeignChangeHeld) ResourceSitePayloadCodecs.foreignChangeHeld()
-                        .decode(input.readNBytes(length));
-                if (!siteId.equals(held.siteId()))
-                    throw new IllegalArgumentException("held foreign field change has a different site owner");
-                heldForeignChanges.put(siteId, held);
+                var held = (ResourceFieldForeignChangeHeld) ResourceSitePayloadCodecs.foreignChangeHeld().decode(input.readNBytes(length));
+                var key = new CellMutationKey(family, held.siteId(), held.cellId().value());
+                if (!siteId.equals(held.siteId()) || !key.equals(ResourceSiteState.mutationKey(held.siteId(), held.cellId()))
+                        || heldForeignChanges.put(key, held) != null)
+                    throw new IllegalArgumentException("held foreign cell has a foreign declaration or duplicate address");
             }
         }
         return new ResourceSiteState(sites, cycles, heldWorldChanges, heldForeignChanges);

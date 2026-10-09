@@ -145,6 +145,19 @@ def minecraft_window() -> int:
             candidates.append(int(match.group(1), 16))
     if not candidates:
         raise RuntimeError("Minecraft X11 window was not found")
+    client_pid = os.environ.get("PALE_MIRROR_CLIENT_PID")
+    if client_pid is not None:
+        if not re.fullmatch(r"[1-9][0-9]*", client_pid):
+            raise RuntimeError("invalid exact Minecraft client PID")
+        owned = []
+        for window in candidates:
+            identity = subprocess.check_output(["xprop", "-id", hex(window), "_NET_WM_PID"], text=True)
+            match = re.search(r"_NET_WM_PID\(CARDINAL\) = ([0-9]+)", identity)
+            if match and match.group(1) == client_pid:
+                owned.append(window)
+        if len(owned) != 1:
+            raise RuntimeError(f"expected one Minecraft window for PID {client_pid}, found {len(owned)}")
+        return owned[0]
     return candidates[-1]
 
 

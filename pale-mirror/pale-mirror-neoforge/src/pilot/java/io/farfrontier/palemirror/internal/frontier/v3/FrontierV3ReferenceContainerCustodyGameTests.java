@@ -43,6 +43,50 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
     private FrontierV3ReferenceContainerCustodyGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void savedAttachmentClosesOnlyItsExactPreparedImageAndUnblocksBodyDeparture(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:saved-attachment-projection");
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        var asset = initial.transportFleet().assets().values().stream()
+                .sorted(java.util.Comparator.comparing(a -> a.actorId())).findFirst().orElseThrow();
+        var runtime = runtime(world, initial);
+        var container = asset.containerId();
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.prepareInitialProjection(runtime, initial, container),
+                "attachment must have a durable pending before-write boundary");
+        var prepared = runtime.decodedState().orElseThrow();
+        var lease = prepared.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container));
+        helper.assertTrue(ActorInventoryInteractionFences.pending(prepared, asset.actorId()),
+                "a body with no activity still retains its independent attachment fence");
+        var slots = java.util.stream.IntStream.range(0, asset.stackSlots())
+                .mapToObj(ReferenceContainerCustody.ObservedSlot::empty).toList();
+        var saved = new FrontierV3StoredAttachedStorage(container, ReferenceContainerCustody.provenance(container), slots);
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(runtime, prepared, lease, saved),
+                "the exact saved inventory must close the pending image without loading or rewriting a body");
+        var confirmed = runtime.decodedState().orElseThrow();
+        helper.assertTrue(!ActorInventoryInteractionFences.pending(confirmed, asset.actorId())
+                        && ReferenceContainerCustody.hasOperationalCustody(confirmed, container)
+                        && confirmed.inventory().surfaces().get(container).status() == ContainerSurfaceStatus.ACTIVE
+                        && initial.inventory().fungibleResources().equals(confirmed.inventory().fungibleResources()),
+                "confirmation opens only custody, never creates stock or an activity");
+        boolean staleRejected = false;
+        try { FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(runtime, confirmed, lease, saved); }
+        catch (IllegalArgumentException expected) { staleRejected = true; }
+        helper.assertTrue(staleRejected, "a stale projection cannot be consumed twice");
+        runtime.shutdown();
+
+        var negative = runtime(world, initial);
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.prepareInitialProjection(negative, initial, container), "negative preparation");
+        var pending = negative.decodedState().orElseThrow();
+        var pendingLease = pending.replicaCustody().custodyByScope().get(lease.scopeId());
+        var foreign = new FrontierV3StoredAttachedStorage(container, "foreign:saved-attachment", slots);
+        helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(negative, pending, pendingLease, foreign)
+                        && ActorInventoryInteractionFences.pending(negative.decodedState().orElseThrow(), asset.actorId())
+                        && !ReferenceContainerCustody.hasOperationalCustody(negative.decodedState().orElseThrow(), container)
+                        && negative.decodedState().orElseThrow().inventory().fungibleResources().equals(initial.inventory().fungibleResources()),
+                "foreign saved evidence remains fenced with a local conflict and conserved stock");
+        negative.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void declaredActorMaterialOrderTakesAndPartiallyPlacesWithoutLosingRemainder(GameTestHelper helper) {
         SubjectId container = new SubjectId("container:actor-material-test");
         SubjectId actorId = new SubjectId("resident:actor-material-test");

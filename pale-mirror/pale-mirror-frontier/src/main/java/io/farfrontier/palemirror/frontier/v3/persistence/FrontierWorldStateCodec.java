@@ -100,6 +100,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 ShipmentStateCodec.write(output, state.shipments());
                 UnitGroupStateCodec.write(output, state.unitGroups());
                 TransportFleetStateCodec.write(output, state.transportFleet());
+                ExtractionSiteStateCodec.write(output, state.extractionSites());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -144,7 +145,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies,
                     sites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents, actorMovements,
                     ActorExecutionStateCodec.read(input), ShipmentStateCodec.read(input), UnitGroupStateCodec.read(input),
-                    TransportFleetStateCodec.read(input));
+                    TransportFleetStateCodec.read(input), ExtractionSiteStateCodec.read(input));
             FrontierWorldStateCodecValidation.validate(input, state);
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }

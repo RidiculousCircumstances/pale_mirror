@@ -48,9 +48,9 @@ final class FrontierV3ActorMovementNavigation {
         }
         if (service.isPresent() && !ServiceAccessCoordinator.available(state, service.orElseThrow())) {
             var identity = service.orElseThrow();
-            var port = ServiceAccessCoordinator.port(state, identity.pointId());
+            var point = ServiceBoundaryComposition.declaration(state, identity.pointId());
             var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, body, state,
-                    port.settlementId(), identity.pointId(), identity.ownerId(), identity.actorId(),
+                    point.settlementId(), point.pointId(), identity.ownerId(), identity.actorId(),
                     Math.toIntExact(movement.order().goalOrdinal()), movement.executionId().generation(), actuation);
             blocked(body, movement, "service-access:" + waiting.reason());
             return; // Local clearance is not arrival at the retained service/work goal.

@@ -20,6 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierContainerSocketPlan;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSocketSupport;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionTransformationStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
@@ -89,7 +90,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         BlockPos target = position(surface);
         if (surface.status() == ContainerSurfaceStatus.UNMATERIALIZED) {
             SocketReadiness readiness = socketReadiness(level, FrontierV3GrayboxLedger.get(level), target,
-                    FrontierContainerSocketPlan.support(state, surface).orElse(null));
+                    FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null));
             if (readiness == SocketReadiness.DEFERRED) return;
             if (readiness == SocketReadiness.CONFLICT) {
                 transition(runtime, surface.containerId(), ContainerSurfaceStatus.CONFLICT);
@@ -100,7 +101,7 @@ final class FrontierV3ContainerSurfaceExecutor {
                 state = state(runtime);
                 if (state == null) return;
             } else if (!transition(runtime, surface.containerId(), ContainerSurfaceStatus.PREPARED)) return;
-            ChestBlockEntity chest = claimFreshChest(level, target, surface.containerId());
+            ChestBlockEntity chest = claimFreshChest(level, target, surface.containerId(), FrontierContainerSocketPlan.declaredSupport(state, surface).orElseThrow());
             if (chest == null || !writeCanonicalSlots(chest, state, surface.containerId())) {
                 transition(runtime, surface.containerId(), ContainerSurfaceStatus.CONFLICT);
                 return;
@@ -112,7 +113,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         // support may still be one materializer turn behind, so wait for an absent owned
         // foundation; then either claim an empty socket or inspect the already-owned chest.
         SocketReadiness readiness = supportReadiness(level, FrontierV3GrayboxLedger.get(level), target,
-                FrontierContainerSocketPlan.support(state, surface).orElse(null));
+                FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null));
         if (readiness == SocketReadiness.DEFERRED) return;
         if (readiness == SocketReadiness.CONFLICT) {
             reportConflict(runtime, surface.containerId());
@@ -130,7 +131,7 @@ final class FrontierV3ContainerSurfaceExecutor {
             else activateAndConfirm(runtime, surface, chest);
             return;
         }
-        chest = claimFreshChest(level, target, surface.containerId());
+        chest = claimFreshChest(level, target, surface.containerId(), FrontierContainerSocketPlan.declaredSupport(state, surface).orElseThrow());
         if (chest == null || !writeCanonicalSlots(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
         else activateAndConfirm(runtime, surface, chest);
     }
@@ -158,7 +159,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         ContainerSurface surface = active.get((int) Math.floorMod(level.getGameTime(), active.size()));
         if (!level.hasChunkAt(position(surface))) return;
         if (!hasReadySocket(level, FrontierV3GrayboxLedger.get(level), position(surface),
-                FrontierContainerSocketPlan.support(state, surface).orElse(null))) {
+                FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null))) {
             reportConflict(runtime, surface.containerId());
             return;
         }
@@ -168,8 +169,12 @@ final class FrontierV3ContainerSurfaceExecutor {
 
     /** Creates a fresh owned chest only after durable PREPARED state exists. */
     static ChestBlockEntity claimFreshChest(ServerLevel level, BlockPos target, SubjectId containerId) {
+        return claimFreshChest(level, target, containerId, null);
+    }
+    private static ChestBlockEntity claimFreshChest(ServerLevel level, BlockPos target, SubjectId containerId, ContainerSocketSupport support) {
         if (!level.getBlockState(target).isAir() || level.getBlockState(target.below()).isAir()) return null;
-        if (!level.setBlock(target, Blocks.CHEST.defaultBlockState(), 3)) return null;
+        if (!(support == null ? level.setBlock(target, Blocks.CHEST.defaultBlockState(), 3)
+                : FrontierV3ContainerSocketProvenance.openingWrite(support, () -> level.setBlock(target, Blocks.CHEST.defaultBlockState(), 3)))) return null;
         if (!(level.getBlockEntity(target) instanceof ChestBlockEntity chest)) return null;
         if (!chest.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY).isBlank() || !chest.isEmpty()) return null;
         chest.getPersistentData().putString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY, containerId.value());
@@ -356,9 +361,10 @@ final class FrontierV3ContainerSurfaceExecutor {
     /** Shared by the complete-image writer and its pure slot-selection regression. */
     static int nextProjectionSlot(FrontierWorldState state, SubjectId containerId, int capacity, int from,
                                   java.util.function.IntPredicate occupied) {
+        var reserved = state.reservedContainerSlots(containerId);
         for (int candidate = from; candidate < capacity; candidate++) {
             if (!occupied.test(candidate)
-                    && !state.harvestOutputReserves(new InventoryCustody.ContainerSlot(containerId, candidate))) return candidate;
+                    && !reserved.contains(candidate)) return candidate;
         }
         return capacity;
     }
@@ -412,7 +418,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         if (!level.hasChunkAt(target) || (ReferenceContainerCustody.isReferenceContainer(state, containerId) && !level.shouldTickBlocksAt(target))) {
             return new Readiness("UNLOADED", "", "", "", "", "", "", false, false, 0, 0);
         }
-        GrayboxCell support = FrontierContainerSocketPlan.support(state, surface).orElse(null);
+        io.farfrontier.palemirror.frontier.v3.model.ContainerSocketSupport support = FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null);
         SocketReadiness supportStatus = supportReadiness(level, FrontierV3GrayboxLedger.get(level), target, support);
         ChestBlockEntity owned = activeChest(level, target, containerId);
         ChestBlockEntity chest = level.getBlockEntity(target) instanceof ChestBlockEntity value ? value : null;
@@ -455,6 +461,19 @@ final class FrontierV3ContainerSurfaceExecutor {
         // it is capacity loss, not evidence that the player obstructed a future chest.
         if (!level.getBlockState(target).isAir()) return SocketReadiness.CONFLICT;
         return supportReadiness(level, ledger, target, support);
+    }
+    static SocketReadiness socketReadiness(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos target,
+            io.farfrontier.palemirror.frontier.v3.model.ContainerSocketSupport support) {
+        if (!level.getBlockState(target).isAir()) return SocketReadiness.CONFLICT;
+        return supportReadiness(level, ledger, target, support);
+    }
+    static SocketReadiness supportReadiness(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos target,
+            io.farfrontier.palemirror.frontier.v3.model.ContainerSocketSupport support) {
+        return FrontierV3ContainerSocketProvenance.inspect(level, ledger, target, support);
+    }
+    private static boolean hasReadySocket(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos target,
+            io.farfrontier.palemirror.frontier.v3.model.ContainerSocketSupport support) {
+        return supportReadiness(level, ledger, target, support) == SocketReadiness.READY;
     }
 
     /** Checks only the owned foundation, so PREPARED recovery can inspect an already-owned chest. */

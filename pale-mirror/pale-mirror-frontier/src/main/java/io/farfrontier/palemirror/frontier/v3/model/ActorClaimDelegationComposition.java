@@ -6,9 +6,11 @@ import java.util.function.BiConsumer;
 /** Shared item custody validates an owner-issued delegation, without commercial dispatch logic. */
 final class ActorClaimDelegationComposition {
     private static final Map<ResourceClaimDelegation.Kind, BiConsumer<FrontierWorldState, ActorContainerItemOrder>> PORTS = Map.of(
-            ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT, ShipmentStateSupport::validateOrder);
+            ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT, ShipmentStateSupport::validateOrder,
+            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, ShipmentStateSupport::validateOrder);
     private static final Map<ResourceClaimDelegation.Kind, java.util.function.BiFunction<FrontierWorldState, ActorContainerItemOrder, ActorItemTransferPreparation>> PREPARATIONS = Map.of(
-            ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT, ShipmentStateSupport::prepareTransfer);
+            ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT, ShipmentStateSupport::prepareTransfer,
+            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, ShipmentStateSupport::prepareTransfer);
     static {
         if (!PORTS.keySet().equals(java.util.EnumSet.allOf(ResourceClaimDelegation.Kind.class)) || !PORTS.keySet().equals(PREPARATIONS.keySet()))
             throw new IllegalArgumentException("delegated item authority lacks an exact validation/preparation owner");

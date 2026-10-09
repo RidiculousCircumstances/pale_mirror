@@ -511,7 +511,13 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         return rejected(command, RejectionCode.INVARIANT_FAILURE, status.failureDetail().orElseThrow());
     }
 
+    private RuntimeException failureCause;
+
+    @Override public Optional<RuntimeException> failureCause() { return Optional.ofNullable(failureCause); }
+
     private void quarantine(CauseChain causes, KernelQuarantineReporter.Boundary boundary, RuntimeException error) {
+        if (failureCause != null) return;
+        failureCause = error;
         try {
             kernelQuarantineReporter.report(state, worldId, causes, instant, boundary, error)
                     .ifPresent(event -> commit(causes, instant, List.of(event), Optional.empty()));

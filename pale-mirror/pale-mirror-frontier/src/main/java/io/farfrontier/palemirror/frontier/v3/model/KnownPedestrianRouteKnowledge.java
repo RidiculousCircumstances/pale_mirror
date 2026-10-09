@@ -17,7 +17,7 @@ public final class KnownPedestrianRouteKnowledge {
     private static FrontierBootstrap cachedBootstrap;
     private static Set<BlockPosition> cachedStaticOccupancy = Set.of();
     private record ViewKey(SubjectId settlementId, List<Passage> passages) { }
-    private static Object viewBootstrap, viewOrgans, viewDeltas, viewTopology;
+    private static Object viewBootstrap, viewOrgans, viewDeltas, viewTopology, viewSites;
     private static Object geometryVersion = new Object();
     private static final java.util.Map<ViewKey, KnownPedestrianRouteKnowledge> VIEWS = new java.util.LinkedHashMap<>();
     private static KnownPedestrianRouteKnowledge frontierView;
@@ -107,6 +107,7 @@ public final class KnownPedestrianRouteKnowledge {
         if (frontierView == null) {
             var hard = staticOccupancy(state.bootstrap());
             hard.addAll(FrontierGrayboxPlan.intactOrganOccupancy(List.copyOf(state.hiveColony().addedOrgans().values())));
+            hard.addAll(KnownSiteGeometry.forState(state).obstacles());
             hard.addAll(state.physicalDeltas().keySet());
             frontierView = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, KnownPedestrianGround.forFrontier(state));
         }
@@ -115,7 +116,8 @@ public final class KnownPedestrianRouteKnowledge {
 
     private static void refresh(FrontierWorldState state) {
         if (viewBootstrap != state.bootstrap() || viewOrgans != state.hiveColony().addedOrgans()
-                || viewDeltas != state.physicalDeltas() || viewTopology != state.routeTopology()) {
+                || viewDeltas != state.physicalDeltas() || viewTopology != state.routeTopology()
+                || viewSites != KnownSiteGeometry.forState(state)) {
             VIEWS.clear();
             FIELDS.clear();
             geometryVersion = new Object();
@@ -123,6 +125,7 @@ public final class KnownPedestrianRouteKnowledge {
             frontierView = null;
             viewBootstrap = state.bootstrap(); viewOrgans = state.hiveColony().addedOrgans();
             viewDeltas = state.physicalDeltas(); viewTopology = state.routeTopology();
+            viewSites = KnownSiteGeometry.forState(state);
         }
     }
 
@@ -186,6 +189,7 @@ public final class KnownPedestrianRouteKnowledge {
     private static Set<BlockPosition> occupied(FrontierWorldState state, Settlement settlement,
                                                List<Passage> passages) {
         Set<BlockPosition> hard = staticOccupancy(state.bootstrap());
+        hard.addAll(KnownSiteGeometry.forState(state).obstacles());
         hard.addAll(FrontierGrayboxPlan.intactOrganOccupancy(
                 List.copyOf(state.hiveColony().addedOrgans().values())));
         for (Passage passage : passages) {

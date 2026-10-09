@@ -88,6 +88,11 @@ final class FrontierV3BakeryPhysicalEffect {
             return;
         }
         if (!shape.before()) {
+            if (shape.canAbortUnappliedDelivery()) {
+                FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_delivery_aborted", lease,
+                        FrontierV3CommandSubmission.submit(runtime, "bakery-delivery-abort", lease.id().value(), shape.cancellation()));
+                return;
+            }
             block(level, runtime, lease, job, new BakeryWorkBlock(BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT,
                     containerId, destinationSlot, "minecraft:air", 0));
             return;
@@ -319,6 +324,19 @@ final class FrontierV3BakeryPhysicalEffect {
                 case PROCESSING -> sourceMatches(true) && plain(chest.getItem(destinationSlot), "minecraft:bread", job.outputCount());
                 case DELIVERED -> false;
             };
+        }
+        boolean canAbortUnappliedDelivery() {
+            return phase() == BakeryWorkState.Phase.DEPOT_DELIVERY && !chest.getItem(destinationSlot).isEmpty()
+                    && (exactSource != null ? FrontierV3ExactItemPresentation.exactMatch(hand(), exactSource)
+                        : transfer().unappliedDestinationOccupied());
+        }
+        BakeryHotDeliveryAborted cancellation() {
+            if (!canAbortUnappliedDelivery()) throw new IllegalStateException("cannot cancel a possibly applied delivery");
+            return new BakeryHotDeliveryAborted(job.id(), lease.id(), destinationSlot, sourceEpoch,
+                    new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
+                            lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN), kind, job.outputCount()),
+                    exactSource == null ? Optional.empty() : Optional.of(exactSource.id()),
+                    observedBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED, containerId, destinationSlot, chest.getItem(destinationSlot)));
         }
         boolean exactBefore() {
             return switch (phase()) {

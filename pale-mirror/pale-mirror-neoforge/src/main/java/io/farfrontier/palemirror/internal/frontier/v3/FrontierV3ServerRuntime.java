@@ -204,6 +204,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         cachedCheckpoint = null;
         if (engine.status().kind() == io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.QUARANTINED) {
             status = new FrontierV3RuntimeStatus(FrontierV3RuntimeStatus.Kind.QUARANTINED, engine.status().failureDetail());
+            engine.failureCause().ifPresent(error -> io.farfrontier.palemirror.PaleMirrorMod.LOGGER.error(
+                    "PMV3_QUARANTINE primary command={} detail={}", command.id().value(), status.detail().orElse(""), error));
         }
         return Optional.of(result);
     }
@@ -269,6 +271,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             ticksSinceCheckpoint = Math.addExact(ticksSinceCheckpoint, intervalTicks);
             if (result.status().kind() == io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.QUARANTINED) {
                 status = new FrontierV3RuntimeStatus(FrontierV3RuntimeStatus.Kind.QUARANTINED, result.status().failureDetail());
+                engine.failureCause().ifPresent(error -> io.farfrontier.palemirror.PaleMirrorMod.LOGGER.error(
+                        "PMV3_QUARANTINE primary instant={} detail={}", instant.ticks(), status.detail().orElse(""), error));
                 return Optional.of(result);
             }
             if (checkpointWhenDue && ticksSinceCheckpoint >= checkpointIntervalTicks) {
@@ -326,6 +330,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     }
 
     void quarantine(RuntimeException error) {
+        if (status.kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) return;
         status = FrontierV3RuntimeStatus.quarantined(error);
     }
 }

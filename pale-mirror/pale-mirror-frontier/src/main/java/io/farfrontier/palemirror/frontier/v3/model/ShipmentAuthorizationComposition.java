@@ -5,7 +5,8 @@ import java.util.Map;
 /** Closed declared permission providers. No inspection of a claimant ID to find its family. */
 final class ShipmentAuthorizationComposition {
     private static final Map<ResourceClaimDelegation.Kind, ShipmentAuthorizationPort> PORTS = Map.of(
-            ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT, new GoodsShipmentAuthorization());
+            ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT, new GoodsShipmentAuthorization(),
+            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, new InternalShipmentAuthorization());
     static {
         if (!PORTS.keySet().equals(java.util.EnumSet.allOf(ResourceClaimDelegation.Kind.class)))
             throw new IllegalArgumentException("shipment authorization registry is incomplete");
