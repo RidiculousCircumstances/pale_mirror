@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "live_carrier_journal_admission",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "requiredConflicts": 0, "inventoryConflicts": 0 } },
+      { "view": "actor", "id": "resident:7-1", "expect": { "status": "ok", "life": "ALIVE" } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 98, "y": 64, "z": -18 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:7-1", "expect": { "status": "ok", "physicalAdmission": { "status": "INDEXED" } }, "timeoutMs": 120000 },
+    { "type": "inspect", "view": "performance", "id": "" },
+    { "type": "inspect", "view": "summary", "id": "" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 64, "z": -132 }, "settleMs": 0 },
+    { "type": "wait", "ms": 5000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 2, "view": "actor", "id": "resident:7-1", "expect": { "status": "ok", "physicalAdmission": { "status": "INDEXED" } } },
+    { "after": 4, "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0, "replicaCustodyDiagnostics": 0 } },
+    { "after": 7, "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0, "replicaCustodyDiagnostics": 0 } }
+  ],
+  "frames": []
+}
