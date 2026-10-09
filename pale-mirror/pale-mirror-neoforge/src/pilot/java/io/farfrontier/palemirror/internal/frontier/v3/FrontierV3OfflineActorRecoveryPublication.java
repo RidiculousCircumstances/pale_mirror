@@ -56,7 +56,7 @@ final class FrontierV3OfflineActorRecoveryPublication {
             plan = FrontierV3OfflineActorRecoveryPlan.create(before, actor, absence,
                     ledger(decode(receipt.getByteArray("beforeLedger"))));
         } else {
-            byte[] original = read(ledgerFile);
+            byte[] original = readLedgerImage(ledgerFile);
             var root = decode(original);
             var carriers = ledger(root);
             var before = runtime.decodedState().orElseThrow();
@@ -87,7 +87,7 @@ final class FrontierV3OfflineActorRecoveryPublication {
         if (delta < 0 || checkpoint.revision().value() != Math.addExact(receipt.getLong("revision"), delta)
                 || checkpoint.instant().ticks() != receipt.getLong("instant"))
             throw new IOException("offline recovery canonical head advanced or diverged");
-        byte[] existing = read(ledgerFile), original = receipt.getByteArray("beforeLedger"), after = receipt.getByteArray("afterLedger");
+        byte[] existing = readLedgerImage(ledgerFile), original = receipt.getByteArray("beforeLedger"), after = receipt.getByteArray("afterLedger");
         // Validate the receipt's proposed data independently before publishing it.
         var nextLedger = ledger(decode(after));
         var carrier = plan.recoveryCarrier();
@@ -98,7 +98,7 @@ final class FrontierV3OfflineActorRecoveryPublication {
             throw new IOException("offline recovery receipt changes unrelated custody");
         expectedRoot.put("data", expectedLedger.save(new CompoundTag(), null));
         if (!expectedRoot.equals(decode(after))) throw new IOException("offline recovery receipt changes SavedData metadata");
-        if (Arrays.equals(existing, original)) atomicWrite(ledgerFile, after);
+        if (Arrays.equals(existing, original)) expectedLedger.save(ledgerFile.toFile(), null);
         else if (!Arrays.equals(existing, after)) throw new IOException("offline carrier ledger changed since recovery preparation");
         observer.reached(Boundary.CUSTODY_DURABLE);
         plan.apply(runtime, nextLedger);
@@ -112,6 +112,14 @@ final class FrontierV3OfflineActorRecoveryPublication {
     static FrontierV3AmbientCarrierLedger ledger(CompoundTag root) throws IOException {
         require(root, "data", Tag.TAG_COMPOUND);
         return FrontierV3AmbientCarrierLedger.load(root.getCompound("data"), null);
+    }
+    /** Receipt comparison uses the complete logical image, never a stale checkpoint alone. */
+    static byte[] readLedgerImage(Path path) throws IOException {
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("carrier checkpoint missing");
+        var root = new CompoundTag();
+        root.put("data", FrontierV3AmbientCarrierLedger.readFile(path, null).save(new CompoundTag(), null));
+        NbtUtils.addCurrentDataVersion(root);
+        return encode(root);
     }
     static CompoundTag proofTag(FrontierV3OfflineActorAbsence.Proof proof) {
         var tag = new CompoundTag(); tag.putInt("chunks", proof.entityChunks());

@@ -71,12 +71,12 @@ class FrontierV3ActorCarrierCompositionTest {
                 methodCallBoundaries(FrontierV3SceneExecutor.class, "materializeBodiesForFixture"),
                 "fixture-only translated poses cannot become a production activity-position bypass");
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
-                methodCallBoundaries(FrontierV3ActorFirstAdmissionBoundary.class, "admit"),
+                methodCallBoundaries(FrontierV3BodyInsertionJournal.class, "prepare"),
                 "first insertion is not an activity-owned physical operation");
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
-                methodCallBoundaries(FrontierV3ActorAdoptionAdmission.class, "admit"),
+                methodCallBoundaries(FrontierV3BodyInsertionJournal.class, "consume"),
                 "reconstruction is not an activity-owned physical operation");
-        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName(), FrontierV3BodyInsertionJournal.class.getName()),
                 methodCallBoundaries(FrontierV3AmbientCarrierLedger.class, "beginBodyResidence"),
                 "only the common body owner may start a new loaded residency; an activity cannot reset unload proof");
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),

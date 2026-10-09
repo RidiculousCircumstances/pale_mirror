@@ -23,25 +23,24 @@ class FrontierV3ActorAdoptionAdmissionTest {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); assertTrue(ledger.fence(OLD, 2L, 2L)); return ledger;
     }
     private FrontierV3AmbientCarrierLedger read(Path file) {
-        try { return FrontierV3AmbientCarrierLedger.load(NbtIo.readCompressed(file,
-                NbtAccounter.unlimitedHeap()).getCompound("data"), null); }
-        catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
+        try { return FrontierV3AmbientCarrierLedger.readFile(file, null); }
+        catch (java.io.UncheckedIOException failure) { throw failure; }
     }
     @Test void exactTransferIsOnDiskBeforePhysicalEffect() {
         var ledger = ledger(); var file = directory.resolve("ledger.dat"); var effects = new AtomicInteger();
-        assertTrue(FrontierV3ActorAdoptionAdmission.admit(ledger, FrontierV3ActorAdoptionFixture.binding(LIVE), () -> ledger.save(file.toFile(), null), () -> {
+        assertTrue(FrontierV3AdoptionCrashFixture.admit(ledger, FrontierV3ActorAdoptionFixture.binding(LIVE), () -> ledger.save(file.toFile(), null), () -> {
             var stored = read(file);
             assertFalse(stored.hasCarrier(OLD.actorId()));
             assertEquals(LIVE, stored.pendingAdoption(OLD.actorId()).orElseThrow().admitted());
             effects.incrementAndGet(); return true;
         }));
         assertEquals(1, effects.get()); assertTrue(read(file).pendingAdoption(OLD.actorId()).isPresent());
-        assertFalse(FrontierV3ActorAdoptionAdmission.admit(ledger, FrontierV3ActorAdoptionFixture.binding(LIVE),
+        assertFalse(FrontierV3AdoptionCrashFixture.admit(ledger, FrontierV3ActorAdoptionFixture.binding(LIVE),
                 () -> fail("must not republish"), () -> { fail("must not duplicate"); return true; }));
     }
     @Test void explicitFailedCreationRestoresAndPersistsPredecessor() {
         var ledger = ledger(); var file = directory.resolve("ledger.dat"); var saves = new AtomicInteger();
-        assertFalse(FrontierV3ActorAdoptionAdmission.admit(ledger, FrontierV3ActorAdoptionFixture.binding(LIVE), () -> {
+        assertFalse(FrontierV3AdoptionCrashFixture.admit(ledger, FrontierV3ActorAdoptionFixture.binding(LIVE), () -> {
             ledger.save(file.toFile(), null); saves.incrementAndGet();
         }, () -> false));
         assertEquals(2, saves.get());
@@ -50,7 +49,7 @@ class FrontierV3ActorAdoptionAdmissionTest {
     }
     @Test void failedIntentPublicationNeverInvokesPhysicalEffect() {
         var ledger = ledger(); var file = directory.resolve("ledger.dat"); ledger.save(file.toFile(), null);
-        assertThrows(IllegalStateException.class, () -> FrontierV3ActorAdoptionAdmission.admit(ledger, FrontierV3ActorAdoptionFixture.binding(LIVE),
+        assertThrows(IllegalStateException.class, () -> FrontierV3AdoptionCrashFixture.admit(ledger, FrontierV3ActorAdoptionFixture.binding(LIVE),
                 () -> { throw new IllegalStateException("injected publication failure"); },
                 () -> { fail("effect after failed publication"); return true; }));
         assertTrue(read(file).matchesCarrier(OLD, 2L, 2L));
@@ -60,7 +59,7 @@ class FrontierV3ActorAdoptionAdmissionTest {
         for (boolean unknownEffect : new boolean[]{true, false}) {
             var ledger = ledger(); var file = directory.resolve("ledger-" + unknownEffect + ".dat");
             var writes = new AtomicInteger();
-            assertThrows(IllegalStateException.class, () -> FrontierV3ActorAdoptionAdmission.admit(ledger, FrontierV3ActorAdoptionFixture.binding(LIVE), () -> {
+            assertThrows(IllegalStateException.class, () -> FrontierV3AdoptionCrashFixture.admit(ledger, FrontierV3ActorAdoptionFixture.binding(LIVE), () -> {
                 if (writes.incrementAndGet() > 1) throw new IllegalStateException("rollback publication failure");
                 ledger.save(file.toFile(), null);
             }, () -> {

@@ -69,6 +69,61 @@ import java.util.Set;
 public final class FrontierV3AmbientActorGameTests {
     private FrontierV3AmbientActorGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 100)
+    public static void commonBodyWaitsForDurableJournalWithoutBlockingItsHost(GameTestHelper helper) {
+        var level = helper.getLevel(); var actor = new SubjectId("resident:1-1");
+        var config = configurationAt(helper, new WorldId("frontier:async-body-journal"), 91L, actor);
+        var store = new EphemeralStore(); var runtime = FrontierV3ServerRuntime.start(config, store, 10_000);
+        initializeAdmission(level, config, store);
+        var feet = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, feet);
+        var lease = AmbientActorProcess.nextLease(state(runtime), actor, runtime.checkpointImage().orElseThrow().instant());
+        FrontierV3CommandSubmission.submit(runtime, "async-body-prepare", actor.value(), new AmbientLeasePrepared(lease));
+        publishProjectionBeforeManagedJoin(helper, level, runtime);
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, state(runtime), actor, bodyAt(feet)),
+                FrontierV3AmbientActorExecutor.Result.DEFERRED, "submission must yield even if disk is fast");
+        helper.assertTrue(level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), actor)) == null,
+                "no physical effect can precede its durable receipt");
+        var ticket = FrontierV3BodyInsertionJournal.get(level, config.worldId(), actor);
+        helper.assertTrue(ticket != null, "retain exact unstarted request, not an inserted body");
+        helper.startSequence().thenWaitUntil(() -> helper.assertTrue(ticket.ready(), "waiting for actual disk receipt"))
+                .thenExecute(() -> {
+                    helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, state(runtime), actor, bodyAt(feet)),
+                            FrontierV3AmbientActorExecutor.Result.APPLIED, "durable current request inserts exactly one body");
+                    var body = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), actor));
+                    helper.assertTrue(body != null && FrontierV3BodyInsertionJournal.get(level, config.worldId(), actor) == null,
+                            "the insertion attempt consumes its ticket");
+                    helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, state(runtime), actor, bodyAt(feet)),
+                            FrontierV3AmbientActorExecutor.Result.CURRENT, "retry cannot duplicate an indexed body");
+                    body.discard(); FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown();
+                }).thenSucceed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void unstartedJournalRequestCanReleaseColdCustodyWithoutInventingAnUnload(GameTestHelper helper) {
+        var level = helper.getLevel(); var actor = new SubjectId("resident:1-1");
+        var config = configurationAt(helper, new WorldId("frontier:async-body-cancel"), 91L, actor);
+        var store = new EphemeralStore(); var runtime = FrontierV3ServerRuntime.start(config, store, 10_000);
+        initializeAdmission(level, config, store);
+        var feet = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, feet);
+        var lease = AmbientActorProcess.nextLease(state(runtime), actor, runtime.checkpointImage().orElseThrow().instant());
+        FrontierV3CommandSubmission.submit(runtime, "async-cancel-prepare", actor.value(), new AmbientLeasePrepared(lease));
+        publishProjectionBeforeManagedJoin(helper, level, runtime);
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, state(runtime), actor, bodyAt(feet)),
+                FrontierV3AmbientActorExecutor.Result.DEFERRED, "request is known not to have attempted insertion");
+        helper.assertTrue(FrontierV3ActorBodyCustody.releaseUnstartedAbsence(level, runtime, actor),
+                "positive unstarted ticket permits the ordinary canonical release");
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, config.worldId());
+        helper.assertTrue(FrontierV3BodyInsertionJournal.get(level, config.worldId(), actor) == null
+                        && level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), actor)) == null,
+                "a late disk completion cannot resurrect the cancelled request");
+        helper.assertValueEqual(ledger.firstAdmission(actor).orElseThrow().phase(), FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED,
+                "cancelled before-effect request preserves unused creation permission");
+        helper.assertFalse(ledger.hasBodyDeparture(actor), "no fabricated native departure receipt");
+        FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void finalAmbientUnloadRetainsDamageAndWaitsForSavedAbsence(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -81,7 +136,7 @@ public final class FrontierV3AmbientActorGameTests {
         var lease = AmbientActorProcess.nextLease(state(runtime), resident, runtime.checkpointImage().orElseThrow().instant());
         FrontierV3CommandSubmission.submit(runtime, "ambient-unload-prepare", resident.value(), new AmbientLeasePrepared(lease));
         publishProjectionBeforeManagedJoin(helper, level, runtime);
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident, bodyAt(origin)),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, state(runtime), resident, bodyAt(origin)),
                 FrontierV3AmbientActorExecutor.Result.APPLIED, "actual managed fixture body must enter Minecraft");
         helper.runAfterDelay(1L, () -> {
             var body = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), resident));
@@ -169,7 +224,7 @@ public final class FrontierV3AmbientActorGameTests {
                 .status().equals("CARRIER_MISSING"), "unused permit must not be diagnosed as missing solely from revision2");
         var feet = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, feet);
         publishProjectionBeforeManagedJoin(helper, level, runtime);
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, state(runtime), actor, bodyAt(feet)),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, runtime, state(runtime), actor, bodyAt(feet)),
                 FrontierV3AmbientActorExecutor.Result.APPLIED, "second lease must create the first body through the runtime-aware boundary");
         helper.assertValueEqual(ledger.firstAdmission(actor).orElseThrow().phase(), FrontierV3ActorFirstAdmission.Phase.PENDING,
                 "insertion is not an entity-save acknowledgement");
@@ -230,7 +285,7 @@ public final class FrontierV3AmbientActorGameTests {
         FrontierV3CommandSubmission.submit(runtime, "born-resident-ambient-prepare", actor.value(), new AmbientLeasePrepared(lease));
         var feet = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, feet);
         publishProjectionBeforeManagedJoin(helper, level, runtime);
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, state(runtime), actor, bodyAt(feet)),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, runtime, state(runtime), actor, bodyAt(feet)),
                 FrontierV3AmbientActorExecutor.Result.APPLIED, "the newly born resident must enter Minecraft once");
         helper.assertValueEqual(ledger.firstAdmission(actor).orElseThrow().phase(), FrontierV3ActorFirstAdmission.Phase.PENDING,
                 "insertion must keep the save acknowledgement pending");
@@ -289,7 +344,7 @@ public final class FrontierV3AmbientActorGameTests {
         FrontierV3CommandSubmission.submit(runtime, "born-bioform-ambient-prepare", actor.value(), new AmbientLeasePrepared(lease));
         var feet = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, feet);
         publishProjectionBeforeManagedJoin(helper, level, runtime);
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, state(runtime), actor, bodyAt(feet)),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, runtime, state(runtime), actor, bodyAt(feet)),
                 FrontierV3AmbientActorExecutor.Result.APPLIED, "the newly grown bioform must enter Minecraft once");
         helper.assertValueEqual(ledger.firstAdmission(actor).orElseThrow().phase(), FrontierV3ActorFirstAdmission.Phase.PENDING,
                 "insertion must wait for actual entity-save acknowledgement");
@@ -332,7 +387,7 @@ public final class FrontierV3AmbientActorGameTests {
         ledger.persist(level, world);
         var feet = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, feet);
         publishProjectionBeforeManagedJoin(helper, level, runtime);
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, state(runtime), actor, bodyAt(feet)),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, runtime, state(runtime), actor, bodyAt(feet)),
                 FrontierV3AmbientActorExecutor.Result.APPLIED, "ordinary ambient owner must consume the proof-backed permission");
         var pending = ledger.firstAdmission(actor).orElseThrow();
         helper.assertValueEqual(pending.phase(), FrontierV3ActorFirstAdmission.Phase.PENDING,
@@ -374,7 +429,7 @@ public final class FrontierV3AmbientActorGameTests {
         FrontierV3CommandSubmission.submit(runtime, "first-recovery-prepare", actor.value(), new AmbientLeasePrepared(lease));
         prepareFloor(level, feet);
         publishProjectionBeforeManagedJoin(helper, level, runtime);
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, state(runtime), actor, bodyAt(feet)),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, runtime, state(runtime), actor, bodyAt(feet)),
                 FrontierV3AmbientActorExecutor.Result.APPLIED, "first body must be created once");
         helper.runAfterDelay(1L, () -> {
             var firstBody = (net.minecraft.world.entity.Mob) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), actor));
@@ -395,11 +450,10 @@ public final class FrontierV3AmbientActorGameTests {
             final FrontierV3AmbientCarrierLedger restored;
             try {
                 var file = FrontierV3AmbientCarrierLedger.storageFile(level, config.worldId());
-                restored = FrontierV3AmbientCarrierLedger.load(net.minecraft.nbt.NbtIo.readCompressed(file,
-                        net.minecraft.nbt.NbtAccounter.unlimitedHeap()).getCompound("data"), level.registryAccess());
+                restored = FrontierV3AmbientCarrierLedger.readFile(file, level.registryAccess());
                 var name = file.getFileName().toString();
                 level.getDataStorage().set(name.substring(0, name.length() - ".dat".length()), restored);
-            } catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
+            } catch (java.io.UncheckedIOException failure) { throw failure; }
             firstBody.discard();
             helper.runAfterDelay(1L, () -> {
                 helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, recovered, state(recovered), actor, bodyAt(feet)),
@@ -479,7 +533,7 @@ public final class FrontierV3AmbientActorGameTests {
         helper.assertValueEqual(FrontierV3ActorBodyController.materialize(level, state, rejectedRequest),
                 FrontierV3ActorBodyController.Result.CONFLICT, "wrong preprojected hand cannot be silently overwritten");
         helper.assertTrue(level.getEntity(declaration.entityId()) == null, "bad inventory cannot enter the native index");
-        helper.assertValueEqual(FrontierV3ActorBodyController.materialize(level, state, request),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.body(level, state, request),
                 FrontierV3ActorBodyController.Result.APPLIED, "only the common boundary creates the body");
         var body = (net.minecraft.world.entity.Mob) level.getEntity(declaration.entityId());
         helper.assertTrue(body != null, "the common body is indexed");
@@ -569,7 +623,7 @@ public final class FrontierV3AmbientActorGameTests {
         var lease = AmbientActorProcess.nextLease(state(runtime), resident, runtime.checkpointImage().orElseThrow().instant());
         FrontierV3CommandSubmission.submit(runtime, "reservation-carrier-prepare", resident.value(), new AmbientLeasePrepared(lease));
         publishProjectionBeforeManagedJoin(helper, level, runtime);
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident, bodyAt(origin)),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, state(runtime), resident, bodyAt(origin)),
                 FrontierV3AmbientActorExecutor.Result.APPLIED, "the test must create its actual managed body");
         helper.runAfterDelay(1L, () -> {
             var body = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), resident));
@@ -608,11 +662,10 @@ public final class FrontierV3AmbientActorGameTests {
             var ledger = FrontierV3AmbientCarrierLedger.get(level, state(runtime).bootstrap().worldId());
             helper.assertFalse(ledger.hasCarrier(resident), "a loaded body cannot be replaced by an inactive carrier");
             try {
-                var saved = net.minecraft.nbt.NbtIo.readCompressed(FrontierV3AmbientCarrierLedger.storageFile(level,
-                        state(runtime).bootstrap().worldId()), net.minecraft.nbt.NbtAccounter.unlimitedHeap());
-                helper.assertTrue(FrontierV3AmbientCarrierLedger.load(saved.getCompound("data"), level.registryAccess())
+                helper.assertTrue(FrontierV3AmbientCarrierLedger.readFile(FrontierV3AmbientCarrierLedger.storageFile(level,
+                        state(runtime).bootstrap().worldId()), level.registryAccess())
                         .firstAdmission(resident).isPresent(), "the common body history must remain durable");
-            } catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
+            } catch (java.io.UncheckedIOException failure) { throw failure; }
             helper.assertTrue(level.getEntity(body.getUUID()) == body && !body.isRemoved(), "scope closure retains the exact loaded object");
             helper.assertValueEqual(body.position(), pose, "scope closure cannot teleport");
             helper.assertValueEqual(body.getPersistentData(), metadata, "scope closure cannot retag the body");

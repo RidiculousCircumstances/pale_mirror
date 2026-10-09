@@ -39,7 +39,8 @@ class FrontierV3OfflineFirstAdmissionRecoveryPublicationTest {
             var original = pending(state);
             var root = new CompoundTag(); root.putInt("DataVersion", 3955);
             root.put("data", original.save(new CompoundTag(), null));
-            NbtIo.writeCompressed(root, ledgerFile);
+            net.minecraft.SharedConstants.tryDetectVersion();
+            original.save(ledgerFile.toFile(), null);
             var absence = proof(world, state, "first-region-proof");
             var config = FrontierV3OfflineActorRecoveryPlanTest.configuration(state);
             var runtime = FrontierV3ServerRuntime.start(config,
@@ -50,8 +51,7 @@ class FrontierV3OfflineFirstAdmissionRecoveryPublicationTest {
                     runtime, absence, ACTOR, ledgerFile, true, reached -> {
                         if (reached == boundary) throw new IOException("simulated crash after " + reached);
                     }));
-            var afterCrash = FrontierV3OfflineActorRecoveryPublication.ledger(NbtIo.readCompressed(ledgerFile,
-                    NbtAccounter.unlimitedHeap()));
+            var afterCrash = FrontierV3AmbientCarrierLedger.readFile(ledgerFile, null);
             assertEquals(boundary == FrontierV3OfflineFirstAdmissionRecoveryPublication.Boundary.RECEIPT_DURABLE
                             ? FrontierV3ActorFirstAdmission.Phase.PENDING : FrontierV3ActorFirstAdmission.Phase.PROVEN_ABSENT,
                     afterCrash.firstAdmission(ACTOR).orElseThrow().phase());
@@ -62,8 +62,7 @@ class FrontierV3OfflineFirstAdmissionRecoveryPublicationTest {
             assertEquals(head, recovered.checkpointImage().orElseThrow().revision());
             FrontierV3OfflineFirstAdmissionRecoveryPublication.publish(recovered, absence, ACTOR, ledgerFile, true);
             var published = Files.readAllBytes(ledgerFile);
-            var rearmed = FrontierV3OfflineActorRecoveryPublication.ledger(NbtIo.readCompressed(ledgerFile,
-                    NbtAccounter.unlimitedHeap()));
+            var rearmed = FrontierV3AmbientCarrierLedger.readFile(ledgerFile, null);
             var permit = rearmed.firstAdmission(ACTOR).orElseThrow();
             assertEquals(FrontierV3ActorFirstAdmission.Phase.PROVEN_ABSENT, permit.phase());
             assertEquals(permit.identity().entityId(), absence.actorUuid());

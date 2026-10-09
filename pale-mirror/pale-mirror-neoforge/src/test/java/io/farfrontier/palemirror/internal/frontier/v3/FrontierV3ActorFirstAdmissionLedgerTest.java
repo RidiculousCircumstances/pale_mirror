@@ -28,13 +28,13 @@ class FrontierV3ActorFirstAdmissionLedgerTest {
             ledger.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(
                     new FrontierV3ActorFirstAdmission.Identity(body.actorId(), kind, body.entityId())));
             var persisted = new java.util.concurrent.atomic.AtomicReference<CompoundTag>();
-            assertThrows(IllegalStateException.class, () -> FrontierV3ActorFirstAdmissionBoundary.admit(
+            assertThrows(IllegalStateException.class, () -> FrontierV3FirstAdmissionCrashFixture.admit(
                     ledger, target, () -> persisted.set(ledger.save(new CompoundTag(), null)),
                     () -> { throw new IllegalStateException("crash with unknown insertion outcome"); }));
             var recovered = FrontierV3AmbientCarrierLedger.load(persisted.get(), null);
             var pending = recovered.firstAdmission(body.actorId()).orElseThrow();
             assertEquals(FrontierV3ActorFirstAdmission.Phase.PENDING, pending.phase());
-            assertFalse(FrontierV3ActorFirstAdmissionBoundary.admit(recovered, target,
+            assertFalse(FrontierV3FirstAdmissionCrashFixture.admit(recovered, target,
                     () -> fail("restart must not reissue creation"),
                     () -> { fail("local absence must not produce a duplicate"); return true; }));
             var foreign = FrontierV3ActorOwnerBinding.body(body.liveBody(owner, 0L, 2L));
@@ -92,7 +92,7 @@ class FrontierV3ActorFirstAdmissionLedgerTest {
                 ledger.firstAdmission(BODY.actorId()).orElseThrow(), "b".repeat(64)));
         ledger = reload(ledger);
         var exact = ledger;
-        assertFalse(FrontierV3ActorFirstAdmissionBoundary.admit(exact, TARGET,
+        assertFalse(FrontierV3FirstAdmissionCrashFixture.admit(exact, TARGET,
                 () -> assertNotNull(reload(exact).firstAdmission(BODY.actorId()).orElseThrow()), () -> false));
         assertEquals(FrontierV3ActorFirstAdmission.Phase.PENDING,
                 reload(exact).firstAdmission(BODY.actorId()).orElseThrow().phase());
@@ -111,25 +111,25 @@ class FrontierV3ActorFirstAdmissionLedgerTest {
     @Test void creationRunsOnlyAfterPersistenceAndFalseRestoresPermitDurably() {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); ledger.registerFirstAdmission(permit());
         var sequence = new java.util.ArrayList<String>();
-        assertFalse(FrontierV3ActorFirstAdmissionBoundary.admit(ledger, TARGET,
+        assertFalse(FrontierV3FirstAdmissionCrashFixture.admit(ledger, TARGET,
                 () -> sequence.add(reload(ledger).firstAdmission(BODY.actorId()).orElseThrow().phase().name()),
                 () -> { sequence.add("explicit-no-insertion"); return false; }));
         assertEquals(java.util.List.of("PENDING", "explicit-no-insertion", "NEVER_CREATED"), sequence);
         sequence.clear();
-        assertTrue(FrontierV3ActorFirstAdmissionBoundary.admit(ledger, TARGET,
+        assertTrue(FrontierV3FirstAdmissionCrashFixture.admit(ledger, TARGET,
                 () -> sequence.add("persisted"), () -> { assertEquals(java.util.List.of("persisted"), sequence); return true; }));
         assertEquals(FrontierV3ActorFirstAdmission.Phase.PENDING, ledger.firstAdmission(BODY.actorId()).orElseThrow().phase());
     }
     @Test void failedPersistencePreventsEffectAndThrowingEffectRetainsAmbiguity() {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); ledger.registerFirstAdmission(permit());
-        assertThrows(IllegalStateException.class, () -> FrontierV3ActorFirstAdmissionBoundary.admit(ledger, TARGET,
+        assertThrows(IllegalStateException.class, () -> FrontierV3FirstAdmissionCrashFixture.admit(ledger, TARGET,
                 () -> { throw new IllegalStateException("write failed"); }, () -> { fail("no effect before durable intent"); return true; }));
         assertEquals(FrontierV3ActorFirstAdmission.Phase.PENDING, ledger.firstAdmission(BODY.actorId()).orElseThrow().phase());
         var another = FrontierV3AmbientCarrierLedger.emptyForTest(); another.registerFirstAdmission(permit());
-        assertThrows(IllegalStateException.class, () -> FrontierV3ActorFirstAdmissionBoundary.admit(another, TARGET,
+        assertThrows(IllegalStateException.class, () -> FrontierV3FirstAdmissionCrashFixture.admit(another, TARGET,
                 () -> {}, () -> { throw new IllegalStateException("unknown insertion result"); }));
         assertEquals(FrontierV3ActorFirstAdmission.Phase.PENDING, reload(another).firstAdmission(BODY.actorId()).orElseThrow().phase());
-        assertFalse(FrontierV3ActorFirstAdmissionBoundary.admit(another, TARGET,
+        assertFalse(FrontierV3FirstAdmissionCrashFixture.admit(another, TARGET,
                 () -> fail("cannot retry ambiguous insertion"), () -> { fail("cannot create another body"); return true; }));
     }
     @Test void missingHistoryIsNotAPermitAndSavedHistoryNeverBecomesFresh() {

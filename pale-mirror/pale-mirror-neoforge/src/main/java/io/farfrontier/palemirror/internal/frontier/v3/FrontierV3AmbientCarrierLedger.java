@@ -25,8 +25,12 @@ import java.util.Map;
 /** Bounded inactive-body evidence; canonical actors and rosters remain domain-owned. */
 final class FrontierV3AmbientCarrierLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_ambient_carriers";
-    private static final int FORMAT = 10, MAX_CARRIERS = 4_096;
+    private static final int FORMAT = 11, MAX_CARRIERS = 4_096;
     private final Map<SubjectId, Carrier> carriers;
+    private final java.util.Set<SubjectId> dirtyActors = new java.util.TreeSet<>();
+    private FrontierV3JournalStore journal;
+    private java.nio.file.Path journalPath;
+    private void markDirty(SubjectId actor) { dirtyActors.add(actor); setDirty(); }
     private final Map<SubjectId, FrontierV3ActorAdoption> pendingAdoptions = new LinkedHashMap<>();
     /** Separately bounded lifetime markers; successful save never makes an actor fresh again. */
     private final Map<SubjectId, FrontierV3ActorFirstAdmission> firstAdmissions = new LinkedHashMap<>();
@@ -57,7 +61,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
                 || !bodyResidences.containsKey(live.actorId()) && bodyResidences.size() >= MAX_CARRIERS)
             throw new IllegalArgumentException("body residence requires an exact admitted lifetime with no outstanding departure");
         long next = Math.addExact(bodyResidences.getOrDefault(live.actorId(), 0L), 1L);
-        bodyResidences.put(live.actorId(), next); setDirty(); return next;
+        bodyResidences.put(live.actorId(), next); markDirty(live.actorId()); return next;
     }
     boolean currentBodyResidence(SubjectId actor, long generation) {
         return generation > 0L && java.util.Objects.equals(bodyResidences.get(actor), generation);
@@ -80,14 +84,14 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         var previous = bodyDepartures.get(actor);
         if (previous != null) {
             if (!previous.equals(receipt) && bodyDepartureConflicts.putIfAbsent(actor, receipt) == null) {
-                savedBodyDepartures.remove(actor); setDirty();
+                savedBodyDepartures.remove(actor); markDirty(actor);
             }
             // A repeated callback cannot turn a returned/read body into a new departure.
             return previous.equals(receipt) && !hasDepartureConflict(actor);
         }
         if (bodyDepartures.size() >= MAX_CARRIERS || bodyDepartures.values().stream().anyMatch(value ->
                 value.identity().entityId().equals(receipt.identity().entityId()))) return false;
-        bodyDepartures.put(actor, receipt); setDirty(); return true;
+        bodyDepartures.put(actor, receipt); markDirty(actor); return true;
     }
     boolean savedBodyDeparture(FrontierV3ActorBodyDeparture receipt) {
         var actor = receipt.identity().actorId();
@@ -97,7 +101,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     boolean confirmSavedBodyDeparture(FrontierV3ActorBodyDeparture receipt) {
         var actor = receipt.identity().actorId();
         if (!receipt.equals(bodyDepartures.get(actor)) || returnReads.contains(actor) || hasDepartureConflict(actor)) return false;
-        if (savedBodyDepartures.putIfAbsent(actor, receipt.residenceGeneration()) == null) setDirty();
+        if (savedBodyDepartures.putIfAbsent(actor, receipt.residenceGeneration()) == null) markDirty(actor);
         return true;
     }
 
@@ -125,7 +129,9 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
             savedBodyDepartures.clear(); savedBodyDepartures.putAll(previousBodies);
             savedDepartures.clear(); savedDepartures.addAll(previousScenes);
             savedAmbientDepartures.clear(); savedAmbientDepartures.addAll(previousAmbient);
-            setDirty();
+            bodies.forEach(value -> markDirty(value.identity().actorId()));
+            scenes.forEach(value -> markDirty(value.carrier().identity().actorId()));
+            ambient.forEach(value -> markDirty(value.carrier().identity().actorId()));
             throw failedPublication;
         }
     }
@@ -139,7 +145,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     boolean markBodyReturnRead(FrontierV3ActorBodyDeparture receipt) {
         var actor = receipt.identity().actorId();
         if (!receipt.equals(bodyDepartures.get(actor))) return false;
-        if (returnReads.add(actor)) { savedBodyDepartures.remove(actor); setDirty(); }
+        if (returnReads.add(actor)) { savedBodyDepartures.remove(actor); markDirty(actor); }
         return true;
     }
     java.util.Optional<FrontierV3ActorFirstAdmission> firstAdmission(SubjectId actor) {
@@ -193,7 +199,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         }
         if (!additions.isEmpty()) {
             firstAdmissions.putAll(additions);
-            setDirty();
+            additions.keySet().forEach(this::markDirty);
         }
         return true;
     }
@@ -206,7 +212,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
                 || departures.containsKey(actor) || ambientDepartures.containsKey(actor) || hasDepartureConflict(actor)) return false;
         final FrontierV3ActorFirstAdmission pending;
         try { pending = permit.begin(target); } catch (IllegalArgumentException invalid) { return false; }
-        firstAdmissions.put(actor, pending); setDirty(); return true;
+        firstAdmissions.put(actor, pending); markDirty(actor); return true;
     }
     /** Offline publisher only; absence proof and this transition must share one durable publication. */
     boolean rearmFirstAdmissionAfterAbsence(FrontierV3ActorFirstAdmission expected, String receipt) {
@@ -216,7 +222,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
                 || carriers.containsKey(actor) || pendingAdoptions.containsKey(actor)
                 || departures.containsKey(actor) || ambientDepartures.containsKey(actor) || hasDepartureConflict(actor)) return false;
         firstAdmissions.put(actor, expected.rearmAfterProvenAbsence(expected.attempt().orElseThrow(), receipt));
-        setDirty(); return true;
+        markDirty(actor); return true;
     }
     /** Startup reconciliation only: canonical birth was not published and no creation ever began. */
     boolean retireUnbornPermission(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState recovered,
@@ -235,7 +241,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         }
         if (actors.isEmpty()) return true;
         actors.forEach(firstAdmissions::remove);
-        setDirty();
+        actors.forEach(this::markDirty);
         return true;
     }
     private boolean canRetireUnbornPermission(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState recovered,
@@ -255,7 +261,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
                 || carriers.containsKey(actor) || pendingAdoptions.containsKey(actor)
                 || departures.containsKey(actor) || ambientDepartures.containsKey(actor) || hasDepartureConflict(actor)) return false;
         var next = expected.rejectedBeforeCreation(expected.attempt().orElseThrow());
-        if (!next.equals(expected)) { firstAdmissions.put(actor, next); setDirty(); }
+        if (!next.equals(expected)) { firstAdmissions.put(actor, next); markDirty(actor); }
         return true;
     }
     boolean acknowledgeFirstAdmission(FrontierV3ActorFirstAdmission expected, FrontierV3ActorOwnerBinding saved) {
@@ -263,49 +269,100 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         if (expected.phase() != FrontierV3ActorFirstAdmission.Phase.PENDING || !expected.equals(firstAdmissions.get(actor))
                 || !expected.attempt().orElseThrow().equals(saved)
                 || carriers.containsKey(actor) || hasDepartureConflict(actor)) return false;
-        firstAdmissions.put(actor, expected.saved(saved)); setDirty(); return true;
+        firstAdmissions.put(actor, expected.saved(saved)); markDirty(actor); return true;
     }
-    /**
-     * Save the same Minecraft-owned SavedData atomically. This protects the file
-     * publication itself; it does not claim atomicity with canonical WAL or entity
-     * region saves. In particular callers must not flush a mixed ledger early and
-     * thereby durably erase an adoption whose new body has not been saved yet.
-     */
+    /** Mandatory durable boundaries append only exact changed actors, never a whole-world image. */
     @Override public void save(java.io.File file, HolderLookup.Provider registries) {
-        if (!isDirty()) return;
-        java.nio.file.Path target = file.toPath();
-        java.nio.file.Path staged = null;
         try {
-            var root = new CompoundTag();
-            root.put("data", save(new CompoundTag(), registries));
-            net.minecraft.nbt.NbtUtils.addCurrentDataVersion(root);
-            java.nio.file.Files.createDirectories(target.getParent());
-            staged = java.nio.file.Files.createTempFile(target.getParent(), ".ambient-carriers-", ".tmp");
-            net.minecraft.nbt.NbtIo.writeCompressed(root, staged);
-            try (var channel = java.nio.channels.FileChannel.open(staged, java.nio.file.StandardOpenOption.WRITE)) {
-                channel.force(true);
+            if (journal != null) journal.checkHealthy();
+            if (!isDirty()) {
+                if (journal != null) journal.append(Map.of()); // A synchronous boundary includes earlier queued writes.
+                return;
             }
-            java.nio.file.Files.move(staged, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            staged = null;
-            try (var directory = java.nio.channels.FileChannel.open(target.getParent(), java.nio.file.StandardOpenOption.READ)) {
-                directory.force(true);
+            var path = file.toPath().toAbsolutePath().normalize();
+            if (journal == null) { journal = FrontierV3JournalStore.open(path); journalPath = path; }
+            else if (!journalPath.equals(path)) throw new IllegalArgumentException("carrier ledger changed storage target");
+            var updates = new java.util.TreeMap<String, byte[]>();
+            for (var actor : dirtyActors) {
+                var row = actorImage(actor);
+                updates.put(actor.value(), row == null ? null : FrontierV3CarrierJournalImage.encode(row));
             }
-            setDirty(false);
+            journal.append(updates);
+            dirtyActors.clear(); setDirty(false);
         } catch (java.io.IOException failure) {
-            // Do not turn a failed write into a clean in-memory ledger. Propagate
-            // persistence failure so the owning save boundary cannot claim success.
-            throw new java.io.UncheckedIOException("unable to atomically persist ambient carrier ledger", failure);
-        } finally {
-            if (staged != null) {
-                try { java.nio.file.Files.deleteIfExists(staged); }
-                catch (java.io.IOException cleanupFailure) { /* original failure remains authoritative */ }
-            }
+            throw new java.io.UncheckedIOException("unable to persist carrier journal", failure);
         }
     }
+    java.util.concurrent.CompletableFuture<Long> persistAsync(ServerLevel level, WorldId worldId) {
+        if (get(level, worldId) != this) throw new IllegalArgumentException("foreign actor carrier ledger");
+        try {
+            var path = storageFile(level, worldId).toAbsolutePath().normalize();
+            if (journal == null) { journal = FrontierV3JournalStore.open(path); journalPath = path; }
+            else if (!journalPath.equals(path)) throw new IllegalArgumentException("carrier ledger changed storage target");
+            var updates = new java.util.TreeMap<String, byte[]>();
+            for (var actor : dirtyActors) {
+                var row = actorImage(actor);
+                updates.put(actor.value(), row == null ? null : FrontierV3CarrierJournalImage.encode(row));
+            }
+            var receipt = journal.appendAsync(updates);
+            dirtyActors.clear(); setDirty(false); // Submitted is not durable: the caller retains the exact receipt.
+            return receipt;
+        } catch (java.io.IOException failure) {
+            throw new java.io.UncheckedIOException("unable to admit carrier journal write", failure);
+        }
+    }
+    static FrontierV3AmbientCarrierLedger readFile(java.nio.file.Path path, HolderLookup.Provider registries) {
+        try {
+            var store = FrontierV3JournalStore.open(path);
+            var ledger = load(FrontierV3CarrierJournalImage.merge(store.image()), registries);
+            ledger.journal = store; ledger.journalPath = path.toAbsolutePath().normalize();
+            return ledger;
+        } catch (java.io.IOException failure) {
+            throw new java.io.UncheckedIOException("unable to recover carrier journal", failure);
+        }
+    }
+    void finishCheckpoints() {
+        if (journal == null) return;
+        try { journal.append(Map.of()); journal.awaitCheckpoint(); }
+        catch (java.io.IOException failure) { throw new java.io.UncheckedIOException("carrier checkpoint shutdown failed", failure); }
+    }
+    String journalDiagnostic() {
+        if (journal == null) return "{\"attached\":false}";
+        var pressure = journal.pressure();
+        return "{\"attached\":true,\"durableSequence\":" + pressure.durableSequence()
+                + ",\"checkpointSequence\":" + pressure.checkpointSequence()
+                + ",\"queuedWrites\":" + pressure.queuedWrites() + ",\"queuedBytes\":" + pressure.queuedBytes()
+                + ",\"retainedBytes\":" + pressure.retainedBytes() + ",\"forcedGroups\":" + pressure.forcedGroups()
+                + ",\"appendedBytes\":" + pressure.appendedBytes() + "}";
+    }
     static FrontierV3AmbientCarrierLedger get(ServerLevel level, WorldId worldId) {
-        return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3AmbientCarrierLedger::new, FrontierV3AmbientCarrierLedger::load,
-                DataFixTypes.SAVED_DATA_COMMAND_STORAGE), fileName(worldId));
+        var path = storageFile(level, worldId);
+        var ledger = level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3AmbientCarrierLedger::new,
+                (tag, registries) -> readFile(path, registries), DataFixTypes.SAVED_DATA_COMMAND_STORAGE), fileName(worldId));
+        try { if (ledger.journal != null) ledger.journal.checkHealthy(); }
+        catch (java.io.IOException failure) { throw new java.io.UncheckedIOException("carrier journal writer failed", failure); }
+        return ledger;
+    }
+    private CompoundTag actorImage(SubjectId actor) {
+        var row = new CompoundTag(); row.putInt("format", FORMAT); row.putString("actor", actor.value());
+        FrontierV3CarrierJournalImage.list(row, "bodyResidences", bodyResidences.containsKey(actor)
+                ? FrontierV3CarrierJournalImage.marker(actor, "generation", bodyResidences.get(actor)) : null);
+        FrontierV3CarrierJournalImage.list(row, "bodyDepartures", bodyDepartures.containsKey(actor) ? bodyDepartures.get(actor).save() : null);
+        FrontierV3CarrierJournalImage.list(row, "bodyDepartureConflicts", bodyDepartureConflicts.containsKey(actor) ? bodyDepartureConflicts.get(actor).save() : null);
+        FrontierV3CarrierJournalImage.list(row, "savedBodyDepartures", savedBodyDepartures.containsKey(actor)
+                ? FrontierV3CarrierJournalImage.marker(actor, "residenceGeneration", savedBodyDepartures.get(actor)) : null);
+        FrontierV3CarrierJournalImage.list(row, "carriers", carriers.containsKey(actor) ? carriers.get(actor).save() : null);
+        FrontierV3CarrierJournalImage.list(row, "pendingAdoptions", pendingAdoptions.containsKey(actor) ? pendingAdoptions.get(actor).save() : null);
+        FrontierV3CarrierJournalImage.list(row, "firstAdmissions", firstAdmissions.containsKey(actor) ? firstAdmissions.get(actor).save() : null);
+        FrontierV3CarrierJournalImage.list(row, "departures", departures.containsKey(actor) ? departures.get(actor).save() : null);
+        FrontierV3CarrierJournalImage.list(row, "savedDepartures", savedDepartures.contains(actor) ? FrontierV3CarrierJournalImage.marker(actor) : null);
+        FrontierV3CarrierJournalImage.list(row, "readFencedDepartures", readFencedDepartures.contains(actor) ? FrontierV3CarrierJournalImage.marker(actor) : null);
+        FrontierV3CarrierJournalImage.list(row, "returnReads", returnReads.contains(actor) ? FrontierV3CarrierJournalImage.marker(actor) : null);
+        FrontierV3CarrierJournalImage.list(row, "departureConflicts", departureConflicts.containsKey(actor) ? departureConflicts.get(actor).save() : null);
+        FrontierV3CarrierJournalImage.list(row, "ambientDepartures", ambientDepartures.containsKey(actor) ? ambientDepartures.get(actor).save() : null);
+        FrontierV3CarrierJournalImage.list(row, "savedAmbientDepartures", savedAmbientDepartures.contains(actor) ? FrontierV3CarrierJournalImage.marker(actor) : null);
+        FrontierV3CarrierJournalImage.list(row, "ambientDepartureConflicts", ambientDepartureConflicts.containsKey(actor) ? ambientDepartureConflicts.get(actor).save() : null);
+        return FrontierV3CarrierJournalImage.hasRows(row) ? row : null;
     }
     private static String fileName(WorldId worldId) {
         return NAME + "_" + Base64.getUrlEncoder().withoutPadding().encodeToString(worldId.value().getBytes(StandardCharsets.UTF_8));
@@ -368,7 +425,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         if (first != null && first.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING)
             firstAdmissions.put(inactive.actorId(), first.fencedAsInactive(inactive));
         pendingAdoptions.remove(inactive.actorId());
-        setDirty(); return true;
+        markDirty(inactive.actorId()); return true;
     }
     boolean matchesCarrier(FrontierV3ActorCarrierComposition.Declaration inactive, long physicalRevision, long ambientRevision) {
         return new Carrier(inactive, physicalRevision, ambientRevision).equals(carriers.get(inactive.actorId()));
@@ -423,14 +480,14 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         if (ambientDepartures.containsKey(actor)) return false;
         var previous = departures.get(actor);
         if (previous != null) {
-            if (!previous.equals(departure) && departureConflicts.putIfAbsent(actor, departure) == null) setDirty();
+            if (!previous.equals(departure) && departureConflicts.putIfAbsent(actor, departure) == null) markDirty(actor);
             return previous.equals(departure) && !hasDepartureConflict(actor);
         }
         if (departures.size() >= MAX_CARRIERS) return false;
         if (departures.values().stream().anyMatch(value -> value.carrier().identity().entityId().equals(departure.carrier().identity().entityId()))) return false;
         departures.put(actor, departure);
         readFencedDepartures.add(actor);
-        setDirty();
+        markDirty(actor);
         return true;
     }
     java.util.Optional<FrontierV3SceneDeparture> departure(SubjectId actor) {
@@ -468,14 +525,14 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         var physical = bodyDepartures.get(actor);
         if (physical != null) return physical.matches(expected) && confirmSavedBodyDeparture(physical);
         if (!expected.equals(departures.get(actor)) || returnReads.contains(actor) || hasDepartureConflict(actor)) return false;
-        if (savedDepartures.add(actor)) setDirty();
+        if (savedDepartures.add(actor)) markDirty(actor);
         return true;
     }
     boolean markReturnRead(FrontierV3SceneDeparture receipt) {
         var actor = receipt.carrier().identity().actorId();
         if (!receipt.equals(departures.get(actor)) && bodyDeparture(actor).filter(value -> value.matches(receipt)).isEmpty()) return false;
         if (returnReads.add(actor)) {
-            savedBodyDepartures.remove(actor); setDirty();
+            savedBodyDepartures.remove(actor); markDirty(actor);
         }
         return true;
     }
@@ -484,13 +541,13 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         SubjectId actor = receipt.carrier().identity().actorId();
         var previous = ambientDepartures.get(actor);
         if (previous != null) {
-            if (!previous.equals(receipt) && ambientDepartureConflicts.putIfAbsent(actor, receipt) == null) setDirty();
+            if (!previous.equals(receipt) && ambientDepartureConflicts.putIfAbsent(actor, receipt) == null) markDirty(actor);
             return previous.equals(receipt) && !hasDepartureConflict(actor);
         }
         if (ambientDepartures.size() >= MAX_CARRIERS || departures.containsKey(actor)
                 || ambientDepartures.values().stream().anyMatch(value -> value.carrier().identity().entityId()
                     .equals(receipt.carrier().identity().entityId()))) return false;
-        ambientDepartures.put(actor, receipt); setDirty(); return true;
+        ambientDepartures.put(actor, receipt); markDirty(actor); return true;
     }
     java.util.Optional<FrontierV3AmbientDeparture> ambientDeparture(SubjectId actor) {
         return java.util.Optional.ofNullable(ambientDepartures.get(actor));
@@ -508,7 +565,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         var physical = bodyDepartures.get(actor);
         if (physical != null) return physical.matches(expected) && confirmSavedBodyDeparture(physical);
         if (!expected.equals(ambientDepartures.get(actor)) || returnReads.contains(actor) || hasDepartureConflict(actor)) return false;
-        if (savedAmbientDepartures.add(actor)) setDirty();
+        if (savedAmbientDepartures.add(actor)) markDirty(actor);
         return true;
     }
     boolean resumeAmbientDeparture(FrontierV3AmbientDeparture receipt) {
@@ -525,7 +582,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         var physical = bodyDepartures.get(actor);
         if (physical != null) return physical.matches(receipt) && markBodyReturnRead(physical);
         if (!receipt.equals(ambientDepartures.get(actor))) return false;
-        if (returnReads.add(actor)) { savedAmbientDepartures.remove(actor); setDirty(); }
+        if (returnReads.add(actor)) { savedAmbientDepartures.remove(actor); markDirty(actor); }
         return true;
     }
     boolean hasDepartureConflict(SubjectId actor) {
@@ -537,10 +594,10 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         if (location == null || location.condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD
                 || state.fencedRecovery().current().containsKey(
                         ActorBodyId.recoveryBindingId(actor))) return false;
-        if (carriers.remove(actor) != null) setDirty();
-        if (pendingAdoptions.remove(actor) != null) setDirty();
-        if (firstAdmissions.remove(actor) != null) setDirty();
-        if (bodyResidences.remove(actor) != null) setDirty();
+        if (carriers.remove(actor) != null) markDirty(actor);
+        if (pendingAdoptions.remove(actor) != null) markDirty(actor);
+        if (firstAdmissions.remove(actor) != null) markDirty(actor);
+        if (bodyResidences.remove(actor) != null) markDirty(actor);
         forgetDeparture(actor);
         return true;
     }
@@ -557,7 +614,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         changed |= ambientDepartures.remove(actor) != null;
         changed |= savedAmbientDepartures.remove(actor);
         changed |= ambientDepartureConflicts.remove(actor) != null;
-        if (changed) setDirty();
+        if (changed) markDirty(actor);
     }
     /** Withdraw only this exact provisional fence when the same scene body returns before release. */
     boolean resumeDeparture(FrontierV3SceneDeparture receipt) {
@@ -586,7 +643,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         // Retain both exact endpoints until the save observer or a superseding
         // physical fence resolves the transfer; this is not inactive custody.
         pendingAdoptions.put(live.actorId(), pending);
-        carriers.remove(live.actorId()); forgetDeparture(live.actorId()); setDirty(); return true;
+        carriers.remove(live.actorId()); forgetDeparture(live.actorId()); markDirty(live.actorId()); return true;
     }
     java.util.Optional<FrontierV3ActorAdoption> pendingAdoption(SubjectId actor) {
         return java.util.Optional.ofNullable(pendingAdoptions.get(actor));
@@ -596,7 +653,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         var actor = expected.admitted().actorId();
         if (!expected.equals(pendingAdoptions.get(actor)) || carriers.containsKey(actor)
                 || hasDepartureConflict(actor) || departures.containsKey(actor) || ambientDepartures.containsKey(actor)) return false;
-        carriers.put(actor, expected.predecessor()); pendingAdoptions.remove(actor); setDirty(); return true;
+        carriers.put(actor, expected.predecessor()); pendingAdoptions.remove(actor); markDirty(actor); return true;
     }
     List<FrontierV3ActorAdoption> pendingAdoptions() {
         return pendingAdoptions.values().stream().sorted(Comparator.comparing(value -> value.admitted().actorId())).toList();
@@ -607,7 +664,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         var saved = binding.declaration();
         if (!expected.matches(binding) || hasDepartureConflict(saved.actorId())
                 || !expected.equals(pendingAdoptions.get(saved.actorId()))) return false;
-        pendingAdoptions.remove(saved.actorId()); setDirty(); return true;
+        pendingAdoptions.remove(saved.actorId()); markDirty(saved.actorId()); return true;
     }
     private int inventorySize() {
         return carriers.size() + pendingAdoptions.size()
@@ -619,6 +676,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
                 new FrontierDomainRelationships.CarrierEvidence(value.identity.actorId(), "carrier:" + value.identity.entityId(), "carrier-revision:" + value.physicalRevision)).toList();
     }
     static FrontierV3AmbientCarrierLedger load(CompoundTag tag, HolderLookup.Provider registries) {
+        if (tag.contains("journalVersion")) throw new IllegalStateException("carrier recovery requires checkpoint AND journal; use readFile");
         int format = tag.getInt("format");
         if (tag.contains("pendingHandoffs") || format != FORMAT) throw new IllegalStateException("incompatible v3 ambient carrier ledger; UAE requires a fresh world");
         ListTag values = inventory(tag, "carriers");
@@ -777,7 +835,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         for (var actor : ledger.bodyResidences.keySet()) {
             if (!ledger.firstAdmissions.containsKey(actor)) throw new IllegalStateException("orphan body residence history");
         }
-        ledger.setDirty(false);
+        ledger.dirtyActors.clear(); ledger.setDirty(false);
         return ledger;
     }
     private static ListTag inventory(CompoundTag tag, String key) {

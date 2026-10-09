@@ -38,7 +38,8 @@ class FrontierV3OfflineFirstAdmissionRecoveryTest {
         assertTrue(ledger.beginFirstAdmission(FrontierV3ActorOwnerBinding.body(declaration)));
         var root = new CompoundTag(); root.putInt("DataVersion", 3955); root.put("data", ledger.save(new CompoundTag(), null));
         Path carrierFile = saveData.resolve("pale_mirror_frontier_v3_ambient_carriers_ZnJvbnRpZXI6Z3JheWJveA.dat");
-        NbtIo.writeCompressed(root, carrierFile);
+        net.minecraft.SharedConstants.tryDetectVersion();
+        ledger.save(carrierFile.toFile(), null);
         var runtime = FrontierV3ServerRuntime.start(FrontierV3OfflineActorRecoveryPlanTest.configuration(state),
                 new FrontierFileStore(world, FrontierWorldRuntimeDefinition.payloadCodecs()), 1000);
         runtime.shutdown();
@@ -53,15 +54,14 @@ class FrontierV3OfflineFirstAdmissionRecoveryTest {
         }
         assertTrue(FrontierV3OfflineFirstAdmissionRecovery.recover(world, 91L, 0L, ACTOR, 2L, false).contains("no writes"));
         assertArrayEquals(before, Files.readAllBytes(carrierFile));
-        try (var files = Files.list(saveData)) { assertEquals(1L, files.count()); }
+        try (var files = Files.list(saveData)) { assertEquals(2L, files.count()); }
         Files.write(entities.resolve("r.0.0.mca"), regionWithActor(declaration.entityId()));
         assertThrows(IOException.class, () -> FrontierV3OfflineFirstAdmissionRecovery.recover(world, 91L, 0L, ACTOR, 2L, true));
         assertArrayEquals(before, Files.readAllBytes(carrierFile));
         Files.write(entities.resolve("r.0.0.mca"), new byte[8192]);
         String result = FrontierV3OfflineFirstAdmissionRecovery.recover(world, 91L, 0L, ACTOR, 2L, true);
         assertTrue(result.contains("re-armed actor=resident:1-1"), result);
-        var rearmed = FrontierV3AmbientCarrierLedger.load(NbtIo.readCompressed(carrierFile,
-                NbtAccounter.unlimitedHeap()).getCompound("data"), null).firstAdmission(ACTOR).orElseThrow();
+        var rearmed = FrontierV3AmbientCarrierLedger.readFile(carrierFile, null).firstAdmission(ACTOR).orElseThrow();
         assertEquals(FrontierV3ActorFirstAdmission.Phase.PROVEN_ABSENT, rearmed.phase());
         assertEquals(declaration.entityId(), rearmed.identity().entityId());
         assertTrue(FrontierV3OfflineFirstAdmissionRecovery.recover(world, 91L, 0L, ACTOR, 2L, true).contains("already re-armed"));

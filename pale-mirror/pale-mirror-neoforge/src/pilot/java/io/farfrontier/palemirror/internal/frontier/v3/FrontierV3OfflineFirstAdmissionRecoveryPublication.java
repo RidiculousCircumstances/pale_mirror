@@ -37,7 +37,7 @@ final class FrontierV3OfflineFirstAdmissionRecoveryPublication {
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IOException("canonical checkpoint missing"));
         var state = runtime.decodedState().orElseThrow(() -> new IOException("canonical state missing"));
         if (!checkpoint.worldId().equals(state.bootstrap().worldId())) throw new IOException("canonical world identity changed");
-        byte[] existing = FrontierV3OfflineActorRecoveryPublication.read(ledgerFile);
+        byte[] existing = FrontierV3OfflineActorRecoveryPublication.readLedgerImage(ledgerFile);
         CompoundTag root = FrontierV3OfflineActorRecoveryPublication.decode(existing);
         var ledger = FrontierV3OfflineActorRecoveryPublication.ledger(root);
         var first = ledger.firstAdmission(actor).orElseThrow(() -> new IOException("first-admission record missing"));
@@ -94,9 +94,9 @@ final class FrontierV3OfflineFirstAdmissionRecoveryPublication {
             FrontierV3OfflineActorRecoveryPublication.atomicWrite(receiptFile,
                     FrontierV3OfflineActorRecoveryPublication.encode(receipt));
         observer.reached(Boundary.RECEIPT_DURABLE);
-        byte[] current = FrontierV3OfflineActorRecoveryPublication.read(ledgerFile);
+        byte[] current = FrontierV3OfflineActorRecoveryPublication.readLedgerImage(ledgerFile);
         if (Arrays.equals(current, existing))
-            FrontierV3OfflineActorRecoveryPublication.atomicWrite(ledgerFile, receipt.getByteArray("afterLedger"));
+            ledger.save(ledgerFile.toFile(), null);
         else if (!Arrays.equals(current, receipt.getByteArray("afterLedger")))
             throw new IOException("carrier ledger changed after absence receipt publication");
         observer.reached(Boundary.REARM_DURABLE);

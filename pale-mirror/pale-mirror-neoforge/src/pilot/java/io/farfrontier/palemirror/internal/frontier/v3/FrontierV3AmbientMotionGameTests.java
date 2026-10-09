@@ -65,7 +65,7 @@ public final class FrontierV3AmbientMotionGameTests {
         prepareFloor(level, feet);
         helper.assertFalse(FrontierV3ActorBodyController.readyForExecution(level, prepared, java.util.List.of(id)),
                 "prepared demand cannot grant activity readiness before its body exists");
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, prepared, actor, lease.handoffBody()),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, prepared, actor, lease.handoffBody()),
                 FrontierV3AmbientActorExecutor.Result.APPLIED, "the common body producer must insert its exact declared incarnation");
         helper.assertFalse(FrontierV3ActorBodyController.readyForExecution(level, state(runtime), java.util.List.of(id)),
                 "insertion alone does not confirm a body in an isolated runtime");
@@ -124,7 +124,7 @@ public final class FrontierV3AmbientMotionGameTests {
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.PREPARED,
                 "prepared recovery must not turn an unacknowledged body into UNKNOWN");
         publishProjectionBeforeManagedJoin(helper, level, runtime);
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, state(runtime), resident,
                         bodyAt(origin)), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "a retained PREPARED lease may create exactly its expected loaded-world body");
         Villager body = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), resident));
@@ -150,7 +150,7 @@ public final class FrontierV3AmbientMotionGameTests {
         level.setBlock(carpet.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(carpet, Blocks.RED_CARPET.defaultBlockState(), 3);
         level.setBlock(carpet.above(), Blocks.AIR.defaultBlockState(), 3); level.setBlock(carpet.above(2), Blocks.AIR.defaultBlockState(), 3);
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), carpetResident,
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, state(runtime), carpetResident,
                         bodyAt(carpet.above())), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "an owned infection carpet is a physical surface, not a reason to strand the canonical actor");
         Villager carpetBody = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), carpetResident));
@@ -184,7 +184,7 @@ public final class FrontierV3AmbientMotionGameTests {
                 .withInventory(initial.inventory().moveObservedItem(tool, exactTool.custody(),
                 new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.Actor(resident)));
 
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, equipped, resident, bodyAt(origin)),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, equipped, resident, bodyAt(origin)),
                 FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "a fresh actor body must materialize only its one canonical identity");
         Villager body = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(equipped, resident));
@@ -305,7 +305,7 @@ public final class FrontierV3AmbientMotionGameTests {
         publishProjectionBeforeManagedJoin(helper, level, runtime);
         helper.assertFalse(FrontierV3AmbientActorExecutor.mayCreateFreshBody(true, false, true),
                 "production admission must defer while Minecraft has loaded blocks but is still restoring entity storage");
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, state(runtime), resident, localBody), FrontierV3AmbientActorExecutor.Result.APPLIED,
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, runtime, state(runtime), resident, localBody), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "the isolated fixture may admit its known-empty test chunk exactly once");
         helper.runAfterDelay(1L, () -> {
             try {
@@ -342,7 +342,7 @@ public final class FrontierV3AmbientMotionGameTests {
             }
         }
         FrontierV3CommandSubmission.submit(runtime, "scout-cursor-prepare", scout.value(), new AmbientLeasePrepared(lease));
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), scout, handoff), FrontierV3AmbientActorExecutor.Result.APPLIED,
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, state(runtime), scout, handoff), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "the exact scout body must materialize at its current patrol cursor");
         // Entity insertion is visible only on the following server tick in a full parallel
         // GameTest run.  Do not inspect/move the pre-index body object as if that were a

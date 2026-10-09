@@ -54,8 +54,15 @@ final class FrontierV3SceneBodyGameTestFixture {
     static List<Entity> materializeAndObserve(GameTestHelper helper,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
             java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BodyPosition> positions) {
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(helper.getLevel(),
-                runtime.decodedState().orElseThrow(), lease, positions),
+        var result = FrontierV3SceneExecutor.materializeBodiesForFixture(helper.getLevel(), runtime.decodedState().orElseThrow(), lease, positions);
+        // Fixture setup deliberately waits at durable boundaries; runtime insertion
+        // returns DEFERRED and is exercised independently by the async body test.
+        for (int i = 0; i < lease.members().size() && result == FrontierV3SceneExecutor.BodyMaterialization.DEFERRED; i++) {
+            var world = runtime.decodedState().orElseThrow().bootstrap().worldId();
+            FrontierV3AmbientCarrierLedger.get(helper.getLevel(), world).persist(helper.getLevel(), world);
+            result = FrontierV3SceneExecutor.materializeBodiesForFixture(helper.getLevel(), runtime.decodedState().orElseThrow(), lease, positions);
+        }
+        helper.assertValueEqual(result,
                 FrontierV3SceneExecutor.BodyMaterialization.COMPLETE, "common controller admits every exact scene body");
         List<Entity> bodies = lease.members().stream().map(member -> helper.getLevel().getEntity(member.entityId())).toList();
         for (Entity body : bodies) {

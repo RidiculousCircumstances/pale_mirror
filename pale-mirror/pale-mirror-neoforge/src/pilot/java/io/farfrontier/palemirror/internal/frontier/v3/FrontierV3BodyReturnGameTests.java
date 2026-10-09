@@ -48,7 +48,7 @@ public final class FrontierV3BodyReturnGameTests {
                 runtime.checkpointImage().orElseThrow().instant());
         FrontierV3CommandSubmission.submit(runtime, "saved-return-prepare", actor.value(), new AmbientLeasePrepared(lease));
         FrontierV3AmbientActorGameTests.publishProjectionBeforeManagedJoin(helper, level, runtime);
-        FrontierV3AmbientActorExecutor.materialize(level, runtime, runtime.decodedState().orElseThrow(), actor, lease.handoffBody());
+        FrontierV3BodyAdmissionGameTestFixture.ambient(level, runtime, runtime.decodedState().orElseThrow(), actor, lease.handoffBody());
         helper.runAfterDelay(1L, () -> {
             var state = runtime.decodedState().orElseThrow();
             var body = (Mob) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, actor));

@@ -197,10 +197,10 @@ public final class FrontierV3SceneGameTests {
         bootstrapFirstAdmissions(level, state);
         BlockPos residentSpot = helper.absolutePos(new BlockPos(2, 8, 2)); BlockPos bioformSpot = helper.absolutePos(new BlockPos(4, 8, 2));
         prepareFloor(level, residentSpot); prepareFloor(level, bioformSpot);
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, resident,
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, state, resident,
                         new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "an exact resident receives one owned Villager body");
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, bioform,
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, state, bioform,
                         new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(bioformSpot.getX(), bioformSpot.getY(), bioformSpot.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "an exact hive bioform receives one owned Zombie body");
         helper.assertTrue(level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, resident)) instanceof Villager, "resident identity maps to Villager");
@@ -235,7 +235,7 @@ public final class FrontierV3SceneGameTests {
         FrontierWorldState initial = state(runtime);
         AmbientActorLease lease = AmbientActorProcess.nextLease(initial, resident, runtime.checkpointImage().orElseThrow().instant());
         FrontierV3CommandSubmission.submit(runtime, "ambient-game-test-prepare", resident.value(), new AmbientLeasePrepared(lease));
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident, lease.handoffBody()),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, state(runtime), resident, lease.handoffBody()),
                 FrontierV3AmbientActorExecutor.Result.APPLIED, "common producer admits the original body before recovery input");
         Entity original = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), resident));
         helper.assertTrue(original instanceof Villager, "the original common body must be indexed");

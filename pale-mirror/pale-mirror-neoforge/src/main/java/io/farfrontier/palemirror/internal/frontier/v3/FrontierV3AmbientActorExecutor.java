@@ -456,6 +456,11 @@ final class FrontierV3AmbientActorExecutor {
                     new BlockPosition(pending.getBlockX(), pending.getBlockY(), pending.getBlockZ()),
                     new ObservedPosition(pending.getX(), pending.getY(), pending.getZ()));
         }
+        var journalRequest = FrontierV3BodyInsertionJournal.get(level, state.bootstrap().worldId(), actorId);
+        if (existing == null && journalRequest != null && journalRequest.current(ledger)) {
+            return new FrontierV3AmbientAdmissionDiagnostic(journalRequest.ready()
+                    ? "DURABLE_INSERTION_READY" : "JOURNAL_RECEIPT_PENDING", expectedId, true, null, null, null);
+        }
         var unresolved = FrontierV3AmbientAdmissionDiagnostic.unresolvedCreationReason(ledger, actorId);
         if (existing == null && unresolved.isPresent()) {
             return FrontierV3AmbientAdmissionDiagnostic.carrierAmbiguity(expectedId, unresolved.orElseThrow());
@@ -690,11 +695,12 @@ final class FrontierV3AmbientActorExecutor {
         UUID id = entityId(state, actorId);
         if (FrontierV3AmbientPendingAdmissions.get(runtime, id) != null) return Optional.empty();
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        boolean cancelledUnstarted = FrontierV3ActorBodyCustody.cancelUnstartedInsertion(level, runtime, state, actorId);
         if (ledger.pendingAdoption(actorId).isPresent()) return Optional.empty();
         var declaration = carrierDeclaration(state, actorId, id, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
                 io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId).physicalEpoch());
         var carrier = ledger.reconciliation(declaration, false);
-        if (!preparedCancellationHasEvidence(carrier, hasNeverCreatedFirstAdmission(ledger, declaration))) return Optional.empty();
+        if (!cancelledUnstarted && !preparedCancellationHasEvidence(carrier, hasNeverCreatedFirstAdmission(ledger, declaration))) return Optional.empty();
         ledger.persist(level, state.bootstrap().worldId());
         if (!(submit(runtime, "ambient-reserved-draining", actorId.value(),
                 new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING)) instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) {

@@ -52,10 +52,8 @@ public final class FrontierV3OfflineActorRecovery {
                     throw new IOException("requested recovery head differs from the retained receipt");
             } else {
                 if (checkpoint.revision().value() != expectedHead) throw new IOException("canonical head changed before recovery");
-                var root = NbtIo.readCompressed(ledger, NbtAccounter.create(64L * 1024 * 1024));
-                if (!root.contains("data", Tag.TAG_COMPOUND)) throw new IOException("missing carrier SavedData");
                 FrontierV3OfflineActorRecoveryPlan.create(state, actor, proof,
-                        FrontierV3AmbientCarrierLedger.load(root.getCompound("data"), null));
+                        FrontierV3AmbientCarrierLedger.readFile(ledger, null));
             }
             if (apply) FrontierV3OfflineActorRecoveryPublication.publish(runtime, proof, actor, ledger, receipt);
             // Do not call shutdown: it checkpoints/compacts the original WAL. No thread,

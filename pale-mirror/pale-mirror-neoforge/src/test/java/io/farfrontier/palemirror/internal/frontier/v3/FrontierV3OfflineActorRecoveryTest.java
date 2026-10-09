@@ -25,10 +25,9 @@ class FrontierV3OfflineActorRecoveryTest {
         Path data = Files.createDirectories(dimension.resolve("data"));
         Path entities = Files.createDirectories(dimension.resolve("entities"));
         Files.write(entities.resolve("r.0.0.mca"), new byte[8192]);
-        var root = new CompoundTag(); root.putInt("DataVersion", 3955);
-        root.put("data", FrontierV3AmbientCarrierLedger.emptyForTest().save(new CompoundTag(), null));
         Path ledger = data.resolve("pale_mirror_frontier_v3_ambient_carriers_ZnJvbnRpZXI6Z3JheWJveA.dat");
-        NbtIo.writeCompressed(root, ledger);
+        net.minecraft.SharedConstants.tryDetectVersion();
+        var carriers = FrontierV3AmbientCarrierLedger.emptyForTest(); carriers.setDirty(); carriers.save(ledger.toFile(), null);
         var state = FrontierV3OfflineActorRecoveryPlanTest.prepared(FrontierV3PhysicalWorld.WORLD_ID);
         var runtime = FrontierV3ServerRuntime.start(FrontierV3OfflineActorRecoveryPlanTest.configuration(state),
                 new FrontierFileStore(world, FrontierWorldRuntimeDefinition.payloadCodecs()), 1000);
@@ -49,7 +48,6 @@ class FrontierV3OfflineActorRecoveryTest {
         assertTrue(result.contains("head=2 lease=CLOSED"), result);
         assertEquals(result, FrontierV3OfflineActorRecovery.recover(world, 91L, 0L, ACTOR, 2L, true));
         assertThrows(IOException.class, () -> FrontierV3OfflineActorRecovery.recover(world, 91L, 2L, ACTOR, 2L, true));
-        assertTrue(FrontierV3AmbientCarrierLedger.load(NbtIo.readCompressed(ledger,
-                NbtAccounter.unlimitedHeap()).getCompound("data"), null).hasCarrier(ACTOR));
+        assertTrue(FrontierV3AmbientCarrierLedger.readFile(ledger, null).hasCarrier(ACTOR));
     }
 }

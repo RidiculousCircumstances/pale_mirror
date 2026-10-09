@@ -12,6 +12,17 @@ import net.minecraft.server.level.ServerLevel;
 final class FrontierV3ActorBodyCustody {
     private FrontierV3ActorBodyCustody() { }
 
+    /** Scope owners may abandon a request, but never undo admission history themselves. */
+    static boolean cancelUnstartedInsertion(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
+        var ticket = FrontierV3BodyInsertionJournal.get(level, state.bootstrap().worldId(), actor);
+        if (ticket == null || !unstartedAbsenceProven(level, runtime, state, actor)) return false;
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        FrontierV3BodyInsertionJournal.reject(level, ledger, ticket);
+        ledger.persist(level, state.bootstrap().worldId());
+        return true;
+    }
+
     /** An unattempted insertion may be cancelled; an empty lookup cannot establish that fact. */
     static boolean releaseUnstartedAbsence(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                           io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
@@ -19,6 +30,8 @@ final class FrontierV3ActorBodyCustody {
         if (!unstartedAbsenceProven(level, runtime, state, actor)) return false;
         var body = ActorBodyAuthority.current(state, actor);
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        var unstarted = FrontierV3BodyInsertionJournal.get(level, state.bootstrap().worldId(), actor);
+        if (unstarted != null) FrontierV3BodyInsertionJournal.reject(level, ledger, unstarted);
         ledger.persist(level, state.bootstrap().worldId());
         return FrontierV3CommandSubmission.submit(runtime, "actor-body-unstarted-release", actor.value(), new ActorBodyReleased(body))
                 instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
@@ -32,6 +45,9 @@ final class FrontierV3ActorBodyCustody {
         var id = ActorBodyId.entityId(state.bootstrap().worldId(), actor);
         if (level.getEntity(id) != null || FrontierV3AmbientPendingAdmissions.get(runtime, id) != null) return false;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        var unstarted = FrontierV3BodyInsertionJournal.get(level, state.bootstrap().worldId(), actor);
+        if (unstarted != null) return unstarted.binding().declaration().epoch() == body.physicalEpoch()
+                && unstarted.current(ledger) && !ledger.hasDepartureConflict(actor);
         return unstartedEvidence(body, state.actorLocations().get(actor).kind(), id, ledger.firstAdmission(actor),
                 ledger.inactiveCarrier(actor), ledger.pendingAdoption(actor).isPresent()
                         || ledger.hasDepartureConflict(actor));

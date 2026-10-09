@@ -579,7 +579,14 @@ final class FrontierV3ActorBodyController {
     static Result materialize(ServerLevel level, FrontierWorldState state, BirthRequest request) {
         var declaration = request.binding().declaration();
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        Admission admission = admission(state, request.binding(), ledger, level.getEntity(declaration.entityId()) != null);
+        var ticket = FrontierV3BodyInsertionJournal.get(level, state.bootstrap().worldId(), declaration.actorId());
+        if (ticket != null && (!ticket.binding().equals(request.binding()) || !ticket.current(ledger))) return Result.CONFLICT;
+        if (ticket != null && !ticket.ready()) return Result.DEFERRED;
+        Admission admission = ticket == null ? admission(state, request.binding(), ledger, level.getEntity(declaration.entityId()) != null)
+                : ticket.admission();
+        if (ticket != null && (!recognizesDeclaration(state, declaration)
+                || ActorBodyAuthority.require(state, ActorBodyAuthority.current(state, declaration.actorId())).phase() != FencedRecoveryPhase.PREPARED
+                || level.getEntity(declaration.entityId()) != null)) return Result.CONFLICT;
         if (admission == Admission.CONFLICT) return Result.CONFLICT;
         if (admission == Admission.DEFERRED
                 || !FrontierV3NativeBodyResidence.admissionReady(level, request.surfaces().getFirst())) return Result.DEFERRED;
@@ -605,13 +612,17 @@ final class FrontierV3ActorBodyController {
                 || !FrontierV3ActorOwnerBinding.from(body).filter(request.binding()::equals).isPresent())
             return Result.CONFLICT;
         if (!FrontierV3BodyPlacement.available(level, body, body.getBoundingBox())) return Result.DEFERRED;
-        boolean added = admit(ledger, request.binding(), admission,
-                () -> ledger.persist(level, state.bootstrap().worldId()), () -> {
-                    long residence = ledger.beginBodyResidence(declaration);
-                    body.getPersistentData().putLong(RESIDENCE_KEY, residence);
-                    ledger.persist(level, state.bootstrap().worldId());
-                    return level.addFreshEntity(body);
-                });
+        if (ticket == null) {
+            ticket = FrontierV3BodyInsertionJournal.prepare(level, state, ledger, request.binding(), admission);
+            return Result.DEFERRED; // No server-thread wait, even if the disk completed quickly.
+        }
+        body.getPersistentData().putLong(RESIDENCE_KEY, ticket.residence());
+        if (!FrontierV3BodyInsertionJournal.consume(level, ticket)) throw new IllegalStateException("body insertion lost its durable ticket");
+        boolean added = level.addFreshEntity(body);
+        if (!added) {
+            if (!ticket.undo().reject(ledger)) throw new IllegalStateException("rejected uncreated body lost its predecessor");
+            ledger.persist(level, state.bootstrap().worldId());
+        }
         // Both admission boundaries restore the exact unused permission on a synchronous
         // false, or throw if that absence is not provable. A canceled, uncreated insertion
         // is retryable, not a family conflict. Unknown outcomes remain durable and fenced.
@@ -657,12 +668,4 @@ final class FrontierV3ActorBodyController {
                         && value.attempt().orElseThrow().declaration().equals(declaration))).isPresent();
     }
 
-    private static boolean admit(FrontierV3AmbientCarrierLedger ledger, FrontierV3ActorOwnerBinding binding,
-                                  Admission admission, Runnable persist, java.util.function.BooleanSupplier insert) {
-        return switch (admission) {
-            case FIRST -> FrontierV3ActorFirstAdmissionBoundary.admit(ledger, binding, persist, insert);
-            case RECONSTRUCTION -> FrontierV3ActorAdoptionAdmission.admit(ledger, binding, persist, insert);
-            case DEFERRED, CONFLICT -> false;
-        };
-    }
 }

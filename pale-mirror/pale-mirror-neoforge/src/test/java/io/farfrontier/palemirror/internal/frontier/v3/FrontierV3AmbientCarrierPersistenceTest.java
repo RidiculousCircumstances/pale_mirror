@@ -15,24 +15,24 @@ class FrontierV3AmbientCarrierPersistenceTest {
         net.minecraft.SharedConstants.tryDetectVersion();
     }
 
-    @Test void savesNormalMinecraftEnvelopeAndReplacesItWithoutLeavingPartialFiles() throws Exception {
+    @Test void keepsMinecraftCheckpointAndDurablyAppendsOnlyChangedActors() throws Exception {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         Path file = directory.resolve("carriers.dat");
         ledger.setDirty(); ledger.save(file.toFile(), null);
         assertFalse(ledger.isDirty());
         var before = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
         assertTrue(before.contains("DataVersion", Tag.TAG_INT));
-        assertEquals(0, FrontierV3AmbientCarrierLedger.load(before.getCompound("data"), null).inactiveCount());
+        assertEquals(0, FrontierV3AmbientCarrierLedger.readFile(file, null).inactiveCount());
         var state = FrontierV3OfflineActorRecoveryPlanTest.prepared();
         var actor = new SubjectId("resident:1-1");
         var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actor, FrontierV3AmbientActorExecutor.entityId(state, actor), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 1L);
         assertTrue(ledger.fence(declaration, 2L, 2L));
         ledger.save(file.toFile(), null);
         assertFalse(ledger.isDirty());
-        var restored = FrontierV3AmbientCarrierLedger.load(NbtIo.readCompressed(file,
-                NbtAccounter.unlimitedHeap()).getCompound("data"), null);
+        var restored = FrontierV3AmbientCarrierLedger.readFile(file, null);
         assertTrue(restored.matchesCarrier(declaration, 2L, 2L));
-        try (var paths = Files.list(directory)) { assertEquals(1L, paths.count()); }
+        try (var paths = Files.list(directory)) { assertEquals(2L, paths.count()); }
+        assertEquals(before, NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap()), "one actor change must not rewrite the checkpoint");
         byte[] saved = Files.readAllBytes(file);
         ledger.save(file.toFile(), null);
         assertArrayEquals(saved, Files.readAllBytes(file));
@@ -59,8 +59,7 @@ class FrontierV3AmbientCarrierPersistenceTest {
                 new java.util.UUID(0, 2), old.representation(), 0L, 4L);
         assertTrue(ledger.fence(other, 7L, 7L));
         Path file = directory.resolve("mixed.dat"); ledger.save(file.toFile(), null);
-        var restored = FrontierV3AmbientCarrierLedger.load(NbtIo.readCompressed(file,
-                NbtAccounter.unlimitedHeap()).getCompound("data"), null);
+        var restored = FrontierV3AmbientCarrierLedger.readFile(file, null);
         assertEquals(1, restored.inactiveCount());
         assertTrue(restored.matchesCarrier(other, 7L, 7L));
         var pending = restored.pendingAdoption(old.actorId()).orElseThrow();

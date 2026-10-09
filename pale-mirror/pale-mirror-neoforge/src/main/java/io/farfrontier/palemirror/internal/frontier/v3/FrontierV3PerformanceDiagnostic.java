@@ -77,6 +77,15 @@ final class FrontierV3PerformanceDiagnostic {
                          FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
                          List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests, String planningPressure,
                          String departurePressure) {
+        return render(checkpoint, metrics, state, fastForwardRemaining, fastForwardTarget, fastForwardFailure,
+                outcome, sliceTelemetry, requests, planningPressure, departurePressure, null);
+    }
+    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+                         int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
+                         FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
+                         FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
+                         List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests, String planningPressure,
+                         String departurePressure, String journalPressure) {
         if (fastForwardRemaining < 0 || fastForwardRemaining > FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS) {
             throw new IllegalArgumentException("bounded fast-forward remainder");
         }
@@ -99,6 +108,7 @@ final class FrontierV3PerformanceDiagnostic {
         if (state != null) value.append(",\"frontier\":").append(frontier(state, checkpoint));
         if (planningPressure != null) value.append(",\"pedestrianPlanning\":").append(planningPressure);
         if (departurePressure != null) value.append(",\"ambientDepartureQueue\":").append(departurePressure);
+        if (journalPressure != null) value.append(",\"physicalJournal\":").append(journalPressure);
         return FrontierV3DiagnosticJson.bounded("performance", "", checkpoint, value.append('}').toString());
     }
 

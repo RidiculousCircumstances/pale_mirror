@@ -127,7 +127,8 @@ public final class FrontierV3ServerLifecycle {
                 FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
                 FAST_FORWARD_OUTCOMES.get(server), FAST_FORWARD_SLICE_TELEMETRY.get(server), fastForwardRequests(server),
                 FrontierV3PedestrianPlanning.diagnostic(runtime),
-                FrontierV3ActorProbeSchedule.diagnostic(runtime, FrontierV3PhysicalWorld.require(server).getGameTime()));
+                FrontierV3ActorProbeSchedule.diagnostic(runtime, FrontierV3PhysicalWorld.require(server).getGameTime()),
+                FrontierV3AmbientCarrierLedger.get(FrontierV3PhysicalWorld.require(server), state.bootstrap().worldId()).journalDiagnostic());
     }
     static FrontierV3PilotSceneDemandSnapshot pilotSceneDemandSnapshot(ServerLevel level, SubjectId assaultId) {
         Objects.requireNonNull(level, "pilot demand level");
@@ -463,6 +464,13 @@ public final class FrontierV3ServerLifecycle {
     }
     private static void releaseRuntime(MinecraftServer server,
                                        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        var physicalWorld = server.getLevel(FrontierV3PhysicalWorld.DIMENSION);
+        if (physicalWorld != null) {
+            var ledger = FrontierV3AmbientCarrierLedger.get(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID);
+            FrontierV3BodyInsertionJournal.cancelAll(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID, ledger);
+            ledger.persist(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID);
+            ledger.finishCheckpoints();
+        }
         FrontierV3NativeFieldOwnership.retain(server, runtime);
         FrontierV3NativeActorOwnership.retain(server, runtime);
         RUNTIMES.remove(server, runtime);

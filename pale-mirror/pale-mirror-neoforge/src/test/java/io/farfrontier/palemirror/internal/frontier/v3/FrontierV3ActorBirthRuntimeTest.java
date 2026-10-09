@@ -73,7 +73,7 @@ class FrontierV3ActorBirthRuntimeTest {
         var target = FrontierV3ActorOwnerBinding.body(new FrontierV3ActorCarrierComposition.Declaration(
                 permit.identity().actorId(), permit.identity().kind(), FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
                 permit.identity().entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 0L, 1));
-        assertTrue(FrontierV3ActorFirstAdmissionBoundary.admit(disk, target, () -> disk.save(ledgerFile.toFile(), null), () -> true));
+        assertTrue(FrontierV3FirstAdmissionCrashFixture.admit(disk, target, () -> disk.save(ledgerFile.toFile(), null), () -> true));
         var afterAdmission = readLedger(ledgerFile);
         var snapshotImage = recoveredStore.recover(WORLD);
         var snapRuntime = FrontierV3ServerRuntime.startRecovered(configuration, recoveredStore, snapshotImage, 10000,
@@ -81,7 +81,7 @@ class FrontierV3ActorBirthRuntimeTest {
                         () -> fail("snapshot recovery must not reissue permission"), new FrontierStoreTransactionCommitter(recoveredStore)));
         assertEquals(born, snapRuntime.decodedState().orElseThrow());
         assertEquals(FrontierV3ActorFirstAdmission.Phase.PENDING, afterAdmission.firstAdmission(job.resident().id()).orElseThrow().phase());
-        assertFalse(FrontierV3ActorFirstAdmissionBoundary.admit(afterAdmission, target,
+        assertFalse(FrontierV3FirstAdmissionCrashFixture.admit(afterAdmission, target,
                 () -> fail("no second save"), () -> { fail("no second creation"); return true; }));
         snapRuntime.shutdown();
     }
@@ -137,7 +137,7 @@ class FrontierV3ActorBirthRuntimeTest {
     }
 
     private static FrontierV3AmbientCarrierLedger readLedger(Path file) throws Exception {
-        return FrontierV3AmbientCarrierLedger.load(NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap()).getCompound("data"), null);
+        return FrontierV3AmbientCarrierLedger.readFile(file, null);
     }
     @Test void failedBirthPublicationRecoversAndReissuesOnlyWhenScheduledBirthCommits() throws Exception {
         net.minecraft.SharedConstants.tryDetectVersion();

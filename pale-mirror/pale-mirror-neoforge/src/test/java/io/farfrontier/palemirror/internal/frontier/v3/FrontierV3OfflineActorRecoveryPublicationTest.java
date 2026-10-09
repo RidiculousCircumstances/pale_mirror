@@ -19,10 +19,9 @@ class FrontierV3OfflineActorRecoveryPublicationTest {
         for (var boundary : FrontierV3OfflineActorRecoveryPublication.Boundary.values()) {
             Path world = Files.createDirectory(directory.resolve(boundary.name())).toRealPath();
             Path ledgerFile = world.resolve("carriers.dat"), receipt = world.resolve("repair.dat");
-            var root = new CompoundTag(); root.putInt("DataVersion", 3955);
-            root.put("data", FrontierV3AmbientCarrierLedger.emptyForTest().save(new CompoundTag(), null));
-            NbtIo.writeCompressed(root, ledgerFile);
-            byte[] original = Files.readAllBytes(ledgerFile);
+            net.minecraft.SharedConstants.tryDetectVersion();
+            var carriers = FrontierV3AmbientCarrierLedger.emptyForTest(); carriers.setDirty(); carriers.save(ledgerFile.toFile(), null);
+            byte[] original = FrontierV3OfflineActorRecoveryPublication.readLedgerImage(ledgerFile);
             var state = FrontierV3OfflineActorRecoveryPlanTest.prepared();
             var config = FrontierV3OfflineActorRecoveryPlanTest.configuration(state);
             var proof = proof(world, state, "original-entity-input");
@@ -36,9 +35,8 @@ class FrontierV3OfflineActorRecoveryPublicationTest {
             assertTrue(Files.isRegularFile(receipt));
             assertArrayEquals(original, NbtIo.readCompressed(receipt, NbtAccounter.unlimitedHeap()).getByteArray("beforeLedger"));
             if (boundary == FrontierV3OfflineActorRecoveryPublication.Boundary.RECEIPT_DURABLE)
-                assertArrayEquals(original, Files.readAllBytes(ledgerFile));
-            else assertTrue(FrontierV3AmbientCarrierLedger.load(NbtIo.readCompressed(ledgerFile,
-                    NbtAccounter.unlimitedHeap()).getCompound("data"), null).hasCarrier(ACTOR));
+                assertArrayEquals(original, FrontierV3OfflineActorRecoveryPublication.readLedgerImage(ledgerFile));
+            else assertTrue(FrontierV3AmbientCarrierLedger.readFile(ledgerFile, null).hasCarrier(ACTOR));
             // No graceful shutdown: recover from the actual persisted snapshot/WAL only.
             var recovered = FrontierV3ServerRuntime.start(config,
                     new FrontierFileStore(world, FrontierWorldRuntimeDefinition.payloadCodecs()), 1000);
