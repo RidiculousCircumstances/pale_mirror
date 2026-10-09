@@ -32,17 +32,22 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** Durable post-impact evidence for a real v3-owned explosion, never a replay queue. */
-final class FrontierV3ManagedExplosionLedger extends SavedData {
-    private static final String NAME = "pale_mirror_frontier_v3_managed_explosions";
-    private static final int FORMAT = 4, MAX_EFFECTS = 64, MAX_CELLS = 65_536, MAX_ENTITIES = 128, MAX_ITEMS = 256;
-    private final LinkedHashMap<String, Pending> pending;
+final class FrontierV3ManagedExplosionLedger extends FrontierV3JournaledSavedData {
+    private static final int FORMAT = 5, MAX_EFFECTS = 64, MAX_CELLS = 65_536, MAX_ENTITIES = 128, MAX_ITEMS = 256;
+    private final java.util.Map<String, Pending> pending;
 
     private FrontierV3ManagedExplosionLedger() { this(new LinkedHashMap<>()); }
-    private FrontierV3ManagedExplosionLedger(LinkedHashMap<String, Pending> pending) { this.pending = pending; }
+    private FrontierV3ManagedExplosionLedger(LinkedHashMap<String, Pending> pending) { super(FrontierV3PhysicalStoreKind.MANAGED_EFFECTS);
+        this.pending = fragmentedTable("pending", pending, java.util.function.Function.identity(),
+                new FrontierV3ListJournalCodec<>((id, value) -> value.header(),
+                    new FrontierV3ListJournalCodec.Facet<>("blocks",Pending::blocks,BlockCandidate::save),
+                    new FrontierV3ListJournalCodec.Facet<>("entities",Pending::entities,EntityCandidate::save),
+                    new FrontierV3ListJournalCodec.Facet<>("items",Pending::items,ItemCandidate::save),
+                    new FrontierV3ListJournalCodec.Facet<>("entityImpacts",Pending::entityImpacts,Pending::saveEntityImpact),
+                    new FrontierV3ListJournalCodec.Facet<>("itemImpacts",Pending::itemImpacts,Pending::saveItemImpact))); }
 
     static FrontierV3ManagedExplosionLedger get(ServerLevel level) {
-        return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3ManagedExplosionLedger::new,
-                FrontierV3ManagedExplosionLedger::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME);
+        return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.MANAGED_EFFECTS, FrontierV3ManagedExplosionLedger::new, FrontierV3ManagedExplosionLedger::load);
     }
 
     boolean capture(ServerLevel level, long gameTime, PhysicalIntentId intentId, List<BlockPos> affected, FrontierV3GrayboxLedger provenance,
@@ -86,11 +91,16 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
     Optional<Completion> completeIfResolved(PhysicalIntentId intentId, long gameTime) {
         Pending value = ready(intentId, gameTime);
         if (value == null || !value.blocks().isEmpty() || !value.entities().isEmpty() || !value.items().isEmpty()) return Optional.empty();
-        pending.remove(value.intentId()); setDirty();
         return Optional.of(new Completion(intentId, value.totalBlocks(), value.changedBlocks(), value.entityImpacts(), value.itemImpacts(),
                 value.affectedInfectionOverlays(), value.changedInfectionOverlays()));
     }
-    /** Compatibility queue used by the block-only ledger proof. */
+    void retireConfirmed(PhysicalIntentId intentId) {
+        Pending value = require(intentId);
+        if (!value.blocks().isEmpty() || !value.entities().isEmpty() || !value.items().isEmpty())
+            throw new IllegalStateException("cannot retire unresolved explosion evidence");
+        pending.remove(value.intentId()); setDirty();
+    }
+    /** Read-only block inspection seam. */
     Optional<Ready> nextReady(long gameTime) {
         return pending.values().stream().filter(value -> value.capturedAtGameTime() < gameTime).findFirst().map(value ->
                 new Ready(new PhysicalIntentId(value.intentId()), value.blocks().isEmpty() ? Optional.empty() : Optional.of(value.blocks().getFirst()),
@@ -196,6 +206,7 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
         for (Tag value : values) { Pending entry = Pending.load((CompoundTag) value, format); if (pending.putIfAbsent(entry.intentId(), entry) != null) throw new IllegalStateException("duplicate managed v3 explosion intent"); }
         return new FrontierV3ManagedExplosionLedger(pending);
     }
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", FORMAT); return tag; }
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("format", FORMAT); ListTag values = new ListTag(); pending.values().forEach(value -> values.add(value.save())); tag.put("pending", values); return tag;
     }
@@ -258,7 +269,7 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
         }
         static ItemCandidate load(CompoundTag value, int format) {
             if (!value.contains("item", Tag.TAG_STRING) || !value.contains("pos", Tag.TAG_LONG)) throw new IllegalStateException("incomplete managed explosion item");
-            if (format == 2 || value.getByte("source") == 0) {
+            if (value.getByte("source") == 0) {
                 if (!value.contains("container", Tag.TAG_STRING) || !value.contains("slot", Tag.TAG_BYTE)) throw new IllegalStateException("incomplete managed explosion container item");
                 return new ItemCandidate(new SubjectId(value.getString("item")), new InventoryCustody.ContainerSlot(new SubjectId(value.getString("container")), value.getByte("slot") & 0xFF), value.getLong("pos"));
             }
@@ -275,17 +286,23 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
                     || items.size() > MAX_ITEMS || entityImpacts.size() > MAX_ENTITIES || itemImpacts.size() > MAX_ITEMS
                     || totalBlocks < blocks.size() || totalBlocks > MAX_CELLS || changedBlocks < 0 || changedBlocks > totalBlocks - blocks.size()
                     || affectedInfectionOverlays < changedInfectionOverlays || changedInfectionOverlays < 0) throw new IllegalArgumentException("invalid managed explosion record");
-            blocks = List.copyOf(blocks); entities = List.copyOf(entities); items = List.copyOf(items); entityImpacts = List.copyOf(entityImpacts); itemImpacts = List.copyOf(itemImpacts);
+            blocks = FrontierV3WitnessQueue.copy(blocks); entities = FrontierV3WitnessQueue.copy(entities); items = FrontierV3WitnessQueue.copy(items); entityImpacts = List.copyOf(entityImpacts); itemImpacts = List.copyOf(itemImpacts);
         }
-        CompoundTag save() {
+        CompoundTag header() {
             CompoundTag value = new CompoundTag(); value.putString("intent", intentId); value.putLong("capturedAt", capturedAtGameTime);
             value.putInt("total", totalBlocks); value.putInt("changed", changedBlocks); value.putInt("infectionTotal", affectedInfectionOverlays);
-            value.putInt("infectionChanged", changedInfectionOverlays); value.put("blocks", saveList(blocks, BlockCandidate::save));
+            value.putInt("infectionChanged", changedInfectionOverlays); return value;
+        }
+        CompoundTag save() {
+            CompoundTag value = header(); value.put("blocks", saveList(blocks, BlockCandidate::save));
             value.put("entities", saveList(entities, EntityCandidate::save)); value.put("items", saveList(items, ItemCandidate::save));
-            value.put("entityImpacts", saveList(entityImpacts, Pending::saveEntityImpact)); value.put("itemImpacts", saveList(itemImpacts, Pending::saveItemImpact)); return value;
+            value.put("entityImpacts", saveList(entityImpacts, Pending::saveEntityImpact)); value.put("itemImpacts", saveList(itemImpacts, Pending::saveItemImpact));
+            value.putLong("blocksStart", FrontierV3WitnessQueue.copy(blocks).start());
+            value.putLong("entitiesStart", FrontierV3WitnessQueue.copy(entities).start());
+            value.putLong("itemsStart", FrontierV3WitnessQueue.copy(items).start());
+            value.putLong("entityImpactsStart",0); value.putLong("itemImpactsStart",0); return value;
         }
         static Pending load(CompoundTag value, int format) {
-            if (format == 1) return legacy(value);
             if (!value.contains("intent", Tag.TAG_STRING) || !value.contains("capturedAt", Tag.TAG_LONG)
                     || !value.contains("total", Tag.TAG_INT) || !value.contains("changed", Tag.TAG_INT)) throw new IllegalStateException("incomplete managed explosion record");
             return new Pending(value.getString("intent"), value.getLong("capturedAt"), loadList(value, "blocks", BlockCandidate::load),
@@ -293,19 +310,15 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
                     loadList(value, "entityImpacts", Pending::loadEntityImpact), loadList(value, "itemImpacts", Pending::loadItemImpact),
                     value.getInt("total"), value.getInt("changed"), value.getInt("infectionTotal"), value.getInt("infectionChanged"));
         }
-        private static Pending legacy(CompoundTag value) {
-            ListTag cells = value.getList("cells", Tag.TAG_COMPOUND); ArrayList<BlockCandidate> blocks = new ArrayList<>();
-            for (Tag cell : cells) blocks.add(BlockCandidate.load((CompoundTag) cell));
-            return new Pending(value.getString("intent"), value.getLong("capturedAt"), blocks, List.of(), List.of(), List.of(), List.of(),
-                    value.getInt("total"), value.getInt("changed"), 0, 0);
-        }
         private static <T> ListTag saveList(List<T> values, java.util.function.Function<T, CompoundTag> mapper) {
-            ListTag tag = new ListTag(); values.forEach(value -> tag.add(mapper.apply(value))); return tag;
+            ListTag tag = new ListTag(); FrontierV3WitnessQueue.copy(values).retained().forEach(value -> tag.add(mapper.apply(value))); return tag;
         }
         private static <T> List<T> loadList(CompoundTag source, String key, java.util.function.Function<CompoundTag, T> mapper) {
             if (!source.contains(key, Tag.TAG_LIST)) throw new IllegalStateException("missing managed explosion " + key);
             ListTag values = source.getList(key, Tag.TAG_COMPOUND); ArrayList<T> result = new ArrayList<>();
-            for (Tag value : values) result.add(mapper.apply((CompoundTag) value)); return result;
+            for (Tag value : values) result.add(mapper.apply((CompoundTag) value));
+            if (!source.contains(key+"Start",Tag.TAG_LONG)) throw new IllegalStateException("missing managed explosion list cursor");
+            return FrontierV3WitnessQueue.restored(result,source.getLong(key+"Start"));
         }
         private static CompoundTag saveEntityImpact(ExplosionEntityImpact impact) {
             CompoundTag value = new CompoundTag(); value.putUUID("id", impact.entityId()); value.putString("type", impact.entityType());
@@ -316,12 +329,11 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
                     value.getString("actor").isBlank() ? Optional.empty() : Optional.of(new SubjectId(value.getString("actor"))), value.getBoolean("removed"));
         }
         private static CompoundTag saveItemImpact(ExplosionItemImpact impact) {
-            CompoundTag value = new CompoundTag(); value.putString("item", impact.itemId().value()); value.putByte("outcome", (byte) impact.outcome().ordinal()); return value;
+            CompoundTag value = new CompoundTag(); value.putString("item", impact.itemId().value()); value.putByte("outcome", (byte) impact.outcome().wireTag()); return value;
         }
         private static ExplosionItemImpact loadItemImpact(CompoundTag value) {
             int outcome = value.getByte("outcome") & 0xFF;
-            if (outcome >= ExplosionItemImpact.Outcome.values().length) throw new IllegalStateException("invalid managed explosion item outcome");
-            return new ExplosionItemImpact(new SubjectId(value.getString("item")), ExplosionItemImpact.Outcome.values()[outcome]);
+            return new ExplosionItemImpact(new SubjectId(value.getString("item")), io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags.require(ExplosionItemImpact.Outcome.class, outcome));
         }
     }
 }

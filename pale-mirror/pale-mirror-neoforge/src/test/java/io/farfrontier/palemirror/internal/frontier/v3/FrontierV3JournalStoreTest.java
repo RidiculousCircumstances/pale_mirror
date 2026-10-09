@@ -109,6 +109,19 @@ class FrontierV3JournalStoreTest {
         assertEquals(Set.of("a", "b"), FrontierV3JournalStore.open(file).image().keySet());
     }
 
+    @Test void physicalProfileDoesNotInflateActorLimitsAndRejectsWrongProfile() throws Exception {
+        Path file = directory.resolve("blocks.dat");
+        var rows = new HashMap<String,byte[]>();
+        for (int i=0;i<5000;i++) rows.put("block:"+i,new byte[]{1});
+        var actors = FrontierV3JournalStore.open(directory.resolve("actors.dat"));
+        assertThrows(IOException.class, () -> actors.append(rows));
+        assertEquals(0L,actors.pressure().durableSequence());
+        var physical = FrontierV3JournalStore.open(file,FrontierV3JournalStore.PHYSICAL);
+        physical.append(rows); physical.awaitCheckpoint();
+        assertEquals(5000,FrontierV3JournalStore.open(file,FrontierV3JournalStore.PHYSICAL).image().size());
+        assertThrows(IOException.class, () -> FrontierV3JournalStore.open(file));
+    }
+
     private Path segment(Path checkpoint, long start) {
         return checkpoint.resolveSibling(checkpoint.getFileName() + ".journal")
                 .resolve(String.format(Locale.ROOT, "%020d.wal", start));

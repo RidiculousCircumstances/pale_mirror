@@ -46,6 +46,12 @@ final class FrontierV3ExplosionExecutor {
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = state(runtime); if (state == null) return;
+        var ledger = FrontierV3ManagedExplosionLedger.get(level);
+        for (var intent : state.physicalIntents().values()) {
+            if (intent.kind() == PhysicalIntentKind.EXPLOSION && intent.status() == PhysicalIntentStatus.CONFIRMED && ledger.has(intent.id())) {
+                ledger.retireConfirmed(intent.id()); ledger.persist(level);
+            }
+        }
         state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.EXPLOSION)
                 .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
                 .sorted(Comparator.comparing(PhysicalIntent::id)).findFirst().ifPresent(intent -> execute(level, runtime, intent));
@@ -57,11 +63,14 @@ final class FrontierV3ExplosionExecutor {
         PhysicalIntent intent = state.physicalIntents().get(intentId);
         if (intent == null || intent.kind() != PhysicalIntentKind.EXPLOSION || intent.status() != PhysicalIntentStatus.RUNNING
                 || !FrontierV3BomberBomb.isCurrent(source, intent)) return false;
-        Set<Long> resourceSiteCells = FrontierV3ResourceSiteExplosionExecutor.activeOwnedCells(level, state);
-        return FrontierV3ManagedExplosionLedger.get(level).capture(level, level.getGameTime(), intentId, affected, entities, state,
+        Set<Long> resourceSiteCells = FrontierV3ResourceFieldOwnership.activeOwnedCells(level, state);
+        var ledger = FrontierV3ManagedExplosionLedger.get(level);
+        boolean captured = ledger.capture(level, level.getGameTime(), intentId, affected, entities, state,
                 FrontierV3GrayboxLedger.get(level), FrontierV3InfectionOverlayLedger.get(level),
                 position -> state.bootstrap().bounds().contains(new BlockPosition(position.getX(), position.getY(), position.getZ()))
                         && !resourceSiteCells.contains(position.asLong()));
+        if (captured) ledger.persist(level);
+        return captured;
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent) {
@@ -89,10 +98,12 @@ final class FrontierV3ExplosionExecutor {
                 || !reconcileBlocks(level, runtime, ledger, intent.id())) return;
         FrontierV3ManagedExplosionLedger.Completion completion = ledger.completeIfResolved(intent.id(), level.getGameTime()).orElse(null);
         if (completion == null) return;
+        ledger.persist(level);
         ExplosionObservation receipt = new ExplosionObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
                 intent.id(), intent.origin(), intent.radiusBlocks(), completion.affectedBlockCount(), completion.changedBlockCount(), completion.entityImpacts(),
                 completion.itemImpacts(), completion.affectedInfectionOverlayCount(), completion.changedInfectionOverlayCount());
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt), "confirmed")) throw new IllegalStateException("managed explosion confirmation was rejected");
+        ledger.retireConfirmed(intent.id()); ledger.persist(level);
     }
 
     private static boolean reconcileItems(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

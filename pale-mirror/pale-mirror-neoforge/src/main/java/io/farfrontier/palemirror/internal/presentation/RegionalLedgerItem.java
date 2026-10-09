@@ -16,7 +16,7 @@ public final class RegionalLedgerItem extends WrittenBookItem {
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
-        if (player instanceof ServerPlayer serverPlayer) {
+        if (player instanceof ServerPlayer serverPlayer && PaleMirrorRuntime.availableForSelectedLaunch()) {
             PaleMirrorRuntime.forServer(serverPlayer.getServer()).refreshRegionalLedger(serverPlayer, stack);
             serverPlayer.openItemGui(stack, hand);
         }

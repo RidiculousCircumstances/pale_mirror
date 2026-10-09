@@ -146,9 +146,10 @@ final class FrontierV3InfectionOverlayExecutor {
         }
         ledger.ensureCapacityFor(desired.cell());
         ledger.prepare(desired.cell(), positions, desired.stage());
+        ledger.persist(level);
         BlockState expected = material(desired.stage());
         if (!replace(level, positions, expected)) return ProjectionResult.DEFERRED;
-        ledger.activate(desired.cell());
+        ledger.activate(desired.cell()); ledger.persist(level);
         return ProjectionResult.APPLIED;
     }
 
@@ -166,18 +167,16 @@ final class FrontierV3InfectionOverlayExecutor {
         if (claim.prepared()) return reconcilePrepared(level, ledger, desired, state, claim, positions);
         if (claim.cleared()) {
             if (positions.stream().anyMatch(position -> !level.getBlockState(position).isAir())) { ledger.defer(desired.cell()); return ProjectionResult.CONFLICT; }
-            BlockState expected = material(desired.stage());
-            if (!replace(level, positions, expected)) return ProjectionResult.DEFERRED;
-            ledger.updateStage(desired.cell(), desired.stage()); return ProjectionResult.UPDATED;
+            ledger.prepareReplacement(desired.cell(), desired.stage()); ledger.persist(level);
+            return reconcilePrepared(level,ledger,desired,state,ledger.claim(desired.cell()),positions);
         }
         if (positions.stream().anyMatch(position -> state.physicalDeltas().containsKey(canonical(position))
                 || !level.getBlockState(position).equals(material(claim.stage())))) {
             ledger.defer(desired.cell()); return ProjectionResult.CONFLICT;
         }
         if (claim.stage() == desired.stage()) return ProjectionResult.CURRENT;
-        BlockState expected = material(desired.stage());
-        if (!replace(level, positions, expected)) return ProjectionResult.DEFERRED;
-        ledger.updateStage(desired.cell(), desired.stage()); return ProjectionResult.UPDATED;
+        ledger.prepareReplacement(desired.cell(), desired.stage()); ledger.persist(level);
+        return reconcilePrepared(level,ledger,desired,state,ledger.claim(desired.cell()),positions);
     }
 
     /**
@@ -194,13 +193,15 @@ final class FrontierV3InfectionOverlayExecutor {
         }
         BlockState preparedMaterial = material(claim.stage());
         if (positions.stream().allMatch(position -> level.getBlockState(position).equals(preparedMaterial))) {
-            ledger.activate(desired.cell()); return ProjectionResult.APPLIED;
+            ledger.activate(desired.cell()); ledger.persist(level); return ProjectionResult.APPLIED;
         }
-        if (positions.stream().allMatch(position -> level.getBlockState(position).isAir())) {
+        BlockState before = claim.predecessor().map(FrontierV3InfectionOverlayExecutor::material).orElse(Blocks.AIR.defaultBlockState());
+        if (positions.stream().allMatch(position -> level.getBlockState(position).equals(before))) {
             ledger.retargetPrepared(desired.cell(), desired.stage());
+            ledger.persist(level);
             BlockState expected = material(desired.stage());
             if (!replace(level, positions, expected)) return ProjectionResult.DEFERRED;
-            ledger.activate(desired.cell()); return ProjectionResult.APPLIED;
+            ledger.activate(desired.cell()); ledger.persist(level); return ProjectionResult.APPLIED;
         }
         ledger.defer(desired.cell()); return ProjectionResult.CONFLICT;
     }

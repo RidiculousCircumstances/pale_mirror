@@ -37,9 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ResourceSiteLedger.ProjectionMode;
 import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ResourceSiteExecutor.*;
-import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ResourceSiteProjectionAdmission.*;
 
 /** Fair, bounded recovery of naturally loaded canonical field projections. */
 final class FrontierV3ResourceSiteRestartDispatcher {
@@ -83,7 +81,7 @@ final class FrontierV3ResourceSiteRestartDispatcher {
                     site.cropSlots().getFirst(),
                     io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.RESTART_OBSERVATION_MISMATCH,
                     LifecycleConflictOrigin.RESTART_RECONCILIATION,
-                    "RETIRED_STAGE_PREFIX_OWNER", claimPhysicalState(level, ledger, site, ledger.claim(siteId)));
+                    "MISSING_CELL_OWNER", "NON_NEUTRAL_SURFACE");
             pending.remove(siteId);
             if (pending.isEmpty()) { RECOVERY_SITES.remove(runtime); RECOVERY_TURNS.remove(runtime); }
             return;

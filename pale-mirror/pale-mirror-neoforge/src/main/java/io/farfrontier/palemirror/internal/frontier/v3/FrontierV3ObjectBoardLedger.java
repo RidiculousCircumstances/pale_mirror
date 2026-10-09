@@ -13,18 +13,20 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Bounded durable provenance for v3 TextDisplay boards; it never grants recreation authority. */
-final class FrontierV3ObjectBoardLedger extends SavedData {
-    private static final String NAME = "pale_mirror_frontier_v3_object_boards";
+final class FrontierV3ObjectBoardLedger extends FrontierV3JournaledSavedData {
     private static final int FORMAT = 1;
     private static final int MAX_BOARDS = 256;
     private final Map<String, Claim> claims;
 
     private FrontierV3ObjectBoardLedger() { this(new LinkedHashMap<>()); }
-    private FrontierV3ObjectBoardLedger(Map<String, Claim> claims) { this.claims = claims; }
+    private FrontierV3ObjectBoardLedger(Map<String, Claim> claims) {
+        super(FrontierV3PhysicalStoreKind.BOARDS); this.claims = table("claims", claims, java.util.function.Function.identity(), (owner, claim) -> {
+            var value = new CompoundTag(); value.putString("owner", claim.owner()); value.putLong("pos", claim.position());
+            value.putString("uuid", claim.uuid()); value.putBoolean("conflict", claim.conflicted()); return value;
+        }); }
 
     static FrontierV3ObjectBoardLedger get(ServerLevel level) {
-        return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3ObjectBoardLedger::new,
-                FrontierV3ObjectBoardLedger::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME);
+        return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.BOARDS, FrontierV3ObjectBoardLedger::new, FrontierV3ObjectBoardLedger::load);
     }
     Claim claim(String owner) { return claims.get(owner); }
     void applied(String owner, long position, String uuid) {
@@ -64,6 +66,8 @@ final class FrontierV3ObjectBoardLedger extends SavedData {
         }
         return new FrontierV3ObjectBoardLedger(claims);
     }
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", FORMAT); return tag; }
+
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("format", FORMAT); ListTag values = new ListTag();
         claims.values().stream().sorted(Comparator.comparing(Claim::owner)).forEach(claim -> {

@@ -172,8 +172,7 @@ class FrontierV3DiagnosticSceneJsonTest {
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
-        var readiness = new FrontierV3ResourceSiteHarvestExecutor.Readiness(true, false, "ACTIVE", false, true, false,
-                7, true, FrontierV3ResourceSiteHarvestExecutor.Precondition.READY, false, false);
+        var readiness = new FrontierV3ResourceSiteHarvestExecutor.Readiness(true, true, false, false, "CELL_WORK", "resident:1-1", 0, 0);
 
         String nonHarvest = FrontierV3DiagnosticJson.render("intent", "intent:missing", checkpoint, state, Optional.empty(),
                 Optional.empty(), Optional.of(readiness));

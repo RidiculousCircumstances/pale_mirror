@@ -98,7 +98,11 @@ public final class PaleMirrorRuntime {
         AdapterRegistry.onServerStarted(server);
         ManagedRailwayRuntime.installPlacementAuthority(data);
     }
+    public static boolean availableForSelectedLaunch() {
+        return !io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.freezesLegacySourceRuntime();
+    }
     public static PaleMirrorRuntime forServer(MinecraftServer server) {
+        if (!availableForSelectedLaunch()) throw new IllegalStateException("legacy PaleMirror runtime is unavailable in a v3 launch");
         return INSTANCES.computeIfAbsent(server, PaleMirrorRuntime::new);
     }
     public static void stop(MinecraftServer server) {

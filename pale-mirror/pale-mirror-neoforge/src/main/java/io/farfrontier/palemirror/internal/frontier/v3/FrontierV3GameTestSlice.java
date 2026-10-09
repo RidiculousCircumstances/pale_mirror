@@ -59,8 +59,7 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-scout-patrol-cursor")
                     || batchName.equals("pm-frontier-v3-ambient-restart-reclaim")
                     || batchName.equals("pm-frontier-v3-ambient-restart-absence");
-            case "harvest-support" -> batchName.equals("pm-frontier-v3-scene-harvest-support")
-                    || batchName.equals("pm-frontier-v3-resource-site-harvest-standing");
+            case "harvest-support" -> batchName.equals("pm-frontier-v3-scene-harvest-support");
             case "calendar" -> batchName.equals("pm-frontier-v3-calendar");
             case "ambient-restart-absence" -> batchName.equals("pm-frontier-v3-ambient-restart-absence");
             case "ambient-restart-reclaim" -> batchName.equals("pm-frontier-v3-ambient-restart-reclaim");
@@ -76,14 +75,14 @@ public final class FrontierV3GameTestSlice {
             case "local-navigation" -> batchName.equals("pm-frontier-v3-scene-local-navigation");
             case "route-construction" -> batchName.equals("pm-frontier-v3-scene-route-construction");
             case "production-effect" -> batchName.equals("pm-frontier-v3-production");
-            case "resource-prefix" -> batchName.equals("pm-frontier-v3-resource-site-prefix");
-            case "resource-site-cold" -> batchName.equals("pm-frontier-v3-resource-site-cold");
-            case "resource-site-owned" -> batchName.equals("pm-frontier-v3-resource-site-owned");
+            case "shared-storage" -> batchName.equals("pm-frontier-v3-shared-storage")
+                    || batchName.equals("pm-frontier-v3-field-turns")
+                    || batchName.equals("pm-frontier-v3-scene-body-lifetime");
             case "field-turns" -> batchName.equals("pm-frontier-v3-field-turns");
             case "service-death" -> batchName.equals("pm-frontier-v3-service-death")
                     || batchName.equals("pm-frontier-v3-settlement-service-input") || batchName.equals("pm-frontier-v3-equipment-death");
             case "physical-ownership-fences" -> batchName.equals("pm-frontier-v3-object-boards")
-                    || batchName.equals("pm-frontier-v3-resource-harvest");
+                    || batchName.equals("pm-frontier-v3-field-turns");
             case ADAPTER_MIRRORS -> batchName.equals("pm-frontier-v3-graybox")
                     || batchName.equals("pm-frontier-v3-infection-overlay");
             case "reference-depot-never-visited" -> batchName.equals("pm-frontier-v3-reference-depot-never-visited");

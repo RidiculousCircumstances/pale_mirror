@@ -128,7 +128,7 @@ public final class FrontierV3ServerLifecycle {
                 FAST_FORWARD_OUTCOMES.get(server), FAST_FORWARD_SLICE_TELEMETRY.get(server), fastForwardRequests(server),
                 FrontierV3PedestrianPlanning.diagnostic(runtime),
                 FrontierV3ActorProbeSchedule.diagnostic(runtime, FrontierV3PhysicalWorld.require(server).getGameTime()),
-                FrontierV3AmbientCarrierLedger.get(FrontierV3PhysicalWorld.require(server), state.bootstrap().worldId()).journalDiagnostic());
+                FrontierV3PhysicalStores.diagnostic(FrontierV3PhysicalWorld.require(server)));
     }
     static FrontierV3PilotSceneDemandSnapshot pilotSceneDemandSnapshot(ServerLevel level, SubjectId assaultId) {
         Objects.requireNonNull(level, "pilot demand level");
@@ -438,6 +438,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3NativeBodyResidence.restore(physicalWorld);
         FrontierV3PhysicalExecutors.registry().tick(Objects.requireNonNull(physicalWorld, "physical world"),
                 Objects.requireNonNull(runtime, "runtime"));
+        FrontierV3PhysicalStores.flush(physicalWorld);
     }
     static void runObservedPhysicalTurn(ServerLevel physicalWorld,
                                         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
@@ -454,6 +455,7 @@ public final class FrontierV3ServerLifecycle {
         try {
             FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
             if (runtime != null) releaseRuntime(server, runtime);
+            else FrontierV3PhysicalStores.finish(server);
         } finally {
             FrontierV3NativeFieldOwnership.forget(server);
             FrontierV3NativeActorOwnership.forget(server);
@@ -469,8 +471,8 @@ public final class FrontierV3ServerLifecycle {
             var ledger = FrontierV3AmbientCarrierLedger.get(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID);
             FrontierV3BodyInsertionJournal.cancelAll(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID, ledger);
             ledger.persist(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID);
-            ledger.finishCheckpoints();
         }
+        FrontierV3PhysicalStores.finish(server);
         FrontierV3NativeFieldOwnership.retain(server, runtime);
         FrontierV3NativeActorOwnership.retain(server, runtime);
         RUNTIMES.remove(server, runtime);
@@ -554,14 +556,12 @@ public final class FrontierV3ServerLifecycle {
                                                 FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         return FrontierV3FastForwardSafety.requiresPhysicalStep(
                 FrontierV3FastForwardSafety.requiresPhysicalStep(physicalWorld, runtime.decodedState().orElseThrow()),
-                FrontierV3ResourceSiteExecutor.hasProjectionInFlight(runtime)
-                        || unheldFieldWorldChange(physicalWorld, runtime) != null);
+                unheldFieldWorldChange(physicalWorld, runtime) != null);
     }
     private static String physicalBlocker(ServerLevel physicalWorld,
                                           FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         String canonical = FrontierV3FastForwardSafety.blockingDescription(physicalWorld, runtime.decodedState().orElseThrow());
-        String projection = FrontierV3ResourceSiteExecutor.hasProjectionInFlight(runtime)
-                ? FrontierV3ResourceSiteExecutor.projectionBlockingDescription(runtime) : "";
+        String projection = "";
         var unheldWorld = unheldFieldWorldChange(physicalWorld, runtime);
         if (unheldWorld != null) projection += (projection.isBlank() ? "" : ";") + "field-world-change="
                 + unheldWorld.siteId().value();

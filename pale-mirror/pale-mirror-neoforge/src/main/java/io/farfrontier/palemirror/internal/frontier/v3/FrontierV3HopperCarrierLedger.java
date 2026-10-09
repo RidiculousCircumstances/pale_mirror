@@ -14,8 +14,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Durable one-to-one provenance for hopper WorldCarrier identities. */
-final class FrontierV3HopperCarrierLedger extends SavedData {
-    private static final String NAME = "pale_mirror_frontier_v3_hopper_carriers";
+final class FrontierV3HopperCarrierLedger extends FrontierV3JournaledSavedData {
     private static final int FORMAT = 1;
     static final int MAX_CARRIERS = 4_096;
     private final Map<UUID, Long> positionsByCarrier;
@@ -23,15 +22,17 @@ final class FrontierV3HopperCarrierLedger extends SavedData {
 
     private FrontierV3HopperCarrierLedger() { this(new HashMap<>()); }
     private FrontierV3HopperCarrierLedger(Map<UUID, Long> positionsByCarrier) {
-        this.positionsByCarrier = positionsByCarrier; carriersByPosition = new HashMap<>();
+        super(FrontierV3PhysicalStoreKind.HOPPERS);
+        this.positionsByCarrier = table("carriers", positionsByCarrier, UUID::toString, (id, pos) -> {
+            var value = new CompoundTag(); value.putUUID("id", id); value.putLong("pos", pos); return value;
+        }); carriersByPosition = new HashMap<>();
         positionsByCarrier.forEach((carrier, position) -> {
             if (carriersByPosition.put(position, carrier) != null) throw new IllegalStateException("duplicate hopper carrier position");
         });
     }
 
     static FrontierV3HopperCarrierLedger get(ServerLevel level) {
-        return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3HopperCarrierLedger::new,
-                FrontierV3HopperCarrierLedger::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME);
+        return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.HOPPERS, FrontierV3HopperCarrierLedger::new, FrontierV3HopperCarrierLedger::load);
     }
 
     /** Claims only a stable one-to-one physical hopper address; false is terminal conflict evidence. */
@@ -55,6 +56,8 @@ final class FrontierV3HopperCarrierLedger extends SavedData {
         }
         return new FrontierV3HopperCarrierLedger(values);
     }
+
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", FORMAT); return tag; }
 
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("format", FORMAT); ListTag entries = new ListTag();

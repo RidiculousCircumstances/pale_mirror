@@ -25,13 +25,12 @@ import java.util.Optional;
  * foreign change conflicts the whole canonical cell and is permanent evidence; it is never a
  * permit to repaint the changed column.</p>
  */
-final class FrontierV3InfectionOverlayLedger extends SavedData {
-    private static final String NAME = "pale_mirror_frontier_v3_infection_overlay";
+final class FrontierV3InfectionOverlayLedger extends FrontierV3JournaledSavedData {
     /*
      * Format 5 deliberately distinguishes a physical adapter block from a canonical conflict.
      * This ledger has no command/cause identity, so it cannot author terminal diagnostic truth.
      */
-    private static final int FORMAT = 5;
+    private static final int FORMAT = 6;
     static final int MAX_CELLS = 65_536;
     static final int PATCH_COLUMNS = InfectionCell.BLOCKS * InfectionCell.BLOCKS;
     private final Map<InfectionCell, Claim> claims;
@@ -39,7 +38,12 @@ final class FrontierV3InfectionOverlayLedger extends SavedData {
 
     private FrontierV3InfectionOverlayLedger() { this(new LinkedHashMap<>()); }
     private FrontierV3InfectionOverlayLedger(Map<InfectionCell, Claim> claims) {
-        this.claims = claims;
+        super(FrontierV3PhysicalStoreKind.INFECTION);
+        this.claims = table("claims", claims, cell -> cell.x() + "," + cell.z(), (cell, claim) -> {
+            var value = new CompoundTag(); value.putInt("x", cell.x()); value.putInt("z", cell.z());
+            value.putLongArray("positions", claim.positions()); value.putString("stage", claim.stage().name()); value.putString("phase", claim.phase().name()); value.putString("baseline",
+            claim.predecessor().map(Enum::name).orElse("AIR")); return value;
+        });
         this.cellsByPosition = new LinkedHashMap<>();
         claims.forEach((cell, claim) -> claim.positions().forEach(position -> {
             if (cellsByPosition.put(position, cell) != null) throw new IllegalStateException("duplicate v3 infection overlay position");
@@ -47,8 +51,7 @@ final class FrontierV3InfectionOverlayLedger extends SavedData {
     }
 
     static FrontierV3InfectionOverlayLedger get(ServerLevel level) {
-        return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3InfectionOverlayLedger::new,
-                FrontierV3InfectionOverlayLedger::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME);
+        return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.INFECTION, FrontierV3InfectionOverlayLedger::new, FrontierV3InfectionOverlayLedger::load);
     }
 
     Claim claim(InfectionCell cell) { return claims.get(cell); }
@@ -75,12 +78,18 @@ final class FrontierV3InfectionOverlayLedger extends SavedData {
         Claim prior = required(cell);
         if (prior.phase() != Phase.PREPARED) throw new IllegalStateException("infection patch is not prepared");
         if (prior.stage() == stage) return;
-        claims.put(cell, new Claim(prior.positions(), stage, Phase.PREPARED));
+        claims.put(cell, new Claim(prior.positions(), stage, Phase.PREPARED, prior.predecessor()));
         setDirty();
     }
     /** Records a failed whole-patch baseline without changing any observed world block. */
     void blocked(InfectionCell cell, List<BlockPos> positions, InfectionOverlayStage stage) { put(cell, positions, stage, Phase.DEFERRED); }
 
+    void prepareReplacement(InfectionCell cell, InfectionOverlayStage target) {
+        Claim prior = required(cell);
+        if (!prior.active() && !prior.cleared()) throw new IllegalStateException("replacement has no exact patch predecessor");
+        claims.put(cell,new Claim(prior.positions(),target,Phase.PREPARED,prior.active() ? Optional.of(prior.stage()) : Optional.empty()));
+        setDirty();
+    }
     void updateStage(InfectionCell cell, InfectionOverlayStage stage) {
         Claim prior = required(cell);
         if (prior.deferred() || prior.phase() != Phase.ACTIVE) throw new IllegalStateException("infection patch is not active");
@@ -130,7 +139,7 @@ final class FrontierV3InfectionOverlayLedger extends SavedData {
         for (Tag value : values) {
             CompoundTag entry = (CompoundTag) value;
             if (!entry.contains("x", Tag.TAG_INT) || !entry.contains("z", Tag.TAG_INT) || !entry.contains("positions", Tag.TAG_LONG_ARRAY)
-                    || !entry.contains("stage", Tag.TAG_STRING) || !entry.contains("phase", Tag.TAG_STRING)) {
+                    || !entry.contains("stage", Tag.TAG_STRING) || !entry.contains("phase", Tag.TAG_STRING) || !entry.contains("baseline",Tag.TAG_STRING)) {
                 throw new IllegalStateException("incomplete v3 infection overlay claim");
             }
             InfectionCell cell = new InfectionCell(entry.getInt("x"), entry.getInt("z"));
@@ -143,11 +152,13 @@ final class FrontierV3InfectionOverlayLedger extends SavedData {
             Phase phase;
             try { phase = Phase.valueOf(entry.getString("phase")); }
             catch (IllegalArgumentException invalid) { throw new IllegalStateException("invalid v3 infection overlay phase", invalid); }
-            Claim claim = new Claim(positions, stage, phase);
+            Claim claim = new Claim(positions, stage, phase, entry.getString("baseline").equals("AIR") ? Optional.empty() : Optional.of(InfectionOverlayStage.valueOf(entry.getString("baseline"))));
             if (claims.put(cell, claim) != null) throw new IllegalStateException("duplicate v3 infection overlay claim");
         }
         return new FrontierV3InfectionOverlayLedger(claims);
     }
+
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", FORMAT); return tag; }
 
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("format", FORMAT);
@@ -158,7 +169,7 @@ final class FrontierV3InfectionOverlayLedger extends SavedData {
             value.putInt("z", entry.getKey().z());
             value.putLongArray("positions", entry.getValue().positions());
             value.putString("stage", entry.getValue().stage().name());
-            value.putString("phase", entry.getValue().phase().name());
+            value.putString("phase", entry.getValue().phase().name()); value.putString("baseline",entry.getValue().predecessor().map(Enum::name).orElse("AIR"));
             values.add(value);
         });
         tag.put("claims", values);
@@ -187,10 +198,11 @@ final class FrontierV3InfectionOverlayLedger extends SavedData {
 
     enum Phase { PREPARED, ACTIVE, DEFERRED, CLEARED }
 
-    record Claim(List<Long> positions, InfectionOverlayStage stage, Phase phase) {
+    record Claim(List<Long> positions, InfectionOverlayStage stage, Phase phase, Optional<InfectionOverlayStage> predecessor) {
+        Claim(List<Long> positions, InfectionOverlayStage stage, Phase phase) { this(positions,stage,phase,Optional.empty()); }
         Claim {
             positions = List.copyOf(positions);
-            if (phase == null) throw new IllegalArgumentException("infection patch phase");
+            if (phase == null || stage == null || predecessor == null || phase != Phase.PREPARED && predecessor.isPresent()) throw new IllegalArgumentException("infection patch phase/predecessor");
             if (positions.size() != PATCH_COLUMNS || new java.util.HashSet<>(positions).size() != PATCH_COLUMNS) {
                 throw new IllegalArgumentException("infection patch must retain every exact surface position once");
             }

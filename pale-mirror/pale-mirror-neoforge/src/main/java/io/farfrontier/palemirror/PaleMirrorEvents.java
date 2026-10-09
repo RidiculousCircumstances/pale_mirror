@@ -71,13 +71,16 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onServerAboutToStart(ServerAboutToStartEvent event) {
         io.farfrontier.palemirror.internal.world.ProductProfilePreflight.verify();
-        PaleMirrorSavedData.assertCompatibleData(event.getServer().getWorldPath(LevelResource.ROOT));
-        SourceGrayboxRuntime.assertCompatibleData(event.getServer().getWorldPath(LevelResource.ROOT));
+        if (PaleMirrorRuntime.availableForSelectedLaunch()) {
+            PaleMirrorSavedData.assertCompatibleData(event.getServer().getWorldPath(LevelResource.ROOT));
+            SourceGrayboxRuntime.assertCompatibleData(event.getServer().getWorldPath(LevelResource.ROOT));
+        }
     }
 
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
-        PaleMirrorRuntime.forServer(event.getServer());
+        if (PaleMirrorRuntime.availableForSelectedLaunch()) PaleMirrorRuntime.forServer(event.getServer());
+        else io.farfrontier.palemirror.internal.frontier.v3.FrontierV3SharedServerServices.start(event.getServer());
         io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.start(event.getServer());
     }
 
@@ -97,13 +100,15 @@ public final class PaleMirrorEvents {
         PaleMirrorPlayerPresentation.clear(event.getServer());
         io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.stop(event.getServer());
         PaleMirrorRuntime.stop(event.getServer());
+        io.farfrontier.palemirror.internal.frontier.v3.FrontierV3SharedServerServices.stop(event.getServer());
     }
 
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         AmbientSpawnThrottle.tick(event.getServer());
         io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.tick(event.getServer());
-        PaleMirrorRuntime.forServer(event.getServer()).tick();
+        if (PaleMirrorRuntime.availableForSelectedLaunch()) PaleMirrorRuntime.forServer(event.getServer()).tick();
+        else io.farfrontier.palemirror.internal.frontier.v3.FrontierV3SharedServerServices.tick(event.getServer());
     }
 
     /**
@@ -233,6 +238,7 @@ public final class PaleMirrorEvents {
                     return;
                 }
             }
+            if (!PaleMirrorRuntime.availableForSelectedLaunch()) return;
             PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
                     .recordSettlementDeath(event.getEntity(), event.getSource());
         }
@@ -321,6 +327,7 @@ public final class PaleMirrorEvents {
             event.setCanceled(true);
             return;
         }
+        if (!PaleMirrorRuntime.availableForSelectedLaunch()) return;
         if (event.getEntity().level().getServer() != null) {
             ActorDamageResult controller = PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
                     .receiveThreatControllerDamage(event.getEntity(), event.getSource(), event.getAmount());
@@ -374,6 +381,7 @@ public final class PaleMirrorEvents {
                     return;
                 }
             }
+            if (!PaleMirrorRuntime.availableForSelectedLaunch()) return;
             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
             var transfer = runtime.interactWithSupplyDepot(player, event.getPos());
             if (transfer.handled()) {
@@ -512,6 +520,7 @@ public final class PaleMirrorEvents {
                     return;
                 }
             }
+            if (!PaleMirrorRuntime.availableForSelectedLaunch()) return;
             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
             runtime.railTopologyChanged(level, event.getPos());
             runtime.gateBlockDestroyed(level, event.getPos());
@@ -521,7 +530,7 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onBlockPlaced(BlockEvent.EntityPlaceEvent event) {
-        if (!event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+        if (PaleMirrorRuntime.availableForSelectedLaunch() && !event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
             PaleMirrorRuntime.forServer(level.getServer()).railTopologyChanged(level, event.getPos());
         }
     }
@@ -537,7 +546,8 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onChunkLoaded(ChunkEvent.Load event) {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
-            PaleMirrorRuntime.forServer(level.getServer()).railChunkLoaded(level, event.getChunk().getPos());
+            if (PaleMirrorRuntime.availableForSelectedLaunch())
+                PaleMirrorRuntime.forServer(level.getServer()).railChunkLoaded(level, event.getChunk().getPos());
             io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeNaturalChunkLoad(level, event.getChunk().getPos());
             if (SourceGrayboxRuntime.availableForSelectedLaunch() && SourceGrayboxRuntime.isGrayboxLevel(level)) {
                 SourceGrayboxRuntime.forServer(level.getServer()).observeChunkLoaded(level);
@@ -547,7 +557,7 @@ public final class PaleMirrorEvents {
 
     private static boolean denyExcludedItem(Player player, ItemStack stack, String operation) {
         return SourceItemFirewall.classify(stack).map(blocked -> {
-            if (player instanceof ServerPlayer serverPlayer) {
+            if (PaleMirrorRuntime.availableForSelectedLaunch() && player instanceof ServerPlayer serverPlayer) {
                 PaleMirrorRuntime.forServer(serverPlayer.getServer()).quarantineLegacyItem(serverPlayer, blocked.sourceId(),
                         blocked.fingerprint(), "Excluded source item attempted " + operation);
             }
@@ -556,7 +566,7 @@ public final class PaleMirrorEvents {
     }
 
     private static boolean denyReservedTransfer(Player player, ItemStack stack) {
-        if (!(player instanceof ServerPlayer serverPlayer) || stack.isEmpty()
+        if (!PaleMirrorRuntime.availableForSelectedLaunch() || !(player instanceof ServerPlayer serverPlayer) || stack.isEmpty()
                 || !PaleMirrorRuntime.forServer(serverPlayer.getServer()).isReservedTransferItem(stack)) return false;
         PaleMirrorPlayerPresentation.actionRejected(serverPlayer, "pale-mirror:reserved-resource-transfer");
         return true;

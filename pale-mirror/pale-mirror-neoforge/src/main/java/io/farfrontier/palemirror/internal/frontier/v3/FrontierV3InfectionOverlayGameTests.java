@@ -40,7 +40,7 @@ public final class FrontierV3InfectionOverlayGameTests {
         helper.assertValueEqual(materialized.size(), FrontierV3InfectionOverlayLedger.PATCH_COLUMNS, "one canonical infection cell retains every physical surface column");
         helper.assertTrue(materialized.stream().allMatch(position -> level.getBlockState(position).is(Blocks.MAGENTA_CARPET)), "the bloom stage is an obvious foreign graybox surface patch");
         net.minecraft.nbt.CompoundTag serialized = ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess());
-        ledger = FrontierV3InfectionOverlayLedger.load(serialized, level.registryAccess());
+        ledger = boundComponentReload(level, serialized);
         helper.assertValueEqual(FrontierV3InfectionOverlayExecutor.reconcileRetraction(level, ledger, java.util.Map.entry(cell, ledger.claim(cell)), state),
                 FrontierV3InfectionOverlayExecutor.ProjectionResult.RETRACTED, "canonical retreat restores only the exact owned air-baseline marker after SavedData reload");
         helper.assertTrue(materialized.stream().allMatch(position -> level.getBlockState(position).isAir()), "retraction leaves the captured air baseline, not a terrain rewrite");
@@ -64,7 +64,7 @@ public final class FrontierV3InfectionOverlayGameTests {
         FrontierV3InfectionOverlayLedger ledger = FrontierV3InfectionOverlayLedger.get(level);
         ledger.prepare(cell, patch, InfectionOverlayStage.BLOOM);
         BlockPos interrupted = patch.getFirst(); level.setBlock(interrupted, FrontierV3InfectionOverlayExecutor.material(InfectionOverlayStage.BLOOM), 3);
-        ledger = FrontierV3InfectionOverlayLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()), level.registryAccess());
+        ledger = boundComponentReload(level, ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()));
 
         helper.assertValueEqual(FrontierV3InfectionOverlayExecutor.project(level, ledger, desired, state("frontier:game-test-interrupted-infection", 92L)),
                 FrontierV3InfectionOverlayExecutor.ProjectionResult.CONFLICT, "a restart with an interrupted patch fails closed instead of completing unknown columns");
@@ -73,6 +73,16 @@ public final class FrontierV3InfectionOverlayGameTests {
                         && patch.subList(1, patch.size()).stream().allMatch(position -> level.getBlockState(position).isAir()),
                 "recovery neither removes the physical trace nor stacks or paints the remaining columns");
         helper.succeed();
+    }
+
+    /** Component fixture owns a separate journal; it cannot replace a live registered writer. */
+    private static FrontierV3InfectionOverlayLedger boundComponentReload(ServerLevel level, net.minecraft.nbt.CompoundTag image) {
+        var ledger=FrontierV3InfectionOverlayLedger.load(image,level.registryAccess());
+        var path=FrontierV3JournaledSavedData.storageFile(level,FrontierV3PhysicalStoreKind.INFECTION)
+                .resolveSibling("component-infection-"+java.util.UUID.randomUUID()+".dat");
+        try { ledger.attach(level,path,FrontierV3JournalStore.open(path,FrontierV3JournalStore.PHYSICAL)); ledger.persist(level); }
+        catch(java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
+        return ledger;
     }
 
     private static InfectionCell cell(BlockPos origin) { return new InfectionCell(Math.floorDiv(origin.getX(), InfectionCell.BLOCKS), Math.floorDiv(origin.getZ(), InfectionCell.BLOCKS)); }

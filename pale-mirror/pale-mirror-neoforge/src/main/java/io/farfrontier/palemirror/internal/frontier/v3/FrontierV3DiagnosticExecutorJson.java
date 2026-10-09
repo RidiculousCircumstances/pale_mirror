@@ -25,16 +25,11 @@ final class FrontierV3DiagnosticExecutorJson {
 
     static String harvestReadiness(FrontierV3ResourceSiteHarvestExecutor.Readiness value) {
         return ",\"physicalReadiness\":{\"fieldLoaded\":" + value.fieldLoaded()
-                + ",\"depotLoaded\":" + value.depotLoaded()
-                + ",\"depotSurface\":\"" + FrontierV3DiagnosticJson.quote(value.depotSurface())
-                + "\",\"ownedChestPresent\":" + value.ownedChestPresent()
-                + ",\"fieldMatchesMatureStage\":" + value.fieldMatchesMatureStage()
-                + ",\"outputSlotEmpty\":" + value.outputSlotEmpty()
-                + ",\"claimedFieldStage\":" + value.claimedFieldStage()
-                + ",\"fieldMatchesClaimedStage\":" + value.fieldMatchesClaimedStage()
-                + ",\"precondition\":\"" + value.precondition()
-                + "\",\"queued\":" + value.queued()
-                + ",\"executionEligible\":" + value.executionEligible() + "}";
+                + ",\"ownedField\":" + value.ownedField() + ",\"conflicted\":" + value.conflicted()
+                + ",\"pendingCellEffect\":" + value.pendingCellEffect()
+                + ",\"workPhase\":\"" + value.workPhase() + "\",\"workerId\":\"" + FrontierV3DiagnosticJson.quote(value.workerId())
+                + "\",\"carriedQuantity\":" + value.carriedQuantity() + ",\"deliveredQuantity\":" + value.deliveredQuantity() + "}";
+
     }
 
     /** Selects a current lease for every diagnostic view without granting any lease authority. */

@@ -50,7 +50,7 @@ public final class FrontierV3DecontaminationGameTests {
         helper.assertTrue(FrontierV3DecontaminationExecutor.applyOne(level, ledger, reduce, chest), "one exact reagent reduces its owned marker");
         helper.assertTrue(chest.getItem(0).getCount() == 1 && markers.stream().allMatch(position -> level.getBlockState(position).equals(FrontierV3InfectionOverlayExecutor.material(InfectionOverlayStage.INFESTED))),
                 "the physical stack and every owned surface column change together");
-        ledger = FrontierV3InfectionOverlayLedger.load(beforeReduction, level.registryAccess());
+        ledger = boundComponentReload(level, beforeReduction);
         helper.assertTrue(FrontierV3DecontaminationExecutor.recoverLedgerPostcondition(level, ledger, reduce)
                         && ledger.claim(cell).stage() == InfectionOverlayStage.INFESTED,
                 "restart reconstructs only the owned stage when the block and exact consumed stack prove the reduction");
@@ -60,17 +60,27 @@ public final class FrontierV3DecontaminationGameTests {
         CompoundTag beforeClear = ledger.save(new CompoundTag(), level.registryAccess());
         helper.assertTrue(FrontierV3DecontaminationExecutor.applyOne(level, ledger, clear, chest), "the final exact reagent clears the owned marker");
         helper.assertTrue(chest.getItem(0).isEmpty() && markers.stream().allMatch(position -> level.getBlockState(position).isAir()), "the final exact reagent clears only its owned surface patch");
-        ledger = FrontierV3InfectionOverlayLedger.load(beforeClear, level.registryAccess());
+        ledger = boundComponentReload(level, beforeClear);
         helper.assertTrue(FrontierV3DecontaminationExecutor.recoverLedgerPostcondition(level, ledger, clear) && ledger.claim(cell).cleared(),
                 "restart reconstructs a cleared-owned lease before canonical confirmation");
         CompoundTag serialized = ledger.save(new CompoundTag(), level.registryAccess());
-        ledger = FrontierV3InfectionOverlayLedger.load(serialized, level.registryAccess());
+        ledger = boundComponentReload(level, serialized);
         helper.assertTrue(ledger.claim(cell).cleared(), "a restart retains the cleared-marker lease for postcondition inspection");
         helper.assertTrue(FrontierV3InfectionOverlayExecutor.reconcileRetraction(level, ledger, Map.entry(cell, ledger.claim(cell)),
                         FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:decontamination-game-test"), 104L)))
                         == FrontierV3InfectionOverlayExecutor.ProjectionResult.RETRACTED && ledger.claim(cell) == null,
                 "confirmed retraction frees the owned air-baseline claim after recovery");
         helper.succeed();
+    }
+
+    /** Component fixture owns a separate journal; it cannot replace a live registered writer. */
+    private static FrontierV3InfectionOverlayLedger boundComponentReload(ServerLevel level, net.minecraft.nbt.CompoundTag image) {
+        var ledger=FrontierV3InfectionOverlayLedger.load(image,level.registryAccess());
+        var path=FrontierV3JournaledSavedData.storageFile(level,FrontierV3PhysicalStoreKind.INFECTION)
+                .resolveSibling("component-infection-"+java.util.UUID.randomUUID()+".dat");
+        try { ledger.attach(level,path,FrontierV3JournalStore.open(path,FrontierV3JournalStore.PHYSICAL)); ledger.persist(level); }
+        catch(java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
+        return ledger;
     }
 
     private static List<BlockPos> patch(BlockPos origin) {

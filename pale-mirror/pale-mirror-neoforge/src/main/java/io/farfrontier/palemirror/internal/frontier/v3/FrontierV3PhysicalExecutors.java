@@ -7,8 +7,7 @@ import java.util.Set;
 final class FrontierV3PhysicalExecutors {
     private static final FrontierV3PhysicalExecutorRegistry REGISTRY = new FrontierV3PhysicalExecutorRegistry(List.of(
             executor("physical-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "physical-delta", FrontierV3PhysicalObservationExecutor::tick),
-            executor("resource-site-explosion-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("physical-observation"), "resource-site-explosion", FrontierV3ResourceSiteExplosionExecutor::tick),
-            executor("explosion-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("resource-site-explosion-observation"), "explosion-observation", FrontierV3ExplosionExecutor::tick),
+            executor("explosion-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("physical-observation"), "explosion-observation", FrontierV3ExplosionExecutor::tick),
 
             executor("graybox-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("physical-observation"), "graybox-projection", FrontierV3AftermathOwnerComposition::projection),
             executor("resource-site-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("graybox-projection"), "resource-site-projection", FrontierV3ResourceSiteExecutor::tick),
@@ -59,8 +58,7 @@ final class FrontierV3PhysicalExecutors {
                     Set.of("reference-container-custody", "shipment-resource-effects"), "resource-site-deferred-receipt", FrontierV3ResourceSiteDeliveryExecutor::confirmDeferredOne),
             // Harvest changes both one PM-owned field and its exact chest slot, so it is an
             // effect after the container owner has established ACTIVE provenance, not projection.
-            executor("resource-site-harvest", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-deferred-receipt"), "resource-site-harvest-effect", FrontierV3ResourceSiteHarvestExecutor::tick),
-            executor("hive-nutrient-endpoints", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-harvest"), "hive-nutrient-endpoint-effect", FrontierV3HiveNutrientEndpointExecutor::tick),
+            executor("hive-nutrient-endpoints", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-deferred-receipt"), "hive-nutrient-endpoint-effect", FrontierV3HiveNutrientEndpointExecutor::tick),
             executor("defender-equipment-issue", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("hive-nutrient-endpoints"), "defender-equipment-issue-effect", FrontierV3EquipmentIssueExecutor::tick),
             executor("settlement-service-input-issue", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("defender-equipment-issue"), "settlement-service-input-issue-effect", FrontierV3SettlementServiceInputIssueExecutor::tick),
             executor("settlement-service-decontamination", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,

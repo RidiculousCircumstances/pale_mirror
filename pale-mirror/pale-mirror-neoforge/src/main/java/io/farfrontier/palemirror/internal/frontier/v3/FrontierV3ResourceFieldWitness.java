@@ -563,14 +563,16 @@ final class FrontierV3ResourceFieldWitness {
                 cellIdsFingerprint, false);
     }
 
-    CompoundTag write() {
+    CompoundTag writeHeader() {
         var tag = new CompoundTag(); tag.putInt("format", FORMAT); tag.putString("site", siteId.value());
-        tag.putLong("epoch", epoch);
-        tag.putLong("layoutRevision", layoutRevision);
-        tag.putString("layoutFingerprint", layoutFingerprint);
+        tag.putLong("epoch", epoch); tag.putLong("layoutRevision", layoutRevision);
+        tag.putString("layoutFingerprint", layoutFingerprint); return tag;
+    }
+    Map<Long, Map<ResourceFieldLayout.CellId, Cell>> journalBuckets() { return byIdBucket; }
+    ListTag writeBucket(long identity) { return writeCells(byIdBucket.get(identity)); }
+    private static ListTag writeCells(Map<ResourceFieldLayout.CellId, Cell> cells) {
         var entries = new ListTag();
-        byIdBucket.values().stream().flatMap(group -> group.entrySet().stream())
-                .sorted(Map.Entry.comparingByKey(Comparator.comparingLong(ResourceFieldLayout.CellId::value)))
+        cells.entrySet().stream().sorted(Map.Entry.comparingByKey(Comparator.comparingLong(ResourceFieldLayout.CellId::value)))
                 .forEach(entry -> {
                     var value = new CompoundTag(); value.putLong("id", entry.getKey().value());
                     writeCondition(value, "committed", entry.getValue().committed());
@@ -610,6 +612,11 @@ final class FrontierV3ResourceFieldWitness {
                     });
                     entries.add(value);
                 });
+        return entries;
+    }
+    CompoundTag write() {
+        var tag = writeHeader(); var entries = new ListTag();
+        byIdBucket.keySet().stream().sorted().forEach(id -> entries.addAll(writeBucket(id)));
         tag.put("cells", entries); return tag;
     }
 

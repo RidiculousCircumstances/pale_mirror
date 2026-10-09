@@ -14,8 +14,16 @@ import java.util.zip.CRC32C;
  */
 final class FrontierV3JournalStore {
     private static final int VERSION = 1, MAGIC = 0x504d4a31;
-    private static final int MAX_ROWS = 4_096, MAX_FRAME = 16 * 1024 * 1024;
-    private static final long MAX_IMAGE_BYTES = 32L * 1024 * 1024;
+    private static final int MAX_FRAME = 16 * 1024 * 1024;
+    record Limits(int rows, long imageBytes) {
+        Limits {
+            if (rows < 1 || rows > 131_072 || imageBytes < 1 || imageBytes > 64L * 1024 * 1024)
+                throw new IllegalArgumentException("invalid journal profile");
+        }
+    }
+    static final Limits ACTORS = new Limits(4_096, 32L * 1024 * 1024);
+    static final Limits PHYSICAL = new Limits(131_072, 64L * 1024 * 1024);
+    private final Limits limits;
     private static final long MAX_RETAINED_BYTES = 64L * 1024 * 1024;
     private static final int SEGMENT_RECORDS = 64, CHECKPOINT_RECORDS = 128;
     private static final ExecutorService CHECKPOINTS = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
@@ -44,7 +52,8 @@ final class FrontierV3JournalStore {
     private Path tornSegment;
     private long tornLength;
 
-    private FrontierV3JournalStore(Path checkpoint, Executor writer) {
+    private FrontierV3JournalStore(Path checkpoint, Executor writer, Limits limits) {
+        this.limits = Objects.requireNonNull(limits);
         this.writer = Objects.requireNonNull(writer);
         this.checkpoint = checkpoint.toAbsolutePath().normalize();
         synchronized (FILE_LOCKS) {
@@ -58,17 +67,27 @@ final class FrontierV3JournalStore {
     }
 
     static FrontierV3JournalStore open(Path checkpoint) throws IOException {
-        return open(checkpoint, WRITES);
+        return open(checkpoint, WRITES, ACTORS);
     }
     static FrontierV3JournalStore open(Path checkpoint, Executor writer) throws IOException {
-        var store = new FrontierV3JournalStore(checkpoint, writer);
+        return open(checkpoint, writer, ACTORS);
+    }
+    static FrontierV3JournalStore open(Path checkpoint, Limits limits) throws IOException {
+        return open(checkpoint, WRITES, limits);
+    }
+    private static FrontierV3JournalStore open(Path checkpoint, Executor writer, Limits limits) throws IOException {
+        var store = new FrontierV3JournalStore(checkpoint, writer, limits);
         synchronized (store.fileLock) {
         if (Files.exists(store.checkpoint)) {
-            var root = NbtIo.readCompressed(store.checkpoint, NbtAccounter.create(MAX_RETAINED_BYTES));
+            var root = NbtIo.readCompressed(store.checkpoint, NbtAccounter.create(128L * 1024 * 1024));
             var data = root.getCompound("data");
             if (data.getInt("journalVersion") != VERSION || !data.contains("sequence", Tag.TAG_LONG)
-                    || !(data.get("rows") instanceof ListTag values) || values.size() > MAX_ROWS)
+                    || !(data.get("rows") instanceof ListTag values) || values.size() > limits.rows())
                 throw new IOException("incompatible physical journal checkpoint; fresh world required");
+            if (data.contains("profileRows")) {
+                if (data.getInt("profileRows") != limits.rows() || data.getLong("profileBytes") != limits.imageBytes())
+                    throw new IOException("physical journal profile mismatch");
+            } else if (!limits.equals(ACTORS)) throw new IOException("missing physical journal profile");
             store.sequence = data.getLong("sequence");
             if (store.sequence < 0) throw new IOException("negative physical checkpoint sequence");
             for (var raw : values) {
@@ -79,7 +98,7 @@ final class FrontierV3JournalStore {
                         || store.rows.putIfAbsent(row.getString("key"), row.getByteArray("value")) != null)
                     throw new IOException("invalid or duplicate physical checkpoint row");
                 store.imageBytes += rowBytes(row.getString("key"), row.getByteArray("value"));
-                if (store.imageBytes > MAX_IMAGE_BYTES) throw new IOException("physical journal image capacity");
+                if (store.imageBytes > limits.imageBytes()) throw new IOException("physical journal image capacity");
             }
             store.checkpointSequence = store.sequence;
         } else if (Files.exists(store.journal)) {
@@ -114,7 +133,7 @@ final class FrontierV3JournalStore {
                 throw new IllegalArgumentException("invalid physical journal key");
             next.put(key, value == null ? null : value.clone());
         });
-        if (next.size() > MAX_ROWS) throw new IOException("physical journal row capacity");
+        if (next.size() > limits.rows()) throw new IOException("physical journal row capacity");
         long bytes = encode(0, next).length + 12L;
         if (bytes > MAX_FRAME || queue.size() >= 64 || queuedBytes + bytes > MAX_FRAME)
             throw new IOException("physical journal admission capacity");
@@ -177,8 +196,8 @@ final class FrontierV3JournalStore {
                 if ((previous == 0) != (next == 0)) count += next == 0 ? -1 : 1;
                 bytes += next - previous; sizes.put(entry.getKey(), next);
             }
-            if (count > MAX_ROWS) throw new IOException("physical journal row capacity");
-            if (bytes > MAX_IMAGE_BYTES) throw new IOException("physical journal image capacity");
+            if (count > limits.rows()) throw new IOException("physical journal row capacity");
+            if (bytes > limits.imageBytes()) throw new IOException("physical journal image capacity");
             if (pending.changes().isEmpty()) { ids.add(id); continue; }
             byte[] payload = encode(++id, pending.changes()); ids.add(id);
             var crc = new CRC32C(); crc.update(payload);
@@ -288,6 +307,7 @@ final class FrontierV3JournalStore {
         Files.createDirectories(checkpoint.getParent());
         var root = new CompoundTag(); var data = new CompoundTag(); var values = new ListTag();
         data.putInt("journalVersion", VERSION); data.putLong("sequence", captured);
+        data.putInt("profileRows", limits.rows()); data.putLong("profileBytes", limits.imageBytes());
         image.forEach((key, value) -> {
             var row = new CompoundTag(); row.putString("key", key); row.putByteArray("value", value); values.add(row);
         });
@@ -348,8 +368,8 @@ final class FrontierV3JournalStore {
                                 imageBytes += rowBytes(key, value) - rowBytes(key, rows.get(key));
                                 if (value == null) rows.remove(key); else rows.put(key, value);
                             });
-                            if (rows.size() > MAX_ROWS) throw new IOException("physical journal row capacity");
-                            if (imageBytes > MAX_IMAGE_BYTES) throw new IOException("physical journal image capacity");
+                            if (rows.size() > limits.rows()) throw new IOException("physical journal row capacity");
+                            if (imageBytes > limits.imageBytes()) throw new IOException("physical journal image capacity");
                             sequence = id;
                         }
                     }
@@ -380,9 +400,9 @@ final class FrontierV3JournalStore {
         }
         return bytes.toByteArray();
     }
-    private static Map<String, byte[]> decode(DataInputStream input) throws IOException {
+    private Map<String, byte[]> decode(DataInputStream input) throws IOException {
         int count = input.readInt();
-        if (count < 1 || count > MAX_ROWS) throw new IOException("physical journal change count");
+        if (count < 1 || count > limits.rows()) throw new IOException("physical journal change count");
         var changes = new TreeMap<String, byte[]>();
         for (int i = 0; i < count; i++) {
             String key = input.readUTF(); int length = input.readInt();

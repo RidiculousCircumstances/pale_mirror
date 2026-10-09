@@ -337,10 +337,13 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     }
     static FrontierV3AmbientCarrierLedger get(ServerLevel level, WorldId worldId) {
         var path = storageFile(level, worldId);
-        var ledger = level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3AmbientCarrierLedger::new,
+        var ledger = level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(() -> readFile(path, level.registryAccess()),
                 (tag, registries) -> readFile(path, registries), DataFixTypes.SAVED_DATA_COMMAND_STORAGE), fileName(worldId));
         try { if (ledger.journal != null) ledger.journal.checkHealthy(); }
         catch (java.io.IOException failure) { throw new java.io.UncheckedIOException("carrier journal writer failed", failure); }
+        FrontierV3PhysicalStores.register(level, worldId, FrontierV3PhysicalStoreKind.ACTORS, ledger,
+                () -> { if (ledger.isDirty()) ledger.persist(level, worldId); else if (ledger.journal != null) { try { ledger.journal.checkHealthy();
+            } catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); } } }, () -> { ledger.persist(level, worldId); ledger.finishCheckpoints(); }, ledger::journalDiagnostic);
         return ledger;
     }
     private CompoundTag actorImage(SubjectId actor) {

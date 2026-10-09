@@ -48,6 +48,9 @@ class FrontierV3LaunchOwnershipTest {
                     "v3 must freeze the legacy source runtime before any broad callback can hydrate it");
             assertFalse(SourceGrayboxRuntime.availableForSelectedLaunch(),
                     "a v3 launch must reject source runtime construction before a chunk callback can deserialize v2");
+            assertFalse(io.farfrontier.palemirror.internal.PaleMirrorRuntime.availableForSelectedLaunch());
+            assertThrows(IllegalStateException.class, () -> io.farfrontier.palemirror.internal.PaleMirrorRuntime.forServer(null),
+                    "selected-launch rejection must precede even dereferencing a server or loading legacy SavedData");
         } finally {
             if (prior == null) System.clearProperty(PROPERTY);
             else System.setProperty(PROPERTY, prior);

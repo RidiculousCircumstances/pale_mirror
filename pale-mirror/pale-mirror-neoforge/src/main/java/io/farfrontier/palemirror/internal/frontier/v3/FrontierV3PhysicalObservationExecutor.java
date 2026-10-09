@@ -31,10 +31,13 @@ final class FrontierV3PhysicalObservationExecutor {
                                             List<BlockPos> affected) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return false;
-        Set<Long> resourceSiteCells = FrontierV3ResourceSiteExplosionExecutor.activeOwnedCells(level, state);
-        return FrontierV3PhysicalObservationLedger.get(level).captureExternalExplosion(level, level.getGameTime(), affected,
+        Set<Long> resourceSiteCells = FrontierV3ResourceFieldOwnership.activeOwnedCells(level, state);
+        var ledger = FrontierV3PhysicalObservationLedger.get(level);
+        boolean captured = ledger.captureExternalExplosion(level, level.getGameTime(), affected,
                 FrontierV3GrayboxLedger.get(level), position -> state.bootstrap().bounds().contains(new BlockPosition(position.getX(), position.getY(), position.getZ()))
                         && !resourceSiteCells.contains(position.asLong()));
+        if (captured) ledger.persist(level);
+        return captured;
     }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {

@@ -110,7 +110,7 @@ final class FrontierV3DecontaminationExecutor {
             if (!replace(level, target.markers(), FrontierV3InfectionOverlayExecutor.material(result))) return false;
             ledger.updateStage(target.cell(), result);
         }
-        stack.shrink(1); chest.setItem(target.slot(), stack); chest.setChanged(); return true;
+        stack.shrink(1); chest.setItem(target.slot(), stack); chest.setChanged(); ledger.persist(level); return true;
     }
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent, FrontierV3InfectionOverlayLedger ledger) {

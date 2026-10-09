@@ -450,6 +450,7 @@ public final class FrontierV3AmbientActorGameTests {
             final FrontierV3AmbientCarrierLedger restored;
             try {
                 var file = FrontierV3AmbientCarrierLedger.storageFile(level, config.worldId());
+                FrontierV3PhysicalStores.release(level, config.worldId(), FrontierV3PhysicalStoreKind.ACTORS, ledger);
                 restored = FrontierV3AmbientCarrierLedger.readFile(file, level.registryAccess());
                 var name = file.getFileName().toString();
                 level.getDataStorage().set(name.substring(0, name.length() - ".dat".length()), restored);

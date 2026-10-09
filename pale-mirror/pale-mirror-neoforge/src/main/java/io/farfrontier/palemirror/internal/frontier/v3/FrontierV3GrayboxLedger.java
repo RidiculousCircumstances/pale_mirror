@@ -17,8 +17,7 @@ import java.util.NavigableSet;
 import java.util.TreeSet;
 
 /** Durable, bounded provenance for v3 graybox cells; it never grants overwrite authority. */
-final class FrontierV3GrayboxLedger extends SavedData {
-    private static final String NAME = "pale_mirror_frontier_v3_graybox";
+final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     /* Format 5 removes adapter-authored terminal conflict from mirror persistence. */
     private static final int FORMAT = 5;
     private static final int MAX_CELLS = 65_536;
@@ -33,15 +32,15 @@ final class FrontierV3GrayboxLedger extends SavedData {
 
     private FrontierV3GrayboxLedger() { this(new HashMap<>()); }
     private FrontierV3GrayboxLedger(Map<Long, Claim> claims) {
-        this.claims = claims;
+        super(FrontierV3PhysicalStoreKind.BLOCKS);
+        this.claims = table("claims", claims, Object::toString, (position, claim) -> encodeClaim(position, claim));
         this.worksiteStagingPositions = new TreeSet<>();
         claims.forEach((position, claim) -> {
             if (claim.semanticPart().equals(GrayboxSemanticPart.WORKSITE_STAGING.name())) worksiteStagingPositions.add(position);
         });
     }
     static FrontierV3GrayboxLedger get(ServerLevel level) {
-        return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3GrayboxLedger::new,
-                FrontierV3GrayboxLedger::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME);
+        return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.BLOCKS, FrontierV3GrayboxLedger::new, FrontierV3GrayboxLedger::load);
     }
     /** Same bounded provenance implementation for the physical-owner composition harness. */
     static FrontierV3GrayboxLedger inMemory() { return new FrontierV3GrayboxLedger(); }
@@ -148,9 +147,16 @@ final class FrontierV3GrayboxLedger extends SavedData {
         return new FrontierV3GrayboxLedger(claims);
     }
 
+    private static CompoundTag encodeClaim(long position, Claim claim) {
+        var value = new CompoundTag(); value.putLong("pos", position); value.putString("owner", claim.owner());
+        value.putInt("targetTag", claim.targetTag()); value.putString("material", claim.material()); value.putString("part", claim.semanticPart());
+        value.putLong("revision", claim.revision()); value.putBoolean("deferred", claim.deferred()); return value;
+    }
     private void index(Claim claim, long position) {
         if (claim.semanticPart().equals(GrayboxSemanticPart.WORKSITE_STAGING.name())) worksiteStagingPositions.add(position);
     }
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", FORMAT); return tag; }
+
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("format", FORMAT); ListTag entries = new ListTag();
         claims.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {

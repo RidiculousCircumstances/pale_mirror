@@ -48,8 +48,7 @@ public final class FrontierV3ResourceSiteObservationGameTests {
         // This isolated canonical-conflict fixture must not leave a claim for the
         // same site ID in the shared GameTest SavedData used by later field tests.
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
-        ledger.reserve(siteId, new PhysicalIntentId("intent:site-prepare-1-wheat-field"));
-        ledger.activate(siteId);
+        ledger.reserveFieldInitialization(site, new PhysicalIntentId("intent:site-prepare-1-wheat-field"));
 
         String cause = "player:resource-observation-game-test";
         helper.assertTrue(FrontierV3ResourceSiteConflictExecutor.recordPlayerConflict(level, runtime, ledger, site, site.cropSlots().getLast(), cause),
@@ -62,7 +61,7 @@ public final class FrontierV3ResourceSiteObservationGameTests {
         helper.assertValueEqual(runtime.decodedState().orElseThrow().resourceSites().site(siteId).conflictDisposition().orElseThrow().policy(),
                 ResourceSiteConflictPolicy.TERMINAL_REPAIR_REQUIRED,
                 "a normal player action must retain terminal repair policy rather than restart recovery custody");
-        helper.assertValueEqual(ledger.claim(siteId).status(), FrontierV3ResourceSiteLedger.Status.CONFLICT,
+        helper.assertValueEqual(ledger.fieldClaim(siteId).status(), FrontierV3ResourceSiteLedger.Status.CONFLICT,
                 "the physical ownership ledger must carry the same local conflict boundary");
         String incidentCorrelation = runtime.decodedState().orElseThrow().resourceSites().site(siteId).conflictDisposition().orElseThrow()
                 .incident().traceCorrelation();

@@ -82,6 +82,7 @@ public final class PaleMirrorNetwork {
      */
     public static void synchronizeDiscoveredFeature(ServerPlayer player, String regionId,
                                                     KnownRegionalFeature feature) {
+        if (!PaleMirrorRuntime.availableForSelectedLaunch()) return;
         String notice = discoveryNotice(feature);
         if (net.neoforged.neoforge.network.registration.NetworkRegistry.hasChannel(
                 player.connection, AtlasSnapshotPayload.TYPE.id())) {
@@ -126,7 +127,7 @@ public final class PaleMirrorNetwork {
 
     private static void performAction(AtlasActionPayload payload, IPayloadContext context) {
         ServerPlayer player = serverPlayer(context);
-        if (player == null) return;
+        if (player == null || !PaleMirrorRuntime.availableForSelectedLaunch()) return;
         PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
         boolean accepted = switch (payload.action()) {
             case ACCEPT_SCENARIO -> runtime.accept(payload.targetId(), runtime.audienceFor(player));
@@ -145,6 +146,7 @@ public final class PaleMirrorNetwork {
     }
 
     private static void reply(ServerPlayer player, String notice, boolean openScreen) {
+        if (!PaleMirrorRuntime.availableForSelectedLaunch()) return;
         PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
         PacketDistributor.sendToPlayer(player, runtime.atlasSnapshot(player, notice, openScreen));
     }

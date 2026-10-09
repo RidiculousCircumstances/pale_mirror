@@ -147,13 +147,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), cellId,
                     "harvest-scene-admission").disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT;
         }
-        if (!FrontierV3ResourceSiteExecutor.loaded(level, site)) return false;
-        FrontierV3ResourceSiteLedger.Claim claim = siteClaim instanceof FrontierV3ResourceSiteLedger.LegacySiteClaim legacy
-                ? legacy.claim() : null;
-        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                || claim.stage() != io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle.MATURE_STAGE) return false;
-        return claim.harvestedCropSlots() == job.progress().completedCropSlots()
-                && FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, job.progress().completedCropSlots());
+        return false;
     }
 
     private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

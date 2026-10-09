@@ -18,6 +18,7 @@ public final class RefugeeAnchorItem extends Item {
     @Override
     public InteractionResult useOn(UseOnContext context) {
         if (!(context.getPlayer() instanceof ServerPlayer player)) return InteractionResult.SUCCESS;
+        if (!PaleMirrorRuntime.availableForSelectedLaunch()) return InteractionResult.FAIL;
         ItemStack stack = context.getItemInHand();
         boolean placed = PaleMirrorRuntime.forServer(player.getServer()).placeRefugeeAnchor(player,
                 context.getClickedPos().relative(context.getClickedFace()), stack);

@@ -335,12 +335,9 @@ public final class FrontierV3ResourceFieldObservationGameTests {
     }
 
     private static FrontierV3ResourceSiteLedger.FieldClaim persistedField(ServerLevel level, SubjectId siteId) {
-        try {
-            var root = NbtIo.readCompressed(FrontierV3ResourceSiteLedger.storageFile(level), NbtAccounter.unlimitedHeap());
-            return FrontierV3ResourceSiteLedger.load(root.getCompound("data"), level.registryAccess()).fieldClaim(siteId);
-        } catch (java.io.IOException failure) {
-            throw new java.io.UncheckedIOException(failure);
-        }
+        return FrontierV3JournaledSavedData.readFile(FrontierV3ResourceSiteLedger.storageFile(level),
+                FrontierV3PhysicalWorld.WORLD_ID.value(), level.dimension().location().toString(),
+                FrontierV3ResourceSiteLedger::fixture, FrontierV3ResourceSiteLedger::load, level.registryAccess()).fieldClaim(siteId);
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",

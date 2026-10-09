@@ -27,22 +27,23 @@ import java.util.Optional;
  * provenance until the following server tick can inspect the real postcondition. This prevents a
  * restart from pretending that an uninspected blast either succeeded or did nothing.</p>
  */
-final class FrontierV3PhysicalObservationLedger extends SavedData {
-    private static final String NAME = "pale_mirror_frontier_v3_physical_observations";
-    private static final int FORMAT = 2;
+final class FrontierV3PhysicalObservationLedger extends FrontierV3JournaledSavedData {
+    private static final int FORMAT = 3;
     private static final int MAX_PENDING_EFFECTS = 64;
     private static final int MAX_PENDING_CELLS = 65_536;
-    private final LinkedHashMap<String, Pending> pending;
+    private final Map<String, Pending> pending;
     private long nextSequence;
 
     private FrontierV3PhysicalObservationLedger() { this(new LinkedHashMap<>(), 0L); }
     private FrontierV3PhysicalObservationLedger(LinkedHashMap<String, Pending> pending, long nextSequence) {
-        this.pending = pending; this.nextSequence = nextSequence;
+        super(FrontierV3PhysicalStoreKind.OBSERVATIONS);
+        this.pending = fragmentedTable("pending", pending, java.util.function.Function.identity(),
+                new FrontierV3ListJournalCodec<>((id, value) -> value.header(),
+                        new FrontierV3ListJournalCodec.Facet<>("cells", Pending::candidates, Candidate::save))); this.nextSequence = nextSequence;
     }
 
     static FrontierV3PhysicalObservationLedger get(ServerLevel level) {
-        return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3PhysicalObservationLedger::new,
-                FrontierV3PhysicalObservationLedger::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME);
+        return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.OBSERVATIONS, FrontierV3PhysicalObservationLedger::new, FrontierV3PhysicalObservationLedger::load);
     }
 
     boolean captureExternalExplosion(ServerLevel level, long gameTime, List<BlockPos> affected, FrontierV3GrayboxLedger provenance,
@@ -111,6 +112,7 @@ final class FrontierV3PhysicalObservationLedger extends SavedData {
         return new FrontierV3PhysicalObservationLedger(pending, next);
     }
 
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", FORMAT); tag.putLong("nextSequence", nextSequence); return tag; }
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("format", FORMAT); tag.putLong("nextSequence", nextSequence);
         ListTag values = new ListTag(); pending.values().forEach(value -> values.add(value.save())); tag.put("pending", values);
@@ -151,19 +153,20 @@ final class FrontierV3PhysicalObservationLedger extends SavedData {
         Pending {
             if (id == null || !id.startsWith("effect:external-explosion:") || capturedAtGameTime < 0L || candidates == null || candidates.isEmpty()
                     || candidates.size() > MAX_PENDING_CELLS) throw new IllegalArgumentException("invalid v3 pending physical observation");
-            candidates = List.copyOf(candidates);
+            candidates = FrontierV3WitnessQueue.copy(candidates);
         }
+        CompoundTag header() { CompoundTag value = new CompoundTag(); value.putString("id",id); value.putLong("capturedAt",capturedAtGameTime); return value; }
         CompoundTag save() {
-            CompoundTag value = new CompoundTag(); value.putString("id", id); value.putLong("capturedAt", capturedAtGameTime);
-            ListTag cells = new ListTag(); candidates.forEach(candidate -> cells.add(candidate.save())); value.put("cells", cells); return value;
+            CompoundTag value = header(); value.putLong("cellsStart", FrontierV3WitnessQueue.copy(candidates).start());
+            ListTag cells = new ListTag(); FrontierV3WitnessQueue.copy(candidates).retained().forEach(candidate -> cells.add(candidate.save())); value.put("cells", cells); return value;
         }
         static Pending load(CompoundTag value) {
-            if (!value.contains("id", Tag.TAG_STRING) || !value.contains("capturedAt", Tag.TAG_LONG) || !value.contains("cells", Tag.TAG_LIST)) {
+            if (!value.contains("id", Tag.TAG_STRING) || !value.contains("capturedAt", Tag.TAG_LONG) || !value.contains("cells", Tag.TAG_LIST) || !value.contains("cellsStart", Tag.TAG_LONG)) {
                 throw new IllegalStateException("incomplete v3 pending physical observation");
             }
             ListTag cells = value.getList("cells", Tag.TAG_COMPOUND); ArrayList<Candidate> candidates = new ArrayList<>(cells.size());
             for (Tag cell : cells) candidates.add(Candidate.load((CompoundTag) cell));
-            try { return new Pending(value.getString("id"), value.getLong("capturedAt"), candidates); }
+            try { return new Pending(value.getString("id"), value.getLong("capturedAt"), FrontierV3WitnessQueue.restored(candidates, value.getLong("cellsStart"))); }
             catch (IllegalArgumentException invalid) { throw new IllegalStateException("invalid v3 pending physical observation", invalid); }
         }
     }

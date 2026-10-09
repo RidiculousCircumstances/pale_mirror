@@ -14,24 +14,23 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Durable pre/post physical witness for one player edit at each PM-owned depot. */
-final class FrontierV3DepotClickLedger extends SavedData {
-    private static final String NAME = "pale_mirror_frontier_v3_depot_clicks";
+final class FrontierV3DepotClickLedger extends FrontierV3JournaledSavedData {
     private static final int FORMAT = 1;
     private static final int MAX_PENDING = 1_024;
     private final Map<SubjectId, FrontierV3DepotClickWitness> pending;
 
     private FrontierV3DepotClickLedger() { this(new LinkedHashMap<>()); }
     private FrontierV3DepotClickLedger(Map<SubjectId, FrontierV3DepotClickWitness> pending) {
+        super(FrontierV3PhysicalStoreKind.PLAYER_CLICKS);
         if (pending.size() > MAX_PENDING || pending.entrySet().stream()
                 .anyMatch(entry -> !entry.getKey().equals(entry.getValue().containerId()))) {
             throw new IllegalArgumentException("invalid bounded depot click witnesses");
         }
-        this.pending = pending;
+        this.pending = table("pending", pending, SubjectId::value, (id, witness) -> witness.save());
     }
 
     static FrontierV3DepotClickLedger get(ServerLevel level) {
-        return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3DepotClickLedger::new,
-                FrontierV3DepotClickLedger::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME);
+        return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.PLAYER_CLICKS, FrontierV3DepotClickLedger::new, FrontierV3DepotClickLedger::load);
     }
 
     FrontierV3DepotClickWitness pending(SubjectId containerId) { return pending.get(containerId); }
@@ -62,43 +61,7 @@ final class FrontierV3DepotClickLedger extends SavedData {
         pending.remove(witness.containerId()); setDirty();
     }
 
-    void persist(ServerLevel level) {
-        if (get(level) != this) throw new IllegalArgumentException("foreign depot click ledger");
-        save(storageFile(level).toFile(), level.registryAccess());
-    }
-
-    private static java.nio.file.Path storageFile(ServerLevel level) {
-        var dimension = net.minecraft.world.level.dimension.DimensionType.getStorageFolder(level.dimension(),
-                level.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT));
-        return dimension.resolve("data").resolve(NAME + ".dat");
-    }
-
-    @Override public void save(java.io.File file, HolderLookup.Provider registries) {
-        if (!isDirty()) return;
-        java.nio.file.Path target = file.toPath(), staged = null;
-        try {
-            CompoundTag root = new CompoundTag(); root.put("data", save(new CompoundTag(), registries));
-            net.minecraft.nbt.NbtUtils.addCurrentDataVersion(root);
-            java.nio.file.Files.createDirectories(target.getParent());
-            staged = java.nio.file.Files.createTempFile(target.getParent(), ".depot-clicks-", ".tmp");
-            net.minecraft.nbt.NbtIo.writeCompressed(root, staged);
-            try (var channel = java.nio.channels.FileChannel.open(staged, java.nio.file.StandardOpenOption.WRITE)) {
-                channel.force(true);
-            }
-            java.nio.file.Files.move(staged, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            staged = null;
-            try (var directory = java.nio.channels.FileChannel.open(target.getParent(), java.nio.file.StandardOpenOption.READ)) {
-                directory.force(true);
-            }
-            setDirty(false);
-        } catch (java.io.IOException failure) {
-            throw new java.io.UncheckedIOException("unable to persist depot click witness", failure);
-        } finally {
-            if (staged != null) try { java.nio.file.Files.deleteIfExists(staged); }
-            catch (java.io.IOException ignored) { }
-        }
-    }
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", FORMAT); return tag; }
 
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("format", FORMAT);
@@ -109,7 +72,7 @@ final class FrontierV3DepotClickLedger extends SavedData {
         return tag;
     }
 
-    private static FrontierV3DepotClickLedger load(CompoundTag tag, HolderLookup.Provider registries) {
+    static FrontierV3DepotClickLedger load(CompoundTag tag, HolderLookup.Provider registries) {
         if (tag.getInt("format") != FORMAT) throw new IllegalArgumentException("incompatible depot click witness format");
         Map<SubjectId, FrontierV3DepotClickWitness> values = new LinkedHashMap<>();
         ListTag entries = tag.getList("pending", Tag.TAG_COMPOUND);

@@ -212,8 +212,6 @@ class FrontierV3ResourceSiteCellClaimTest {
         assertTrue(restoredDelivery.pendingFieldDeliveries().isEmpty());
         activeLedger.retireFieldDelivery(delivery);
         var claim = (FrontierV3ResourceSiteLedger.FieldOwnership) activeLedger.fieldClaim(SITE);
-        assertThrows(IllegalStateException.class, () -> activeLedger.claim(SITE));
-        assertThrows(IllegalStateException.class, () -> activeLedger.reserve(SITE, INTENT));
         var conflictedCopy = FrontierV3ResourceSiteLedger.load(activeLedger.save(new CompoundTag(), null), null);
         conflictedCopy.conflict(SITE);
         assertEquals(FrontierV3ResourceSiteLedger.Status.CONFLICT, conflictedCopy.fieldClaim(SITE).status(),
@@ -226,7 +224,6 @@ class FrontierV3ResourceSiteCellClaimTest {
         assertEquals(INTENT, recovered.fieldClaim(SITE).intentId());
         assertTrue(((FrontierV3ResourceSiteLedger.FieldOwnership) recovered.fieldClaim(SITE)).witness()
                 .matchesCycle(ResourceFieldCycle.seeded(SITE, layout(), 3)));
-        assertThrows(IllegalStateException.class, () -> recovered.claim(SITE));
         var owned = (FrontierV3ResourceSiteLedger.FieldOwnership) recovered.fieldClaim(SITE);
         recovered.replaceFieldClaim(owned, owned.conflicted());
         var conflicted = (FrontierV3ResourceSiteLedger.FieldOwnership) recovered.fieldClaim(SITE);
@@ -239,15 +236,10 @@ class FrontierV3ResourceSiteCellClaimTest {
     }
 
     @Test void formatAndCompetingSameSiteOwnersFailClosed() {
-        var legacy = FrontierV3ResourceSiteLedger.fixture();
-        legacy.reserve(SITE, INTENT);
-        assertThrows(IllegalStateException.class, () -> legacy.reserveFieldInitialization(site(), INTENT));
-        assertThrows(IllegalStateException.class, () -> legacy.fieldClaim(SITE));
-
         var field = FrontierV3ResourceSiteLedger.fixture();
         field.reserveFieldInitialization(site(), INTENT);
-        CompoundTag competing = legacy.save(new CompoundTag(), null);
-        competing.put("fieldClaims", field.save(new CompoundTag(), null).getList("fieldClaims", 10).copy());
+        CompoundTag competing = field.save(new CompoundTag(), null);
+        competing.getList("fieldClaims",10).add(competing.getList("fieldClaims",10).getFirst().copy());
         assertThrows(IllegalStateException.class, () -> FrontierV3ResourceSiteLedger.load(competing, null));
         CompoundTag old = field.save(new CompoundTag(), null);
         old.putInt("format", 8);
@@ -258,7 +250,7 @@ class FrontierV3ResourceSiteCellClaimTest {
         CompoundTag invalidPrepared = field.save(new CompoundTag(), null);
         invalidPrepared.getList("fieldClaims", 10).getCompound(0).getCompound("initial").putByte("batch", (byte) 2);
         assertThrows(IllegalStateException.class, () -> FrontierV3ResourceSiteLedger.load(invalidPrepared, null));
-        for (String section : List.of("claims", "fieldClaims", "nativeGrowthFences", "harvestReceipts",
+        for (String section : List.of("fieldClaims", "fieldDeliveries", "fieldHandProjections", "fieldPlayerBreaks",
                 "fieldWorldChanges", "fieldForeignChanges")) {
             CompoundTag missing = field.save(new CompoundTag(), null);
             missing.remove(section);
@@ -299,10 +291,7 @@ class FrontierV3ResourceSiteCellClaimTest {
             assertEquals(delivery, recoveredDelivery.fieldDelivery(SITE));
             recoveredDelivery.retireFieldDelivery(delivery);
         }
-        var legacy = FrontierV3ResourceSiteLedger.fixture();
-        legacy.reserve(SITE, INTENT);
-        assertThrows(IllegalStateException.class, () -> legacy.beginFieldHandProjection(hand));
-        assertThrows(IllegalStateException.class, () -> legacy.beginFieldDelivery(delivery));
+
     }
 
     private static ResourceFieldLayout layout() {

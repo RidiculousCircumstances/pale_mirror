@@ -21,22 +21,11 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** One SavedData owner for twelve sites; legacy and cell claims are disjoint during cutover. */
-final class FrontierV3ResourceSiteLedger extends SavedData {
-    private static final String NAME = "pale_mirror_frontier_v3_resource_sites";
-    private static final int FORMAT = 15;
+/** One current cell-owned field journal; no stage/prefix compatibility authority. */
+final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
+    private static final int FORMAT = 16;
     static final int MAX_SITES = 12;
-    private final Map<SubjectId, Claim> claims;
-    /** Mutually exclusive replacement for a site's legacy stage/prefix claim. */
     private final Map<SubjectId, FieldClaim> fieldClaims;
-    /** First blocked native crop attempt is a diagnostic fact, not part of facility ownership. */
-    private final Map<SubjectId, NativeGrowthFence> nativeGrowthFences;
-    /**
-     * A persisted write-ahead fence for the one physical harvest receipt. It distinguishes a
-     * first empty depot slot from output removed before canonical confirmation, which fails
-     * closed rather than minting a replacement.
-     */
-    private final Map<SubjectId, HarvestReceipt> harvestReceipts;
     /** A positive cell-owned delivery is fenced before either Vanilla inventory is edited. */
     private final Map<SubjectId, FrontierV3ResourceSiteDeliveryWitness> fieldDeliveries;
     /** A COLD actor part cannot first appear in a HOT hand without this before-effect owner. */
@@ -49,86 +38,44 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
     private final Map<SubjectId, FrontierV3ResourceFieldForeignChangeWitness> fieldForeignChanges;
 
     private FrontierV3ResourceSiteLedger() { this(new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(),
-            new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(),
-            new LinkedHashMap<>()); }
-    private FrontierV3ResourceSiteLedger(Map<SubjectId, Claim> claims, Map<SubjectId, FieldClaim> fieldClaims,
-                                         Map<SubjectId, NativeGrowthFence> nativeGrowthFences,
-                                         Map<SubjectId, HarvestReceipt> harvestReceipts,
-                                         Map<SubjectId, FrontierV3ResourceSiteDeliveryWitness> fieldDeliveries,
-                                         Map<SubjectId, FrontierV3ResourceSiteHandProjectionWitness> fieldHandProjections,
-                                         Map<SubjectId, FrontierV3ResourceFieldPlayerBreakWitness> fieldPlayerBreaks,
-                                         Map<SubjectId, FrontierV3ResourceFieldWorldChangeWitness> fieldWorldChanges,
-                                         Map<SubjectId, FrontierV3ResourceFieldForeignChangeWitness> fieldForeignChanges) {
-        if (claims.size() + fieldClaims.size() > MAX_SITES || claims.keySet().stream().anyMatch(fieldClaims::containsKey))
-            throw new IllegalArgumentException("v3 field has competing or unbounded physical claim owners");
-        if (fieldDeliveries.size() > MAX_SITES || fieldDeliveries.keySet().stream().anyMatch(claims::containsKey))
-            throw new IllegalArgumentException("field delivery competes with a legacy site owner");
-        if (fieldHandProjections.size() > MAX_SITES || fieldHandProjections.keySet().stream().anyMatch(claims::containsKey)
-                || fieldHandProjections.keySet().stream().anyMatch(fieldDeliveries::containsKey))
-            throw new IllegalArgumentException("field hand projection competes with a legacy site owner or delivery");
-        if (fieldPlayerBreaks.size() > MAX_SITES || fieldPlayerBreaks.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site)))
-            throw new IllegalArgumentException("player field break lacks its one cell-owned site");
-        if (fieldWorldChanges.size() > MAX_SITES || fieldWorldChanges.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site)))
-            throw new IllegalArgumentException("world field change lacks its one cell-owned site");
-        if (fieldForeignChanges.size() > MAX_SITES || fieldForeignChanges.keySet().stream()
-                .anyMatch(site -> !fieldClaims.containsKey(site) || fieldWorldChanges.containsKey(site)
-                        || fieldPlayerBreaks.containsKey(site)))
-            throw new IllegalArgumentException("foreign field change lacks a unique cell-owned site");
-        this.claims = claims; this.fieldClaims = fieldClaims;
-        this.nativeGrowthFences = nativeGrowthFences; this.harvestReceipts = harvestReceipts;
-        this.fieldDeliveries = fieldDeliveries; this.fieldHandProjections = fieldHandProjections;
-        this.fieldPlayerBreaks = fieldPlayerBreaks;
-        this.fieldWorldChanges = fieldWorldChanges;
-        this.fieldForeignChanges = fieldForeignChanges;
+            new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>()); }
+    private FrontierV3ResourceSiteLedger(Map<SubjectId, FieldClaim> fieldClaims,
+            Map<SubjectId, FrontierV3ResourceSiteDeliveryWitness> deliveries,
+            Map<SubjectId, FrontierV3ResourceSiteHandProjectionWitness> hands,
+            Map<SubjectId, FrontierV3ResourceFieldPlayerBreakWitness> breaks,
+            Map<SubjectId, FrontierV3ResourceFieldWorldChangeWitness> world,
+            Map<SubjectId, FrontierV3ResourceFieldForeignChangeWitness> foreign) {
+        super(FrontierV3PhysicalStoreKind.FIELDS);
+        if (fieldClaims.size() > MAX_SITES || deliveries.size() > MAX_SITES || hands.size() > MAX_SITES
+                || breaks.size() > MAX_SITES || world.size() > MAX_SITES || foreign.size() > MAX_SITES
+                || hands.keySet().stream().anyMatch(deliveries::containsKey)
+                || breaks.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site))
+                || world.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site))
+                || foreign.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site)
+                    || world.containsKey(site) || breaks.containsKey(site)))
+            throw new IllegalArgumentException("invalid cell-owned field evidence");
+        this.fieldClaims = fragmentedTable("fieldClaims", fieldClaims, SubjectId::value, new FrontierV3FieldJournalCodec());
+        fieldDeliveries = table("fieldDeliveries", deliveries, SubjectId::value, (id, value) -> value.write());
+        fieldHandProjections = table("fieldHandProjections", hands, SubjectId::value, (id, value) -> value.write());
+        fieldPlayerBreaks = table("fieldPlayerBreaks", breaks, SubjectId::value, (id, value) -> value.write());
+        fieldWorldChanges = table("fieldWorldChanges", world, SubjectId::value, (id, value) -> value.write());
+        fieldForeignChanges = table("fieldForeignChanges", foreign, SubjectId::value, (id, value) -> value.write());
     }
-
     static FrontierV3ResourceSiteLedger get(ServerLevel level) {
-        return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3ResourceSiteLedger::new,
-                FrontierV3ResourceSiteLedger::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME);
+        return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.FIELDS,
+                FrontierV3ResourceSiteLedger::new, FrontierV3ResourceSiteLedger::load);
     }
-
-    /** Persist the level-owned claim before its next physical block effect is permitted. */
-    void persist(ServerLevel level) {
-        if (get(level) != this) throw new IllegalArgumentException("foreign resource-site ledger");
-        save(storageFile(level).toFile(), level.registryAccess());
-    }
-
     static java.nio.file.Path storageFile(ServerLevel level) {
-        var dimension = net.minecraft.world.level.dimension.DimensionType.getStorageFolder(level.dimension(),
-                level.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT));
-        return dimension.resolve("data").resolve(NAME + ".dat");
+        return FrontierV3JournaledSavedData.storageFile(level, FrontierV3PhysicalStoreKind.FIELDS);
     }
-
-    /** Atomic single-file SavedData publication; not atomic with the chunk region or canonical WAL. */
-    @Override public void save(java.io.File file, HolderLookup.Provider registries) {
-        if (!isDirty()) return;
-        java.nio.file.Path target = file.toPath();
-        java.nio.file.Path staged = null;
-        try {
-            var root = new CompoundTag();
-            root.put("data", save(new CompoundTag(), registries));
-            net.minecraft.nbt.NbtUtils.addCurrentDataVersion(root);
-            java.nio.file.Files.createDirectories(target.getParent());
-            staged = java.nio.file.Files.createTempFile(target.getParent(), ".resource-sites-", ".tmp");
-            net.minecraft.nbt.NbtIo.writeCompressed(root, staged);
-            try (var channel = java.nio.channels.FileChannel.open(staged, java.nio.file.StandardOpenOption.WRITE)) {
-                channel.force(true);
-            }
-            java.nio.file.Files.move(staged, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            staged = null;
-            try (var directory = java.nio.channels.FileChannel.open(target.getParent(), java.nio.file.StandardOpenOption.READ)) {
-                directory.force(true);
-            }
-            setDirty(false);
-        } catch (java.io.IOException failure) {
-            throw new java.io.UncheckedIOException("unable to atomically persist resource-site ledger", failure);
-        } finally {
-            if (staged != null) {
-                try { java.nio.file.Files.deleteIfExists(staged); }
-                catch (java.io.IOException cleanupFailure) { /* original failure remains authoritative */ }
-            }
-        }
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", FORMAT); return tag; }
+    static CompoundTag encodeField(FieldClaim claim) {
+        var value = new CompoundTag(); value.putString("site", claim.siteId().value());
+        value.putString("intent", claim.intentId().value()); value.putString("status", claim.status().name());
+        if (claim instanceof FieldInitialization initial) { value.putString("kind", "INITIAL"); value.put("initial", initial.cursor().write()); }
+        else if (claim instanceof FieldOwnership owner) { value.putString("kind", "OWNED"); value.put("witness", owner.witness().write()); }
+        else throw new IllegalStateException("unknown field claim");
+        return value;
     }
 
     /** Isolated GameTest fixture state; production always uses the level-owned ledger above. */
@@ -136,22 +83,10 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         return new FrontierV3ResourceSiteLedger();
     }
 
-    /** Read the explicit versioned claim variant without asking either incompatible API to infer it. */
     SiteClaim siteClaim(SubjectId siteId) {
-        Claim legacy = claims.get(siteId);
-        FieldClaim cells = fieldClaims.get(siteId);
-        if (legacy != null && cells != null) throw new IllegalStateException("field has competing physical owners");
-        if (legacy != null) return new LegacySiteClaim(siteId, legacy);
-        return cells == null ? null : new CellSiteClaim(cells);
+        FieldClaim cells = fieldClaims.get(siteId); return cells == null ? null : new CellSiteClaim(cells);
     }
-    Claim claim(SubjectId siteId) {
-        if (fieldClaims.containsKey(siteId)) throw new IllegalStateException("cell-owned field cannot use the legacy stage/prefix claim");
-        return claims.get(siteId);
-    }
-    FieldClaim fieldClaim(SubjectId siteId) {
-        if (claims.containsKey(siteId)) throw new IllegalStateException("legacy field cannot use the replacement cell claim");
-        return fieldClaims.get(siteId);
-    }
+    FieldClaim fieldClaim(SubjectId siteId) { return fieldClaims.get(siteId); }
     FrontierV3ResourceSiteDeliveryWitness fieldDelivery(SubjectId siteId) { return fieldDeliveries.get(siteId); }
     FrontierV3ResourceSiteHandProjectionWitness fieldHandProjection(SubjectId siteId) { return fieldHandProjections.get(siteId); }
     FrontierV3ResourceFieldPlayerBreakWitness fieldPlayerBreak(SubjectId siteId) { return fieldPlayerBreaks.get(siteId); }
@@ -241,7 +176,7 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         // A COLD-accounted lot is owned by its actor account, not by the field's
         // independently materialized block claim. The depot-side worker can become
         // HOT before first-field projection finishes (or while that chunk is absent).
-        if (claims.containsKey(witness.siteId()) || fieldDeliveries.containsKey(witness.siteId()))
+        if (fieldDeliveries.containsKey(witness.siteId()))
             throw new IllegalStateException("field hand projection has a competing physical owner");
         var prior = fieldHandProjections.putIfAbsent(witness.siteId(), witness);
         if (prior != null && !prior.equals(witness)) throw new IllegalStateException("field hand projection changes its durable predecessor");
@@ -259,8 +194,6 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         return fieldDeliveries.values().stream().sorted(java.util.Comparator.comparing(FrontierV3ResourceSiteDeliveryWitness::siteId)).toList();
     }
     void beginFieldDelivery(FrontierV3ResourceSiteDeliveryWitness witness) {
-        if (claims.containsKey(witness.siteId()))
-            throw new IllegalStateException("field delivery has a competing legacy site owner");
         if (fieldHandProjections.containsKey(witness.siteId()))
             throw new IllegalStateException("field delivery cannot overtake an unretired actor-hand projection");
         FrontierV3ResourceSiteDeliveryWitness prior = fieldDeliveries.putIfAbsent(witness.siteId(), witness);
@@ -278,13 +211,12 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
     void reserveFieldInitialization(ResourceSite site, PhysicalIntentId intentId, ResourceFieldCycle target) {
         FieldClaim claim = new FieldInitialization(site.id(), intentId, Status.PENDING, InitialCursor.atStart(site, target));
         SubjectId siteId = claim.siteId();
-        if (claims.containsKey(siteId)) throw new IllegalStateException("field site still has a legacy stage/prefix owner");
         FieldClaim prior = fieldClaims.putIfAbsent(siteId, claim);
         if (prior != null) {
             if (!prior.equals(claim)) throw new IllegalStateException("field site already has another cell claim");
             return;
         }
-        if (fieldClaims.size() + claims.size() > MAX_SITES) {
+        if (fieldClaims.size() > MAX_SITES) {
             fieldClaims.remove(siteId); throw new IllegalStateException("v3 field claim limit exceeded");
         }
         setDirty();
@@ -353,146 +285,6 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
             throw new IllegalStateException("field cell claim replacement has a foreign or stale owner");
         fieldClaims.put(prior.siteId(), next); setDirty();
     }
-    NativeGrowthFence nativeGrowthFence(SubjectId siteId) {
-        if (fieldClaims.containsKey(siteId)) throw new IllegalStateException("cell-owned field cannot use a legacy native-growth fence");
-        return nativeGrowthFences.get(siteId);
-    }
-    boolean hasHarvestReceipt(SubjectId siteId, ExactItemStack output) {
-        if (fieldClaims.containsKey(siteId)) throw new IllegalStateException("cell-owned field cannot use a legacy exact-stack receipt");
-        HarvestReceipt receipt = harvestReceipts.get(siteId);
-        return receipt != null && receipt.matches(output);
-    }
-
-    /** Writes the durable receipt fence before the matching chest slot is materialized. */
-    boolean recordHarvestReceipt(SubjectId siteId, ExactItemStack output) {
-        Claim claim = required(siteId);
-        if (claim.status() != Status.ACTIVE || claim.stage() != 7 || claim.harvestedCropSlots() != 64) {
-            throw new IllegalStateException("v3 resource site receipt has incomplete harvest cursor");
-        }
-        HarvestReceipt receipt = HarvestReceipt.from(output);
-        HarvestReceipt prior = harvestReceipts.putIfAbsent(siteId, receipt);
-        if (prior == null) { setDirty(); return true; }
-        if (!prior.equals(receipt)) throw new IllegalStateException("v3 resource site receipt changes output identity");
-        return false;
-    }
-
-    /** Retain only the first fence edge, so later equivalent random ticks cannot rewrite its source. */
-    void recordNativeGrowthFence(SubjectId siteId, NativeGrowthFence fence) {
-        if (!claims.containsKey(siteId)) throw new IllegalStateException("v3 native crop fence has no site claim");
-        if (nativeGrowthFences.putIfAbsent(siteId, fence) == null) setDirty();
-    }
-
-    void reserve(SubjectId siteId, PhysicalIntentId intentId) {
-        if (fieldClaims.containsKey(siteId)) throw new IllegalStateException("cell-owned field cannot reserve a legacy claim");
-        Claim next = new Claim(intentId, Status.PENDING, 0, 0);
-        Claim prior = claims.get(siteId); if (prior != null) {
-            if (!prior.equals(next)) throw new IllegalStateException("v3 resource site claim changes intent or lifecycle");
-            return;
-        }
-        if (claims.size() + fieldClaims.size() >= MAX_SITES) throw new IllegalStateException("v3 resource site claim limit exceeded");
-        claims.put(siteId, next); setDirty();
-    }
-
-    /**
-     * Re-establishes only the durable terminal predecessor shape of an exact composed
-     * successor.  Its following projection retains this stage-seven/64-slot origin, so an
-     * interruption cannot reinterpret irrigated farmland and replanted crops as a neutral field.
-     */
-    void reserveComposedTerminalSuccessor(SubjectId siteId, PhysicalIntentId intentId) {
-        reserveComposedSuccessor(siteId, intentId, 7, 64);
-    }
-
-    /**
-     * Re-establishes a bounded, exact physical predecessor of a composed successor.  The
-     * caller supplies only a complete stage surface (or the stage-seven/64 terminal receipt),
-     * never a mixed or inferred cursor.
-     */
-    void reserveComposedSuccessor(SubjectId siteId, PhysicalIntentId intentId, int predecessorStage,
-                                  int predecessorHarvestedCropSlots) {
-        if (fieldClaims.containsKey(siteId)) throw new IllegalStateException("cell-owned field cannot reserve a legacy successor");
-        if (predecessorStage < 0 || predecessorStage > 7
-                || (predecessorStage == 7
-                ? predecessorHarvestedCropSlots != 0 && predecessorHarvestedCropSlots != 64
-                : predecessorHarvestedCropSlots != 0)) {
-            throw new IllegalArgumentException("v3 composed successor predecessor is invalid");
-        }
-        Claim next = new Claim(intentId, Status.PENDING, predecessorStage, predecessorHarvestedCropSlots);
-        Claim prior = claims.get(siteId); if (prior != null) {
-            if (!prior.equals(next)) throw new IllegalStateException("v3 resource site claim changes composed successor lifecycle");
-            return;
-        }
-        if (claims.size() + fieldClaims.size() >= MAX_SITES) throw new IllegalStateException("v3 resource site claim limit exceeded");
-        claims.put(siteId, next);
-        // A composed successor has already retained the output in canonical custody; this
-        // physical cursor may not leave a retired predecessor receipt fence behind.
-        harvestReceipts.remove(siteId); setDirty();
-    }
-
-    void activate(SubjectId siteId) { transition(siteId, Status.PENDING, Status.ACTIVE); }
-    /**
-     * Persists the exact bounded physical transition before its first world write.  A claim is
-     * the stable facility owner; this separate fence is deliberately the only mutable
-     * lifecycle/projection cursor so restart recovery never infers ownership from a mixed crop
-     * surface.
-     */
-    void beginProjection(SubjectId siteId, ProjectionTransition projection) {
-        Claim prior = required(siteId);
-        if (prior.projection() != null && !prior.projection().equals(projection)) {
-            throw new IllegalStateException("v3 resource site projection replaces an active cursor");
-        }
-        if (prior.projection() == null) {
-            claims.put(siteId, prior.withProjection(projection)); setDirty();
-        }
-    }
-    void advanceProjection(SubjectId siteId, int nextWrite) {
-        Claim prior = required(siteId); ProjectionTransition projection = prior.projection();
-        if (projection == null || nextWrite != projection.nextWrite() + 1 || nextWrite > projection.writeCount()) {
-            throw new IllegalStateException("v3 resource site projection cursor is invalid");
-        }
-        claims.put(siteId, prior.withProjection(projection.advance())); setDirty();
-    }
-    void completeProjection(SubjectId siteId) {
-        Claim prior = required(siteId); ProjectionTransition projection = prior.projection();
-        if (projection == null || projection.nextWrite() != projection.writeCount()) {
-            throw new IllegalStateException("v3 resource site projection is incomplete");
-        }
-        claims.put(siteId, prior.withProjection(null)); setDirty();
-    }
-    void updateStage(SubjectId siteId, int stage) {
-        Claim prior = required(siteId);
-        if (prior.status() != Status.ACTIVE) throw new IllegalStateException("v3 resource site stage is not active");
-        if (prior.stage() == stage) return;
-        Claim next = new Claim(prior.intentId(), prior.status(), stage, stage == 7 ? prior.harvestedCropSlots() : 0, prior.projection());
-        // The validated projector has completed regrowth into a new nonmature
-        // surface. Its predecessor's receipt must not fence the next harvest.
-        // Mature-to-mature restoration retires it separately in restoreOne().
-        if (prior.stage() == 7 && stage < 7) harvestReceipts.remove(siteId);
-        claims.put(siteId, next); setDirty();
-    }
-    void harvestOne(SubjectId siteId, int completedCropSlots) {
-        Claim prior = required(siteId);
-        if (prior.status() != Status.ACTIVE || prior.stage() != 7 || completedCropSlots != prior.harvestedCropSlots() + 1) {
-            throw new IllegalStateException("v3 resource site harvest cursor is invalid");
-        }
-        claims.put(siteId, new Claim(prior.intentId(), prior.status(), prior.stage(), completedCropSlots, prior.projection())); setDirty();
-    }
-    /**
-     * Records one bounded reverse transition from the fully harvested predecessor to its exact
-     * next growth-epoch field.  This is deliberately the inverse of {@link #harvestOne}: the
-     * same immutable prefix encoding remains the durable restart witness while the successor
-     * field is restored one naturally observed slot at a time.
-     */
-    void restoreOne(SubjectId siteId, int remainingHarvestedCropSlots) {
-        Claim prior = required(siteId);
-        if (prior.status() != Status.ACTIVE || prior.stage() != 7
-                || remainingHarvestedCropSlots != prior.harvestedCropSlots() - 1) {
-            throw new IllegalStateException("v3 resource site successor restore cursor is invalid");
-        }
-        // A successor restore is admitted only after canonical confirmation. Once its first
-        // physical crop is restored, the prior receipt no longer fences a future harvest epoch.
-        if (remainingHarvestedCropSlots == 63) harvestReceipts.remove(siteId);
-        claims.put(siteId, new Claim(prior.intentId(), prior.status(), prior.stage(), remainingHarvestedCropSlots, prior.projection())); setDirty();
-    }
     void conflict(SubjectId siteId) {
         FieldClaim field = fieldClaims.get(siteId);
         if (field != null) {
@@ -502,38 +294,16 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
             setDirty();
             return;
         }
-        Claim prior = claims.get(siteId);
-        if (prior == null || prior.status() == Status.CONFLICT) return;
-        claims.put(siteId, new Claim(prior.intentId(), Status.CONFLICT, prior.stage(), prior.harvestedCropSlots(), null)); setDirty();
     }
 
     static FrontierV3ResourceSiteLedger load(CompoundTag tag, HolderLookup.Provider registries) {
+        if (!java.util.Set.of("format", "fieldClaims", "fieldDeliveries", "fieldHandProjections", "fieldPlayerBreaks", "fieldWorldChanges", "fieldForeignChanges").containsAll(tag.getAllKeys()))
+            throw new IllegalStateException("obsolete or undeclared field ledger section");
         int format = tag.getInt("format");
         if (format != FORMAT) throw new IllegalStateException("incompatible v3 resource site ledger: format " + format + "; fresh current-schema world required");
-        ListTag values = rows(tag, "claims");
-        if (values.size() > MAX_SITES) throw new IllegalStateException("v3 resource site claim limit exceeded");
-        Map<SubjectId, Claim> claims = new LinkedHashMap<>();
-        for (Tag value : values) {
-            CompoundTag entry = (CompoundTag) value;
-            if (!entry.contains("site", Tag.TAG_STRING) || !entry.contains("intent", Tag.TAG_STRING) || !entry.contains("status", Tag.TAG_STRING)
-                    || !entry.contains("stage", Tag.TAG_INT) || !entry.contains("harvested", Tag.TAG_INT)) {
-                throw new IllegalStateException("incomplete v3 resource site claim");
-            }
-            SubjectId site = new SubjectId(entry.getString("site"));
-            if (!site.value().startsWith("site:")) throw new IllegalStateException("invalid v3 resource site claim identity");
-            Status status;
-            try { status = Status.valueOf(entry.getString("status")); }
-            catch (IllegalArgumentException invalid) { throw new IllegalStateException("invalid v3 resource site claim status", invalid); }
-            int stage = entry.getInt("stage"), harvested = entry.getInt("harvested");
-            ProjectionTransition projection = format >= 4 && entry.contains("projection", Tag.TAG_COMPOUND)
-                    ? ProjectionTransition.read(entry.getCompound("projection")) : null;
-            if (claims.put(site, new Claim(new PhysicalIntentId(entry.getString("intent")), status, stage, harvested, projection)) != null) {
-                throw new IllegalStateException("duplicate v3 resource site claim");
-            }
-        }
         Map<SubjectId, FieldClaim> fieldClaims = new LinkedHashMap<>();
         ListTag fieldValues = rows(tag, "fieldClaims");
-        if (fieldValues.size() + claims.size() > MAX_SITES)
+        if (fieldValues.size() > MAX_SITES)
             throw new IllegalStateException("v3 cell field claim limit exceeded");
         for (Tag value : fieldValues) {
             CompoundTag entry = (CompoundTag) value;
@@ -559,43 +329,15 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
                 }
                 default -> throw new IllegalStateException("unknown v3 cell field claim kind");
             };
-            if (claims.containsKey(site) || fieldClaims.put(site, claim) != null)
+            if (fieldClaims.put(site, claim) != null)
                 throw new IllegalStateException("duplicate or competing v3 field claim owner");
-        }
-        Map<SubjectId, NativeGrowthFence> nativeGrowthFences = new LinkedHashMap<>();
-        {
-            ListTag fences = rows(tag, "nativeGrowthFences");
-            if (fences.size() > MAX_SITES) throw new IllegalStateException("v3 resource site native fence limit exceeded");
-            for (Tag value : fences) {
-                CompoundTag entry = (CompoundTag) value;
-                if (!entry.contains("site", Tag.TAG_STRING)) throw new IllegalStateException("incomplete v3 native crop fence");
-                SubjectId site = new SubjectId(entry.getString("site"));
-                if (!claims.containsKey(site) || nativeGrowthFences.put(site, NativeGrowthFence.read(entry)) != null) {
-                    throw new IllegalStateException("invalid v3 native crop fence site");
-                }
-            }
-        }
-        Map<SubjectId, HarvestReceipt> harvestReceipts = new LinkedHashMap<>();
-        {
-            ListTag receipts = rows(tag, "harvestReceipts");
-            if (receipts.size() > MAX_SITES) throw new IllegalStateException("v3 resource site receipt limit exceeded");
-            for (Tag value : receipts) {
-                CompoundTag entry = (CompoundTag) value;
-                if (!entry.contains("site", Tag.TAG_STRING)) throw new IllegalStateException("incomplete v3 resource site receipt");
-                SubjectId site = new SubjectId(entry.getString("site")); Claim claim = claims.get(site);
-                if (claim == null || claim.stage() != 7 || claim.harvestedCropSlots() != 64
-                        || harvestReceipts.put(site, HarvestReceipt.read(entry)) != null) {
-                    throw new IllegalStateException("invalid v3 resource site receipt site");
-                }
-            }
         }
         Map<SubjectId, FrontierV3ResourceSiteDeliveryWitness> fieldDeliveries = new LinkedHashMap<>();
         ListTag deliveryRows = rows(tag, "fieldDeliveries");
         if (deliveryRows.size() > MAX_SITES) throw new IllegalStateException("field delivery witness limit exceeded");
         for (Tag value : deliveryRows) {
             FrontierV3ResourceSiteDeliveryWitness witness = FrontierV3ResourceSiteDeliveryWitness.read((CompoundTag) value);
-            if (claims.containsKey(witness.siteId())
-                    || fieldDeliveries.put(witness.siteId(), witness) != null)
+            if (fieldDeliveries.put(witness.siteId(), witness) != null)
                 throw new IllegalStateException("field delivery witness has no unique COLD crop owner");
         }
         Map<SubjectId, FrontierV3ResourceSiteHandProjectionWitness> fieldHandProjections = new LinkedHashMap<>();
@@ -603,8 +345,7 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         if (handRows.size() > MAX_SITES) throw new IllegalStateException("field hand witness limit exceeded");
         for (Tag value : handRows) {
             var witness = FrontierV3ResourceSiteHandProjectionWitness.read((CompoundTag) value);
-            if (claims.containsKey(witness.siteId())
-                    || fieldHandProjections.put(witness.siteId(), witness) != null)
+            if (fieldHandProjections.put(witness.siteId(), witness) != null)
                 throw new IllegalStateException("field hand witness has no unique COLD crop owner");
         }
         Map<SubjectId, FrontierV3ResourceFieldPlayerBreakWitness> fieldPlayerBreaks = new LinkedHashMap<>();
@@ -639,7 +380,7 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
                     || fieldForeignChanges.put(change.siteId(), change) != null)
                 throw new IllegalStateException("field foreign-change witness has no unique exact cell owner");
         }
-        return new FrontierV3ResourceSiteLedger(claims, fieldClaims, nativeGrowthFences, harvestReceipts,
+        return new FrontierV3ResourceSiteLedger(fieldClaims,
                 fieldDeliveries, fieldHandProjections, fieldPlayerBreaks, fieldWorldChanges, fieldForeignChanges);
     }
 
@@ -651,15 +392,7 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
     }
 
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
-        tag.putInt("format", FORMAT); ListTag values = new ListTag();
-        claims.entrySet().stream().sorted(Map.Entry.comparingByKey(Comparator.naturalOrder())).forEach(entry -> {
-            CompoundTag value = new CompoundTag(); value.putString("site", entry.getKey().value());
-            value.putString("intent", entry.getValue().intentId().value()); value.putString("status", entry.getValue().status().name()); value.putInt("stage", entry.getValue().stage());
-            value.putInt("harvested", entry.getValue().harvestedCropSlots());
-            if (entry.getValue().projection() != null) value.put("projection", entry.getValue().projection().write());
-            values.add(value);
-        });
-        tag.put("claims", values);
+        tag.putInt("format", FORMAT);
         ListTag fieldValues = new ListTag();
         fieldClaims.entrySet().stream().sorted(Map.Entry.comparingByKey(Comparator.naturalOrder())).forEach(entry -> {
             FieldClaim claim = entry.getValue();
@@ -673,16 +406,6 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
             fieldValues.add(value);
         });
         tag.put("fieldClaims", fieldValues);
-        ListTag fences = new ListTag();
-        nativeGrowthFences.entrySet().stream().sorted(Map.Entry.comparingByKey(Comparator.naturalOrder())).forEach(entry -> {
-            CompoundTag value = entry.getValue().write(); value.putString("site", entry.getKey().value()); fences.add(value);
-        });
-        tag.put("nativeGrowthFences", fences);
-        ListTag receipts = new ListTag();
-        harvestReceipts.entrySet().stream().sorted(Map.Entry.comparingByKey(Comparator.naturalOrder())).forEach(entry -> {
-            CompoundTag value = entry.getValue().write(); value.putString("site", entry.getKey().value()); receipts.add(value);
-        });
-        tag.put("harvestReceipts", receipts);
         ListTag deliveryRows = new ListTag();
         fieldDeliveries.values().stream().sorted(java.util.Comparator.comparing(FrontierV3ResourceSiteDeliveryWitness::siteId))
                 .forEach(witness -> deliveryRows.add(witness.write()));
@@ -707,26 +430,9 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         return tag;
     }
 
-    private void transition(SubjectId siteId, Status expected, Status next) {
-        if (fieldClaims.containsKey(siteId)) throw new IllegalStateException("cell-owned field cannot use a legacy lifecycle transition");
-        Claim prior = claims.get(siteId);
-        if (prior == null || prior.status() != expected) throw new IllegalStateException("v3 resource site claim has unexpected lifecycle");
-        claims.put(siteId, new Claim(prior.intentId(), next, prior.stage(), prior.harvestedCropSlots(), prior.projection())); setDirty();
-    }
-    private Claim required(SubjectId siteId) {
-        if (fieldClaims.containsKey(siteId)) throw new IllegalStateException("cell-owned field cannot use a legacy receipt or cursor");
-        Claim claim = claims.get(siteId); if (claim == null) throw new IllegalStateException("missing v3 resource site claim"); return claim;
-    }
-
     enum Status { PENDING, ACTIVE, CONFLICT }
-    sealed interface SiteClaim permits LegacySiteClaim, CellSiteClaim {
+    sealed interface SiteClaim permits CellSiteClaim {
         SubjectId siteId();
-    }
-    record LegacySiteClaim(SubjectId siteId, Claim claim) implements SiteClaim {
-        LegacySiteClaim {
-            java.util.Objects.requireNonNull(siteId, "legacy field site");
-            java.util.Objects.requireNonNull(claim, "legacy field claim");
-        }
     }
     record CellSiteClaim(FieldClaim claim) implements SiteClaim {
         CellSiteClaim { java.util.Objects.requireNonNull(claim, "cell field claim"); }
@@ -815,13 +521,14 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
             var retained = nextWrite + 1 == batch.orElseThrow().end() ? java.util.Optional.<InitialBatch>empty() : batch;
             return new InitialCursor(epoch, layoutRevision, layoutFingerprint, nextWrite + 1, writeCount, retained, target);
         }
-        CompoundTag write() {
+        CompoundTag writeHeader() {
             CompoundTag tag = new CompoundTag(); tag.putLong("epoch", epoch); tag.putLong("revision", layoutRevision);
             tag.putString("fingerprint", layoutFingerprint); tag.putInt("next", nextWrite); tag.putInt("count", writeCount);
             batch.ifPresent(value -> tag.put("batch", value.write()));
-            tag.put("target", target.write());
+            tag.put("target", target.writeHeader());
             return tag;
         }
+        CompoundTag write() { var tag = writeHeader(); tag.put("target", target.write()); return tag; }
         static InitialCursor read(CompoundTag tag) {
             if (!tag.contains("epoch", Tag.TAG_LONG) || !tag.contains("revision", Tag.TAG_LONG)
                     || !tag.contains("fingerprint", Tag.TAG_STRING) || !tag.contains("next", Tag.TAG_INT)
@@ -865,87 +572,4 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         FieldOwnership conflicted() { return new FieldOwnership(siteId, intentId, Status.CONFLICT, witness); }
     }
     // Serialized names are stable tags. INITIAL retains its original all-AIR meaning.
-    enum ProjectionMode { INITIAL, INITIAL_SOIL, ADVANCE, SUCCESSOR_RESTORE }
-    record HarvestReceipt(SubjectId outputId, String itemKind, int count, SubjectId containerId, int slot) {
-        HarvestReceipt {
-            if (outputId == null || itemKind == null || itemKind.isBlank() || count < 1 || containerId == null || slot < 0) {
-                throw new IllegalArgumentException("v3 resource site receipt is invalid");
-            }
-        }
-        static HarvestReceipt from(ExactItemStack output) {
-            if (!(output.custody() instanceof InventoryCustody.ContainerSlot slot)) {
-                throw new IllegalArgumentException("v3 resource site receipt lacks a container slot");
-            }
-            return new HarvestReceipt(output.id(), output.itemKind(), output.count(), slot.containerId(), slot.slot());
-        }
-        boolean matches(ExactItemStack output) { return equals(from(output)); }
-        CompoundTag write() {
-            CompoundTag tag = new CompoundTag(); tag.putString("output", outputId.value()); tag.putString("kind", itemKind);
-            tag.putInt("count", count); tag.putString("container", containerId.value()); tag.putInt("slot", slot); return tag;
-        }
-        static HarvestReceipt read(CompoundTag tag) {
-            if (!tag.contains("output", Tag.TAG_STRING) || !tag.contains("kind", Tag.TAG_STRING) || !tag.contains("count", Tag.TAG_INT)
-                    || !tag.contains("container", Tag.TAG_STRING) || !tag.contains("slot", Tag.TAG_INT)) {
-                throw new IllegalStateException("incomplete v3 resource site receipt");
-            }
-            return new HarvestReceipt(new SubjectId(tag.getString("output")), tag.getString("kind"), tag.getInt("count"),
-                    new SubjectId(tag.getString("container")), tag.getInt("slot"));
-        }
-    }
-    /** Immutable first event retained independently from the stable facility claim. */
-    record NativeGrowthFence(String source, BlockPosition position, int observedAge, int claimStage) {
-        NativeGrowthFence {
-            if (source == null || source.isBlank() || position == null || observedAge < 0 || observedAge > 7 || claimStage < 0 || claimStage > 7) {
-                throw new IllegalArgumentException("v3 native crop fence observation is invalid");
-            }
-        }
-        CompoundTag write() {
-            CompoundTag tag = new CompoundTag(); tag.putString("source", source); tag.putInt("x", position.x()); tag.putInt("y", position.y());
-            tag.putInt("z", position.z()); tag.putInt("age", observedAge); tag.putInt("claimStage", claimStage); return tag;
-        }
-        static NativeGrowthFence read(CompoundTag tag) {
-            if (!tag.contains("source", Tag.TAG_STRING) || !tag.contains("x", Tag.TAG_INT) || !tag.contains("y", Tag.TAG_INT)
-                    || !tag.contains("z", Tag.TAG_INT) || !tag.contains("age", Tag.TAG_INT) || !tag.contains("claimStage", Tag.TAG_INT)) {
-                throw new IllegalStateException("incomplete v3 native crop fence observation");
-            }
-            return new NativeGrowthFence(tag.getString("source"), new BlockPosition(tag.getInt("x"), tag.getInt("y"), tag.getInt("z")),
-                    tag.getInt("age"), tag.getInt("claimStage"));
-        }
-    }
-    record ProjectionTransition(String source, int fromStage, int fromHarvestedCropSlots, int targetStage,
-                                int targetHarvestedCropSlots, int nextWrite, int writeCount, ProjectionMode mode) {
-        ProjectionTransition {
-            if (source == null || source.isBlank() || fromStage < 0 || fromStage > 7 || fromHarvestedCropSlots < 0 || fromHarvestedCropSlots > 64
-                    || fromStage != 7 && fromHarvestedCropSlots != 0 || targetStage < 0 || targetStage > 7
-                    || targetHarvestedCropSlots < 0 || targetHarvestedCropSlots > 64
-                    || targetStage != 7 && targetHarvestedCropSlots != 0
-                    || nextWrite < 0 || writeCount < 1 || nextWrite > writeCount || mode == null) {
-                throw new IllegalArgumentException("v3 resource site projection transition is invalid");
-            }
-        }
-        ProjectionTransition advance() { return new ProjectionTransition(source, fromStage, fromHarvestedCropSlots, targetStage, targetHarvestedCropSlots, nextWrite + 1, writeCount, mode); }
-        CompoundTag write() {
-            CompoundTag tag = new CompoundTag(); tag.putString("source", source); tag.putInt("fromStage", fromStage); tag.putInt("fromHarvested", fromHarvestedCropSlots); tag.putInt("stage", targetStage);
-            tag.putInt("harvested", targetHarvestedCropSlots); tag.putInt("next", nextWrite); tag.putInt("count", writeCount); tag.putString("mode", mode.name());
-            return tag;
-        }
-        static ProjectionTransition read(CompoundTag tag) {
-            if (!tag.contains("source", Tag.TAG_STRING) || !tag.contains("fromStage", Tag.TAG_INT) || !tag.contains("fromHarvested", Tag.TAG_INT)
-                    || !tag.contains("stage", Tag.TAG_INT) || !tag.contains("harvested", Tag.TAG_INT)
-                    || !tag.contains("next", Tag.TAG_INT) || !tag.contains("count", Tag.TAG_INT) || !tag.contains("mode", Tag.TAG_STRING)) {
-                throw new IllegalStateException("incomplete v3 resource site projection transition");
-            }
-            try { return new ProjectionTransition(tag.getString("source"), tag.getInt("fromStage"), tag.getInt("fromHarvested"),
-                    tag.getInt("stage"), tag.getInt("harvested"), tag.getInt("next"), tag.getInt("count"), ProjectionMode.valueOf(tag.getString("mode"))); }
-            catch (IllegalArgumentException invalid) { throw new IllegalStateException("invalid v3 resource site projection transition", invalid); }
-        }
-    }
-    record Claim(PhysicalIntentId intentId, Status status, int stage, int harvestedCropSlots, ProjectionTransition projection) {
-        Claim(PhysicalIntentId intentId, Status status, int stage, int harvestedCropSlots) { this(intentId, status, stage, harvestedCropSlots, null); }
-        Claim {
-            if (stage < 0 || stage > 7 || harvestedCropSlots < 0 || harvestedCropSlots > 64
-                    || stage != 7 && harvestedCropSlots != 0) throw new IllegalArgumentException("v3 resource site claim stage is invalid");
-        }
-        Claim withProjection(ProjectionTransition next) { return new Claim(intentId, status, stage, harvestedCropSlots, next); }
-    }
 }

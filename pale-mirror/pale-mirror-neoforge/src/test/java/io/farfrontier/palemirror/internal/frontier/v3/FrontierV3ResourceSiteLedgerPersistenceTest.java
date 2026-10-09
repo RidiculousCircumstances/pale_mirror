@@ -27,31 +27,9 @@ class FrontierV3ResourceSiteLedgerPersistenceTest {
         net.minecraft.SharedConstants.tryDetectVersion();
     }
 
-    @Test void savesTheNormalMinecraftEnvelopeAndNoopDoesNotRewriteIt() throws Exception {
-        var ledger = FrontierV3ResourceSiteLedger.fixture();
-        ledger.reserve(SITE, INTENT);
-        Path file = directory.resolve("sites.dat");
-        ledger.save(file.toFile(), null);
-        assertFalse(ledger.isDirty());
-        var root = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
-        assertTrue(root.contains("DataVersion", Tag.TAG_INT));
-        assertEquals(INTENT, FrontierV3ResourceSiteLedger.load(root.getCompound("data"), null).claim(SITE).intentId());
-        byte[] before = Files.readAllBytes(file);
-        ledger.save(file.toFile(), null);
-        assertArrayEquals(before, Files.readAllBytes(file));
-        try (var paths = Files.list(directory)) { assertEquals(1L, paths.count()); }
-    }
 
-    @Test void failedPublicationRetainsDirtyStateAndDoesNotEraseAnExistingTarget() throws Exception {
-        var ledger = FrontierV3ResourceSiteLedger.fixture();
-        ledger.reserve(SITE, INTENT);
-        Path blocked = Files.createDirectory(directory.resolve("sites.dat"));
-        Path sentinel = Files.writeString(blocked.resolve("preserved"), "untouched");
-        assertThrows(java.io.UncheckedIOException.class, () -> ledger.save(blocked.toFile(), null));
-        assertTrue(ledger.isDirty());
-        assertEquals("untouched", Files.readString(sentinel));
-        try (var paths = Files.list(directory)) { assertEquals(1L, paths.count()); }
-    }
+
+
 
     @Test void deliveryWitnessRetainsExplicitAbsenceOfFutureCapacity() {
         var witness = new FrontierV3ResourceSiteDeliveryWitness(new SubjectId("site:capacity"),

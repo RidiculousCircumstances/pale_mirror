@@ -159,10 +159,8 @@ final class FrontierV3ServerPhysicalInteractions {
         Entity directSource = explosion == null ? null : explosion.getDirectSourceEntity();
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> managed = FrontierV3ExplosionExecutionScope.currentIntent()
                 .or(() -> FrontierV3BomberBomb.intentFor(explosion));
-        boolean resourceSite = managed.map(intent -> FrontierV3ResourceSiteExplosionExecutor.captureManaged(level, runtime, intent, affected))
-                .orElseGet(() -> FrontierV3ResourceSiteExplosionExecutor.captureExternal(level, runtime, affected));
         boolean ordinary = managed.map(intent -> FrontierV3ExplosionExecutor.observeDetonation(level, runtime, intent, directSource, affected, entities))
                 .orElseGet(() -> FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected));
-        return resourceSite || ordinary;
+        return ordinary;
     }
 }

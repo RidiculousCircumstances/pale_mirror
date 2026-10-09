@@ -24,8 +24,9 @@ class FrontierV3GameTestSliceTest {
     }
     @Test void productionWorkSliceRetainsTheRegisteredWorkerBatchOnly() {
         assertTrue(FrontierV3GameTestSlice.includes("production-effect", "pm-frontier-v3-production"));
-        assertTrue(FrontierV3GameTestSlice.includes("resource-prefix", "pm-frontier-v3-resource-site-prefix"));
-        assertFalse(FrontierV3GameTestSlice.includes("resource-prefix", "pm-frontier-v3-production"));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3GameTestSlice.includes("resource-prefix", "pm-frontier-v3-resource-site-prefix"));
+        assertTrue(FrontierV3GameTestSlice.includes("shared-storage", "pm-frontier-v3-shared-storage"));
+        assertTrue(FrontierV3GameTestSlice.includes("shared-storage", "pm-frontier-v3-field-turns"));
         assertTrue(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-production"));
         assertFalse(FrontierV3GameTestSlice.includes("production-effect", "pm-frontier-v3-scene-production-work"));
         assertTrue(FrontierV3GameTestSlice.includes("production-work", "pm-frontier-v3-scene-production-work"));

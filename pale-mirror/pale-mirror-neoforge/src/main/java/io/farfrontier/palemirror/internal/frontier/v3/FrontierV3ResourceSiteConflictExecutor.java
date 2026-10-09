@@ -52,7 +52,7 @@ final class FrontierV3ResourceSiteConflictExecutor {
                                         String admission, String claimState) {
         FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
-        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        FrontierV3ResourceSiteLedger.FieldClaim claim = ledger.fieldClaim(site.id());
         io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState()
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         String originId = origin.name().toLowerCase(Locale.ROOT).replace('_', '-');
@@ -66,19 +66,19 @@ final class FrontierV3ResourceSiteConflictExecutor {
 
     /** Package-visible formatter seam for the bounded causal incident contract. */
     static String lifecycleConflictTraceKind(FrontierV3ResourceSiteExecutor.LifecycleConflictOrigin origin,
-                                             ResourceSiteLifecycle lifecycle, FrontierV3ResourceSiteLedger.Claim claim,
+                                             ResourceSiteLifecycle lifecycle, FrontierV3ResourceSiteLedger.FieldClaim claim,
                                              ResourceSiteConflictReason reason) {
         return lifecycleConflictTraceKind(origin, lifecycle, claim, reason, "NOT_EVALUATED");
     }
 
     static String lifecycleConflictTraceKind(FrontierV3ResourceSiteExecutor.LifecycleConflictOrigin origin,
-                                             ResourceSiteLifecycle lifecycle, FrontierV3ResourceSiteLedger.Claim claim,
+                                             ResourceSiteLifecycle lifecycle, FrontierV3ResourceSiteLedger.FieldClaim claim,
                                              ResourceSiteConflictReason reason, String admission) {
         return lifecycleConflictTraceKind(origin, lifecycle, claim, reason, admission, "NOT_EVALUATED");
     }
 
     static String lifecycleConflictTraceKind(FrontierV3ResourceSiteExecutor.LifecycleConflictOrigin origin,
-                                             ResourceSiteLifecycle lifecycle, FrontierV3ResourceSiteLedger.Claim claim,
+                                             ResourceSiteLifecycle lifecycle, FrontierV3ResourceSiteLedger.FieldClaim claim,
                                              ResourceSiteConflictReason reason, String admission, String claimState) {
         String claimValue = claimValue(claim);
         return "resource_site_conflict:" + origin.name().toLowerCase(Locale.ROOT)
@@ -96,16 +96,12 @@ final class FrontierV3ResourceSiteConflictExecutor {
      * is active. Retain its immutable transition facts without making that mutable cursor a
      * second ownership identity or a desired-state repair instruction.
      */
-    private static String claimValue(FrontierV3ResourceSiteLedger.Claim claim) {
-        if (claim == null) return "none";
-        String value = claim.status().name().toLowerCase(Locale.ROOT) + "-s" + claim.stage() + "-h" + claim.harvestedCropSlots();
-        FrontierV3ResourceSiteLedger.ProjectionTransition projection = claim.projection();
-        if (projection == null) return value + "-pnone";
-        return value + "-p" + projection.mode().name().toLowerCase(Locale.ROOT)
-                + "-fs" + projection.fromStage() + "-fh" + projection.fromHarvestedCropSlots()
-                + "-ts" + projection.targetStage() + "-th" + projection.targetHarvestedCropSlots()
-                + "-n" + projection.nextWrite() + "-c" + projection.writeCount()
-                + "-src" + traceValue(projection.source());
+    private static String claimValue(FrontierV3ResourceSiteLedger.FieldClaim claim) {
+        if (claim == null) return "missing";
+        String value = traceValue(claim.intentId().value()) + "-" + claim.status().name().toLowerCase(Locale.ROOT);
+        if (claim instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
+            return value + "-cell-e" + owner.witness().epoch();
+        return value + "-initial";
     }
 
     private static String traceValue(String value) {

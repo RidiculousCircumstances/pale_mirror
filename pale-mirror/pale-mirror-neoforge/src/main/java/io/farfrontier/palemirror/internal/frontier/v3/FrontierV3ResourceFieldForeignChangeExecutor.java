@@ -183,7 +183,6 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
         if (state.resourceSites().hasPendingWorldChange(siteId)
                 || ledger.fieldWorldChange(siteId) != null || ledger.fieldForeignChange(siteId) != null
                 || ledger.fieldPlayerBreak(siteId) != null || cycle.pendingPlayerBreaks().containsKey(cellId)
-                || FrontierV3ResourceSiteExplosionLedger.get(level).hasPendingSite(siteId)
                 || !(ledger.fieldClaim(siteId) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                 || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
                 || !owner.witness().matchesCycle(cycle)) return false;
