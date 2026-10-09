@@ -232,4 +232,78 @@ class FrontierV3SceneDeparturePersistenceTest {
         assertTrue(batch.complete(true, () -> CompletableFuture.completedFuture(null), ledger)
                 .orElseThrow().departures().isEmpty());
     }
+
+    @Test void commonBodyBatchPublishesOnceOnlyAfterItsWriteAndSync() {
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        var chunk = storedChunk(9);
+        var bodies = commonBodyBatch(ledger, chunk);
+        var written = new CompletableFuture<Void>();
+        var synced = new CompletableFuture<Void>();
+        var batch = new FrontierV3SceneDeparturePersistence.Batch();
+        batch.observe(new ChunkPos(0, 0), chunk, written);
+        var ticket = batch.complete(true, () -> synced, ledger).orElseThrow();
+        var publications = new java.util.concurrent.atomic.AtomicInteger();
+        assertFalse(batch.acknowledgeBodies(ticket, ledger, value -> true, publications::incrementAndGet));
+        written.complete(null);
+        assertFalse(batch.acknowledgeBodies(ticket, ledger, value -> true, publications::incrementAndGet));
+        synced.complete(null);
+        assertTrue(batch.acknowledgeBodies(ticket, ledger, value -> true, publications::incrementAndGet));
+        assertEquals(1, publications.get(), "one positive batch, not one ledger fsync per resident");
+        bodies.forEach(body -> assertTrue(ledger.savedBodyDeparture(body)));
+        assertTrue(batch.acknowledgeBodies(ticket, ledger, value -> true, publications::incrementAndGet));
+        assertEquals(1, publications.get(), "unchanged saved proofs do not rewrite the ledger");
+        var restored = FrontierV3AmbientCarrierLedger.load(ledger.save(new CompoundTag(), null), null);
+        bodies.forEach(body -> assertTrue(restored.savedBodyDeparture(body)));
+    }
+
+    @Test void failedBatchPublicationDoesNotLeakSavedBodyPermissionsAndCanRetry() {
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        var chunk = storedChunk(9);
+        var bodies = commonBodyBatch(ledger, chunk);
+        var batch = new FrontierV3SceneDeparturePersistence.Batch();
+        batch.observe(new ChunkPos(0, 0), chunk, CompletableFuture.completedFuture(null));
+        var ticket = batch.complete(true, () -> CompletableFuture.completedFuture(null), ledger).orElseThrow();
+        assertThrows(java.io.UncheckedIOException.class, () -> batch.acknowledgeBodies(ticket, ledger,
+                value -> true, () -> { throw new java.io.UncheckedIOException(new java.io.IOException("ledger fsync failed")); }));
+        bodies.forEach(body -> assertFalse(ledger.savedBodyDeparture(body)));
+        var restored = FrontierV3AmbientCarrierLedger.load(ledger.save(new CompoundTag(), null), null);
+        bodies.forEach(body -> assertFalse(restored.savedBodyDeparture(body)));
+        var publications = new java.util.concurrent.atomic.AtomicInteger();
+        assertTrue(batch.acknowledgeBodies(ticket, ledger, value -> true, publications::incrementAndGet));
+        assertEquals(1, publications.get());
+        bodies.forEach(body -> assertTrue(ledger.savedBodyDeparture(body)));
+    }
+
+    private static java.util.List<FrontierV3ActorBodyDeparture> commonBodyBatch(
+            FrontierV3AmbientCarrierLedger ledger, CompoundTag chunk) {
+        var first = receipt(9);
+        var firstBody = new FrontierV3ActorBodyDeparture(first.carrier().identity(), 1L,
+                first.observed(), first.observed().body(), first.observed().health(),
+                java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty());
+        var secondActor = new SubjectId("resident:save-proof-second");
+        var secondId = UUID.fromString("b520b5ba-7c35-36b7-845c-689ed5f4c697");
+        var declaration = new FrontierV3ActorCarrierComposition.Declaration(secondActor, ActorKind.RESIDENT,
+                FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, secondId,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, 2L);
+        var secondBody = new FrontierV3ActorBodyDeparture(declaration, 1L,
+                new SceneMemberPosition(secondActor, first.observed().body(), first.observed().health()),
+                first.observed().body(), first.observed().health(), java.util.Optional.empty(),
+                java.util.Optional.empty(), java.util.Optional.empty());
+        var second = chunk.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).copy();
+        second.putUUID("UUID", secondId);
+        second.getCompound("NeoForgeData").putString(FrontierV3ActorCarrierComposition.ACTOR_KEY, secondActor.value());
+        chunk.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).add(second);
+        for (var body : java.util.List.of(firstBody, secondBody)) {
+            var identity = body.identity();
+            assertTrue(ledger.registerFirstAdmission(FrontierV3ActorFirstAdmission.neverCreated(
+                    new FrontierV3ActorFirstAdmission.Identity(identity.actorId(), identity.kind(), identity.entityId()))));
+            var live = FrontierV3ActorOwnerBinding.body(identity.liveBody(
+                    FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, 0L, identity.epoch()));
+            assertTrue(ledger.beginFirstAdmission(live));
+            assertTrue(ledger.acknowledgeFirstAdmission(ledger.firstAdmission(identity.actorId()).orElseThrow(), live));
+            assertEquals(1L, ledger.beginBodyResidence(live.declaration()));
+            assertTrue(ledger.recordBodyDeparture(body));
+        }
+        return java.util.List.of(firstBody, secondBody);
+    }
 }

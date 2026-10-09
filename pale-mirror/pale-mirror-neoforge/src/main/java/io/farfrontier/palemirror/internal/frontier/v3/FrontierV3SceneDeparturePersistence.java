@@ -156,9 +156,8 @@ final class FrontierV3SceneDeparturePersistence {
                                    java.util.function.Predicate<FrontierV3ActorBodyDeparture> current, Runnable persist) {
             if (!writes.current(ticket.write()) || !ticket.saved().isDone()
                     || ticket.saved().isCompletedExceptionally()) return false;
-            for (var receipt : ticket.bodies()) {
-                if (current.test(receipt) && ledger.confirmSavedBodyDeparture(receipt)) persist.run();
-            }
+            ledger.publishSavedDepartures(ticket.bodies().stream().filter(current).toList(),
+                    List.of(), List.of(), persist);
             return true;
         }
 
@@ -167,13 +166,9 @@ final class FrontierV3SceneDeparturePersistence {
                             java.util.function.Predicate<FrontierV3AmbientDeparture> currentAmbientOwner, Runnable persist) {
             if (!writes.current(ticket.write()) || !ticket.saved().isDone()
                     || ticket.saved().isCompletedExceptionally()) return false;
-            for (var receipt : ticket.departures()) {
-                if (!currentOwner.test(receipt)) continue;
-                if (ledger.confirmSavedDeparture(receipt)) persist.run();
-            }
-            for (var receipt : ticket.ambientDepartures()) {
-                if (currentAmbientOwner.test(receipt) && ledger.confirmSavedAmbientDeparture(receipt)) persist.run();
-            }
+            ledger.publishSavedDepartures(List.of(),
+                    ticket.departures().stream().filter(currentOwner).toList(),
+                    ticket.ambientDepartures().stream().filter(currentAmbientOwner).toList(), persist);
             if (!writes.accept(ticket.write())) return false;
             candidates.clear(); candidateCount = 0;
             return true;

@@ -100,6 +100,35 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         if (savedBodyDepartures.putIfAbsent(actor, receipt.residenceGeneration()) == null) setDirty();
         return true;
     }
+
+    /** One durable publication for one positively saved batch, never one whole-ledger write per body. */
+    void publishSavedDepartures(List<FrontierV3ActorBodyDeparture> bodies,
+                               List<FrontierV3SceneDeparture> scenes,
+                               List<FrontierV3AmbientDeparture> ambient, Runnable persist) {
+        java.util.Objects.requireNonNull(persist, "departure publication");
+        if (bodies.size() > MAX_CARRIERS || scenes.size() > MAX_CARRIERS || ambient.size() > MAX_CARRIERS)
+            throw new IllegalArgumentException("departure publication exceeds receipt capacity");
+        if (bodies.isEmpty() && scenes.isEmpty() && ambient.isEmpty()) return;
+        var previousBodies = new java.util.HashMap<>(savedBodyDepartures);
+        var previousScenes = new java.util.HashSet<>(savedDepartures);
+        var previousAmbient = new java.util.HashSet<>(savedAmbientDepartures);
+        try {
+            bodies.forEach(this::confirmSavedBodyDeparture);
+            scenes.forEach(this::confirmSavedDeparture);
+            ambient.forEach(this::confirmSavedAmbientDeparture);
+            if (!previousBodies.equals(savedBodyDepartures) || !previousScenes.equals(savedDepartures)
+                    || !previousAmbient.equals(savedAmbientDepartures)) persist.run();
+        } catch (RuntimeException | Error failedPublication) {
+            // No server-thread consumer may see a new saved proof after its publication failed.
+            // Disk may already contain the positive batch; withholding the in-memory permission
+            // is conservative until a later successful publication or recovery re-proves it.
+            savedBodyDepartures.clear(); savedBodyDepartures.putAll(previousBodies);
+            savedDepartures.clear(); savedDepartures.addAll(previousScenes);
+            savedAmbientDepartures.clear(); savedAmbientDepartures.addAll(previousAmbient);
+            setDirty();
+            throw failedPublication;
+        }
+    }
     boolean resumeBodyDeparture(FrontierV3ActorBodyDeparture receipt) {
         var actor = receipt.identity().actorId();
         if (!receipt.equals(bodyDepartures.get(actor)) || hasDepartureConflict(actor)) return false;
