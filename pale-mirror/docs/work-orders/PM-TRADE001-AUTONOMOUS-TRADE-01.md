@@ -124,21 +124,57 @@ counterparty yields an explained non-match, not a forced transaction.
 
 ### 4. Real second commodity and complementary graybox
 
+2026-10-09 user amendment: this is now the active main-alone goal. Six of twelve
+settlements receive finite, visibly authored exterior quarries; the others buy
+cobblestone for a bounded construction reserve. Real construction consumption is
+deferred. The following current cut replaces this step's old single-project
+consumer and two-settlement-only acceptance; previous steps/evidence remain history.
+
+Implementation blocks (no intermediate approval gates):
+
+1. Trace existing work admission, UAE/activity, extraction, custody/container,
+   local logistics, terrain projection and goods policy end-to-end. Record exact
+   reusable ports and required new family registrations. Do not reuse crop
+   lifecycle semantics or add service-private pathfinding/inventory.
+2. Implement finite extraction-site state, typed declared source blocks and
+   bounded safe work-frontier policy. Register it once in process/state/codec/
+   reference/projection ownership. Explicit ruleset content supplies six sites,
+   exterior geometry, actual starter tools, work rates and reserve quantities.
+3. Connect miners through common labour/UAE/navigation/work/extraction; deposit
+   actual output in each site's container. Add internal hauling through common
+   resource transfer and logistics; full source/destination capacity pauses only
+   eligible operations. Preserve interruptions, meals and exact resource custody.
+4. Connect site/depletion/container observations and HOT/COLD/recovery before
+   testing the complete loop. Initial geometry cannot regenerate depleted blocks
+   or overwrite player changes. Declare live physical authority, durable effect
+   receipts and local mismatch dispositions; no second ledger or per-frame WAL.
+5. Add cobblestone to existing public trade catalogs and bounded reserve targets.
+   Verify produced site stock -> home depot -> ordinary trade -> importer reserve,
+   alongside retained farming/feeding. Check accessible blocked/removed cells,
+   exhausted/full site/depot, concurrent claims and affected restart boundaries.
+   Focused existing gates plus a connected native/player check, not a broad
+   unrelated proof campaign. Deploy a verified immutable candidate through root
+   scripts; disclose exact acceptance limits and update the materialization map.
+
+Scope excludes tool manufacture, subterranean planning, new mineral content,
+construction consumers and automatic prospecting. Mechanisms must accommodate
+later mineral/layout definitions without editing common execution/transport.
+Source/JAR verification and ordinary player observation remain distinct evidence.
+
 - Register cobblestone production, permissions, work definitions and company
   policy without commodity branches in shared trade/logistics mechanisms.
 - Add a finite declared quarry cell pool and extraction work using shared
   work selection, rates/modifiers, custody, navigation and physical-effect APIs.
   No fake wheat-field cycle or infinite abstract stock source for stone.
-- Add one bounded stone-consuming construction/repair project with declared
-  target blocks and real resource expense. This is minimal content, not generic
-  building AI. Already removed/player-mined cells cannot yield stone twice;
+- Defer stone-consuming construction/repair to later content; first use a bounded
+  reserve rather than inventing recurring demand. Already removed/player-mined cells cannot yield stone twice;
   unknown physical changes require classification rather than overwrite.
-- Configure two existing settlements for complementary bread/stone supply,
+- Configure six producers and six importers for complementary bread/stone supply,
   demand and lawful known endpoints. Provide explicit finite initial capital
   and owned fixtures only; acceptance stock must include produced goods.
   Seed capital is setup, not a recurring rescue of insolvent participants.
 
-Exit: bread has a real feeding consumer and stone a real physical project.
+Exit: bread has a real feeding consumer and stone reaches bounded importer reserves.
 Both sources, allocations and destinations are traceable. A finite quarry or
 completed project may legitimately leave no further trade; do not invent demand
 to promise an endless loop.
@@ -151,7 +187,7 @@ to promise an endless loop.
 - Update architecture, relation/codec ownership and materialization inventory
   for the actually adopted flow, with honest M0/M1/M2/M3 evidence labels.
 - Build one relevant checked-in native bread/stone scenario: observe real
-  production/loading, travel, acceptance and public use/project consumption.
+  production/loading, travel, acceptance and public use/bounded stone reserves.
   Use semantic camera/frame evidence; HOT activation shows current COLD state,
   never a visible replay. Cover graceful restart at a prepared physical boundary.
 - Reuse existing coverage. Add only discriminating checks for overcommit,
@@ -179,7 +215,7 @@ whole Python parity programme. No per-stage approval pause during a later
 authorized implementation; stop for a material scope/authority choice or the
 completed agreed checkpoint. Full applicable release gates still apply.
 Escort AI, diplomacy simulation, loans/taxes/dividends, dynamic pricing and
-construction planning beyond the single stone consumer remain later content.
+construction consumption/planning remain later content under the Step4 amendment.
 
 Current action: implement step 1 and its connected seams, then continue the
 delivery/participant/content sequence. Do not offer a backend-only checkpoint as
