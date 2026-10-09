@@ -59,7 +59,7 @@ final class FrontierV3GrayboxExecutor {
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PENDING_SETTLEMENT_FENCES = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PRIORITY_SETTLEMENT_FENCES = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.Set<ChunkPos>> PLAYER_INGRESS = new IdentityHashMap<>();
-    enum ProjectionResult { APPLIED, CURRENT, CONFLICT, DEFERRED }
+    enum ProjectionResult { APPLIED, CURRENT, CONFLICT, DEFERRED, YIELDED }
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
     enum FirstVisibility {
         PENDING, STATIC_CURRENT, READY, BLOCKED;
@@ -316,9 +316,15 @@ final class FrontierV3GrayboxExecutor {
         if (records == null) return;
         drainHiveFences(runtime, cursor);
         drainSettlementFences(runtime, cursor);
-        int remainingCells = MAX_FIRST_VISIBILITY_CELLS_PER_TICK;
-        for (int processed = 0; processed < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK && remainingCells > 0; processed++) {
-            ChunkPos chunk = pollFirstVisibility(runtime);
+        var budget = new FrontierV3FirstVisibilityBudget(
+                io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get(),
+                MAX_FIRST_VISIBILITY_CELLS_PER_TICK,
+                (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
+                System::nanoTime);
+        var origins = level.players().stream().filter(player -> !player.isSpectator())
+                .map(net.minecraft.server.level.ServerPlayer::chunkPosition).toList();
+        for (int processed = 0; processed < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK && budget.canRead(); processed++) {
+            ChunkPos chunk = pollFirstVisibility(runtime, origins);
             if (chunk == null) return;
             FirstVisibilityRecord record = records.get(chunk);
             if (record == null || record.status() != FirstVisibility.PENDING) continue;
@@ -330,11 +336,12 @@ final class FrontierV3GrayboxExecutor {
             if (parked != null) parked.remove(chunk);
             FirstVisibilityWork work = firstVisibilityWork(runtime, chunk, cursor.cellsIn(chunk));
             FirstVisibility result = FirstVisibility.PENDING;
-            while (remainingCells > 0 && !work.complete()) {
-                ProjectionResult projection = projectFirstVisible(FrontierV3AftermathPhysicalWorld.firstVisibility(level), ledger, state, work.next());
-                remainingCells--;
+            while (!work.complete() && budget.takeRead()) {
+                ProjectionResult projection = projectFirstVisible(FrontierV3AftermathPhysicalWorld.firstVisibility(level), ledger, state,
+                        work.next(), budget::takeWrite);
                 if (projection == ProjectionResult.CONFLICT) { result = FirstVisibility.BLOCKED; break; }
                 work.observe(projection);
+                if (projection == ProjectionResult.YIELDED) break; // Try read-only work in another chunk, not the same yielded cell.
                 if (work.blocked()) { result = FirstVisibility.BLOCKED; break; }
             }
             if (result == FirstVisibility.PENDING && work.complete()) result = FirstVisibility.STATIC_CURRENT;
@@ -366,13 +373,31 @@ final class FrontierV3GrayboxExecutor {
         return (priority ? PRIORITY_SETTLEMENT_FENCES : PENDING_SETTLEMENT_FENCES)
                 .computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>());
     }
-    private static ChunkPos pollFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime) {
+    private static ChunkPos pollFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime, List<ChunkPos> origins) {
         boolean priority = !PRIORITY_VISIBILITY_TURN.getOrDefault(runtime, false);
         PRIORITY_VISIBILITY_TURN.put(runtime, priority);
         var first = priority ? PRIORITY_FIRST_VISIBILITY.get(runtime) : PENDING_FIRST_VISIBILITY.get(runtime);
         var second = priority ? PENDING_FIRST_VISIBILITY.get(runtime) : PRIORITY_FIRST_VISIBILITY.get(runtime);
-        ChunkPos next = poll(first);
-        return next != null ? next : poll(second);
+        ChunkPos next = pollVisibility(first, origins, priority);
+        if (next == null) next = pollVisibility(second, origins, priority);
+        if (next != null) {
+            // A natural-load candidate may be in both queues. It is one obligation.
+            if (first != null) first.remove(next);
+            if (second != null) second.remove(next);
+        }
+        return next;
+    }
+    /** Alternate nearest-player admission and FIFO; distant work must not starve. */
+    static ChunkPos pollVisibility(java.util.LinkedHashSet<ChunkPos> queue, List<ChunkPos> origins, boolean nearest) {
+        if (queue == null || queue.isEmpty()) return null;
+        if (!nearest || origins.isEmpty()) return poll(queue);
+        ChunkPos next = queue.stream().min(java.util.Comparator.comparingLong(candidate -> origins.stream()
+                .mapToLong(origin -> {
+                    long dx = (long) candidate.x - origin.x, dz = (long) candidate.z - origin.z;
+                    return dx * dx + dz * dz;
+                }).min().orElseThrow())).orElseThrow();
+        queue.remove(next);
+        return next;
     }
     private static void drainHiveFences(FrontierV3ServerRuntime<?, ?> runtime, Cursor cursor) {
         for (int drained = 0; drained < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK; drained++) {
@@ -396,32 +421,6 @@ final class FrontierV3GrayboxExecutor {
         java.util.Iterator<ChunkPos> iterator = queue.iterator();
         ChunkPos next = iterator.next(); iterator.remove();
         return next;
-    }
-    private static final class FirstVisibilityWork {
-        private final java.util.ArrayDeque<GrayboxCell> pending;
-        private final int cells;
-        private int remainingInPass;
-        private boolean progressedInPass;
-        private boolean blocked;
-        FirstVisibilityWork(List<GrayboxCell> cells) {
-            this.pending = new java.util.ArrayDeque<>(cells);
-            this.cells = cells.size();
-            this.remainingInPass = cells.size();
-        }
-        GrayboxCell next() { return current = pending.removeFirst(); }
-        void observe(ProjectionResult result) {
-            if (result == ProjectionResult.DEFERRED) pending.addLast(current); else progressedInPass = true;
-            remainingInPass--;
-            if (remainingInPass == 0 && !pending.isEmpty()) {
-                if (!progressedInPass) blocked = true;
-                else { remainingInPass = pending.size(); progressedInPass = false; }
-            }
-            current = null;
-        }
-        private GrayboxCell current;
-        boolean complete() { return pending.isEmpty(); }
-        boolean blocked() { return blocked; }
-        int cells() { return cells; }
     }
     static void completeDynamicCatchUp(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         long revision = runtime.canonicalState().orElseThrow().revision().value();
@@ -471,13 +470,17 @@ final class FrontierV3GrayboxExecutor {
         return visibility == null || visibility.status() != FirstVisibility.BLOCKED;
     }
     private static ProjectionResult projectFirstVisible(FrontierV3AftermathPhysicalWorld world, FrontierV3GrayboxLedger ledger,
-                                                        FrontierWorldState state, GrayboxCell cell) {
+                                                        FrontierWorldState state, GrayboxCell cell,
+                                                        java.util.function.BooleanSupplier admitMutation) {
         PhysicalDelta delta = state.physicalDeltas().get(cell.position());
         if (delta != null) {
-            if (matchesKnownLoss(delta, cell)) { retainKnownLoss(world, cell); return ProjectionResult.CURRENT; }
+            if (matchesKnownLoss(delta, cell)) {
+                if (!admitMutation.getAsBoolean()) return ProjectionResult.YIELDED;
+                retainKnownLoss(world, cell); return ProjectionResult.CURRENT;
+            }
             return ProjectionResult.CONFLICT;
         }
-        return project(world, cell);
+        return project(world, cell, admitMutation);
     }
     static Optional<FrontierSettlementAssaultBattlefield.Provider> admissionProvider(
             FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
@@ -559,6 +562,10 @@ final class FrontierV3GrayboxExecutor {
         return project(FrontierV3AftermathPhysicalWorld.minecraft(level), cell);
     }
     static ProjectionResult project(FrontierV3AftermathPhysicalWorld world, GrayboxCell cell) {
+        return project(world, cell, () -> true);
+    }
+    static ProjectionResult project(FrontierV3AftermathPhysicalWorld world, GrayboxCell cell,
+                                    java.util.function.BooleanSupplier admitMutation) {
         io.farfrontier.palemirror.frontier.v3.model.BlockPosition position = cell.position();
         if (!world.naturallyLoaded(position)) return ProjectionResult.DEFERRED;
         FrontierV3GrayboxLedger ledger = world.ledger();
@@ -566,14 +573,17 @@ final class FrontierV3GrayboxExecutor {
         if (prior != null) {
             if (prior.deferred() || !matches(prior, cell)) return ProjectionResult.DEFERRED;
             if (world.hasMaterial(position, cell.material())) return ProjectionResult.CURRENT;
+            if (!admitMutation.getAsBoolean()) return ProjectionResult.YIELDED;
             ledger.defer(toMinecraft(cell));
             return ProjectionResult.DEFERRED;
         }
         if (!world.isAir(position)) {
+            if (!admitMutation.getAsBoolean()) return ProjectionResult.YIELDED;
             ledger.obstructed(toMinecraft(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
             return ProjectionResult.CONFLICT;
         }
         if (requiresSupport(cell.semanticPart()) && world.isAir(cell.position().offset(0, -1, 0))) return ProjectionResult.DEFERRED;
+        if (!admitMutation.getAsBoolean()) return ProjectionResult.YIELDED;
         ledger.ensureCapacityFor(toMinecraft(cell));
         if (!world.placeMaterial(position, cell.material())) return ProjectionResult.DEFERRED;
         ledger.applied(toMinecraft(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
