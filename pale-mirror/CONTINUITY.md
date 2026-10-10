@@ -5,6 +5,92 @@ Canonical governance is here; sole workflow docs/engineering-agent-protocol.md.
 
 ## Current assignment and result
 
+Completed implementation2026-10-10: main alone implemented performance items1–5:
+explicit coalescible reconsideration hints (not resource/effect facts),
+deterministic population-sized weighted admission, immutable worksite geometry
+index, evidenced persistence-path optimizations preserving durable-before-effect,
+and fresh ready/held/future queue telemetry plus complete PM host-turn timing.
+Implementation remains pm-f06r3-facility-lane-recovery; starting HEAD5455bb5 clean.
+Source implementation complete; current integration candidate is private frozen
+28db4de786d2521b8a0750270ff4c3966ad05023/tree13a2f4cfa393db7479f04c3860bcc6371a4919f7
+in pm-runtime-performance-r85-release-20261010, clean detached source. Published
+implementation15fdec7ea375a0abaaac1b621f2cc00ae371d703 on
+origin/feat/baker-carry-orders-20260926; committed tree exactly matches the
+verified candidate. Implementation worktree/index clean. Canonical design/receipt:
+docs/work-orders/PM-RUNTIME-PERFORMANCE-20261010.md. Current artifact SHA512
+29c4ac1a610bbdbc39bc83ce6a331d8d1f1fdf33446c3f4ca9717cbb8399e59e899bfad1360579e24ae9a9b461faba26e6e6de1bdfbf582d812d0e6f73d0a29a.
+Current candidate domain146tests (including queue/replay/weighted actual cohort,
+ruleset/geometry/stock/trade)0failure0skip. Guardrails and packaged verification
+passed; native harvest-support3 PASS. A broad
+native build unexpectedly included unrelated reference-simulation annual test;
+its exact test worker was terminated and original log retained as interrupted,
+not green. Replaced by internal.frontier.v3 scope, no test/oracle weakening.
+Logs /tmp/pm-runtime-performance-r85-release-gates.log and
+/tmp/pm-runtime-performance-r85-native-gates.log. Final native618tests0fail1existing
+skip, native harvest-support3 PASS, guardrails/package/build PASS1m43s.
+Delivered same core to fresh frontier-v3-runtime-performance-r85-20261010;
+R84 world retained (not deleted), only datapacks copied. Selector quarry-graybox-r2,
+same seed20260918065, schema267. Save-all flush acknowledged before service stop.
+Source/JAR/new-world preflight and live verifier PASS. Live wrapper2404038,
+invocation3ac58608e3fb414783e1976868220563, start1791617009. Early cut tick374
+green/no conflicts; ready0/held12/future807, ready-lag0, historical budget-lag4.
+Recent64 host turns total134589947ns/max12772786ns; initial startup max807ms
+is visible, not claimed cured. Exact full-pack20FPS client HOT/COLD scenario13
+actions PASS, run3af44d5d-a941-4ee7-b9a6-b926c9232811; both frames reviewed.
+Candidate build/runtime-performance-live-final-result.json/JSONL and
+/tmp/pm-runtime-performance-r85-live-final-client.log. First carrier mistakenly
+released an absolute hold after relative advance, next launch failed before
+connection in FML early-window handoff; original failed logs retained, corrected
+task-local scenario/window only, no new artifact or weakened domain assertion.
+Task client exited. Same-world save-flush/RCON-stop/all-dimensions saved/port
+closed then recovery PASS. Current wrapper2420189, invocation
+b02b6a08c9b84650a86924605da045ce, start1791617449. Post-start verifier PASS;
+tick13259/revision15325 green,366residents/49bioforms, no required/scene/inventory/
+custody conflicts. Tick13260 pressure ready0/held9/future820/audit0; recent64 PM
+turns mean8.92ms/max35.95ms; recovery maximum1.182s remains visible, not solved.
+All five implemented, verified, delivered, committed and pushed; private frozen
+release ref retained. Unrelated governance/outer/nested WIP preserved. No subagents.
+Historical2s overload cause is unresolved, not the justification for speculative
+GC/disk remedies. Verify connected ordinary/negative/recovery paths, not a new
+unchanged infrastructure proof campaign.
+
+Latest request read-only server check: same R84 artifact/service/world active
+after about8h, no online players. RCON summary revision644252/tick574094
+green, required/inventory/scene conflicts0; neoforge TPS20.000 while empty.
+All six live quarry diagnostics report EXTRACTED256/external0/siteQuantity0,
+no retained mining workers, home stocks142–256: exhausted, not stuck extraction.
+Two isolated Can't keep up warnings at03:37/03:47 (~2s); no runtime ERROR/quarantine.
+Performance records some queue samples187–189ticks late (about9s at20TPS);
+these aggregate samples are not a measured present courier wall-time delay.
+No restart, world reset, code change or client started for this check.
+
+Follow-up delay diagnosis2026-10-10 11:10–11:16+05: confirmed source ceiling
+FrontierV3RuntimeBudgets ordinary/fast-forward4actions per tick. Catalog admits
+all366 initial activity reviews at tick1; current snapshot585200 also has318
+activity reviews due together588000. Unique cause-based workforce/stock/trade
+invalidations can add reviews rather than coalescing one participant's hints.
+This establishes a burst-service limitation, not present sustained saturation.
+Snapshot579200 has822schedules but only8due (including condition-held work).
+Two live telemetry cuts205.417s apart advanced4109ticks,2522revisions (~20.003
+simticks/s); current overall budget-blocked lag0. The187–189tick per-owner rows
+did not refresh. Queue currentLagTicks is the last recorded sample, sorted by
+lifetime maximum, with no timestamp; it also includes legitimate prior held
+time because an unparked action retains its original deadline. These rows
+cannot prove a present9s carrier pause or pure CPU scheduling delay.
+Native Minecraft tickServer tallies tickTimesNanos BEFORE fireServerTickPost;
+our lifecycle runs in Post. Standard neoforge TPS/MSPT and Minecraft JFR tick
+means exclude that PM work. Actual SimInstant/wall progression independently
+confirmed20Hz while empty. One bounded60s JFR completed, no remaining recording:
+implementation pale-mirror/build/profiles/quarry-r84-delay-diagnosis-20261010.jfr
+(~1.3MiB). One G1 pause3.171ms/no observed historical2s reproduction. Server
+native samples53 at WAL force plus a few directory forces; Java samples include
+full validation, schedule overlay copying and repeated ExtractionRegion.all.
+Worksite projection still rebuilds all1536source-cell region identities on
+ordinary empty turns (two beforeTurn passes plus afterProjection). This is
+confirmed redundant work, not proof of the two old overload warnings' cause.
+Old warnings alone cannot distinguish accumulated overrun, fsync, GC or host
+descheduling; no historical trace existed. Diagnosis only, no code/config fix.
+
 Current authority: ongoing extraction while the settlement requests it; user
 also reports a roughly5s pause after the courier takes stone. Main alone fixes
 the connected source path, verifies and deploys by standing test delivery policy.
@@ -52,7 +138,7 @@ Implementation22task-owned paths committed, worktree clean. Old governance
 WIP and both original repositories preserved. No graphical acceptance/measured
 latency improvement is claimed; exact reported5s attribution remains unmeasured.
 
-### Latest live deployment — R84 continuous extraction, 2026-10-10 03:07+05
+### Previous live deployment — R84 continuous extraction, 2026-10-10 03:07+05
 
 Graceful save/stop R83 completed; old world retained for diagnosis, nothing deleted.
 Published/installed exact R84b core SHA512

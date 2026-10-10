@@ -1,5 +1,20 @@
 # Pale Mirror runtime performance
 
+## Frontier v3 current scheduler and diagnostics
+
+Quarry graybox r2 pins a hashed64-action/128-weight execution budget; explicit
+policy reviews cost at least8. Only registered stock/trade reconsideration
+hints merge by exact owner/kind; facts and physical receipts never merge.
+Current queue pressure separates ready/held/future at its observation tick.
+Stale owner rows expose last-observed values, not a fabricated current lag.
+Host-turn timing includes PM durability exit; native-through-PM-Post timing
+does not include later listeners or the idle wait. Immutable extraction geometry
+is reused across depletion, and the owned WAL tail is validated incrementally
+on append with complete validation on read/recovery. Physical fences remain.
+Detailed design and actual verification receipt are owned by canonical
+governance `docs/work-orders/PM-RUNTIME-PERFORMANCE-20261010.md`.
+
+
 Agent workflow, evidence reuse and retry decisions follow
 [`engineering-agent-protocol.md`](engineering-agent-protocol.md).
 Terra owns performance diagnosis, technical design and verification as senior
