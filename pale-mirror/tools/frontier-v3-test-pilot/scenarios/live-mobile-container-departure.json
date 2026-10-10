@@ -7,11 +7,10 @@
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
       { "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "inventoryConflicts": 0 } },
       { "view": "container", "id": "container:pack/settlement-1", "expect": {
-        "status": "ok", "canonicalCapacity": { "packedFungibleSlots": 0 } } }
+        "status": "ok", "canonicalCapacity": { "packedFungibleSlots": 1 } } }
     ] },
     { "type": "command", "command": "/gamemode creative" },
-    { "type": "command", "command": "/clear PMQuarryAudit" },
-    { "type": "command", "command": "/give PMQuarryAudit minecraft:granite 16" }
+    { "type": "command", "command": "/clear PMQuarryAudit" }
   ],
   "actions": [
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
@@ -21,7 +20,7 @@
       "expect": { "status": "ok", "custody": { "status": "ACQUIRED" } }, "timeoutMs": 60000 },
     { "type": "interact_nearest_entity", "entityType": "minecraft:donkey", "secondaryUse": true,
       "maxDistance": 6, "timeoutMs": 15000 },
-    { "type": "quick_move_from_inventory", "item": "minecraft:granite", "count": 16, "timeoutMs": 15000 },
+    { "type": "inspect", "view": "container", "id": "container:pack/settlement-1" },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 64, "z": 480 }, "settleMs": 0 },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:pack/settlement-1",
       "expect": { "status": "ok", "custody": { "status": "RELEASED" }, "canonicalCapacity": { "packedFungibleSlots": 1 } }, "timeoutMs": 60000 },
@@ -30,7 +29,7 @@
       "offset": { "x": -2, "y": -1, "z": -2 }, "settleMs": 0, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:pack/settlement-1",
       "expect": { "status": "ok", "custody": { "status": "ACQUIRED" },
-        "fungibleOccupied": [{ "itemKind": "minecraft:granite", "count": 16 }],
+        "fungibleOccupied": [{ "slot": 0, "account": "custody:container-pack/settlement-1", "itemKind": "minecraft:granite", "count": 16 }],
         "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } }, "timeoutMs": 60000 },
     { "type": "interact_nearest_entity", "entityType": "minecraft:donkey", "secondaryUse": true,
       "maxDistance": 6, "timeoutMs": 15000 },
