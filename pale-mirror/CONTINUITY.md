@@ -1,9 +1,345 @@
 # Continuity Ledger
 
-Updated2026-10-10. Main alone; Terra stopped, subagents prohibited.
+Updated2026-10-11. Main alone; Terra stopped, subagents prohibited.
 Canonical governance is here; sole workflow docs/engineering-agent-protocol.md.
 
 ## Current assignment and result
+
+Completed2026-10-10: audited shared-mechanism gaps1–5 implemented by main alone
+in pm-f06r3-facility-lane-recovery. Fixed/mobile vanilla clicks share the durable
+causal witness; guessed player inventory attribution/depot prefix polling is
+removed. Exact declared tracked-player returns conserve existing lots, including
+partial returns; supported quick-move only, unsupported ambiguous operations
+fail before editing. Farmer delivery uses shared actor-item transfer preserving
+destination-first recovery. Production/growth forfeiture decisions are registered
+owner-local capabilities. All ordinary diagnostic views use executionView,
+not checkpoint encoding; unmeasured live checkpointBytes is null.
+The five-gap baseline is now committed2a2c46e6 and pushed on
+feat/baker-carry-orders-20260926. R97e native8actions/2assertions/2 reviewed UI
+frames proved clicks, not unload liveness; receipt remains in the quarry doc.
+Active user-requested R98 correction: mobile custody persisted ACQUIRED after
+positive native departure because the body retired before the container owner
+could use departure.current. Fixccfe491b separates retained dependent evidence
+from active actuation: exact retired BODY epoch/RESUME_COLD/no successor plus
+the existing saved image, residence, return-read, pending-effect and provenance
+checks. No heuristic release, body revival, schema change or world reset.
+Domain25/adapter27 focused checks, reference-projection10 and field-turns17
+required GameTests PASS; clean guardrails/check/build/package PASS, unaffected
+evidence reused with -x test. The old epoch4 lock became RELEASED in the same
+world after first deployment. A failed native carrier's array expectation was
+partial although the matcher compares arrays exactly; actual granite16 and
+ACQUIRED were current. Preserve failure, correct full record; no deadline change.
+Final frozen sourcefed1c94293a72431aaa7ed862e126e0b3502d313/tree
+1c06024f3e53951d1c0cb4c3fa8f2a789fd144ef, clean detached
+/home/rd/proj/pm-mobile-custody-r98-release-20261010.
+CoreSHA512eaa8be2483e182fc7912e5fd99d20f2b2f29f17ee895d5b623611a92afcd7e80417a6d8eba67fd94ac8db4479d7e0a0b2b398d339e4c514b30d8ca9a05e19125.
+Same live world frontier-v3-shared-mechanisms-r97c-20261010/schema269/r4;
+Visuals unchanged. Final verifier PASS wrapper3837269/start1791658848,
+invocationa6ab6fded21f4bc6a467998310e129ac. Full-pack terminal scenario PASS
+15actions/3assertions/2 actual reviewed UI frames, run
+0a3081e6-a76a-4581-b05e-8145f44da4eb,41.724s including launch. UNLOADED precedes
+RELEASED for nonempty/empty cargo; return retains exact16 after same-world saved
+restart. Post-exit tick60200+: actor UNLOADED/ambient CLOSED, container empty
+RELEASED epoch8,0 required/inventory/scene/custody conflicts. Manifest frozen
+build/mobile-container-r98-terminal-native.json; implementation JSONL
+build/mobile-container-r98-terminal-post-exit.jsonl. Client/Xvfb stopped.
+Implementation branch pushed throughfed1c942; scoped governance closure is
+recorded here. Unrelated governance and historical nested-checkout WIP remain preserved. No new M3,
+arbitrary abrupt save atomicity or performance percentage claim.
+Full scope, commands, limitations and receipts: docs/frontier-v3-quarry-development.md.
+
+Prior2026-10-10: Ironmeadow player withdrawal/connected departure fixes deployed
+as R96c; main alone, no subagents. Generic fixed-reference-container click
+witness and explicit contribution custody replace depot-only inference. Closed
+claim-loss owner ports atomically retire unpicked internal hauls/meals; prepared
+non-replayable effects remain fenced. Pending player witnesses also fence native
+container competitors. Actual R96b player departure exposed body release after
+prepared inventory interaction: now shared inventory fences are checked before
+changing ambient lease/insertion journal, without suppressing canonical errors.
+Historical untracked cobblestone loss cannot gain an invented receipt; diagnostic
+worlds retained, current world fresh frontier-v3-quarry-player-r96c-20261010.
+Clean frozen /home/rd/proj/pm-quarry-player-r96c-release-20261010 source
+39bb0a3749a8d8ae37d664ad3403e839ada0eb9b/treebbd91d6a0fa63a3833176e9b1df80c7372128f2f.
+CoreSHA5121cda02228d31918d4c6e8cbb0d7a1dd7481da46b4cd435a01341146b1aae1ea51071849fadde2b54e659521f0860af5d77d2ce1bd2776c087a6d49acae97ee78.
+Visuals/schema269/r4 unchanged. Private release ref only, real index untouched;
+no user-branch commit/push. Final live verifier PASS wrapper3650128, restart
+1791653369/invocation5d8a1ee925804c41bdc83dd467f2bd76. Post-exit1642 and post-restart
+2513:0 required/inventory conflicts, same chest image/revision10, custody RELEASED.
+Native9actions/2 declared assertions/2 reviewed UI frames PASS run
+a946e526-f6ea-40ff-a674-2d7856231fa0, frozen build/quarry-player-r96c-native.json.
+Granite gift/withdrawal proves shared quarry click boundary; claimed cobblestone
+haul retirement has domain/codec coverage, not that native claim. Domain46 and
+adapter12 focused checks PASS; guardrails/check/build/package reuse affected
+evidence with -x test. Failed carriers remain failed; R96b departure log retained
+in implementation build/quarry-r96b-post-exit-failure.log. Client/Xvfb stopped.
+JFR identifies mining checkpointImage serializing whole world for current tick;
+mining/card clocks now executionView. Exact cell lookup indexed immutably.
+Identical old snapshot root construction1.795→1.732ms: not material total gain.
+Fresh recent64 host-through-PM mean4.116ms/max22.045ms, peak794.940ms; not matched
+before/after speedup. First native visit7s; residual chunk-readiness delay and
+explicit full-diagnostic checkpoint encoding remain unquantified/not eliminated.
+Full receipt docs/frontier-v3-quarry-development.md.
+
+Prior2026-10-10: systemic fixes1–5 implemented and deployment verified.
+Final source130a5680904e9543d83e5996197cd3bea9b2e6f1/tree1075c39e3baab6a5b9423d2f6b8374cf1e9f9210,
+clean detached /home/rd/proj/pm-quarry-recovery-r95-release-20261010.
+CoreSHA51252ae16f05a78d42c3411a8541e2ca0595cd9974acecc7a3528693ff51135ebb071ce5396b63503f76c3201148548c707dddb4622b43c090b9ed92500997cc9bf;
+Visuals/schema269/r4 unchanged. Same diagnostic world retained, no reset.
+Latest restart1791648763/invocatione4d29377b880453f8fe52ee3a2561cbf.
+Live verifier PASS, wrapper3487733/port25565. Final summarytick236256/revision
+1100901: historical required conflict1, inventory0/scene0; no fresh quarantine.
+Northwatch1142/1152, live source regions0, workersCOLDtrue, home512/site558.
+Recent64 PMturns mean19.29ms/max99.53ms, ready/deadline lag0, no FF queued.
+These are current observations, not a matched before/after speedup measurement.
+Native9actions/3assertions/1frame PASS run39619e6f-6fed-45c7-9019-7cf4dee01f52,
+source20610d7892170b5b38cdbb9a92a40b5c9025d27e (before final read-only wait label);
+unchanged mining/custody/capacity/geometry evidence reused only for those claims.
+Northwatch recovered1042→1046→1060 COLD, native1110→1113→1114,
+leases0→11→0. No new conflict: retained incident is the actual old1053609
+crash, occurrences1. Summary blocked is historical record, not current quarantine.
+Failed first carrier's zero-conflict assertion retained; corrected fixture binds
+exact old incident and rejects recurrence/new conflicts, never deletes history.
+Focused tests/negative recovery, Node53, block extraction GameTest1 and final
+guardrails/check/package PASS. Full receipt docs/frontier-v3-quarry-development.md.
+No client now running, no user-branch commit/push/subagents; WIP preserved.
+
+R94 diagnosis and repair context: user authorized fixes1–5, then reported stopped
+after taking cobblestone. Main alone implementing/verification/deploy; no subagents.
+Server actually stopped20:49:48 at1053609: closeMutation and area extension in
+one HOT mining transaction renew PREPARING at the same canonical revision;
+supersedeProjection wrongly required a strictly later revision. Cobblestone
+withdrawal causality is not established. Exact log retained in implementation
+build/quarry-r94-same-transaction-supersession-failure.log. Unit collected;
+server was stopped before the repair. Same diagnostic world remains intact.
+Corrections in WIP: ordered same-transaction supersession, exact unobserved
+projection withdrawal/reissue guarded by native settled/no-effect journals,
+truthful custody/labor diagnostics and bounded immutable-input capacity/geology
+views. Old deferred harvest receipts and retired-body rejection audited without
+inventing defects. Scope/ongoing receipt docs/frontier-v3-quarry-development.md.
+Confirmed Northwatch local liveness defect: region(-22,-22) PREPARING/epoch2,
+expected revision767242, actual chunk unloaded (ordinary execute-if-block says
+position not loaded). Miners11/12 retain exact targets1053/1041 and completed
+120000 work since185716/185982; snapshots206280 onward and live repeated queries
+show unchanged work revisions5919/5562, extracted1042/total1056, while world
+continues beyond212120. afterProjection requires loaded whole-region witnesses;
+departure skips every state except ACQUIRED; blocksCold fences every live lease.
+Thus stranded PREPARING has no unloaded completion/release path. No pending
+mining effect; cannot fix by inventing confirmation or dropping an ambiguous fence.
+Mining diagnostics incorrectly expose LABOUR/ELIGIBLE rather than source-custody
+wait; global green covers emitted incidents, not actual per-job progress.
+Five other quarries progressed beyond512; no whole-engine quarantine.
+Read-only evidence active checkout build/quarry-r94-readonly-diagnosis.{jsh,log}.
+45s bounded JFR completed/no active recording: build/profiles/quarry-r94-live-delay-diagnosis.jfr.
+1700 server-thread samples: GoodsTradeStorageDemand392(23.1%), known navigation133,
+geological knowledge67, WAL force37; groups overlap, not exclusive CPU accounting.
+Source confirms every capacity query rebuilds whole-world trade/container claims,
+and geology adapter reconstructs whole protected geometry on proposal. GC max
+observed pause31.6ms, not2s. Historical keep-up warnings at19:52/20:01/20:02 were
+not captured; their exact individual trigger is UNCONFIRMED, and "2s behind"
+is accumulated lag rather than proof of one2s operation. Three old Northwatch
+RUNNING harvest intents7/8/9 are terminal lineages, not active jobs: native
+confirmDeferredOne requires naturally ticking loaded depot/current stock. COLD
+successor jobs11/12/14 already completed, so no evidence these pending physical
+receipts stopped farming. RETIRED_INCARNATION logs reject obsolete saved bodies;
+not a proven resident-loss defect. Actual R94/service/world identities unchanged.
+
+Completed goal2026-10-10: actual adjacent quarry development beyond the initial512
+cells, main alone in /home/rd/proj/pm-f06r3-facility-lane-recovery. User accepts
+bounded known-real-geology planning and excavation of accessible adjacent fronts;
+no construction, regeneration, invented unknown stone or force-loading. Reuse
+block extraction, UAE, navigation, resource custody and hauling. SOLID: geometry
+provides facts, the mining planner selects work, actors execute it. The existing
+R91 finite-area opening is not this feature. Final scope/receipt/limits:
+docs/frontier-v3-quarry-development.md. No budget.
+UPDATE: R93 natural COLD reached544 declared/534 actually mined (22 outside512),
+ordinary miners11/12 and home384; same-world graceful recovery then560/548,
+home512 and same identities. At98479 another site's expansion failed because
+the generic planner allowed a lower floor beneath an existing higher access
+column, violating the single-surface column graph. Server stopped normally on
+quarantine; no client now running. Exact failure log active checkout
+build/quarry-r93-undermined-access-failure.log; failed native client carrier
+also retained in R93 build (Java parser missed firstAdjacentSource, no actions).
+Root fix excludes all retained access columns and whole owned worksite columns,
+not a coordinate exception. Focused domain5 plus architecture7/native parser43 and guardrails PASS;
+JS scenario53 PASS. R94 frozen07358cbe8ad24627f9274131816504bd022d5b32,
+tree64afaead1d12c664191ee87347d7208c223b1c15 in clean detached
+/home/rd/proj/pm-quarry-development-r94-release-20261010. Packaging/preflight/
+install/live verifier PASS; same diagnostic world recovered and passed98479,
+no reset. Schema269/r4 unchanged. CoreSHA512
+a989c00514987ebd8a472c45809b12383fd3c2386372071a2f6f9303cf3df776e2a44140b1762dfbd686311c850427620f9f1c575c4a3a5a38ba9f9c25cb0ecf.
+Live world frontier-v3-quarry-development-r92-20261010, wrapper3247511,
+invocatione19b335200e34f65a35330af11e21123/start1791641013.
+Final native9actions/2assertions/2frames PASS, runc6b2ce14-ccf3-4fcc-a9d8-c224dabab2cd,
+frozen build/quarry-r94-adjacent-development.json. Actual PNGs reviewed:
+chest/miner/excavated front. Ingress sees current depleted new source AIR;
+departure workersColdtrue/liveRegions0. Selected site624/623 =111 new blocks,
+new batches in quarry storage; home512 original batches. New-front-to-home
+delivery was not separately filmed. Summary103798/revision473093 green/0conflicts.
+Client exited/server active/normal20 ticks/no pending FF. Existing roughly2s
+ingress pauses remain; no performance improvement/full human M3 claim.
+MainHEAD/index unchanged,69WIP retained, original nested23WIP and outer
+.f0v-baseline preserved; no user-branch commit/push/subagents.
+Earlier runtime identities below are history, not the active server.
+Generic KnownBlockGeometry/AdjacentExcavationPlanner, append-only cells and
+stable infrastructure IDs, geological invalidation and region custody renewal
+are connected to the ordinary mining path. Corrected exhausted-site staffing
+circular dependency. Focused domain42 plus domain22/native4 and block-extraction
+GameTest1 PASS; guardrails/check/package PASS with unrelated unchanged tests
+reused rather than rerun. Earlier R92 source af49ce5e9cf6da19ba7cdd8d93aefce9de3ba019,
+tree81b1070e7f7339d9e960606997f5bf5b2d2d8fe7, clean detached
+/home/rd/proj/pm-quarry-development-r92-release-20261010. CoreSHA512
+a56ad96ba06956031639d3cf9f73b5157f59812e82127144c4dd6cdb28ccc383b6f36d4a74fc999a163b819940448f3d9e961ddafcc8cad7677b508a5102c71a.
+Runtime newworld frontier-v3-quarry-development-r92-20261010/r4/schema269;
+R91 world retained unchanged. Normal save/stop, preflight/install/live verifier
+PASS. Wrapper3200272/invocation3a20030136e944f1ba0be493b16527ec,
+restart1791639729. No users/clients during native COLD preparation; ordinary
+bounded advancement only, not synthetic depletion/resource credit. Evidence
+active checkout pale-mirror/build/quarry-r92-cold-development.jsonl. Main
+HEAD/index unchanged, no user branch commit/push or subagent.
+
+Current runtime2026-10-10 after explicit user fresh-world request: R91 unchanged,
+world frontier-v3-quarry-playtest-r91-20261010, seed20260918065/r3/schema268.
+Only level-name changed; copied the required graybox datapack, no player/state/
+region data from the old world. Previous depleted audit world retained separately.
+Normal save/stop completed; fresh-state preflight and live verifier PASS,
+wrapper3098049/invocation1ef407b545244c709689832215b3746f/restart1791636530.
+Fresh summary241/revision475 green/0conflicts; all six deposits512, extracted0,
+external0, initial opened8/revision1, two exact mining jobs each admitted.
+No client or accelerated test started. Evidence
+/tmp/pm-quarry-r91-fresh-world-start.jsonl. The audit runtime identities below
+describe the preceding world, not the current live world.
+
+Active2026-10-10: comprehensive quarry edge audit, main alone; user authorizes
+testing/fixing. Two confirmed RED→GREEN defects are fixed and deployed: source/
+geometry retarget may withdraw only its exact ExtractionLeg (not service exit
+or suspended miner's current presence movement), and persisted retargeting uses
+the pure geometry path, not asynchronous planner readiness. Source observation
+still gives no mining credit. Connected clearance/current+suspended recovery and
+same-event replay against a PLANNING provider regressions PASS. Final domain38
+unique cases PASS; native618/1existing skip PASS before the second pure-domain
+change; guardrails/check/build/package and deployment gates PASS.
+Additional JFR-confirmed whole-path waste corrected: immutable land/layout
+validation is reused only for the same exact layout/bounds; current land/storage
+relationships still validate. The shared block projector now probes at most64
+naturally available cells fairly, retaining its unchanged physical-write/force
+fences. External reconciliation uses the ledger-derived pending-change index
+instead of scanning every declared block. New native cursor/index hydration and
+changed-bounds/layout rejection checks PASS; focused domain17/native18 PASS.
+Current frozen R91 source6457f6e651bc7cc2f048fca6ab0e56c7668a6573,
+tree56d88bdcf5f29091e38470b0eea0ab3e289dead6, clean detached
+pm-quarry-audit-r91-release-20261010. CoreSHA512
+45aab1850bb832f72fa181a7cc976704ed4c08a65b3fe952b0bd7a9aca7525c326dd3f6af91bd59084df2552068c90d1cc769fe1ee5e0d3f2680e3ec85ce4588.
+Published/installed; same audit world frontier-v3-quarry-audit-r89-20261010
+(world name is not build identity), wrapper2976542/Java2976566,
+invocation6cd8b44a29934c669f521f2902a8f026/restart1791632311. Prior R86 world
+retained. Full receipt docs/frontier-v3-block-extraction.md.
+Actual ordinary HOT mining/player source removal reached extracted32/external1;
+natural departure liveRegions0/workersColdtrue. COLD exploration reached62994
+with all six mines developing and hauling (home128–256); queued advance finished
+72998. Same-world recovery retained exact jobs/actors/cargo with no duplicate
+credit. Six-day/whole-exhaustion native soak was NOT completed. Earlier aggregate
+carriers retain failure on invalid hold/bounded-advance/short runner assumptions;
+they are not product failures or repainted green. Invalid newly authored long
+COLD carrier removed, input retained in ignored build evidence.
+R90 native six-quarry recovery/ingress passed32actions/13assertions,
+runaab8c618-8444-4356-9281-6c28abf00edd, manifestbuild/quarry-r90-recovery-ingress.json
+in frozen checkout. All six ACTIVE OWNED/CURRENT/READY containers and first
+depleted cells inspected; final summary green/0conflicts. Actual first frame
+shows finite working face/miners; second is unrendered sky, NOT visual acceptance.
+R90 profile diagnostic80a3d06c also passed32actions and captured repeated catch-up
+warnings up to14644ms. JFR attributed repeated bounds checks and native full
+worksite scans; R91 fixes those paths, not every server cost. Final R91 ordinary
+six-quarry recovery/ingress32actions/13assertions PASS,
+runb21bd7cf-4f69-4d17-a724-29581733af86, manifestbuild/quarry-r91-recovery-ingress.json
+in frozen checkout. Both final screenshots are sky, not visual acceptance;
+earlier R89 actual standing-worker frame remains the narrower visual evidence.
+Finalinstant99143/revision419706 green/0conflicts, TPS20; hostTurn maximum993.57ms
+and ingress catch-up2129/2045/7498ms remain. JFR shows remaining shared full-world
+audits/scheduler/set construction/checkpoint costs, not a proven disk wait or
+new canonical failure. No comparable measured speedup or complete visual
+acceptance claimed. R90/R91 bounded JFR files retained under their frozen build
+directories; recordings and all owned test clients stopped, live server active.
+Packaging11s reused focused tests; an accidentally broad release test invocation
+was cancelled after55s, its log preserved, not claimed green. No new test loop.
+Main HEAD15fdec7e/index
+unchanged; source WIP/original histories preserved; no goal/branch commit/push/
+subagents. Test carriers are frozen with R90.
+
+Completed correction2026-10-10: user teleported403/61/-339 at15:06:33 and
+R86 stopped after PMV3_QUARANTINE surface-conflict-container-quarry-1a92e562.
+Main alone owns diagnosis/fix/deploy. Exact native saved socket403/61/-338 is
+STONE and support403/60/-338 STONE, no block entity: initial carving was not
+settled. Generic fresh-socket probe checked occupied target before its worksite
+opening provenance, falsely conflicting the native preimage. The allowed
+UNMATERIALIZED→CONFLICT reducer then required a nonexistent prepared recovery
+binding. Fix validates exact previous surface at command admission/reduction;
+unstarted conflict is local without invented physical authority, prepared/live
+missing fences still reject. Generic socket readiness waits for owner geometry;
+true obstruction after settled opening remains conflict. Added bounded socket
+conflict trace and stop physical dispatch after runtime quarantine. Same schema268
+and R86 world retained for exact recovery/first-visit retest. R87 startup then
+exposed a second exact defect: KernelQuarantineCodec decoded producer before
+subject, opposite its writer. R88 corrects decoding, not WAL bytes/schema/history;
+actual committed quarantine WAL roundtrip/replay and invalid-tag/truncation tests
+PASS. Final private sourcea339b477/tree681d7c12, clean detached
+pm-quarry-socket-r88-release-20261010. Relevant domain24/native618(1existing skip),
+container-socket GameTests4, additional diagnostic/lifecycle regression and
+guardrails/build/package PASS. Installed/published coreSHA512
+4c4af4b1f82ef82807b0f3dcc78bca85338b0f3474bb1ae0314c5a03e66b80321184a35d6464d141cdff67405722cb7a69ed6815f3885ae8d43defafd955a3ec.
+Same-world recovery/live verifier PASS; wrapper2821152,
+invocationc6b7357979b446ce9e0bcec0719872d0/restart1791627766. Actual creative
+PMAudit full-pack first visit/return sees ACTIVE owned chest, current slots,
+READY support and acquired custody; no new quarantine/socket conflict.
+Runb14b45e4 completed10actions but original aggregate manifest remains failed:
+global-green assumption contradicted retained old incident, and final summary
+assertion had no matching action. Stopped owned client rather than wait uselessly.
+Checked-in carrier corrected to assert exact container at steps3/9; validated
+and matches retained observations, not claimed a fresh native rerun. First frame
+was unrendered sky; return frame shows depleted quarry/roof, not chest close-up;
+no full visual acceptance claim. Historical quarantine remains awaitingReview,
+first/last revision349933/occurrences1, so summary blocked/requiredConflicts1 is
+retained history, not a currently quarantined engine. TPS20, recent PM turns
+mean17.89ms/max58.22ms; recovery max1.123s remains visible. All clients stopped,
+live stays active. Main branch/index unchanged; source WIP preserved, only
+scenario differs from frozen production. No branch commit/push requested.
+Full receipt docs/frontier-v3-block-extraction.md; no new goal/subagents.
+
+Completed goal2026-10-10: adjacent accessible quarry expansion, main
+alone. User accepts no regeneration, no complex overburden or multilevel mines;
+extract reusable isolated mechanisms and preserve existing UAE/navigation/custody/
+hauling. Starting implementation15fdec7e clean. New finite graybox reservoir is
+authored at genesis; only bounded neighbouring reachable sources are opened for
+work. Generic WorkAreaDevelopment/AdjacentWorkArea own admission/spatial selection,
+ExtractionDevelopment owns mining mandate and source/access eligibility. Exact
+front opening event persists independently of block depletion; schema268 and
+quarry-graybox-r3 require a fresh disposable world. Implementation and verified
+delivery complete; exact receipt in docs/frontier-v3-block-extraction.md.
+R86 source901106ad/treecdcfc4cf, clean detached
+pm-quarry-expansion-r86-release-20261010. Domain76PASS/native618PASS(1existing
+skip), guardrails/build/package and native block-extraction1PASS. Actual ordinary
+player HOT0→2 extraction/natural COLD departure, adjacent openings and retained
+jobs across same-world graceful recovery; separate carriers deliver home128,
+later256. Final read-only59724/revision210291: extracted335/opened336/revision42,
+same jobs at batch2, no regeneration/new quarantine. Original aggregate failed
+home wait before normal meal service cleared; follow-up delivery passed but its
+camera failed because a vanilla zombie killed PMTestPilot in the Overworld.
+Fresh living PMAudit spectator camera7actions PASS; overview/face frames reviewed,
+run6203822f-09c9-43a9-aefc-eedfe6150ddf. Original failed manifests retained, not
+painted green. Source-first fix was partial STORE on every exhausted front:
+same HOT/COLD opening continuation now wakes SELECT_SOURCE retaining partial
+resources/tool; periodic review is only backstop. Scoped negative/recovery tests
+cover exact openings/finite exhaustion/broken support/external removal/withdrawal.
+Current R86 coreSHA512
+b35a212874429f18dc4cd2fef767c37e969bebed17166a4546682aabfc37c1dc4a71752c1e9b94b4a4c8bea39c65b36bffa7197d35aef8f23045aab03598e727.
+World frontier-v3-quarry-expansion-r86-20261010, seed20260918065/r3/schema268,
+Java22/Visuals unchanged. Preflight/live/recovery verifiers PASS; current wrapper
+2695282, invocationaf72cbe37de0461fb7f646bd919d858c, restart1791623773.
+R85 world retained, nothing deleted. All task clients exited; live stays active.
+Implementation26owned WIP paths, HEAD15fdec7e/index unchanged; no branch commit/
+push requested. Frozen code equals WIP production; only final checked-in carrier
+timing changed after freeze: validated18actions split24000→42000 instead of a
+premature one-day home-stock requirement; not rerun wholesale. Both original
+repositories and historical governance WIP preserved. No subagents. Goal complete.
 
 Completed implementation2026-10-10: main alone implemented performance items1–5:
 explicit coalescible reconsideration hints (not resource/effect facts),
