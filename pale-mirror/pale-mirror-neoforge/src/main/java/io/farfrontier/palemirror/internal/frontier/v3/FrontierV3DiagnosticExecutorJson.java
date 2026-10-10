@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -43,7 +43,7 @@ final class FrontierV3DiagnosticExecutorJson {
                 .orElse(null);
     }
 
-    static String trace(String id, CheckpointImage checkpoint, FrontierWorldState state, Optional<FrontierV3DiagnosticTrace.Entry> trace) {
+    static String trace(String id, FrontierScheduleView checkpoint, FrontierWorldState state, Optional<FrontierV3DiagnosticTrace.Entry> trace) {
         if (trace.isEmpty()) {
             var retainedHarvest = io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestTrace.lookup(state, id);
             if (retainedHarvest.isPresent()) {

@@ -52,7 +52,8 @@ public final class ReferenceProjectionStateSupport {
         FencedRecoveryState recovery = state.fencedRecovery();
         if (prior == null) {
             inventory = inventory.withSurfaceStatus(containerId, ContainerSurfaceStatus.PREPARED);
-            recovery = FencedRecoveryContainerSupport.transition(recovery, container, ContainerSurfaceStatus.PREPARED);
+            recovery = FencedRecoveryContainerSupport.transition(recovery, container,
+                    state.inventory().surfaces().get(containerId), ContainerSurfaceStatus.PREPARED);
         }
         FrontierWorldState transferred = state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs));
         String fingerprint = ReferenceContainerCustody.canonicalFingerprint(transferred, containerId);

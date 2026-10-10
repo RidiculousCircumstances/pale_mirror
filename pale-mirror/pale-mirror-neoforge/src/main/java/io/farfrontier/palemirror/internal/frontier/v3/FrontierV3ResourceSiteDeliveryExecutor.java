@@ -273,19 +273,21 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             return true;
         }
         if (hand.disposition() == FrontierV3ActorHandObservation.Disposition.UNAVAILABLE) return false;
+        var entity = level.getEntity(witness.entityId());
+        if (!(entity instanceof net.minecraft.world.entity.npc.Villager farmer)
+                || !FrontierV3SceneExecutor.owned(farmer, state, scene, scene.members().getFirst())) return false;
+        var order = ResourceSiteHarvestCargo.deliveryOrder(state, job);
+        var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, chest, farmer, witness.entityId(),
+                MaterialSourceSelection.select(resources, order), witness.slot());
         if (chestState == ChestState.BEFORE && handBefore) {
-            chest.setItem(witness.slot(), new ItemStack(Items.WHEAT, witness.quantity())); chest.setChanged();
+            if (!transfer.placeDestination())
+                FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-place-rejected");
             return true;
         }
         if (chestState == ChestState.AFTER && handBefore) {
-            if (level.getEntity(witness.entityId()) instanceof Mob farmer
-                    && FrontierV3SceneExecutor.owned(farmer, state, scene, scene.members().getFirst())) {
-                if (!FrontierV3VillagerHandMutation.setOffhand(farmer, ItemStack.EMPTY))
-                    FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene,
-                            "field-delivery-hand-clear-rejected");
-                return true;
-            }
-            return false;
+            if (!transfer.releasePlacedSource())
+                FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-hand-clear-rejected");
+            return true;
         }
         if (chestState == ChestState.BEFORE && handAfter) {
             FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-crash-split-ambiguous");

@@ -15,7 +15,8 @@ public record ResidentPresentation(String name, String settlement, String task, 
             case FIELD_HARVEST -> "Harvest and deliver crops";
             case EXTRACTION -> "Extract and store resources";
             case PRODUCTION -> "Production";
-            case COURIER, GROUP_MEMBER -> "Expedition";
+            case COURIER -> "Transport resources";
+            case GROUP_MEMBER -> "Expedition";
             case ROUTE_PATROL -> "Route patrol";
             case SETTLEMENT_DEFENCE -> "Settlement defence";
             case ENGINEERING_RECOVERY -> "Repair infrastructure";

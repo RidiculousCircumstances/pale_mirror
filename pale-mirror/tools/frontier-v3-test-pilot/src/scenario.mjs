@@ -290,6 +290,7 @@ export function validateScenario(scenario) {
       if (action.type === 'interact_nearest_entity' && (!validItemKind(action.entityType) || !Number.isInteger(action.timeoutMs)
           || action.timeoutMs < 0 || action.timeoutMs > 120_000
           || (action.expectContextCard !== undefined && typeof action.expectContextCard !== 'boolean')
+          || (action.secondaryUse !== undefined && typeof action.secondaryUse !== 'boolean')
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 64)))) {
         throw new Error('interact_nearest_entity needs a namespaced entity type and bounded local range');
       }
@@ -473,7 +474,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'field_physical', 'settlement', 'settlement_population', 'resident_life', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
+  return ['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'field_physical', 'settlement', 'settlement_population', 'resident_life', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'incident', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
     && typeof value.id === 'string' && (['summary', 'performance', 'projection_work', 'aftermath'].includes(value.view) || Boolean(value.id));
 }
 
@@ -548,7 +549,7 @@ function validResolvablePosition(value) {
       || (reference.view === 'process' && requiredId(reference.id, 'job:')
         && ['cursor.retainedBody', 'goal.station'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'shipment:') && reference.field === 'actorBody')
-      || (reference.view === 'process' && requiredId(reference.id, 'extraction:') && ['position', 'firstSource'].includes(reference.field))
+      || (reference.view === 'process' && requiredId(reference.id, 'extraction:') && ['position', 'firstSource', 'firstAdjacentSource'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'work:') && ['actorBody', 'goal'].includes(reference.field))
       || (reference.view === 'scene' && requiredId(reference.id, 'job:')
         && ['productionCurrent', 'productionNext', 'productionNextBody', 'productionFutureBody'].includes(reference.field))

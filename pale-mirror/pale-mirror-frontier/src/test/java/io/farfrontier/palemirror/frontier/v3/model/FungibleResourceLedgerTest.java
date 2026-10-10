@@ -715,12 +715,12 @@ class FungibleResourceLedgerTest {
         List<FungiblePhysicalObservation.Stack> after = List.of(new FungiblePhysicalObservation.Stack(
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:bread", 48));
 
-        FungibleResourceLedger contributed = hot.contributeObserved(accountId, 7, gift, after);
+        FungibleResourceLedger contributed = hot.contributeObserved(accountId, depot, 7, gift, after);
 
         assertEquals(48, contributed.totalQuantity(OWNER, "minecraft:bread"));
         assertEquals(Map.of(LOT, 32, gift.id(), 16), contributed.accounts().get(accountId).lotQuantities());
-        assertThrows(IllegalArgumentException.class, () -> hot.contributeObserved(accountId, 8, gift, after));
-        assertThrows(IllegalArgumentException.class, () -> contributed.contributeObserved(accountId, 7, gift, after));
+        assertThrows(IllegalArgumentException.class, () -> hot.contributeObserved(accountId, depot, 8, gift, after));
+        assertThrows(IllegalArgumentException.class, () -> contributed.contributeObserved(accountId, depot, 7, gift, after));
     }
 
     private static FungibleResourceLedger issue(int quantity) {

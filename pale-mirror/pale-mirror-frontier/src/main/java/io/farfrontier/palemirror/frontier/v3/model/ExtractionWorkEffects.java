@@ -58,7 +58,9 @@ public final class ExtractionWorkEffects {
                     state.actorLocations().get(job.execution().actorId()).supportingSurface(), cell.workstation())).thenComparingLong(ExtractionLayout.Cell::id))
                 : Optional.<ExtractionLayout.Cell>empty();
         return next.map(cell -> job.transition(ExtractionWork.Phase.EXTRACT, Optional.of(target(nextDeposit, cell))))
-                .orElseGet(() -> job.transition(ExtractionWork.Phase.STORE, Optional.empty()));
+                .orElseGet(() -> job.transition(carried < ActorCarriedResources.MAX_STACK_ITEMS
+                        && ExtractionWorkPolicy.requested(state, job) && ExtractionWorkPolicy.remaining(nextDeposit)
+                        ? ExtractionWork.Phase.SELECT_SOURCE : ExtractionWork.Phase.STORE, Optional.empty()));
     }
     public static ExtractionTarget target(ExtractionDeposit deposit, ExtractionLayout.Cell cell) {
         return new ExtractionTarget(new CellMutationKey(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, deposit.site().id(), cell.id()),

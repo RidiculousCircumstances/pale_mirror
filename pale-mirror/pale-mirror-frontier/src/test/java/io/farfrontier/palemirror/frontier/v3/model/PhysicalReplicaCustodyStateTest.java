@@ -22,9 +22,25 @@ class PhysicalReplicaCustodyStateTest {
         assertThrows(IllegalArgumentException.class, () -> next.confirmProjection(SCOPE_A, 1, 10, 1, "sha256:a", "owned:genesis"));
         assertThrows(IllegalArgumentException.class, () -> next.release(SCOPE_A, 2, 11, 2));
         assertThrows(IllegalArgumentException.class, () -> pending.supersedeProjection(SCOPE_A, 2, 10, 1, 11, "sha256:b", "owned:successor"));
-        assertThrows(IllegalArgumentException.class, () -> pending.supersedeProjection(SCOPE_A, 1, 10, 1, 10, "sha256:b", "owned:successor"));
+        var sameTransaction = pending.supersedeProjection(SCOPE_A, 1, 10, 1, 10, "sha256:b", "owned:successor");
+        assertEquals(2, sameTransaction.custodyByScope().get(SCOPE_A).authorityEpoch());
+        assertEquals(2, sameTransaction.replicas().get(OBJECT_A).replicaRevision());
+        assertThrows(IllegalArgumentException.class, () -> pending.supersedeProjection(SCOPE_A, 1, 10, 1, 9, "sha256:b", "owned:successor"));
         var confirmed = next.confirmProjection(SCOPE_A, 2, 11, 2, "sha256:b", "owned:successor");
         assertThrows(IllegalArgumentException.class, () -> confirmed.supersedeProjection(SCOPE_A, 2, 11, 3, 12, "sha256:c", "owned:next"));
+    }
+    @Test void withdrawingUnobservedProjectionPreservesExpectedImageAndRevokesOldConfirmations() {
+        var pending = PhysicalReplicaCustodyState.empty().declare(replica(OBJECT_A)).prepareProjection(
+                new PhysicalCustodyLease(SCOPE_A, OBJECT_A, PROVIDER, 1, 10, 1, PhysicalCustodyLeaseStatus.PREPARING, null));
+        var released = pending.withdrawProjection(SCOPE_A, 1, 10, 1);
+        assertEquals(PhysicalCustodyLeaseStatus.RELEASED, released.custodyByScope().get(SCOPE_A).status());
+        assertSame(pending.replicas(), released.replicas());
+        assertEquals(PhysicalReplicaState.EXPECTED, released.replicas().get(OBJECT_A).state());
+        assertThrows(IllegalArgumentException.class, () -> released.confirmProjection(SCOPE_A, 1, 10, 1, "sha256:a", "owned:genesis"));
+        assertThrows(IllegalArgumentException.class, () -> pending.withdrawProjection(SCOPE_A, 2, 10, 1));
+        assertThrows(IllegalArgumentException.class, () -> pending.withdrawProjection(SCOPE_A, 1, 11, 1));
+        var acquired = pending.confirmProjection(SCOPE_A, 1, 10, 1, "sha256:a", "owned:genesis");
+        assertThrows(IllegalArgumentException.class, () -> acquired.withdrawProjection(SCOPE_A, 1, 10, 2));
     }
     private static final SubjectId OBJECT_A = new SubjectId("container:replica-a");
     private static final SubjectId OBJECT_B = new SubjectId("container:replica-b");

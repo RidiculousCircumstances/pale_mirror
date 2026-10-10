@@ -23,6 +23,42 @@ public final class FrontierV3ContainerSocketGameTests {
     private FrontierV3ContainerSocketGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-container-socket", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void worksiteOpeningDefersNativeStoneUntilSettledAndRejectsLaterObstruction(GameTestHelper helper) {
+        var level = helper.getLevel(); var target = helper.absolutePos(new BlockPos(1, 2, 1));
+        var owner = new SubjectId("extraction:socket-admission-test");
+        var stone = new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block("minecraft:stone", java.util.Map.of());
+        var air = new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block("minecraft:air", java.util.Map.of());
+        var opening = new io.farfrontier.palemirror.frontier.v3.model.WorksiteBlock(
+                new io.farfrontier.palemirror.frontier.v3.model.WorksiteBlock.Key(
+                        io.farfrontier.palemirror.frontier.v3.model.CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, owner,
+                        io.farfrontier.palemirror.frontier.v3.model.WorksiteBlock.Role.CONTAINER_SOCKET, 1),
+                new BlockPosition(target.getX(), target.getY(), target.getZ()), 1, air);
+        var floor = new io.farfrontier.palemirror.frontier.v3.model.WorksiteBlock(
+                new io.farfrontier.palemirror.frontier.v3.model.WorksiteBlock.Key(opening.key().family(), owner,
+                        io.farfrontier.palemirror.frontier.v3.model.WorksiteBlock.Role.INFRASTRUCTURE, 2),
+                opening.position().offset(0, -1, 0), 1, stone);
+        var support = new io.farfrontier.palemirror.frontier.v3.model.ContainerSocketSupport.Worksite(floor, opening);
+        var ledger = FrontierV3GrayboxLedger.get(level);
+        level.setBlock(target.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(target, Blocks.STONE.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3ContainerSurfaceExecutor.socketReadiness(level, ledger, target, support),
+                FrontierV3ContainerSurfaceExecutor.SocketReadiness.DEFERRED, "native preimage is not an obstruction before opening projection");
+        ledger.worksite(new FrontierV3WorksiteBlockWitness(opening, stone, FrontierV3WorksiteBlockWitness.Phase.PREPARED));
+        helper.assertValueEqual(FrontierV3ContainerSurfaceExecutor.socketReadiness(level, ledger, target, support),
+                FrontierV3ContainerSurfaceExecutor.SocketReadiness.DEFERRED, "prepared opening still requires settled physical evidence");
+        level.setBlock(target, Blocks.AIR.defaultBlockState(), 3);
+        ledger.worksite(new FrontierV3WorksiteBlockWitness(opening, stone, FrontierV3WorksiteBlockWitness.Phase.SETTLED));
+        ledger.worksite(new FrontierV3WorksiteBlockWitness(floor, stone, FrontierV3WorksiteBlockWitness.Phase.SETTLED));
+        helper.assertValueEqual(FrontierV3ContainerSurfaceExecutor.socketReadiness(level, ledger, target, support),
+                FrontierV3ContainerSurfaceExecutor.SocketReadiness.READY, "settled exact opening and foundation admit one chest");
+        level.setBlock(target, Blocks.BLUE_CONCRETE.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3ContainerSurfaceExecutor.socketReadiness(level, ledger, target, support),
+                FrontierV3ContainerSurfaceExecutor.SocketReadiness.CONFLICT, "an obstruction after settlement remains a genuine conflict");
+        helper.assertValueEqual(level.getBlockState(target), Blocks.BLUE_CONCRETE.defaultBlockState(), "validation never overwrites a foreign block");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-container-socket", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void ownedSocketDefersBeforeProjectionThenAcceptsOnlyItsExactClaim(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(8, 8, 0));
         GrayboxCell support = new GrayboxCell(new BlockPosition(target.getX(), target.getY() - 1, target.getZ()),

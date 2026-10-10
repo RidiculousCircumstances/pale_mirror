@@ -28,7 +28,13 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         for (var region : geometry(state).chunks()) {
             var chunk = level.getChunkSource().getChunkNow(region.x(), region.z());
             if (chunk != null && !level.shouldTickBlocksAt(new BlockPos(region.x() * 16, level.getMinBuildHeight(), region.z() * 16)))
-                departure(level, runtime, chunk);
+                departure(level, runtime, chunk, false);
+        }
+        // Includes already-unloaded regions after recovery. Withdrawal is based on
+        // durable write/effect journals, never on elapsed time or invented observation.
+        for (var region : geometry(runtime.decodedState().orElseThrow()).regions()) {
+            if (level.getChunkSource().getChunkNow(region.chunkX(), region.chunkZ()) == null)
+                withdrawProjection(level, runtime, region);
         }
     }
     @Override public List<WorksiteBlock> declarations(FrontierWorldState state) {
@@ -112,13 +118,45 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         return FrontierV3CommandSubmission.submit(runtime, "extraction-source-" + event.operation().name().toLowerCase(Locale.ROOT),
                 event.region().objectId().value(), event) instanceof CommandResult.Accepted;
     }
+    private void withdrawProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ExtractionRegion region) {
+        var state = runtime.decodedState().orElseThrow();
+        var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
+        if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.PREPARING) return;
+        if (state.extractionSites().work().values().stream().anyMatch(job -> job.siteId().equals(region.siteId())
+                && job.pending().isPresent() && job.target().filter(target -> region.contains(
+                    state.extractionSites().deposits().get(region.siteId()).site().layout().require(target.key().cell()).source())).isPresent())) return;
+        var ledger = FrontierV3GrayboxLedger.get(level);
+        var chunk = level.getChunkSource().getChunkNow(region.chunkX(), region.chunkZ());
+        for (var cell : geometry(state).cells(region)) {
+            var declaration = ExtractionWorksiteBlocks.current(state.extractionSites().deposits().get(region.siteId()),
+                    new WorksiteBlock(new WorksiteBlock.Key(family(), region.siteId(), WorksiteBlock.Role.RESOURCE, cell.id()),
+                            cell.source(), 1, cell.definition().before()));
+            var position = FrontierV3WorksiteProjection.position(declaration);
+            var witness = ledger.worksite(position);
+            if (!FrontierV3WorksiteBlockWitness.permitsProjectionWithdrawal(witness, declaration)) return;
+            if (chunk != null && witness != null && !FrontierV3MinecraftBlockExtraction.describe(chunk.getBlockState(position))
+                    .equals(witness.declaration().block())) return;
+        }
+        if (ledger.isDirty()) ledger.persist(level);
+        submit(runtime, new ExtractionSourceBoundary(region, ExtractionSourceBoundary.Operation.WITHDRAW_PROJECTION,
+                lease.authorityEpoch(), lease.expectedReplicaRevision(), ExtractionSourceCustody.fingerprint(state.extractionSites(), region)));
+    }
     @Override public void departure(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             net.minecraft.world.level.chunk.LevelChunk chunk) {
+        departure(level, runtime, chunk, true);
+    }
+    private void departure(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            net.minecraft.world.level.chunk.LevelChunk chunk, boolean withdrawPreparing) {
         var state = runtime.decodedState().orElse(null);
         if (state == null) return;
         var index = geometry(state);
         for (var region : index.regions(new ExtractionGeometryIndex.Chunk(chunk.getPos().x, chunk.getPos().z))) {
             var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
+            if (withdrawPreparing && lease != null && lease.status() == PhysicalCustodyLeaseStatus.PREPARING) {
+                withdrawProjection(level, runtime, region);
+                state = runtime.decodedState().orElseThrow();
+                continue;
+            }
             if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED) continue;
             var currentState = state;
             if (currentState.extractionSites().work().values().stream().anyMatch(job -> job.siteId().equals(region.siteId())

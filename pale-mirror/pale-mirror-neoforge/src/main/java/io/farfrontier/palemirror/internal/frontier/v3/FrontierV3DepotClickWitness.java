@@ -17,7 +17,22 @@ import java.util.UUID;
 record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, SubjectId ownerId,
                                   long authorityEpoch, UUID playerId, UUID interactionId,
                                   List<FungiblePhysicalObservation.Stack> before,
-                                  Optional<List<FungiblePhysicalObservation.Stack>> after) {
+                                  Optional<List<FungiblePhysicalObservation.Stack>> after,
+                                  Optional<ReturnSource> returnSource, Optional<Integer> returnedRemaining) {
+    record ReturnSource(SubjectId bindingId, SubjectId accountId, long epoch, int playerSlot,
+                        String itemKind, int quantity) {
+        ReturnSource {
+            Objects.requireNonNull(bindingId); Objects.requireNonNull(accountId);
+            if (epoch < 1 || playerSlot < 0 || playerSlot > 255 || quantity < 1 || quantity > 64
+                    || itemKind == null) throw new IllegalArgumentException("invalid exact player return source");
+        }
+    }
+
+    FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, SubjectId ownerId,
+            long epoch, UUID playerId, UUID interactionId, List<FungiblePhysicalObservation.Stack> before,
+            Optional<List<FungiblePhysicalObservation.Stack>> after) {
+        this(containerId, accountId, ownerId, epoch, playerId, interactionId, before, after, Optional.empty(), Optional.empty());
+    }
     FrontierV3DepotClickWitness {
         Objects.requireNonNull(containerId, "click container");
         Objects.requireNonNull(accountId, "click account");
@@ -26,6 +41,12 @@ record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, S
         Objects.requireNonNull(interactionId, "click id");
         before = List.copyOf(Objects.requireNonNull(before, "click predecessor"));
         after = Objects.requireNonNull(after, "click successor").map(List::copyOf);
+        Objects.requireNonNull(returnSource); Objects.requireNonNull(returnedRemaining);
+        if (returnedRemaining.isPresent() && (returnSource.isEmpty() || after.isEmpty()
+                || returnedRemaining.orElseThrow() < 0 || returnedRemaining.orElseThrow() > returnSource.orElseThrow().quantity()))
+            throw new IllegalArgumentException("player return successor lacks exact predecessor");
+        if (after.isPresent() && returnSource.isPresent() && returnedRemaining.isEmpty())
+            throw new IllegalArgumentException("player return must witness both physical postimages");
         if (authorityEpoch < 1 || before.size() > 54
                 || after.map(value -> value.size() > 54).orElse(false)
                 || !addressesMatch(containerId, before)
@@ -35,9 +56,13 @@ record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, S
     }
 
     FrontierV3DepotClickWitness observed(List<FungiblePhysicalObservation.Stack> successor) {
+        return observed(successor, Optional.empty());
+    }
+
+    FrontierV3DepotClickWitness observed(List<FungiblePhysicalObservation.Stack> successor, Optional<Integer> remaining) {
         if (after.isPresent()) throw new IllegalArgumentException("depot click already has a postcondition");
         return new FrontierV3DepotClickWitness(containerId, accountId, ownerId, authorityEpoch,
-                playerId, interactionId, before, Optional.of(successor));
+                playerId, interactionId, before, Optional.of(successor), returnSource, remaining);
     }
 
     CompoundTag save() {
@@ -47,6 +72,13 @@ record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, S
         tag.putUUID("player", playerId); tag.putUUID("interaction", interactionId);
         tag.put("before", stacks(before)); tag.putBoolean("hasAfter", after.isPresent());
         after.ifPresent(value -> tag.put("after", stacks(value)));
+        returnSource.ifPresent(source -> {
+            var value = new CompoundTag(); value.putString("binding", source.bindingId().value());
+            value.putString("account", source.accountId().value()); value.putLong("epoch", source.epoch());
+            value.putInt("slot", source.playerSlot()); value.putString("kind", source.itemKind()); value.putInt("quantity", source.quantity());
+            tag.put("returnSource", value);
+        });
+        returnedRemaining.ifPresent(value -> tag.putInt("returnedRemaining", value));
         return tag;
     }
 
@@ -56,7 +88,14 @@ record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, S
                 new SubjectId(tag.getString("owner")), tag.getLong("epoch"), tag.getUUID("player"),
                 tag.getUUID("interaction"), readStacks(container, tag.getList("before", Tag.TAG_COMPOUND)),
                 tag.getBoolean("hasAfter") ? Optional.of(readStacks(container, tag.getList("after", Tag.TAG_COMPOUND)))
-                        : Optional.empty());
+                        : Optional.empty(), tag.contains("returnSource", Tag.TAG_COMPOUND)
+                        ? Optional.of(readReturnSource(tag.getCompound("returnSource"))) : Optional.empty(),
+                tag.contains("returnedRemaining", Tag.TAG_INT) ? Optional.of(tag.getInt("returnedRemaining")) : Optional.empty());
+    }
+
+    private static ReturnSource readReturnSource(CompoundTag tag) {
+        return new ReturnSource(new SubjectId(tag.getString("binding")), new SubjectId(tag.getString("account")),
+                tag.getLong("epoch"), tag.getInt("slot"), tag.getString("kind"), tag.getInt("quantity"));
     }
 
     private static ListTag stacks(List<FungiblePhysicalObservation.Stack> stacks) {

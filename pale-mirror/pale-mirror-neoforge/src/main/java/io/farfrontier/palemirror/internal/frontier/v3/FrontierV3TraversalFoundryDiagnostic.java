@@ -4,7 +4,7 @@ import io.farfrontier.palemirror.api.FoundryAuditPhase;
 import io.farfrontier.palemirror.api.FoundryAuditReport;
 import io.farfrontier.palemirror.api.FoundryFinding;
 import io.farfrontier.palemirror.api.FoundrySeverity;
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.server.level.ServerLevel;
@@ -19,7 +19,7 @@ final class FrontierV3TraversalFoundryDiagnostic {
 
     private FrontierV3TraversalFoundryDiagnostic() { }
 
-    static String render(CheckpointImage checkpoint, FrontierWorldState state, ServerLevel level, String requestedPhase) {
+    static String render(FrontierScheduleView checkpoint, FrontierWorldState state, ServerLevel level, String requestedPhase) {
         Objects.requireNonNull(checkpoint, "Foundry diagnostic checkpoint");
         Objects.requireNonNull(state, "Foundry diagnostic state");
         Objects.requireNonNull(level, "Foundry diagnostic level");

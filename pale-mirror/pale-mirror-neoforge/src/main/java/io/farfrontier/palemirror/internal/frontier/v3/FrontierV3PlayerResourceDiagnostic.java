@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -24,7 +24,7 @@ import java.util.UUID;
 final class FrontierV3PlayerResourceDiagnostic {
     private FrontierV3PlayerResourceDiagnostic() { }
 
-    static String render(CheckpointImage checkpoint, FrontierWorldState state, MinecraftServer server, String id) {
+    static String render(FrontierScheduleView checkpoint, FrontierWorldState state, MinecraftServer server, String id) {
         Expected expected = expected(state, id);
         if (expected == null) return FrontierV3DiagnosticJson.bounded("player_resource", id, checkpoint,
                 FrontierV3DiagnosticJson.unavailable("player_resource", id, checkpoint, "not_found"));
@@ -66,7 +66,7 @@ final class FrontierV3PlayerResourceDiagnostic {
         return new Actual(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount());
     }
 
-    static String render(CheckpointImage checkpoint, String id, Expected expected, Actual actual) {
+    static String render(FrontierScheduleView checkpoint, String id, Expected expected, Actual actual) {
         boolean matches = expected.canonicalQuantity() == expected.bindingQuantity()
                 && expected.itemKind().equals(actual.itemKind()) && expected.bindingQuantity() == actual.count();
         String value = FrontierV3DiagnosticJson.base("player_resource", id, checkpoint)

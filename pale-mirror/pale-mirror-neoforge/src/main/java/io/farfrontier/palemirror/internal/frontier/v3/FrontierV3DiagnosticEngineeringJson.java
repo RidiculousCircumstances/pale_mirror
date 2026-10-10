@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -12,7 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.process.EngineeringEquipmentProcess
 final class FrontierV3DiagnosticEngineeringJson {
     private FrontierV3DiagnosticEngineeringJson() { }
 
-    static String routeConstruction(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    static String routeConstruction(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId settlement = FrontierV3DiagnosticJson.subject(id).orElse(null);
         RouteConstruction project = settlement == null ? null : state.routeConstructions().values().stream()
                 .filter(value -> value.settlementId().equals(settlement)).sorted(java.util.Comparator.comparing(RouteConstruction::id)).findFirst().orElse(null);
@@ -29,7 +29,7 @@ final class FrontierV3DiagnosticEngineeringJson {
                 + ",\"nextCell\":" + next + ",\"pendingProjectIntents\":" + pendingProjectIntents + ",\"pendingOtherIntents\":" + pendingOtherIntents + team + assembly + "}";
     }
 
-    static String routeMaintenance(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    static String routeMaintenance(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId settlement = FrontierV3DiagnosticJson.subject(id).orElse(null);
         RouteMaintenance maintenance = settlement == null ? null : state.routeMaintenances().values().stream()
                 .filter(value -> value.settlementId().equals(settlement)).sorted(java.util.Comparator.comparing(RouteMaintenance::id)).findFirst().orElse(null);

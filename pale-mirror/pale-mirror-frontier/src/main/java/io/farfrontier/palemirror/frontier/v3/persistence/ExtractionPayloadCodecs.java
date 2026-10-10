@@ -9,7 +9,39 @@ import java.util.List;
 final class ExtractionPayloadCodecs {
     private ExtractionPayloadCodecs() { }
     static PayloadCodecs create() {
-        return new PayloadCodecs(List.of(codec("frontier.extraction_work_started", (out, payload) -> {
+        return new PayloadCodecs(List.of(codec("frontier.extraction_geology_invalidated", (out, payload) -> {
+            var value = (ExtractionGeologyInvalidated) payload;
+            FrontierWorldStateCodec.writePosition(out, value.position()); out.writeLong(value.stratumRevision());
+        }, in -> new ExtractionGeologyInvalidated(FrontierWorldStateCodec.readPosition(in), in.readLong())),
+        codec("frontier.extraction_area_extended", (out, payload) -> {
+            var value = (ExtractionAreaExtended) payload;
+            out.writeUTF(value.siteId().value()); out.writeLong(value.expectedRevision()); out.writeInt(value.columns().size());
+            for (var column : value.columns()) {
+                FrontierWorldStateCodec.writePosition(out, column.station().support());
+                FrontierWorldStateCodec.writePosition(out, column.floor().support());
+                writeSample(out, column.support()); writeSample(out, column.upper()); writeSample(out, column.lower());
+            }
+        }, in -> {
+            var site = new SubjectId(in.readUTF()); long revision = in.readLong(); int count = in.readInt();
+            if (count < 1 || count > io.farfrontier.palemirror.frontier.v3.model.geometry.AdjacentExcavationPlanner.MAX_COLUMNS)
+                throw new IllegalArgumentException("unbounded excavation extension");
+            var columns = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.model.geometry.AdjacentExcavationPlanner.Column<
+                    io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block>>();
+            for (int i = 0; i < count; i++) columns.add(new io.farfrontier.palemirror.frontier.v3.model.geometry.AdjacentExcavationPlanner.Column<>(
+                    new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
+                    readSample(in), readSample(in), readSample(in)));
+            return new ExtractionAreaExtended(site, revision, columns);
+        }), codec("frontier.extraction_frontier_opened", (out, payload) -> {
+            var value = (ExtractionFrontierOpened) payload;
+            out.writeUTF(value.siteId().value()); out.writeLong(value.expectedRevision()); out.writeInt(value.cells().size());
+            for (long cell : value.cells().stream().sorted().toList()) out.writeLong(cell);
+        }, in -> {
+            var site = new SubjectId(in.readUTF()); long revision = in.readLong(); int count = in.readInt();
+            if (count < 1 || count > WorkAreaDevelopment.MAX_CELLS) throw new IllegalArgumentException("unbounded frontier opening");
+            var cells = new java.util.HashSet<Long>();
+            for (int index = 0; index < count; index++) if (!cells.add(in.readLong())) throw new IllegalArgumentException("duplicate developed cell");
+            return new ExtractionFrontierOpened(site, revision, cells);
+        }), codec("frontier.extraction_work_started", (out, payload) -> {
             var value = (ExtractionWorkStarted) payload;
             ExtractionWorkCodec.write(out, value.work()); out.writeLong(value.expectedOrdinal());
         }, in -> new ExtractionWorkStarted(ExtractionWorkCodec.read(in), in.readLong())),
@@ -80,6 +112,20 @@ final class ExtractionPayloadCodecs {
             if (stacks.size() != 1) throw new IllegalArgumentException("mining hand boundary needs its single observed stack");
             return new ExtractionHandCustodyObserved(id, identity, boundary, stacks.getFirst());
         })));
+    }
+    private static void writeSample(DataOutputStream out, io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample<
+            io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block> sample) throws IOException {
+        ExtractionSiteStateCodec.writeBlock(out, sample.block()); out.writeLong(sample.revision());
+        if (sample.permission() != io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample.Permission.PUBLIC)
+            throw new IllegalArgumentException("protected sample cannot authorize excavation");
+        out.writeByte(1); // Stable tag of the proposal's explicit PUBLIC declaration.
+    }
+    private static io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample<
+            io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block> readSample(DataInputStream in) throws IOException {
+        var block = ExtractionSiteStateCodec.readBlock(in); long revision = in.readLong();
+        if (in.readUnsignedByte() != 1) throw new IllegalArgumentException("unsupported excavation geometry permission");
+        return new io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample<>(block, revision,
+                io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample.Permission.PUBLIC);
     }
     private interface Writer { void write(DataOutputStream out, FrontierPayload payload) throws IOException; }
     private interface Reader { FrontierPayload read(DataInputStream in) throws IOException; }

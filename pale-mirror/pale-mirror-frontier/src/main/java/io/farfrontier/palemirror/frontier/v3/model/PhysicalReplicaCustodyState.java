@@ -85,6 +85,21 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         next.put(objectId, current.observe(expectedCanonicalRevision, fingerprint, provenance, observedRevision));
         return new PhysicalReplicaCustodyState(next, custodyByScope, withoutDiagnostic(objectId));
     }
+    /** Reissue an unobserved, withdrawn image under fresh authority, not a fake observation. */
+    public PhysicalReplicaCustodyState reissueProjection(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,
+            long successorRevision, String fingerprint, String provenance) {
+        var replica = requireReplica(objectId);
+        if (replica.state() != PhysicalReplicaState.EXPECTED || replica.emittedCanonicalRevision() != expectedCanonicalRevision
+                || replica.replicaRevision() != expectedReplicaRevision || successorRevision <= expectedCanonicalRevision
+                || fingerprint.isBlank() || provenance.isBlank()
+                || custodyByScope.values().stream().anyMatch(lease -> lease.live() && lease.objectId().equals(objectId)))
+            throw new IllegalArgumentException("projection reissue lacks a withdrawn exact image and newer revision");
+        var next = new LinkedHashMap<>(replicas);
+        next.put(objectId, new PhysicalReplicaRecord(objectId, replica.semanticKind(), successorRevision, successorRevision,
+                Math.addExact(expectedReplicaRevision, 1), fingerprint, provenance, PhysicalReplicaState.EXPECTED,
+                java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty()));
+        return new PhysicalReplicaCustodyState(next, custodyByScope, withoutDiagnostic(objectId));
+    }
     public PhysicalReplicaCustodyState conflict(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,
                                                 String fingerprint, String provenance, DiagnosticTuple diagnostic) {
         PhysicalReplicaRecord current = requireReplica(objectId);
@@ -143,8 +158,11 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         var lease = requireLive(scopeId, epoch); var replica = requireReplica(lease.objectId());
         if (lease.status() != PhysicalCustodyLeaseStatus.PREPARING || replica.state() != PhysicalReplicaState.EXPECTED
                 || canonicalRevision != lease.expectedCanonicalRevision() || replicaRevision != lease.expectedReplicaRevision()
-                || successorRevision <= canonicalRevision || fingerprint.isBlank() || provenance.isBlank())
+                || replica.emittedCanonicalRevision() != canonicalRevision || replica.replicaRevision() != replicaRevision
+                || successorRevision < canonicalRevision || fingerprint.isBlank() || provenance.isBlank())
             throw new IllegalArgumentException("projection supersession lacks its exact preparing fence and successor");
+        // Ordered events can compose multiple images inside ONE canonical transaction.
+        // The replica revision and authority epoch still advance on every supersession.
         // This changes the owner's expected projection. It does NOT assert observation,
         // release authority, or certify a partially written old projection as complete.
         var nextReplica = new PhysicalReplicaRecord(replica.objectId(), replica.semanticKind(), successorRevision,
@@ -155,6 +173,20 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         nextLeases.put(scopeId, new PhysicalCustodyLease(scopeId, lease.objectId(), lease.providerId(), Math.addExact(epoch, 1),
                 successorRevision, nextReplica.replicaRevision(), PhysicalCustodyLeaseStatus.PREPARING, null));
         return new PhysicalReplicaCustodyState(nextReplicas, nextLeases, withoutDiagnostic(scopeId));
+    }
+
+    /** Owner withdraws a replayable projection, NOT a physical effect or observation. */
+    public PhysicalReplicaCustodyState withdrawProjection(SubjectId scopeId, long epoch,
+            long canonicalRevision, long replicaRevision) {
+        var lease = requireLive(scopeId, epoch); var replica = requireReplica(lease.objectId());
+        if (lease.status() != PhysicalCustodyLeaseStatus.PREPARING || replica.state() != PhysicalReplicaState.EXPECTED
+                || lease.expectedCanonicalRevision() != canonicalRevision || lease.expectedReplicaRevision() != replicaRevision
+                || replica.emittedCanonicalRevision() != canonicalRevision || replica.replicaRevision() != replicaRevision)
+            throw new IllegalArgumentException("projection withdrawal lacks its exact unobserved preparing fence");
+        var next = new LinkedHashMap<>(custodyByScope);
+        next.put(scopeId, new PhysicalCustodyLease(scopeId, lease.objectId(), lease.providerId(), epoch,
+                canonicalRevision, replicaRevision, PhysicalCustodyLeaseStatus.RELEASED, null));
+        return new PhysicalReplicaCustodyState(replicas, next, withoutDiagnostic(scopeId));
     }
 
     /** Confirm only matching actual evidence; a mismatch retains the fence for explicit recovery. */

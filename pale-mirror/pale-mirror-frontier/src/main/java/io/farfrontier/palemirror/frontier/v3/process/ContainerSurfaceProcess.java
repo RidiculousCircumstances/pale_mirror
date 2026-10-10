@@ -22,6 +22,13 @@ public final class ContainerSurfaceProcess {
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY,
                     "container activation waits for its exact cold production input"));
         }
+        try {
+            FencedRecoveryContainerSupport.transition(state.fencedRecovery(), container,
+                    state.inventory().surfaces().get(transition.containerId()), transition.status());
+        } catch (IllegalArgumentException invalid) {
+            return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
+                    io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
+        }
         return new CommandPlan.Accepted(List.of(new ProposedEvent(container.ownerId(), transition)));
     }
 
@@ -34,7 +41,8 @@ public final class ContainerSurfaceProcess {
         }
         FrontierWorldState reduced = state.withInventory(state.inventory().withSurfaceStatus(transition.containerId(), transition.status()));
         return reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
-                FencedRecoveryContainerSupport.transition(state.fencedRecovery(), container, transition.status())));
+                FencedRecoveryContainerSupport.transition(state.fencedRecovery(), container,
+                        state.inventory().surfaces().get(transition.containerId()), transition.status())));
     }
 
     private static boolean activationBlocked(FrontierWorldState state, ContainerSurfaceTransition transition) {

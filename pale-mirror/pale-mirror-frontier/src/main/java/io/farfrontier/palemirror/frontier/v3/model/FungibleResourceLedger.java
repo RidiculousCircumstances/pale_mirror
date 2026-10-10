@@ -791,10 +791,10 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
      * lot is a settlement gift, not a resurrection of a previously withdrawn lot; its fresh
      * identity and economic owner are checked before the complete post-click layout is bound.
      */
-    public FungibleResourceLedger contributeObserved(SubjectId accountId, long authorityEpoch,
+    public FungibleResourceLedger contributeObserved(SubjectId accountId, SubjectId containerId, long authorityEpoch,
                                                      ResourceLot contribution,
                                                      List<FungiblePhysicalObservation.Stack> observed) {
-        return FungibleObservedStockTransitions.contribute(this, accountId, authorityEpoch,
+        return FungibleObservedStockTransitions.contribute(this, accountId, containerId, authorityEpoch,
                 contribution, observed);
     }
 

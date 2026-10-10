@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup;
 import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;
@@ -11,12 +11,12 @@ import java.util.stream.Collectors;
 /** Bounded read-only roster/movement view. Diagnostics never request a path or advance a mission. */
 final class FrontierV3GroupDiagnosticJson {
     private FrontierV3GroupDiagnosticJson() { }
-    static String render(CheckpointImage checkpoint, FrontierWorldState state, UnitGroup group) {
+    static String render(FrontierScheduleView checkpoint, FrontierWorldState state, UnitGroup group) {
         return render(checkpoint, state, group,
                 io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView.canonical(state, checkpoint.instant().ticks()), "CANONICAL",
                 movement -> java.util.Optional.empty(), movement -> java.util.Optional.empty());
     }
-    static String render(CheckpointImage checkpoint, FrontierWorldState state, UnitGroup group,
+    static String render(FrontierScheduleView checkpoint, FrontierWorldState state, UnitGroup group,
                          io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView positions, String positionSource,
                          java.util.function.Function<io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement, java.util.Optional<String>> nativeWait,
                          java.util.function.Function<io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement,

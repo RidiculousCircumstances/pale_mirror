@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.server.MinecraftServer;
@@ -20,7 +20,7 @@ final class FrontierV3ServerDiagnostic {
         if (!ownsPhysicalWorld(server) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
             return FrontierV3DiagnosticJson.unavailableRuntime(view, id);
         }
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierScheduleView checkpoint = runtime.executionView().orElseThrow();
         if ("execution".equals(view)) return FrontierV3PhysicalExecutionDiagnostic.render(checkpoint);
         if ("first_visibility".equals(view)) return FrontierV3HotHandoffDiagnostic.render(
                 FrontierV3PhysicalWorld.require(server), runtime, id, checkpoint);

@@ -441,6 +441,11 @@ class FrontierV3DiagnosticJsonTest {
                 && value.contains("\"queues\":[],\"frontier\":{") && value.contains("\"sceneActorBindings\":0")
                 && value.contains("\"managedActorBindings\":0")
                 && value.contains("\"checkpointBytes\":3"), "the pressure cut is a bounded canonical count, not a level census");
+        var execution = new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(checkpoint.worldId(),
+                checkpoint.revision(), checkpoint.instant(), checkpoint.schedules());
+        String live = FrontierV3PerformanceDiagnostic.render(execution, new FrontierV3PerformanceMetrics().snapshot(), state,
+                0, null, null, null);
+        assertTrue(live.contains("\"checkpointBytes\":null"), "live read does not invent a size or request encoded world bytes");
     }
 
     @Test

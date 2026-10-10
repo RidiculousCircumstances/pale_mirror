@@ -10,7 +10,8 @@ final class ExtractionWorkPlanning {
     private ExtractionWorkPlanning() { }
     static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
         boolean work = state.extractionSites().deposits().values().stream()
-                .filter(deposit -> deposit.site().settlementId().equals(home)).anyMatch(ExtractionWorkPolicy::remaining);
+                .filter(deposit -> deposit.site().settlementId().equals(home))
+                .anyMatch(deposit -> ExtractionWorkPolicy.remaining(deposit) || ExtractionAreaPlanning.hasKnownExtension(state, deposit.site().id()));
         return new SettlementStaffingPort.Demand(ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION,
                 work ? rules.targetWorkers() : 0, work ? rules.minimumLocalStaff() : 0, rules.priority(),
                 state.extractionSites().work().values().stream().filter(job -> !job.terminal()

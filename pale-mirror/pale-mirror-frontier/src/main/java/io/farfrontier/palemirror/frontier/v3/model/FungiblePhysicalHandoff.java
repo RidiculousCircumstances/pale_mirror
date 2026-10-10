@@ -109,6 +109,33 @@ public final class FungiblePhysicalHandoff {
                 sourceEpoch, destinationEpoch, sourceBinding.lotQuantities(), sourceBinding.claimQuantities(), remainingSource, destinationBindings);
     }
 
+    /** A witnessed player return may split and merge into any exact observed container layout. */
+    public static FungibleResourceHandoffObserved returnObserved(FungibleResourceLedger ledger,
+            PhysicalStackBinding source, int remainingQuantity, SubjectId destinationId,
+            SubjectId containerId, long destinationEpoch, List<FungiblePhysicalObservation.Stack> observed) {
+        if (!(source.address() instanceof PhysicalStackAddress.PlayerSlot)
+                || !source.claimQuantities().isEmpty() || remainingQuantity < 0 || remainingQuantity >= source.quantity()
+                || !current(ledger, source.accountId(), source.authorityEpoch()).contains(source))
+            throw new IllegalArgumentException("player return lacks its exact current unclaimed source");
+        CustodyAccount destination = ledger.accounts().get(destinationId);
+        if (destination != null && !destination.custody().equals(new ResourceCustody.Container(containerId)))
+            throw new IllegalArgumentException("player return has a foreign destination");
+        Map<SubjectId, Integer> retained = first(source.lotQuantities(), remainingQuantity);
+        Map<SubjectId, Integer> moved = subtract(source.lotQuantities(), retained);
+        CustodyAccount after = new CustodyAccount(destinationId, new ResourceCustody.Container(containerId),
+                add(destination == null ? Map.of() : destination.lotQuantities(), moved),
+                destination == null ? Map.of() : destination.claimQuantities());
+        List<PhysicalStackBinding> remaining = new ArrayList<>();
+        for (var binding : current(ledger, source.accountId(), source.authorityEpoch())) {
+            if (!binding.id().equals(source.id())) remaining.add(binding);
+            else if (remainingQuantity > 0) remaining.add(new PhysicalStackBinding(binding.id(), binding.accountId(),
+                    binding.address(), binding.authorityEpoch(), binding.itemKind(), retained, Map.of(), binding.playerSaveFence()));
+        }
+        var destinationBindings = FungiblePhysicalObservation.bindAccount(ledger, after, destinationEpoch, observed);
+        return new FungibleResourceHandoffObserved(source.accountId(), after, source.authorityEpoch(), destinationEpoch,
+                moved, Map.of(), remaining, destinationBindings);
+    }
+
     private static Map<SubjectId, Integer> first(Map<SubjectId, Integer> source, int quantity) {
         if (quantity == 0) return Map.of();
         int remaining = quantity; Map<SubjectId, Integer> result = new LinkedHashMap<>();

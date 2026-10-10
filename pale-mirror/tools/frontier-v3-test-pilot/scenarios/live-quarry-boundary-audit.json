@@ -1,0 +1,182 @@
+{
+  "schema": 1,
+  "id": "live_quarry_boundary_audit",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMQuarryAudit"
+  },
+  "setup": [],
+  "actions": [
+    {
+      "type": "wait",
+      "ms": 5000,
+      "causalMilestone": "ordinary_creative_audit_player_setup"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -315,
+        "y": 61,
+        "z": -337
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE"
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -314,
+        "y": 62,
+        "z": -340
+      }
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "hasExtraction": true
+        }
+      },
+      "timeoutMs": 90000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -283,
+        "y": 61,
+        "z": -341
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -283,
+        "y": 62,
+        "z": -340
+      },
+      "block": "minecraft:stone",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "break",
+      "position": {
+        "x": -283,
+        "y": 62,
+        "z": -340
+      }
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "external": 1
+        }
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "player_removal_is_not_a_mining_receipt"
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 8,
+        "y": 64,
+        "z": -5
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "liveSourceRegions": 0,
+          "workersCold": true
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 9,
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "external": 1
+        }
+      }
+    },
+    {
+      "after": 12,
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "external": 1,
+          "liveSourceRegions": 0,
+          "workersCold": true
+        }
+      }
+    },
+    {
+      "after": 13,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "inventoryConflicts": 0,
+        "sceneConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 5,
+      "name": "ordinary-hot-mining"
+    }
+  ]
+}

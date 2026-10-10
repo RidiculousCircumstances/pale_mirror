@@ -3,11 +3,11 @@ package io.farfrontier.palemirror.frontier.v3.model.extraction;
 import java.util.*;
 
 /** Sole depletion history. Removing a source externally is not a production receipt. */
-public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells, Map<io.farfrontier.palemirror.frontier.v3.model.BlockPosition, GeometryState> geometry) {
+public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells, Map<io.farfrontier.palemirror.frontier.v3.model.BlockPosition, GeometryState> geometry,
+                                io.farfrontier.palemirror.frontier.v3.model.WorkAreaDevelopment development) {
     public record GeometryState(long revision, BlockExtraction.Block block) {
         public GeometryState { Objects.requireNonNull(block); if (revision < 2) throw new IllegalArgumentException("external geometry needs a successor generation"); }
     }
-    public ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells) { this(site, cells, Map.of()); }
     public enum Disposition {
         PRESENT(1), EXTRACTED(2), EXTERNALLY_CHANGED(3);
         private final int tag;
@@ -32,7 +32,10 @@ public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells,
         }
     }
     public ExtractionDeposit {
-        Objects.requireNonNull(site); cells = Map.copyOf(cells); geometry = Map.copyOf(geometry);
+        Objects.requireNonNull(site); cells = Map.copyOf(cells); geometry = Map.copyOf(geometry); Objects.requireNonNull(development);
+        if (!cells.keySet().containsAll(development.openedCells()) || cells.entrySet().stream().anyMatch(entry ->
+                entry.getValue().disposition() == Disposition.EXTRACTED && !development.openedCells().contains(entry.getKey())))
+            throw new IllegalArgumentException("depletion outside the declared developed area");
         if (!site.layout().fixedBlocks().keySet().containsAll(geometry.keySet()))
             throw new IllegalArgumentException("external geometry must name an authored worksite cell");
         if (!cells.keySet().equals(site.layout().cells().stream().map(ExtractionLayout.Cell::id)
@@ -45,11 +48,16 @@ public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells,
                 throw new IllegalArgumentException("depletion disposition contradicts its declared block");
         }
     }
-    public static ExtractionDeposit initial(ExtractionSite site) {
+    public static ExtractionDeposit initial(ExtractionSite site, Set<Long> openedCells) {
         return new ExtractionDeposit(site, site.layout().cells().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
-                ExtractionLayout.Cell::id, cell -> new CellState(1, Disposition.PRESENT, cell.definition().before()))));
+                ExtractionLayout.Cell::id, cell -> new CellState(1, Disposition.PRESENT, cell.definition().before()))), Map.of(),
+                new io.farfrontier.palemirror.frontier.v3.model.WorkAreaDevelopment(1, openedCells));
     }
     public List<ExtractionLayout.Cell> available(Set<Long> reserved) {
+        return accessibleSources(reserved).stream().filter(cell -> development.openedCells().contains(cell.id())).toList();
+    }
+    /** Known source/standing clearance; development permission is a separate owner decision. */
+    public List<ExtractionLayout.Cell> accessibleSources(Set<Long> reserved) {
         return site.layout().cells().stream().filter(cell -> cells.get(cell.id()).disposition() == Disposition.PRESENT
                 && !reserved.contains(cell.id()) && cell.prerequisites().stream().allMatch(id ->
                     cells.get(id).knownBlock().equals(site.layout().require(id).definition().after()))).toList();
@@ -60,7 +68,7 @@ public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells,
     /** Only the extraction process may call this after its exact retained effect has settled. */
     public ExtractionDeposit extracted(long cellId, long expectedRevision, String operation) {
         CellState current = cells.get(cellId);
-        if (current == null || current.disposition() != Disposition.PRESENT)
+        if (current == null || current.disposition() != Disposition.PRESENT || !development.openedCells().contains(cellId))
             throw new IllegalArgumentException("cannot produce again from a depleted or foreign source");
         return transition(cellId, expectedRevision, Disposition.EXTRACTED, site.layout().require(cellId).definition().after(), Optional.of(operation));
     }
@@ -70,7 +78,7 @@ public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells,
         if (current.knownBlock().equals(block) && current.disposition() == disposition) return this;
         var next = new LinkedHashMap<>(cells);
         next.put(cellId, new CellState(Math.addExact(expectedRevision, 1), disposition, block, operation));
-        return new ExtractionDeposit(site, next, geometry);
+        return new ExtractionDeposit(site, next, geometry, development);
     }
     public ExtractionDeposit observeGeometry(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position,
             long expectedRevision, BlockExtraction.Block actual) {
@@ -78,6 +86,19 @@ public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells,
         var prior = geometry.get(position);
         if ((prior == null ? 1 : prior.revision()) != expectedRevision) throw new IllegalArgumentException("stale worksite geometry observation");
         var next = new LinkedHashMap<>(geometry); next.put(position, new GeometryState(Math.addExact(expectedRevision, 1), actual));
-        return new ExtractionDeposit(site, cells, next);
+        return new ExtractionDeposit(site, cells, next, development);
+    }
+    public ExtractionDeposit develop(long expectedRevision, Set<Long> additions) {
+        if (!cells.keySet().containsAll(additions)) throw new IllegalArgumentException("development outside the finite deposit");
+        return new ExtractionDeposit(site, cells, geometry, development.extend(expectedRevision, additions));
+    }
+    public ExtractionDeposit extend(long expectedRevision, ExtractionLayout layout) {
+        layout.requireExtensionOf(site.layout());
+        var next = new LinkedHashMap<>(cells); var additions = new HashSet<Long>();
+        for (var cell : layout.cells()) if (!next.containsKey(cell.id())) {
+            next.put(cell.id(), new CellState(1, Disposition.PRESENT, cell.definition().before())); additions.add(cell.id());
+        }
+        return new ExtractionDeposit(new ExtractionSite(site.id(), site.settlementId(), site.containerId(), layout), next, geometry,
+                development.extend(expectedRevision, additions));
     }
 }

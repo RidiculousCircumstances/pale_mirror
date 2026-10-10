@@ -113,8 +113,9 @@ class ResidentFoodPortionTest {
         var isolatedRecovery = state.fencedRecovery();
         var container = isolatedInventory.containers().get(fixture.depot());
         for (var phase : List.of(ContainerSurfaceStatus.PREPARED, ContainerSurfaceStatus.ACTIVE, ContainerSurfaceStatus.CONFLICT)) {
+            isolatedRecovery = FencedRecoveryContainerSupport.transition(isolatedRecovery, container,
+                    isolatedInventory.surfaces().get(fixture.depot()), phase);
             isolatedInventory = isolatedInventory.withSurfaceStatus(fixture.depot(), phase);
-            isolatedRecovery = FencedRecoveryContainerSupport.transition(isolatedRecovery, container, phase);
         }
         var isolated = state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(isolatedInventory).fencedRecovery(isolatedRecovery));

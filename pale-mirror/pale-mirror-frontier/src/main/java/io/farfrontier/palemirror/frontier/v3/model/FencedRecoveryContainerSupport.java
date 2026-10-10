@@ -5,8 +5,18 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 /** Fences one exact physical container surface without treating its contents as rollbackable. */
 public final class FencedRecoveryContainerSupport {
     private FencedRecoveryContainerSupport() { }
-    public static FencedRecoveryState transition(FencedRecoveryState recovery, ContainerRecord container, ContainerSurfaceStatus status) {
+    public static FencedRecoveryState transition(FencedRecoveryState recovery, ContainerRecord container,
+                                                 ContainerSurface surface, ContainerSurfaceStatus status) {
+        if (!surface.containerId().equals(container.id())) throw new IllegalArgumentException("container recovery surface is foreign");
+        surface.transitionTo(status); // Validate the exact predecessor, not a guessed recovery phase.
         SubjectId id = bindingId(container);
+        if (surface.status() == ContainerSurfaceStatus.UNMATERIALIZED && status == ContainerSurfaceStatus.CONFLICT) {
+            // Admission failed before any physical claim or write. There is no attempt to
+            // recover; keep the local surface conflict without manufacturing an authority.
+            if (recovery.current().containsKey(id) || recovery.tombstones().containsKey(id))
+                throw new IllegalArgumentException("unmaterialized container already retains physical authority");
+            return recovery;
+        }
         return switch (status) {
             case PREPARED -> recovery.prepare(FencedRecoveryBinding.prepared(id, FencedRecoveryAsset.CONTAINER, container.ownerId(), 0L,
                     recovery.nextEpoch(id), true));

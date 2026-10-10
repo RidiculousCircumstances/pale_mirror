@@ -40,6 +40,7 @@ final class FrontierV3ActorBodyCustody {
     /** Shared positive admission-history proof; no caller may derive absence from a UUID lookup. */
     static boolean unstartedAbsenceProven(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
+        if (io.farfrontier.palemirror.frontier.v3.model.ActorInventoryInteractionFences.pending(state, actor)) return false;
         var body = ActorBodyAuthority.current(state, actor);
         if (ActorBodyAuthority.require(state, body).phase() != FencedRecoveryPhase.PREPARED) return false;
         var id = ActorBodyId.entityId(state.bootstrap().worldId(), actor);

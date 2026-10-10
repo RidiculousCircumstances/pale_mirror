@@ -155,6 +155,33 @@ final class FrontierV3ActorItemTransfer {
             return plain(destination(), destinationBefore + order.portion().quantity());
         }
 
+        /** A retained PLACE witness may have saved the destination before the actor storage.
+         * Only its exact unchanged source and exact declared destination permit completion. */
+        boolean destinationAppliedWithSourceRetained() {
+            return order.direction() == ActorContainerItemOrder.Direction.PLACE && sourceMatches(false)
+                    && plain(destination(), destinationBefore + order.portion().quantity());
+        }
+
+        boolean placeDestination() {
+            if (order.direction() != ActorContainerItemOrder.Direction.PLACE || !before()) return false;
+            chest.setItem(destinationSlot, new ItemStack(item, destinationBefore + order.portion().quantity()));
+            chest.setChanged();
+            return destinationAppliedWithSourceRetained();
+        }
+
+        boolean releasePlacedSource() {
+            if (!destinationAppliedWithSourceRetained()) return false;
+            for (var slice : source) {
+                int count = slice.before() - slice.moved();
+                ItemStack remaining = count == 0 ? ItemStack.EMPTY : new ItemStack(item, count);
+                if (slice.address() instanceof PhysicalStackAddress.ContainerSlot address)
+                    sourceContainer(address).setItem(address.slot().slot(), remaining);
+                else FrontierV3ActorResourceSlots.set(actor, order.actorSlot(), remaining);
+            }
+            if (attached != null) attached.setChanged();
+            return after();
+        }
+
         boolean apply() {
             if (!before()) return false;
             for (MaterialSourceSelection.Slice slice : source) {

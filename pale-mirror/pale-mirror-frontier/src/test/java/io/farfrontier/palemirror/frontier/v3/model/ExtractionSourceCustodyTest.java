@@ -9,6 +9,25 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExtractionSourceCustodyTest {
+    @Test void withdrawnPreparationUnblocksColdWithoutInventingPhysicalConfirmationAndSurvivesRecovery() {
+        var original = initial(); var region = ExtractionRegion.all(original.extractionSites()).getFirst();
+        var preparing = transition(original, boundary(original, region, ExtractionSourceBoundary.Operation.PREPARE), 10);
+        var target = ExtractionWorkEffects.target(preparing.extractionSites().deposits().get(region.siteId()),
+                region.cells(preparing.extractionSites()).getFirst());
+        assertTrue(ExtractionSourceCustody.blocksCold(preparing, target));
+        var event = boundary(preparing, region, ExtractionSourceBoundary.Operation.WITHDRAW_PROJECTION);
+        var payloads = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(event, payloads.decode(event.type(), payloads.encode(event)));
+        var released = transition(preparing, event, 11);
+        assertFalse(ExtractionSourceCustody.blocksCold(released, target));
+        assertEquals(original.inventory(), released.inventory());
+        assertEquals(PhysicalReplicaState.EXPECTED, released.replicaCustody().replicas().get(region.objectId()).state());
+        var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released));
+        assertEquals(released, restored);
+        assertThrows(IllegalArgumentException.class, () -> transition(restored, event, 12));
+        var next = transition(restored, boundary(restored, region, ExtractionSourceBoundary.Operation.PREPARE), 12);
+        assertEquals(2, next.replicaCustody().custodyByScope().get(region.scopeId()).authorityEpoch());
+    }
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:source-custody"),
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r1")));

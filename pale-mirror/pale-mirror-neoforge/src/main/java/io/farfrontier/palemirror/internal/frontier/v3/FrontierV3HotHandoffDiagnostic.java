@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.server.level.ServerLevel;
 import java.util.stream.Collectors;
@@ -10,7 +10,7 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3Diagnosti
 final class FrontierV3HotHandoffDiagnostic {
     private FrontierV3HotHandoffDiagnostic() { }
     static String render(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                         String id, CheckpointImage checkpoint) {
+                         String id, FrontierScheduleView checkpoint) {
         var visibility = FrontierV3GrayboxExecutor.firstVisibility(runtime, id);
         String base = FrontierV3DiagnosticJson.firstVisibility(id, checkpoint, visibility);
         if (visibility.chunk() == null) return base;

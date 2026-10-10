@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class FungibleDepotPlayerEditTest {
+class FungibleContainerPlayerEditTest {
     private static final SubjectId OWNER = new SubjectId("settlement:one");
     private static final SubjectId DEPOT = FrontierWorldState.depotId(OWNER);
     private static final SubjectId ACCOUNT = new SubjectId("custody:settlement-one-depot");
@@ -33,13 +33,13 @@ class FungibleDepotPlayerEditTest {
                 FungiblePhysicalObservation.bind(cold, ACCOUNT, 2, List.of(stack(0, 64), stack(1, 8))));
 
         FungibleStockDepartureObserved exit = assertInstanceOf(FungibleStockDepartureObserved.class,
-                FungibleDepotPlayerEdit.classify(hot, ACCOUNT, DEPOT, OWNER, 2, PLAYER, INTERACTION,
-                        List.of(stack(0, 32), stack(1, 8))));
+                FungibleContainerPlayerEdit.classify(hot, ACCOUNT, DEPOT, OWNER, 2, PLAYER, INTERACTION,
+                        List.of(stack(0, 32), stack(1, 8)), java.util.Set.of()));
         assertEquals(Map.of(FREE, 32), exit.departedLots());
         assertEquals(40, hot.departObserved(ACCOUNT, 2, exit.departedLots(), exit.remaining())
                 .totalQuantity(OWNER, "minecraft:bread"));
-        assertThrows(IllegalArgumentException.class, () -> FungibleDepotPlayerEdit.classify(hot, ACCOUNT, DEPOT,
-                OWNER, 2, PLAYER, INTERACTION, List.of(stack(0, 1))));
+        assertThrows(IllegalArgumentException.class, () -> FungibleContainerPlayerEdit.classify(hot, ACCOUNT, DEPOT,
+                OWNER, 2, PLAYER, INTERACTION, List.of(stack(0, 1)), java.util.Set.of()));
     }
 
     @Test void depositBecomesFreshLotOwnedBySettlement() {
@@ -50,11 +50,11 @@ class FungibleDepotPlayerEditTest {
                 FungiblePhysicalObservation.bind(cold, ACCOUNT, 2, List.of(stack(0, 32))));
 
         FungibleStockContributionObserved gift = assertInstanceOf(FungibleStockContributionObserved.class,
-                FungibleDepotPlayerEdit.classify(hot, ACCOUNT, DEPOT, OWNER, 2, PLAYER, INTERACTION,
-                        List.of(stack(0, 48))));
+                FungibleContainerPlayerEdit.classify(hot, ACCOUNT, DEPOT, OWNER, 2, PLAYER, INTERACTION,
+                        List.of(stack(0, 48)), java.util.Set.of()));
         assertEquals(OWNER, gift.contribution().economicOwnerId());
         assertEquals(16, gift.contribution().quantity());
-        assertEquals(48, hot.contributeObserved(ACCOUNT, 2, gift.contribution(), gift.observed())
+        assertEquals(48, hot.contributeObserved(ACCOUNT, DEPOT, 2, gift.contribution(), gift.observed())
                 .totalQuantity(OWNER, "minecraft:bread"));
     }
 
@@ -68,7 +68,8 @@ class FungibleDepotPlayerEditTest {
         FungibleResourceLedger hot = cold.rebind(ACCOUNT, 2,
                 FungiblePhysicalObservation.bind(cold, ACCOUNT, 2, List.of(stack(0, 1))));
         FungibleStockDepartureObserved exit = assertInstanceOf(FungibleStockDepartureObserved.class,
-                FungibleDepotPlayerEdit.classify(hot, ACCOUNT, DEPOT, OWNER, 2, PLAYER, INTERACTION, List.of()));
+                FungibleContainerPlayerEdit.classify(hot, ACCOUNT, DEPOT, OWNER, 2, PLAYER, INTERACTION,
+                        List.of(), java.util.Set.of(claimId)));
         assertEquals(Map.of(HELD, 1), exit.departedLots());
         assertEquals(java.util.Set.of(claimId), exit.forfeitedClaimIds());
         assertEquals(0, hot.releaseClaims(exit.forfeitedClaimIds())
@@ -80,9 +81,9 @@ class FungibleDepotPlayerEditTest {
         SubjectId canonicalAccount = ReferenceContainerCustody.scopeId(DEPOT);
         var observed = List.of(stack(0, 16));
         var gift = assertInstanceOf(FungibleStockContributionObserved.class,
-                FungibleDepotPlayerEdit.classify(FungibleResourceLedger.empty(), canonicalAccount,
-                        DEPOT, OWNER, 3, PLAYER, INTERACTION, observed));
-        var credited = FungibleResourceLedger.empty().contributeObserved(canonicalAccount, 3,
+                FungibleContainerPlayerEdit.classify(FungibleResourceLedger.empty(), canonicalAccount,
+                        DEPOT, OWNER, 3, PLAYER, INTERACTION, observed, java.util.Set.of()));
+        var credited = FungibleResourceLedger.empty().contributeObserved(canonicalAccount, DEPOT, 3,
                 gift.contribution(), observed);
         assertEquals(16, credited.totalQuantity(OWNER, "minecraft:bread"));
         assertEquals(observed, gift.observed());
@@ -91,5 +92,19 @@ class FungibleDepotPlayerEditTest {
     private static FungiblePhysicalObservation.Stack stack(int slot, int count) {
         return new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
                 new InventoryCustody.ContainerSlot(DEPOT, slot)), "minecraft:bread", count);
+    }
+
+    @Test void firstGiftUsesAnExplicitNonDepotContainerWithoutInferringCustodyFromTheOwner() {
+        var quarry = new SubjectId("container:quarry-player-edit");
+        var account = ReferenceContainerCustody.scopeId(quarry);
+        var observed = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(quarry, 4)), "minecraft:granite", 16));
+        var gift = assertInstanceOf(FungibleStockContributionObserved.class, FungibleContainerPlayerEdit.classify(
+                FungibleResourceLedger.empty(), account, quarry, OWNER, 3, PLAYER, INTERACTION, observed, java.util.Set.of()));
+        var credited = FungibleResourceLedger.empty().contributeObserved(account, quarry, 3, gift.contribution(), observed);
+        assertEquals(new ResourceCustody.Container(quarry), credited.accounts().get(account).custody());
+        assertEquals(16, credited.totalQuantity(OWNER, "minecraft:granite"));
+        assertThrows(IllegalArgumentException.class, () -> FungibleResourceLedger.empty().contributeObserved(
+                account, DEPOT, 3, gift.contribution(), observed));
     }
 }

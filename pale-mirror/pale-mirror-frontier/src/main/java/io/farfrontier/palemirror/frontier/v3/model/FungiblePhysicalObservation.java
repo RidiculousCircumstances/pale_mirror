@@ -33,6 +33,15 @@ public final class FungiblePhysicalObservation {
         if (authorityEpoch < 1 || observed == null || observed.isEmpty()) throw new IllegalArgumentException("physical observation requires current non-empty evidence");
         CustodyAccount account = ledger.accounts().get(accountId);
         if (account == null) throw new IllegalArgumentException("physical observation has no known custody account");
+        return bindAccount(ledger, account, authorityEpoch, observed);
+    }
+
+    /** Transaction-local postimage; the final ledger transition validates conservation and custody. */
+    static List<PhysicalStackBinding> bindAccount(FungibleResourceLedger ledger, CustodyAccount account,
+                                                long authorityEpoch, List<Stack> observed) {
+        if (authorityEpoch < 1 || observed == null || observed.isEmpty())
+            throw new IllegalArgumentException("physical observation requires current non-empty evidence");
+        SubjectId accountId = account.id();
         List<Stack> ordered = observed.stream().sorted(Comparator.comparing(stack -> stack.address().toString())).toList();
         if (ordered.stream().map(Stack::address).distinct().count() != ordered.size()) throw new IllegalArgumentException("physical observation duplicates one stack address");
         Map<String, List<Stack>> observedByKind = ordered.stream().collect(java.util.stream.Collectors.groupingBy(Stack::itemKind));
@@ -56,7 +65,7 @@ public final class FungiblePhysicalObservation {
             }
             if (lotCursor != lots.size()) throw new IllegalArgumentException("physical observation omitted exact resource evidence");
         }
-        return allocateClaims(ledger, accountId, bindings);
+        return allocateClaims(ledger, account, bindings);
     }
 
     /** Extends pinned allocations without moving an already admitted physical source.
@@ -64,6 +73,11 @@ public final class FungiblePhysicalObservation {
     static List<PhysicalStackBinding> allocateClaims(FungibleResourceLedger ledger, SubjectId accountId,
                                                      List<PhysicalStackBinding> layout) {
         CustodyAccount account = ledger.accounts().get(accountId);
+        return allocateClaims(ledger, account, layout);
+    }
+
+    private static List<PhysicalStackBinding> allocateClaims(FungibleResourceLedger ledger, CustodyAccount account,
+                                                            List<PhysicalStackBinding> layout) {
         if (account == null || layout.isEmpty()) throw new IllegalArgumentException("claim layout has no current account or stacks");
         List<PhysicalStackBinding> ordered = layout.stream().sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
         List<Map<SubjectId, Integer>> allocated = new ArrayList<>();

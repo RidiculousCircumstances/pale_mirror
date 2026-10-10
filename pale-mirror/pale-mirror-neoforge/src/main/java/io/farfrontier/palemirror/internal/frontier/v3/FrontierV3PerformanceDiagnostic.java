@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
@@ -19,11 +19,11 @@ final class FrontierV3PerformanceDiagnostic {
 
     private FrontierV3PerformanceDiagnostic() { }
 
-    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics) {
+    static String render(FrontierScheduleView checkpoint, FrontierExecutionMetrics.Snapshot metrics) {
         return render(checkpoint, metrics, 0);
     }
 
-    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, int fastForwardRemaining) {
+    static String render(FrontierScheduleView checkpoint, FrontierExecutionMetrics.Snapshot metrics, int fastForwardRemaining) {
         return render(checkpoint, metrics, fastForwardRemaining, null, null, null);
     }
 
@@ -32,7 +32,7 @@ final class FrontierV3PerformanceDiagnostic {
      * must not treat the command packet acknowledgement as completion while the server is still
      * advancing the canonical clock in slices.
      */
-    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, int fastForwardRemaining, Long fastForwardTarget,
+    static String render(FrontierScheduleView checkpoint, FrontierExecutionMetrics.Snapshot metrics, int fastForwardRemaining, Long fastForwardTarget,
                          String fastForwardFailure, FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome) {
         return render(checkpoint, metrics, null, fastForwardRemaining, fastForwardTarget, fastForwardFailure, outcome, null);
     }
@@ -41,20 +41,20 @@ final class FrontierV3PerformanceDiagnostic {
      * One bounded read-only pressure cut.  It counts retained canonical bindings rather than
      * scanning a level, loading a chunk, or claiming that a presentation entity is an actor.
      */
-    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+    static String render(FrontierScheduleView checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
                          int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
                          FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome) {
         return render(checkpoint, metrics, state, fastForwardRemaining, fastForwardTarget, fastForwardFailure, outcome, null);
     }
 
-    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+    static String render(FrontierScheduleView checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
                          int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
                          FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
                          FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry) {
         return render(checkpoint, metrics, state, fastForwardRemaining, fastForwardTarget, fastForwardFailure, outcome, sliceTelemetry, List.of());
     }
 
-    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+    static String render(FrontierScheduleView checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
                          int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
                          FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
                          FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
@@ -62,7 +62,7 @@ final class FrontierV3PerformanceDiagnostic {
         return render(checkpoint, metrics, state, fastForwardRemaining, fastForwardTarget, fastForwardFailure,
                 outcome, sliceTelemetry, requests, null);
     }
-    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+    static String render(FrontierScheduleView checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
                          int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
                          FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
                          FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
@@ -71,7 +71,7 @@ final class FrontierV3PerformanceDiagnostic {
                 outcome, sliceTelemetry, requests, planningPressure, null);
     }
 
-    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+    static String render(FrontierScheduleView checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
                          int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
                          FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
                          FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
@@ -80,7 +80,7 @@ final class FrontierV3PerformanceDiagnostic {
         return render(checkpoint, metrics, state, fastForwardRemaining, fastForwardTarget, fastForwardFailure,
                 outcome, sliceTelemetry, requests, planningPressure, departurePressure, null);
     }
-    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+    static String render(FrontierScheduleView checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
                          int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
                          FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
                          FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
@@ -115,7 +115,7 @@ final class FrontierV3PerformanceDiagnostic {
         return FrontierV3DiagnosticJson.bounded("performance", "", checkpoint, value.append('}').toString());
     }
 
-    private static String frontier(FrontierWorldState state, CheckpointImage checkpoint) {
+    private static String frontier(FrontierWorldState state, FrontierScheduleView checkpoint) {
         long hotScenes = state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.HOT).count();
         long activeScenes = state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.PREPARED
                 || lease.status() == SceneLeaseStatus.HOT || lease.status() == SceneLeaseStatus.DRAINING).count();
@@ -138,7 +138,9 @@ final class FrontierV3PerformanceDiagnostic {
                 + ",\"activeAssaults\":" + activeAssaults
                 + ",\"physicalIntents\":" + state.physicalIntents().size() + ",\"physicalObservations\":" + state.physicalObservations().size()
                 + ",\"deferredAftermath\":" + state.deferredAftermath().entries().size() + ",\"recoveryCurrent\":" + state.fencedRecovery().current().size()
-                + ",\"recoveryTombstones\":" + state.fencedRecovery().tombstones().size() + ",\"checkpointBytes\":" + checkpoint.canonicalState().length + "}";
+                + ",\"recoveryTombstones\":" + state.fencedRecovery().tombstones().size()
+                + ",\"checkpointBytes\":" + (checkpoint instanceof io.farfrontier.palemirror.frontier.v3.api.CheckpointImage image
+                    ? Integer.toString(image.canonicalState().length) : "null") + "}";
     }
 
     private static String outcome(FrontierV3ServerLifecycle.FastForwardTargetOutcome value) {

@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -69,7 +69,7 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3Diagnosti
 final class FrontierV3HarvestDiagnosticJson {
     private FrontierV3HarvestDiagnosticJson() { }
 
-    static String harvestProcess(CheckpointImage checkpoint, FrontierWorldState state, ResourceSiteHarvestJob job) {
+    static String harvestProcess(FrontierScheduleView checkpoint, FrontierWorldState state, ResourceSiteHarvestJob job) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         PhysicalIntent intent = state.physicalIntents().get(job.intentId());
         ActorLocation actor = state.actorLocations().get(job.workerId());
@@ -154,7 +154,7 @@ final class FrontierV3HarvestDiagnosticJson {
                 + "\",\"intentStatus\":\"" + intentStatus + "\",\"dutyPhase\":\"" + dutyPhase + "\",\"intentObservationId\":" + intentObservationId
                 + ",\"obstruction\":" + obstruction + ",\"complete\":" + job.progress().complete() + "}}";
     }
-    static String site(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    static String site(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         ResourceSiteLifecycle lifecycle = subject == null ? null : state.resourceSites().sites().get(subject);
         ResourceSite site = subject == null ? null : state.resourceSiteDescriptors().get(subject);

@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -70,18 +70,18 @@ final class FrontierV3DiagnosticJson {
     static final int MAX_BYTES = 8_192;
     private FrontierV3DiagnosticJson() { }
 
-    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+    static String render(String kind, String id, FrontierScheduleView checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace) {
         return render(kind, id, checkpoint, state, trace, Optional.empty());
     }
 
-    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+    static String render(String kind, String id, FrontierScheduleView checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
                          Optional<FrontierV3AmbientAdmissionDiagnostic> admission) {
         return render(kind, id, checkpoint, state, trace, admission, Optional.empty());
     }
 
-    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+    static String render(String kind, String id, FrontierScheduleView checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
                          Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness) {
@@ -89,7 +89,7 @@ final class FrontierV3DiagnosticJson {
     }
 
 
-    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+    static String render(String kind, String id, FrontierScheduleView checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
                          Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
@@ -97,7 +97,7 @@ final class FrontierV3DiagnosticJson {
         return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, sceneReadiness, Optional.empty());
     }
 
-    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+    static String render(String kind, String id, FrontierScheduleView checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
                          Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
@@ -107,7 +107,7 @@ final class FrontierV3DiagnosticJson {
                 containerReadiness, Optional.empty(), Optional.empty());
     }
 
-    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+    static String render(String kind, String id, FrontierScheduleView checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
                          Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
@@ -161,7 +161,7 @@ final class FrontierV3DiagnosticJson {
         return bounded(kind, id, checkpoint, value);
     }
 
-    static String firstVisibility(String id, CheckpointImage checkpoint, FrontierV3GrayboxExecutor.FirstVisibilitySnapshot value) {
+    static String firstVisibility(String id, FrontierScheduleView checkpoint, FrontierV3GrayboxExecutor.FirstVisibilitySnapshot value) {
         if (value == null || value.chunk() == null || value.status().equals("INVALID")) return unavailable("first_visibility", id, checkpoint, "invalid_chunk");
         return PREFIX + base("first_visibility", id, checkpoint) + ",\"status\":\"ok\",\"chunkX\":" + value.chunk().x
                 + ",\"chunkZ\":" + value.chunk().z + ",\"visibility\":\"" + quote(value.status())
@@ -178,12 +178,12 @@ final class FrontierV3DiagnosticJson {
      * server-local action receipts; object detail stays with actor/site/settlement views so this
      * never becomes a second authority or an unbounded world scan.
      */
-    static String operatorStatus(CheckpointImage checkpoint, FrontierWorldState state,
+    static String operatorStatus(FrontierScheduleView checkpoint, FrontierWorldState state,
                                  java.util.List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests) {
         return operatorStatus(checkpoint, state, requests, "");
     }
 
-    static String operatorStatus(CheckpointImage checkpoint, FrontierWorldState state,
+    static String operatorStatus(FrontierScheduleView checkpoint, FrontierWorldState state,
                                  java.util.List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests, String selectedId) {
         String receipt = requests.isEmpty() ? "null" : fastForwardReceipt(requests.getLast());
         String subject = selectedStatus(checkpoint, state, selectedId);
@@ -199,7 +199,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"selectedSubject\":" + subject + ",\"lastFastForwardRequest\":" + receipt + "}");
     }
 
-    private static String selectedStatus(CheckpointImage checkpoint, FrontierWorldState state, String id) {
+    private static String selectedStatus(FrontierScheduleView checkpoint, FrontierWorldState state, String id) {
         if (id == null || id.isBlank()) return "null";
         SubjectId subject = subject(id).orElse(null);
         if (subject == null) return unavailable("status", id, checkpoint, "not_found");
@@ -219,14 +219,14 @@ final class FrontierV3DiagnosticJson {
     }
 
     /** Applies the one operator-response limit to every read-only v3 diagnostic view. */
-    static String bounded(String kind, String id, CheckpointImage checkpoint, String value) {
+    static String bounded(String kind, String id, FrontierScheduleView checkpoint, String value) {
         if (value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BYTES) {
             value = unavailable(kind, id, checkpoint, "response_limit");
         }
         return PREFIX + value;
     }
 
-    private static String summary(CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String summary(FrontierScheduleView checkpoint, FrontierWorldState state) {
         long retainedConflicts = state.diagnosticIncidents().incidents().values().stream().filter(DiagnosticIncident::awaitingReview).count();
         long custodyDiagnostics = state.diagnosticIncidents().incidents().values().stream().filter(value -> value.diagnostic().owner().kind()
                 == io.farfrontier.palemirror.frontier.v3.model.DiagnosticOwnerKind.REPLICA_CUSTODY).count();
@@ -235,6 +235,9 @@ final class FrontierV3DiagnosticJson {
         String verdict = retainedConflicts == 0 && sceneConflicts == 0 ? "green" : "blocked";
         return base("summary", "", checkpoint)
                 + ",\"status\":\"ok\",\"diagnosticVerdict\":\"" + verdict + "\",\"requiredConflicts\":" + retainedConflicts
+                + ",\"diagnosticScope\":\"RETAINED_CONFLICTS\",\"progressVerdict\":\"NOT_ASSESSED\""
+                + ",\"preparingReplicaScopes\":" + state.replicaCustody().custodyByScope().values().stream()
+                    .filter(lease -> lease.status() == io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus.PREPARING).count()
                 + ",\"settlements\":" + state.bootstrap().settlements().size()
                 + ",\"residents\":" + state.humanPopulation().residents().size()
                 + ",\"bioforms\":" + state.actorLocations().keySet().stream().filter(value -> value.value().startsWith("bioform:")).count()
@@ -251,7 +254,7 @@ final class FrontierV3DiagnosticJson {
     }
 
     /** One bounded composition account; all counts are derived from canonical state. */
-    private static String physicalLifecycle(CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String physicalLifecycle(FrontierScheduleView checkpoint, FrontierWorldState state) {
         PhysicalIntentLifecycleCompositionDiagnostic diagnostic = FrontierWorldProcessCatalog.physicalLifecycleDiagnostic(state);
         String owners = diagnostic.owners().stream().map(owner -> "{\"owner\":\"" + quote(owner.owner().stableId())
                 + "\",\"version\":" + owner.declarationVersion() + ",\"schemaTags\":" + owner.schemaTags()
@@ -264,7 +267,7 @@ final class FrontierV3DiagnosticJson {
     }
 
     /** One exact durable recovery fence, rendered read-only for a crash/reconciliation receipt. */
-    private static String recovery(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String recovery(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId bindingId = subject(id).orElse(null);
         if (bindingId == null) return unavailable("recovery", id, checkpoint, "not_found");
         FencedRecoveryBinding current = state.fencedRecovery().current().get(bindingId);
@@ -282,16 +285,16 @@ final class FrontierV3DiagnosticJson {
     }
 
     /** Bounded read-only duration-process projection; aggregate, lease and schedule remain authoritative. */
-    private static String process(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String process(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         return FrontierV3ProcessDiagnosticJson.render(id, checkpoint, state);
     }
 
-    private static String site(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String site(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         return FrontierV3HarvestDiagnosticJson.site(id, checkpoint, state);
     }
 
     /** A read-only typed-subject causal account; the caller supplies KIND/id, never an inferred kind. */
-    private static String why(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String why(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         Optional<DiagnosticSubject> subject = typedSubject(id);
         if (subject.isEmpty()) return unavailable("why", id, checkpoint, "typed_subject_required");
         return state.diagnosticIncidents().why(subject.orElseThrow()).map(value -> base("why", id, checkpoint)
@@ -300,7 +303,7 @@ final class FrontierV3DiagnosticJson {
     }
 
     /** Exact persisted incident lookup; this bounded lookup reads no chunks or mutable state. */
-    private static String incident(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String incident(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         return state.diagnosticIncidents().incident(id).map(value -> base("incident", id, checkpoint)
                 + ",\"status\":\"ok\",\"incident\":" + incident(value) + "}")
                 .orElseGet(() -> unavailable("incident", id, checkpoint, "not_found"));
@@ -344,7 +347,7 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"subjectKind\":\"" + value.subject().kind() + "\",\"subject\":\"" + quote(value.subject().id().value())
                 + "\",\"disposition\":\"" + value.disposition() + "\",\"dispositionTag\":" + value.disposition().wireTag() + "}";
     }
-    private static String settlement(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String settlement(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         FrontierSettlementWorkDiagnostic value = subject == null ? null
                 : FrontierSettlementWorkDiagnostic.inspect(checkpoint, state, subject).orElse(null);
@@ -401,7 +404,7 @@ final class FrontierV3DiagnosticJson {
      * before a native first visit; the caller supplies the current physical admission evidence
      * only so the client can bind its own locally rendered UUIDs without choosing a body.
      */
-    static String settlementPopulation(CheckpointImage checkpoint, FrontierWorldState state, String id,
+    static String settlementPopulation(FrontierScheduleView checkpoint, FrontierWorldState state, String id,
                                        java.util.Map<SubjectId, FrontierV3AmbientAdmissionDiagnostic> admissions) {
         SubjectId settlementId = subject(id).orElse(null);
         if (settlementId == null || state.bootstrap().settlements().stream().noneMatch(value -> value.id().equals(settlementId))) {
@@ -436,7 +439,7 @@ final class FrontierV3DiagnosticJson {
                 + residents.size() + ",\"residents\":[" + values + "]}");
     }
     /** One named-polity diagnostic, bounded to aggregate counts plus the single next growth claim. */
-    private static String hive(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String hive(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         if (subject == null || !subject.equals(state.bootstrap().hive().id())) return unavailable("hive", id, checkpoint, "not_found");
         var next = state.hiveColony().growthJobs().values().stream().sorted(java.util.Comparator.comparing(value -> value.id().value())).findFirst();
@@ -449,7 +452,7 @@ final class FrontierV3DiagnosticJson {
     }
 
     /** One exact nutrient corridor or terminal receipt; no aggregate hive stock is exposed. */
-    private static String hiveTransfer(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String hiveTransfer(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null); if (subject == null) return unavailable("hive_transfer", id, checkpoint, "not_found");
         HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().get(subject);
         if (transfer != null) {
@@ -473,7 +476,7 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"status\":\"" + quote(lane.status()) + "\"}";
     }
 
-    private static String actor(String id, CheckpointImage checkpoint, FrontierWorldState state,
+    private static String actor(String id, FrontierScheduleView checkpoint, FrontierWorldState state,
                                 Optional<FrontierV3AmbientAdmissionDiagnostic> admission) {
         SubjectId subject = subject(id).orElse(null); ActorLocation location = subject == null ? null : state.actorLocations().get(subject);
         if (location == null) return unavailable("actor", id, checkpoint, "not_found");
@@ -539,7 +542,7 @@ final class FrontierV3DiagnosticJson {
     }
 
     /** One exact resident's durable movement corridor; diagnostics never choose, advance or unblock it. */
-    private static String transit(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String transit(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         var journey = subject == null ? null : state.humanPopulation().migration(subject);
         if (journey == null) return unavailable("transit", id, checkpoint, "not_found");
@@ -572,7 +575,7 @@ final class FrontierV3DiagnosticJson {
                 + FrontierV3NavigationDiagnosticJson.fragment(value.navigation()) + "}";
     }
 
-    private static String item(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String item(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null); ExactItemStack item = subject == null ? null : state.inventory().items().get(subject);
         if (item == null) return unavailable("item", id, checkpoint, "not_found");
         return base("item", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(item.economicOwnerId().value())
@@ -583,7 +586,7 @@ final class FrontierV3DiagnosticJson {
      * One account's exact fungible custody projection.  Physical addresses are retained
      * evidence only: lots and claims remain the canonical quantity and reservation owners.
      */
-    private static String resource(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String resource(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId accountId = subject(id).orElse(null);
         if (accountId == null) return unavailable("resource", id, checkpoint, "not_found");
         var resources = state.inventory().fungibleResources();
@@ -639,7 +642,7 @@ final class FrontierV3DiagnosticJson {
     }
 
     /** One bounded exact-container projection for test-pilot and operator inspection. */
-    private static String container(String id, CheckpointImage checkpoint, FrontierWorldState state,
+    private static String container(String id, FrontierScheduleView checkpoint, FrontierWorldState state,
                                     Optional<FrontierV3ContainerSurfaceExecutor.Readiness> readiness) {
         SubjectId subject = subject(id).orElse(null); ContainerRecord container = subject == null ? null : state.inventory().containers().get(subject);
         ContainerSurface surface = subject == null ? null : state.inventory().surfaces().get(subject);
@@ -704,7 +707,7 @@ final class FrontierV3DiagnosticJson {
      * depot and hive task/schedule/reservation owners without creating a
      * second ledger or inferring history from a chest endpoint.
      */
-    private static String referenceContainer(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String referenceContainer(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         // Historical F0.2B composition report, not an arbitrary container lookup.
         // Never label its fixed subjects with a caller-supplied container identity.
         if (!"f02b".equals(id)) return unavailable("reference_container", id, checkpoint, "not_found");
@@ -761,7 +764,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"birthJobs\":" + birthEntries + ",\"physicalIntents\":" + intents + "}";
     }
 
-    private static String marketOrder(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String marketOrder(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         FrontierMarketOrderDiagnostic order = subject == null ? null : FrontierMarketOrderDiagnostic.inspect(state, subject).orElse(null);
         if (order == null) return unavailable("market_order", id, checkpoint, "not_found");
@@ -782,7 +785,7 @@ final class FrontierV3DiagnosticJson {
     /** Bounded operator evidence for the one retained command source of an active hive engagement. */
 
     /** One declared supply topology, with grade facts only; diagnostics never survey or alter Minecraft terrain. */
-    private static String routeTopology(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String routeTopology(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId settlement = subject(id).orElse(null);
         if (settlement == null || state.bootstrap().settlements().stream().noneMatch(value -> value.id().equals(settlement))) {
             return unavailable("route_topology", id, checkpoint, "not_found");
@@ -803,7 +806,7 @@ final class FrontierV3DiagnosticJson {
 
 
     /** One exact durable world-change fact, keyed by a canonical x,y,z cell rather than a player identity. */
-    private static String physicalDelta(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String physicalDelta(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         BlockPosition position = parsePosition(id).orElse(null);
         PhysicalDelta delta = position == null ? null : state.physicalDeltas().get(position);
         if (delta == null) return unavailable("physical_delta", id, checkpoint, "not_found");
@@ -817,7 +820,7 @@ final class FrontierV3DiagnosticJson {
     }
 
     /** One exact medical owner, including its patient, retained team and physical remedy receipt. */
-    private static String medical(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String medical(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         MedicalEvacuationOperation operation = subject == null ? null : state.humanPopulation().medicalOperations().get(subject);
         if (operation == null) return unavailable("medical", id, checkpoint, "not_found");
@@ -832,7 +835,7 @@ final class FrontierV3DiagnosticJson {
     }
 
     /** One bounded, read-only COLD aftermath receipt selected by exact id or exact causal selector. */
-    private static String aftermath(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String aftermath(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         var value = id.startsWith("cause:") ? state.deferredAftermath().entries().values().stream()
                 .filter(entry -> entry.causeId().value().equals(id))
                 .sorted(java.util.Comparator.comparing(entry -> entry.id())).findFirst().orElse(null)
@@ -851,7 +854,7 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"expectedPart\":\"" + cell.expectedPart() + "\",\"authorityRevision\":" + cell.authorityRevision() + "}";
     }
 
-    private static String intent(String id, CheckpointImage checkpoint, FrontierWorldState state,
+    private static String intent(String id, FrontierScheduleView checkpoint, FrontierWorldState state,
                                  Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                                  Optional<FrontierV3EquipmentIssueExecutor.Readiness> equipmentIssueReadiness,
                                  Optional<FrontierV3EquipmentReturnExecutor.Readiness> equipmentReturnReadiness) {
@@ -873,11 +876,11 @@ final class FrontierV3DiagnosticJson {
                     ? equipmentReturnReadiness.map(FrontierV3DiagnosticExecutorJson::equipmentReturnReadiness).orElse("") : "") + "}";
     }
 
-    static String unavailable(String kind, String id, CheckpointImage checkpoint, String status) {
+    static String unavailable(String kind, String id, FrontierScheduleView checkpoint, String status) {
         return base(kind, id, checkpoint) + ",\"status\":\"" + quote(status) + "\"}";
     }
 
-    static String base(String kind, String id, CheckpointImage checkpoint) {
+    static String base(String kind, String id, FrontierScheduleView checkpoint) {
         return "{\"schema\":1,\"kind\":\"" + quote(kind) + "\",\"id\":\"" + quote(id) + "\",\"world\":\""
                 + quote(checkpoint.worldId().value()) + "\",\"revision\":" + checkpoint.revision().value() + ",\"instant\":" + checkpoint.instant().ticks();
     }

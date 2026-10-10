@@ -200,18 +200,6 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 && !budget.occupied().contains(slot) && !budget.bound().contains(slot));
     }
 
-    private record ContainerSlotBudget(java.util.Set<Integer> occupied, java.util.Set<Integer> bound, long packedStacks,
-                                       Map<String, Long> stockByKind) {
-        long requiredSlots() { return occupied.size() + Math.max(packedStacks, bound.size()); }
-        ContainerSlotBudget withIncoming(Map<String, Long> incoming) {
-            if (incoming.isEmpty()) return this;
-            Map<String, Long> projected = new HashMap<>(stockByKind);
-            incoming.forEach((kind, quantity) -> projected.merge(kind, quantity, Math::addExact));
-            long packed = projected.values().stream().mapToLong(quantity -> (quantity + 63) / 64).sum();
-            return new ContainerSlotBudget(occupied, bound, packed, projected);
-        }
-    }
-
     /** Canonical capacity, not a claim that an unloaded chest has been physically observed. */
     public record ContainerCapacity(int slotCount, int exactSlots, int boundFungibleSlots,
                                     long packedFungibleSlots, int reservedSlots, long freeCapacitySlots,
@@ -228,23 +216,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     }
 
     private ContainerSlotBudget slotBudget(SubjectId containerId) {
-        var occupied = new java.util.HashSet<Integer>();
-        occupiedSlots.keySet().stream().filter(slot -> slot.containerId().equals(containerId))
-                .map(InventoryCustody.ContainerSlot::slot).forEach(occupied::add);
-        var bound = new java.util.HashSet<Integer>();
-        fungibleResources.bindings().values().stream()
-                .filter(binding -> binding.address() instanceof PhysicalStackAddress.ContainerSlot address
-                        && address.slot().containerId().equals(containerId))
-                .map(binding -> ((PhysicalStackAddress.ContainerSlot) binding.address()).slot().slot())
-                .forEach(bound::add);
-        Map<String, Long> stockByKind = new HashMap<>();
-        fungibleResources.accounts().values().stream()
-                .filter(account -> account.custody() instanceof ResourceCustody.Container location
-                        && location.containerId().equals(containerId))
-                .forEach(account -> account.lotQuantities().forEach((lotId, quantity) ->
-                        stockByKind.merge(fungibleResources.lots().get(lotId).itemKind(), quantity.longValue(), Math::addExact)));
-        long packedStacks = stockByKind.values().stream().mapToLong(quantity -> ((long) quantity + 63) / 64).sum();
-        return new ContainerSlotBudget(occupied, bound, packedStacks, stockByKind);
+        return ContainerStockIndex.budget(this, containerId);
     }
 
     /** A recipe replaces stored input; a full container alone does not forbid equal-size conversion. */
@@ -254,12 +226,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         Objects.requireNonNull(inputKind); Objects.requireNonNull(outputKind); Objects.requireNonNull(inbound);
         if (inputCount <= 0 || outputCount <= 0) throw new IllegalArgumentException("invalid storage conversion");
         ContainerRecord container = Objects.requireNonNull(containers.get(containerId), "unknown container");
-        long available = fungibleResources.accounts().values().stream()
-                .filter(account -> account.custody() instanceof ResourceCustody.Container custody
-                        && custody.containerId().equals(containerId))
-                .flatMap(account -> account.lotQuantities().entrySet().stream())
-                .filter(entry -> fungibleResources.lots().get(entry.getKey()).itemKind().equals(inputKind))
-                .mapToLong(entry -> entry.getValue().longValue()).sum();
+        long available = slotBudget(containerId).stockByKind().getOrDefault(inputKind, 0L);
         if (available < inputCount) return false;
         var changes = new HashMap<>(inbound);
         changes.merge(inputKind, -(long) inputCount, Math::addExact);

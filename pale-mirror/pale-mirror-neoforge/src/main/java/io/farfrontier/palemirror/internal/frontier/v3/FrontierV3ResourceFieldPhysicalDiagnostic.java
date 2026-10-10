@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 
@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 final class FrontierV3ResourceFieldPhysicalDiagnostic {
     private FrontierV3ResourceFieldPhysicalDiagnostic() { }
 
-    static String render(CheckpointImage checkpoint, FrontierWorldState state,
+    static String render(FrontierScheduleView checkpoint, FrontierWorldState state,
                          FrontierV3ResourceSiteLedger ledger, String id,
                          net.minecraft.server.level.ServerLevel level,
                          FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {

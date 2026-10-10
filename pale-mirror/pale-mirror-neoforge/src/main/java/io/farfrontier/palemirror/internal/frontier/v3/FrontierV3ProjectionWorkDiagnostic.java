@@ -1,13 +1,13 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 
 /** Read-only counter snapshot for the two retained projection owners; it has no scheduling authority. */
 final class FrontierV3ProjectionWorkDiagnostic {
     private FrontierV3ProjectionWorkDiagnostic() { }
 
-    static String render(CheckpointImage checkpoint, FrontierV3ServerRuntime<?, ?> runtime) {
+    static String render(FrontierScheduleView checkpoint, FrontierV3ServerRuntime<?, ?> runtime) {
         FrontierV3GrayboxExecutor.ProjectionWorkSnapshot structural = FrontierV3GrayboxExecutor.projectionWork(runtime);
         FrontierV3InfectionOverlayExecutor.ProjectionWorkSnapshot overlay = FrontierV3InfectionOverlayExecutor.projectionWork(runtime);
         FrontierExecutionMetrics.StageSample callerPath = runtime.executionMetrics().snapshot().stages().stream()

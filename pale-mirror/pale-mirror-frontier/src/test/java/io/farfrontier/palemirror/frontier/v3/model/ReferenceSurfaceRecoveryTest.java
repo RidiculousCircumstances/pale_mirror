@@ -18,8 +18,8 @@ class ReferenceSurfaceRecoveryTest {
         var recovery = state.fencedRecovery();
         var inventory = state.inventory();
         for (var phase : List.of(ContainerSurfaceStatus.PREPARED, ContainerSurfaceStatus.ACTIVE, ContainerSurfaceStatus.CONFLICT)) {
+            recovery = FencedRecoveryContainerSupport.transition(recovery, container, inventory.surfaces().get(DEPOT), phase);
             inventory = inventory.withSurfaceStatus(DEPOT, phase);
-            recovery = FencedRecoveryContainerSupport.transition(recovery, container, phase);
         }
         var replica = PhysicalReplicaRecord.expected(DEPOT, ReferenceContainerCustody.semanticKind(state, DEPOT),
                 7, ReferenceContainerCustody.canonicalFingerprint(state, DEPOT), ReferenceContainerCustody.provenance(DEPOT));

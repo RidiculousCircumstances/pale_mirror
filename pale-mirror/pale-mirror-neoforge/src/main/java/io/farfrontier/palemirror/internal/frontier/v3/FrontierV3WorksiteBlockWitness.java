@@ -38,6 +38,11 @@ record FrontierV3WorksiteBlockWitness(WorksiteBlock declaration, BlockExtraction
     boolean settledCurrent(WorksiteBlock current, BlockExtraction.Block actual) {
         return phase == Phase.SETTLED && declaration.equals(current) && current.block().equals(actual);
     }
+    /** No unresolved native write, resource effect or foreign observation may cross a withdrawal. */
+    static boolean permitsProjectionWithdrawal(FrontierV3WorksiteBlockWitness witness, WorksiteBlock current) {
+        return witness == null || witness.phase == Phase.SETTLED && witness.declaration.key().equals(current.key())
+                && witness.declaration.revision() <= current.revision();
+    }
     CompoundTag write() {
         var tag = new CompoundTag(); var key = declaration.key();
         tag.putInt("family", key.family().wireTag()); tag.putString("owner", key.owner().value());

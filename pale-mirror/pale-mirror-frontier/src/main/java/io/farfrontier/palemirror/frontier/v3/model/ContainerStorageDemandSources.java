@@ -8,8 +8,11 @@ final class ContainerStorageDemandSources {
     private ContainerStorageDemandSources() { }
     private static final List<Function<FrontierWorldState, List<ContainerInboundCapacity.Demand>>> SOURCES = List.of(
             state -> ProductionOutputCapacity.pendingInbound(state.productionJobs()), GoodsTradeStorageDemand::pending);
+    private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> VIEW = new ImmutableInputView<>();
 
     static List<ContainerInboundCapacity.Demand> demands(FrontierWorldState state) {
-        return SOURCES.stream().flatMap(source -> source.apply(state).stream()).toList();
+        return VIEW.get(List.of(state.productionJobs(), state.companies().goodsTrade().contracts(),
+                        state.inventory().fungibleResources().accounts()),
+                () -> SOURCES.stream().flatMap(source -> source.apply(state).stream()).toList());
     }
 }

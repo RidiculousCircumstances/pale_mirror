@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "live_quarry_container_first_visit",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25565, "viewDistance": 6 },
+  "pilot": { "username": "PMAudit" },
+  "setup": [],
+  "actions": [
+    { "type": "wait", "ms": 5000, "causalMilestone": "audit_player_creative_setup" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 403, "y": 65, "z": -339 },
+      "settleMs": 3000, "causalMilestone": "first_visit_unprojected_socket" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:quarry-1a92e562-08ae-3d4a-b8c4-fbc62dfeac78",
+      "expect": { "status": "ok", "surface": "ACTIVE" }, "timeoutMs": 120000,
+      "causalMilestone": "settled_geometry_admits_container" },
+    { "type": "look", "at": { "x": 410, "y": 61, "z": -337 } },
+    { "type": "inspect", "view": "summary", "id": "", "causalMilestone": "first_visit_does_not_quarantine_frontier" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 80, "z": -132 }, "settleMs": 0 },
+    { "type": "wait", "ms": 1000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 403, "y": 65, "z": -339 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:quarry-1a92e562-08ae-3d4a-b8c4-fbc62dfeac78",
+      "expect": { "status": "ok", "surface": "ACTIVE" }, "timeoutMs": 60000,
+      "causalMilestone": "return_preserves_owned_container" },
+    { "type": "look", "at": { "x": 410, "y": 61, "z": -337 } }
+  ],
+  "assertions": [
+    { "after": 3, "view": "container", "id": "container:quarry-1a92e562-08ae-3d4a-b8c4-fbc62dfeac78", "expect": { "status": "ok", "surface": "ACTIVE", "physicalSocket": { "chest": "OWNED", "slots": "CURRENT", "support": "READY", "ordinaryPlayerNearby": true } } },
+    { "after": 9, "view": "container", "id": "container:quarry-1a92e562-08ae-3d4a-b8c4-fbc62dfeac78", "expect": { "status": "ok", "surface": "ACTIVE", "physicalSocket": { "chest": "OWNED", "slots": "CURRENT", "support": "READY", "ordinaryPlayerNearby": true } } }
+  ],
+  "frames": [ { "after": 4, "name": "first-visit-quarry-socket" }, { "after": 10, "name": "return-quarry-socket" } ]
+}

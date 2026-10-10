@@ -25,6 +25,12 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Residen
 
     public boolean carriesFood() { return phase == Phase.CLEAR_ACCESS || phase == Phase.CONSUME; }
 
+    /** Stable continuation identity belongs to the retained activity, not its scheduler adapter. */
+    public io.farfrontier.palemirror.frontier.v3.api.ScheduleId progressScheduleId() {
+        return new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resident-meal-"
+                + residentId.value().substring("resident:".length()) + "-" + executionId.generation() + "-" + startedAtTick);
+    }
+
     public boolean movesToClearance() { return phase == Phase.CLEAR_ACCESS; }
     public boolean portable() { return source instanceof ResidentFoodSource.Personal; }
     public SubjectId sourceAccountId() { return source.accountId(); }

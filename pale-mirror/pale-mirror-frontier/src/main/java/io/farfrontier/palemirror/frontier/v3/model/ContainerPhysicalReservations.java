@@ -5,6 +5,9 @@ import java.util.function.Function;
 
 /** Registered physical effect owners contribute exact held slots; storage does not inspect jobs. */
 final class ContainerPhysicalReservations {
+    private static final ImmutableInputView<List<ContainerSlotClaim>> CLAIMS = new ImmutableInputView<>();
+    private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> DEMANDS = new ImmutableInputView<>();
+    private record DemandKey(SubjectId owner, SubjectId container, String kind) { }
     private record Owners(ResourceSiteState sites, Map<SubjectId, ProductionJob> production, ShipmentState shipments,
             io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extraction) { }
     private static final List<Function<Owners, List<ContainerSlotClaim>>> PORTS = List.of(
@@ -13,9 +16,11 @@ final class ContainerPhysicalReservations {
             owners -> BakeryPhysicalAuthority.slotClaims(owners.production()),
             owners -> ExtractionPhysicalAuthority.slotClaims(owners.extraction()));
     private static List<ContainerSlotClaim> claims(ExactInventory inventory, Owners owners) {
-        var claims = PORTS.stream().flatMap(port -> port.apply(owners).stream()).toList();
-        requireExclusive(inventory, claims);
-        return claims;
+        return CLAIMS.get(List.of(inventory.containers(), owners.sites(), owners.production(), owners.shipments(), owners.extraction()), () -> {
+            var claims = PORTS.stream().flatMap(port -> port.apply(owners).stream()).toList();
+            requireExclusive(inventory, claims);
+            return claims;
+        });
     }
     static List<ContainerSlotClaim> claims(FrontierWorldState state) {
         return claims(state.inventory(), new Owners(state.resourceSites(), state.productionJobs(), state.shipments(), state.extractionSites()));
@@ -44,16 +49,19 @@ final class ContainerPhysicalReservations {
                 .map(claim -> claim.slot().slot()).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
     static List<ContainerInboundCapacity.Demand> uncoveredDemands(FrontierWorldState state) {
-        var covered = claims(state).stream().flatMap(claim -> claim.coveredDemand().stream()).toList();
-        return ContainerStorageDemandSources.demands(state).stream().map(demand -> {
-            int remaining = demand.quantity();
-            for (var physical : covered) {
-                if (physical.owner().equals(demand.owner()) && physical.container().equals(demand.container())
-                        && physical.itemKind().equals(demand.itemKind())) remaining = Math.subtractExact(remaining, physical.quantity());
-            }
+        var physicalClaims = claims(state);
+        var demands = ContainerStorageDemandSources.demands(state);
+        return DEMANDS.get(List.of(physicalClaims, demands), () -> {
+            var covered = new HashMap<DemandKey, Integer>();
+            physicalClaims.stream().flatMap(claim -> claim.coveredDemand().stream()).forEach(physical ->
+                    covered.merge(new DemandKey(physical.owner(), physical.container(), physical.itemKind()), physical.quantity(), Math::addExact));
+            return demands.stream().map(demand -> {
+            int remaining = Math.subtractExact(demand.quantity(), covered.getOrDefault(
+                    new DemandKey(demand.owner(), demand.container(), demand.itemKind()), 0));
             if (remaining < 0) throw new IllegalArgumentException("physical claims exceed inbound demand");
             return remaining == 0 ? null : new ContainerInboundCapacity.Demand(demand.owner(), demand.container(), demand.itemKind(), remaining);
-        }).filter(Objects::nonNull).toList();
+            }).filter(Objects::nonNull).toList();
+        });
     }
     private ContainerPhysicalReservations() { }
 }

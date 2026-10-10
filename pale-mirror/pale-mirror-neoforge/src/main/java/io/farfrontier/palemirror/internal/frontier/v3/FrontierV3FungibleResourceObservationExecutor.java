@@ -48,7 +48,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
         if (state == null) return;
         if (FrontierV3ActorDeathResourceComposition.reconcileOne(level, runtime, state)) return;
         if (FrontierV3UnitInventoryPhysicalCustody.bindOne(level, runtime, state)) return;
-        if (FrontierV3DepotClickExecutor.reconcileOne(level, runtime, state)) return;
+        if (FrontierV3ContainerClickExecutor.reconcileOne(level, runtime, state)) return;
         // This is deliberately before ordinary return/departure observation: only an exact
         // canonical-first fence without its later persisted player witness is reversible.
         if (FrontierV3PlayerCustodyRecovery.reconcileOne(level, runtime, state)) return;
@@ -100,10 +100,8 @@ final class FrontierV3FungibleResourceObservationExecutor {
         try {
             expected = FungiblePhysicalObservation.bind(state.inventory().fungibleResources(), account.id(), epoch, stacks);
         } catch (IllegalArgumentException invalid) {
-            if (!managedDepot(state, containerId)) {
-                if (observeOnePlayerReturn(level, runtime, state, account, chest, epoch)) return false;
-                if (observeOnePlayerDeparture(level, runtime, state, account, chest, sourcePosition, epoch)) return false;
-            }
+            // Player menu edits are accounted only by their durable causal witness.
+            // Matching another player's same-kind stack is not evidence of a container click.
             if (observeOneExternalDeparture(level, runtime, state, account, chest, sourcePosition, epoch)) return false;
             FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, ((ResourceCustody.Container) account.custody()).containerId());
             return false;
@@ -120,53 +118,12 @@ final class FrontierV3FungibleResourceObservationExecutor {
         return result instanceof CommandResult.Accepted;
     }
 
-    private static boolean managedDepot(FrontierWorldState state, SubjectId containerId) {
-        var container = state.inventory().containers().get(containerId);
-        return container != null && container.ownerId().value().startsWith("settlement:")
-                && FrontierWorldState.depotId(container.ownerId()).equals(containerId);
-    }
 
     /**
      * One ordinary player withdrawal is a typed partial handoff, not a generic chest conflict.
      * Ambiguous stacks, existing player custody and any non-current source layout still fail
      * closed; this adapter never writes either inventory.
      */
-    private static boolean observeOnePlayerDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                    FrontierWorldState state, CustodyAccount account, Container chest,
-                                                    BlockPos sourcePosition, long epoch) {
-        List<PhysicalStackBinding> current = state.inventory().fungibleResources().bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(account.id())).sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
-        if (current.isEmpty() || current.stream().anyMatch(binding -> binding.authorityEpoch() != epoch)) return false;
-        List<SourceDeparture> departures = current.stream().map(binding -> departure(chest, binding)).filter(java.util.Objects::nonNull).toList();
-        if (departures.size() != 1 || current.stream().filter(binding -> !binding.id().equals(departures.getFirst().binding().id()))
-                .anyMatch(binding -> !matches(chest, binding))) return false;
-        SourceDeparture source = departures.getFirst();
-        if (!externalTargets(level, sourcePosition, source).isEmpty()) return false;
-        List<PlayerStack> targets = level.players().stream().flatMap(player -> java.util.stream.IntStream.range(0, player.getInventory().getContainerSize())
-                .mapToObj(slot -> new PlayerStack(player, slot, player.getInventory().getItem(slot))))
-                .filter(target -> !target.stack().isEmpty() && kind(target.stack()).equals(source.binding().itemKind())
-                        && target.stack().getCount() == source.movedQuantity()).sorted(Comparator.comparing((PlayerStack value) -> value.player().getUUID())
-                        .thenComparingInt(PlayerStack::slot)).toList();
-        if (targets.size() != 1) return false;
-        PlayerStack target = targets.getFirst(); UUID playerId = target.player().getUUID();
-        if (state.inventory().fungibleResources().accounts().values().stream().anyMatch(value -> value.custody().equals(new ResourceCustody.Player(playerId)))) return false;
-        SubjectId destinationId = new SubjectId("custody:player-" + playerId);
-        try {
-            FungibleResourceHandoffObserved observed = committedDeparture(state, FungiblePhysicalHandoff.departToNew(state.inventory().fungibleResources(), account.id(), epoch,
-                    source.binding(), source.remainingQuantity(), destinationId, new ResourceCustody.Player(playerId), 1L,
-                    new PhysicalStackAddress.PlayerSlot(playerId, target.slot())));
-            if (observed == null) return false;
-            observed = observed.withPlayerSaveFence(UUID.randomUUID());
-            CommandResult result = FrontierV3CommandSubmission.submit(runtime, "fungible-player-withdrawal", account.id().value(), observed);
-            if (result instanceof CommandResult.Accepted) {
-                FrontierV3PlayerCustodyRecovery.armDurablePlayerSave(target.player(), observed);
-                return true;
-            }
-            return false;
-        } catch (IllegalArgumentException invalid) {
-            return false;
-        }
-    }
 
     /** One source stack can leave to exactly one hopper slot or world entity, never inferred COLD stock. */
     private static boolean observeOneExternalDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -277,30 +234,6 @@ final class FrontierV3FungibleResourceObservationExecutor {
         return observed;
     }
 
-    /** The reverse merge uses the same one transaction; the player portion never becomes COLD. */
-    private static boolean observeOnePlayerReturn(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                  FrontierWorldState state, CustodyAccount destination, Container chest, long epoch) {
-        List<PhysicalStackBinding> destinationBindings = state.inventory().fungibleResources().bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(destination.id())).sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
-        if (destinationBindings.isEmpty() || destinationBindings.stream().anyMatch(binding -> binding.authorityEpoch() != epoch)) return false;
-        List<PlayerReturn> returns = state.inventory().fungibleResources().accounts().values().stream()
-                .filter(account -> account.custody() instanceof ResourceCustody.Player).flatMap(source -> state.inventory().fungibleResources().bindings().values().stream()
-                        .filter(binding -> binding.accountId().equals(source.id()) && binding.address() instanceof PhysicalStackAddress.PlayerSlot)
-                        .map(binding -> new PlayerReturn(source, binding))).filter(candidate -> playerSlotEmpty(level, candidate.binding()))
-                .filter(candidate -> destinationBindings.stream().anyMatch(binding -> returnMatches(chest, binding, candidate.binding()))).toList();
-        if (returns.size() != 1) return false;
-        PlayerReturn returned = returns.getFirst();
-        PhysicalStackBinding target = destinationBindings.stream().filter(binding -> returnMatches(chest, binding, returned.binding())).findFirst().orElseThrow();
-        try {
-            FungibleResourceHandoffObserved observed = FungiblePhysicalHandoff.returnToExisting(state.inventory().fungibleResources(), returned.account().id(),
-                    returned.binding().authorityEpoch(), returned.binding(), destination.id(), epoch, target);
-            CommandResult result = FrontierV3CommandSubmission.submit(runtime, "fungible-player-return", destination.id().value(), observed);
-            return result instanceof CommandResult.Accepted;
-        } catch (IllegalArgumentException invalid) {
-            return false;
-        }
-    }
-
     private static SourceDeparture departure(Container chest, PhysicalStackBinding binding) {
         if (!(binding.address() instanceof PhysicalStackAddress.ContainerSlot address)) return null;
         ItemStack actual = chest.getItem(address.slot().slot());
@@ -360,24 +293,10 @@ final class FrontierV3FungibleResourceObservationExecutor {
         return !stack.isEmpty() && kind(stack).equals(binding.itemKind()) && stack.getCount() == quantity;
     }
 
-    private static boolean returnMatches(Container chest, PhysicalStackBinding destination, PhysicalStackBinding source) {
-        if (!(destination.address() instanceof PhysicalStackAddress.ContainerSlot address) || !destination.itemKind().equals(source.itemKind())) return false;
-        ItemStack actual = chest.getItem(address.slot().slot());
-        return !actual.isEmpty() && kind(actual).equals(destination.itemKind())
-                && actual.getCount() == destination.quantity() + source.quantity();
-    }
-
-    private static boolean playerSlotEmpty(ServerLevel level, PhysicalStackBinding binding) {
-        if (!(binding.address() instanceof PhysicalStackAddress.PlayerSlot address)) return false;
-        ServerPlayer player = level.getServer().getPlayerList().getPlayer(address.playerId());
-        return player != null && player.getInventory().getItem(address.slot()).isEmpty();
-    }
-
     private static String kind(ItemStack stack) { return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(); }
 
     private record SourceDeparture(PhysicalStackBinding binding, int remainingQuantity, int movedQuantity) { }
     private record PlayerStack(ServerPlayer player, int slot, ItemStack stack) { }
-    private record PlayerReturn(CustodyAccount account, PhysicalStackBinding binding) { }
     private record HopperCandidate(HopperBlockEntity hopper, int slot, ItemStack stack) { }
     private record ExternalTarget(SubjectId accountId, ResourceCustody custody, PhysicalStackAddress address) { }
 

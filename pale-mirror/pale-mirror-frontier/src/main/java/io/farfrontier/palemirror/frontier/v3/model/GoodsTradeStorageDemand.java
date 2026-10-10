@@ -10,7 +10,12 @@ import java.util.Map;
 final class GoodsTradeStorageDemand {
     private GoodsTradeStorageDemand() { }
     private record Held(SubjectId container, SubjectId claim) { }
+    private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> VIEW = new ImmutableInputView<>();
     static List<ContainerInboundCapacity.Demand> pending(FrontierWorldState state) {
+        return VIEW.get(List.of(state.companies().goodsTrade().contracts(), state.inventory().fungibleResources().accounts()),
+                () -> compute(state));
+    }
+    private static List<ContainerInboundCapacity.Demand> compute(FrontierWorldState state) {
         var trade = state.companies().goodsTrade();
         if (trade.contracts().isEmpty()) return List.of();
         Map<Held, Integer> held = new HashMap<>();

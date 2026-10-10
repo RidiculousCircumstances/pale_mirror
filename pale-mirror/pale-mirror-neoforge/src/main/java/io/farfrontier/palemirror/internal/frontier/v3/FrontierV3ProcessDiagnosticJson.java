@@ -1,15 +1,15 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 
 /** Read-only process views; lookup never selects mutation or ownership authority. */
 final class FrontierV3ProcessDiagnosticJson {
-    static String render(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    static String render(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         return render(id, checkpoint, state, io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView.canonical(state,
                 checkpoint.instant().ticks()), "CANONICAL", movement -> java.util.Optional.empty(), movement -> java.util.Optional.empty());
     }
-    static String render(String id, CheckpointImage checkpoint, FrontierWorldState state,
+    static String render(String id, FrontierScheduleView checkpoint, FrontierWorldState state,
                          io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView positions, String positionSource,
                          java.util.function.Function<io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement, java.util.Optional<String>> nativeWait,
                          java.util.function.Function<io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement,

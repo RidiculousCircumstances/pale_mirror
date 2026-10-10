@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 final class FrontierV3HiveMobilizationDiagnostic {
     private FrontierV3HiveMobilizationDiagnostic() { }
 
-    static String render(CheckpointImage checkpoint, FrontierWorldState state, ServerLevel level, String id) {
+    static String render(FrontierScheduleView checkpoint, FrontierWorldState state, ServerLevel level, String id) {
         try {
             HiveMobilization mobilization = state.hiveColony().mobilizations().get(new SubjectId(id));
             if (mobilization != null && (mobilization.status() == HiveMobilizationStatus.ASSEMBLING
@@ -59,7 +59,7 @@ final class FrontierV3HiveMobilizationDiagnostic {
      * same next cursor as the executor and reports only already-loaded target readiness; it
      * cannot seek a body, load a chunk, alter a lease or advance an actor.
      */
-    private static String assembly(CheckpointImage checkpoint, FrontierWorldState state, ServerLevel level,
+    private static String assembly(FrontierScheduleView checkpoint, FrontierWorldState state, ServerLevel level,
                                    HiveMobilization mobilization) {
         HiveTaskAssembly assembly = mobilization.assembly().orElseThrow();
         HiveAssemblyBlockage blockage = mobilization.assemblyBlockage().orElse(null);
@@ -102,13 +102,13 @@ final class FrontierV3HiveMobilizationDiagnostic {
                         + ",\"standingColumn\":" + standingColumn + ",\"runnable\":" + runnable + "},\"detail\":\"" + detail + "\"}");
     }
 
-    private static String base(String id, CheckpointImage checkpoint) {
+    private static String base(String id, FrontierScheduleView checkpoint) {
         return "{\"schema\":1,\"kind\":\"hive_mobilization\",\"id\":\"" + quote(id)
                 + "\",\"world\":\"" + quote(checkpoint.worldId().value()) + "\",\"revision\":"
                 + checkpoint.revision().value() + ",\"instant\":" + checkpoint.instant().ticks();
     }
 
-    private static String departed(CheckpointImage checkpoint, FrontierWorldState state, HiveMobilization mobilization) {
+    private static String departed(FrontierScheduleView checkpoint, FrontierWorldState state, HiveMobilization mobilization) {
         String assaultId = state.strategicPlans().settlementAssaults().values().stream()
                 .filter(assault -> assault.taskId().equals(mobilization.taskId()))
                 .map(assault -> assault.id().value()).findFirst().orElse("");
@@ -126,7 +126,7 @@ final class FrontierV3HiveMobilizationDiagnostic {
      * formatter observes canonical positions and loaded-world readiness only; it cannot revive
      * a casualty, advance a return edge, or create a replacement body.
      */
-    private static String returning(CheckpointImage checkpoint, FrontierWorldState state, ServerLevel level,
+    private static String returning(FrontierScheduleView checkpoint, FrontierWorldState state, ServerLevel level,
                                     HiveMobilization mobilization) {
         HiveReturnAssembly returning = mobilization.returnAssembly().orElseThrow();
         SubjectId nextActor = returning.safeAdvances().stream().min(Comparator.naturalOrder()).orElse(null);
@@ -165,7 +165,7 @@ final class FrontierV3HiveMobilizationDiagnostic {
      * Keeps the exact-returning diagnostic wire document independently parseable by the pilot.
      * It is a read-only formatter: all canonical and physical facts are supplied by {@link #returning}.
      */
-    static String returningJson(CheckpointImage checkpoint, FrontierWorldState state, HiveMobilization mobilization,
+    static String returningJson(FrontierScheduleView checkpoint, FrontierWorldState state, HiveMobilization mobilization,
                                 HiveReturnAssembly returning, SubjectId nextActor, HiveTaskAssembly.Member member,
                                 long completed, long hot, FrontierV3PhysicalDemand.Readiness demand, boolean standingColumn,
                                 String physicalSurvivors) {

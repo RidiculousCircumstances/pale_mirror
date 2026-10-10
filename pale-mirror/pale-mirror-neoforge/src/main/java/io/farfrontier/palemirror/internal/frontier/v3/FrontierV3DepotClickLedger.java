@@ -15,7 +15,7 @@ import java.util.Map;
 
 /** Durable pre/post physical witness for one player edit at each PM-owned depot. */
 final class FrontierV3DepotClickLedger extends FrontierV3JournaledSavedData {
-    private static final int FORMAT = 1;
+    private static final int FORMAT = 2;
     private static final int MAX_PENDING = 1_024;
     private final Map<SubjectId, FrontierV3DepotClickWitness> pending;
 
@@ -47,7 +47,7 @@ final class FrontierV3DepotClickLedger extends FrontierV3JournaledSavedData {
 
     void observe(FrontierV3DepotClickWitness before, FrontierV3DepotClickWitness after) {
         if (!before.containerId().equals(after.containerId()) || !before.interactionId().equals(after.interactionId())
-                || !before.before().equals(after.before()) || after.after().isEmpty()
+                || !before.before().equals(after.before()) || !before.returnSource().equals(after.returnSource()) || after.after().isEmpty()
                 || !before.equals(pending.get(before.containerId()))) {
             throw new IllegalArgumentException("depot click postcondition lacks its exact pre-effect witness");
         }

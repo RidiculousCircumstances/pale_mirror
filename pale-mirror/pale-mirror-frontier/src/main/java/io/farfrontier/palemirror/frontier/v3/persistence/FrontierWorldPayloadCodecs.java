@@ -88,8 +88,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             output.writeByte(value.producer().wireTag()); writeString(output, value.failureIdentity());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            var frontier = readSubject(input).value();
             int producer = input.readUnsignedByte();
-            return new KernelQuarantineObserved(readSubject(input).value(), KernelQuarantineObserved.Producer.fromWireTag(producer), readString(input));
+            return new KernelQuarantineObserved(frontier, KernelQuarantineObserved.Producer.fromWireTag(producer), readString(input));
         }); }
     } private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; } @Override public byte[] encode(FrontierPayload payload) {

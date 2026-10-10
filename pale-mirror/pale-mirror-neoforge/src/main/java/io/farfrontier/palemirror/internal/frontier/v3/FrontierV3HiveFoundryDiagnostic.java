@@ -2,7 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.api.FoundryAuditPhase;
 import io.farfrontier.palemirror.api.FoundryAuditReport;
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.server.level.ServerLevel;
@@ -16,7 +16,7 @@ final class FrontierV3HiveFoundryDiagnostic {
 
     private FrontierV3HiveFoundryDiagnostic() { }
 
-    static String render(CheckpointImage checkpoint, FrontierWorldState state, ServerLevel level, String requested) {
+    static String render(FrontierScheduleView checkpoint, FrontierWorldState state, ServerLevel level, String requested) {
         Objects.requireNonNull(checkpoint, "hive Foundry checkpoint");
         Objects.requireNonNull(state, "hive Foundry state");
         Objects.requireNonNull(level, "hive Foundry level");
@@ -56,7 +56,7 @@ final class FrontierV3HiveFoundryDiagnostic {
         return report.metrics().stream().filter(metric -> metric.id().equals(id)).findFirst().map(metric -> metric.value()).orElse(0D);
     }
 
-    private static String unavailable(CheckpointImage checkpoint, String requested, String reason) {
+    private static String unavailable(FrontierScheduleView checkpoint, String requested, String reason) {
         return FrontierV3DiagnosticJson.bounded(VIEW, requested, checkpoint,
                 "{\"schema\":1,\"kind\":\"hive_foundry\",\"id\":\"" + quote(requested)
                         + "\",\"status\":\"unavailable\",\"reason\":\"" + reason + "\"}");

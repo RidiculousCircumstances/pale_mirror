@@ -166,7 +166,7 @@ class FrontierV3FixtureCatalogTest {
             var expected = switch (profile.rulesetId()) {
                 case "production" -> FrontierRulesets.production();
                 case "expedition-candidate" -> FrontierRulesets.installed("frontier-v3-expedition-candidate-r2");
-                case "quarry-graybox" -> FrontierRulesets.installed("frontier-v3-quarry-graybox-r2");
+                case "quarry-graybox" -> FrontierRulesets.installed("frontier-v3-quarry-graybox-r4");
                 default -> throw new AssertionError("undeclared fixture ruleset " + profile.rulesetId());
             };
             assertEquals(expected, configuration.initialState().bootstrap().ruleset(),

@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Comparator;
@@ -30,7 +30,7 @@ public record FrontierSettlementWorkDiagnostic(
         static Lane none() { return new Lane("", "", "NONE"); }
     }
 
-    public static Optional<FrontierSettlementWorkDiagnostic> inspect(CheckpointImage checkpoint, FrontierWorldState state, SubjectId settlementId) {
+    public static Optional<FrontierSettlementWorkDiagnostic> inspect(FrontierScheduleView checkpoint, FrontierWorldState state, SubjectId settlementId) {
         Objects.requireNonNull(checkpoint, "checkpoint"); Objects.requireNonNull(state, "state"); Objects.requireNonNull(settlementId, "settlement id");
         if (state.bootstrap().settlements().stream().noneMatch(value -> value.id().equals(settlementId))) return Optional.empty();
         List<ResourceSite> sites = state.resourceSiteDescriptors().values().stream()

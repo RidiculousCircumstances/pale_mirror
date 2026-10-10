@@ -247,6 +247,30 @@ class FungibleProductionLifecycleTest {
                 "a rejected physical transformation must not pay the invoice beneficiary");
     }
 
+    @Test void productionOwnerAtomicallyRetiresUnstartedInputLossButFencesPreparedEffects() {
+        Fixture f = fixture();
+        var resources = f.state().inventory().fungibleResources();
+        var source = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(f.account()))
+                .findFirst().orElseThrow();
+        var player = java.util.UUID.fromString("00000000-0000-0000-0000-000000000077");
+        var loss = FungiblePhysicalHandoff.departToNew(resources, f.account(), 1, source, 0,
+                new SubjectId("custody:production-loss-player"), new ResourceCustody.Player(player), 1,
+                new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitAffectedClaims(resources);
+        assertTrue(FungibleClaimForfeitureStateSupport.supports(f.state(), loss));
+        var after = FungibleClaimForfeitureStateSupport.apply(f.state(), loss);
+        assertFalse(after.productionJobs().containsKey(f.job().id()));
+        assertFalse(after.inventory().fungibleResources().claims().containsKey(f.claim()));
+        assertEquals(StrategicTaskStatus.BLOCKED, after.strategicPlans().tasks().get(f.job().taskId()).status());
+        assertEquals(MarketWorkOrderStatus.CANCELLED, after.companies().market().workOrders().get(f.order()).status());
+        assertFalse(after.inventory().economics().reservations().containsKey(
+                f.state().companies().market().workOrders().get(f.order()).reservationId()));
+        assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
+        var prepared = PhysicalIntentLifecycleFixture.prepare(f.state(), f.job().settlementId(), f.intent());
+        assertFalse(FungibleClaimForfeitureStateSupport.supports(prepared, loss));
+        assertThrows(IllegalArgumentException.class, () -> FungibleClaimForfeitureStateSupport.apply(prepared, loss));
+        assertEquals(f.job(), prepared.productionJobs().get(f.job().id()));
+    }
+
     private static Fixture fixture() {
         return fixture(64);
     }

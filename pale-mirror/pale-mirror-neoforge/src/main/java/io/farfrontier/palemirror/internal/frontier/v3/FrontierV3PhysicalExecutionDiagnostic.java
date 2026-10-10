@@ -1,12 +1,12 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 
 /** Read-only stable view of the physical execution plan; it has no world or canonical authority. */
 final class FrontierV3PhysicalExecutionDiagnostic {
     private FrontierV3PhysicalExecutionDiagnostic() { }
 
-    static String render(CheckpointImage checkpoint) {
+    static String render(FrontierScheduleView checkpoint) {
         StringBuilder value = new StringBuilder("{\"schema\":1,\"kind\":\"execution\",\"id\":\"\",\"revision\":")
                 .append(checkpoint.revision().value()).append(",\"status\":\"ok\",\"executors\":[");
         boolean first = true;

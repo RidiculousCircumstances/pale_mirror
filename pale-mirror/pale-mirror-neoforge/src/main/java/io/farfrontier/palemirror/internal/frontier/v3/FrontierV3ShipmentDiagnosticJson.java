@@ -2,7 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.process.ShipmentProgressObligation;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
 import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;
@@ -10,7 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute;
 
 /** Read-only exact transport/receiver view, with no dispatch or reconciliation authority. */
 final class FrontierV3ShipmentDiagnosticJson {
-    static String render(CheckpointImage checkpoint, FrontierWorldState state, Shipment shipment) {
+    static String render(FrontierScheduleView checkpoint, FrontierWorldState state, Shipment shipment) {
         var actor = shipment.execution().actorId();
         var movement = state.actorMovements().get(actor); var lease = state.ambientLeases().get(actor);
         var body = ActorMovementProcess.bodyAt(state, actor, checkpoint.instant().ticks());

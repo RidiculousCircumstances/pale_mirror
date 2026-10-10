@@ -12,24 +12,23 @@ import java.util.HashSet;
 import java.util.UUID;
 
 /**
- * Pure classification of one explicitly witnessed player edit to a depot. This is not a
+ * Pure classification of one explicitly witnessed player edit to a declared container. This is not a
  * polling inference: the caller must own a pre-effect interaction fence and supply the exact
  * post-effect chest layout before publishing the returned fact.
  */
-public final class FungibleDepotPlayerEdit {
-    private FungibleDepotPlayerEdit() { }
+public final class FungibleContainerPlayerEdit {
+    private FungibleContainerPlayerEdit() { }
 
     public static FrontierPayload classify(FungibleResourceLedger ledger, SubjectId accountId,
                                            SubjectId containerId, SubjectId settlementId,
                                            long epoch, UUID playerId, UUID interactionId,
-                                           List<FungiblePhysicalObservation.Stack> observed) {
+                                           List<FungiblePhysicalObservation.Stack> observed,
+                                           Set<SubjectId> withdrawableClaims) {
         Objects.requireNonNull(ledger, "depot resource ledger");
         Objects.requireNonNull(playerId, "depot player");
         Objects.requireNonNull(interactionId, "depot interaction");
         Objects.requireNonNull(observed, "depot observed layout");
-        if (!FrontierWorldState.depotId(settlementId).equals(containerId)) {
-            throw new IllegalArgumentException("player edit must name its settlement depot");
-        }
+        Objects.requireNonNull(withdrawableClaims, "owner-authorized claim losses");
         CustodyAccount account = ledger.accounts().get(accountId);
         if (account != null && !account.custody().equals(new ResourceCustody.Container(containerId))
                 || account == null && (!accountId.equals(ReferenceContainerCustody.scopeId(containerId))
@@ -70,11 +69,11 @@ public final class FungibleDepotPlayerEdit {
             var gift = gifts.entrySet().iterator().next();
             ResourceLot lot = new ResourceLot(new SubjectId("lot:player-gift-" + interactionId.toString().replace("-", "")),
                     settlementId, gift.getKey(), gift.getValue(), "player-gift:" + interactionId, List.of());
-            ledger.contributeObserved(accountId, epoch, lot, observed);
+            ledger.contributeObserved(accountId, containerId, epoch, lot, observed);
             return new FungibleStockContributionObserved(accountId, containerId, epoch, playerId, interactionId, lot, observed);
         }
         if (account == null) throw new IllegalArgumentException("empty depot cannot lose stock");
-        Set<SubjectId> forfeited = mealClaimsNeededForExit(ledger, account, losses);
+        Set<SubjectId> forfeited = claimsNeededForExit(ledger, account, losses, withdrawableClaims);
         FungibleResourceLedger cleared = forfeited.isEmpty() ? ledger : ledger.releaseClaims(forfeited);
         Map<SubjectId, Integer> departed = unclaimedDepartures(cleared, cleared.accounts().get(accountId), losses);
         cleared.departObserved(accountId, epoch, departed, observed);
@@ -82,10 +81,10 @@ public final class FungibleDepotPlayerEdit {
                 playerId, interactionId, departed, forfeited, observed);
     }
 
-    /** Only an unconsumed resident meal has a declared local replan on source loss. */
-    private static Set<SubjectId> mealClaimsNeededForExit(FungibleResourceLedger ledger,
+    /** Physical accounting selects losses only from explicitly owner-authorized allocations. */
+    private static Set<SubjectId> claimsNeededForExit(FungibleResourceLedger ledger,
                                                             CustodyAccount account,
-                                                            Map<String, Integer> losses) {
+                                                            Map<String, Integer> losses, Set<SubjectId> withdrawableClaims) {
         Set<SubjectId> forfeited = new HashSet<>();
         for (var loss : losses.entrySet()) {
             int stock = account.lotQuantities().entrySet().stream()
@@ -98,7 +97,7 @@ public final class FungibleDepotPlayerEdit {
             if (need <= 0) continue;
             for (SubjectId id : account.claimQuantities().keySet().stream().sorted().toList()) {
                 ClaimAllocation claim = ledger.claims().get(id);
-                if (!claim.itemKind().equals(loss.getKey()) || claim.purpose() != ClaimPurpose.RESIDENT_MEAL)
+                if (!claim.itemKind().equals(loss.getKey()) || !withdrawableClaims.contains(id))
                     continue;
                 forfeited.add(id);
                 need -= account.claimQuantities().get(id);

@@ -7,6 +7,8 @@ import java.util.*;
 
 /** Shared bounded block projection. Never re-evaluates loot, force-loads or overwrites foreign facts. */
 final class FrontierV3WorksiteProjection {
+    private static final int PROBES_PER_TURN = 64;
+    private static final Map<ServerLevel, FrontierV3IndexedProbeCursor<WorksiteBlock>> CURSORS = new WeakHashMap<>();
     private FrontierV3WorksiteProjection() { }
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElse(null);
@@ -16,12 +18,15 @@ final class FrontierV3WorksiteProjection {
         var ledger = FrontierV3GrayboxLedger.get(level);
         var writes = new ArrayList<FrontierV3WorksiteBlockWitness>();
         int budget = state.bootstrap().ruleset().extraction().projectionWritesPerTurn();
-        for (var entry : FrontierV3WorksiteRegistry.chunks(state).entrySet()) {
-            var chunk = new net.minecraft.world.level.ChunkPos(entry.getKey());
-            if (!level.getChunkSource().hasChunk(chunk.x, chunk.z)) continue;
-            for (var declared : entry.getValue()) {
+        var cursor = CURSORS.computeIfAbsent(level, ignored -> new FrontierV3IndexedProbeCursor<>());
+        var probes = cursor.probes(FrontierV3WorksiteRegistry.chunks(state), key -> {
+            var chunk = new net.minecraft.world.level.ChunkPos(key);
+            return level.getChunkSource().hasChunk(chunk.x, chunk.z);
+        }, PROBES_PER_TURN);
+        var iterator = probes.iterator();
+        while (writes.size() < budget && iterator.hasNext()) {
+            var declared = iterator.next();
             var owner = FrontierV3WorksiteRegistry.owner(declared.key().family());
-            if (writes.size() == budget) break;
             if (declared.key().family() != owner.family()) throw new IllegalStateException("worksite owner returned foreign declaration");
             var position = position(declared);
             if (!level.hasChunkAt(position)) continue;
@@ -59,7 +64,7 @@ final class FrontierV3WorksiteProjection {
             }
             var prepared = new FrontierV3WorksiteBlockWitness(current, preimage, FrontierV3WorksiteBlockWitness.Phase.PREPARED);
             ledger.worksite(prepared); writes.add(prepared);
-        }}
+        }
         // One bounded journal force group BEFORE all writes, not a full-registry save per block.
         if (ledger.isDirty()) ledger.persist(level);
         for (var write : writes) {

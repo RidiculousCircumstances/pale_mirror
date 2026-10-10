@@ -4,9 +4,9 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // Explicit coalesced review effects and versioned execution-cost admission.
-    // Old outstanding hint multiplicity must not be replayed under the new contract.
-    static final int VERSION = 267;
+    // Exact work-area development is independent of finite source/depletion history.
+    // Historical disposable worlds lack its explicit admission authority.
+    static final int VERSION = 269;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

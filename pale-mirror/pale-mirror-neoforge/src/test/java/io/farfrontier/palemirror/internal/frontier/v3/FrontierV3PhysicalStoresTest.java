@@ -85,6 +85,20 @@ class FrontierV3PhysicalStoresTest {
                 CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, new SubjectId("extraction:test"), WorksiteBlock.Role.RESOURCE, 1),
                 new BlockPosition(2, 64, 1), 1, block), block, phase, effect);
     }
+    @Test void externalWorksiteIndexTracksOnlyUnacknowledgedFactsAndRebuildsFromTheJournalImage() {
+        var ledger = FrontierV3GrayboxLedger.inMemory();
+        var position = new BlockPos(2, 64, 1);
+        ledger.worksite(worksite(FrontierV3WorksiteBlockWitness.Phase.SETTLED, Optional.empty()));
+        assertTrue(ledger.externalWorksites().isEmpty());
+        ledger.worksite(worksite(FrontierV3WorksiteBlockWitness.Phase.EXTERNAL_PENDING, Optional.empty()));
+        assertEquals(List.of(position), ledger.externalWorksites());
+        ledger.worksite(worksite(FrontierV3WorksiteBlockWitness.Phase.EXTERNAL, Optional.empty()));
+        var recovered = FrontierV3GrayboxLedger.load(ledger.save(new CompoundTag(), null), null);
+        assertEquals(List.of(position), recovered.externalWorksites());
+        recovered.worksite(worksite(FrontierV3WorksiteBlockWitness.Phase.SETTLED, Optional.empty()));
+        assertTrue(recovered.externalWorksites().isEmpty());
+        assertEquals(List.of(position), ledger.externalWorksites(), "hydration must not mutate the original witness index");
+    }
     @TestFactory Collection<DynamicTest> everyAdapterRecoversCheckpointAndTailAndNoopDoesNotWrite() {
         return cases().stream().map(item -> DynamicTest.dynamicTest(item.name, () -> {
             Path path=directory.resolve(item.name+".dat"); var ledger=item.fresh.get();

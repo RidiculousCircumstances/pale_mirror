@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import java.util.Comparator;
 import java.util.stream.Collectors;
@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 /** Read-only join of existing mission, fleet, stock and budget owners. Never selects execution. */
 final class FrontierV3ExpeditionDiagnosticJson {
     private FrontierV3ExpeditionDiagnosticJson() { }
-    static String render(CheckpointImage checkpoint, FrontierWorldState state, GoodsParticipant participant) {
+    static String render(FrontierScheduleView checkpoint, FrontierWorldState state, GoodsParticipant participant) {
         var home = participant.party().id();
         var missions = state.shipments().missions().values().stream().filter(m -> m.sender().settlementId().equals(home))
                 .sorted(Comparator.comparing(TransportMission::id)).toList();

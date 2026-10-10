@@ -92,7 +92,7 @@ final class FrontierV3ServerPhysicalInteractions {
         var actor = new io.farfrontier.palemirror.frontier.v3.api.SubjectId(declared);
         if (state.humanPopulation().resident(actor) == null) return false;
         PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:resident:" + actor.value(),
-                FrontierV3ResidentCard.from(state, actor, runtime.checkpointImage().orElseThrow().instant().ticks()));
+                FrontierV3ResidentCard.from(state, actor, runtime.executionView().orElseThrow().instant().ticks()));
         return true;
     }
     public static ExactCustodyObservation observeExactItemPickup(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {

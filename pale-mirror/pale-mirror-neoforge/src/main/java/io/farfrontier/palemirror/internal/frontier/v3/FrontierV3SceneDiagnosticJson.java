@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
@@ -23,7 +23,7 @@ import java.util.Optional;
 final class FrontierV3SceneDiagnosticJson {
     private FrontierV3SceneDiagnosticJson() { }
 
-    static String render(String id, CheckpointImage checkpoint, FrontierWorldState state,
+    static String render(String id, FrontierScheduleView checkpoint, FrontierWorldState state,
                          Optional<FrontierV3SceneReadiness.Value> readiness) {
         SubjectId sceneSubject;
         try { sceneSubject = new SubjectId(id); }

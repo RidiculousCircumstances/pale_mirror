@@ -93,6 +93,7 @@ final class FrontierV3ContainerSurfaceExecutor {
                     FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null));
             if (readiness == SocketReadiness.DEFERRED) return;
             if (readiness == SocketReadiness.CONFLICT) {
+                logSocketConflict(level, state, surface, readiness);
                 transition(runtime, surface.containerId(), ContainerSurfaceStatus.CONFLICT);
                 return;
             }
@@ -116,6 +117,7 @@ final class FrontierV3ContainerSurfaceExecutor {
                 FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null));
         if (readiness == SocketReadiness.DEFERRED) return;
         if (readiness == SocketReadiness.CONFLICT) {
+            logSocketConflict(level, state, surface, readiness);
             reportConflict(runtime, surface.containerId());
             return;
         }
@@ -459,13 +461,28 @@ final class FrontierV3ContainerSurfaceExecutor {
     static SocketReadiness socketReadiness(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos target, GrayboxCell support) {
         // A destroyed/temporarily unavailable canonical facility has no socket to materialize;
         // it is capacity loss, not evidence that the player obstructed a future chest.
-        if (!level.getBlockState(target).isAir()) return SocketReadiness.CONFLICT;
-        return supportReadiness(level, ledger, target, support);
+        SocketReadiness readiness = supportReadiness(level, ledger, target, support);
+        if (readiness != SocketReadiness.READY) return readiness;
+        return level.getBlockState(target).isAir() ? SocketReadiness.READY : SocketReadiness.CONFLICT;
     }
     static SocketReadiness socketReadiness(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos target,
             io.farfrontier.palemirror.frontier.v3.model.ContainerSocketSupport support) {
-        if (!level.getBlockState(target).isAir()) return SocketReadiness.CONFLICT;
-        return supportReadiness(level, ledger, target, support);
+        // The geometry owner must settle its opening before the native terrain preimage
+        // can be classified as an obstruction. This is common readiness, not quarry policy.
+        SocketReadiness readiness = supportReadiness(level, ledger, target, support);
+        if (readiness != SocketReadiness.READY) return readiness;
+        return level.getBlockState(target).isAir() ? SocketReadiness.READY : SocketReadiness.CONFLICT;
+    }
+    private static void logSocketConflict(ServerLevel level, FrontierWorldState state, ContainerSurface surface,
+                                          SocketReadiness readiness) {
+        var target = position(surface);
+        var ledger = FrontierV3GrayboxLedger.get(level);
+        org.slf4j.LoggerFactory.getLogger(FrontierV3ContainerSurfaceExecutor.class).warn(
+                "PMV3_CONTAINER_SOCKET_CONFLICT container={} phase={} position={} readiness={} actual={} support={} openingWitness={} supportWitness={}",
+                surface.containerId().value(), surface.status(), surface.position(), readiness,
+                FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(target)),
+                FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null),
+                ledger.worksite(target), ledger.worksite(target.below()));
     }
     static SocketReadiness supportReadiness(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos target,
             io.farfrontier.palemirror.frontier.v3.model.ContainerSocketSupport support) {

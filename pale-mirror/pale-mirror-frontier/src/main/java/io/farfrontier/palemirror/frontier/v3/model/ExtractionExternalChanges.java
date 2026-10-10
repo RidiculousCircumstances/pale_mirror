@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.extraction.*;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementWithdrawal;
 import java.util.*;
 
 /** Source policy: retain the actual block, retire this production opportunity, choose remaining work. */
@@ -40,11 +39,7 @@ public final class ExtractionExternalChanges {
                 abort.step().observation().require(state, job.execution(), job.revision(), state.actorLocations().get(job.execution().actorId()).body());
                 usedAbort = true;
             }
-            var movement = state.actorMovements().get(job.execution().actorId());
-            if (movement != null && (!movement.order().equals(job.movementOrder(deposit.site()))
-                    || !movement.context().equals(new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ExtractionLeg(job.id(), job.revision()))))
-                throw new IllegalArgumentException("external source change cannot withdraw a foreign mining order");
-            state = ActorMovementWithdrawal.apply(state, job.execution());
+            state = ExtractionWorkTargets.withdrawTargetRoute(state, job);
             var reserved = new HashSet<>(sites.reservedCells(job.siteId())); reserved.remove(target.key().cell());
             var nextCell = changed.available(reserved).stream().min(Comparator.comparingLong(ExtractionLayout.Cell::id));
             if (job.phase() == ExtractionWork.Phase.TAKE_TOOL && nextCell.isEmpty()) {
@@ -62,7 +57,7 @@ public final class ExtractionExternalChanges {
         }
         if (event.unapplied().isPresent() != usedAbort) throw new IllegalArgumentException("external change supplied foreign abort evidence");
         var deposits = new LinkedHashMap<>(sites.deposits()); deposits.put(changed.site().id(), changed);
-        var successor = new ExtractionSiteState(deposits, jobs, sites.nextWorkOrdinal());
+        var successor = new ExtractionSiteState(deposits, jobs, sites.nextWorkOrdinal(), sites.geologicalExclusions());
         var custody = lease.status() == PhysicalCustodyLeaseStatus.PREPARING
                 ? state.replicaCustody().supersedeProjection(region.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(),
                     lease.expectedReplicaRevision(), revision, ExtractionSourceCustody.fingerprint(successor, region), region.provenance())

@@ -32,13 +32,14 @@ public final class ExtractionColdWork {
                             ? ExtractionWork.Phase.STORE : ExtractionWork.Phase.RETURN_TOOL, Optional.empty()))));
         }
         if (event.operation() == ExtractionWorkProgressed.Operation.SELECT_SOURCE) {
-            if (job.phase() != ExtractionWork.Phase.SELECT_SOURCE || ExtractionWorkAuthority.carried(state, job) != 0)
-                throw new IllegalArgumentException("next mining source requires a settled delivered resource part");
+            if (job.phase() != ExtractionWork.Phase.SELECT_SOURCE)
+                throw new IllegalArgumentException("next mining source requires its retained selection boundary");
             var target = ExtractionWorkPolicy.nextTarget(state, job);
             if (target.isEmpty() && !ExtractionWorkPolicy.finished(state, job))
                 throw new IllegalArgumentException("temporarily unavailable mining frontier is not completion");
             return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
-                    job, job.transition(target.isPresent() ? ExtractionWork.Phase.EXTRACT : ExtractionWork.Phase.RETURN_TOOL, target))));
+                    job, job.transition(target.isPresent() ? ExtractionWork.Phase.EXTRACT
+                            : ExtractionWorkAuthority.carried(state, job) > 0 ? ExtractionWork.Phase.STORE : ExtractionWork.Phase.RETURN_TOOL, target))));
         }
         if (event.operation() == ExtractionWorkProgressed.Operation.SELECT_REACHABLE) {
             var target = ExtractionWorkTargets.alternative(state, job).orElseThrow(

@@ -8,6 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3TestPilotScenarioTest {
+    @Test void actualAdjacentQuarryDeclarationIsAcceptedByTheNativeParserBeforeClientLaunch() throws java.io.IOException {
+        var declaration = java.nio.file.Files.readString(java.nio.file.Path.of("..", "tools", "frontier-v3-test-pilot",
+                "scenarios", "live-quarry-adjacent-development.json"));
+        var scenario = FrontierV3TestPilotScenario.parse(declaration);
+        assertEquals(2, scenario.setupCount()); assertEquals(9, scenario.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse(
+                declaration.replace("firstAdjacentSource", "arbitraryPrivateState")));
+    }
     @Test void actualFarmerMealDeclarationAndDiagnosticNamesAreAcceptedBeforeAnyClientRun() throws java.io.IOException {
         var declaration = java.nio.file.Files.readString(java.nio.file.Path.of("..", "tools", "frontier-v3-test-pilot",
                 "scenarios", "disposable-resident-worker-meal.json"));

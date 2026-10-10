@@ -1,0 +1,503 @@
+{
+  "schema": 1,
+  "id": "live_quarry_recovery_ingress",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMQuarryAudit"
+  },
+  "setup": [],
+  "actions": [
+    {
+      "type": "wait",
+      "ms": 5000,
+      "causalMilestone": "ordinary_creative_audit_player_setup"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -315,
+        "y": 61,
+        "z": -337
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -314,
+        "y": 62,
+        "z": -340
+      },
+      "block": "minecraft:air",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571"
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -299,
+        "y": 61,
+        "z": -336
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 165,
+        "y": 61,
+        "z": 343
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:quarry-0cb794ca-3d1d-3a16-9957-4f365ca76268",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": 166,
+        "y": 62,
+        "z": 340
+      },
+      "block": "minecraft:air",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-0cb794ca-3d1d-3a16-9957-4f365ca76268"
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": 181,
+        "y": 61,
+        "z": 344
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -75,
+        "y": 61,
+        "z": -337
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:quarry-828cabe0-1f27-3001-8431-6ea55030e627",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -74,
+        "y": 62,
+        "z": -340
+      },
+      "block": "minecraft:air",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-828cabe0-1f27-3001-8431-6ea55030e627"
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -59,
+        "y": 61,
+        "z": -336
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 405,
+        "y": 61,
+        "z": -337
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:quarry-1a92e562-08ae-3d4a-b8c4-fbc62dfeac78",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": 406,
+        "y": 62,
+        "z": -340
+      },
+      "block": "minecraft:air",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-1a92e562-08ae-3d4a-b8c4-fbc62dfeac78"
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": 421,
+        "y": 61,
+        "z": -336
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -75,
+        "y": 61,
+        "z": 3
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -74,
+        "y": 62,
+        "z": 0
+      },
+      "block": "minecraft:air",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24"
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -59,
+        "y": 61,
+        "z": 4
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 405,
+        "y": 61,
+        "z": 3
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:quarry-59ff314a-e5a6-3c02-9d7e-2aa68eedffac",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": 406,
+        "y": 62,
+        "z": 0
+      },
+      "block": "minecraft:air",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-59ff314a-e5a6-3c02-9d7e-2aa68eedffac"
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": 421,
+        "y": 61,
+        "z": 4
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 3,
+      "view": "container",
+      "id": "container:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      }
+    },
+    {
+      "after": 5,
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "hasExtraction": true,
+          "developmentAdvanced": true,
+          "homeReserveSupplied": true
+        }
+      }
+    },
+    {
+      "after": 8,
+      "view": "container",
+      "id": "container:quarry-0cb794ca-3d1d-3a16-9957-4f365ca76268",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      }
+    },
+    {
+      "after": 10,
+      "view": "process",
+      "id": "extraction:quarry-0cb794ca-3d1d-3a16-9957-4f365ca76268",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "hasExtraction": true,
+          "developmentAdvanced": true,
+          "homeReserveSupplied": true
+        }
+      }
+    },
+    {
+      "after": 13,
+      "view": "container",
+      "id": "container:quarry-828cabe0-1f27-3001-8431-6ea55030e627",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      }
+    },
+    {
+      "after": 15,
+      "view": "process",
+      "id": "extraction:quarry-828cabe0-1f27-3001-8431-6ea55030e627",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "hasExtraction": true,
+          "developmentAdvanced": true,
+          "homeReserveSupplied": true
+        }
+      }
+    },
+    {
+      "after": 18,
+      "view": "container",
+      "id": "container:quarry-1a92e562-08ae-3d4a-b8c4-fbc62dfeac78",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      }
+    },
+    {
+      "after": 20,
+      "view": "process",
+      "id": "extraction:quarry-1a92e562-08ae-3d4a-b8c4-fbc62dfeac78",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "hasExtraction": true,
+          "developmentAdvanced": true,
+          "homeReserveSupplied": true
+        }
+      }
+    },
+    {
+      "after": 23,
+      "view": "container",
+      "id": "container:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      }
+    },
+    {
+      "after": 25,
+      "view": "process",
+      "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "hasExtraction": true,
+          "developmentAdvanced": true,
+          "homeReserveSupplied": true
+        }
+      }
+    },
+    {
+      "after": 28,
+      "view": "container",
+      "id": "container:quarry-59ff314a-e5a6-3c02-9d7e-2aa68eedffac",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "physicalSocket": {
+          "chest": "OWNED",
+          "slots": "CURRENT",
+          "support": "READY"
+        }
+      }
+    },
+    {
+      "after": 30,
+      "view": "process",
+      "id": "extraction:quarry-59ff314a-e5a6-3c02-9d7e-2aa68eedffac",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "hasExtraction": true,
+          "developmentAdvanced": true,
+          "homeReserveSupplied": true
+        }
+      }
+    },
+    {
+      "after": 32,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "inventoryConflicts": 0,
+        "sceneConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 6,
+      "name": "recovered-quarry-ec4ecc0f"
+    },
+    {
+      "after": 21,
+      "name": "recovered-quarry-1a92e562"
+    }
+  ]
+}

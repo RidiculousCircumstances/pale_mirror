@@ -20,10 +20,12 @@ class DiagnosticIncidentIndexTest {
         var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:quarantine-dispatch"), 93L);
         var primary = new IllegalArgumentException("active harvest output slot lacks exclusive container capacity");
         var failureCommand = new CommandId("command:quarantine-dispatch");
+        var committed = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord>();
         var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
                 base.worldId(), base.initialState(), base.initialInstant(),
                 (state, command) -> { throw primary; }, base.scheduledPlanner(), base.reducer(), base.stateCodec(),
-                base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(),
+                base.projectionMapper(), base.limits(), base.initialSchedules(),
+                (transaction, durability) -> { base.transactionCommitter().commit(transaction, durability); committed.add(transaction); },
                 base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter());
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(configuration);
         var result = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1,
@@ -41,6 +43,26 @@ class DiagnosticIncidentIndexTest {
         assertEquals(failureCommand.value(), incident.firstCauseId());
         assertEquals(incident, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(saved))
                 .diagnosticIncidents().incidents().values().iterator().next());
+        assertEquals(1, committed.size());
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        var recovered = io.farfrontier.palemirror.frontier.v3.persistence.FrontierPersistenceCodec.decodeWal(
+                io.farfrontier.palemirror.frontier.v3.persistence.FrontierPersistenceCodec.encodeWal(committed.getFirst(), codecs), codecs);
+        assertEquals(committed.getFirst(), recovered, "the actual quarantine record must decode across file-store recovery");
+        var replayed = base.reducer().apply(base.initialState(), recovered.events().getFirst());
+        assertEquals(saved.diagnosticIncidents(), replayed.diagnosticIncidents());
+    }
+    @Test void kernelQuarantineWireOrderAndProducerTagsRoundTripAndRejectMalformedEvidence() {
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        for (var producer : KernelQuarantineObserved.Producer.values()) {
+            var payload = new KernelQuarantineObserved(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("frontier:graybox"),
+                    producer, "IllegalArgumentException: container recovery authority is absent or stale");
+            var bytes = codecs.encode(payload);
+            assertEquals(payload, codecs.decode(payload.type(), bytes));
+            byte[] invalidProducer = bytes.clone();
+            invalidProducer[2 + payload.frontierId().value().getBytes(java.nio.charset.StandardCharsets.UTF_8).length] = 127;
+            assertThrows(IllegalArgumentException.class, () -> codecs.decode(payload.type(), invalidProducer));
+            assertThrows(IllegalArgumentException.class, () -> codecs.decode(payload.type(), java.util.Arrays.copyOf(bytes, bytes.length - 1)));
+        }
     }
     @Test void distinctProductionJobsAtOneFacilityRetainIndependentIncidentsAcrossSnapshot() {
         var settlement = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("settlement:7");

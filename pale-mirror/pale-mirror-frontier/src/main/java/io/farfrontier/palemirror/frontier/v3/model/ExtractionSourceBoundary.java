@@ -8,11 +8,11 @@ import java.util.Objects;
 public record ExtractionSourceBoundary(ExtractionRegion region, Operation operation, long expectedEpoch,
         long expectedReplicaRevision, String fingerprint) implements FrontierPayload {
     public enum Operation {
-        PREPARE(1), CONFIRM(2), RELEASE(3);
+        PREPARE(1), CONFIRM(2), RELEASE(3), WITHDRAW_PROJECTION(4);
         private final int tag; Operation(int tag) { this.tag = tag; }
         public int wireTag() { return tag; }
         public static Operation decode(int tag) {
-            return switch (tag) { case 1 -> PREPARE; case 2 -> CONFIRM; case 3 -> RELEASE;
+            return switch (tag) { case 1 -> PREPARE; case 2 -> CONFIRM; case 3 -> RELEASE; case 4 -> WITHDRAW_PROJECTION;
                 default -> throw new IllegalArgumentException("unknown source boundary operation"); };
         }
     }

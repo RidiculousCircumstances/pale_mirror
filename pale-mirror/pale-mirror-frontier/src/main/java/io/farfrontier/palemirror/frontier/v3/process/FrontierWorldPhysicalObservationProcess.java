@@ -216,12 +216,10 @@ public final class FrontierWorldPhysicalObservationProcess {
         }
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(new ProposedEvent(observed.economicOwnerId(), observed));
-        for (SubjectId claimId : observed.forfeitedClaimIds().stream().sorted().toList()) {
-            ClaimAllocation claim = state.inventory().fungibleResources().claims().get(claimId);
-            ResidentMeal meal = state.humanPopulation().meals().get(claim.claimantId());
-            events.add(new ProposedEvent(meal.residentId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(
-                    ResidentMealProcess.progress(meal, meal.startedAtTick() + 1L).id())));
-            events.add(ResidentActivityProcess.wakeAfterActivity(meal.residentId(), now));
+        for (var activity : PlayerStockClaimLoss.released(state, observed)) {
+            activity.cancelledProgress().ifPresent(id -> events.add(new ProposedEvent(activity.actor(),
+                    new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(id))));
+            events.add(ResidentActivityProcess.wakeAfterActivity(activity.actor(), now));
         }
         events.add(playerStockWake(observed.economicOwnerId(), observed.interactionId(), now));
         return new CommandPlan.Accepted(List.copyOf(events));
@@ -236,6 +234,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         if (source == null || !(source.custody() instanceof ResourceCustody.Container actual)
                 || !actual.containerId().equals(observed.containerId()) || container == null
                 || surface == null || ReferenceContainerCustody.blocksCanonicalUse(state, observed.containerId())
+                || ContainerPhysicalAuthorityComposition.pending(state, observed.containerId())
                 || !container.ownerId().equals(subject) || !subject.equals(observed.economicOwnerId())
                 || observed.departedLots().keySet().stream().anyMatch(id -> {
                     ResourceLot lot = ledger.lots().get(id);
@@ -252,34 +251,15 @@ public final class FrontierWorldPhysicalObservationProcess {
                 throw new IllegalArgumentException("stock departure lacks its current physical custody epoch");
             }
         }
-        if (!observed.equals(FungibleDepotPlayerEdit.classify(ledger, observed.sourceAccountId(),
+        if (!observed.equals(FungibleContainerPlayerEdit.classify(ledger, observed.sourceAccountId(),
                 observed.containerId(), observed.economicOwnerId(), observed.authorityEpoch(),
-                observed.playerId(), observed.interactionId(), observed.remaining())))
+                observed.playerId(), observed.interactionId(), observed.remaining(),
+                PlayerStockClaimLoss.admissibleClaims(state, observed.sourceAccountId()))))
             throw new IllegalArgumentException("stock departure differs from its exact witnessed edit classification");
-        HumanPopulation population = state.humanPopulation();
-        var executions = state.actorExecutions();
-        for (SubjectId claimId : observed.forfeitedClaimIds().stream().sorted().toList()) {
-            ClaimAllocation claim = ledger.claims().get(claimId);
-            ResidentMeal meal = claim == null ? null : population.meals().get(claim.claimantId());
-            if (claim == null || claim.purpose() != ClaimPurpose.RESIDENT_MEAL || meal == null
-                    || !meal.claimId().equals(claimId) || !meal.sourceAccountId().equals(observed.sourceAccountId())
-                    || !meal.portion().lotQuantities().equals(claim.lotQuantities())
-                    || ledger.accounts().containsKey(meal.actorAccountId()))
-                throw new IllegalArgumentException("stock exit cannot retire a foreign or physically held meal claim");
-            population = population.abandonMealSource(meal);
-            executions = executions.finish(meal.executionId());
-        }
-        FungibleResourceLedger cleared = observed.forfeitedClaimIds().isEmpty()
-                ? ledger : ledger.releaseClaims(observed.forfeitedClaimIds());
-        FungibleResourceLedger departed = cleared.departObserved(observed.sourceAccountId(),
-                observed.authorityEpoch(), observed.departedLots(), observed.remaining());
-        FrontierWorldState next = state.withChanges(FrontierWorldStateUpdate.begin()
-                .inventory(state.inventory().withFungibleResources(departed)).humanPopulation(population)
-                .actorExecutions(executions));
-        for (SubjectId claimId : observed.forfeitedClaimIds().stream().sorted().toList()) {
-            ClaimAllocation claim = ledger.claims().get(claimId);
-            next = ResidentActivityProcess.retargetHotResident(next, claim.claimantId(),
-                    Math.max(1L, state.humanPopulation().meals().get(claim.claimantId()).startedAtTick()));
+        FrontierWorldState next = PlayerStockClaimLoss.settle(state, observed);
+        for (var activity : PlayerStockClaimLoss.released(state, observed)) {
+            if (activity.retargetAtTick().isPresent()) next = ResidentActivityProcess.retargetHotResident(
+                    next, activity.actor(), activity.retargetAtTick().getAsLong());
         }
         return next;
     }
@@ -312,8 +292,8 @@ public final class FrontierWorldPhysicalObservationProcess {
                 && custody.containerId().equals(observed.containerId())) || container == null
                 || surface == null || ReferenceContainerCustody.blocksCanonicalUse(state, observed.containerId())
                 || !container.ownerId().equals(subject) || !subject.equals(observed.contribution().economicOwnerId())
-                || !FrontierWorldState.depotId(subject).equals(observed.containerId())) {
-            throw new IllegalArgumentException("stock contribution lacks its declared settlement depot");
+                || ContainerPhysicalAuthorityComposition.pending(state, observed.containerId())) {
+            throw new IllegalArgumentException("stock contribution lacks its declared idle owned container");
         }
         PhysicalCustodyLease lease = state.replicaCustody().custodyByScope()
                 .get(ReferenceContainerCustody.scopeId(observed.containerId()));
@@ -322,7 +302,7 @@ public final class FrontierWorldPhysicalObservationProcess {
                 || lease.authorityEpoch() != observed.authorityEpoch()) {
             throw new IllegalArgumentException("stock contribution lacks current physical custody authority");
         }
-        FungibleResourceLedger contributed = ledger.contributeObserved(observed.accountId(),
+        FungibleResourceLedger contributed = ledger.contributeObserved(observed.accountId(), observed.containerId(),
                 observed.authorityEpoch(), observed.contribution(), observed.observed());
         return state.withInventory(state.inventory().withFungibleResources(contributed));
     }

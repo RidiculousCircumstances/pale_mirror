@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.SettlementManagementComposition;
@@ -9,7 +9,7 @@ import java.util.stream.Collectors;
 /** Read-only bounded decision explanation, derived from the same management policy as execution. */
 final class FrontierV3SettlementManagementDiagnostic {
     private FrontierV3SettlementManagementDiagnostic() { }
-    static String render(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    static String render(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId owner = FrontierV3DiagnosticJson.subject(id).orElse(null);
         Settlement settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(owner)).findFirst().orElse(null);
         if (settlement == null) return FrontierV3DiagnosticJson.unavailable("settlement_management", id, checkpoint, "not_found");

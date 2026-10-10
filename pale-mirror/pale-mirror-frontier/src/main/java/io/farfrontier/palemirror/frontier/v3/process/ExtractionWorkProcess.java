@@ -16,7 +16,8 @@ final class ExtractionWorkProcess {
                 || !action.id().equals(ExtractionContinuation.review(site.id(), action.dueAt().ticks()).id()))
             throw new IllegalArgumentException("mining review has a foreign schedule");
         long now = Math.max(tick, action.dueAt().ticks());
-        var events = new ArrayList<ProposedEvent>(); var projected = state;
+        var events = new ArrayList<ProposedEvent>();
+        var projected = ExtractionDevelopmentContinuation.append(state, site.id(), events, now);
         var provider = new ExtractionWorkAdmission(site.id());
         for (var resident : ResidentWorkComposition.SELECTION.eligible(state, site.settlementId(), ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, now)) {
             var offer = ResidentWorkComposition.SELECTION.offer(projected, resident, now, provider);
@@ -110,7 +111,13 @@ final class ExtractionWorkProcess {
         var preview = ExtractionColdWork.apply(state, job.id(), event, now);
         if (!preview.extractionSites().work().containsKey(job.id())) return List.of(new ProposedEvent(job.id(), event),
                 new ProposedEvent(job.id(), new ScheduleEffect.Cancelled(action.id())), ResidentActivityProcess.wakeAfterActivity(job.execution().actorId(), now));
-        return List.of(new ProposedEvent(job.id(), event), ExtractionContinuation.wake(job.id(), now));
+        var events = new ArrayList<ProposedEvent>();
+        events.add(new ProposedEvent(job.id(), event));
+        if (operation == ExtractionWorkProgressed.Operation.EXTRACT_BLOCK)
+            ExtractionDevelopmentContinuation.append(preview, job.siteId(), events, now);
+        if (events.stream().noneMatch(proposed -> proposed.subject().equals(job.id()) && proposed.payload() instanceof ScheduleEffect))
+            events.add(ExtractionContinuation.wake(job.id(), now));
+        return List.copyOf(events);
     }
     private static List<ProposedEvent> retry(FrontierWorldState state, ExtractionWork job, long tick) {
         var action = ExtractionContinuation.at(job.id(), Math.addExact(tick, state.bootstrap().ruleset().extraction().reviewTicks()));

@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "id": "live_quarry_custody_recovery",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25565, "viewDistance": 6 },
+  "pilot": { "username": "PMQuarryAudit" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative @s" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+        "expect": { "status": "ok", "result": { "adjacentAreaMined": true, "workersCold": true, "liveSourceRegions": 0 } } },
+      { "view": "incident", "id": "diagnostic:v2:502:6:14:16:frontier:graybox:15:16:frontier:graybox:5",
+        "expect": { "status": "ok", "incident": { "firstRevision": 1053609, "lastRevision": 1053609, "occurrences": 1 } } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -315, "y": 61, "z": -337 }, "settleMs": 3000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": { "status": "ok", "surface": "ACTIVE", "physicalSocket": { "chest": "OWNED", "slots": "CURRENT", "support": "READY" } }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -317, "y": 61, "z": -338 } },
+    { "type": "assert_visible_block", "position": { "x": -317, "y": 61, "z": -338 }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 64, "z": -132 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": { "status": "ok", "result": { "adjacentAreaMined": true, "workersCold": true, "liveSourceRegions": 0 } }, "timeoutMs": 60000,
+      "causalMilestone": "natural_departure_closes_projection_custody" },
+    { "type": "inspect", "view": "summary", "id": "" },
+    { "type": "inspect", "view": "incident", "id": "diagnostic:v2:502:6:14:16:frontier:graybox:15:16:frontier:graybox:5" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": { "status": "ok", "result": { "workersCold": true, "liveSourceRegions": 0 } } },
+    { "after": 8, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 1, "inventoryConflicts": 0, "sceneConflicts": 0 } },
+    { "after": 9, "view": "incident", "id": "diagnostic:v2:502:6:14:16:frontier:graybox:15:16:frontier:graybox:5",
+      "expect": { "status": "ok", "incident": { "firstRevision": 1053609, "lastRevision": 1053609, "occurrences": 1,
+        "firstCause": "executor:mining-effect-observed-r1053608" } } }
+  ],
+  "frames": [ { "after": 4, "name": "recovered-quarry-owned-storage" } ]
+}

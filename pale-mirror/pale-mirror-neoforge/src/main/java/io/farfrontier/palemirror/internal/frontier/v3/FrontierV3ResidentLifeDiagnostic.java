@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
@@ -17,7 +17,7 @@ import java.util.Map;
 final class FrontierV3ResidentLifeDiagnostic {
     private FrontierV3ResidentLifeDiagnostic() { }
 
-    static String render(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    static String render(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         SubjectId subject = FrontierV3DiagnosticJson.subject(id).orElse(null);
         ResidentProfile resident = subject == null ? null : state.humanPopulation().resident(subject);
         if (resident == null) return FrontierV3DiagnosticJson.unavailable("resident_life", id, checkpoint, "not_found");

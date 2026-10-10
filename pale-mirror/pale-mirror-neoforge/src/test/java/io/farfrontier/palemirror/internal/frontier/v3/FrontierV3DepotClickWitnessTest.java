@@ -25,6 +25,23 @@ class FrontierV3DepotClickWitnessTest {
     private static final UUID PLAYER = UUID.fromString("00000000-0000-0000-0000-000000000141");
     private static final UUID INTERACTION = UUID.fromString("00000000-0000-0000-0000-000000000142");
 
+    @Test void activeQuarryChestUsesTheSamePlayerEditBoundaryAsADepot() {
+        var state = io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState.initial(
+                io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper.create(
+                        new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:quarry-click-owner"),
+                        20260918065L, io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.installed(
+                                "frontier-v3-quarry-graybox-r4")));
+        var site = state.extractionSites().deposits().values().iterator().next().site();
+        var inventory = state.inventory().withSurfaceStatus(site.containerId(),
+                io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(site.containerId(), io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.ACTIVE);
+        state = state.withChanges(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate.begin().inventory(inventory));
+        var at = inventory.surfaces().get(site.containerId()).position();
+        var position = new net.minecraft.core.BlockPos(at.x(), at.y(), at.z());
+        assertEquals(site.containerId(), FrontierV3ContainerClickExecutor.ownedContainer(state, position).id());
+        assertEquals(null, FrontierV3ContainerClickExecutor.ownedContainer(state, position.above(10)));
+    }
+
     @Test void durablePreAndPostLayoutsRoundTripIncludingAnEmptyChest() {
         var prepared = new FrontierV3DepotClickWitness(DEPOT, ACCOUNT, OWNER, 7, PLAYER, INTERACTION,
                 List.of(stack(0, 64), stack(1, 8)), Optional.empty());
@@ -39,11 +56,23 @@ class FrontierV3DepotClickWitnessTest {
         PhysicalStackBinding binding = new PhysicalStackBinding(new SubjectId("binding:bread"), ACCOUNT,
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)),
                 7L, "minecraft:bread", Map.of(new SubjectId("lot:bread"), 64), Map.of(claim, 33));
-        assertFalse(FrontierV3DepotClickExecutor.exceedsUnclaimedPortion(binding, ClickType.THROW, 0, true));
-        assertTrue(FrontierV3DepotClickExecutor.exceedsUnclaimedPortion(binding, ClickType.PICKUP, 1, true));
-        assertTrue(FrontierV3DepotClickExecutor.exceedsUnclaimedPortion(binding, ClickType.PICKUP, 0, true));
-        assertTrue(FrontierV3DepotClickExecutor.exceedsUnclaimedPortion(binding, ClickType.QUICK_MOVE, 0, true));
-        assertFalse(FrontierV3DepotClickExecutor.exceedsUnclaimedPortion(binding, ClickType.PICKUP, 1, false));
+        assertFalse(FrontierV3ContainerClickExecutor.exceedsUnclaimedPortion(binding, ClickType.THROW, 0, true));
+        assertTrue(FrontierV3ContainerClickExecutor.exceedsUnclaimedPortion(binding, ClickType.PICKUP, 1, true));
+        assertTrue(FrontierV3ContainerClickExecutor.exceedsUnclaimedPortion(binding, ClickType.PICKUP, 0, true));
+        assertTrue(FrontierV3ContainerClickExecutor.exceedsUnclaimedPortion(binding, ClickType.QUICK_MOVE, 0, true));
+        assertFalse(FrontierV3ContainerClickExecutor.exceedsUnclaimedPortion(binding, ClickType.PICKUP, 1, false));
+    }
+
+    @Test void trackedReturnPersistsBothExactSourceAndPostimageAndRejectsMissingEvidence() {
+        var source = new FrontierV3DepotClickWitness.ReturnSource(new SubjectId("binding:player-return"),
+                new SubjectId("custody:player-return"), 3, 9, "minecraft:bread", 10);
+        var prepared = new FrontierV3DepotClickWitness(DEPOT, ACCOUNT, OWNER, 7, PLAYER, INTERACTION,
+                List.of(), Optional.empty(), Optional.of(source), Optional.empty());
+        assertEquals(prepared, FrontierV3DepotClickWitness.read(prepared.save()));
+        assertThrows(IllegalArgumentException.class, () -> prepared.observed(List.of(stack(0, 6))));
+        var observed = prepared.observed(List.of(stack(0, 6)), Optional.of(4));
+        assertEquals(observed, FrontierV3DepotClickWitness.read(observed.save()));
+        assertThrows(IllegalArgumentException.class, () -> prepared.observed(List.of(stack(0, 6)), Optional.of(11)));
     }
 
     private static FungiblePhysicalObservation.Stack stack(int slot, int count) {

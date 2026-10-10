@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "id": "live_mobile_player_container_edit",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMQuarryAudit" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "inventoryConflicts": 0 } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "command", "command": "/clear PMQuarryAudit" },
+    { "type": "command", "command": "/give PMQuarryAudit minecraft:granite 16" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "actor", "id": "actor:pack/settlement-1", "field": "position" } },
+      "offset": { "x": -2, "y": -1, "z": -2 }, "settleMs": 0, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:pack/settlement-1",
+      "expect": { "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } }, "timeoutMs": 60000 },
+    { "type": "interact_nearest_entity", "entityType": "minecraft:donkey", "secondaryUse": true,
+      "maxDistance": 6, "timeoutMs": 15000 },
+    { "type": "quick_move_from_inventory", "item": "minecraft:granite", "count": 16, "timeoutMs": 15000 },
+    { "type": "inspect", "view": "container", "id": "container:pack/settlement-1" },
+    { "type": "quick_move_from_container", "item": "minecraft:granite", "count": 16, "timeoutMs": 15000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:pack/settlement-1",
+      "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" },
+        "custody": { "status": "ACQUIRED", "unresolvedReason": "" } }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "container", "id": "container:pack/settlement-1",
+      "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
+    { "after": 8, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "inventoryConflicts": 0, "sceneConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 4, "name": "mobile-player-gift", "presentation": "player" },
+    { "after": 6, "name": "mobile-player-withdrawal", "presentation": "player" }
+  ]
+}

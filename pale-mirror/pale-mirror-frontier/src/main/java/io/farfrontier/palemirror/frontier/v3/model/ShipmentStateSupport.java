@@ -192,8 +192,7 @@ public final class ShipmentStateSupport {
                 shipment.execution().actorId(), shipment.carriedAccountId(), new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN))) : java.util.Optional.empty();
     }
     static FrontierWorldStateUpdate withdrawSourceClaim(FrontierWorldState state, SubjectId claim) {
-        var settled = withdrawSourceClaim(state, claim, new FungibleForfeitureSettlement(state.inventory(), state.companies(),
-                state.shipments(), state.actorExecutions(), state.actorMovements()));
+        var settled = withdrawSourceClaim(state, claim, FungibleForfeitureSettlement.from(state, state.inventory()));
         return settled.shipments().equals(state.shipments()) ? FrontierWorldStateUpdate.begin()
                 : FrontierWorldStateUpdate.begin().shipments(settled.shipments()).actorExecutions(settled.executions()).actorMovements(settled.movements());
     }

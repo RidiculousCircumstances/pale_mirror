@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
@@ -17,7 +17,7 @@ import io.farfrontier.palemirror.frontier.v3.process.BakeryProcess;
 final class FrontierV3ProductionProcessDiagnosticJson {
     private FrontierV3ProductionProcessDiagnosticJson() { }
 
-    static String render(CheckpointImage checkpoint, FrontierWorldState state, ProductionJob job) {
+    static String render(FrontierScheduleView checkpoint, FrontierWorldState state, ProductionJob job) {
         ActorLocation actor = state.actorLocations().get(job.workerId());
         SceneLease lease = currentLease(state, job.id());
         PhysicalIntent intent = state.physicalIntents().values().stream().filter(value -> value.causeSubjectId().equals(job.id()))

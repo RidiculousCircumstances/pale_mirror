@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "id": "live_quarry_player_container_edit",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMQuarryAudit" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "inventoryConflicts": 0 } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "command", "command": "/clear PMQuarryAudit" },
+    { "type": "command", "command": "/give PMQuarryAudit minecraft:granite 16" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:quarry-59ff314a-e5a6-3c02-9d7e-2aa68eedffac", "field": "position" } },
+      "offset": { "x": -2, "y": 0, "z": -2 }, "settleMs": 0, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:quarry-59ff314a-e5a6-3c02-9d7e-2aa68eedffac",
+      "expect": { "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } }, "timeoutMs": 60000 },
+    { "type": "open_container",
+      "position": { "diagnostic": { "view": "container", "id": "container:quarry-59ff314a-e5a6-3c02-9d7e-2aa68eedffac", "field": "position" } }, "timeoutMs": 15000 },
+    { "type": "quick_move_from_inventory", "item": "minecraft:granite", "count": 16, "timeoutMs": 15000 },
+    { "type": "inspect", "view": "container", "id": "container:quarry-59ff314a-e5a6-3c02-9d7e-2aa68eedffac" },
+    { "type": "quick_move_from_container", "item": "minecraft:granite", "count": 16, "timeoutMs": 15000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:quarry-59ff314a-e5a6-3c02-9d7e-2aa68eedffac",
+      "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" },
+        "custody": { "status": "ACQUIRED", "unresolvedReason": "" } }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-59ff314a-e5a6-3c02-9d7e-2aa68eedffac" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "container", "id": "container:quarry-59ff314a-e5a6-3c02-9d7e-2aa68eedffac",
+      "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
+    { "after": 9, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "inventoryConflicts": 0, "sceneConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 4, "name": "quarry-player-gift", "presentation": "player" },
+    { "after": 6, "name": "quarry-player-withdrawal", "presentation": "player" }
+  ]
+}

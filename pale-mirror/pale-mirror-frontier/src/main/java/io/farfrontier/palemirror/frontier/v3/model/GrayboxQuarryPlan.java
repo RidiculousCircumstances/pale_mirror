@@ -56,7 +56,10 @@ public final class GrayboxQuarryPlan {
                 occupied.addAll(positions); break;
             }
             if (selected == null) throw new IllegalArgumentException("no clear exterior quarry for " + home.id());
-            deposits.put(selected.id(), ExtractionDeposit.initial(selected));
+            var opened = rules.developmentBatchCells() == 0 ? selected.layout().cells().stream().map(ExtractionLayout.Cell::id)
+                    : selected.layout().cells().stream().filter(cell -> cell.prerequisites().isEmpty()).map(ExtractionLayout.Cell::id);
+            deposits.put(selected.id(), ExtractionDeposit.initial(selected,
+                    opened.collect(java.util.stream.Collectors.toUnmodifiableSet())));
         }
         return new ExtractionSiteState(deposits);
     }

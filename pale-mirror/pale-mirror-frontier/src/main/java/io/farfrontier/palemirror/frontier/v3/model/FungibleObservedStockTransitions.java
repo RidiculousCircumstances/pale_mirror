@@ -81,24 +81,24 @@ final class FungibleObservedStockTransitions {
                 FungiblePhysicalObservation.bind(reduced, account.id(), authorityEpoch, remaining));
     }
 
-    static FungibleResourceLedger contribute(FungibleResourceLedger ledger, SubjectId accountId,
+    static FungibleResourceLedger contribute(FungibleResourceLedger ledger, SubjectId accountId, SubjectId containerId,
                                              long authorityEpoch, ResourceLot contribution,
                                              List<FungiblePhysicalObservation.Stack> observed) {
         Objects.requireNonNull(accountId, "contribution account");
         CustodyAccount account = ledger.accounts().get(accountId);
         Objects.requireNonNull(contribution, "contributed resource lot");
         Objects.requireNonNull(observed, "observed contributed layout");
-        SubjectId depot = FrontierWorldState.depotId(contribution.economicOwnerId());
+        Objects.requireNonNull(containerId, "declared contribution container");
         if (authorityEpoch < 1 || ledger.lots().containsKey(contribution.id()) || !contribution.lineage().isEmpty()
-                || account != null && !account.custody().equals(new ResourceCustody.Container(depot)))
-            throw new IllegalArgumentException("observed contribution requires a fresh original lot at its owner's depot");
+                || account != null && !account.custody().equals(new ResourceCustody.Container(containerId)))
+            throw new IllegalArgumentException("observed contribution requires a fresh original lot at its declared container");
         if (account == null) {
-            if (!accountId.equals(ReferenceContainerCustody.scopeId(depot))
+            if (!accountId.equals(ReferenceContainerCustody.scopeId(containerId))
                     || ledger.accounts().values().stream().anyMatch(other ->
-                    other.custody().equals(new ResourceCustody.Container(depot))))
-                throw new IllegalArgumentException("first player gift needs its one vacant canonical depot account");
+                    other.custody().equals(new ResourceCustody.Container(containerId))))
+                throw new IllegalArgumentException("first player gift needs its one vacant canonical container account");
             FungibleResourceLedger created = ledger.issue(contribution, new CustodyAccount(accountId,
-                    new ResourceCustody.Container(depot), Map.of(contribution.id(), contribution.quantity()), Map.of()));
+                    new ResourceCustody.Container(containerId), Map.of(contribution.id(), contribution.quantity()), Map.of()));
             return created.rebind(accountId, authorityEpoch,
                     FungiblePhysicalObservation.bind(created, accountId, authorityEpoch, observed));
         }

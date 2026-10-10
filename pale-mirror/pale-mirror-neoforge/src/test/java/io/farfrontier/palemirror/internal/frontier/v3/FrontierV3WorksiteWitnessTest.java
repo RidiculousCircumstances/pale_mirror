@@ -8,6 +8,46 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3WorksiteWitnessTest {
+    @Test void withdrawalAcceptsOnlyUnwrittenOrSettledOwnedProjectionNeverAmbiguousWritesOrEffects() {
+        var key = new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, new SubjectId("extraction:test"), WorksiteBlock.Role.RESOURCE, 1);
+        var stone = new BlockExtraction.Block("minecraft:stone", Map.of());
+        var cell = new WorksiteBlock(key, new BlockPosition(1, 64, 1), 1, stone);
+        assertTrue(FrontierV3WorksiteBlockWitness.permitsProjectionWithdrawal(null, cell));
+        for (var phase : FrontierV3WorksiteBlockWitness.Phase.values()) {
+            var operation = phase == FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED
+                    || phase == FrontierV3WorksiteBlockWitness.Phase.EFFECT_COMMITTED ? Optional.of("effect:1") : Optional.<String>empty();
+            var witness = new FrontierV3WorksiteBlockWitness(cell, stone, phase, operation);
+            assertEquals(phase == FrontierV3WorksiteBlockWitness.Phase.SETTLED,
+                    FrontierV3WorksiteBlockWitness.permitsProjectionWithdrawal(witness, cell), phase.name());
+        }
+        var future = new FrontierV3WorksiteBlockWitness(new WorksiteBlock(key, cell.position(), 2, stone), stone,
+                FrontierV3WorksiteBlockWitness.Phase.SETTLED);
+        assertFalse(FrontierV3WorksiteBlockWitness.permitsProjectionWithdrawal(future, cell));
+    }
+    @Test void appendingRealAdjacentSourcesRefreshesPointIndexWithoutRenumberingOldPhysicalDeclarations() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:dynamic-worksite-index"), 20260918065L,
+                FrontierRulesets.installed("frontier-v3-quarry-graybox-r4")));
+        var old = state.extractionSites().deposits().values().stream().min(Comparator.comparing(value -> value.site().id())).orElseThrow();
+        var initialIndex = FrontierV3WorksiteRegistry.chunks(state);
+        var priorKeys = ExtractionWorksiteBlocks.declared(old).stream().collect(java.util.stream.Collectors.toMap(WorksiteBlock::position, WorksiteBlock::key));
+        var exhausted = new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionDeposit(old.site(), old.cells(), old.geometry(),
+                new WorkAreaDevelopment(2, old.cells().keySet()));
+        for (long id : exhausted.cells().keySet()) exhausted = exhausted.extracted(id, 1, "fixture:index-history-" + id);
+        var cleared = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(exhausted)));
+        assertSame(initialIndex, FrontierV3WorksiteRegistry.chunks(cleared), "depletion is not a declaration change");
+        var plan = ExtractionAreaPlanning.proposal(cleared, old.site().id()).orElseThrow();
+        var next = ExtractionAreaPlanning.apply(cleared, old.site().id(), plan, 1000);
+        var newPoint = plan.columns().getFirst().floor().support().offset(0, 2, 0);
+        assertTrue(FrontierV3WorksiteRegistry.point(cleared, new net.minecraft.core.BlockPos(newPoint.x(), newPoint.y(), newPoint.z())).isEmpty());
+        var nativePoint = FrontierV3WorksiteRegistry.point(next, new net.minecraft.core.BlockPos(newPoint.x(), newPoint.y(), newPoint.z())).orElseThrow();
+        assertEquals(WorksiteBlock.Role.RESOURCE, nativePoint.key().role()); assertTrue(nativePoint.key().cell() > 512);
+        assertNotSame(initialIndex, FrontierV3WorksiteRegistry.chunks(next));
+        assertSame(FrontierV3WorksiteRegistry.chunks(next), FrontierV3WorksiteRegistry.chunks(next));
+        var newKeys = ExtractionWorksiteBlocks.declared(next.extractionSites().deposits().get(old.site().id())).stream()
+                .collect(java.util.stream.Collectors.toMap(WorksiteBlock::position, WorksiteBlock::key));
+        assertTrue(newKeys.entrySet().containsAll(priorKeys.entrySet()));
+    }
     @Test void sourceDeclarationIndexIsReusedAcrossTurnsAndDepletionButRefreshesForAnotherManifest() {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:worksite-index"), 20260918065L,

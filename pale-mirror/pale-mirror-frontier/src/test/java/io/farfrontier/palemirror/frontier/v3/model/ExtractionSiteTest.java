@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ExtractionSiteTest {
     @Test void deliveredMiningBatchContinuesTheSameMandateWhileSeparateCouriersDeliverStock() {
         var configuration = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(
-                new WorldId("frontier:quarry-work-kernel"), 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r2"));
+                new WorldId("frontier:quarry-work-kernel"), 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r3"));
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
         var initial = engine.canonicalState().state();
         var site = initial.extractionSites().deposits().values().stream().sorted(Comparator.comparing(value -> value.site().id())).findFirst().orElseThrow().site();
@@ -47,22 +47,27 @@ class ExtractionSiteTest {
                     homeStock.orElseThrow().id(), site.settlementId(), "minecraft:cobblestone") >= 64) {
                 deliveredHome = true; break;
             }
-            var next = engine.checkpoint().schedules().stream().filter(action ->
+            var view = engine.executionView();
+            var next = view.schedules().stream().filter(action ->
                     !io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.scheduledHeld(current, action))
                     .sorted().findFirst().orElseThrow();
             var result = engine.advanceTo(new io.farfrontier.palemirror.frontier.v3.api.SimInstant(
-                    Math.max(next.dueAt().ticks(), engine.checkpoint().instant().ticks())),
+                    Math.max(next.dueAt().ticks(), view.instant().ticks())),
                     new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(128, 1024));
             assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, result.status().kind(),
                     result.status().failureDetail().orElse("active"));
             if (boundary % 100 == 0) {
-                engine.compact(engine.checkpoint().revision()); // This in-memory fixture retains its verified checkpoint, like the host.
+                engine.checkpoint(); // Encode only the checkpoint actually retained by this fixture.
+                engine.compact(engine.executionView().revision());
             }
         }
         var state = engine.canonicalState().state();
-        assertTrue(deliveredHome, () -> "mining did not continue after its delivered batch; tick=" + engine.checkpoint().instant()
-                + " work=" + state.extractionSites().work());
+        var retainedFirst = firstJob;
+        assertTrue(deliveredHome, () -> "mining did not continue after its delivered batch; tick=" + engine.executionView().instant()
+                + " site=" + site.id() + " first=" + state.extractionSites().work().get(retainedFirst));
         assertTrue(continuedWithSameTool, "a delivered stack must not retire the worker/tool mandate");
+        assertTrue(state.extractionSites().deposits().get(site.id()).development().revision() > 1,
+                "actual miners must exhaust and open adjacent fronts, not work an initially fully admitted deposit");
         assertTrue(recoveredDelivery, "the settled batch/select-source boundary must survive recovery");
         assertNotNull(state.inventory().items().get(firstTool));
         assertTrue(state.extractionSites().deposits().get(site.id()).cells().values().stream()
@@ -76,6 +81,13 @@ class ExtractionSiteTest {
         var drained = ExtractionColdWork.apply(withdrawn, running.id(), stop, engine.checkpoint().instant().ticks());
         assertEquals(ExtractionWork.Phase.STORE, drained.extractionSites().work().get(firstJob).phase());
         assertEquals(withdrawn.inventory(), drained.inventory(), "withdrawal must not discard or fake delivery of held stone");
+        var selecting = running.transition(ExtractionWork.Phase.SELECT_SOURCE, Optional.empty());
+        var waiting = withdrawn.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
+                withdrawn.extractionSites().replaceWork(running, selecting)));
+        var stoppedSelection = ExtractionColdWork.apply(waiting, selecting.id(), new ExtractionWorkProgressed(
+                selecting.id(), selecting.revision(), ExtractionWorkProgressed.Operation.SELECT_SOURCE), engine.executionView().instant().ticks());
+        assertEquals(ExtractionWork.Phase.STORE, stoppedSelection.extractionSites().work().get(selecting.id()).phase());
+        assertEquals(waiting.inventory(), stoppedSelection.inventory(), "frontier waiting must also drain its retained cargo on withdrawal");
         assertThrows(IllegalArgumentException.class, () -> ExtractionColdWork.apply(drained, stop.jobId(), stop, 0));
         var live = continuation;
         assertThrows(IllegalArgumentException.class, () -> ExtractionColdWork.apply(live, stop.jobId(), stop, 0));

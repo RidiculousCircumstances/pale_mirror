@@ -8,7 +8,7 @@
   "setup": [
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
       { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
-        "expect": { "status": "ok", "family": "frontier.extraction.site", "result": { "total": 256, "extracted": 0, "homeQuantity": 0 } } }
+        "expect": { "status": "ok", "family": "frontier.extraction.site", "result": { "total": 512, "developed": 8, "extracted": 0, "homeQuantity": 0 } } }
     ] }
   ],
   "actions": [
@@ -36,8 +36,11 @@
     { "type": "fast_forward_to_instant", "targetInstant": 24000, "timeoutMs": 180000,
       "causalMilestone": "cold_mining_and_separate_transport_no_fixture_outcomes" },
     { "type": "release_fast_forward_hold" },
+    { "type": "fast_forward_to_instant", "targetInstant": 42000, "timeoutMs": 180000,
+      "causalMilestone": "ordinary_meal_interruption_resumes_retained_miners_and_carriers" },
+    { "type": "release_fast_forward_hold" },
     { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
-      "expect": { "status": "ok", "result": { "homeReserveSupplied": true } }, "timeoutMs": 180000,
+      "expect": { "status": "ok", "result": { "homeReserveSupplied": true, "developmentAdvanced": true, "minedOpenedFront": true } }, "timeoutMs": 180000,
       "causalMilestone": "separate_carrier_delivers_real_mined_resource_to_home_depot" },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
       "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "position" } },
@@ -48,9 +51,9 @@
     { "type": "look", "at": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "firstSource" } } }
   ],
   "assertions": [
-    { "after": 13, "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
-      "expect": { "status": "ok", "result": { "outputKind": "minecraft:cobblestone", "homeReserveSupplied": true } } }
+    { "after": 15, "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": { "status": "ok", "result": { "outputKind": "minecraft:cobblestone", "homeReserveSupplied": true, "developmentAdvanced": true, "minedOpenedFront": true } } }
   ],
   "frames": [ { "after": 3, "name": "finite-quarry-before-mining" }, { "after": 8, "name": "hot-mining-frontier" },
-    { "after": 16, "name": "recovered-cold-depleted-quarry" } ]
+    { "after": 18, "name": "recovered-cold-depleted-quarry" } ]
 }

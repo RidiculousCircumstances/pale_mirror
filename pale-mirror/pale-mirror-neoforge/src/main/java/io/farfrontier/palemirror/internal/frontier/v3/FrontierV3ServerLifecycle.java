@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.PaleMirrorMod;
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
@@ -83,12 +83,12 @@ public final class FrontierV3ServerLifecycle {
             net.minecraft.world.inventory.ClickType kind) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(player.getServer());
         if (runtime == null) return v3LaunchOwnsPhysicalWorld()
-                && menu instanceof net.minecraft.world.inventory.ChestMenu
+                && FrontierV3ContainerMenuTarget.supported(menu)
                 ? DepotClickDisposition.REJECTED : DepotClickDisposition.NOT_OWNED;
         if (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE)
-            return FrontierV3DepotClickExecutor.ownsDepot(player, menu, runtime)
+            return FrontierV3ContainerClickExecutor.ownsContainer(player, menu, runtime)
                     ? DepotClickDisposition.REJECTED : DepotClickDisposition.NOT_OWNED;
-        return switch (FrontierV3DepotClickExecutor.before(player, menu, slot, button, kind, runtime)) {
+        return switch (FrontierV3ContainerClickExecutor.before(player, menu, slot, button, kind, runtime)) {
             case NOT_OWNED -> DepotClickDisposition.NOT_OWNED;
             case ACCEPTED -> DepotClickDisposition.ACCEPTED;
             case REJECTED -> DepotClickDisposition.REJECTED;
@@ -98,7 +98,7 @@ public final class FrontierV3ServerLifecycle {
             net.minecraft.world.inventory.AbstractContainerMenu menu) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(player.getServer());
         if (runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE)
-            FrontierV3DepotClickExecutor.after(player, menu, runtime);
+            FrontierV3ContainerClickExecutor.after(player, menu, runtime);
     }
     public static String status(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
@@ -122,7 +122,7 @@ public final class FrontierV3ServerLifecycle {
 
     static String performanceDiagnostic(MinecraftServer server,
                                         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime,
-                                        CheckpointImage checkpoint, FrontierWorldState state) {
+                                        FrontierScheduleView checkpoint, FrontierWorldState state) {
         return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(), state,
                 FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
                 FAST_FORWARD_OUTCOMES.get(server), FAST_FORWARD_SLICE_TELEMETRY.get(server), fastForwardRequests(server),
@@ -189,8 +189,8 @@ public final class FrontierV3ServerLifecycle {
         RuntimeException startupFailure = null;
         try {
             RecoveryImage recovery = store.recover(configuration.worldId());
-            configuration = FrontierWorldRecoveryConfiguration.select(configuration,
-                    recovery.checkpoint().map(io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord::checkpoint));
+            configuration = FrontierWorldRecoveryConfiguration.select(configuration, recovery.checkpoint().map(io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord::checkpoint));
+            FrontierV3GeologicalBaseline.require(physicalWorld, configuration.initialState().bootstrap());
             if (recovery.checkpoint().isEmpty() && recovery.walTail().isEmpty()) {
                 var firstLedger = FrontierV3AmbientCarrierLedger.get(physicalWorld, configuration.worldId());
                 var firstWorld = configuration.worldId();

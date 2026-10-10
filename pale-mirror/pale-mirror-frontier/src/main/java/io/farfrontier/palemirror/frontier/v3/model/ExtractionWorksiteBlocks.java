@@ -18,13 +18,13 @@ public final class ExtractionWorksiteBlocks {
     }
     public static List<WorksiteBlock> declared(ExtractionDeposit deposit) {
         var site = deposit.site(); var result = new ArrayList<WorksiteBlock>();
-        long index = 1;
         for (var entry : site.layout().fixedBlocks().entrySet().stream().sorted(Comparator
                 .comparingInt((Map.Entry<BlockPosition, BlockExtraction.Block> entry) -> entry.getKey().x())
                 .thenComparingInt(entry -> entry.getKey().y()).thenComparingInt(entry -> entry.getKey().z())).toList()) {
             boolean socket = entry.getKey().equals(site.layout().container());
             result.add(new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, site.id(),
-                    socket ? WorksiteBlock.Role.CONTAINER_SOCKET : WorksiteBlock.Role.INFRASTRUCTURE, index++),
+                    socket ? WorksiteBlock.Role.CONTAINER_SOCKET : WorksiteBlock.Role.INFRASTRUCTURE,
+                    site.layout().infrastructureIds().get(entry.getKey())),
                     entry.getKey(), 1, socket ? new BlockExtraction.Block("minecraft:air", Map.of()) : entry.getValue()));
         }
         for (var cell : site.layout().cells()) {

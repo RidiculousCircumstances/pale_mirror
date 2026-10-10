@@ -628,7 +628,8 @@ public final class FrontierV3TestPilotClient {
         if (!entityInteractionAttempted) {
             interactedEntityCardTitle = target.getCustomName() == null ? null
                     : target.getCustomName().getString().split("\n", 2)[0];
-            minecraft.gameMode.interact(minecraft.player, target, InteractionHand.MAIN_HAND);
+            FrontierV3PilotEntityInteraction.interact(minecraft, target,
+                    action.has("secondaryUse") && action.get("secondaryUse").getAsBoolean());
             entityInteractionAttempted = true;
         }
         if (action.has("expectContextCard") && action.get("expectContextCard").getAsBoolean()) {

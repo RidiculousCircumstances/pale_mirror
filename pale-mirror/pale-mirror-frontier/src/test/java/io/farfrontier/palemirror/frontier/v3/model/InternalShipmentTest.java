@@ -8,6 +8,53 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class InternalShipmentTest {
+    @Test void witnessedQuarryWithdrawalAtomicallyRetiresUnpickedHaulAndSurvivesRecovery() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:quarry-player-loss"),
+                20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r4")));
+        var site = state.extractionSites().deposits().values().iterator().next().site();
+        var home = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());
+        var source = new SubjectId("custody:test-quarry-player-loss");
+        var lot = new SubjectId("lot:test-quarry-player-loss");
+        var claimId = new SubjectId("claim:test-quarry-player-loss");
+        var shipmentId = new SubjectId("shipment:test-quarry-player-loss");
+        var ledger = state.inventory().fungibleResources().issue(
+                new ResourceLot(lot, home.id(), "minecraft:cobblestone", 36, "isolated-loss-fixture", List.of()),
+                new CustodyAccount(source, new ResourceCustody.Container(site.containerId()), Map.of(lot, 36), Map.of()));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(ledger)));
+        var worker = SettlementWorkforce.candidates(state, home.id(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS).getFirst();
+        var receiver = GoodsParticipantDeclarations.endpoint(home);
+        var receiving = FungibleResourceCustodySupport.accountAtContainer(state, receiver.containerId()).map(CustodyAccount::id)
+                .orElseGet(() -> ReferenceContainerCustody.scopeId(receiver.containerId()));
+        var shipment = new Shipment(shipmentId, new ResourceClaimDelegation(ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT,
+                claimId, home.id(), shipmentId, 1), state.actorExecutions().next(worker.id(), ActorActivityKind.COURIER, shipmentId),
+                new ShipmentEndpoint.ExtractiveSite(home.id(), site.id(), site.containerId(), site.layout().storagePort()), receiver,
+                source, new SubjectId("custody:test-quarry-player-carrier"), receiving, "minecraft:cobblestone", Map.of(lot, 36),
+                Shipment.Status.AWAITING_LOAD, 1);
+        state = InternalShipmentStateSupport.dispatch(state, home.id(), new InternalShipmentDispatched(shipment,
+                new ClaimAllocation(claimId, home.id(), home.id(), shipment.itemKind(), 36, Map.of(lot, 36), ClaimPurpose.INTERNAL_LOGISTICS)));
+        var inventoryBeforeBinding = state.inventory();
+        int freeSlot = java.util.stream.IntStream.range(0, 27)
+                .filter(slot -> inventoryBeforeBinding.itemAt(site.containerId(), slot).isEmpty()).findFirst().orElseThrow();
+        var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(site.containerId(), freeSlot)), "minecraft:cobblestone", 36);
+        ledger = state.inventory().fungibleResources();
+        state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(
+                ledger.rebind(source, 1L, FungiblePhysicalObservation.bind(ledger, source, 1L, List.of(stack))))));
+        assertEquals(Set.of(claimId), PlayerStockClaimLoss.admissibleClaims(state, source));
+        var loss = assertInstanceOf(FungibleStockDepartureObserved.class, FungibleContainerPlayerEdit.classify(
+                state.inventory().fungibleResources(), source, site.containerId(), home.id(), 1L,
+                UUID.randomUUID(), UUID.randomUUID(), List.of(), PlayerStockClaimLoss.admissibleClaims(state, source)));
+        var economics = state.inventory().economics();
+        var after = PlayerStockClaimLoss.settle(state, loss);
+        assertEquals(Shipment.Status.ALLOCATION_WITHDRAWN, after.shipments().shipments().get(shipmentId).status());
+        assertFalse(after.inventory().fungibleResources().claims().containsKey(claimId));
+        assertFalse(after.actorExecutions().current(ActorActivityKind.COURIER).containsKey(worker.id()));
+        assertEquals(0, after.inventory().fungibleResources().totalQuantity(home.id(), "minecraft:cobblestone"));
+        assertEquals(economics, after.inventory().economics());
+        assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
+        assertThrows(IllegalArgumentException.class, () -> PlayerStockClaimLoss.settle(after, loss));
+    }
+
     @Test void sameOwnerHaulAcceptsExactStockWithoutSellingItAndRejectsForgedOrRepeatedReceipts() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:internal-receipt"),
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r1")));

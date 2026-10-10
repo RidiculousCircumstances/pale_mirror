@@ -55,8 +55,7 @@ public final class ResidentMealProcess {
 
     public static ScheduledAction progress(ResidentMeal meal, long dueAt) {
         if (dueAt <= meal.startedAtTick()) throw new IllegalArgumentException("meal progress precedes start");
-        return new ScheduledAction(new ScheduleId("schedule:resident-meal-"
-                + meal.residentId().value().substring("resident:".length()) + "-" + meal.executionId().generation() + "-" + meal.startedAtTick()),
+        return new ScheduledAction(meal.progressScheduleId(),
                 new SimInstant(dueAt), 12, meal.residentId(), PROGRESS, 1);
     }
 

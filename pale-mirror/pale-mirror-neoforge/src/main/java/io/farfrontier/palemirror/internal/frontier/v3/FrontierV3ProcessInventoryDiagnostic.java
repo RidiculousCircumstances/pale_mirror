@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestGoal;
@@ -14,7 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 final class FrontierV3ProcessInventoryDiagnostic {
     private FrontierV3ProcessInventoryDiagnostic() { }
 
-    static String render(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    static String render(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {
         String scope = id;
         int offset = 0;
         int separator = id.indexOf('@');
@@ -40,7 +40,7 @@ final class FrontierV3ProcessInventoryDiagnostic {
         return renderPage(id, scope, offset, checkpoint, entries);
     }
 
-    static String renderPage(String id, String scope, int offset, CheckpointImage checkpoint, java.util.List<Entry> entries) {
+    static String renderPage(String id, String scope, int offset, FrontierScheduleView checkpoint, java.util.List<Entry> entries) {
         if (offset < 0 || offset >= entries.size()) return FrontierV3DiagnosticJson.unavailable("process_inventory", id, checkpoint, "invalid_page");
         String header = FrontierV3DiagnosticJson.base("process_inventory", id, checkpoint) + ",\"status\":\"ok\",\"count\":" + entries.size()
                 + ",\"coldEligible\":" + entries.stream().filter(Entry::coldEligible).count() + ",\"offset\":" + offset;
@@ -64,7 +64,7 @@ final class FrontierV3ProcessInventoryDiagnostic {
                 + ",\"entries\":[" + String.join(",", rows) + "]}";
     }
 
-    private static Entry entry(ResourceSiteLifecycle lifecycle, ResourceSiteHarvestJob job, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static Entry entry(ResourceSiteLifecycle lifecycle, ResourceSiteHarvestJob job, FrontierScheduleView checkpoint, FrontierWorldState state) {
         if (job == null) return new Entry(false, "{\"site\":\"" + quote(lifecycle.siteId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"waitReason\":\"" + waitReason(lifecycle, null) + "\"}");
         long dueAt = checkpoint.schedules().stream()

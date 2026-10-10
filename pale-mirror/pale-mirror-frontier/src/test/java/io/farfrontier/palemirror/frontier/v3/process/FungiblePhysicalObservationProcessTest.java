@@ -18,7 +18,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceHandoffObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStockDepartureObserved;
-import io.farfrontier.palemirror.frontier.v3.model.FungibleDepotPlayerEdit;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleContainerPlayerEdit;
+import io.farfrontier.palemirror.frontier.v3.model.PlayerStockClaimLoss;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStockContributionObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStackLayoutObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
@@ -93,8 +94,8 @@ class FungiblePhysicalObservationProcessTest {
         UUID player = UUID.fromString("00000000-0000-0000-0000-000000000193");
         UUID interaction = UUID.fromString("00000000-0000-0000-0000-000000000194");
         FungibleStockDepartureObserved observed = assertInstanceOf(FungibleStockDepartureObserved.class,
-                FungibleDepotPlayerEdit.classify(state.inventory().fungibleResources(), account, depot, owner,
-                        1L, player, interaction, List.of()));
+                FungibleContainerPlayerEdit.classify(state.inventory().fungibleResources(), account, depot, owner,
+                        1L, player, interaction, List.of(), PlayerStockClaimLoss.admissibleClaims(state, account)));
         assertEquals(java.util.Set.of(meal.claimId()), observed.forfeitedClaimIds());
         var plan = assertInstanceOf(CommandPlan.Accepted.class,
                 FrontierWorldPhysicalObservationProcess.planFungibleStockDeparture(state, observed, 48_000L));
@@ -145,7 +146,7 @@ class FungiblePhysicalObservationProcessTest {
                 FrontierWorldPhysicalObservationProcess.planFungibleStockContribution(state, observed, 0L));
         assertEquals(2, giftPlan.events().size());
         assertEquals(StrategicObjectiveProcess.playerStockReconsideration(owner, observed.interactionId(), 1L),
-                ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created) giftPlan.events().get(1).payload()).action());
+                ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested) giftPlan.events().get(1).payload()).action());
         FrontierWorldState reduced = FrontierWorldPhysicalObservationProcess.reduceFungibleStockContribution(state, owner, observed);
         assertEquals(16, reduced.inventory().fungibleResources().totalQuantity(owner, "minecraft:bread"));
         var configuration = new FrontierEngineConfiguration<>(world, state, base.initialInstant(),
@@ -187,7 +188,7 @@ class FungiblePhysicalObservationProcessTest {
                 FrontierWorldPhysicalObservationProcess.planFungibleStockDeparture(state, observed, 0L));
         assertEquals(2, departurePlan.events().size());
         assertEquals(StrategicObjectiveProcess.playerStockReconsideration(owner, observed.interactionId(), 1L),
-                ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created) departurePlan.events().get(1).payload()).action());
+                ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested) departurePlan.events().get(1).payload()).action());
         FrontierWorldState reduced = FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(state, owner, observed);
         assertEquals(32, reduced.inventory().fungibleResources().totalQuantity(owner, "minecraft:wheat"));
         assertFalse(reduced.inventory().fungibleResources().accounts().values().stream()

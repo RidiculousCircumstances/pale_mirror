@@ -7,9 +7,9 @@ import java.util.*;
 
 /** Registered owner, not a manual server tick branch. */
 final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
-    static final Set<String> COMMANDS = Set.of("frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
+    static final Set<String> COMMANDS = Set.of("frontier.extraction_geology_invalidated", "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
             "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed");
-    static final Set<String> TYPES = Set.of("frontier.extraction_work_started", "frontier.extraction_work_progressed",
+    static final Set<String> TYPES = Set.of("frontier.extraction_geology_invalidated", "frontier.extraction_area_extended", "frontier.extraction_frontier_opened", "frontier.extraction_work_started", "frontier.extraction_work_progressed",
             "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
             "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("extraction",
@@ -22,6 +22,9 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {
+            case ExtractionGeologyInvalidated invalidated -> invalidated.apply(state, event.subject());
+            case ExtractionAreaExtended extended -> ExtractionAreaPlanning.apply(state, event.subject(), extended, event.revision().value());
+            case ExtractionFrontierOpened opened -> ExtractionDevelopment.apply(state, event.subject(), opened);
             case ExtractionGeometryChanged changed -> changed.apply(state, event.subject());
             case ExtractionWorkStarted start -> {
                 if (!event.subject().equals(start.work().id())) throw new IllegalArgumentException("mining admission has a foreign subject");
@@ -44,6 +47,9 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
             var events = new ArrayList<ProposedEvent>();
             SubjectId id;
             switch (command.payload()) {
+                case ExtractionGeologyInvalidated invalidated -> {
+                    id = ExtractionGeologyInvalidated.OWNER; invalidated.apply(state, id);
+                }
                 case ExtractionGeometryChanged changed -> {
                     id = changed.predecessor().key().owner();
                     changedContinuations(state, changed.apply(state, id), events, command.submittedAt().ticks());
@@ -51,6 +57,7 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
                 case ExtractionSourceChanged changed -> {
                     id = changed.target().key().owner();
                     var preview = ExtractionExternalChanges.apply(state, id, changed, command.expectedRevision().next().value());
+                    preview = ExtractionDevelopmentContinuation.append(preview, id, events, command.submittedAt().ticks());
                     changedContinuations(state, preview, events, command.submittedAt().ticks());
                     for (var job : state.extractionSites().work().values()) {
                         if (!preview.extractionSites().work().containsKey(job.id())) {
@@ -69,7 +76,12 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
                 case ExtractionHotObserved observed -> {
                     id = observed.jobId();
                     var preview = ExtractionPhysicalStateSupport.observed(state, id, observed, command.expectedRevision().next().value());
-                    if (preview.extractionSites().work().containsKey(id)) events.add(ExtractionContinuation.wake(id, command.submittedAt().ticks()));
+                    var original = state.extractionSites().work().get(id);
+                    preview = ExtractionDevelopmentContinuation.append(preview, original.siteId(), events, command.submittedAt().ticks());
+                    if (preview.extractionSites().work().containsKey(id)) {
+                        if (events.stream().noneMatch(proposed -> proposed.subject().equals(observed.jobId()) && proposed.payload() instanceof ScheduleEffect))
+                            events.add(ExtractionContinuation.wake(id, command.submittedAt().ticks()));
+                    }
                     else {
                         events.add(new ProposedEvent(id, new ScheduleEffect.Cancelled(ExtractionContinuation.at(id, 0).id())));
                         events.add(ResidentActivityProcess.wakeAfterActivity(observed.step().observation().actuation().execution().actorId(), command.submittedAt().ticks()));

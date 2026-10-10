@@ -44,8 +44,11 @@ public final class ExtractionSourceCustody {
                         "extraction.source-region", canonicalRevision, event.fingerprint(), region.provenance()));
                 else {
                     if (prior != null && prior.live()) throw new IllegalArgumentException("source projection already has live custody");
-                    custody = custody.emit(region.objectId(), replica.emittedCanonicalRevision(), replica.replicaRevision(),
-                            canonicalRevision, event.fingerprint(), region.provenance());
+                    custody = replica.state() == PhysicalReplicaState.EXPECTED
+                            ? custody.reissueProjection(region.objectId(), replica.emittedCanonicalRevision(), replica.replicaRevision(),
+                                canonicalRevision, event.fingerprint(), region.provenance())
+                            : custody.emit(region.objectId(), replica.emittedCanonicalRevision(), replica.replicaRevision(),
+                                canonicalRevision, event.fingerprint(), region.provenance());
                 }
                 var expected = custody.replicas().get(region.objectId());
                 return custody.prepareProjection(new PhysicalCustodyLease(region.scopeId(), region.objectId(), PROVIDER,
@@ -57,12 +60,14 @@ public final class ExtractionSourceCustody {
                 return custody.confirmProjection(region.scopeId(), prior.authorityEpoch(), prior.expectedCanonicalRevision(),
                         prior.expectedReplicaRevision(), event.fingerprint(), region.provenance());
             }
-            case RELEASE -> {
+            case RELEASE, WITHDRAW_PROJECTION -> {
                 if (prior == null || state.extractionSites().work().values().stream().anyMatch(job -> job.pending().isPresent()
                         && job.siteId().equals(region.siteId()) && job.target().filter(target -> region.contains(
                             state.extractionSites().deposits().get(region.siteId()).site().layout().require(target.key().cell()).source())).isPresent()))
                     throw new IllegalArgumentException("source release retains a pending non-replayable effect");
-                return release(custody, prior);
+                return event.operation() == ExtractionSourceBoundary.Operation.WITHDRAW_PROJECTION
+                        ? custody.withdrawProjection(region.scopeId(), prior.authorityEpoch(), prior.expectedCanonicalRevision(),
+                            prior.expectedReplicaRevision()) : release(custody, prior);
             }
         }
         throw new IllegalArgumentException("undeclared extraction source transition");

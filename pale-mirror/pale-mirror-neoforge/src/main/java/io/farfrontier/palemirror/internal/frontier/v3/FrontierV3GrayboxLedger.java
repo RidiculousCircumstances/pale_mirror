@@ -30,6 +30,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
      * hydration, so it grants no independent materialization authority.
      */
     private final NavigableSet<Long> worksiteStagingPositions;
+    private final NavigableSet<Long> externalWorksitePositions = new TreeSet<>();
 
     private FrontierV3GrayboxLedger() { this(new HashMap<>(), new HashMap<>()); }
     private FrontierV3GrayboxLedger(Map<Long, Claim> claims, Map<Long, FrontierV3WorksiteBlockWitness> worksiteCells) {
@@ -42,6 +43,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
         claims.forEach((position, claim) -> {
             if (claim.semanticPart().equals(GrayboxSemanticPart.WORKSITE_STAGING.name())) worksiteStagingPositions.add(position);
         });
+        worksiteCells.forEach(this::indexExternalWorksite);
     }
     static FrontierV3GrayboxLedger get(ServerLevel level) {
         return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.BLOCKS, FrontierV3GrayboxLedger::new, FrontierV3GrayboxLedger::load);
@@ -50,6 +52,13 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     static FrontierV3GrayboxLedger inMemory() { return new FrontierV3GrayboxLedger(); }
     Claim claim(BlockPos position) { return claims.get(position.asLong()); }
     FrontierV3WorksiteBlockWitness worksite(BlockPos position) { return worksiteCells.get(position.asLong()); }
+    List<BlockPos> externalWorksites() { return externalWorksitePositions.stream().map(BlockPos::of).toList(); }
+    private void indexExternalWorksite(long address, FrontierV3WorksiteBlockWitness witness) {
+        if (witness.phase() == FrontierV3WorksiteBlockWitness.Phase.EXTERNAL
+                || witness.phase() == FrontierV3WorksiteBlockWitness.Phase.EXTERNAL_PENDING)
+            externalWorksitePositions.add(address);
+        else externalWorksitePositions.remove(address);
+    }
     void worksite(FrontierV3WorksiteBlockWitness witness) {
         var position = witness.declaration().position();
         long address = new BlockPos(position.x(), position.y(), position.z()).asLong();
@@ -58,7 +67,9 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
             throw new IllegalStateException("competing block provenance at worksite cell");
         if (prior == null && claims.size() + worksiteCells.size() >= MAX_CELLS)
             throw new IllegalStateException("bounded physical block provenance is full");
-        if (!witness.equals(prior)) { worksiteCells.put(address, witness); setDirty(); }
+        if (!witness.equals(prior)) {
+            worksiteCells.put(address, witness); indexExternalWorksite(address, witness); setDirty();
+        }
     }
     void ensureCapacityFor(BlockPos position) {
         if (worksiteCells.containsKey(position.asLong())) throw new IllegalStateException("graybox write crosses declared worksite provenance");

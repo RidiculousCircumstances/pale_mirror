@@ -1,12 +1,12 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import java.util.stream.Collectors;
 
 /** Read-only public/company policy, stock and obligation join. It grants no consent or title. */
 final class FrontierV3GoodsParticipantDiagnosticJson {
-    static String render(CheckpointImage checkpoint, FrontierWorldState state, GoodsParticipant participant) {
+    static String render(FrontierScheduleView checkpoint, FrontierWorldState state, GoodsParticipant participant) {
         var view = GoodsParticipantView.read(state, participant);
         var stocks = view.stocks().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).map(entry ->
                 "{\"commodity\":" + string(entry.getKey()) + ",\"owned\":" + entry.getValue().ownedAtEndpoint()

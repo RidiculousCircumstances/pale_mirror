@@ -82,8 +82,42 @@ public final class FrontierV3ActorCarryGameTests {
         helper.assertTrue(actor.getMainHandItem().getCount() == 64 && chest.getItem(5).is(Items.STONE),
                 "failed precondition preserves both cargo and player stock");
         chest.setItem(5, ItemStack.EMPTY);
-        helper.assertTrue(delivery.apply() && delivery.after() && !delivery.unappliedDestinationOccupied(),
-                "after an actual effect cancellation is forbidden");
+        helper.assertTrue(delivery.placeDestination() && !delivery.placeDestination()
+                        && delivery.destinationAppliedWithSourceRetained(), "destination-first split is exact and cannot duplicate stock");
+        var splitSave = new CompoundTag(); actor.saveWithoutId(splitSave);
+        Villager splitRestored = EntityType.VILLAGER.create(helper.getLevel());
+        if (splitRestored == null) throw new IllegalStateException("native transfer cannot restore source body");
+        splitRestored.load(splitSave);
+        var resumed = new FrontierV3ActorItemTransfer.FungibleStep(place, chest, splitRestored, splitRestored.getUUID(),
+                List.of(new MaterialSourceSelection.Slice(new PhysicalStackAddress.ActorHand(workActor, splitRestored.getUUID(),
+                        ActorContainerItemOrder.Hand.MAIN), 64, 64, 1)), 5);
+        helper.assertTrue(resumed.releasePlacedSource() && resumed.after() && !resumed.releasePlacedSource(),
+                "native source save split completes once without repeating destination");
+        helper.assertTrue(splitRestored.getOffhandItem().getCount() == 37 && chest.getItem(5).getCount() == 64,
+                "recovery preserves unrelated equipment and exact destination quantity");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void horseMenuMapsOnlyCargoAndLeavesEquipmentOutsideTheResourcePort(GameTestHelper helper) {
+        var donkey = EntityType.DONKEY.create(helper.getLevel());
+        if (donkey == null || !donkey.getSlot(499).set(new ItemStack(Items.CHEST)))
+            throw new IllegalStateException("native menu test has no chest donkey");
+        var player = helper.makeMockServerPlayerInLevel();
+        var menu = new net.minecraft.world.inventory.HorseInventoryMenu(1, player.getInventory(), donkey.getInventory(), donkey, 5);
+        helper.assertTrue(menu instanceof io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3HorseMenuAccessor,
+                "the real HorseInventoryMenu must expose its exact body through the registered accessor");
+        var access = (io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3HorseMenuAccessor) menu;
+        helper.assertTrue(access.frontierV3$horse() == donkey, "menu body is exact, not nearby discovery");
+        var container = new SubjectId("container:menu-cargo");
+        var target = new FrontierV3ContainerMenuTarget(new ContainerRecord(container, new SubjectId("settlement:menu"), 15),
+                FrontierV3PhysicalContainer.attached(container, 15, donkey), 2);
+        helper.assertTrue(target.equipmentSlot(0) && target.equipmentSlot(1) && target.cargoSlot(0) == -1
+                        && target.cargoSlot(2) == 0 && target.cargoSlot(16) == 14 && target.cargoSlot(17) == -1,
+                "equipment, cargo and player inventory have distinct declared menu ranges");
+        menu.getSlot(2).set(new ItemStack(Items.COBBLESTONE, 9));
+        helper.assertTrue(target.physical().inventory().getItem(0).getCount() == 9
+                        && donkey.getInventory().getItem(0).isEmpty(), "cargo mapping never writes the saddle");
         helper.succeed();
     }
 }

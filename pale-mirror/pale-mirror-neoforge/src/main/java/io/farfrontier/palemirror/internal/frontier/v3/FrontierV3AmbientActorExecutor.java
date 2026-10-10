@@ -685,7 +685,9 @@ final class FrontierV3AmbientActorExecutor {
     static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> abandonPreparedForReservation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                                                     FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
         if (lease.status() != AmbientLeaseStatus.PREPARED || !lease.equals(state.ambientLeases().get(actorId))
-                || !state.equals(runtime.decodedState().orElse(null))) return Optional.empty();
+                || !state.equals(runtime.decodedState().orElse(null))
+                || io.farfrontier.palemirror.frontier.v3.model.ActorInventoryInteractionFences.pending(state, actorId))
+            return Optional.empty();
         Entity body = level.getEntity(entityId(state, actorId));
         if (body != null) {
             if (!(body instanceof Mob mob) || !observedBody(mob).equals(lease.handoffBody())) return Optional.empty();

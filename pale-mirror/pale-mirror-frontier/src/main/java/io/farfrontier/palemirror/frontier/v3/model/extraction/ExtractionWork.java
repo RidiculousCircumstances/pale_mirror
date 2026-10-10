@@ -77,7 +77,7 @@ public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId ex
             case TAKE_TOOL -> next == Phase.EXTRACT || next == Phase.RETURN_TOOL || next == Phase.FINISHED;
             case EXTRACT -> next == Phase.EXTRACT || next == Phase.STORE || next == Phase.RETURN_TOOL || next == Phase.SELECT_SOURCE;
             case STORE -> false; // Only a settled whole-batch receipt may start the next part.
-            case SELECT_SOURCE -> next == Phase.EXTRACT || next == Phase.RETURN_TOOL;
+            case SELECT_SOURCE -> next == Phase.EXTRACT || next == Phase.STORE || next == Phase.RETURN_TOOL;
             case RETURN_TOOL -> next == Phase.FINISHED;
             case FINISHED -> false;
         };
