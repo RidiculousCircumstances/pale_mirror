@@ -61,6 +61,16 @@ record FrontierV3ActorBodyDeparture(FrontierV3ActorCarrierComposition.Declaratio
                     identity.liveBody(identity.owner(), 0L, identity.epoch()));
     }
 
+    /** A dependent saved inventory may drain after body retirement, never after reincarnation. */
+    boolean retainedForDependentCheckpoint(FrontierWorldState state) {
+        if (current(state)) return true;
+        var actor = state.actorLocations().get(identity.actorId());
+        return actor != null && actor.kind() == identity.kind()
+                && identity.entityId().equals(SceneLease.deterministicEntityId(state.bootstrap().worldId(), identity.actorId()))
+                && ActorBodyAuthority.retainsRetiredDeparture(state,
+                    new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(identity.actorId(), identity.epoch()));
+    }
+
     boolean matches(FrontierV3SceneDeparture receipt) {
         return residenceGeneration == receipt.residenceGeneration()
                 && identity.equals(receipt.carrier().identity()) && observed.equals(receipt.observed())

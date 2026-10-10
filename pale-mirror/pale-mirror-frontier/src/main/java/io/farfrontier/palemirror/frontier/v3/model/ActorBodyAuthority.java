@@ -89,6 +89,22 @@ public final class ActorBodyAuthority {
         Objects.requireNonNull(state, "body authority state"); Objects.requireNonNull(body, "body identity");
         return require(state.fencedRecovery(), body);
     }
+    /**
+     * Read-only identity fence for a dependent owner's saved-departure checkpoint.
+     * Retirement ends actuation, not the exact physical evidence retained by that owner.
+     * This grants no body admission or mutation: the caller must still prove the native
+     * save, current residence, absent body, no return read and its own inventory image.
+     */
+    public static boolean retainsRetiredDeparture(FrontierWorldState state, ActorBodyId body) {
+        var actor = state.actorLocations().get(body.actorId());
+        var id = ActorBodyId.recoveryBindingId(body.actorId());
+        var retired = state.fencedRecovery().tombstones().get(id);
+        return actor != null && actor.condition().status() == ActorLifeStatus.ALIVE
+                && !state.fencedRecovery().current().containsKey(id) && retired != null
+                && retired.asset() == FencedRecoveryAsset.BODY && retired.ownerId().equals(body.actorId())
+                && retired.ownerRevision() == 0L && retired.retiredEpoch() == body.physicalEpoch()
+                && retired.disposition() == FencedRecoveryDisposition.RESUME_COLD;
+    }
     /** Death retires actuation, not the independently retained resource evidence of that exact incarnation. */
     public static void requireRetiredDeath(FrontierWorldState state, ActorBodyId body) {
         var id = ActorBodyId.recoveryBindingId(body.actorId());

@@ -105,7 +105,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                     var saved = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
                     var departure = saved.bodyDeparture(mobile.actorId()).orElse(null);
                     var attached = departure == null ? null : departure.attachedStorage().orElse(null);
-                    if (departure == null || !departure.current(state) || !saved.savedBodyDeparture(departure)
+                    if (departure == null || !departure.retainedForDependentCheckpoint(state) || !saved.savedBodyDeparture(departure)
                             || !saved.currentBodyResidence(mobile.actorId(), departure.residenceGeneration())
                             || FrontierV3ActorBodyController.departureReadPending(level, departure)
                             || level.getEntity(departure.identity().entityId()) != null || attached == null

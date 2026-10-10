@@ -11,6 +11,32 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ActorCarr
 
 /** Replaces owner-transfer chain tests: activities cannot transfer the body in the first place. */
 class FrontierV3ActorBodyLifetimeTest {
+    @Test void savedDependentInventoryCheckpointSurvivesBodyRetirementButNotSuccessor() {
+        var state = running(); var receipt = receipt(state); var actor = receipt.identity().actorId();
+        var ledger = ledger(receipt);
+        assertTrue(ledger.recordBodyDeparture(receipt));
+        assertFalse(ledger.savedBodyDeparture(receipt), "a retained identity is not native save evidence");
+        assertTrue(ledger.confirmSavedBodyDeparture(receipt));
+        var retired = ActorBodyAuthority.unloaded(state, new ActorBodyUnloaded(
+                ActorBodyAuthority.current(state, actor), receipt.canonicalBody(), receipt.canonicalHealth(),
+                receipt.observed().body(), receipt.observed().health(), receipt.executionAtCapture()));
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var restored = codec.decode(codec.encode(retired));
+        assertFalse(receipt.current(restored), "retired evidence cannot actuate or retire a body again");
+        assertTrue(receipt.retainedForDependentCheckpoint(restored));
+        assertTrue(ledger.savedBodyDeparture(receipt));
+        var successor = ActorBodyAuthority.demand(restored, actor);
+        assertFalse(receipt.retainedForDependentCheckpoint(successor), "a prepared successor also fences old cargo evidence");
+        assertFalse(receipt.retainedForDependentCheckpoint(ActorBodyAuthority.running(successor,
+                ActorBodyAuthority.current(successor, actor))));
+        var foreign = new Declaration(actor, receipt.identity().kind(), receipt.identity().owner(),
+                java.util.UUID.randomUUID(), receipt.identity().representation(), 0L, receipt.identity().epoch());
+        var wrong = new FrontierV3ActorBodyDeparture(foreign, receipt.residenceGeneration(), receipt.observed(),
+                receipt.canonicalBody(), receipt.canonicalHealth(), receipt.executionAtCapture(), Optional.empty(), Optional.empty());
+        assertFalse(wrong.retainedForDependentCheckpoint(restored));
+        assertTrue(ledger.markBodyReturnRead(receipt));
+        assertFalse(ledger.savedBodyDeparture(receipt), "native return reads revoke save eligibility independently");
+    }
     @Test void commonBodyDepartureRetainsTheExactEquipmentIdentity() {
         var original = receipt(running());
         var held = new FrontierV3ActorBodyDeparture.HandStack("minecraft:stone_pickaxe", 1, Optional.of(new SubjectId("item:body-tool")));

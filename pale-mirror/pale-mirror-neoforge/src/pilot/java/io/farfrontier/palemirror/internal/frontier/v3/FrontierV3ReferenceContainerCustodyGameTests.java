@@ -43,6 +43,55 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
     private FrontierV3ReferenceContainerCustodyGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void savedAttachmentReleasesThroughRealCustodyExecutorAfterBodyRetirement(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:retired-attachment-drain");
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        var asset = initial.transportFleet().assets().values().stream()
+                .sorted(java.util.Comparator.comparing(a -> a.actorId())).findFirst().orElseThrow();
+        initial = ActorBodyAuthority.demand(initial, asset.actorId());
+        initial = ActorBodyAuthority.running(initial, ActorBodyAuthority.current(initial, asset.actorId()));
+        var runtime = runtime(world, initial);
+        var container = asset.containerId();
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.prepareInitialProjection(runtime, initial, container), "projection preparation");
+        var prepared = runtime.decodedState().orElseThrow();
+        var lease = prepared.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container));
+        var slots = java.util.stream.IntStream.range(0, asset.stackSlots()).mapToObj(ReferenceContainerCustody.ObservedSlot::empty).toList();
+        var storage = new FrontierV3StoredAttachedStorage(container, ReferenceContainerCustody.provenance(container), slots);
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(runtime, prepared, lease, storage), "projection confirmation");
+        var confirmed = runtime.decodedState().orElseThrow();
+        var body = ActorBodyAuthority.current(confirmed, asset.actorId());
+        var identity = new FrontierV3ActorCarrierComposition.Declaration(asset.actorId(), ActorKind.PACK_ANIMAL,
+                FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, SceneLease.deterministicEntityId(world, asset.actorId()),
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, body.physicalEpoch());
+        var location = confirmed.actorLocations().get(asset.actorId());
+        var ledger = FrontierV3AmbientCarrierLedger.get(helper.getLevel(), world);
+        var first = FrontierV3ActorFirstAdmission.neverCreated(new FrontierV3ActorFirstAdmission.Identity(identity.actorId(), identity.kind(), identity.entityId()));
+        var live = FrontierV3ActorOwnerBinding.body(identity.liveBody(identity.owner(), 0L, identity.epoch()));
+        helper.assertTrue(ledger.registerFirstAdmission(first) && ledger.beginFirstAdmission(live)
+                && ledger.acknowledgeFirstAdmission(ledger.firstAdmission(identity.actorId()).orElseThrow(), live), "fixture incarnation history");
+        long residence = ledger.beginBodyResidence(live.declaration());
+        var departure = new FrontierV3ActorBodyDeparture(identity, residence,
+                new SceneMemberPosition(asset.actorId(), location.body(), location.condition().health()),
+                location.body(), location.condition().health(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(storage));
+        helper.assertTrue(ledger.recordBodyDeparture(departure), "fixture unload observation");
+        FrontierV3CommandSubmission.submit(runtime, "test-body-unloaded", asset.actorId().value(),
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded(body, location.body(), location.condition().health(),
+                    location.body(), location.condition().health(), Optional.empty()));
+        FrontierV3ReferenceContainerCustodyExecutor.tick(helper.getLevel(), runtime);
+        helper.assertTrue(runtime.decodedState().orElseThrow().replicaCustody().custodyByScope().get(lease.scopeId()).status()
+                == PhysicalCustodyLeaseStatus.ACQUIRED, "retirement without native save acknowledgement cannot release storage");
+        helper.assertTrue(ledger.confirmSavedBodyDeparture(departure), "fixture positive serialized-image acknowledgement");
+        ledger.persist(helper.getLevel(), world);
+        FrontierV3ReferenceContainerCustodyExecutor.tick(helper.getLevel(), runtime);
+        FrontierV3ReferenceContainerCustodyExecutor.tick(helper.getLevel(), runtime);
+        var released = runtime.decodedState().orElseThrow();
+        helper.assertTrue(released.replicaCustody().custodyByScope().get(lease.scopeId()).status() == PhysicalCustodyLeaseStatus.RELEASED
+                && released.inventory().fungibleResources().equals(initial.inventory().fungibleResources()),
+                "the production custody executor must release the exact saved attachment after independent body retirement, without creating stock");
+        runtime.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void savedAttachmentClosesOnlyItsExactPreparedImageAndUnblocksBodyDeparture(GameTestHelper helper) {
         WorldId world = new WorldId("frontier:saved-attachment-projection");
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));

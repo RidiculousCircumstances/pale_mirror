@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "live_mobile_container_departure",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMQuarryAudit" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "inventoryConflicts": 0 } },
+      { "view": "container", "id": "container:pack/settlement-1", "expect": {
+        "status": "ok", "canonicalCapacity": { "packedFungibleSlots": 0 } } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "command", "command": "/clear PMQuarryAudit" },
+    { "type": "command", "command": "/give PMQuarryAudit minecraft:granite 16" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "actor", "id": "actor:pack/settlement-1", "field": "position" } },
+      "offset": { "x": -2, "y": -1, "z": -2 }, "settleMs": 0, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:pack/settlement-1",
+      "expect": { "status": "ok", "custody": { "status": "ACQUIRED" } }, "timeoutMs": 60000 },
+    { "type": "interact_nearest_entity", "entityType": "minecraft:donkey", "secondaryUse": true,
+      "maxDistance": 6, "timeoutMs": 15000 },
+    { "type": "quick_move_from_inventory", "item": "minecraft:granite", "count": 16, "timeoutMs": 15000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 64, "z": 480 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:pack/settlement-1",
+      "expect": { "status": "ok", "custody": { "status": "RELEASED" }, "canonicalCapacity": { "packedFungibleSlots": 1 } }, "timeoutMs": 60000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "actor", "id": "actor:pack/settlement-1", "field": "position" } },
+      "offset": { "x": -2, "y": -1, "z": -2 }, "settleMs": 0, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:pack/settlement-1",
+      "expect": { "status": "ok", "custody": { "status": "ACQUIRED" },
+        "fungibleOccupied": [{ "itemKind": "minecraft:granite", "count": 16 }],
+        "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } }, "timeoutMs": 60000 },
+    { "type": "interact_nearest_entity", "entityType": "minecraft:donkey", "secondaryUse": true,
+      "maxDistance": 6, "timeoutMs": 15000 },
+    { "type": "quick_move_from_container", "item": "minecraft:granite", "count": 16, "timeoutMs": 15000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 64, "z": 480 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:pack/settlement-1",
+      "expect": { "status": "ok", "custody": { "status": "RELEASED" }, "canonicalCapacity": { "packedFungibleSlots": 0 } }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 6, "view": "container", "id": "container:pack/settlement-1", "expect": { "custody": { "status": "RELEASED" } } },
+    { "after": 12, "view": "container", "id": "container:pack/settlement-1", "expect": { "custody": { "status": "RELEASED" } } },
+    { "after": 13, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "inventoryConflicts": 0, "sceneConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 4, "name": "cargo-before-native-unload", "presentation": "player" },
+    { "after": 9, "name": "same-cargo-after-cold-return", "presentation": "player" }
+  ]
+}
