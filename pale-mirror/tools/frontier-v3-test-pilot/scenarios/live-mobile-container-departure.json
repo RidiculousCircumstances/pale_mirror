@@ -22,6 +22,8 @@
       "maxDistance": 6, "timeoutMs": 15000 },
     { "type": "inspect", "view": "container", "id": "container:pack/settlement-1" },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 64, "z": 480 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "actor:pack/settlement-1",
+      "expect": { "status": "ok", "ambientLease": "CLOSED", "physicalAdmission": { "status": "UNLOADED" } }, "timeoutMs": 60000 },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:pack/settlement-1",
       "expect": { "status": "ok", "custody": { "status": "RELEASED" }, "canonicalCapacity": { "packedFungibleSlots": 1 } }, "timeoutMs": 60000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
@@ -35,17 +37,19 @@
       "maxDistance": 6, "timeoutMs": 15000 },
     { "type": "quick_move_from_container", "item": "minecraft:granite", "count": 16, "timeoutMs": 15000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 64, "z": 480 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "actor:pack/settlement-1",
+      "expect": { "status": "ok", "ambientLease": "CLOSED", "physicalAdmission": { "status": "UNLOADED" } }, "timeoutMs": 60000 },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:pack/settlement-1",
       "expect": { "status": "ok", "custody": { "status": "RELEASED" }, "canonicalCapacity": { "packedFungibleSlots": 0 } }, "timeoutMs": 60000 },
     { "type": "inspect", "view": "summary", "id": "" }
   ],
   "assertions": [
-    { "after": 6, "view": "container", "id": "container:pack/settlement-1", "expect": { "custody": { "status": "RELEASED" } } },
-    { "after": 12, "view": "container", "id": "container:pack/settlement-1", "expect": { "custody": { "status": "RELEASED" } } },
-    { "after": 13, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "inventoryConflicts": 0, "sceneConflicts": 0 } }
+    { "after": 7, "view": "container", "id": "container:pack/settlement-1", "expect": { "custody": { "status": "RELEASED" } } },
+    { "after": 14, "view": "container", "id": "container:pack/settlement-1", "expect": { "custody": { "status": "RELEASED" } } },
+    { "after": 15, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "inventoryConflicts": 0, "sceneConflicts": 0 } }
   ],
   "frames": [
     { "after": 4, "name": "cargo-before-native-unload", "presentation": "player" },
-    { "after": 9, "name": "same-cargo-after-cold-return", "presentation": "player" }
+    { "after": 10, "name": "same-cargo-after-cold-return", "presentation": "player" }
   ]
 }
