@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ExtractionSiteTest {
     @Test void deliveredMiningBatchContinuesTheSameMandateWhileSeparateCouriersDeliverStock() {
         var configuration = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(
-                new WorldId("frontier:quarry-work-kernel"), 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r1"));
+                new WorldId("frontier:quarry-work-kernel"), 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r2"));
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
         var initial = engine.canonicalState().state();
         var site = initial.extractionSites().deposits().values().stream().sorted(Comparator.comparing(value -> value.site().id())).findFirst().orElseThrow().site();
@@ -130,6 +130,12 @@ class ExtractionSiteTest {
         assertThrows(IllegalArgumentException.class, () -> extracted.extracted(upper.id(), 2, "effect:test-upper-again"));
         assertTrue(extracted.available(Set.of()).stream().anyMatch(cell -> cell.id() == upper.id() + 1));
         var next = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(extracted)));
+        var geometry = new ExtractionGeometryIndex(ExtractionGeometryIndex.declarations(state.extractionSites()));
+        assertEquals(ExtractionRegion.all(state.extractionSites()), geometry.regions());
+        assertTrue(geometry.matches(ExtractionGeometryIndex.declarations(next.extractionSites())), "depletion must not invalidate immutable source geometry");
+        assertEquals(1536, geometry.regions().stream().mapToInt(region -> geometry.cells(region).size()).sum());
+        assertTrue(geometry.regions(new ExtractionGeometryIndex.Chunk(10000, 10000)).isEmpty());
+        for (var region : geometry.regions()) assertEquals(region.cells(state.extractionSites()), geometry.cells(region));
         var codec = new FrontierWorldStateCodec();
         assertEquals(next, codec.decode(codec.encode(next)));
         assertEquals(state.inventory(), next.inventory()); // Depletion history alone is not permission to mint output.

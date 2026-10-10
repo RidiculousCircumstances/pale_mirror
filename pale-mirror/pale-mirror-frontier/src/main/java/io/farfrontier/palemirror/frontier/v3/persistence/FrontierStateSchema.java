@@ -4,9 +4,9 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // Extraction delivery now continues the same job with a fresh resource part.
-    // Old STORE history has different transition semantics and must not be replayed.
-    static final int VERSION = 266;
+    // Explicit coalesced review effects and versioned execution-cost admission.
+    // Old outstanding hint multiplicity must not be replayed under the new contract.
+    static final int VERSION = 267;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

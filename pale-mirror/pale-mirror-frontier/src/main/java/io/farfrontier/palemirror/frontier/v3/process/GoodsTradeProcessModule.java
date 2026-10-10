@@ -12,7 +12,7 @@ final class GoodsTradeProcessModule implements FrontierWorldProcessModule {
             "frontier.goods_trade_cancelled", "frontier.goods_trade_claim_partitioned", "frontier.goods_trade_retired", "frontier.goods_participant_reviewed");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor(
             "goods-trade", Set.of(), Set.of(GoodsTradeReceiptProcess.REVIEW, GoodsParticipantProcess.REVIEW, GoodsParticipantWakeup.OPPORTUNITY), TYPES,
-            java.util.stream.Stream.concat(TYPES.stream(), Set.of("kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled",
+            java.util.stream.Stream.concat(TYPES.stream(), Set.of("kernel.reconsideration_requested", "kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled",
                     "frontier.shipment_receipt_acknowledged", "frontier.shipment_dispatched", "frontier.shipment_retired", "frontier.transport_mission_started").stream())
                     .collect(java.util.stream.Collectors.toUnmodifiableSet()), TYPES);
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {

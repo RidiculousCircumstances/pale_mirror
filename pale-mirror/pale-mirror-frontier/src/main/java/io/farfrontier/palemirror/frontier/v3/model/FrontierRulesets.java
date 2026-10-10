@@ -22,7 +22,7 @@ public final class FrontierRulesets {
             PREVIOUS_PRODUCTION_R14.resourceHarvestColdTravelTicksPerEdge(), PREVIOUS_PRODUCTION_R14.workCatalog(), PREVIOUS_PRODUCTION_R14.goodsTrade(),
             java.util.List.of(new InitialSettlementStock(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("settlement:7"), "minecraft:bread", 256)));
     private static final FrontierRuleset TRADE_PLAYTEST = caravanPace("frontier-v3-trade-playtest-r4", PREVIOUS_TRADE_PLAYTEST_R3, 15L);
-    private static final FrontierRuleset QUARRY_GRAYBOX = new FrontierRuleset("frontier-v3-quarry-graybox-r1", 18,
+    private static final FrontierRuleset PREVIOUS_QUARRY_GRAYBOX = new FrontierRuleset("frontier-v3-quarry-graybox-r1", 18,
             TRADE_PLAYTEST.cadence(), TRADE_PLAYTEST.spatial(), TRADE_PLAYTEST.rates(), TRADE_PLAYTEST.facilityCapacity(),
             TRADE_PLAYTEST.combat(), TRADE_PLAYTEST.hiveCommand(), TRADE_PLAYTEST.residentLife(),
             TRADE_PLAYTEST.resourceHarvestColdTravelTicksPerEdge(), TRADE_PLAYTEST.workCatalog().withDefinition(
@@ -34,6 +34,7 @@ public final class FrontierRulesets {
             TRADE_PLAYTEST.initialSettlementStocks(), TRADE_PLAYTEST.labour().with(ResidentWorkKind.EXTRACTION,
                     new SettlementLabourRules.Entry(2, 1, 2)), TRADE_PLAYTEST.expedition(),
             io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules.graybox());
+    private static final FrontierRuleset QUARRY_GRAYBOX = populationExecution("frontier-v3-quarry-graybox-r2", PREVIOUS_QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -48,6 +49,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
             Map.entry(QUARRY_GRAYBOX.id(), QUARRY_GRAYBOX),
+            Map.entry(PREVIOUS_QUARRY_GRAYBOX.id(), PREVIOUS_QUARRY_GRAYBOX),
             Map.entry(PRODUCTION.id(), PRODUCTION), Map.entry(TRADE_PLAYTEST.id(), TRADE_PLAYTEST),
             Map.entry(EXPEDITION_CANDIDATE.id(), EXPEDITION_CANDIDATE),
             Map.entry(PREVIOUS_PRODUCTION_R14.id(), PREVIOUS_PRODUCTION_R14),
@@ -62,6 +64,13 @@ public final class FrontierRulesets {
     private FrontierRulesets() { }
 
     public static FrontierRuleset production() { return PRODUCTION; }
+
+    private static FrontierRuleset populationExecution(String id, FrontierRuleset base) {
+        return new FrontierRuleset(id, 19, base.cadence(), base.spatial(), base.rates(), base.facilityCapacity(),
+                base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(),
+                base.extraction(), FrontierRuleset.Execution.population());
+    }
 
     /** A new pinned balance selector; old worlds retain their exact expedition clock and digest. */
     private static FrontierRuleset caravanPace(String id, FrontierRuleset base, long ticksPerEdge) {

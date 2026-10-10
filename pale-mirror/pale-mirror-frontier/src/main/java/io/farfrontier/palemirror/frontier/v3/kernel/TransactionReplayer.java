@@ -39,6 +39,7 @@ public final class TransactionReplayer {
             ScheduledActionQueue.Mutation nextSchedules = schedules.beginMutation();
             for (FrontierEvent event : transaction.events()) {
                 if (event.payload() instanceof ScheduleEffect effect) {
+                    stateValidator.validateScheduleEffect(next, event.subject(), effect);
                     ScheduleEffectApplier.applyCommitted(nextSchedules, effect, transaction.instant());
                 }
                 else next = Objects.requireNonNull(reducer.apply(next, event), "reducer state");

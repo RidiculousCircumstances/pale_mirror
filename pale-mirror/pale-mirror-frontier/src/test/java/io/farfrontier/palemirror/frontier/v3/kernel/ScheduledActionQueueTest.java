@@ -15,6 +15,62 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScheduledActionQueueTest {
+    @Test void explicitHintsCoalesceByOwnerAndKindWithoutLosingASuccessorOrExactFacts() {
+        var queue = new ScheduledActionQueue();
+        var first = action("schedule:hint-first", 20, 0, "settlement:a", 1);
+        var mutation = queue.beginMutation();
+        for (int i = 0; i < 100; i++) mutation.requestReconsideration(
+                action("schedule:hint-" + i, 20 + i, 0, "settlement:a", 1));
+        assertEquals(1, mutation.projectedSize());
+        assertEquals(0, queue.size(), "uncommitted hints cannot alter the canonical queue");
+        mutation.commit();
+        var retained = queue.snapshot().getFirst();
+        var earlier = queue.beginMutation(); earlier.requestReconsideration(first);
+        earlier.requestReconsideration(action("schedule:earlier", 10, 0, "settlement:a", 1));
+        earlier.requestReconsideration(action("schedule:another-owner", 10, 0, "settlement:b", 1));
+        earlier.schedule(new ScheduledAction(new ScheduleId("schedule:receipt"), new SimInstant(10), 0,
+                first.subject(), "effect.confirmation", 1));
+        earlier.commit();
+        assertEquals(3, queue.size());
+        assertFalse(queue.containsExact(retained));
+        assertTrue(queue.snapshot().stream().anyMatch(value -> value.kind().equals("effect.confirmation")));
+        var next = queue.beginMutation();
+        next.cancel(new ScheduleId("schedule:earlier"));
+        var successor = action("schedule:successor", 11, 0, "settlement:a", 1);
+        next.requestReconsideration(successor); next.commit();
+        assertTrue(queue.containsExact(successor), "a change after consumption must get its own pending review");
+        var invalid = queue.beginMutation();
+        assertThrows(IllegalArgumentException.class, () -> invalid.requestReconsideration(
+                action("schedule:conflicting-cost", 12, 0, "settlement:a", 2)));
+        assertThrows(IllegalArgumentException.class, () -> invalid.requestReconsideration(
+                action("schedule:successor", 11, 0, "settlement:foreign", 1)));
+    }
+
+    @Test void pressureSeparatesReadyHeldFutureAndExcludesParkedTimeAfterWake() {
+        var queue = new ScheduledActionQueue();
+        var held = action("schedule:held-pressure", 1, 0, "resident:a", 1);
+        var ready = action("schedule:ready-pressure", 2, 0, "resident:b", 1);
+        var future = action("schedule:future-pressure", 200, 0, "resident:c", 1);
+        queue.schedule(held); queue.schedule(ready); queue.schedule(future);
+        queue.selectDue(new SimInstant(10), new WorkBudget(1, 1), value -> !value.equals(held), value -> Set.of(held.subject()));
+        var before = queue.pressure(new SimInstant(100), value -> !value.equals(held));
+        assertEquals(1, before.ready()); assertEquals(1, before.held()); assertEquals(1, before.future());
+        queue.cancel(ready.id()); queue.wake(Set.of(held.subject()), 100);
+        var after = queue.pressure(new SimInstant(103), value -> true);
+        assertEquals(3, after.oldestReadyLagTicks());
+        assertEquals(102, after.oldestDeadlineLagTicks(), "held time is semantic deadline lateness, not ready service delay");
+        assertEquals(0, after.held());
+    }
+
+    @Test void registeredAdmissionCostBoundsTheSameStableDueOrder() {
+        var queue = new ScheduledActionQueue();
+        for (int i = 0; i < 20; i++) queue.schedule(action("schedule:policy-" + i, 1, 0, "settlement:a", 1));
+        var work = queue.selectDue(new SimInstant(1), new WorkBudget(64, 128), value -> true,
+                value -> Set.of(), value -> 8);
+        assertEquals(16, work.admitted().size());
+        assertEquals(queue.snapshot().subList(0, 16), work.admitted());
+        assertEquals(queue.snapshot().get(16), work.blockedAction());
+    }
     @Test
     void parkedWaitersAreNotReevaluatedEachTickAndWakeInTheirOriginalDueOrder() {
         ScheduledActionQueue queue = new ScheduledActionQueue();

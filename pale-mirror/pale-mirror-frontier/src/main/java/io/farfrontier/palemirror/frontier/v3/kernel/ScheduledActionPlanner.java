@@ -26,6 +26,9 @@ public interface ScheduledActionPlanner<S> {
     /** Canonical owner-declared hold; excludes work before budget admission without changing its deadline. */
     default boolean held(S state, ScheduledAction action) { return false; }
 
+    /** Producer-owned deterministic admission cost, independent of observed host timings. */
+    default int admissionWeight(S state, ScheduledAction action) { return action.weight(); }
+
     /** Nonempty keys allow a held action to leave the runnable index until one owner changes. */
     default Set<SubjectId> holdWakeKeys(S state, ScheduledAction action) { return Set.of(); }
 

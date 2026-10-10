@@ -317,7 +317,8 @@ class FrontierV3ServerRuntimeTest {
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 47L),
                         new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
-        WorkBudget budget = FrontierV3RuntimeBudgets.fastForwardTick();
+        WorkBudget budget = FrontierV3RuntimeBudgets.fastForwardTick(
+                io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.production());
 
         for (int tick = 0; tick < FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS; tick++) {
             runtime.advance(1, budget).orElseThrow();

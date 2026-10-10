@@ -216,8 +216,8 @@ class ResidentActivityProcessTest {
         assertTrue(planned.stream().noneMatch(proposed -> proposed.payload() instanceof ResidentMealStarted));
         assertEquals(1L, planned.stream().filter(proposed -> proposed.payload()
                 instanceof io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarted).count());
-        var availability = planned.stream().map(proposed -> proposed.payload()).filter(ScheduleEffect.Created.class::isInstance)
-                .map(ScheduleEffect.Created.class::cast).findFirst().orElseThrow().action();
+        var availability = planned.stream().map(proposed -> proposed.payload()).filter(ScheduleEffect.ReconsiderationRequested.class::isInstance)
+                .map(ScheduleEffect.ReconsiderationRequested.class::cast).findFirst().orElseThrow().action();
         assertEquals("frontier.objective.stock_reconsider", availability.kind());
         var next = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getLast().payload()).replacement();
         assertEquals(action.id(), next.id());
@@ -272,8 +272,8 @@ class ResidentActivityProcessTest {
                 .filter(io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarted.class::isInstance)
                 .map(io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarted.class::cast).findFirst().orElseThrow();
         assertEquals(24_050L, presence.atTick());
-        var availability = planned.stream().map(proposed -> proposed.payload()).filter(ScheduleEffect.Created.class::isInstance)
-                .map(ScheduleEffect.Created.class::cast).findFirst().orElseThrow().action();
+        var availability = planned.stream().map(proposed -> proposed.payload()).filter(ScheduleEffect.ReconsiderationRequested.class::isInstance)
+                .map(ScheduleEffect.ReconsiderationRequested.class::cast).findFirst().orElseThrow().action();
         assertEquals("frontier.objective.stock_reconsider", availability.kind());
         var next = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getLast().payload()).replacement();
         assertEquals(action.id(), next.id());

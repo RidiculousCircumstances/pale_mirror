@@ -46,14 +46,17 @@ public final class StrategicObjectiveProcess {
     }
 
     public static List<ProposedEvent> planStockReconsideration(FrontierWorldState state, ScheduledAction action) {
+        return planStockReconsideration(state, action, action.dueAt().ticks());
+    }
+    public static List<ProposedEvent> planStockReconsideration(FrontierWorldState state, ScheduledAction action, long currentTick) {
         if (!action.kind().equals("frontier.objective.stock_reconsider")
                 || !action.subject().value().startsWith("settlement:")
                 || state.bootstrap().settlements().stream().noneMatch(value -> value.id().equals(action.subject())))
             throw new IllegalArgumentException("stock wake has a foreign settlement owner or action kind");
         // The wake is only a causal hint. Policy re-reads current stock, worker, station and
         // active lane before it may create a task. The recurring review remains a backstop.
-        var events = new java.util.ArrayList<>(plan(state, action, false, action.id().value()));
-        events.addAll(GoodsParticipantWakeup.container(state, FrontierWorldState.depotId(action.subject()), action.id().value(), action.dueAt().ticks()));
+        var events = new java.util.ArrayList<>(plan(state, action, false, action.id().value(), currentTick));
+        events.addAll(GoodsParticipantWakeup.container(state, FrontierWorldState.depotId(action.subject()), action.id().value(), currentTick));
         return List.copyOf(events);
     }
 
@@ -262,18 +265,18 @@ public final class StrategicObjectiveProcess {
                 new ScheduleEffect.Created(review(owner, ordinal + 1, action.dueAt().ticks()
                         + state.bootstrap().ruleset().cadence().strategicReviewInterval())))) : List.of();
         List<ProposedEvent> health = state.bootstrap().hive().id().equals(owner) ? List.of()
-                : HumanHealthProcess.assess(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.dueAt().ticks());
+                : HumanHealthProcess.assess(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner), currentTick);
         boolean hive = state.bootstrap().hive().id().equals(owner);
         List<ProposedEvent> medical = hive ? List.of() : MedicalTreatmentProcess.planStart(state, owner, ordinal);
         SettlementPerceptionProcess.Refresh perception = hive ? new SettlementPerceptionProcess.Refresh(state.strategicPlans().infectionKnowledge(), List.of())
-                : SettlementPerceptionProcess.refreshLocalInfection(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.dueAt().ticks());
-        HiveTerritoryPerceptionProcess.Refresh territoryPerception = hive ? HiveTerritoryPerceptionProcess.refresh(state, action.dueAt().ticks())
+                : SettlementPerceptionProcess.refreshLocalInfection(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner), currentTick);
+        HiveTerritoryPerceptionProcess.Refresh territoryPerception = hive ? HiveTerritoryPerceptionProcess.refresh(state, currentTick)
                 : new HiveTerritoryPerceptionProcess.Refresh(state.strategicPlans().hiveTerritoryKnowledge(), List.of());
-        HiveSettlementPerceptionProcess.Refresh settlementPerception = hive ? HiveSettlementPerceptionProcess.refresh(state, action.dueAt().ticks())
+        HiveSettlementPerceptionProcess.Refresh settlementPerception = hive ? HiveSettlementPerceptionProcess.refresh(state, currentTick)
                 : new HiveSettlementPerceptionProcess.Refresh(state.strategicPlans().hiveSettlementKnowledge(), List.of());
         HiveDoctrineState doctrine = hive ? HiveDoctrineProcess.select(state.withStrategicPlans(state.strategicPlans()
                 .withHiveTerritoryKnowledge(territoryPerception.knowledge())
-                .withHiveSettlementKnowledge(settlementPerception.knowledge())), action.dueAt().ticks())
+                .withHiveSettlementKnowledge(settlementPerception.knowledge())), currentTick)
                 : state.strategicPlans().hiveDoctrine();
         FrontierWorldState decisionState = state.withStrategicPlans(state.strategicPlans().withInfectionKnowledge(perception.knowledge())
                 .withHiveTerritoryKnowledge(territoryPerception.knowledge())
@@ -289,11 +292,11 @@ public final class StrategicObjectiveProcess {
                         FrontierWorldStateSupport.settlement(state.bootstrap(), owner)));
         if (management.isPresent()) {
             var expansion = SettlementManagementComposition.MANAGEMENT.expandActiveTasks(decisionState,
-                    FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.id(), action.dueAt().ticks());
+                    FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.id(), currentTick);
             if (!expansion.isEmpty()) return concatenate(concatenate(observedAndHealth, expansion), next);
         }
         Optional<StrategicOperationProposal> candidate = management.isPresent() ? management.orElseThrow().selected()
-                : hiveCandidate(decisionState, action.dueAt().ticks());
+                : hiveCandidate(decisionState, currentTick);
         List<ProposedEvent> preempted = new java.util.ArrayList<>();
         management.ifPresent(decision -> decision.replacePendingTasks().forEach(id -> preempted.add(
                 new ProposedEvent(owner, new StrategicTaskTransition(id, StrategicTaskStatus.BLOCKED)))));
@@ -305,29 +308,29 @@ public final class StrategicObjectiveProcess {
         StrategicTask task = task(state, objective);
         if (task.kind() == StrategicTaskKind.SPREAD_INFECTION_CELL) {
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
-                    new ProposedEvent(owner, new ScheduleEffect.Created(HiveInfectionProcess.task(task, 1, action.dueAt().ticks() + 100L))));
+                    new ProposedEvent(owner, new ScheduleEffect.Created(HiveInfectionProcess.task(task, 1, currentTick + 100L))));
         }
         if (task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM) {
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
-                    new ProposedEvent(owner, new ScheduleEffect.Created(HiveGrowthProcess.start(task, action.dueAt().ticks() + 100L))));
+                    new ProposedEvent(owner, new ScheduleEffect.Created(HiveGrowthProcess.start(task, currentTick + 100L))));
         }
         if (task.kind() == StrategicTaskKind.PRODUCE_BREAD) {
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)),
                         new ProposedEvent(owner, new StrategicTaskPlanned(task)), new ProposedEvent(task.id(),
-                        new ScheduleEffect.Created(ProductionProcess.start(task, action.dueAt().ticks() + 1L))));
+                        new ScheduleEffect.Created(ProductionProcess.start(task, currentTick + 1L))));
         }
         if (task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE) {
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)),
                     new ProposedEvent(owner, new StrategicTaskPlanned(task)), new ProposedEvent(task.id(),
-                            new ScheduleEffect.Created(ResourceSiteHarvestProcess.start(task, action.dueAt().ticks() + 1L))));
+                            new ScheduleEffect.Created(ResourceSiteHarvestProcess.start(task, currentTick + 1L))));
         }
         if (task.kind() == StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE) {
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
-                    new ProposedEvent(owner, new ScheduleEffect.Created(RoutePatrolProcess.start(task, action.dueAt().ticks() + 100L))));
+                    new ProposedEvent(owner, new ScheduleEffect.Created(RoutePatrolProcess.start(task, currentTick + 100L))));
         }
         if (task.kind() == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS) {
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
-                    new ProposedEvent(owner, new ScheduleEffect.Created(RouteConstructionProcess.start(task, action.dueAt().ticks() + 100L))));
+                    new ProposedEvent(owner, new ScheduleEffect.Created(RouteConstructionProcess.start(task, currentTick + 100L))));
         }
         return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)));
     }

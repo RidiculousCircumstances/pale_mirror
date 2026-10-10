@@ -365,7 +365,7 @@ public final class FrontierV3ServerLifecycle {
         if (stopping(server)) return;
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null) return;
-        try {
+        try (var hostTurn = FrontierV3HostTiming.beginPmTurn(runtime.executionMetrics())) {
             runtime.beginPersistenceTurn();
             try {
                 boolean active = runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE;
@@ -385,7 +385,7 @@ public final class FrontierV3ServerLifecycle {
                 } else if (active) {
                     ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
                     runObservedPhysicalTurn(physicalWorld, runtime);
-                    runtime.tick(FrontierV3RuntimeBudgets.ordinaryTick());
+                    runtime.tick(FrontierV3RuntimeBudgets.ordinaryTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
                     if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) advanceQueuedCanonicalTime(server, runtime);
                 }
             } finally { runtime.endPersistenceTurn(); }
@@ -535,7 +535,7 @@ public final class FrontierV3ServerLifecycle {
             if (physicalStepRequired) break;
             long advanceStarted = System.nanoTime();
             long before = runtime.canonicalState().orElseThrow().instant().ticks();
-            var result = runtime.advanceColdInterval(allowed - advanced, FrontierV3RuntimeBudgets.fastForwardTick());
+            var result = runtime.advanceColdInterval(allowed - advanced, FrontierV3RuntimeBudgets.fastForwardTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
             advanceNanos += elapsedNanos(advanceStarted);
             if (result.isEmpty()) break;
             advanced += Math.toIntExact(result.orElseThrow().instant().ticks() - before); steps++;

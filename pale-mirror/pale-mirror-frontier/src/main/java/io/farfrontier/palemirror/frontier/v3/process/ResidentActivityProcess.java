@@ -202,7 +202,7 @@ public final class ResidentActivityProcess {
                 && ResidentActivityCoordinator.mayStartOrdinaryWork(selectedState, resident.id(), now)
                 && SettlementWorkPolicy.permissions(selectedState, resident.settlementId()).workers().values()
                     .stream().anyMatch(workers -> workers.contains(resident.id()))) {
-            events.add(new ProposedEvent(resident.settlementId(), new ScheduleEffect.Created(
+            events.add(new ProposedEvent(resident.settlementId(), new ScheduleEffect.ReconsiderationRequested(
                     StrategicObjectiveProcess.workforceReconsideration(resident, action, Math.addExact(now, 1L)))));
         }
         long next = nextReview(state, resident, now, choice, mealStarted,

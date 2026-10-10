@@ -15,8 +15,10 @@ class FrontierV3AbsoluteFastForwardTest {
     @Test
     void queuedColdAdvanceHasASmallLiveTickSlice() {
         assertEquals(10, FrontierV3ServerLifecycle.fastForwardSliceTicks());
-        assertEquals(4, FrontierV3RuntimeBudgets.fastForwardTick().maxActions(),
-                "one coincident due wave may not monopolize the server thread");
+        var ruleset = io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.installed("frontier-v3-quarry-graybox-r2");
+        assertEquals(ruleset.execution().budget(), FrontierV3RuntimeBudgets.fastForwardTick(ruleset));
+        assertEquals(FrontierV3RuntimeBudgets.ordinaryTick(ruleset), FrontierV3RuntimeBudgets.fastForwardTick(ruleset),
+                "operator advancement must not silently change the world's admission policy");
         assertTrue(FrontierV3ServerLifecycle.fastForwardSliceTimeRemaining(19_999_999L));
         assertTrue(!FrontierV3ServerLifecycle.fastForwardSliceTimeRemaining(20_000_000L));
     }

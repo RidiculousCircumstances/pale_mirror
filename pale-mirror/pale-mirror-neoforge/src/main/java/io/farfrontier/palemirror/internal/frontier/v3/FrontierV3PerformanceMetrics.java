@@ -20,11 +20,11 @@ import java.util.TreeMap;
 final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
     private static final int MAX_STAGE_ATTRIBUTIONS = 256;
     private static final int MAX_QUEUE_ATTRIBUTIONS = 256;
-    private static final Key OTHER = new Key(Stage.PHYSICAL, "other", "other");
     private final Map<Key, Timing> stages = new TreeMap<>();
     private final Map<QueueKey, Queue> queues = new TreeMap<>();
     private long droppedAttributions;
     private long auditReadyWithoutWake;
+    private QueuePressure pressure;
 
     @Override
     public Span begin(Stage stage, String kind, String owner) {
@@ -38,7 +38,8 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
         ScheduledAction action = deferred.orElse(null);
         QueueKey key = action == null ? new QueueKey("idle", "world") : new QueueKey(action.kind(), action.subject().value());
         long lag = action == null ? 0L : Math.max(0L, instant.ticks() - action.dueAt().ticks());
-        queue(key).record(queueDepth, lag);
+        queue(key).record(queueDepth, lag, instant.ticks());
+        queue(new QueueKey("budget-deferred", "world")).record(action == null ? 0 : 1, lag, instant.ticks());
     }
 
     @Override
@@ -47,10 +48,12 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
         if (parkedDepth < 0 || parkedDepth > queueDepth)
             throw new IllegalArgumentException("parked depth exceeds canonical queue depth");
         observeQueue(instant, queueDepth, deferred);
-        queue(new QueueKey("held-waiters", "world")).record(parkedDepth, 0L);
+        queue(new QueueKey("held-waiters", "world")).record(parkedDepth, 0L, instant.ticks());
         queue(new QueueKey("unparked-depth", "world")).record(queueDepth - parkedDepth,
-                deferred.map(action -> Math.max(0L, instant.ticks() - action.dueAt().ticks())).orElse(0L));
+                deferred.map(action -> Math.max(0L, instant.ticks() - action.dueAt().ticks())).orElse(0L), instant.ticks());
     }
+
+    @Override public void observePressure(QueuePressure value) { pressure = value; }
 
     @Override
     public void observeWakeAudit(long count) {
@@ -64,13 +67,14 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
         stages.forEach((key, value) -> stageSamples.add(value.snapshot(key)));
         List<QueueSample> queueSamples = new ArrayList<>(queues.size());
         queues.forEach((key, value) -> queueSamples.add(value.snapshot(key)));
-        return new Snapshot(stageSamples, queueSamples, droppedAttributions, auditReadyWithoutWake);
+        return new Snapshot(stageSamples, queueSamples, droppedAttributions, auditReadyWithoutWake, Optional.ofNullable(pressure));
     }
 
     private Timing timing(Key requested) {
         Timing current = stages.get(requested);
         if (current != null) return current;
-        Key selected = stages.size() < MAX_STAGE_ATTRIBUTIONS ? requested : OTHER;
+        Key selected = stages.size() < MAX_STAGE_ATTRIBUTIONS || requested.stage() == Stage.HOST_TURN || requested.stage() == Stage.HOST_TICK
+                ? requested : new Key(requested.stage(), "other", "other");
         if (!selected.equals(requested)) droppedAttributions = droppedAttributions == Long.MAX_VALUE ? Long.MAX_VALUE : droppedAttributions + 1L;
         return stages.computeIfAbsent(selected, ignored -> new Timing());
     }
@@ -98,16 +102,21 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
 
     private static final class Timing {
         private final long[] bins = new long[64];
+        private final long[] recent = new long[64];
+        private int recentCursor, recentCount;
         private long samples, totalNanos, maxNanos;
 
         private void record(long nanos) {
             samples = saturatingAdd(samples, 1L); totalNanos = saturatingAdd(totalNanos, nanos); maxNanos = Math.max(maxNanos, nanos);
             int bin = bin(nanos); bins[bin] = saturatingAdd(bins[bin], 1L);
+            recent[recentCursor] = nanos; recentCursor = (recentCursor + 1) % recent.length;
+            recentCount = Math.min(recent.length, recentCount + 1);
         }
 
         private StageSample snapshot(Key key) {
             return new StageSample(key.stage(), key.kind(), key.owner(), samples, totalNanos, maxNanos,
-                    percentile(50), percentile(95), percentile(99));
+                    percentile(50), percentile(95), percentile(99), recentCount == 0 ? 0 : recent[(recentCursor + recent.length - 1) % recent.length],
+                    recentCount, java.util.Arrays.stream(recent).reduce(0L, Timing::saturatingAdd), java.util.Arrays.stream(recent).max().orElse(0));
         }
 
         private long percentile(int percentile) {
@@ -133,16 +142,17 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
     }
 
     private static final class Queue {
-        private long samples, currentLagTicks, maxLagTicks;
+        private long samples, currentLagTicks, maxLagTicks, observedAtTicks = -1;
         private int currentDepth, maxDepth;
 
-        private void record(int depth, long lag) {
+        private void record(int depth, long lag, long observedAt) {
             samples = samples == Long.MAX_VALUE ? Long.MAX_VALUE : samples + 1L; currentDepth = depth; maxDepth = Math.max(maxDepth, depth);
             currentLagTicks = lag; maxLagTicks = Math.max(maxLagTicks, lag);
+            observedAtTicks = observedAt;
         }
 
         private QueueSample snapshot(QueueKey key) {
-            return new QueueSample(key.kind(), key.owner(), samples, currentDepth, maxDepth, currentLagTicks, maxLagTicks);
+            return new QueueSample(key.kind(), key.owner(), samples, currentDepth, maxDepth, currentLagTicks, maxLagTicks, observedAtTicks);
         }
     }
 }

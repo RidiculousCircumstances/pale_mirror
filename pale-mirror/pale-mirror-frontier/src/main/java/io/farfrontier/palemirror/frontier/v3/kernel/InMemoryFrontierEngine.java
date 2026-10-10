@@ -228,13 +228,12 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         ScheduledWork work;
         try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.SCHEDULE_ALLOCATION, "due-actions", worldId.value())) {
             work = schedules.selectDue(target, budget, action -> !scheduledPlanner.held(state, action),
-                    action -> safeHoldWakeKeys(state, action));
+                    action -> safeHoldWakeKeys(state, action), action -> scheduledPlanner.admissionWeight(state, action));
         } catch (RuntimeException error) {
             quarantine(CauseChain.root(new CommandId("scheduler:allocation")),
                     KernelQuarantineReporter.Boundary.DUE_TRANSACTION, error);
             return advanceResult(List.of(), Optional.empty());
         }
-        observeQueue(target, schedules.size(), schedules.parkedCount(), work.blockedActionOptional());
         List<TransactionId> completed = new ArrayList<>();
         for (ScheduledAction action : work.admitted()) {
             try {
@@ -405,6 +404,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                     new EventId("event:revision-" + nextRevision.value() + "-" + events.size()),
                     transactionId, worldId, nextRevision, eventInstant, next.subject(), causes, next.payload());
             if (event.payload() instanceof ScheduleEffect effect) {
+                stateValidator.validateScheduleEffect(nextState, event.subject(), effect);
                 S scheduleState = nextState;
                 ScheduleEffectApplier.apply(nextSchedules, effect, action -> scheduledPlanner.held(scheduleState, action));
             } else {
@@ -473,8 +473,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         encodedState = encoded;
         revision = nextRevision;
         nextSchedules.commit();
-        if (wakeAll) schedules.wakeAll();
-        else schedules.wake(wakeKeys);
+        if (wakeAll) schedules.wakeAll(eventInstant.ticks());
+        else schedules.wake(wakeKeys, eventInstant.ticks());
         transactions.add(transaction);
         return transactionId;
     }
@@ -490,8 +490,11 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
 
     private void observeQueue(SimInstant observedAt, int queueDepth, int parkedDepth,
                               Optional<ScheduledAction> deferred) {
+        deferred = deferred.filter(schedules::containsExact).filter(action -> !scheduledPlanner.held(state, action));
         FrontierExecutionMetrics.safelyObserveQueue(executionMetrics, observedAt, queueDepth, parkedDepth, deferred);
         FrontierExecutionMetrics.safelyObserveWakeAudit(executionMetrics, schedules.auditReadyWithoutWake());
+        try { executionMetrics.observePressure(schedules.pressure(observedAt, action -> !scheduledPlanner.held(state, action))); }
+        catch (RuntimeException ignored) { /* Observations never determine a canonical transition. */ }
     }
 
     private byte[] currentEncodedState() {

@@ -46,7 +46,40 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
      * directory scan and full snapshot decode at every periodic checkpoint; a new store created
      * for restart still performs the complete on-disk recovery below.
      */
-    private final Map<WorldId, RecoveryImage> recoveredImages = new HashMap<>();
+    private final Map<WorldId, OwnedRecovery> recoveredImages = new HashMap<>();
+
+    /** Single-owner mutable tail; immutable validated images are made only at read boundaries. */
+    private static final class OwnedRecovery {
+        private final WorldId world;
+        private final java.util.Optional<SnapshotRecord> checkpoint;
+        private final java.util.ArrayList<TransactionRecord> tail;
+        private final java.util.Set<io.farfrontier.palemirror.frontier.v3.api.TransactionId> transactionIds = new java.util.HashSet<>();
+        private final java.util.Set<io.farfrontier.palemirror.frontier.v3.api.EventId> eventIds = new java.util.HashSet<>();
+        private RecoveryImage image;
+        OwnedRecovery(RecoveryImage verified) {
+            world = verified.worldId(); checkpoint = verified.checkpoint(); tail = new java.util.ArrayList<>(verified.walTail()); image = verified;
+            for (var transaction : tail) {
+                transactionIds.add(transaction.id());
+                transaction.events().forEach(event -> eventIds.add(event.id()));
+            }
+        }
+        void validateAppend(TransactionRecord transaction) {
+            var previous = tail.isEmpty() ? checkpoint.map(value -> value.checkpoint().instant())
+                    .orElse(io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO) : tail.getLast().instant();
+            if (!world.equals(transaction.worldId()) || transaction.instant().compareTo(previous) < 0
+                    || transactionIds.contains(transaction.id())
+                    || transaction.events().stream().anyMatch(event -> eventIds.contains(event.id())))
+                throw new IllegalArgumentException("WAL append violates world, time or exact identity order");
+        }
+        void appended(TransactionRecord transaction) {
+            tail.add(transaction); transactionIds.add(transaction.id());
+            transaction.events().forEach(event -> eventIds.add(event.id())); image = null;
+        }
+        RecoveryImage image() {
+            if (image == null) image = new RecoveryImage(world, checkpoint, tail);
+            return image;
+        }
+    }
     /**
      * Per-store ordered WAL head, populated by complete disk recovery.  It separately records
      * the last fsynced WAL sequence so BATCHABLE progression has a real bounded batch boundary,
@@ -66,7 +99,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         Path directory = worldDirectory(worldId);
         if (!Files.exists(directory)) {
             RecoveryImage empty = new RecoveryImage(worldId, java.util.Optional.empty(), List.of());
-            durableHeads.put(worldId, DurableHead.from(empty)); recoveredImages.put(worldId, empty);
+            durableHeads.put(worldId, DurableHead.from(empty)); recoveredImages.put(worldId, new OwnedRecovery(empty));
             return empty;
         }
         try {
@@ -103,7 +136,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
             // boundary; retain that in-process fact so the next physical effect still flushes
             // the complete prefix.
             if (previousHead != null) recoveredHead = recoveredHead.retainingKnownFlush(previousHead);
-            durableHeads.put(worldId, recoveredHead); recoveredImages.put(worldId, image);
+            durableHeads.put(worldId, recoveredHead); recoveredImages.put(worldId, new OwnedRecovery(image));
             return image;
         } catch (IOException error) { throw new IllegalStateException("unable to recover Frontier v3 store", error); }
     }
@@ -114,14 +147,16 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
      * already established this store's durable head may reuse its verified image.
      */
     synchronized RecoveryImage recoverOwned(WorldId worldId) {
-        RecoveryImage cached = recoveredImages.get(worldId);
-        return cached == null ? recover(worldId) : cached;
+        OwnedRecovery cached = recoveredImages.get(worldId);
+        return cached == null ? recover(worldId) : cached.image();
     }
 
     @Override public synchronized AppendReceipt append(TransactionRecord transaction, Durability durability) {
         Objects.requireNonNull(transaction, "transaction"); Objects.requireNonNull(durability, "durability");
         DurableHead head = head(transaction.worldId());
         if (!transaction.revision().equals(head.revision().next())) throw new IllegalStateException("WAL append revision is not next");
+        OwnedRecovery image = Objects.requireNonNull(recoveredImages.get(transaction.worldId()), "recovered store image");
+        image.validateAppend(transaction);
         long sequence = Math.addExact(head.lastSequence(), 1L);
         WorldId worldId = transaction.worldId();
         appendSegment(worldId, sequence, FrontierPersistenceCodec.encodeWal(transaction, payloadCodecs));
@@ -137,9 +172,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
             appended = appended.flushedThrough(sequence);
         }
         durableHeads.put(worldId, appended);
-        RecoveryImage image = Objects.requireNonNull(recoveredImages.get(transaction.worldId()), "recovered store image");
-        java.util.ArrayList<TransactionRecord> tail = new java.util.ArrayList<>(image.walTail()); tail.add(transaction);
-        recoveredImages.put(transaction.worldId(), new RecoveryImage(transaction.worldId(), image.checkpoint(), List.copyOf(tail)));
+        image.appended(transaction);
         return new AppendReceipt(transaction.id(), transaction.revision(), durability, sequence);
     }
 
@@ -153,7 +186,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         writeAtomically(worldDirectory(worldId).resolve(fileName("snapshot", head.lastSequence())), FrontierPersistenceCodec.encodeSnapshot(snapshot), true);
         closeSegment(worldId);
         durableHeads.put(worldId, head.withSnapshot(head.lastSequence(), head.revision()));
-        recoveredImages.put(worldId, new RecoveryImage(worldId, java.util.Optional.of(snapshot), List.of()));
+        recoveredImages.put(worldId, new OwnedRecovery(new RecoveryImage(worldId, java.util.Optional.of(snapshot), List.of())));
         return new SnapshotReceipt(snapshot.checkpoint().revision(), head.lastSequence());
     }
 

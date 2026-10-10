@@ -402,9 +402,29 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(value.contains("\"status\":\"ok\""), "a bounded pressure cut must remain readable");
         assertTrue(value.length() < 8_192, "maximum retained telemetry cannot turn into response_limit");
-        assertEquals(13, value.split("\\\"stage\\\":").length - 1,
-                "the pressure cut retains twelve cumulative spans plus one independent worst-span caller");
+        assertEquals(9, value.split("\\\"stage\\\":").length - 1,
+                "the pressure cut retains eight spans plus worst-span, leaving space for fresh queue and complete tick timing");
         assertEquals(8, value.split("\\\"currentDepth\\\":").length - 1);
+    }
+
+    @Test void performanceDistinguishesStaleHistoryFromCurrentReadyPressureAndKeepsTrueOverflowStage() {
+        var metrics = new FrontierV3PerformanceMetrics();
+        var action = new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:old-pressure"),
+                new SimInstant(1), 0, new SubjectId("settlement:1"), "process.old", 1);
+        metrics.observeQueue(new SimInstant(100), 20, 0, Optional.of(action));
+        metrics.observeQueue(new SimInstant(103), 19, 2, Optional.empty());
+        metrics.observePressure(new FrontierExecutionMetrics.QueuePressure(103, 19, 0, 2, 17, 0, 0));
+        for (int i = 0; i < 260; i++) metrics.begin(FrontierExecutionMetrics.Stage.VALIDATION, "validate-" + i, "world").close();
+        metrics.begin(FrontierExecutionMetrics.Stage.HOST_TURN, "pm-turn-including-durability", "world").close();
+        assertTrue(metrics.snapshot().stages().stream().anyMatch(value -> value.stage() == FrontierExecutionMetrics.Stage.VALIDATION && value.kind().equals("other")));
+        assertTrue(metrics.snapshot().stages().stream().noneMatch(value -> value.stage() == FrontierExecutionMetrics.Stage.PHYSICAL));
+        var checkpoint = new CheckpointImage(new WorldId("frontier:pressure-freshness"),
+                new io.farfrontier.palemirror.frontier.v3.api.Revision(1), new SimInstant(103), new byte[]{1}, List.of(), List.of());
+        var json = FrontierV3PerformanceDiagnostic.render(checkpoint, metrics.snapshot());
+        assertTrue(json.contains("\"currentLagTicks\":null"), "historical owner lag must not masquerade as current pressure");
+        assertTrue(json.contains("\"lastObservedLagTicks\":99"));
+        assertTrue(json.contains("\"ready\":0,\"held\":2,\"future\":17"));
+        assertTrue(json.contains("\"hostTurn\":{\"samples\":1") && json.contains("\"recentSamples\":1"));
     }
 
     @Test

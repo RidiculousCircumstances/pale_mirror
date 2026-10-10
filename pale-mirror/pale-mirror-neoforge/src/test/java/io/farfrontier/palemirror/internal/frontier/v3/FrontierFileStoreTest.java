@@ -50,6 +50,30 @@ class FrontierFileStoreTest {
     private static final WorldId WORLD = new WorldId("frontier:file-store");
     private static final SubjectId SUBJECT = new SubjectId("settlement:file-store");
 
+    @Test void ownedTailReadsRemainImmutableWhileAppendChecksOnlyTheNewBoundary(@TempDir Path directory) {
+        try (var store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects())) {
+            store.beginTurn();
+            store.append(transaction(1), Durability.BATCHABLE);
+            var first = store.recoverOwned(WORLD);
+            store.append(transaction(2), Durability.BATCHABLE);
+            var second = store.recoverOwned(WORLD);
+            assertEquals(List.of(transaction(1)), first.walTail());
+            assertEquals(List.of(transaction(1), transaction(2)), second.walTail());
+            var valid = transaction(3);
+            var backwards = new TransactionRecord(valid.id(), WORLD, valid.revision(), SimInstant.ZERO,
+                    List.of(new FrontierEvent(1, valid.events().getFirst().id(), valid.id(), WORLD, valid.revision(), SimInstant.ZERO,
+                            SUBJECT, valid.events().getFirst().causes(), valid.events().getFirst().payload())));
+            assertThrows(IllegalArgumentException.class, () -> store.append(backwards, Durability.BATCHABLE));
+            assertEquals(second, store.recoverOwned(WORLD), "invalid append must fail before writing or advancing the head");
+            store.append(valid, Durability.DURABLE_BEFORE_EFFECT);
+            assertEquals(3, store.flushedSequence(WORLD));
+            store.endTurn();
+        }
+        try (var recovered = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects())) {
+            assertEquals(List.of(transaction(1), transaction(2), transaction(3)), recovered.recover(WORLD).walTail());
+        }
+    }
+
     @Test
     void groupsOneTurnButFlushesTheWholePrefixBeforePhysicalEffects(@TempDir Path directory) throws IOException {
         FrontierFileStore store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects());

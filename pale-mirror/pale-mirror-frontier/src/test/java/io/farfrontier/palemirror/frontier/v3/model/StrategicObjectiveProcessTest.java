@@ -167,6 +167,11 @@ class StrategicObjectiveProcessTest {
         var wake = StrategicObjectiveProcess.stockReconsideration(owner, job, 0, 61L);
         assertEquals(wake, StrategicObjectiveProcess.stockReconsideration(owner, job, 0, 61L));
         List<ProposedEvent> planned = StrategicObjectiveProcess.planStockReconsideration(stocked, wake);
+        var delayed = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.planScheduled(
+                stocked, wake, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(200));
+        assertTrue(delayed.stream().anyMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created created
+                && created.action().kind().equals("frontier.settlement.production.task.start") && created.action().dueAt().ticks() == 201),
+                "a merged late hint must launch work from current execution time, not its historical deadline");
         assertTrue(planned.stream().anyMatch(event -> event.payload() instanceof StrategicObjectiveSelected selected
                 && selected.objective().kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD));
         assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created created

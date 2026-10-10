@@ -95,6 +95,7 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
+        io.farfrontier.palemirror.internal.frontier.v3.FrontierV3HostTiming.endHostTick(event.getServer());
         io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.clearPlayerBreakDispositions(event.getServer());
         AmbientSpawnThrottle.clear();
         PaleMirrorPlayerPresentation.clear(event.getServer());
@@ -103,12 +104,19 @@ public final class PaleMirrorEvents {
         io.farfrontier.palemirror.internal.frontier.v3.FrontierV3SharedServerServices.stop(event.getServer());
     }
 
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void onServerTickPre(ServerTickEvent.Pre event) {
+        io.farfrontier.palemirror.internal.frontier.v3.FrontierV3HostTiming.beginHostTick(event.getServer());
+    }
+
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
+        try {
         AmbientSpawnThrottle.tick(event.getServer());
         io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.tick(event.getServer());
         if (PaleMirrorRuntime.availableForSelectedLaunch()) PaleMirrorRuntime.forServer(event.getServer()).tick();
         else io.farfrontier.palemirror.internal.frontier.v3.FrontierV3SharedServerServices.tick(event.getServer());
+        } finally { io.farfrontier.palemirror.internal.frontier.v3.FrontierV3HostTiming.endHostTick(event.getServer()); }
     }
 
     /**

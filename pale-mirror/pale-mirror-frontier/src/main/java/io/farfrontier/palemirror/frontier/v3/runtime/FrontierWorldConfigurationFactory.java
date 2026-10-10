@@ -56,6 +56,9 @@ final class FrontierWorldConfigurationFactory {
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                 return FrontierWorldRuntimeDefinition.scheduledHeld(state, action);
             }
+            @Override public int admissionWeight(FrontierWorldState state, ScheduledAction action) {
+                return FrontierWorldRuntimeDefinition.scheduledAdmissionWeight(state, action);
+            }
             @Override public java.util.Set<SubjectId> holdWakeKeys(FrontierWorldState state, ScheduledAction action) {
                 return FrontierWorldRuntimeDefinition.holdWakeKeys(state, action);
             }

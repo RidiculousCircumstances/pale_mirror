@@ -12,6 +12,8 @@ final class ScheduleEffectApplier {
                       java.util.function.Predicate<ScheduledAction> held) {
         if (effect instanceof ScheduleEffect.Created created) {
             schedules.schedule(created.action());
+        } else if (effect instanceof ScheduleEffect.ReconsiderationRequested requested) {
+            schedules.requestReconsideration(requested.action());
         } else if (effect instanceof ScheduleEffect.Cancelled cancelled) {
             require(schedules.cancel(cancelled.scheduleId()), cancelled.scheduleId());
         } else if (effect instanceof ScheduleEffect.Rescheduled rescheduled) {

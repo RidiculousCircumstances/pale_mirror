@@ -29,6 +29,12 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
     @Override public void validateScheduleChanges(FrontierWorldState state, List<ScheduledAction> retainedChanges) {
         FrontierReferenceClosure.validateScheduledSubjects(state, retainedChanges);
     }
+    @Override public void validateScheduleEffect(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId subject, ScheduleEffect effect) {
+        StateValidator.super.validateScheduleEffect(state, subject, effect);
+        if (effect instanceof ScheduleEffect.ReconsiderationRequested requested)
+            io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.requireReconsideration(requested.action());
+    }
 
     @Override public void validateTransaction(FrontierWorldState previous, FrontierWorldState next, List<FrontierEvent> events,
                                               List<ScheduledAction> schedulesBefore, List<ScheduledAction> schedulesAfter) {
@@ -61,7 +67,8 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
                     throw new IllegalArgumentException("retirement proof schedule does not have one engine-owned disposition");
                 }
             } else if (events.stream().map(FrontierEvent::payload).filter(ScheduleEffect.class::isInstance).map(ScheduleEffect.class::cast)
-                    .anyMatch(effect -> !(effect instanceof ScheduleEffect.Created))) {
+                    .anyMatch(effect -> !(effect instanceof ScheduleEffect.Created)
+                            && !(effect instanceof ScheduleEffect.ReconsiderationRequested))) {
                 // A checked-none continuation means this terminal account owns no engine action
                 // in this atomic transaction.  A transaction carrying a schedule disposition
                 // must name that action exactly; it cannot hide it behind a none claim.
@@ -91,6 +98,7 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
             case ScheduleEffect.Consumed consumed -> consumed.scheduleId().equals(id);
             case ScheduleEffect.Rescheduled rescheduled -> rescheduled.scheduleId().equals(id);
             case ScheduleEffect.Created ignored -> false;
+            case ScheduleEffect.ReconsiderationRequested ignored -> false;
         };
     }
 }

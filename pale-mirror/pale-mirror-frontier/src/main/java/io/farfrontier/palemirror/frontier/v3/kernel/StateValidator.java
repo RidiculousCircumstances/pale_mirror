@@ -32,6 +32,14 @@ public interface StateValidator<S> {
      */
     default void validateScheduleChanges(S state, List<ScheduledAction> retainedChanges) { }
 
+    /** Validate an explicit scheduling capability even when its coalesced queue delta is empty. */
+    default void validateScheduleEffect(S state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                       ScheduleEffect effect) {
+        if (effect instanceof ScheduleEffect.ReconsiderationRequested requested
+                && !subject.equals(requested.action().subject()))
+            throw new IllegalArgumentException("review request has a foreign declared owner");
+    }
+
     /**
      * Transaction boundary with the complete committed batch and engine-owned schedule result.
      * Implementations that only validate aggregate state retain their existing transition audit.

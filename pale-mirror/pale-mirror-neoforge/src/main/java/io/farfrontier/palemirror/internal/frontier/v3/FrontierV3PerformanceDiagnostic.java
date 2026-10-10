@@ -14,7 +14,7 @@ import java.util.Set;
 final class FrontierV3PerformanceDiagnostic {
     /* Keep a useful pressure cut inside the shared 8 KiB operator response envelope even when
        every retained attribution uses its longest permitted identity. */
-    private static final int MAX_STAGE_ROWS = 12;
+    private static final int MAX_STAGE_ROWS = 8;
     private static final int MAX_QUEUE_ROWS = 8;
 
     private FrontierV3PerformanceDiagnostic() { }
@@ -103,8 +103,11 @@ final class FrontierV3PerformanceDiagnostic {
                 .append(",\"fastForwardRequests\":").append(requests(requests))
                 .append(",\"fastForwardSlice\":").append(sliceTelemetry == null ? "null" : sliceTelemetry(sliceTelemetry))
                 .append(",\"worstSpan\":").append(worstSpan(metrics.stages()))
+                .append(",\"hostTurn\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TURN))
+                .append(",\"hostTickThroughPmPost\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TICK))
+                .append(",\"scheduleQueue\":").append(queuePressure(metrics, checkpoint.instant().ticks()))
                 .append(",\"stages\":[");
-        appendStages(value, metrics.stages()); value.append("],\"queues\":["); appendQueues(value, metrics.queues()); value.append(']');
+        appendStages(value, metrics.stages()); value.append("],\"queues\":["); appendQueues(value, metrics.queues(), checkpoint.instant().ticks()); value.append(']');
         if (state != null) value.append(",\"frontier\":").append(frontier(state, checkpoint));
         if (planningPressure != null) value.append(",\"pedestrianPlanning\":").append(planningPressure);
         if (departurePressure != null) value.append(",\"ambientDepartureQueue\":").append(departurePressure);
@@ -193,19 +196,39 @@ final class FrontierV3PerformanceDiagnostic {
         }
     }
 
-    private static void appendQueues(StringBuilder value, List<FrontierExecutionMetrics.QueueSample> samples) {
+    private static void appendQueues(StringBuilder value, List<FrontierExecutionMetrics.QueueSample> samples, long instant) {
         boolean first = true;
         for (FrontierExecutionMetrics.QueueSample sample : samples.stream()
-                .sorted(Comparator.comparingLong(FrontierExecutionMetrics.QueueSample::maxLagTicks).reversed()
-                        .thenComparing(Comparator.comparingInt(FrontierExecutionMetrics.QueueSample::maxDepth).reversed())
+                .sorted(Comparator.comparingLong(FrontierExecutionMetrics.QueueSample::observedAtTicks).reversed()
+                        .thenComparing(Comparator.comparingLong(FrontierExecutionMetrics.QueueSample::currentLagTicks).reversed())
                         .thenComparing(FrontierExecutionMetrics.QueueSample::kind).thenComparing(FrontierExecutionMetrics.QueueSample::owner))
                 .limit(MAX_QUEUE_ROWS).toList()) {
             if (!first) value.append(','); first = false;
             value.append("{\"kind\":\"").append(quote(sample.kind())).append("\",\"owner\":\"").append(quote(sample.owner()))
-                    .append("\",\"samples\":").append(sample.samples()).append(",\"currentDepth\":").append(sample.currentDepth())
-                    .append(",\"maxDepth\":").append(sample.maxDepth()).append(",\"currentLagTicks\":").append(sample.currentLagTicks())
+                    .append("\",\"samples\":").append(sample.samples()).append(",\"observedAtTicks\":").append(sample.observedAtTicks())
+                    .append(",\"fresh\":").append(sample.observedAtTicks() == instant)
+                    .append(",\"currentDepth\":").append(sample.observedAtTicks() == instant ? Integer.toString(sample.currentDepth()) : "null")
+                    .append(",\"lastObservedDepth\":").append(sample.currentDepth())
+                    .append(",\"maxDepth\":").append(sample.maxDepth()).append(",\"currentLagTicks\":")
+                    .append(sample.observedAtTicks() == instant ? Long.toString(sample.currentLagTicks()) : "null")
+                    .append(",\"lastObservedLagTicks\":").append(sample.currentLagTicks())
                     .append(",\"maxLagTicks\":").append(sample.maxLagTicks()).append('}');
         }
+    }
+
+    private static String queuePressure(FrontierExecutionMetrics.Snapshot metrics, long instant) {
+        return metrics.pressure().map(value -> "{\"observedAtTicks\":" + value.observedAtTicks()
+                + ",\"fresh\":" + (value.observedAtTicks() == instant) + ",\"total\":" + value.total()
+                + ",\"ready\":" + value.ready() + ",\"held\":" + value.held() + ",\"future\":" + value.future()
+                + ",\"oldestReadyLagTicks\":" + value.oldestReadyLagTicks()
+                + ",\"oldestDeadlineLagTicks\":" + value.oldestDeadlineLagTicks() + "}").orElse("null");
+    }
+
+    private static String hostTiming(List<FrontierExecutionMetrics.StageSample> samples, FrontierExecutionMetrics.Stage stage) {
+        return samples.stream().filter(value -> value.stage() == stage).findFirst().map(value ->
+                "{\"samples\":" + value.samples() + ",\"lastNanos\":" + value.lastNanos()
+                + ",\"maxNanos\":" + value.maxNanos() + ",\"recentSamples\":" + value.recentSamples()
+                + ",\"recentTotalNanos\":" + value.recentTotalNanos() + ",\"recentMaxNanos\":" + value.recentMaxNanos() + "}").orElse("null");
     }
 
     private static String quote(String value) { return value.replace("\\", "\\\\").replace("\"", "\\\""); }

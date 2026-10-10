@@ -297,7 +297,7 @@ public final class FrontierWorldPhysicalObservationProcess {
 
     private static ProposedEvent playerStockWake(SubjectId settlementId, java.util.UUID interactionId,
                                                  long now) {
-        return new ProposedEvent(settlementId, new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
+        return new ProposedEvent(settlementId, new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested(
                 StrategicObjectiveProcess.playerStockReconsideration(settlementId, interactionId,
                         Math.addExact(now, 1L))));
     }

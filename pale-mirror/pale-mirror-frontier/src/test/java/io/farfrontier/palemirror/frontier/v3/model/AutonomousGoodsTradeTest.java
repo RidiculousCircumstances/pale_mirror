@@ -138,7 +138,7 @@ class AutonomousGoodsTradeTest {
         var rules = recovered.bootstrap().ruleset().goodsTrade();
         for (boolean periodic : List.of(true, false)) {
             var action = periodic ? GoodsParticipantProcess.review(COMPANY, 800)
-                    : ((ScheduleEffect.Created) GoodsParticipantWakeup.party(recovered, COMPANY,
+                    : ((ScheduleEffect.ReconsiderationRequested) GoodsParticipantWakeup.party(recovered, COMPANY,
                             "delayed-review", 799).getFirst().payload()).action();
             for (long executedAt : new long[]{sell.expiresAtTick(), sell.expiresAtTick() + 1}) {
                 // Exercise the registered dispatcher, not a helper that might bypass the lost clock.

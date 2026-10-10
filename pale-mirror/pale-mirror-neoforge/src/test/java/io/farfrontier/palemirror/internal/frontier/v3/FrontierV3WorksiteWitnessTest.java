@@ -8,6 +8,26 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3WorksiteWitnessTest {
+    @Test void sourceDeclarationIndexIsReusedAcrossTurnsAndDepletionButRefreshesForAnotherManifest() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:worksite-index"), 20260918065L,
+                FrontierRulesets.installed("frontier-v3-quarry-graybox-r2")));
+        var owner = new FrontierV3ExtractionWorksiteOwner();
+        var declared = owner.declarations(initial);
+        for (int turn = 0; turn < 100; turn++) assertSame(declared, owner.declarations(initial));
+        var deposit = initial.extractionSites().deposits().values().iterator().next();
+        var cell = deposit.available(Set.of()).getFirst();
+        var next = initial.withChanges(FrontierWorldStateUpdate.begin().extractionSites(initial.extractionSites()
+                .replace(deposit.extracted(cell.id(), 1, "effect:index-depletion"))));
+        assertSame(declared, owner.declarations(next));
+        var resource = declared.stream().filter(value -> value.key().owner().equals(deposit.site().id())
+                && value.key().role() == WorksiteBlock.Role.RESOURCE && value.key().cell() == cell.id()).findFirst().orElseThrow();
+        assertEquals("minecraft:air", owner.current(next, resource).block().kind());
+        var other = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:other-worksite-index"), 42L,
+                FrontierRulesets.installed("frontier-v3-quarry-graybox-r2")));
+        assertNotSame(declared, owner.declarations(other));
+    }
     @Test void cachedPresentationIsCurrentOnlyAfterExactSettledRevisionAndPhysicalPostimage() {
         var key = new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, new SubjectId("extraction:test"), WorksiteBlock.Role.RESOURCE, 1);
         var stone = new BlockExtraction.Block("minecraft:stone", Map.of());

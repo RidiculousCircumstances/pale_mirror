@@ -55,7 +55,7 @@ final class BakeryCompletionPlanning {
         ProductionJob current = after.productionJobs().get(jobId);
         if (prior == null || current == null || !prior.reservesFacility() || current.reservesFacility())
             return List.of();
-        return List.of(new ProposedEvent(current.settlementId(), new ScheduleEffect.Created(
+        return List.of(new ProposedEvent(current.settlementId(), new ScheduleEffect.ReconsiderationRequested(
                 StrategicObjectiveProcess.stationReconsideration(current, receiptCause, Math.addExact(atTick, 1L)))));
     }
 

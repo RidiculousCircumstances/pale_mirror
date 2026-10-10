@@ -11,6 +11,13 @@ import java.util.*;
 final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProjectionOwner {
     private FrontierBootstrap bootstrap;
     private List<WorksiteBlock> declarations = List.of();
+    private ExtractionGeometryIndex geometry;
+    private ExtractionGeometryIndex declarationGeometry;
+    private ExtractionGeometryIndex geometry(FrontierWorldState state) {
+        var declared = ExtractionGeometryIndex.declarations(state.extractionSites());
+        if (geometry == null || !geometry.matches(declared)) geometry = new ExtractionGeometryIndex(declared);
+        return geometry;
+    }
     @Override public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.EXTRACTIVE_SITE; }
     @Override public void beforeTurn(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierV3ExtractionBlockWrites.reconcile(level, runtime);
@@ -18,18 +25,17 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         // A cached loaded chunk is not an active physical custodian. Reuse the same
         // positive current-block departure proof when its natural ticking demand ends.
         var state = runtime.decodedState().orElseThrow();
-        var visited = new HashSet<Long>();
-        for (var region : ExtractionRegion.all(state.extractionSites())) {
-            long chunkId = net.minecraft.world.level.ChunkPos.asLong(region.chunkX(), region.chunkZ());
-            if (!visited.add(chunkId)) continue;
-            var chunk = level.getChunkSource().getChunkNow(region.chunkX(), region.chunkZ());
-            if (chunk != null && !level.shouldTickBlocksAt(new BlockPos(region.chunkX() * 16, level.getMinBuildHeight(), region.chunkZ() * 16)))
+        for (var region : geometry(state).chunks()) {
+            var chunk = level.getChunkSource().getChunkNow(region.x(), region.z());
+            if (chunk != null && !level.shouldTickBlocksAt(new BlockPos(region.x() * 16, level.getMinBuildHeight(), region.z() * 16)))
                 departure(level, runtime, chunk);
         }
     }
     @Override public List<WorksiteBlock> declarations(FrontierWorldState state) {
-        if (bootstrap != state.bootstrap()) {
+        var currentGeometry = geometry(state);
+        if (bootstrap != state.bootstrap() || declarationGeometry != currentGeometry) {
             bootstrap = state.bootstrap();
+            declarationGeometry = currentGeometry;
             declarations = state.extractionSites().deposits().values().stream().sorted(Comparator.comparing(value -> value.site().id()))
                     .flatMap(deposit -> ExtractionWorksiteBlocks.declared(deposit).stream()).toList();
         }
@@ -82,10 +88,11 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     }
     @Override public void afterProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElseThrow(); var ledger = FrontierV3GrayboxLedger.get(level);
-        for (var region : ExtractionRegion.all(state.extractionSites())) {
+        var index = geometry(state);
+        for (var region : index.regions()) {
             var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
             if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.PREPARING) continue;
-            boolean complete = region.cells(state.extractionSites()).stream().allMatch(cell -> {
+            boolean complete = index.cells(region).stream().allMatch(cell -> {
                 var position = new BlockPos(cell.source().x(), cell.source().y(), cell.source().z());
                 if (!level.hasChunkAt(position)) return false;
                 var witness = ledger.worksite(position); var current = state.extractionSites().deposits().get(region.siteId()).cells().get(cell.id());
@@ -109,15 +116,15 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
             net.minecraft.world.level.chunk.LevelChunk chunk) {
         var state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        for (var region : ExtractionRegion.all(state.extractionSites())) {
-            if (region.chunkX() != chunk.getPos().x || region.chunkZ() != chunk.getPos().z) continue;
+        var index = geometry(state);
+        for (var region : index.regions(new ExtractionGeometryIndex.Chunk(chunk.getPos().x, chunk.getPos().z))) {
             var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
             if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED) continue;
             var currentState = state;
             if (currentState.extractionSites().work().values().stream().anyMatch(job -> job.siteId().equals(region.siteId())
                     && job.pending().isPresent() && job.target().filter(target ->
                     region.contains(currentState.extractionSites().deposits().get(region.siteId()).site().layout().require(target.key().cell()).source())).isPresent())) continue;
-            boolean matches = region.cells(currentState.extractionSites()).stream().allMatch(cell ->
+            boolean matches = index.cells(region).stream().allMatch(cell ->
                     FrontierV3MinecraftBlockExtraction.describe(chunk.getBlockState(new BlockPos(cell.source().x(), cell.source().y(), cell.source().z())))
                             .equals(currentState.extractionSites().deposits().get(region.siteId()).cells().get(cell.id()).knownBlock()));
             if (matches) submit(runtime, new ExtractionSourceBoundary(region, ExtractionSourceBoundary.Operation.RELEASE,
@@ -128,7 +135,7 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     @Override public void shutdown(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        for (var region : ExtractionRegion.all(state.extractionSites())) {
+        for (var region : geometry(state).regions()) {
             afterProjection(level, runtime); // Complete a fully observed successor before releasing its saved region.
             var chunk = level.getChunkSource().getChunkNow(region.chunkX(), region.chunkZ());
             if (chunk != null) departure(level, runtime, chunk);

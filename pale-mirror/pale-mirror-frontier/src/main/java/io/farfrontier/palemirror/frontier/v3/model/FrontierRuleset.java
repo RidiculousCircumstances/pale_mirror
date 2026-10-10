@@ -21,7 +21,34 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                               GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks,
                               SettlementLabourRules labour,
                               io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition,
-                              io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction) {
+                              io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction,
+                              Execution execution) {
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                           ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
+                           GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks,
+                           SettlementLabourRules labour,
+                           io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition,
+                           io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand, residentLife,
+                resourceHarvestColdTravelTicksPerEdge, workCatalog, goodsTrade, initialSettlementStocks, labour,
+                expedition, extraction, Execution.previous());
+    }
+
+    /** Deterministic admission costs, never wall-clock durations or work/satiety cadence. */
+    public record Execution(int maxActions, int maxWeight, int policyReviewWeight) {
+        public Execution {
+            if (maxActions < 1 || maxActions > 512 || maxWeight < 1 || maxWeight > 4096
+                    || policyReviewWeight < 1 || policyReviewWeight > maxWeight)
+                throw new IllegalArgumentException("invalid bounded execution policy");
+        }
+        public static Execution previous() { return new Execution(4, 512, 1); }
+        public static Execution population() { return new Execution(64, 128, 8); }
+        String canonicalText() { return maxActions + ":" + maxWeight + ":" + policyReviewWeight; }
+        public io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget budget() {
+            return new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(maxActions, maxWeight);
+        }
+    }
     public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                            FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
                            ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
@@ -93,6 +120,9 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         labour = Objects.requireNonNull(labour, "labour rules");
         expedition = Objects.requireNonNull(expedition, "expedition rules");
         extraction = Objects.requireNonNull(extraction, "extraction rules");
+        execution = Objects.requireNonNull(execution, "execution policy");
+        if (schemaVersion < 19 && !execution.equals(Execution.previous()))
+            throw new IllegalArgumentException("custom execution budgets require hashed schema19");
         if (schemaVersion < 18 && !extraction.equals(
                 io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules.disabled()))
             throw new IllegalArgumentException("custom extraction rules require hashed schema18");
@@ -146,7 +176,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                     .map(InitialSettlementStock::canonicalText).sorted().collect(java.util.stream.Collectors.joining(";")) : "")
                 + (schemaVersion >= 16 ? "|" + labour.canonicalText() : "")
                 + (schemaVersion >= 17 ? "|" + expedition.canonicalText() : "")
-                + (schemaVersion >= 18 ? "|" + extraction.canonicalText() : "");
+                + (schemaVersion >= 18 ? "|" + extraction.canonicalText() : "")
+                + (schemaVersion >= 19 ? "|" + execution.canonicalText() : "");
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */

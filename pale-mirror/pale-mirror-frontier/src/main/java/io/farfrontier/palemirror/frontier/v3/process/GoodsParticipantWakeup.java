@@ -12,7 +12,7 @@ public final class GoodsParticipantWakeup {
         if (!state.companies().goodsTrade().participants().participants().containsKey(party)) return List.of();
         var action = new ScheduledAction(new ScheduleId("schedule:goods-opportunity/" + WorkOpportunityIdentity.digest(party.value() + "|" + cause + "|" + now)),
                 new SimInstant(Math.addExact(now, 1)), 0, party, OPPORTUNITY, 1);
-        return List.of(new ProposedEvent(party, new ScheduleEffect.Created(action)));
+        return List.of(new ProposedEvent(party, new ScheduleEffect.ReconsiderationRequested(action)));
     }
     public static List<ProposedEvent> container(FrontierWorldState state, SubjectId container, String cause, long now) {
         return state.companies().goodsTrade().participants().participants().values().stream()

@@ -38,6 +38,9 @@ public final class FrontierWorldRuntimeDefinition {
     public static boolean scheduledHeld(FrontierWorldState state, ScheduledAction action) {
         return FrontierWorldProcessCatalog.scheduledHeld(PROCESS_REGISTRY, state, action);
     }
+    public static int scheduledAdmissionWeight(FrontierWorldState state, ScheduledAction action) {
+        return FrontierWorldProcessCatalog.scheduledAdmissionWeight(PROCESS_REGISTRY, state, action);
+    }
     public static java.util.Set<SubjectId> holdWakeKeys(FrontierWorldState state, ScheduledAction action) {
         return FrontierWorldProcessCatalog.holdWakeKeys(state, action);
     }

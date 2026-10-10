@@ -17,6 +17,29 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierRulesetTest {
+    @Test void populationBudgetIsHashedRecoveredAndServesTheActualInitialResidentCohort() {
+        var current = FrontierRulesets.installed("frontier-v3-quarry-graybox-r2");
+        var previous = FrontierRulesets.installed("frontier-v3-quarry-graybox-r1");
+        assertEquals(4, previous.execution().maxActions());
+        assertEquals(64, current.execution().maxActions());
+        assertEquals(previous.cadence(), current.cadence());
+        assertEquals(previous.residentLife(), current.residentLife(), "admission must not postpone hunger or calendar boundaries");
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:population-wave"), 20260918065L, current);
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
+        for (int tick = 1; tick <= 10; tick++) {
+            engine.advanceTo(new io.farfrontier.palemirror.frontier.v3.api.SimInstant(tick), current.execution().budget());
+            assertEquals("ACTIVE", engine.status().kind().name(), () -> engine.failureCause().toString());
+        }
+        assertTrue(engine.executionView().schedules().stream().noneMatch(action -> action.kind().equals(
+                io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.REVIEW) && action.dueAt().ticks() == 1));
+        var state = engine.canonicalState().state();
+        assertEquals(current, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)).bootstrap().ruleset());
+        assertThrows(IllegalArgumentException.class, () -> FrontierRulesets.require(current.id(), 19, previous.contentSha256()));
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.requireReconsideration(
+                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:illegal-coalescing"),
+                        new io.farfrontier.palemirror.frontier.v3.api.SimInstant(1), 0, new SubjectId("resident:1-1"),
+                        io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.PROGRESS, 1)));
+    }
     @Test void caravanPaceIsSharedWithProvisionForecastAndOldWorldsKeepTheirClock() {
         var current = FrontierRulesets.production();
         var previous = FrontierRulesets.installed("frontier-v3-production-r14");

@@ -15,7 +15,7 @@ public final class KernelPayloadCodecs {
     private KernelPayloadCodecs() {}
 
     public static PayloadCodecs scheduleEffects() {
-        return new PayloadCodecs(List.of(new Created(), new Cancelled(), new Rescheduled(), new Consumed()));
+        return new PayloadCodecs(List.of(new Created(), new Cancelled(), new Rescheduled(), new Consumed(), new ReconsiderationRequested()));
     }
 
     private abstract static class EffectCodec implements PayloadCodec {
@@ -47,6 +47,16 @@ public final class KernelPayloadCodecs {
             return encodeAction(((ScheduleEffect.Created) payload).action());
         }
         @Override public FrontierPayload decode(byte[] bytes) { return new ScheduleEffect.Created(decodeAction(bytes)); }
+    }
+
+    private static final class ReconsiderationRequested extends EffectCodec {
+        @Override public String type() { return "kernel.reconsideration_requested"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            return encodeAction(((ScheduleEffect.ReconsiderationRequested) payload).action());
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return new ScheduleEffect.ReconsiderationRequested(decodeAction(bytes));
+        }
     }
 
     private static final class Cancelled extends EffectCodec {

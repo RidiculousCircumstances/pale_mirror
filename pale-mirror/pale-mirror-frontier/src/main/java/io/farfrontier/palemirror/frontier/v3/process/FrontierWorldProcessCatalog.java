@@ -16,6 +16,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import static io.farfrontier.palemirror.frontier.v3.process.ScheduledReviewAdmission.coalescedReview;
+import static io.farfrontier.palemirror.frontier.v3.process.ScheduledReviewAdmission.policyReview;
 
 /**
  * Closed ownership catalog for the installed Frontier world processes.
@@ -26,19 +28,22 @@ import java.util.Set;
  */
 public final class FrontierWorldProcessCatalog {
     @FunctionalInterface
-    private interface ScheduledPlanner {
+    interface ScheduledPlanner {
         List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action);
         default List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
                                          io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
             return plan(state, action);
         }
         default boolean held(FrontierWorldState state, ScheduledAction action) { return false; }
+        default int admissionWeight(FrontierWorldState state, ScheduledAction action) { return action.weight(); }
+        default boolean acceptsReconsideration() { return false; }
         default Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return Set.of(); }
         default void restorePlanningWait(FrontierWorldState state, ScheduledAction action,
                 io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) { }
     }
 
     private static final Set<String> KERNEL = types(
+            "kernel.reconsideration_requested",
             "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
             "frontier.kernel_quarantine_observed");
     private static final Set<String> PHYSICAL = types(
@@ -211,6 +216,7 @@ public final class FrontierWorldProcessCatalog {
             }
         };
     }
+
     private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
             Map.entry(ExtractionContinuation.REVIEW, withPlanningRecovery(atExecutionTime((state, action, instant) -> ExtractionWorkProcess.review(state, action, instant.ticks())))),
             Map.entry(ExtractionContinuation.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {
@@ -289,8 +295,8 @@ public final class FrontierWorldProcessCatalog {
             })),
             Map.entry(GoodsTradeReceiptProcess.REVIEW, atExecutionTime(GoodsTradeReceiptProcess::plan)),
             Map.entry(InternalShipmentReceipts.RECEIVE, atExecutionTime(InternalShipmentReceipts::receive)),
-            Map.entry(GoodsParticipantProcess.REVIEW, withPlanningRecovery(atExecutionTime(GoodsParticipantProcess::plan))),
-            Map.entry(GoodsParticipantWakeup.OPPORTUNITY, withPlanningRecovery(atExecutionTime(GoodsParticipantProcess::plan))),
+            Map.entry(GoodsParticipantProcess.REVIEW, policyReview(withPlanningRecovery(atExecutionTime(GoodsParticipantProcess::plan)))),
+            Map.entry(GoodsParticipantWakeup.OPPORTUNITY, coalescedReview(withPlanningRecovery(atExecutionTime(GoodsParticipantProcess::plan)))),
             Map.entry(ShipmentProcess.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ShipmentProcess.plan(state, action, action.dueAt().ticks());
@@ -376,7 +382,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.route_patrol.progress", (state, action) -> RoutePatrolProcess.planProgress(state, action)),
             Map.entry("frontier.hive.scout.patrol", (state, action) -> HiveScoutPatrolProcess.plan(state, action)),
             Map.entry("frontier.decontamination.scan", (state, action) -> SettlementServiceWorkProcess.planDecontamination(state, action)),
-            Map.entry("frontier.objective.review", new ScheduledPlanner() {
+            Map.entry("frontier.objective.review", policyReview(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return StrategicObjectiveProcess.plan(state, action);
                 }
@@ -384,8 +390,9 @@ public final class FrontierWorldProcessCatalog {
                                                          io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
                     return StrategicObjectiveProcess.plan(state, action, currentInstant.ticks());
                 }
-            }),
-            Map.entry("frontier.objective.stock_reconsider", (state, action) -> StrategicObjectiveProcess.planStockReconsideration(state, action)),
+            })),
+            Map.entry("frontier.objective.stock_reconsider", coalescedReview(atExecutionTime((state, action, instant) ->
+                    StrategicObjectiveProcess.planStockReconsideration(state, action, instant.ticks())))),
             Map.entry("frontier.objective.reconsider", (state, action) -> StrategicObjectiveProcess.planReconsideration(state, action)),
             Map.entry("frontier.objective.assault", (state, action) -> StrategicObjectiveProcess.planAssaultOpportunity(state, action)),
             Map.entry("frontier.settlement_assault.start", (state, action) -> HiveSettlementAssaultProcess.planStart(state, action)),
@@ -557,6 +564,18 @@ public final class FrontierWorldProcessCatalog {
         ScheduledPlanner planner = SCHEDULED_PLANNERS.get(action.kind());
         if (planner == null) throw new IllegalStateException("registered scheduled kind has no planner: " + action.kind());
         return planner.held(state, action);
+    }
+
+    public static int scheduledAdmissionWeight(DeterministicProcessRegistry registry, FrontierWorldState state, ScheduledAction action) {
+        registry.requireScheduledOwner(action.kind());
+        ScheduledPlanner planner = SCHEDULED_PLANNERS.get(action.kind());
+        if (planner == null) throw new IllegalStateException("registered scheduled kind has no cost owner: " + action.kind());
+        return planner.admissionWeight(state, action);
+    }
+    public static void requireReconsideration(ScheduledAction action) {
+        ScheduledPlanner planner = SCHEDULED_PLANNERS.get(action.kind());
+        if (planner == null || !planner.acceptsReconsideration())
+            throw new IllegalArgumentException("scheduled owner has not declared coalescible review capability: " + action.kind());
     }
 
     /** Park only waits whose source/service owner has an exact wake address. */
@@ -774,6 +793,7 @@ public final class FrontierWorldProcessCatalog {
         return switch (processId) {
             case "kernel-schedule" -> KERNEL;
             case "physical-observation" -> types(
+                    "kernel.reconsideration_requested",
                     "frontier.physical_custody_checkpointed", "frontier.physical_custody_released",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     // A witnessed block change checkpoints only a resident whose retained COLD route crosses it.
@@ -804,6 +824,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled",
                     "frontier.market_demand_expired", "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.production_blocked");
             case "scene-lifecycle" -> types(
+                    "kernel.reconsideration_requested",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.scene_lease_transition",
                     "frontier.scene_lease_released_v2", "frontier.scene_lease_recovery_unresolved", "frontier.scene_lease_recovery_revoked", "frontier.settlement_assault_scene_lease_prepared",
@@ -829,6 +850,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
                     "frontier.hive_mobilization_started", "frontier.hive_mobilization_departed");
             case "population" -> types(
+                    "kernel.reconsideration_requested",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.actor_movement_interrupted", "frontier.actor_movement_started", "frontier.actor_execution_resumed",
                     "frontier.actor_presence_started",
@@ -851,6 +873,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.actor_movement_cold_route_started",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
             case "economy" -> types(
+                    "kernel.reconsideration_requested",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",
                     "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_relationship_incident_recorded", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",
@@ -868,6 +891,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.container_surface_transition", "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected",
                     "frontier.strategic_task_planned", "frontier.strategic_task_transition");
             case "resource-sites" -> types(
+                    "kernel.reconsideration_requested",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.resource_site_growth_advanced", "frontier.resource_site_preparation_started", "frontier.resource_site_prepared",
                     "frontier.resource_site_harvest_started", "frontier.resource_site_harvest_crop_prepared",
@@ -934,6 +958,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.settlement_service_work_traversal_blocked", "frontier.settlement_service_work_progressed",
                     "frontier.scene_lease_transition", "frontier.strategic_task_transition");
             case "strategy" -> types(
+                    "kernel.reconsideration_requested",
                     "frontier.actor_presence_started",
                     // Registered policy expansion delegates admission to the corresponding family owner.
                     "frontier.resource_site_harvest_started", "frontier.production_started",

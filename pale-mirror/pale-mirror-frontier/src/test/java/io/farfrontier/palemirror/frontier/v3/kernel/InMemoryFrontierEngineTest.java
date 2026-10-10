@@ -40,6 +40,24 @@ class InMemoryFrontierEngineTest {
     private static final WorldId WORLD = new WorldId("frontier:test-world");
     private static final SubjectId SUBJECT = new SubjectId("settlement:test");
 
+    @Test void reviewHintsRetainTheirCausalWalFactsAndRecoverTheCoalescedQueue() {
+        var engine = engine(List.of(), false);
+        var codecs = KernelPayloadCodecs.scheduleEffects();
+        for (int i = 0; i < 5; i++) {
+            var requested = new ScheduleEffect.ReconsiderationRequested(scheduled("schedule:review-" + i, SUBJECT.value(), 10 + i, 1));
+            assertEquals(requested, codecs.decode(requested.type(), codecs.encode(requested)));
+            assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:review-" + i, new Revision(i), requested)));
+        }
+        assertEquals(1, engine.scheduledActions().size());
+        assertEquals(5, engine.transactions().size(), "coalescing dispatch must not erase accepted causes");
+        var replay = TransactionReplayer.replay(WORLD, new Counter(0), SimInstant.ZERO, List.of(), engine.transactions(),
+                (state, event) -> reduce(state, event, false), state -> ByteBuffer.allocate(4).putInt(state.value()).array());
+        assertEquals(engine.scheduledActions(), replay.schedules());
+        engine.advanceTo(new SimInstant(10), new WorkBudget(1, 1));
+        assertTrue(engine.scheduledActions().isEmpty());
+        assertEquals(1, engine.projection(ProjectionQuery.summary()).value(), "the current state is reconsidered once, not five times");
+    }
+
     @Test void admissionPressureIsReadOnlyAndCountsExpiryAtTheSameBoundaryAsSubmit() {
         var engine = engine(List.of(), false);
         for (int i = 0; i < 8; i++) assertInstanceOf(CommandResult.Accepted.class,

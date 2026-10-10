@@ -307,6 +307,7 @@ interface PhysicalIntentRetirementAccount {
             case ScheduleEffect.Consumed consumed -> consumed.scheduleId().equals(id);
             case ScheduleEffect.Rescheduled rescheduled -> rescheduled.scheduleId().equals(id);
             case ScheduleEffect.Created ignored -> false;
+            case ScheduleEffect.ReconsiderationRequested ignored -> false;
         };
     }
 

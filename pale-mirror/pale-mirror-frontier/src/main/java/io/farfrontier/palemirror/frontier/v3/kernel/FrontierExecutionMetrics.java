@@ -14,25 +14,35 @@ import java.util.Optional;
  * deterministic recorder. Metrics are deliberately absent from snapshots and WAL.</p>
  */
 public interface FrontierExecutionMetrics {
-    enum Stage { COMMAND_PLAN, SCHEDULE_ALLOCATION, SCHEDULE_PLAN, REDUCTION, VALIDATION, TRANSACTION, PERSISTENCE, PHYSICAL }
+    enum Stage { COMMAND_PLAN, SCHEDULE_ALLOCATION, SCHEDULE_PLAN, REDUCTION, VALIDATION, TRANSACTION, PERSISTENCE, PHYSICAL, HOST_TURN, HOST_TICK }
 
     interface Span extends AutoCloseable {
         @Override void close();
     }
 
     record StageSample(Stage stage, String kind, String owner, long samples, long totalNanos,
-                       long maxNanos, long p50UpperNanos, long p95UpperNanos, long p99UpperNanos) {
+                       long maxNanos, long p50UpperNanos, long p95UpperNanos, long p99UpperNanos,
+                       long lastNanos, int recentSamples, long recentTotalNanos, long recentMaxNanos) {
+        public StageSample(Stage stage, String kind, String owner, long samples, long totalNanos,
+                           long maxNanos, long p50UpperNanos, long p95UpperNanos, long p99UpperNanos) {
+            this(stage, kind, owner, samples, totalNanos, maxNanos, p50UpperNanos, p95UpperNanos, p99UpperNanos, 0, 0, 0, 0);
+        }
         public StageSample {
             stage = Objects.requireNonNull(stage, "stage");
             kind = requireLabel(kind, "kind"); owner = requireLabel(owner, "owner");
-            if (samples < 0L || totalNanos < 0L || maxNanos < 0L || p50UpperNanos < 0L || p95UpperNanos < 0L || p99UpperNanos < 0L) {
+            if (samples < 0L || totalNanos < 0L || maxNanos < 0L || p50UpperNanos < 0L || p95UpperNanos < 0L || p99UpperNanos < 0L
+                    || lastNanos < 0L || recentSamples < 0 || recentTotalNanos < 0L || recentMaxNanos < 0L) {
                 throw new IllegalArgumentException("execution measurements cannot be negative");
             }
         }
     }
 
     record QueueSample(String kind, String owner, long samples, int currentDepth, int maxDepth,
-                       long currentLagTicks, long maxLagTicks) {
+                       long currentLagTicks, long maxLagTicks, long observedAtTicks) {
+        public QueueSample(String kind, String owner, long samples, int currentDepth, int maxDepth,
+                           long currentLagTicks, long maxLagTicks) {
+            this(kind, owner, samples, currentDepth, maxDepth, currentLagTicks, maxLagTicks, -1L);
+        }
         public QueueSample {
             kind = requireLabel(kind, "kind"); owner = requireLabel(owner, "owner");
             if (samples < 0L || currentDepth < 0 || maxDepth < 0 || currentLagTicks < 0L || maxLagTicks < 0L) {
@@ -41,12 +51,28 @@ public interface FrontierExecutionMetrics {
         }
     }
 
+    /** One fresh cut; ready wait excludes time explicitly parked behind an owner condition. */
+    record QueuePressure(long observedAtTicks, int total, int ready, int held, int future,
+                         long oldestReadyLagTicks, long oldestDeadlineLagTicks) {
+        public QueuePressure {
+            if (observedAtTicks < 0 || total < 0 || ready < 0 || held < 0 || future < 0
+                    || total != ready + held + future || oldestReadyLagTicks < 0 || oldestDeadlineLagTicks < 0)
+                throw new IllegalArgumentException("invalid exact queue pressure cut");
+        }
+    }
+
     record Snapshot(List<StageSample> stages, List<QueueSample> queues, long droppedAttributions,
-                    long auditReadyWithoutWake) {
+                    long auditReadyWithoutWake, Optional<QueuePressure> pressure) {
         public Snapshot {
             stages = List.copyOf(stages); queues = List.copyOf(queues);
+            pressure = Objects.requireNonNull(pressure, "queue pressure");
             if (droppedAttributions < 0L || auditReadyWithoutWake < 0L)
                 throw new IllegalArgumentException("diagnostic counters cannot be negative");
+        }
+
+        public Snapshot(List<StageSample> stages, List<QueueSample> queues, long droppedAttributions,
+                        long auditReadyWithoutWake) {
+            this(stages, queues, droppedAttributions, auditReadyWithoutWake, Optional.empty());
         }
 
         public Snapshot(List<StageSample> stages, List<QueueSample> queues, long droppedAttributions) {
@@ -69,6 +95,7 @@ public interface FrontierExecutionMetrics {
 
     /** Audit-only evidence that an eligible owner wait lacked a matching invalidation. */
     default void observeWakeAudit(long auditReadyWithoutWake) { }
+    default void observePressure(QueuePressure pressure) { }
 
     Snapshot snapshot();
 
