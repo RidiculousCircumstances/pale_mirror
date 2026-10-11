@@ -165,6 +165,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                   FrontierWorldState state, ContainerSurface surface) {
         SubjectId containerId = surface.containerId();
+        if (surface.status() == ContainerSurfaceStatus.RETIRED) return;
         if (FrontierV3ContainerEffectFence.pending(level, state, containerId)) return;
         if (surface.status() == ContainerSurfaceStatus.CONFLICT) {
             if (surface.fixed()) FrontierV3ReferenceSurfaceRecovery.inspect(level, runtime, state, surface);
@@ -648,6 +649,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
 
     static List<ContainerSurface> eligibleReferenceSurfaces(FrontierWorldState state, List<ContainerSurface> loaded) {
         return loaded.stream().filter(surface -> ReferenceContainerCustody.isReferenceContainer(state, surface.containerId()))
+                .filter(surface -> surface.status() != ContainerSurfaceStatus.RETIRED)
                 .sorted(Comparator.comparing(ContainerSurface::containerId))
                 // Ordinary released conflicts remain isolated. A retained pending-write
                 // conflict may receive matching later evidence under its same exact epoch;

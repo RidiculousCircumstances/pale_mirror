@@ -18,7 +18,7 @@ public record ResourceStorageAdopted(ResourceStorageDeclared declaration, List<R
     @Override public String type() { return "frontier.resource_storage_adopted"; }
     @Override public boolean requiresDurableBeforeEffect() { return true; }
     public FrontierWorldState apply(FrontierWorldState state, SubjectId owner) {
-        if (!SettlementStorageTerritory.owner(state.bootstrap(), declaration.position()).map(Settlement::id)
+        if (!SettlementStorageTerritory.owner(state, declaration.position()).map(Settlement::id)
                 .filter(owner::equals).isPresent())
             throw new IllegalArgumentException("default storage admission lacks one exact territorial owner");
         var declared = declaration.apply(state, owner);

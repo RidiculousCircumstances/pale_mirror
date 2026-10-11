@@ -100,6 +100,14 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         FencedRecoveryBinding binding = requireCurrent(bindingId, epoch).confirmed();
         return retire(binding, FencedRecoveryDisposition.REJECT_STALE, "confirmed");
     }
+    /** A causal container removal cannot be replayed as another projection at the same socket. */
+    FencedRecoveryState retireObservedContainerRemoval(SubjectId bindingId, long epoch, SubjectId owner) {
+        var binding = requireCurrent(bindingId, epoch);
+        if (binding.asset() != FencedRecoveryAsset.CONTAINER || !binding.ownerId().equals(owner)
+                || binding.phase() != FencedRecoveryPhase.RUNNING)
+            throw new IllegalArgumentException("container removal lacks current running recovery authority");
+        return retire(binding, FencedRecoveryDisposition.REJECT_STALE, "observed-container-removal");
+    }
     /** Positive saved-body absence is not a rollback of a reversible effect checkpoint. */
     FencedRecoveryState retireObservedBodyAbsence(SubjectId bindingId, long epoch, SubjectId actor) {
         FencedRecoveryBinding binding = requireCurrent(bindingId, epoch);

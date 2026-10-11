@@ -17,7 +17,8 @@ public record ResourceStorageDeclared(ContainerRecord container, BlockPosition p
         var inventory = state.inventory();
         if (!container.ownerId().equals(owner) || inventory.containers().size() >= 4096
                 || inventory.containers().containsKey(container.id()) || !state.bootstrap().bounds().contains(position)
-                || inventory.surfaces().values().stream().filter(ContainerSurface::fixed).anyMatch(surface -> surface.position().equals(position)))
+                || inventory.surfaces().values().stream().filter(ContainerSurface::fixed)
+                    .filter(surface -> surface.status() != ContainerSurfaceStatus.RETIRED).anyMatch(surface -> surface.position().equals(position)))
             throw new IllegalArgumentException("storage declaration has foreign ownership, occupied identity/socket or excessive capacity");
         var records = new LinkedHashMap<>(inventory.containers()); records.put(container.id(), container);
         var surfaces = new LinkedHashMap<>(inventory.surfaces());

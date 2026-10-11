@@ -16,14 +16,15 @@ final class FrontierV3StorageAdoption {
     private static final Map<ServerLevel, Discovery> WINDOWS = new WeakHashMap<>();
     private record Chunk(int x, int z) { }
     private static final class Discovery {
-        FrontierBootstrap bootstrap; List<Chunk> chunks = List.of(); int cursor;
-        void refresh(FrontierBootstrap next) {
-            if (bootstrap == next) return;
+        List<SettlementStorageTerritory.Area> areas = List.of(); List<Chunk> chunks = List.of(); int cursor;
+        void refresh(FrontierWorldState state) {
+            var next = SettlementStorageTerritory.areas(state);
+            if (areas.equals(next)) return;
             var targets = new LinkedHashSet<Chunk>();
-            for (var area : SettlementStorageTerritory.areas(next))
+            for (var area : next)
                 for (int x = area.minX() >> 4; x <= area.maxX() >> 4; x++)
                     for (int z = area.minZ() >> 4; z <= area.maxZ() >> 4; z++) targets.add(new Chunk(x, z));
-            chunks = List.copyOf(targets); cursor = 0; bootstrap = next;
+            chunks = List.copyOf(targets); cursor = 0; areas = next;
         }
     }
     private FrontierV3StorageAdoption() { }
@@ -36,7 +37,7 @@ final class FrontierV3StorageAdoption {
             if (level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4) == null) continue;
             finish(level, runtime, state, surface); return;
         }
-        var window = WINDOWS.computeIfAbsent(level, ignored -> new Discovery()); window.refresh(state.bootstrap());
+        var window = WINDOWS.computeIfAbsent(level, ignored -> new Discovery()); window.refresh(state);
         for (int i = 0; i < Math.min(CHUNKS_PER_TURN, window.chunks.size()); i++) {
             var target = window.chunks.get(window.cursor);
             window.cursor = (window.cursor + 1) % window.chunks.size();
@@ -53,13 +54,16 @@ final class FrontierV3StorageAdoption {
         var data = chest.getPersistentData(); var p = position(chest.getBlockPos());
         if (data.getBoolean(EXCLUDED_KEY) || !data.getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY).isBlank()
                 || !data.getString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY).isBlank()
-                || state.inventory().surfaces().values().stream().filter(ContainerSurface::fixed).anyMatch(s -> s.position().equals(p))) return false;
-        var home = SettlementStorageTerritory.owner(state.bootstrap(), p).orElse(null);
+                || state.inventory().surfaces().values().stream().filter(ContainerSurface::fixed)
+                    .filter(s -> s.status() != ContainerSurfaceStatus.RETIRED).anyMatch(s -> s.position().equals(p))) return false;
+        var home = SettlementStorageTerritory.owner(state, p).orElse(null);
         if (home == null || !plain(chest)) return false;
         var station = station(level, state, chest.getBlockPos());
         if (station == null) return false; // Storage exists; interaction waits for an admissible shared-geometry port.
         // A readable world-local identity stamped by this producer; nobody dispatches by its spelling.
-        var id = new SubjectId("container:observed-" + p.x() + "_" + p.y() + "_" + p.z());
+        var firstId = new SubjectId("container:observed-" + p.x() + "_" + p.y() + "_" + p.z());
+        var id = state.inventory().containers().containsKey(firstId)
+                ? new SubjectId("container:observed-" + UUID.randomUUID()) : firstId;
         Optional<SubjectId> facility = home.structures().stream().filter(structure ->
                 SettlementStructureFootprint.supportSurfaces(structure).contains(station)).map(SettlementStructure::id).findFirst();
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, facility, station);

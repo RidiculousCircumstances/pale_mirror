@@ -23,6 +23,7 @@ public final class ContainerSurfaceProcess {
                     "container activation waits for its exact cold production input"));
         }
         try {
+            requireRetirement(state, transition);
             FencedRecoveryContainerSupport.transition(state.fencedRecovery(), container,
                     state.inventory().surfaces().get(transition.containerId()), transition.status());
         } catch (IllegalArgumentException invalid) {
@@ -39,6 +40,7 @@ public final class ContainerSurfaceProcess {
         if (activationBlocked(state, transition)) {
             throw new IllegalArgumentException("container activation waits for its exact cold production input");
         }
+        requireRetirement(state, transition);
         FrontierWorldState reduced = state.withInventory(state.inventory().withSurfaceStatus(transition.containerId(), transition.status()));
         return reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
                 FencedRecoveryContainerSupport.transition(state.fencedRecovery(), container,
@@ -48,5 +50,20 @@ public final class ContainerSurfaceProcess {
     private static boolean activationBlocked(FrontierWorldState state, ContainerSurfaceTransition transition) {
         return transition.status() == ContainerSurfaceStatus.ACTIVE
                 && ContainerSurfaceActivationStateSupport.blockedByColdProduction(state, transition.containerId());
+    }
+
+    private static void requireRetirement(FrontierWorldState state, ContainerSurfaceTransition transition) {
+        if (transition.status() != ContainerSurfaceStatus.RETIRED) return;
+        var id = transition.containerId();
+        if (!state.inventory().surfaces().get(id).fixed()
+                || ReferenceContainerCustody.hasLiveCustody(state, id)
+                || state.inventory().items().values().stream().anyMatch(item ->
+                    item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(id))
+                || state.inventory().fungibleResources().accounts().values().stream().anyMatch(account ->
+                    account.custody().equals(new ResourceCustody.Container(id))
+                    && (!account.lotQuantities().isEmpty() || !account.claimQuantities().isEmpty()))
+                || state.inventory().fungibleResources().bindings().values().stream().anyMatch(binding ->
+                    binding.address() instanceof PhysicalStackAddress.ContainerSlot slot && slot.slot().containerId().equals(id)))
+            throw new IllegalArgumentException("container retirement requires disposed stock and closed exact custody");
     }
 }

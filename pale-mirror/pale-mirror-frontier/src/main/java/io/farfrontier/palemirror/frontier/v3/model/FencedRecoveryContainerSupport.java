@@ -28,6 +28,10 @@ public final class FencedRecoveryContainerSupport {
                 FencedRecoveryBinding binding = current(recovery, id, container);
                 yield recovery.ambiguous(id, binding.authorityEpoch(), "container-surface-conflict", FencedRecoveryDisposition.INSPECT);
             }
+            case RETIRED -> {
+                var binding = current(recovery, id, container);
+                yield recovery.retireObservedContainerRemoval(id, binding.authorityEpoch(), container.ownerId());
+            }
             case UNMATERIALIZED, ADOPTING -> throw new IllegalArgumentException("container surface cannot recover to an admission phase");
         };
     }

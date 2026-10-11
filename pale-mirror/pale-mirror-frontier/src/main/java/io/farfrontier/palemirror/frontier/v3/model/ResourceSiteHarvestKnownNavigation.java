@@ -16,9 +16,19 @@ public final class ResourceSiteHarvestKnownNavigation {
     public static final class KnowledgeUnavailable extends IllegalArgumentException {
         public KnowledgeUnavailable(String detail) { super(detail); }
         public KnowledgeUnavailable(String detail, Throwable cause) { super(detail, cause); }
+        public boolean planning() {
+            return getCause() instanceof KnownPedestrianNavigation.RouteUnavailable unavailable
+                    && unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING;
+        }
     }
 
     public static List<SurfaceAnchor> path(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        return path(state, job, false);
+    }
+    public static List<SurfaceAnchor> plannedPath(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        return path(state, job, true);
+    }
+    private static List<SurfaceAnchor> path(FrontierWorldState state, ResourceSiteHarvestJob job, boolean deferred) {
         Objects.requireNonNull(state, "known field navigation state");
         Objects.requireNonNull(job, "known field navigation job");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
@@ -45,8 +55,8 @@ public final class ResourceSiteHarvestKnownNavigation {
         SurfaceAnchor start = actor.supportingSurface();
         ResourceStorageAccess port = ResourceSiteHarvestGoal.depotPort(state, job);
         try {
-            return KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start)
-                    .path(start, goal.movementOrder());
+            var knowledge = KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start);
+            return deferred ? knowledge.plannedPath(start, goal.movementOrder()) : knowledge.path(start, goal.movementOrder());
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
             throw new KnowledgeUnavailable("field goal has no path in retained known geometry: "
                     + goal.kind() + ": " + unavailable.getMessage(), unavailable);

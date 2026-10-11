@@ -15,9 +15,29 @@ class FrontierV3ResourceHandoffLedgerTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
     private static FrontierV3ResourceHandoffLedger empty() {
-        var tag = new CompoundTag(); tag.putInt("format", 4); tag.putLong("nextSequence", 1);
+        var tag = new CompoundTag(); tag.putInt("format", 5); tag.putLong("nextSequence", 1);
         tag.put("pending", new ListTag()); tag.put("actorPickups", new ListTag()); tag.put("groundLosses", new ListTag());
         return FrontierV3ResourceHandoffLedger.load(tag, null);
+    }
+    @Test void removalAndExactToolDropRecoverTheirOwnDeclarationsAndRejectCompetingAuthority() {
+        var journal = empty(); var container = new SubjectId("container:mine-original");
+        var witness = new FrontierV3ContainerRemovalWitness(container, new SubjectId("settlement:6"), new BlockPosition(-77, 61, 2), 7, 3);
+        var id = UUID.randomUUID();
+        var drop = new ExactItemCustodyChanged(new SubjectId("item:mine-tool"), new InventoryCustody.ContainerSlot(container, 2),
+                new InventoryCustody.WorldCarrier(id));
+        journal.prepareRemoval(witness); journal.prepareExact(id, drop);
+        var recovered = FrontierV3ResourceHandoffLedger.load(journal.save(new CompoundTag(), null), null);
+        assertEquals(List.of(witness), recovered.removals()); assertEquals(Map.of(id, drop), recovered.exactDrops());
+        assertTrue(recovered.removes(container)); assertTrue(recovered.blocks(id));
+        assertThrows(IllegalArgumentException.class, () -> recovered.prepareRemoval(witness));
+        assertThrows(IllegalArgumentException.class, () -> recovered.prepareExact(id, drop));
+        assertThrows(IllegalArgumentException.class, () -> recovered.prepareExact(UUID.randomUUID(), drop));
+        assertThrows(IllegalArgumentException.class, () -> recovered.retireRemoval(new FrontierV3ContainerRemovalWitness(
+                container, witness.owner(), witness.position(), 8, 3)));
+        var obsolete = journal.save(new CompoundTag(), null); obsolete.putInt("format", 4);
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(obsolete, null));
+        recovered.retireExact(id, drop); recovered.retireRemoval(witness);
+        assertFalse(recovered.removes(container)); assertFalse(recovered.blocks(id));
     }
     @Test void fragmentedDropsRetainExactlyOneStockBalanceAndReplayInRecordedOrder() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:drop-fragments"), 20260918065L,

@@ -2,7 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import java.util.*;
 
-/** Admission-only default ownership inside the existing residential perimeter. Not behavior dispatch. */
+/** Admission-only default ownership of declared settlement/worksite land. Not behavior dispatch. */
 public final class SettlementStorageTerritory {
     public record Area(Settlement settlement, int minX, int maxX, int minZ, int maxZ) {
         public boolean contains(BlockPosition position) {
@@ -11,6 +11,7 @@ public final class SettlementStorageTerritory {
     }
     private static FrontierBootstrap cached;
     private static List<Area> areas = List.of();
+    private static final ImmutableInputView<List<Area>> WORK_AREAS = new ImmutableInputView<>();
     private SettlementStorageTerritory() { }
     public static synchronized List<Area> areas(FrontierBootstrap bootstrap) {
         if (cached != bootstrap) {
@@ -31,5 +32,27 @@ public final class SettlementStorageTerritory {
         var candidates = areas(bootstrap).stream().filter(area -> area.contains(position)).toList();
         // An overlap is not permission to choose the nearest or first owner.
         return candidates.size() == 1 ? Optional.of(candidates.getFirst().settlement()) : Optional.empty();
+    }
+    public static List<Area> areas(FrontierWorldState state) {
+        var sites = state.extractionSites().deposits().values().stream().map(deposit -> deposit.site())
+                .sorted(Comparator.comparing(site -> site.id())).toList();
+        return WORK_AREAS.get(List.of(state.bootstrap(), sites), () -> {
+        var result = new ArrayList<>(areas(state.bootstrap()));
+        for (var site : sites) {
+            var home = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());
+            var positions = new ArrayList<>(site.layout().fixedBlocks().keySet());
+            site.layout().cells().forEach(cell -> positions.add(cell.source()));
+            result.add(new Area(home, positions.stream().mapToInt(BlockPosition::x).min().orElseThrow(),
+                    positions.stream().mapToInt(BlockPosition::x).max().orElseThrow(),
+                    positions.stream().mapToInt(BlockPosition::z).min().orElseThrow(),
+                    positions.stream().mapToInt(BlockPosition::z).max().orElseThrow()));
+        }
+        return List.copyOf(result);
+        });
+    }
+    public static Optional<Settlement> owner(FrontierWorldState state, BlockPosition position) {
+        if (!state.bootstrap().bounds().contains(position)) return Optional.empty();
+        var homes = areas(state).stream().filter(area -> area.contains(position)).map(Area::settlement).distinct().toList();
+        return homes.size() == 1 ? Optional.of(homes.getFirst()) : Optional.empty();
     }
 }

@@ -16,6 +16,9 @@ final class FrontierV3ReferenceContainerHandoff {
         var checks = new ArrayList<FrontierV3HotHandoff.Check>();
         for (var id : FrontierV3HandoffIndex.containers(level, state.inventory().surfaces(), chunk)) {
             var surface = state.inventory().surfaces().get(id);
+            // A witnessed destroyed incarnation is historical evidence, not a
+            // provider that must reappear before exposing its former chunk.
+            if (surface.status() == ContainerSurfaceStatus.RETIRED) continue;
             if (!ReferenceContainerCustody.isReferenceContainer(state, surface.containerId())) continue;
             var pos = surface.position();
             if (!chunk.equals(new ChunkPos(pos.x() >> 4, pos.z() >> 4))) continue;

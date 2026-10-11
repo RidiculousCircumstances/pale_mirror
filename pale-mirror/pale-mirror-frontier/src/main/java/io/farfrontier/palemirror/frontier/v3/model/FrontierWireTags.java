@@ -67,7 +67,7 @@ public final class FrontierWireTags {
                     tag(0, CompanyStatus.ACTIVE), tag(1, CompanyStatus.INSOLVENT), tag(2, CompanyStatus.DISSOLVED)),
             entry(ContainerSurfaceStatus.class,
                     tag(0, ContainerSurfaceStatus.UNMATERIALIZED), tag(1, ContainerSurfaceStatus.PREPARED), tag(2, ContainerSurfaceStatus.ACTIVE),
-                    tag(3, ContainerSurfaceStatus.CONFLICT), tag(4, ContainerSurfaceStatus.ADOPTING)),
+                    tag(3, ContainerSurfaceStatus.CONFLICT), tag(4, ContainerSurfaceStatus.ADOPTING), tag(5, ContainerSurfaceStatus.RETIRED)),
 
             entry(EconomicAccountStatus.class,
                     tag(0, EconomicAccountStatus.ACTIVE), tag(1, EconomicAccountStatus.INSOLVENT)),

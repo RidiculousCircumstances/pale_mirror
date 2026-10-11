@@ -1,0 +1,223 @@
+{
+  "schema": 1,
+  "id": "disposable_storage_mine_replacement",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25595,
+    "profile": "quarry-world",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 12
+  },
+  "setup": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -76,
+        "y": 61,
+        "z": 4
+      },
+      "settleMs": 0
+    },
+    { "type": "command", "command": "/give PMTestPilot minecraft:trapped_chest 2" },
+    { "type": "command", "command": "/give PMTestPilot minecraft:granite 17" }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE"
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "original_quarry_provider_is_current"
+    },
+    {
+      "type": "break",
+      "position": {
+        "x": -77,
+        "y": 61,
+        "z": 2
+      },
+      "timeoutMs": 15000,
+      "causalMilestone": "ordinary_player_removes_original_mine_chest"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": {
+        "status": "ok",
+        "surface": "RETIRED"
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "causal_drops_close_original_provider_without_erasing_stock"
+    },
+    {
+      "type": "place", "item": "minecraft:trapped_chest", "position": { "x": -77, "y": 61, "z": 2 }, "timeoutMs": 15000
+    },
+    {
+      "type": "place", "item": "minecraft:trapped_chest", "position": { "x": -76, "y": 61, "z": 2 }, "timeoutMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--77_61_2",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE"
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "new_incarnation_admitted_at_destroyed_worksite_socket"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--76_61_2",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE"
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "second_half_admitted_on_declared_mine_land"
+    },
+    {
+      "type": "look", "at": { "x": -76, "y": 61, "z": 2 }
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "x": -76,
+        "y": 61,
+        "z": 2
+      },
+      "timeoutMs": 15000,
+      "causalMilestone": "replacement_double_menu_is_accessible"
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:granite",
+      "count": 17,
+      "timeoutMs": 15000,
+      "causalMilestone": "ordinary_player_can_insert_across_both_replacement_halves"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resource",
+      "id": "custody:container-observed--76_61_2",
+      "expect": {
+        "status": "ok",
+      "quantity": 17,
+        "bindingCount": 1
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "replacement_receives_ingress"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--77_61_2",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE"
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "replacement_other_half_receives_merge"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -76,
+        "y": 61,
+        "z": 4
+      },
+      "settleMs": 0,
+      "causalMilestone": "return_after_graceful_restart"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": {
+        "status": "ok",
+        "surface": "RETIRED"
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "old_provider_stays_terminal_after_restart"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resource",
+      "id": "custody:container-observed--76_61_2",
+      "expect": {
+        "status": "ok",
+        "quantity": 17,
+        "bindingCount": 1
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "replacement_identity_and_ingress_survive_restart"
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -76,
+        "y": 61,
+        "z": 2
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -76,
+        "y": 61,
+        "z": 2
+      },
+      "timeoutMs": 15000,
+      "causalMilestone": "actual_replacement_is_visible"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 14,
+      "view": "container",
+      "id": "container:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": {
+        "status": "ok",
+        "surface": "RETIRED"
+      }
+    },
+    {
+      "after": 15,
+      "view": "resource",
+      "id": "custody:container-observed--76_61_2",
+      "expect": {
+        "status": "ok",
+        "quantity": 17
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 10,
+      "name": "ordinary-replacement-double-chest-ingress",
+      "presentation": "player"
+    },
+    {
+      "after": 17,
+      "name": "replacement-chest-after-graceful-restart"
+    }
+  ]
+}

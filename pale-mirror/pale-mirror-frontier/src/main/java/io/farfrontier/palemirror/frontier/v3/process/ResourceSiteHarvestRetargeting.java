@@ -14,20 +14,28 @@ public final class ResourceSiteHarvestRetargeting {
 
     /** Pure COLD alternative search; a failed target remains in the outstanding CellId pool. */
     public static OptionalInt coldReachableWorkTarget(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        return coldReachableWorkTarget(state, job, true);
+    }
+    private static OptionalInt coldReachableWorkTarget(FrontierWorldState state, ResourceSiteHarvestJob job, boolean deferred) {
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
-        return cycle.reachableWorkSlotAfter(job.progress().nextCropSlotIndex(), index -> {
+        try { return cycle.reachableWorkSlotAfter(job.progress().nextCropSlotIndex(), index -> {
             if (!lifecycle.targetAvailable(index, job.id())) return false;
             ResourceSiteHarvestJob candidate = job.retargetTo(index).bindTarget(cycle);
             FrontierWorldState projected = state.withResourceSites(state.resourceSites().replace(
                     lifecycle.retargetHarvestCell(job, index, cycle)));
             try {
-                ResourceSiteHarvestKnownNavigation.path(projected, candidate);
+                if (deferred) ResourceSiteHarvestKnownNavigation.plannedPath(projected, candidate);
+                else ResourceSiteHarvestKnownNavigation.path(projected, candidate);
                 return true;
             } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
+                if (unavailable.planning()) throw unavailable; // Await this candidate; never fan out a field-sized search batch.
                 return false;
             }
-        });
+        }); } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
+            if (!unavailable.planning()) throw unavailable;
+            return OptionalInt.empty();
+        }
     }
 
     public static FrontierWorldState reduceTargetRetargeted(FrontierWorldState state, SubjectId subject,
@@ -65,7 +73,7 @@ public final class ResourceSiteHarvestRetargeting {
             }
             if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())
                     || !currentUnavailable
-                    || !coldReachableWorkTarget(state, job).equals(OptionalInt.of(retargeted.toSlot())))
+                    || !coldReachableWorkTarget(state, job, false).equals(OptionalInt.of(retargeted.toSlot())))
                 throw new IllegalArgumentException("COLD area work retarget lacks an exact known alternative");
         }
         return state.withResourceSites(state.resourceSites().replace(

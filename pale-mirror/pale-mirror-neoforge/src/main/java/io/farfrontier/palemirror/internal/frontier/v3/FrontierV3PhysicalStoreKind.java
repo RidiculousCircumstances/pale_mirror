@@ -13,7 +13,8 @@ enum FrontierV3PhysicalStoreKind {
     OBSERVATIONS(6, "pale_mirror_frontier_v3_physical_observations", List.of(new Table(1,"pending"))),
     MANAGED_EFFECTS(7, "pale_mirror_frontier_v3_managed_explosions", List.of(new Table(1,"pending"))),
     ACTORS(9, "pale_mirror_frontier_v3_ambient_carriers", List.of()),
-    RESOURCE_HANDOFFS(11, "pale_mirror_frontier_v3_resource_handoffs", List.of(new Table(1,"pending"), new Table(2,"actorPickups"), new Table(3,"groundLosses"))),
+    RESOURCE_HANDOFFS(11, "pale_mirror_frontier_v3_resource_handoffs", List.of(new Table(1,"pending"), new Table(2,"actorPickups"), new Table(3,"groundLosses"),
+            new Table(4,"containerRemovals"), new Table(5,"exactDrops"))),
     INFECTION(8, "pale_mirror_frontier_v3_infection_overlay", List.of(new Table(1,"claims")));
 
     record Table(int wireTag, String name) {

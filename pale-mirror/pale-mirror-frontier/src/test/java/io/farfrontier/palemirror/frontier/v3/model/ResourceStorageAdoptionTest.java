@@ -56,4 +56,24 @@ class ResourceStorageAdoptionTest {
         var moved = new ResourceStorageAdopted(new ResourceStorageDeclared(event.declaration().container(), occupied), List.of());
         assertThrows(IllegalArgumentException.class, () -> moved.apply(state, home.id()));
     }
+    @Test void declaredMineLandAdmitsItsOwnerAndRetiredStorageDoesNotOwnTheReplacementSocket() {
+        var state = initial();
+        var site = state.extractionSites().deposits().values().stream()
+                .filter(deposit -> deposit.site().settlementId().equals(new SubjectId("settlement:6"))).findFirst().orElseThrow().site();
+        var socket = state.inventory().surfaces().get(site.containerId()).position();
+        assertEquals(site.settlementId(), SettlementStorageTerritory.owner(state, socket).orElseThrow().id());
+        var original = event(state, false); var record = original.declaration().container();
+        var adopted = original.apply(state, record.ownerId());
+        var active = adopted.withInventory(adopted.inventory().withSurfaceStatus(record.id(), ContainerSurfaceStatus.ACTIVE));
+        var retired = active.withInventory(active.inventory().withSurfaceStatus(record.id(), ContainerSurfaceStatus.RETIRED));
+        assertTrue(ReferenceContainerCustody.blocksCanonicalUse(retired, record.id()));
+        var replacementId = new SubjectId("container:new-incarnation");
+        var oldPort = (ShipmentEndpoint.Storage) record.storage().orElseThrow().endpoint();
+        var port = new ShipmentEndpoint.Storage(oldPort.settlementId(), replacementId, oldPort.station(), oldPort.facilityId(), oldPort.exteriorApproach());
+        var replacement = new ContainerRecord(replacementId, record.ownerId(), 27, ContainerPurpose.RESOURCE_STORAGE,
+                Optional.empty(), Optional.of(new ResourceStoragePolicy(port, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var declaration = new ResourceStorageDeclared(replacement, original.declaration().position());
+        assertDoesNotThrow(() -> declaration.apply(retired, record.ownerId()));
+        assertThrows(IllegalArgumentException.class, () -> declaration.apply(active, record.ownerId()));
+    }
 }

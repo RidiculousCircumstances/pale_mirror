@@ -8,6 +8,7 @@ import net.minecraft.server.level.ServerLevel;
 final class FrontierV3ReferenceContainerPresentation {
     private FrontierV3ReferenceContainerPresentation() { }
     static boolean needsReconciliation(ServerLevel level, FrontierWorldState state, ContainerSurface surface) {
+        if (surface.status() == ContainerSurfaceStatus.RETIRED) return false;
         if (!ReferenceContainerCustody.isReferenceContainer(state, surface.containerId())) return false;
         var position = surface.position(state);
         var block = new BlockPos(position.x(), position.y(), position.z());

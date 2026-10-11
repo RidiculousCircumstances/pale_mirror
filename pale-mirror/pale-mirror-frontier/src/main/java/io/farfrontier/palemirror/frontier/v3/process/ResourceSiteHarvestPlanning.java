@@ -166,8 +166,9 @@ final class ResourceSiteHarvestPlanning {
                 && outcome != ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE) {
             FrontierWorldState admitted = state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
             try {
-                ResourceSiteHarvestKnownNavigation.path(admitted, job);
+                ResourceSiteHarvestKnownNavigation.plannedPath(admitted, job);
             } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
+                if (unavailable.planning()) return java.util.Optional.empty();
                 var alternate = ResourceSiteHarvestRetargeting.coldReachableWorkTarget(admitted, job);
                 if (alternate.isEmpty()) return java.util.Optional.empty();
                 job = job.withProgress(job.progress().withSelectedCropSlot(alternate.getAsInt())).bindTarget(field);
@@ -361,8 +362,9 @@ final class ResourceSiteHarvestPlanning {
         }
         List<SurfaceAnchor> path;
         try {
-            path = ResourceSiteHarvestKnownNavigation.path(state, job);
+            path = ResourceSiteHarvestKnownNavigation.plannedPath(state, job);
         } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
+            if (unavailable.planning()) return List.of(reschedule(action, coldProgress(job, nextDue)));
             if (goal.kind() == ResourceSiteHarvestGoal.Kind.WORK_CELL) {
                 var alternate = ResourceSiteHarvestRetargeting.coldReachableWorkTarget(state, job);
                 if (alternate.isPresent()) {

@@ -51,10 +51,12 @@ final class FrontierV3PhysicalExecutors {
             // from physical storage.  Keep both graph edges explicit so a
             // later executor insertion cannot turn either recovery order into
             // incidental declaration order.
+            executor("container-removal", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
+                    Set.of("fungible-resource-observation"), "container-removal", FrontierV3ContainerRemovalExecutor::tick),
             executor("container-surfaces", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
-                    Set.of("production-transformation", "fungible-resource-observation"),
+                    Set.of("production-transformation", "container-removal"),
                     "container-surface-effect", FrontierV3ContainerSurfaceExecutor::tick),
-            executor("reference-container-custody", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("fungible-resource-observation"), "reference-container-custody", FrontierV3ReferenceContainerCustodyExecutor::tick),
+            executor("reference-container-custody", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-removal"), "reference-container-custody", FrontierV3ReferenceContainerCustodyExecutor::tick),
             executor("shipment-resource-effects", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
                     Set.of("reference-container-custody", "container-surfaces"), "shipment-resource-effect", FrontierV3ShipmentPhysicalExecutor::tick),
             executor("resource-site-deferred-receipt", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,

@@ -326,6 +326,7 @@ final class FrontierV3ContainerClickExecutor {
     static ContainerRecord ownedContainer(FrontierWorldState state, BlockPos position) {
         return state.inventory().surfaces().entrySet().stream()
                 .filter(entry -> entry.getValue().fixed())
+                .filter(entry -> entry.getValue().status() != ContainerSurfaceStatus.RETIRED)
                 .filter(entry -> entry.getValue().position().x() == position.getX()
                         && entry.getValue().position().y() == position.getY()
                         && entry.getValue().position().z() == position.getZ())

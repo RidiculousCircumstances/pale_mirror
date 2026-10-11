@@ -33,6 +33,26 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Goal-navigation regression and shared fixture; obsolete route-cursor tests are archived. */
 class ResourceSiteHarvestProcessTest {
+    @Test void fieldRuntimeRouteAdmissionUsesCooperativePlanningWithoutSurveyingTheWorldSynchronously() throws Exception {
+        var fixture = coldHarvestAfterSteps(125L, 0);
+        try (var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
+             var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner)) {
+            var observation = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(() -> {
+                var pending = assertThrows(ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable.class,
+                        () -> ResourceSiteHarvestKnownNavigation.plannedPath(fixture.state(), fixture.job()));
+                assertTrue(pending.planning(), "pending calculation must not become a no-path field hold");
+                return pending;
+            });
+            assertEquals(0, planner.workUnits(), "admission may enqueue, never run a regional survey inline");
+            assertEquals(1, planner.pendingCount()); assertEquals(1, observation.requests().size());
+            int turns = 0;
+            while (planner.pendingCount() > 0 && turns++ < 4096)
+                planner.advance(io.farfrontier.palemirror.frontier.v3.model.navigation.HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            assertEquals(0, planner.pendingCount());
+            assertEquals(ResourceSiteHarvestKnownNavigation.path(fixture.state(), fixture.job()),
+                    ResourceSiteHarvestKnownNavigation.plannedPath(fixture.state(), fixture.job()));
+        }
+    }
     @Test void unavailableWarehouseIsReplacedWithoutLosingTheCarriedHarvestAndOldAuthorityCannotResume() {
         var fixture = coldHarvestWithCargo(125L); var state = fixture.state(); var job = fixture.job();
         var home = state.resourceSite(job.siteId()).settlementId(); var oldContainer = job.outputSlot().containerId();
