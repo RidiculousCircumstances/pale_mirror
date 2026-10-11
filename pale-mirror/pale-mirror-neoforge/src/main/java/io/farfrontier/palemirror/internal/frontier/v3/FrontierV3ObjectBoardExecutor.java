@@ -144,8 +144,7 @@ final class FrontierV3ObjectBoardExecutor {
             var cycle = state.resourceSites().cycle(board.ownerId());
             if (!owner.witness().matchesCycle(cycle) || cycle.layout().cells().stream().anyMatch(cell -> {
                 var physical = owner.witness().cell(cell.id());
-                return physical.pending().isPresent() || physical.foreign().isPresent()
-                        || !physical.committed().equals(ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell.id())));
+                return !physical.settledFor(cycle.cell(cell.id()));
             })) {
                 return project(level, ledger, fieldProjectionBoard(board, "CROPS UPDATING"));
             }

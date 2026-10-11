@@ -85,16 +85,22 @@ public final class ScheduledActionQueue {
                                   Predicate<ScheduledAction> eligible,
                                   Function<ScheduledAction, Set<SubjectId>> holdWakeKeys) {
         Set<ScheduleId> audited = auditExpired(instant.ticks());
-        for (Iterator<ScheduledAction> iterator = runnable.iterator(); iterator.hasNext();) {
-            ScheduledAction candidate = iterator.next();
+        // The runnable set accelerates allocation; it cannot define a different
+        // admission order from the canonical queue used at commit. Reconcile a
+        // missed wake before planning, rather than quarantining after selection.
+        for (ScheduledAction candidate : ordered) {
             if (candidate.dueAt().compareTo(instant) > 0) return false;
             if (eligible.test(candidate)) {
                 countMissedWake(audited, candidate);
+                if (parked.containsKey(candidate.id())) {
+                    unpark(candidate.id(), instant.ticks());
+                    if (auditReadyWithoutWake < Long.MAX_VALUE) auditReadyWithoutWake++;
+                }
                 return action.equals(candidate);
             }
             Set<SubjectId> keys = holdWakeKeys.apply(candidate);
-            if (!keys.isEmpty()) {
-                iterator.remove();
+            if (!keys.isEmpty() && !parked.containsKey(candidate.id())) {
+                runnable.remove(candidate);
                 park(candidate, keys, instant.ticks());
             }
         }

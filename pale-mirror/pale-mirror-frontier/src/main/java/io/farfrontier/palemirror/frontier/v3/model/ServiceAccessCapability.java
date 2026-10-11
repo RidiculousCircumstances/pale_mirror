@@ -8,4 +8,6 @@ interface ServiceAccessCapability {
     ServiceAccessDemand.Kind kind();
     ServiceAccessDemand.Priority priority();
     List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId);
+    /** The same owner that publishes demand must address changes to that demand. */
+    java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next);
 }

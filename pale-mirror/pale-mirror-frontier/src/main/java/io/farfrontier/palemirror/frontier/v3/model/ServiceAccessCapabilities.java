@@ -67,4 +67,10 @@ final class ServiceAccessCapabilities {
     static ServiceAccessDemand.Priority priority(ServiceAccessDemand.Identity identity) {
         return CURRENT.capabilities.get(identity.kind()).priority();
     }
+
+    static Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
+        var points = new HashSet<SubjectId>();
+        CURRENT.capabilities.values().forEach(capability -> points.addAll(capability.wakePoints(previous, next)));
+        return Set.copyOf(points);
+    }
 }

@@ -8,6 +8,15 @@ import java.util.List;
 public final class ShipmentServiceAccess implements ServiceAccessCapability {
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.COURIER; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
+    @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
+        var points = new java.util.HashSet<>(ServiceAccessWakeDependencies.changed(
+                previous.shipments().shipments(), next.shipments().shipments(), shipment ->
+                        java.util.stream.Stream.concat(shipment.sender().container().stream(),
+                                java.util.stream.Stream.of(shipment.receiver().containerId()))));
+        points.addAll(ServiceAccessWakeDependencies.changed(previous.shipments().missions(), next.shipments().missions(),
+                mission -> java.util.stream.Stream.of(mission.sender().containerId(), mission.receiver().containerId())));
+        return java.util.Set.copyOf(points);
+    }
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var boundary = ServiceAccessCoordinator.boundary(state, pointId);
         var result = new ArrayList<ServiceAccessDemand>();

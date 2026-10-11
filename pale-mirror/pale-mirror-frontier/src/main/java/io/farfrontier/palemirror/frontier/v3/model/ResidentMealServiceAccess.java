@@ -7,6 +7,10 @@ import java.util.List;
 public final class ResidentMealServiceAccess implements ServiceAccessCapability {
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.MEAL; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.SELF_CARE; }
+    @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
+        return ServiceAccessWakeDependencies.changed(previous.humanPopulation().meals(), next.humanPopulation().meals(),
+                meal -> meal.portable() ? java.util.stream.Stream.empty() : java.util.stream.Stream.of(meal.depotId()));
+    }
 
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var boundary = ServiceAccessCoordinator.boundary(state, pointId);

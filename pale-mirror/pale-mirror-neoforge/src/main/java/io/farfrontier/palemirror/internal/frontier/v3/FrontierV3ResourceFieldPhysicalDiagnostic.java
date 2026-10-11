@@ -44,13 +44,7 @@ final class FrontierV3ResourceFieldPhysicalDiagnostic {
         for (var cell : cycle.layout().cells()) {
             var retained = owner.witness().cell(cell.id());
             var target = cycle.cell(cell.id());
-            boolean owned = target.soil() != io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.Soil.UNKNOWN
-                    && target.soil() != io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.Soil.OBSTRUCTED
-                    && target.crop() != io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.Crop.UNKNOWN
-                    && target.crop() != io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.Crop.OBSTRUCTED;
-            if (retained.pending().isEmpty() && (owned
-                    ? retained.committed().equals(io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface.Condition.of(target))
-                    : retained.foreign().isPresent())) continue;
+            if (retained.settledFor(target)) continue;
             mismatches++;
             if (!mismatch.equals("null")) continue;
             var reading = FrontierV3ResourceFieldObservation.read(level, cell, "diagnostic:field-mismatch");
@@ -63,12 +57,7 @@ final class FrontierV3ResourceFieldPhysicalDiagnostic {
         var firstClaim = owner.witness().cell(first);
         var committed = firstClaim.committed();
         var canonical = cycle.cell(first);
-        boolean canonicalForeign = canonical.soil() == io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.Soil.OBSTRUCTED
-                || canonical.crop() == io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.Crop.OBSTRUCTED;
-        boolean current = owner.witness().matchesCycle(cycle)
-                && !canonicalForeign && firstClaim.pending().isEmpty() && firstClaim.foreign().isEmpty()
-                && committed.equals(io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface.Condition.of(
-                        canonical));
+        boolean current = owner.witness().matchesCycle(cycle) && firstClaim.settledFor(canonical);
         String foreign = firstClaim.foreign().map(incident ->
                 ",\"firstCellForeign\":true,\"foreignSoilName\":\""
                         + FrontierV3DiagnosticJson.quote(incident.observedSoil().getString("Name"))

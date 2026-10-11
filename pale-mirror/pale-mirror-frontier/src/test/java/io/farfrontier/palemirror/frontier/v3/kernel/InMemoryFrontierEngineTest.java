@@ -341,6 +341,43 @@ class InMemoryFrontierEngineTest {
     }
 
     @Test
+    void missedDerivedWakeCannotAdmitALaterActionAgainstTheCanonicalHead() {
+        ScheduledAction held = scheduled("schedule:waiting-meal", "resident:waiting", 5L, 1);
+        ScheduledAction release = scheduled("schedule:release-point", "settlement:a", 6L, 1);
+        ScheduledAction later = scheduled("schedule:independent", "settlement:b", 7L, 1);
+        ScheduledActionPlanner<Counter> planner = new ScheduledActionPlanner<>() {
+            @Override public boolean held(Counter state, ScheduledAction action) {
+                return state.value() == 0 && action.equals(held);
+            }
+            @Override public Set<SubjectId> holdWakeKeys(Counter state, ScheduledAction action) {
+                return Set.of(SUBJECT);
+            }
+            // Deliberately omit the derived wake to reproduce a stale runnable index.
+            @Override public List<ProposedEvent> plan(Counter state, ScheduledAction action) {
+                return List.of(new ProposedEvent(action.subject(), new Delta(1)));
+            }
+        };
+        var engine = new InMemoryFrontierEngine<>(WORLD, new Counter(0), SimInstant.ZERO,
+                (Counter state, FrontierCommand command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                planner, (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(held, release, later));
+        engine.advanceTo(new SimInstant(10L), new WorkBudget(2, 2));
+        assertEquals(List.of(held, later), engine.scheduledActions(),
+                "the newly eligible earlier action fences later work, without losing its identity");
+        assertEquals(1, engine.canonicalState().state().value());
+        engine.advanceTo(new SimInstant(11L), new WorkBudget(2, 2));
+        assertTrue(engine.scheduledActions().isEmpty(), "the stale index is repaired before the audit timeout");
+        assertEquals(3, engine.canonicalState().state().value());
+        var replay = TransactionReplayer.replayFrom(WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO,
+                List.of(held, release, later), engine.transactions(), (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(), StateValidator.none());
+        assertEquals(engine.canonicalState().state(), replay.state());
+        assertEquals(engine.scheduledActions(), replay.schedules());
+    }
+
+    @Test
     void scheduleCreationRescheduleAndCancellationAreCommittedEvents() {
         InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(), false);
         ScheduledAction original = scheduled("schedule:created", "settlement:a", 10L, 1);

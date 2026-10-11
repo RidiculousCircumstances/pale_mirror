@@ -612,15 +612,25 @@ public final class FrontierWorldProcessCatalog {
                 || previous.humanPopulation().meals() != next.humanPopulation().meals()
                 || previous.actorMovements() != next.actorMovements()
                 || previous.productionJobs() != next.productionJobs()
-                || previous.resourceSites() != next.resourceSites();
+                || previous.resourceSites() != next.resourceSites()
+                || previous.shipments() != next.shipments()
+                || previous.extractionSites() != next.extractionSites()
+                || previous.actorExecutions() != next.actorExecutions();
         boolean stockChanged = previous.inventory().fungibleResources() != next.inventory().fungibleResources();
         boolean surfaceChanged = previous.inventory().surfaces() != next.inventory().surfaces();
         boolean policyChanged = previous.inventory().containers() != next.inventory().containers();
         boolean custodyChanged = previous.replicaCustody() != next.replicaCustody();
         boolean sceneChanged = previous.sceneLeases() != next.sceneLeases();
         if (accessChanged || stockChanged || custodyChanged || sceneChanged || surfaceChanged || policyChanged) keys.add(event.subject());
+        if (previous.actorExecutions() != next.actorExecutions()) {
+            previous.actorExecutions().actors().forEach((actor, execution) -> {
+                if (!execution.equals(next.actorExecutions().actors().get(actor))) keys.add(actor);
+            });
+            next.actorExecutions().actors().keySet().stream()
+                    .filter(actor -> !previous.actorExecutions().actors().containsKey(actor)).forEach(keys::add);
+        }
         if (policyChanged) keys.addAll(StoragePolicyWakeKeys.changed(previous.inventory(), next.inventory()));
-        if (accessChanged || sceneChanged) {
+        if (accessChanged || sceneChanged || custodyChanged || stockChanged) {
             keys.addAll(ServiceAccessCoordinator.wakePoints(previous, next));
         }
         if (surfaceChanged) next.inventory().surfaces().forEach((id, surface) -> {
@@ -628,18 +638,7 @@ public final class FrontierWorldProcessCatalog {
         });
         if (!accessChanged && !stockChanged && !custodyChanged && !sceneChanged && !surfaceChanged && !policyChanged)
             return Set.copyOf(keys);
-        if (sceneChanged) {
-            for (var entry : previous.sceneLeases().entrySet()) {
-                SceneLease updated = next.sceneLeases().get(entry.getKey());
-                if (entry.getValue().equals(updated)) continue;
-                addResidentDepotKeys(previous, entry.getValue(), keys);
-                if (updated != null) addResidentDepotKeys(next, updated, keys);
-            }
-            for (var entry : next.sceneLeases().entrySet()) {
-                if (!previous.sceneLeases().containsKey(entry.getKey()))
-                    addResidentDepotKeys(next, entry.getValue(), keys);
-            }
-        }
+        if (sceneChanged) keys.addAll(SceneLeaseWakeKeys.changed(previous, next));
         io.farfrontier.palemirror.frontier.v3.api.SubjectId siteId = null;
         if (accessChanged) {
             if (next.resourceSites().sites().containsKey(event.subject())) siteId = event.subject();
@@ -674,18 +673,6 @@ public final class FrontierWorldProcessCatalog {
             if (localAccess || localStock || localCustody) keys.add(depot);
         }
         return Set.copyOf(keys);
-    }
-
-    private static void addResidentDepotKeys(FrontierWorldState state, SceneLease lease,
-                                             Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> keys) {
-        for (SceneMember member : lease.members()) {
-            ResidentProfile resident = state.humanPopulation().resident(member.actorId());
-            if (resident != null) {
-                keys.add(resident.id());
-                keys.addAll(ServiceAccessCoordinator.wakePoints(state, resident.id()));
-                keys.add(FrontierWorldState.depotId(resident.settlementId()));
-            }
-        }
     }
 
     private static DeterministicProcessDescriptor descriptor(String id, Set<String> commands, Set<String> schedules,

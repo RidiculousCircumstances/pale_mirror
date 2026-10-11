@@ -9,6 +9,10 @@ import java.util.List;
 public final class HarvestServiceAccess implements ServiceAccessCapability {
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.FIELD_HARVEST; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
+    @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
+        return ServiceAccessWakeDependencies.changed(previous.resourceSites().sites(), next.resourceSites().sites(),
+                site -> site.harvestJobs().values().stream().map(job -> job.outputSlot().containerId()));
+    }
 
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var boundary = ServiceAccessCoordinator.boundary(state, pointId);

@@ -8,6 +8,10 @@ import java.util.List;
 public final class ExtractionServiceAccess implements ServiceAccessCapability {
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.EXTRACTION; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
+    @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
+        return ServiceAccessWakeDependencies.changed(previous.extractionSites().work(), next.extractionSites().work(),
+                work -> java.util.stream.Stream.of(work.toolSource().containerId(), work.storageTarget().containerId()));
+    }
     public static boolean needsAccess(ExtractionWork work) {
         return work.phase() == ExtractionWork.Phase.TAKE_TOOL || work.phase() == ExtractionWork.Phase.STORE
                 || work.phase() == ExtractionWork.Phase.RETURN_TOOL;

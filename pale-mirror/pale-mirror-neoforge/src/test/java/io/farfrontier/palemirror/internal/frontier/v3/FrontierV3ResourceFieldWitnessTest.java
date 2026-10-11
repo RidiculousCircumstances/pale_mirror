@@ -176,6 +176,12 @@ class FrontierV3ResourceFieldWitnessTest {
         assertThrows(IllegalArgumentException.class, () -> claim.acknowledgeForeignChange(change, accepted,
                 new FrontierV3ResourceFieldForeignChangeWitness.Blocks(block("minecraft:farmland"), block("minecraft:diamond_block")), reading));
         var blockedClaim = claim.acknowledgeForeignChange(change, accepted, physical, reading);
+        assertTrue(blockedClaim.cell(FIRST).settledFor(accepted.cell(FIRST)),
+                "an accepted excluded cell is not an unfinished physical update");
+        assertFalse(blockedClaim.cell(FIRST).settledFor(cycle.cell(FIRST)),
+                "foreign evidence cannot settle an owned crop state");
+        assertFalse(claim.cell(FIRST).settledFor(accepted.cell(FIRST)),
+                "an exclusion still requires its acknowledged foreign witness");
         assertEquals(FrontierV3HotHandoff.Status.READY, FrontierV3ResourceFieldHandoff.inspectCells(
                 accepted, blockedClaim, List.of(layout().requireCell(FIRST)), ignored -> reading).status(),
                 "an exactly observed canonical obstruction excludes one cell, not the whole field's handoff");

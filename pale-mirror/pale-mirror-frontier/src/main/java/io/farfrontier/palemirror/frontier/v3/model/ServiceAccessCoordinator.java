@@ -16,7 +16,8 @@ public final class ServiceAccessCoordinator {
         changedActors(previous.actorLocations(), next.actorLocations(), actors);
         changedActors(previous.actorMovements(), next.actorMovements(), actors);
         changedActors(previous.ambientLeases(), next.ambientLeases(), actors);
-        var points = new java.util.HashSet<SubjectId>();
+        changedActors(previous.actorExecutions().actors(), next.actorExecutions().actors(), actors);
+        var points = new java.util.HashSet<>(ServiceAccessCapabilities.wakePoints(previous, next));
         for (SubjectId actor : actors) {
             points.addAll(wakePoints(previous, actor));
             points.addAll(wakePoints(next, actor));

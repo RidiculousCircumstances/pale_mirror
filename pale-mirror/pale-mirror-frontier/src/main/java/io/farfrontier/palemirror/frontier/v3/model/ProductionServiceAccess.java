@@ -8,6 +8,11 @@ import java.util.List;
 public final class ProductionServiceAccess implements ServiceAccessCapability {
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.PRODUCTION; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
+    @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
+        return ServiceAccessWakeDependencies.changed(previous.productionJobs(), next.productionJobs(),
+                job -> job.bakeryWork().isEmpty() ? java.util.stream.Stream.empty()
+                        : java.util.stream.Stream.of(BakeryStorage.current(job)));
+    }
 
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var boundary = ServiceAccessCoordinator.boundary(state, pointId);

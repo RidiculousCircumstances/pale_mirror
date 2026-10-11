@@ -126,6 +126,19 @@ final class FrontierV3ResourceFieldWitness {
                     throw new IllegalArgumentException("field effect cursor disagrees with its committed prefix");
             });
         }
+
+        /** Accepted foreign exclusions are settled facts, not unfinished projection work.
+         * This compares retained evidence only; it does not observe or authorize a physical write. */
+        boolean settledFor(ResourceFieldCycle.CellState canonical) {
+            Objects.requireNonNull(canonical, "canonical field cell");
+            if (pending.isPresent()) return false;
+            if (canonical.soil() == ResourceFieldCycle.Soil.OBSTRUCTED
+                    || canonical.crop() == ResourceFieldCycle.Crop.OBSTRUCTED)
+                return foreign.isPresent();
+            if (canonical.soil() == ResourceFieldCycle.Soil.UNKNOWN
+                    || canonical.crop() == ResourceFieldCycle.Crop.UNKNOWN) return false;
+            return foreign.isEmpty() && committed.equals(ResourceFieldPhysicalSurface.Condition.of(canonical));
+        }
     }
 
     private final SubjectId siteId;

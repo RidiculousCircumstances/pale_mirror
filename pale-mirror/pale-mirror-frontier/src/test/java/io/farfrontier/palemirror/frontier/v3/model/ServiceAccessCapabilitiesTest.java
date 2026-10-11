@@ -69,6 +69,9 @@ class ServiceAccessCapabilitiesTest {
         assertSame(SettlementDepotServicePort.forDepot(depot), SettlementDepotServicePort.forDepot(depot));
         var calls = new java.util.concurrent.atomic.AtomicInteger();
         var production = new ServiceAccessCapability() {
+            @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
+                return java.util.Set.of();
+            }
             @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.PRODUCTION; }
             @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
             @Override public List<ServiceAccessDemand> demands(FrontierWorldState current, SubjectId requested) {
@@ -122,6 +125,9 @@ class ServiceAccessCapabilitiesTest {
 
     private static ServiceAccessCapability provider(ServiceAccessDemand.Kind kind, List<ServiceAccessDemand> demands) {
         return new ServiceAccessCapability() {
+            @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
+                return java.util.Set.of();
+            }
             @Override public ServiceAccessDemand.Kind kind() { return kind; }
             @Override public ServiceAccessDemand.Priority priority() {
                 return kind == ServiceAccessDemand.Kind.MEAL ? ServiceAccessDemand.Priority.SELF_CARE : ServiceAccessDemand.Priority.WORK;

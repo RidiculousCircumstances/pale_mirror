@@ -8,6 +8,11 @@ import java.util.List;
 public final class ExpeditionSupplyServiceAccess implements ServiceAccessCapability {
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.EXPEDITION_SUPPLY; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
+    @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
+        return ServiceAccessWakeDependencies.changed(previous.shipments().missions(), next.shipments().missions(), mission ->
+                java.util.stream.Stream.concat(java.util.stream.Stream.of(mission.sender().containerId()),
+                        mission.replenishment().stream().map(UnitResourceTransfer::containerId)));
+    }
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId point) {
         var boundary = ServiceAccessCoordinator.boundary(state, point);
         var loading = state.shipments().missions().values().stream().filter(m -> m.stage() == TransportMission.Stage.LOADING

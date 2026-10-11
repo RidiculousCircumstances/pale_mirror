@@ -46,6 +46,9 @@ class InternalShipmentTest {
                 UUID.randomUUID(), UUID.randomUUID(), List.of(), SourceStockClaimLoss.admissibleClaims(state, source)));
         var economics = state.inventory().economics();
         var after = SourceStockClaimLoss.settle(state, loss);
+        var woken = ServiceAccessCoordinator.wakePoints(state, after);
+        assertTrue(woken.contains(site.containerId()), "retiring a courier wakes its exact source, not only the home depot");
+        assertTrue(woken.contains(receiver.containerId()), "both sides of the retired transport demand are addressed");
         assertEquals(Shipment.Status.ALLOCATION_WITHDRAWN, after.shipments().shipments().get(shipmentId).status());
         assertFalse(after.inventory().fungibleResources().claims().containsKey(claimId));
         assertFalse(after.actorExecutions().current(ActorActivityKind.COURIER).containsKey(worker.id()));
