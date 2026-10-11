@@ -26,6 +26,7 @@ final class SettlementFieldPlanner implements SettlementOperationPlanner {
         return java.util.List.of();
     }
     @Override public Assessment assess(FrontierWorldState state, Settlement settlement) {
+        if (!ProductionStockDemand.read(state, settlement.id(), "minecraft:wheat").requested()) return Assessment.empty();
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         Optional<ResourceSite> recoverableField = state.resourceSiteDescriptors().values().stream()
                 .filter(site -> site.settlementId().equals(settlement.id()))

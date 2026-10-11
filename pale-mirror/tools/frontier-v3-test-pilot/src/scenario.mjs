@@ -549,7 +549,7 @@ function validResolvablePosition(value) {
       || (reference.view === 'process' && requiredId(reference.id, 'job:')
         && ['cursor.retainedBody', 'goal.station'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'shipment:') && reference.field === 'actorBody')
-      || (reference.view === 'process' && requiredId(reference.id, 'extraction:') && ['position', 'firstSource', 'firstAdjacentSource'].includes(reference.field))
+      || (reference.view === 'process' && requiredId(reference.id, 'extraction:') && ['position', 'firstSource', 'firstAdjacentSource', 'lowerLanding', 'openingTop'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'work:') && ['actorBody', 'goal'].includes(reference.field))
       || (reference.view === 'scene' && requiredId(reference.id, 'job:')
         && ['productionCurrent', 'productionNext', 'productionNextBody', 'productionFutureBody'].includes(reference.field))

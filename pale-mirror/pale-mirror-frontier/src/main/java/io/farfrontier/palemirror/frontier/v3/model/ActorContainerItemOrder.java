@@ -16,10 +16,12 @@ import java.util.Optional;
  */
 public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Direction direction,
                                       Portion portion, ContainerEndpoint containerEndpoint,
-                                      SurfaceAnchor station, ActorItemSlot actorSlot, long goalOrdinal, long goalRevision) {
+                                      SurfaceAnchor station, ActorItemSlot actorSlot, long goalOrdinal, long goalRevision)
+        implements ActorResourceItemOrder {
     public enum Direction { TAKE, PLACE }
     public enum Hand { MAIN, OFF }
     public enum StationPort { INPUT, OUTPUT }
+    @Override public EndpointKind endpointKind() { return EndpointKind.CONTAINER; }
 
     public ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Direction direction,
                                    Portion portion, ContainerEndpoint endpoint, SurfaceAnchor station,
@@ -194,5 +196,37 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
     public MovementOrder movementOrder() {
         return new MovementOrder(ownerId, actorId, goalOrdinal, goalRevision, List.of(station),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+    }
+
+    @Override public boolean admitsBinding(ResourceCustody custody, PhysicalStackAddress address) {
+        if (custody instanceof ResourceCustody.Container container)
+            return address instanceof PhysicalStackAddress.ContainerSlot slot
+                    && slot.slot().containerId().equals(container.containerId())
+                    && (!container.containerId().equals(containerEndpoint.containerId())
+                        || !(containerEndpoint instanceof ContainerEndpoint.FungibleStation station)
+                        || direction == Direction.PLACE && slot.slot().slot() == station.spec().inputSlot());
+        return ActorResourceSlotAddress.admits(actorId, actorSlot, custody, address);
+    }
+    @Override public ActorContainerItemOrder withPortion(Portion.Fungible replacement) {
+        if (!(portion instanceof Portion.Fungible)) throw new IllegalArgumentException("exact equipment cannot become a resource portion");
+        return new ActorContainerItemOrder(ownerId, actorId, direction, replacement, containerEndpoint, station, actorSlot, goalOrdinal, goalRevision);
+    }
+    @Override public void requireSourceEvidence(FungibleResourceLedger ledger) {
+        if (direction == Direction.TAKE && containerEndpoint instanceof ContainerEndpoint.FungibleStation)
+            requireStationLayout(ledger, ledger.accounts().get(((Portion.Fungible) portion).sourceAccountId()), List.of());
+    }
+
+    @Override public void requireStationLayout(FungibleResourceLedger ledger, CustodyAccount source,
+                                                List<PhysicalStackBinding> destinationBindings) {
+        if (!(containerEndpoint instanceof ContainerEndpoint.FungibleStation endpoint)) return;
+        var portion = (Portion.Fungible) this.portion;
+        var slot = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(endpoint.containerId(),
+                endpoint.port() == StationPort.INPUT ? endpoint.spec().inputSlot() : endpoint.spec().outputSlot()));
+        var layout = direction == Direction.PLACE ? destinationBindings
+                : ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(source.id())).toList();
+        if (layout.stream().noneMatch(binding -> binding.address().equals(slot)
+                && portion.lotQuantities().entrySet().stream().allMatch(entry ->
+                    binding.lotQuantities().getOrDefault(entry.getKey(), 0) >= entry.getValue())))
+            throw new IllegalArgumentException("observed actor transfer did not use its declared machine port");
     }
 }

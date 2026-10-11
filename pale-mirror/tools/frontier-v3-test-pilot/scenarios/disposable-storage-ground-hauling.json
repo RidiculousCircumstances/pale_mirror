@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "id": "disposable_storage_ground_hauling",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "storage-ground", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "restart": { "mode": "graceful", "afterAction": 4 },
+  "setup": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "offset": { "x": -4, "y": -1, "z": 0 }, "settleMs": 0 },
+    { "type": "assert_fixture", "timeoutMs": 90000, "checks": [
+      { "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE" } },
+      { "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 64 } }
+    ] },
+    { "type": "command", "command": "/pale_mirror v3 storage create settlement:1 container:ground-recovery -350 64 -334 -351 63 -334 \"minecraft:cobblestone\" 100" }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:ground-recovery",
+      "expect": { "status": "ok", "surface": "ACTIVE", "storage": { "role": "WAREHOUSE", "priority": 100, "items": ["minecraft:cobblestone"] } },
+      "timeoutMs": 60000, "causalMilestone": "ordinary_command_declares_empty_filtered_warehouse" },
+    { "type": "look", "at": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } } },
+    { "type": "break", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "causalMilestone": "player_breaks_stocked_chest_and_vanilla_drops_resources" },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "block": "minecraft:air", "timeoutMs": 15000, "causalMilestone": "destroyed_storage_is_not_rebuilt" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:ground-recovery", "field": "position" } },
+      "offset": { "x": 3, "y": 0, "z": 1 }, "settleMs": 0, "causalMilestone": "ordinary_return_after_graceful_restart" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot",
+      "expect": { "status": "ok", "surface": "CONFLICT", "custody": { "status": "UNRESOLVED", "unresolvedReason": "PROVIDER_LOST" } },
+      "timeoutMs": 60000, "causalMilestone": "destroyed_provider_is_locally_unavailable_not_a_chunk_barrier" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:ground-recovery",
+      "expect": { "status": "ok", "storage": { "groundReceiptPresent": true } }, "timeoutMs": 180000,
+      "causalMilestone": "carrier_delivers_actual_ground_resource_to_filtered_warehouse" },
+    { "type": "wait_until_diagnostic", "view": "resource", "id": "custody:container-ground-recovery",
+      "expect": { "status": "ok", "quantity": 64 }, "timeoutMs": 180000,
+      "causalMilestone": "all_finite_ground_stock_reaches_owned_storage" },
+    { "type": "look", "at": { "diagnostic": { "view": "container", "id": "container:ground-recovery", "field": "position" } } },
+    { "type": "assert_visible_block", "position": { "diagnostic": { "view": "container", "id": "container:ground-recovery", "field": "position" } },
+      "timeoutMs": 15000, "causalMilestone": "replacement_storage_visible_after_return" },
+    { "type": "inspect", "view": "container", "id": "container:ground-recovery", "causalMilestone": "terminal_ground_delivery_receipt" }
+  ],
+  "assertions": [
+    { "after": 11, "view": "container", "id": "container:ground-recovery",
+      "expect": { "status": "ok", "surface": "ACTIVE", "storage": { "role": "WAREHOUSE", "groundReceiptPresent": true },
+        "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } }
+  ],
+  "frames": [
+    { "after": 2, "name": "owned-chest-before-destruction" },
+    { "after": 4, "name": "vanilla-ground-resources-after-destruction" },
+    { "after": 11, "name": "filtered-warehouse-after-ground-hauling" }
+  ]
+}

@@ -31,8 +31,8 @@ public record ResidentMealResourceObligation(ActorExecutionId executionId, Actor
         if (executionId.activityKind() != ActorActivityKind.MEAL || !executionId.actorId().equals(body.actorId())
                 || retiredAtTick < 0)
             throw new IllegalArgumentException("meal resource obligation has a foreign identity or custody pair");
-        if (source instanceof ResidentFoodSource.Depot depot) {
-            if (!depot.settlementId().equals(settlementId) || !FrontierWorldState.depotId(settlementId).equals(depot.containerId())
+        if (source instanceof ResidentFoodSource.Storage depot) {
+            if (!depot.settlementId().equals(settlementId)
                     || !ReferenceContainerCustody.scopeId(depot.containerId()).equals(depot.accountId())
                     || depot.accountId().equals(actorAccountId)) throw new IllegalArgumentException("retired meal has a foreign depot pair");
         } else if (source instanceof ResidentFoodSource.Personal personal) {
@@ -66,17 +66,17 @@ public record ResidentMealResourceObligation(ActorExecutionId executionId, Actor
     public SubjectId sourceAccountId() { return source.accountId(); }
     public boolean portable() { return source instanceof ResidentFoodSource.Personal; }
     public SubjectId depotId() {
-        if (!(source instanceof ResidentFoodSource.Depot depot)) throw new IllegalStateException("portable obligation has no depot");
+        if (!(source instanceof ResidentFoodSource.Storage depot)) throw new IllegalStateException("portable obligation has no depot");
         return depot.containerId();
     }
     public ActorItemSlot inventorySlot() {
         return source instanceof ResidentFoodSource.Personal personal ? personal.slot()
-                : ((ResidentFoodSource.Depot) source).portionSlot();
+                : ((ResidentFoodSource.Storage) source).portionSlot();
     }
     public ResidentMealResourceObligation(ActorExecutionId executionId, ActorBodyId body,
             SubjectId settlementId, SubjectId depotId, SubjectId sourceAccountId, SubjectId actorAccountId,
             FoodPortion portion, CustodyState custodyState, Optional<ResidentMealPhysicalStep> pending, long retiredAtTick) {
-        this(executionId, body, settlementId, new ResidentFoodSource.Depot(settlementId, depotId, sourceAccountId),
+        this(executionId, body, settlementId, new ResidentFoodSource.Storage(settlementId, depotId, sourceAccountId),
                 actorAccountId, portion, custodyState, pending, retiredAtTick);
     }
 

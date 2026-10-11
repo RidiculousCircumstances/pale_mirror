@@ -16,24 +16,35 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
         var deposit = Objects.requireNonNull(state.extractionSites().deposits().get(siteId), "declared mining site");
         if (!resident.settlementId().equals(deposit.site().settlementId()) || !ExtractionWorkPlanning.availableWork(state, resident, tick)
                 || state.extractionSites().work().size() >= ExtractionSiteState.MAX_WORK) return Optional.empty();
-        var tool = state.inventory().items().values().stream().filter(item -> item.economicOwnerId().equals(resident.settlementId())
-                && item.itemKind().equals(state.bootstrap().ruleset().extraction().source().toolKind())
-                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(deposit.site().containerId())
-                && state.extractionSites().work().values().stream().noneMatch(job -> !job.terminal() && job.toolId().equals(item.id())))
-                .min(Comparator.comparing(ExactItemStack::id));
-        var cell = deposit.available(state.extractionSites().reservedCells(siteId)).stream()
-                .min(Comparator.comparingLong((ExtractionLayout.Cell value) -> ExtractionWorkEffects.distance(
-                        deposit.site().layout().storagePort(), value.workstation())).thenComparingLong(ExtractionLayout.Cell::id));
-        if (tool.isEmpty() || cell.isEmpty()) return Optional.empty();
+        var tool = ExtractionToolSelection.select(state, resident);
+        var cells = deposit.available(state.extractionSites().reservedCells(siteId)).stream()
+                .filter(value -> value.definition().coldOutput().stream().allMatch(output ->
+                        ResourceStorageSelection.destination(state, resident.settlementId(), output.itemKind(), output.quantity(),
+                                cellOrigin(state, resident), Set.of(ResourceStorageRole.WAREHOUSE, ResourceStorageRole.LOCAL_BUFFER),
+                                Optional.empty(), endpoint -> ResourceStorageNavigation.reachable(state, value.workstation(), endpoint)).isPresent()))
+                .toList();
+        var cell = ExtractionWorkTargets.spatialSelection(state, deposit, resident.id(), cells,
+                AreaWorkSelection.SpatialPolicy.SPREAD_STARTS);
+        if (tool.isEmpty() || cell.isEmpty()
+                || !tool.orElseThrow().itemKind().equals(cell.orElseThrow().definition().toolKind())) return Optional.empty();
         long ordinal = state.extractionSites().nextWorkOrdinal();
         var id = new SubjectId("work:extraction-" + ordinal);
+        var toolSlot = (InventoryCustody.ContainerSlot) tool.orElseThrow().custody();
+        var source = state.inventory().containers().get(toolSlot.containerId()).storage().orElseThrow().endpoint();
+        var output = cell.orElseThrow().definition().coldOutput().getFirst();
+        var destination = ResourceStorageSelection.destination(state, resident.settlementId(), output.itemKind(), output.quantity(),
+                cell.orElseThrow().workstation(), Set.of(ResourceStorageRole.WAREHOUSE, ResourceStorageRole.LOCAL_BUFFER),
+                Optional.empty(), endpoint -> ResourceStorageNavigation.reachable(state, cell.orElseThrow().workstation(), endpoint)).orElseThrow();
         var job = new ExtractionWork(id, siteId, new ActorExecutionId(resident.id(), ActorActivityKind.EXTRACTION, id,
                 Math.addExact(state.actorExecutions().generation(resident.id()), 1)), tool.orElseThrow().id(),
-                (InventoryCustody.ContainerSlot) tool.orElseThrow().custody(), cell.orElseThrow().definition().coldOutput().getFirst().itemKind(),
+                toolSlot, source, destination, output.itemKind(),
                 new SubjectId("custody:extraction-work-" + ordinal), new SubjectId("lot:extraction-work-" + ordinal), 0,
                 ExtractionWork.Phase.TAKE_TOOL, 1, Optional.of(ExtractionWorkEffects.target(deposit, cell.orElseThrow())), Optional.empty(), Optional.empty());
         return Optional.of(new ResidentWorkOffer<>(kind(), resident.id(), job, List.of(
                 new WorkReservationClaim.ExtractionCell(job.target().orElseThrow()), new WorkReservationClaim.ExactResource(job.toolId(), 1))));
+    }
+    private static SurfaceAnchor cellOrigin(FrontierWorldState state, ResidentProfile resident) {
+        return state.actorLocations().get(resident.id()).supportingSurface();
     }
     static FrontierWorldState start(FrontierWorldState state, ExtractionWorkStarted event, long tick) {
         var job = event.work();

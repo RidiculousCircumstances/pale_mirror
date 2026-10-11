@@ -7,7 +7,7 @@ public final class ExtractionPhysicalAuthority {
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId container) {
         return state.extractionSites().work().values().stream().anyMatch(job -> job.pending().isPresent()
                 && !(job.pending().orElseThrow() instanceof ExtractionPhysicalStep.BlockWork)
-                && ExtractionWorkAuthority.site(state, job).containerId().equals(container));
+                && ExtractionServiceAccess.identity(state, job).pointId().equals(container));
     }
     public static List<ContainerSlotClaim> slotClaims(ExtractionSiteState sites) {
         var result = new ArrayList<ContainerSlotClaim>();
@@ -17,7 +17,7 @@ public final class ExtractionPhysicalAuthority {
                 result.add(new ContainerSlotClaim(new ContainerSlotClaim.Owner(ContainerSlotClaim.Family.EXTRACTION, job.id()), equipment.slot()));
             else if (pending instanceof ExtractionPhysicalStep.Cargo cargo)
                 result.add(new ContainerSlotClaim(new ContainerSlotClaim.Owner(ContainerSlotClaim.Family.EXTRACTION, job.id()),
-                        new InventoryCustody.ContainerSlot(sites.deposits().get(job.siteId()).site().containerId(), cargo.transfer().destinationSlot())));
+                        new InventoryCustody.ContainerSlot(job.storageTarget().containerId(), cargo.transfer().destinationSlot())));
         }
         return List.copyOf(result);
     }

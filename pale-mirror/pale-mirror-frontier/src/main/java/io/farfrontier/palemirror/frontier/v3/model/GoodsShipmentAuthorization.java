@@ -45,7 +45,7 @@ final class GoodsShipmentAuthorization implements ShipmentAuthorizationPort {
                 || !claim.claimantId().equals(contract.id()) || !claim.economicOwnerId().equals(contract.seller().id())
                 || !claim.itemKind().equals(shipment.itemKind()) || !claim.lotQuantities().equals(expected)
                 || contract.outstandingClaims().getOrDefault(claim.id(), 0) != expected.values().stream().mapToInt(Integer::intValue).sum()
-                || !contract.sourceContainerId().equals(shipment.sender().containerId())
+                || !shipment.sender().container().equals(java.util.Optional.of(contract.sourceContainerId()))
                 || !contract.receiverContainerId().equals(shipment.receiver().containerId())
                 || (admission ? grant.authorizationRevision() != contract.revision() : grant.authorizationRevision() > contract.revision()))
             throw new IllegalArgumentException("shipment lacks the exact commercial allocation, endpoints or authorization revision");

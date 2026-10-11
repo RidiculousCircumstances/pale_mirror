@@ -394,6 +394,8 @@ class FrontierV3CrashBoundaryProbeTest {
     @Test
     void fungibleCrashWindowNamesTheExactProductionSubmissionPayloadDescriptor() throws IOException {
         List<String> constants = mixinUtf8("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3FungiblePlayerCrashWindowMixin");
+        assertTrue(constants.contains("observeOneWorldPickup"));
+        assertFalse(constants.contains("observeOnePlayerDeparture"));
         assertTrue(constants.stream().anyMatch(value -> value.contains("FrontierV3CommandSubmission;submit") && value.contains("FrontierPayload")));
         assertFalse(constants.stream().anyMatch(value -> value.contains("FrontierV3CommandSubmission;submit") && value.contains("FrontierEvent")));
     }

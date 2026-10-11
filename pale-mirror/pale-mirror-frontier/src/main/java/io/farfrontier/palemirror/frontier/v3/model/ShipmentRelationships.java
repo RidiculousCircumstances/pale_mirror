@@ -14,7 +14,7 @@ final class ShipmentRelationships {
             Lifecycle life = shipment.terminal() ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
             add(edges, Kind.SHIPMENT_COURIER, owner, EntityKind.ACTOR, shipment.execution().actorId(), life);
             shipment.mobileContainerId().ifPresent(id -> add(edges, Kind.SHIPMENT_STORAGE, owner, EntityKind.CONTAINER, id, life));
-            add(edges, Kind.SHIPMENT_SOURCE, owner, EntityKind.CONTAINER, shipment.sender().containerId(), life);
+            shipment.sender().container().ifPresent(id -> add(edges, Kind.SHIPMENT_SOURCE, owner, EntityKind.CONTAINER, id, life));
             add(edges, Kind.SHIPMENT_RECEIVER, owner, EntityKind.CONTAINER, shipment.receiver().containerId(), life);
             if (!shipment.terminal()) {
                 add(edges, Kind.SHIPMENT_CLAIM, owner, EntityKind.RESOURCE_CLAIM, shipment.authorization().claimId(), life);

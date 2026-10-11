@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec;
 
 import java.nio.ByteBuffer;
@@ -11,6 +12,28 @@ import java.nio.charset.StandardCharsets;
 
 /** Payload codec registry fragment for the resource-site COLD process. */
 final class ResourceSitePayloadCodecs {
+    static PayloadCodec harvestStorageRetargeted() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.resource_site_harvest_storage_retargeted"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            var value = (ResourceSiteHarvestStorageRetargeted) payload;
+            return FrontierWorldPayloadCodecs.encodeProduction(out -> {
+                FrontierWorldPayloadCodecs.writeSubject(out, value.siteId()); FrontierWorldPayloadCodecs.writeSubject(out, value.jobId());
+                FrontierWorldPayloadCodecs.writeSubject(out, value.workerId()); out.writeLong(value.expectedRevision());
+                FrontierWorldStateCodec.writeCustody(out, value.destination());
+                FrontierWorldPayloadCodecs.writeString(out, value.replacementIntent().value());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> {
+                var site = FrontierWorldPayloadCodecs.readSubject(in).value(); var job = FrontierWorldPayloadCodecs.readSubject(in).value();
+                var worker = FrontierWorldPayloadCodecs.readSubject(in).value(); long revision = in.readLong();
+                var custody = FrontierWorldStateCodec.readCustody(in);
+                if (!(custody instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("field storage replacement requires its declared container slot");
+                return new ResourceSiteHarvestStorageRetargeted(site, job, worker, revision, slot,
+                        new PhysicalIntentId(FrontierWorldPayloadCodecs.readString(in)));
+            });
+        }
+    }; }
     private ResourceSitePayloadCodecs() { }
     static PayloadCodec growthAdvanced() {
         return new PayloadCodec() {
@@ -96,6 +119,7 @@ final class ResourceSitePayloadCodecs {
                     ResourceSiteHarvestAcceptanceCodec.writeOptional(output, job.progress().acceptance());
                     output.writeInt(job.deliveredYieldQuantity());
                     output.writeInt(job.harvestedYieldQuantity());
+                    output.writeLong(job.storageRevision());
                     output.writeLong(job.target().layoutRevision());
                     output.writeLong(job.target().cellId().value());
                     output.writeLong(job.target().generation());
@@ -123,6 +147,7 @@ final class ResourceSitePayloadCodecs {
                     var workProgress = WorkStateCodec.readProgress(input);
                     var acceptance = ResourceSiteHarvestAcceptanceCodec.readOptional(input);
                     int delivered = input.readInt(), harvested = input.readInt();
+                    long storageRevision = input.readLong();
                     var target = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldWorkTarget(site,
                             input.readLong(), new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId(input.readLong()), input.readLong());
                     boolean returningForBatch = input.readBoolean();
@@ -140,7 +165,7 @@ final class ResourceSitePayloadCodecs {
                     return new ResourceSiteHarvestStarted(new ResourceSiteHarvestJob(id, task, site, worker, actorAccount, depotAccount, output,
                             new InventoryCustody.ContainerSlot(depot, slot), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(intent),
                             new ResourceSiteHarvestProgress(total, completed, pending, selected, lastCompleted, workProgress, acceptance), delivered,
-                            returningForBatch, successorSlot, lastBatch, java.util.Optional.empty(), harvested, target));
+                            returningForBatch, successorSlot, lastBatch, java.util.Optional.empty(), harvested, target, storageRevision));
                 });
             }
         };

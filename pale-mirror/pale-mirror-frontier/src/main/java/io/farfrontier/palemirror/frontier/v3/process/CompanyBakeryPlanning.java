@@ -43,7 +43,7 @@ final class CompanyBakeryPlanning implements SettlementOperationPlanner {
         var rights = rights(company.orElseThrow());
         var batch = BakeryBatchSelection.admissible(state, rights).orElseThrow();
         if (!SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id())
-                || ReferenceContainerCustody.blocksCanonicalUse(state, rights.destinationContainerId())
+                || ReferenceContainerCustody.blocksCanonicalUse(state, batch.sourceContainer(state))
                 || batch.fungibleInput().filter(input -> !FungibleResourceCustodySupport.canReserve(state, input)).isPresent())
             return retry(state, task, action);
         var job = ResidentWorkComposition.SELECTION.eligible(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY,

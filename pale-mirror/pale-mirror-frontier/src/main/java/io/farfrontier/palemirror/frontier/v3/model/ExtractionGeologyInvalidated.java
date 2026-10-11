@@ -12,10 +12,9 @@ public record ExtractionGeologyInvalidated(BlockPosition position, long stratumR
     }
     @Override public String type() { return "frontier.extraction_geology_invalidated"; }
     public FrontierWorldState apply(FrontierWorldState state, SubjectId subject) {
-        var geology = state.bootstrap().ruleset().extraction().geology().orElseThrow(
+        var fact = ExtractionTerrainFacts.at(state.bootstrap(), position).orElseThrow(
                 () -> new IllegalArgumentException("no declared geological knowledge"));
-        if (!subject.equals(OWNER) || geology.revision() != stratumRevision
-                || geology.at(state.bootstrap().bounds(), position).isEmpty()
+        if (!subject.equals(OWNER) || fact.revision() != stratumRevision
                 || state.extractionSites().deposits().values().stream().anyMatch(deposit ->
                     deposit.site().layout().fixedBlocks().containsKey(position)
                     || deposit.site().layout().cells().stream().anyMatch(cell -> cell.source().equals(position))))

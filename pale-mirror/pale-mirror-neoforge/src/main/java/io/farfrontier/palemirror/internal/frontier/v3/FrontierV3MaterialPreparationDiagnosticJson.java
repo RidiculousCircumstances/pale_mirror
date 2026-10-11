@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 /** Read-only explanation of the shared resource boundary, never a request to bind stock. */
 final class FrontierV3MaterialPreparationDiagnosticJson {
     private FrontierV3MaterialPreparationDiagnosticJson() { }
-    static String render(FrontierWorldState state, ActorContainerItemOrder order) {
+    static String render(FrontierWorldState state, ActorResourceItemOrder order) {
         var portion = (ActorContainerItemOrder.Portion.Fungible) order.portion();
         String status; long epoch = 0; String reason = "";
         try {

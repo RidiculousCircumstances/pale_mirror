@@ -50,12 +50,13 @@ public final class DiagnosticProducerContract {
             diagnostic("frontier.physical_intent_transition", DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, Admission.OWNER_STAMPS_TRANSITION));
 
     private static final Set<String> ORDINARY = Set.of(
+        "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed", "frontier.shipment_storage_retargeted", "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
         "frontier.pedestrian_planning_ready",
         "frontier.settlement_work_policy_changed",
         "frontier.goods_order_placed", "frontier.goods_trade_reserved", "frontier.goods_trade_accepted", "frontier.goods_trade_cancelled", "frontier.goods_participant_reviewed",
         "frontier.goods_trade_claim_partitioned",
         "frontier.goods_trade_retired",
-        "frontier.extraction_geology_invalidated", "frontier.extraction_area_extended", "frontier.extraction_frontier_opened",
+        "frontier.extraction_geology_invalidated", "frontier.extraction_area_extended.v2", "frontier.extraction_frontier_opened",
         "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_work_started",
         "frontier.extraction_work_progressed", "frontier.extraction_source_boundary",
         "frontier.extraction_hot_prepared", "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed",
@@ -87,7 +88,7 @@ public final class DiagnosticProducerContract {
         "frontier.reference_projection_prepared", "frontier.reference_surface_verified",
         "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared",
         "frontier.physical_replica_declared", "frontier.physical_replica_emitted", "frontier.physical_replica_observed", "frontier.reference_mutation_closed",
-        "frontier.production_cold_work_advanced", "frontier.bakery_cold_step", "frontier.bakery_input_reallocated",
+        "frontier.production_cold_work_advanced", "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_storage_retargeted",
         "frontier.production_completed", "frontier.production_interrupted", "frontier.production_started",
         "frontier.production_work_progressed", "frontier.production_work_scene_finalized", "frontier.production_work_scene_lease_handoff",
         "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_preparation_aborted", "frontier.production_work_traversal_advanced",
@@ -125,7 +126,7 @@ public final class DiagnosticProducerContract {
                 "frontier.resource_site_harvest_scene_reconciled", "frontier.resource_site_harvest_effect_reconciled", "frontier.resource_site_harvest_hand_projected",
                 "frontier.resource_site_harvest_hand_release", "frontier.resource_site_harvest_segment_renewed",
                 "frontier.resource_site_harvest_blocked_cell_skipped", "frontier.resource_site_harvest_immature_cell_skipped", "frontier.resource_site_harvest_work_changed",
-                "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_route_blocked",
+                "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_storage_retargeted", "frontier.resource_site_harvest_route_blocked",
                 "frontier.resource_site_harvest_route_cleared", "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
                 "frontier.resource_site_harvest_scene_lease_handoff",
         "frontier.resource_site_harvest_scene_lease_prepared", "frontier.resource_site_harvest_scene_preparation_aborted", "frontier.resource_site_harvest_started", "frontier.resource_site_preparation_started",

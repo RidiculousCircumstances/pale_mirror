@@ -33,6 +33,51 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Goal-navigation regression and shared fixture; obsolete route-cursor tests are archived. */
 class ResourceSiteHarvestProcessTest {
+    @Test void unavailableWarehouseIsReplacedWithoutLosingTheCarriedHarvestAndOldAuthorityCannotResume() {
+        var fixture = coldHarvestWithCargo(125L); var state = fixture.state(); var job = fixture.job();
+        var home = state.resourceSite(job.siteId()).settlementId(); var oldContainer = job.outputSlot().containerId();
+        var port = SettlementServiceAccessPoints.depotPort(state, home);
+        var horizontal = port.facing().step(port.exteriorApproach(), 4);
+        var station = KnownPedestrianGround.forFrontier(state).at(horizontal.x(), horizontal.z());
+        var target = new SubjectId("container:harvest-replacement");
+        var endpoint = new ShipmentEndpoint.Storage(home, target, station, Optional.empty(), station);
+        var policy = new ResourceStoragePolicy(endpoint, new ResourceStorageFilter(false, java.util.Set.of("minecraft:wheat"), Map.of()),
+                100, ResourceStorageRole.WAREHOUSE);
+        state = new ResourceStorageDeclared(new ContainerRecord(target, home, 27, ContainerPurpose.RESOURCE_STORAGE,
+                Optional.empty(), Optional.of(policy)), station.support().offset(1, 1, 0)).apply(state, home);
+        assertTrue(HarvestStorageReplacement.select(state, job).isEmpty(), "a working retained destination must not be silently replaced");
+        var replica = PhysicalReplicaRecord.expected(oldContainer, ReferenceContainerCustody.semanticKind(state, oldContainer), 1L,
+                ReferenceContainerCustody.canonicalFingerprint(state, oldContainer), ReferenceContainerCustody.provenance(oldContainer));
+        var custody = state.replicaCustody().declare(replica).observe(oldContainer, 1L, 1L, replica.fingerprint(), replica.provenance(), 1L);
+        var conflict = ReplicaCustodyDiagnosticProducer.conflict(oldContainer, 1L, 2L, "missing", replica.provenance());
+        state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody.conflict(oldContainer, 1L, 2L,
+                conflict.fingerprint(), conflict.provenance(), conflict.diagnostic())));
+        var beforeResources = state.inventory().fungibleResources();
+        var replacement = HarvestStorageReplacement.select(state, job).orElseThrow();
+        assertEquals(target, replacement.destination().containerId());
+        assertEquals(replacement, FrontierWorldRuntimeDefinition.payloadCodecs().decode(replacement.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(replacement)));
+        state = HarvestStorageReplacement.apply(state, job.siteId(), replacement);
+        assertEquals(beforeResources, state.inventory().fungibleResources(), "replanning cannot alter any stock/title/claim");
+        var redirected = state.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
+        assertEquals(job.workerId(), redirected.workerId()); assertEquals(job.progress(), redirected.progress());
+        assertEquals(2L, redirected.storageRevision()); assertNotEquals(job.intentId(), redirected.intentId());
+        assertFalse(state.physicalIntents().containsKey(job.intentId()));
+        var retiredBinding = FencedRecoveryPhysicalIntentSupport.bindingId(fixture.state().physicalIntents().get(job.intentId()));
+        assertFalse(state.fencedRecovery().current().containsKey(retiredBinding));
+        assertTrue(state.fencedRecovery().tombstones().containsKey(retiredBinding));
+        var redirectedState = state;
+        assertThrows(IllegalArgumentException.class, () -> HarvestStorageReplacement.apply(redirectedState, job.siteId(), replacement));
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        var due = ResourceSiteHarvestProcess.coldProgress(redirected, 22_301L);
+        int stepBound = Math.addExact(256, Math.multiplyExact(job.progress().totalCropSlots(), 8));
+        for (int turns = 0; state.resourceSites().site(job.siteId()).harvestJob(job.id()).isPresent() && turns < stepBound; turns++) {
+            var next = stepCold(state, job.siteId(), due); state = next.state(); due = next.next();
+        }
+        assertTrue(state.resourceSites().site(job.siteId()).harvestJob(job.id()).isEmpty(), "replacement must deliver the harvest, not merely change its address: "
+                + state.resourceSites().site(job.siteId()).harvestJob(job.id()) + " body=" + state.actorLocations().get(job.workerId()).body() + " due=" + due);
+        assertTrue(state.inventory().fungibleResources().unclaimedQuantity(ReferenceContainerCustody.scopeId(target), home, "minecraft:wheat") > 0);
+    }
     @Test void personalPocketFoodSurvivesHarvestAdmissionAndRecovery() {
         FrontierWorldState state = ready(initial(126L));
         SubjectId settlement = new SubjectId("settlement:1"), site = new SubjectId("site:1-wheat-field");
@@ -377,6 +422,7 @@ class ResourceSiteHarvestProcessTest {
                 case ResourceSiteHarvestColdGoalHeld held -> state = ResourceSiteHarvestProcess.reduceColdGoalHeld(state, site, held);
                 case ResourceSiteHarvestBlockedCellSkipped skipped -> state = ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, site, skipped);
                 case ResourceSiteHarvestTargetRetargeted retargeted -> state = ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, site, retargeted);
+                case ResourceSiteHarvestStorageRetargeted retargeted -> state = HarvestStorageReplacement.apply(state, site, retargeted);
                 case ScheduleEffect.Rescheduled scheduled -> next = scheduled.replacement();
                 default -> { }
             }

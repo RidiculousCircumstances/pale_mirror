@@ -9,7 +9,24 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                               int reserveItems, int minersPerSite, int haulBatch,
                               long reviewTicks, int exteriorClearance, int pitDepth, int projectionWritesPerTurn, BlockExtraction.Definition source,
                               int developmentBatchCells,
-                              java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockStratum> geology) {
+                              java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockStratum> geology,
+                              java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.ExcavationTerraces> terraces,
+                              java.util.Optional<ExtractionSurfaceCut> surfaceCut) {
+    public ExtractionRules(boolean enabled, int producerStride, int width, int depth, int reserveItems,
+            int minersPerSite, int haulBatch, long reviewTicks, int exteriorClearance, int pitDepth,
+            int projectionWritesPerTurn, BlockExtraction.Definition source, int developmentBatchCells,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockStratum> geology,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.ExcavationTerraces> terraces) {
+        this(enabled, producerStride, width, depth, reserveItems, minersPerSite, haulBatch, reviewTicks,
+                exteriorClearance, pitDepth, projectionWritesPerTurn, source, developmentBatchCells, geology, terraces, java.util.Optional.empty());
+    }
+    public ExtractionRules(boolean enabled, int producerStride, int width, int depth, int reserveItems,
+            int minersPerSite, int haulBatch, long reviewTicks, int exteriorClearance, int pitDepth,
+            int projectionWritesPerTurn, BlockExtraction.Definition source, int developmentBatchCells,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockStratum> geology) {
+        this(enabled, producerStride, width, depth, reserveItems, minersPerSite, haulBatch, reviewTicks,
+                exteriorClearance, pitDepth, projectionWritesPerTurn, source, developmentBatchCells, geology, java.util.Optional.empty());
+    }
     public ExtractionRules(boolean enabled, int producerStride, int width, int depth, int reserveItems,
             int minersPerSite, int haulBatch, long reviewTicks, int exteriorClearance, int pitDepth,
             int projectionWritesPerTurn, BlockExtraction.Definition source, int developmentBatchCells) {
@@ -23,14 +40,20 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                 exteriorClearance, pitDepth, projectionWritesPerTurn, source, 0);
     }
     public ExtractionRules {
-        Objects.requireNonNull(source); Objects.requireNonNull(geology);
+        Objects.requireNonNull(source); Objects.requireNonNull(geology); Objects.requireNonNull(terraces); Objects.requireNonNull(surfaceCut);
         if (producerStride < 1 || producerStride > 12 || width < 2 || width > 32
                 || depth < 1 || depth > 32 || reserveItems < 1 || reserveItems > 3_456
                 || minersPerSite < 1 || minersPerSite > 8 || haulBatch < 1 || haulBatch > 64
                 || reviewTicks < 1 || reviewTicks > 24_000 || exteriorClearance < 4 || exteriorClearance > 64
                 || pitDepth < 1 || pitDepth > 8 || projectionWritesPerTurn < 1 || projectionWritesPerTurn > 256
-                || developmentBatchCells < 0 || developmentBatchCells > 256)
+                || developmentBatchCells < 0 || developmentBatchCells > 256
+                || terraces.isPresent() && (geology.isEmpty() || developmentBatchCells < 2))
             throw new IllegalArgumentException("invalid bounded extraction content rules");
+        if (surfaceCut.isPresent() && (terraces.isEmpty() || geology.isEmpty()
+                || surfaceCut.orElseThrow().topY() != geology.orElseThrow().maxY() + 1
+                || !surfaceCut.orElseThrow().cover().toolKind().equals(source.toolKind())
+                || surfaceCut.orElseThrow().cover().before().equals(source.before())))
+            throw new IllegalArgumentException("surface cut requires contiguous declared geology and one compatible tool");
     }
     public static ExtractionRules disabled() { return initial(false); }
     public static ExtractionRules graybox() { return initial(true); }
@@ -47,6 +70,18 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                 base.minersPerSite(), base.haulBatch(), base.reviewTicks(), base.exteriorClearance(), base.pitDepth(),
                 base.projectionWritesPerTurn(), base.source(), base.developmentBatchCells(), java.util.Optional.of(
                         new io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockStratum(-63, 62, "minecraft:stone", 1)));
+    }
+    public static ExtractionRules terracedGraybox() {
+        var base = developingGraybox();
+        // A modest real initial face makes later development visible before the first reserves fill.
+        return new ExtractionRules(base.enabled(), base.producerStride(), base.width(), 4, base.reserveItems(),
+                base.minersPerSite(), base.haulBatch(), base.reviewTicks(), base.exteriorClearance(), base.pitDepth(),
+                base.projectionWritesPerTurn(), base.source(), base.developmentBatchCells(), base.geology(),
+                java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.geometry.ExcavationTerraces(4, 4)),
+                java.util.Optional.of(new ExtractionSurfaceCut(63, 1, new BlockExtraction.Definition(
+                        "pale_mirror:quarry_surface_preparation", new BlockExtraction.Block("minecraft:grass_block", Map.of("snowy", "false")),
+                        new BlockExtraction.Block("minecraft:air", Map.of()), base.source().toolKind(), "minecraft:blocks/grass_block",
+                        List.of(new BlockExtraction.Output("minecraft:dirt", 1))))));
     }
     private static ExtractionRules initial(boolean enabled) {
         return new ExtractionRules(enabled, 2, 8, 16, 64, 2, 64, 200, 8, 3, 64,
@@ -65,9 +100,17 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                 + source.coldOutput().stream().map(value -> value.itemKind() + ":" + value.quantity())
                     .collect(java.util.stream.Collectors.joining(";"))
                 + (developmentBatchCells == 0 ? "" : "|development=" + developmentBatchCells)
-                + geology.map(value -> "|geology=" + value.canonicalText()).orElse("");
+                + geology.map(value -> "|geology=" + value.canonicalText()).orElse("")
+                + terraces.map(value -> "|terraces=" + value.canonicalText()).orElse("")
+                + surfaceCut.map(value -> "|surface-cut=" + value.canonicalText()).orElse("");
     }
-    private static String blockText(BlockExtraction.Block block) {
+    public java.util.Optional<BlockExtraction.Definition> definitionFor(BlockExtraction.Block block) {
+        return definitions().stream().filter(definition -> definition.before().equals(block)).findFirst();
+    }
+    public List<BlockExtraction.Definition> definitions() {
+        return surfaceCut.map(value -> List.of(source, value.cover())).orElseGet(() -> List.of(source));
+    }
+    static String blockText(BlockExtraction.Block block) {
         return block.kind() + block.properties().entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .map(entry -> ";" + entry.getKey() + "=" + entry.getValue())
                 .collect(java.util.stream.Collectors.joining());

@@ -25,7 +25,44 @@ final class FungibleResourcePayloadCodecs {
     static PayloadCodecs observationCodecs() {
         return new PayloadCodecs(List.of(new FungibleStackLayoutObservedCodec(), new FungibleResourceHandoffObservedCodec(),
                 new FungibleStockDepartureObservedCodec(), new FungibleStockContributionObservedCodec(),
-                new FungibleStackBindingsReleasedCodec()));
+                new FungibleStackBindingsReleasedCodec(), new GroundResourceDestroyedCodec(), new GroundResourcePlayerWithdrawalCodec()));
+    }
+    private static final class GroundResourcePlayerWithdrawalCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.ground_resource_player_withdrawal"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            var loss = (GroundResourcePlayerWithdrawal) payload;
+            writeSubject(output, loss.sourceAccountId()); writeString(output, loss.source().entityId().toString());
+            FrontierWorldStateCodec.writePosition(output, loss.source().position()); output.writeLong(loss.epoch()); writeSubject(output, loss.economicOwner());
+            writeString(output, loss.witnessId().toString()); writeString(output, loss.playerId().toString());
+            writeFungibleQuantities(output, loss.beforeLots()); writeFungibleQuantities(output, loss.departedLots());
+            writeSubjects(output, loss.forfeitedClaims()); output.writeByte(loss.remaining().size());
+            for (var stack : loss.remaining()) { writeString(output, stack.itemKind()); output.writeByte(stack.quantity()); }
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            var account = readSubject(input).value();
+            var source = new ResourceCustody.Ground(java.util.UUID.fromString(readString(input)), FrontierWorldStateCodec.readPosition(input));
+            long epoch = input.readLong(); var owner = readSubject(input).value();
+            var witness = java.util.UUID.fromString(readString(input)); var player = java.util.UUID.fromString(readString(input));
+            var before = readFungibleQuantities(input); var departed = readFungibleQuantities(input); var forfeited = readSubjects(input);
+            int count = input.readUnsignedByte(); if (count > 1) throw new IllegalArgumentException("ground pickup postimage bound exceeded");
+            var remaining = new ArrayList<FungiblePhysicalObservation.Stack>();
+            for (int i = 0; i < count; i++) remaining.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.WorldEntity(source.entityId()), readString(input), input.readUnsignedByte()));
+            return new GroundResourcePlayerWithdrawal(account, source, epoch, owner, witness, player, before, departed, forfeited, remaining);
+        }); }
+    }
+    private static final class GroundResourceDestroyedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.ground_resource_destroyed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            var loss = (GroundResourceDestroyed) payload;
+            writeSubject(output, loss.sourceAccountId()); writeString(output, loss.source().entityId().toString());
+            FrontierWorldStateCodec.writePosition(output, loss.source().position()); output.writeLong(loss.epoch()); writeSubject(output, loss.economicOwner());
+            writeString(output, loss.witnessId().toString()); writeString(output, loss.nativeReason());
+            writeFungibleQuantities(output, loss.lots()); writeSubjects(output, loss.forfeitedClaims());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input ->
+            new GroundResourceDestroyed(readSubject(input).value(), new ResourceCustody.Ground(java.util.UUID.fromString(readString(input)), FrontierWorldStateCodec.readPosition(input)),
+                    input.readLong(), readSubject(input).value(), java.util.UUID.fromString(readString(input)), readString(input),
+                    readFungibleQuantities(input), readSubjects(input))); }
     }
 
     static PayloadCodec productionCompleted() { return new FungibleProductionCompletedCodec(); }
@@ -206,6 +243,10 @@ final class FungibleResourcePayloadCodecs {
             case ResourceCustody.Cargo cargo -> { output.writeByte(2); writeSubject(output, cargo.cargoId()); }
             case ResourceCustody.WorldCarrier carrier -> { output.writeByte(3); writeString(output, carrier.carrierId().toString()); }
             case ResourceCustody.Actor actor -> { output.writeByte(4); writeSubject(output, actor.actorId()); }
+            case ResourceCustody.Ground ground -> {
+                output.writeByte(5); writeString(output, ground.entityId().toString());
+                FrontierWorldStateCodec.writePosition(output, ground.position());
+            }
         }
     }
 
@@ -215,6 +256,7 @@ final class FungibleResourcePayloadCodecs {
             case 1 -> new ResourceCustody.Player(java.util.UUID.fromString(readString(input)));
             case 2 -> new ResourceCustody.Cargo(readSubject(input).value());
             case 3 -> new ResourceCustody.WorldCarrier(java.util.UUID.fromString(readString(input)));
+            case 5 -> new ResourceCustody.Ground(java.util.UUID.fromString(readString(input)), FrontierWorldStateCodec.readPosition(input));
             case 4 -> new ResourceCustody.Actor(readSubject(input).value());
             default -> throw new IllegalArgumentException("unknown resource custody");
         };

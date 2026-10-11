@@ -17,7 +17,7 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
                 || !shipment.execution().equals(movement.executionId()) || !shipment.movementOrder().equals(movement.order()))
             throw new IllegalArgumentException("shipment movement lacks its exact current leg");
         state.actorExecutions().requireCurrent(shipment.execution());
-        ShipmentEndpointComposition.validate(state, shipment.sender());
+        ResourceSourceComposition.validate(state, shipment.sender());
         ShipmentEndpointComposition.validate(state, shipment.receiver());
     }
     @Override public FrontierWorldState start(FrontierWorldState state, ActorMovement movement, FrontierWorldStateUpdate update) {
@@ -27,7 +27,7 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
         validate(state, movement);
         Shipment shipment = state.shipments().shipments().get(movement.order().ownerId());
-        return ShipmentEndpointComposition.knowledge(state, List.of(shipment.sender(), shipment.receiver()));
+        return ResourceSourceComposition.knowledge(state, shipment.sender(), shipment.receiver());
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         return placementKnowledge(state, movement).plannedPath(start, movement.order());
@@ -35,15 +35,15 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);
         Shipment shipment = state.shipments().shipments().get(movement.order().ownerId());
-        ShipmentEndpointComposition.knowledge(state, List.of(shipment.sender(), shipment.receiver())).requireRoute(route);
+        ResourceSourceComposition.knowledge(state, shipment.sender(), shipment.receiver()).requireRoute(route);
         if (!movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)
             throw new IllegalArgumentException("shipment segment is neither a bounded prefix nor its declared goal");
     }
     @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);
-        var access = serviceApproach(state, movement).orElseThrow();
+        var access = serviceApproach(state, movement).orElse(null);
         int end = Math.min(route.size(), TimedKnownRoute.MAX_SURFACES);
-        if (!ServiceAccessCoordinator.available(state, access)) {
+        if (access != null && !ServiceAccessCoordinator.available(state, access)) {
             var boundary = ServiceAccessCoordinator.boundary(state, access.pointId());
             for (int index = 1; index < end; index++) {
                 if (boundary.occupied(route.get(index).standingBody())) { end = index; break; }
@@ -54,14 +54,14 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     @Override public java.util.Optional<ServiceAccessDemand.Identity> serviceApproach(FrontierWorldState state, ActorMovement movement) {
         validate(state, movement);
         var shipment = state.shipments().shipments().get(movement.order().ownerId());
-        return java.util.Optional.of(ShipmentServiceAccess.identity(shipment));
+        return ShipmentServiceAccess.point(shipment).map(point -> ShipmentServiceAccess.identity(shipment));
     }
     @Override public void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {
         validate(state, movement);
         var shipment = state.shipments().shipments().get(movement.order().ownerId());
-        ShipmentEndpointComposition.knowledge(state, List.of(shipment.sender(), shipment.receiver())).requireRoute(route);
-        var access = serviceApproach(state, movement).orElseThrow();
-        boolean waitingOutside = !ServiceAccessCoordinator.available(state, access)
+        ResourceSourceComposition.knowledge(state, shipment.sender(), shipment.receiver()).requireRoute(route);
+        var access = serviceApproach(state, movement).orElse(null);
+        boolean waitingOutside = access != null && !ServiceAccessCoordinator.available(state, access)
                 && ServiceAccessCoordinator.boundary(state, access.pointId()).cleared(route.getLast().standingBody())
                 && ServiceAccessCoordinator.boundary(state, access.pointId()).allowsWaitingRoute(route);
         if (route.size() > TimedKnownRoute.MAX_SURFACES || !waitingOutside
@@ -77,7 +77,7 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
         var shipment = state.shipments().shipments().get(movement.order().ownerId());
         if (shipment.pendingPhysicalStep().isPresent()) return java.util.Optional.empty();
         var current = ActorMovementProcess.bodyAt(state, movement.order().actorId(), atTick);
-        return ServiceAccessCoordinator.boundary(state, shipment.sender().containerId()).cleared(current)
+        return shipment.sender().container().map(point -> ServiceAccessCoordinator.boundary(state, point).cleared(current)).orElse(true)
                 && ServiceAccessCoordinator.boundary(state, shipment.receiver().containerId()).cleared(current)
                 ? java.util.Optional.of(current) : java.util.Optional.empty();
     }

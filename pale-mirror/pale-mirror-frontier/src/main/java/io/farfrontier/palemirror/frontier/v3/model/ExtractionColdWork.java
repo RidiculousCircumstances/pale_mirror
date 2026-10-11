@@ -20,7 +20,7 @@ public final class ExtractionColdWork {
             if (job.phase() == ExtractionWork.Phase.TAKE_TOOL) {
                 var tool = state.inventory().items().get(job.toolId());
                 if (tool == null || !(tool.custody() instanceof InventoryCustody.ContainerSlot slot)
-                        || !slot.containerId().equals(site.containerId()) || ExtractionWorkAuthority.carried(state, job) != 0)
+                        || !slot.containerId().equals(job.toolSource().containerId()) || ExtractionWorkAuthority.carried(state, job) != 0)
                     throw new IllegalArgumentException("unstarted mining cannot release retained actor resources");
                 var next = job.transition(ExtractionWork.Phase.FINISHED, Optional.empty());
                 return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
@@ -30,6 +30,14 @@ public final class ExtractionColdWork {
             return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
                     job, job.transition(ExtractionWorkAuthority.carried(state, job) > 0
                             ? ExtractionWork.Phase.STORE : ExtractionWork.Phase.RETURN_TOOL, Optional.empty()))));
+        }
+        if (event.operation() == ExtractionWorkProgressed.Operation.SELECT_STORAGE) {
+            if (ExtractionStorageSelection.retainedAvailable(state, job))
+                throw new IllegalArgumentException("available retained storage cannot be silently replaced");
+            var destination = ExtractionStorageSelection.replacement(state, job).orElseThrow(
+                    () -> new IllegalArgumentException("no eligible replacement storage"));
+            return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
+                    job, job.retargetStorage(destination))));
         }
         if (event.operation() == ExtractionWorkProgressed.Operation.SELECT_SOURCE) {
             if (job.phase() != ExtractionWork.Phase.SELECT_SOURCE)
@@ -62,7 +70,7 @@ public final class ExtractionColdWork {
                         || !ServiceAccessCoordinator.available(state, ExtractionServiceAccess.identity(state, job)))
                     throw new IllegalArgumentException("COLD mining interaction competes with body/service custody");
                 if (event.operation() == ExtractionWorkProgressed.Operation.STORE) {
-                    if (!state.canReceiveFungible(site.containerId(), job.outputKind(), ExtractionWorkAuthority.carried(state, job)))
+                    if (!ExtractionStorageSelection.retainedAvailable(state, job))
                         throw new IllegalArgumentException("mining storage capacity is unavailable");
                     update.inventory(ActorItemCustody.transferCold(state, ExtractionWorkEffects.cargo(state, job)));
                     update.extractionSites(state.extractionSites().replaceWork(job, job.delivered()));
@@ -86,8 +94,6 @@ public final class ExtractionColdWork {
             case EXTRACT_BLOCK -> {
                 if (job.phase() != ExtractionWork.Phase.EXTRACT || !ActorExecutionCoordinator.coldAvailable(state, job.execution().actorId())
                         || ExtractionSourceCustody.blocksCold(state, job.target().orElseThrow())
-                        || ReferenceContainerCustody.hasLiveCustody(state, site.containerId())
-                        || ReferenceContainerCustody.blocksCanonicalUse(state, site.containerId())
                         || job.labour().isEmpty() || job.labour().orElseThrow().completedAt(tick) != job.labour().orElseThrow().requiredMilliWork())
                     throw new IllegalArgumentException("COLD extraction lacks completed labour or exclusive known source custody");
                 var tool = state.inventory().items().get(job.toolId());

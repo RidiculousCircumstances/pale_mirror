@@ -9,7 +9,7 @@ import java.util.Optional;
 
 /** The farmer's next semantic destination, independently of any pedestrian route cache. */
 public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, SubjectId workerId,
-                                      long layoutRevision, int nextWorkSlot, Kind kind,
+                                      long layoutRevision, long goalRevision, int nextWorkSlot, Kind kind,
                                       Optional<ResourceFieldLayout.CellId> cellId,
                                       List<SurfaceAnchor> legalStations,
                                       TraversalCapability capability, ArrivalContract arrivalContract) {
@@ -34,7 +34,7 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
         legalStations = List.copyOf(Objects.requireNonNull(legalStations, "field goal legal stations"));
         Objects.requireNonNull(capability, "field goal capability");
         Objects.requireNonNull(arrivalContract, "field goal arrival contract");
-        if (layoutRevision < 1 || nextWorkSlot < 0 || legalStations.isEmpty()
+        if (layoutRevision < 1 || goalRevision < 1 || nextWorkSlot < 0 || legalStations.isEmpty()
                 || legalStations.size() > 8 || legalStations.stream().anyMatch(Objects::isNull)
                 || legalStations.stream().distinct().count() != legalStations.size()
                 || (kind == Kind.WORK_CELL) != cellId.isPresent()
@@ -50,7 +50,7 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
 
     /** The work owner chooses the CellId/depot; the movement subsystem sees only this destination. */
     public MovementOrder movementOrder() {
-        return new MovementOrder(jobId, workerId, nextWorkSlot, layoutRevision, legalStations, capability,
+        return new MovementOrder(jobId, workerId, nextWorkSlot, goalRevision, legalStations, capability,
                 kind == Kind.WORK_CELL ? MovementOrder.ArrivalPolicy.EXACT_STATION
                         : MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
     }
@@ -90,32 +90,21 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
             throw new IllegalArgumentException("field goal slot is outside retained work progress");
         if (nextSlot < cycle.layout().cells().size()) {
             ResourceFieldLayout.Cell cell = cycle.layout().cells().get(nextSlot);
-            return new ResourceSiteHarvestGoal(job.id(), job.siteId(), job.workerId(), cycle.layout().revision(), nextSlot,
+            return new ResourceSiteHarvestGoal(job.id(), job.siteId(), job.workerId(), cycle.layout().revision(), cycle.layout().revision(), nextSlot,
                     Kind.WORK_CELL, Optional.of(cell.id()), List.of(cell.workstation()),
                     TraversalCapability.PEDESTRIAN, ArrivalContract.EXACT_WORK_STATION);
         }
-        return new ResourceSiteHarvestGoal(job.id(), job.siteId(), job.workerId(), cycle.layout().revision(), nextSlot,
+        return new ResourceSiteHarvestGoal(job.id(), job.siteId(), job.workerId(), cycle.layout().revision(), job.storageRevision(), nextSlot,
                 Kind.DEPOT_SERVICE, Optional.empty(), depotPort(state, job).stations(),
                 TraversalCapability.PEDESTRIAN, ArrivalContract.ANY_DEPOT_SERVICE_STATION);
     }
 
     /** The current bootstrap's exact container-to-structure service binding. */
-    public static SettlementDepotServicePort depotPort(FrontierWorldState state, ResourceSiteHarvestJob job) {
+    public static ResourceStorageAccess depotPort(FrontierWorldState state, ResourceSiteHarvestJob job) {
         ResourceSite site = Objects.requireNonNull(state.resourceSite(job.siteId()), "field goal site descriptor");
-        Settlement settlement = state.bootstrap().settlements().stream()
-                .filter(value -> value.id().equals(site.settlementId())).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("field goal has no settlement"));
-        // Current bootstrap has distinct IDs for the depot structure and its container.
-        // Bind the retained output container to this settlement's declared depot identity
-        // first, then require exactly one matching physical service structure; never choose
-        // an arbitrary first matching structure as an alternative output destination.
-        if (!job.outputSlot().containerId().equals(FrontierWorldState.depotId(settlement.id())))
+        var access = ResourceStorageAccess.at(state, job.outputSlot().containerId());
+        if (!access.settlementId().equals(site.settlementId()))
             throw new IllegalArgumentException("field goal has a foreign output container");
-        List<SettlementStructure> depots = settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT
-                        && value.settlementId().equals(site.settlementId())).toList();
-        if (depots.size() != 1)
-            throw new IllegalArgumentException("field goal needs one declared settlement depot structure");
-        return SettlementDepotServicePort.forDepot(depots.getFirst());
+        return access;
     }
 }

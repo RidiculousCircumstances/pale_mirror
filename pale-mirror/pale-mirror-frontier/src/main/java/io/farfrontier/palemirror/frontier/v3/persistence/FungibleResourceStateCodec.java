@@ -122,6 +122,10 @@ final class FungibleResourceStateCodec {
             case ResourceCustody.Cargo cargo -> { output.writeByte(2); writeString(output, cargo.cargoId().value()); }
             case ResourceCustody.WorldCarrier carrier -> { output.writeByte(3); writeString(output, carrier.carrierId().toString()); }
             case ResourceCustody.Actor actor -> { output.writeByte(4); writeString(output, actor.actorId().value()); }
+            case ResourceCustody.Ground ground -> {
+                output.writeByte(5); writeString(output, ground.entityId().toString());
+                FrontierWorldStateCodec.writePosition(output, ground.position());
+            }
         }
     }
 
@@ -131,6 +135,7 @@ final class FungibleResourceStateCodec {
             case 1 -> new ResourceCustody.Player(UUID.fromString(readString(input)));
             case 2 -> new ResourceCustody.Cargo(new SubjectId(readString(input)));
             case 3 -> new ResourceCustody.WorldCarrier(UUID.fromString(readString(input)));
+            case 5 -> new ResourceCustody.Ground(UUID.fromString(readString(input)), FrontierWorldStateCodec.readPosition(input));
             case 4 -> new ResourceCustody.Actor(new SubjectId(readString(input)));
             default -> throw new IllegalArgumentException("unknown resource custody");
         };

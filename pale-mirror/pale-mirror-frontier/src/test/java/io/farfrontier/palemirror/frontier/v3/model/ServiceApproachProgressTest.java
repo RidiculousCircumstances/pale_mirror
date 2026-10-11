@@ -95,7 +95,7 @@ class ServiceApproachProgressTest {
         SubjectId visitor = state.bootstrap().settlements().getFirst().residents().stream().map(Resident::id)
                 .filter(id -> !id.equals(worker)).findFirst().orElseThrow();
         state = hungryMeal(state, visitor);
-        var port = ResourceSiteHarvestGoal.depotPort(state, job);
+        var port = SettlementServiceAccessPoints.depotPort(state, state.resourceSite(job.siteId()).settlementId());
         state = state.withHumanPopulation(state.humanPopulation().consumeResidentBread(worker, 27_000L,
                 state.bootstrap().ruleset().residentLife()));
         state = state.withActorBody(visitor, port.serviceSurface().standingBody());

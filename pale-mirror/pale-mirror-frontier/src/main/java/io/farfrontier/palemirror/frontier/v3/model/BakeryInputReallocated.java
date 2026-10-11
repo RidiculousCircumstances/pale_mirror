@@ -5,9 +5,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Same accepted bread job reacquires its retained input quantity after a witnessed loss. */
-public record BakeryInputReallocated(SubjectId jobId, ProductionInputHold replacement) implements FrontierPayload {
+public record BakeryInputReallocated(SubjectId jobId, SubjectId sourceContainerId, ProductionInputHold replacement) implements FrontierPayload {
     public BakeryInputReallocated {
         Objects.requireNonNull(jobId, "bakery job");
+        Objects.requireNonNull(sourceContainerId, "replacement source storage");
         Objects.requireNonNull(replacement, "replacement input");
         if (!(replacement instanceof ProductionInputHold.FungibleCold
                 || replacement instanceof ProductionInputHold.FungibleBound

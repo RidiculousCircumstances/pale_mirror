@@ -241,6 +241,21 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         // either branch, and restart discards the debounce rather than fabricating evidence.
         if (!stableLoadedObservation(level, containerId, physical)) return;
         PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
+        if (surface.fixed() && physical == null) {
+            // A confirmed missing loaded provider cannot confirm its old stock image.
+            // Waiting for that confirmation before releasing custody would keep both
+            // storage admission and the chunk-presentation barrier stuck forever.
+            // Retain exact local uncertainty; never erase stock, invent drops or rebuild.
+            if (lease != null && lease.live()
+                    && !retainUnresolved(runtime, lease, PhysicalCustodyUnresolvedReason.PROVIDER_LOST)) return;
+            if (!FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, containerId))
+                throw new IllegalStateException("confirmed missing container could not isolate its exact surface: " + containerId);
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(
+                    "PMV3_CONTAINER_PROVIDER_LOST container={} position={} replicaRevision={} custodyEpoch={} actualBlock={}",
+                    containerId, position(state, surface), replica.replicaRevision(), lease == null ? 0 : lease.authorityEpoch(),
+                    level.getBlockState(position(state, surface)));
+            return;
+        }
         if (replica.state() == PhysicalReplicaState.EXPECTED) {
             observe(runtime, state, replica, physical);
             return;

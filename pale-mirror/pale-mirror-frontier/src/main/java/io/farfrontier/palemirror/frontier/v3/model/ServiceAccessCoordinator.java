@@ -139,9 +139,9 @@ public final class ServiceAccessCoordinator {
      * A personal clear, materialized apron spot, selected before the permit is taken and then
      * retained by the meal. Another resident's current body is never chosen as an exit.
      */
-    public static Optional<SurfaceAnchor> mealClearingSurface(FrontierWorldState state, SubjectId residentId) {
-        ResidentProfile resident = Objects.requireNonNull(state.humanPopulation().resident(residentId), "service resident");
-        var point = ServiceBoundaryComposition.declaration(state, FrontierWorldState.depotId(resident.settlementId())).identity();
+    public static Optional<SurfaceAnchor> mealClearingSurface(FrontierWorldState state, SubjectId residentId, SubjectId containerId) {
+        Objects.requireNonNull(state.humanPopulation().resident(residentId), "service resident");
+        var point = ServiceBoundaryComposition.declaration(state, containerId).identity();
         java.util.Set<SurfaceAnchor> excluded = ServiceDestinationClaims.excludedFor(state, residentId);
         return ServiceClearanceTargets.select(ServiceBoundaryComposition.geometry(state, point),
                 residentId, ServiceBoundaryComposition.knowledge(state, point), excluded);

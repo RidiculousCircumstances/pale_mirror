@@ -17,7 +17,7 @@ public final class HarvestServiceAccess implements ServiceAccessCapability {
             for (var job : site.harvestJobs().values()) {
                 if (state.humanPopulation().meals().containsKey(job.workerId())
                         || state.actorMovements().containsKey(job.workerId())
-                        || !FrontierWorldState.depotId(ResourceSiteHarvestGoal.depotPort(state, job).settlementId()).equals(pointId)) continue;
+                        || !job.outputSlot().containerId().equals(pointId)) continue;
                 boolean occupied = ServiceAccessCoordinator.occupies(state, boundary, job.workerId());
                 if (ResourceSiteHarvestGoal.current(state, job).kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE || occupied)
                     result.add(new ServiceAccessDemand(identity(job, pointId), priority(), occupied
@@ -33,13 +33,13 @@ public final class HarvestServiceAccess implements ServiceAccessCapability {
 
     public static boolean available(FrontierWorldState state, ResourceSiteHarvestJob job) {
         var port = ResourceSiteHarvestGoal.depotPort(state, job);
-        return ServiceAccessCoordinator.available(state, identity(job, FrontierWorldState.depotId(port.settlementId())));
+        return ServiceAccessCoordinator.available(state, identity(job, port.containerId()));
     }
 
     public static boolean mayAdvance(FrontierWorldState state, ResourceSiteHarvestJob job, SurfaceAnchor destination) {
         var port = ResourceSiteHarvestGoal.depotPort(state, job);
         return ServiceAccessCoordinator.mayAdvance(state,
-                identity(job, FrontierWorldState.depotId(port.settlementId())), destination);
+                identity(job, port.containerId()), destination);
     }
 
     public static boolean witnessedExit(FrontierWorldState state, ResourceSiteHarvestJob job,

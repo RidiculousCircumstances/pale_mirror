@@ -622,6 +622,8 @@ final class FrontierV3DiagnosticJson {
         if (custody instanceof ResourceCustody.Player value) return "{\"kind\":\"PLAYER\",\"player\":\"" + value.playerId() + "\"}";
         if (custody instanceof ResourceCustody.Cargo value) return "{\"kind\":\"CARGO\",\"cargo\":\"" + quote(value.cargoId().value()) + "\"}";
         if (custody instanceof ResourceCustody.WorldCarrier value) return "{\"kind\":\"WORLD_CARRIER\",\"carrier\":\"" + value.carrierId() + "\"}";
+        if (custody instanceof ResourceCustody.Ground value) return "{\"kind\":\"GROUND\",\"entity\":\"" + value.entityId()
+                + "\",\"position\":" + position(value.position()) + "}";
         ResourceCustody.Actor value = (ResourceCustody.Actor) custody;
         return "{\"kind\":\"ACTOR\",\"actor\":\"" + quote(value.actorId().value()) + "\"}";
     }
@@ -682,7 +684,7 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"surface\":\"" + surface.status() + "\",\"position\":" + position(surface.position(state)) + ",\"slotCount\":" + container.slotCount()
                 + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied
                 + ",\"fungibleOccupiedCount\":" + fungibleBindings.size() + ",\"fungibleOccupied\":" + fungibleOccupied
-                + canonicalCapacity + replica + physical + "}";
+                + canonicalCapacity + replica + physical + FrontierV3StorageDiagnosticJson.render(state, container) + "}";
     }
 
     /** Reference scopes report canonical stock separately from replica evidence and temporary lease authority. */

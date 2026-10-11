@@ -25,29 +25,30 @@ class KnownPedestrianRouteKnowledgeTest {
         var state = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());
         var site = state.resourceSite(new SubjectId("site:1-wheat-field"));
         var port = SettlementServiceAccessPoints.depotPort(state, site.settlementId());
+        var access = ResourceStorageAccess.at(state, FrontierWorldState.depotId(site.settlementId()));
         var start = port.exteriorApproach();
         var cycle = state.resourceSites().cycle(site.id());
-        var base = KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start);
+        var base = KnownPedestrianRouteKnowledge.forField(state, site, cycle, access, start);
         org.junit.jupiter.api.Assertions.assertSame(base,
-                KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start));
+                KnownPedestrianRouteKnowledge.forField(state, site, cycle, access, start));
         var cell = cycle.layout().cells().getFirst();
         var replanted = cycle.cropReplanted(cell.id());
         var changed = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site.id()), replanted));
         org.junit.jupiter.api.Assertions.assertSame(base,
-                KnownPedestrianRouteKnowledge.forField(changed, site, replanted, port, start),
+                KnownPedestrianRouteKnowledge.forField(changed, site, replanted, access, start),
                 "crop age and generation do not change pedestrian geometry");
         var blocked = replanted.cropObstructed(cell.id());
         var damaged = changed.withResourceSites(changed.resourceSites().replace(changed.resourceSites().site(site.id()), blocked));
-        var rebuilt = KnownPedestrianRouteKnowledge.forField(damaged, site, blocked, port, start);
+        var rebuilt = KnownPedestrianRouteKnowledge.forField(damaged, site, blocked, access, start);
         org.junit.jupiter.api.Assertions.assertNotSame(base, rebuilt);
         assertTrue(!rebuilt.traversable(List.of(cell.soil())));
         assertTrue(base.traversable(List.of(cell.soil())), "old immutable knowledge cannot be mutated by an overlay");
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
         var recovered = codec.decode(codec.encode(damaged));
         assertTrue(!KnownPedestrianRouteKnowledge.forField(recovered, recovered.resourceSite(site.id()),
-                recovered.resourceSites().cycle(site.id()), port, start).traversable(List.of(cell.soil())));
+                recovered.resourceSites().cycle(site.id()), access, start).traversable(List.of(cell.soil())));
         org.junit.jupiter.api.Assertions.assertNotSame(rebuilt,
-                KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start));
+                KnownPedestrianRouteKnowledge.forField(state, site, cycle, access, start));
     }
     @Test void clearwaterPrivateStationCanBeExitedButCannotBecomeACourtesyRestingPosition() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
@@ -343,6 +344,7 @@ class KnownPedestrianRouteKnowledgeTest {
         SettlementStructure depot = settlement.structures().stream()
                 .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
         SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
+        var access = ResourceStorageAccess.at(state, FrontierWorldState.depotId(site.settlementId()));
         SurfaceAnchor start = port.exteriorApproach();
         SubjectId resident = settlement.residents().getFirst().id();
         MovementOrder order = new MovementOrder(resident, resident, 0L, 1L,
@@ -352,14 +354,14 @@ class KnownPedestrianRouteKnowledgeTest {
         ResourceFieldCycle foreign = state.resourceSites().cycles().entrySet().stream()
                 .filter(entry -> !entry.getKey().equals(site.id())).findFirst().orElseThrow().getValue();
         assertThrows(IllegalArgumentException.class,
-                () -> KnownPedestrianRouteKnowledge.forField(state, site, foreign, port, start));
+                () -> KnownPedestrianRouteKnowledge.forField(state, site, foreign, access, start));
         assertEquals(List.of(start, port.serviceSurface()),
-                KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start).path(start, order));
+                KnownPedestrianRouteKnowledge.forField(state, site, cycle, access, start).path(start, order));
         FrontierWorldState changed = state.recordPhysicalDelta(new PhysicalDelta(
                 port.serviceSurface().support().offset(0, 1, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
                 Optional.empty(), Optional.empty(), "test:changed-field-service"));
         assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
                 () -> KnownPedestrianRouteKnowledge.forField(changed, site,
-                        changed.resourceSites().cycle(site.id()), port, start).path(start, order));
+                        changed.resourceSites().cycle(site.id()), access, start).path(start, order));
     }
 }

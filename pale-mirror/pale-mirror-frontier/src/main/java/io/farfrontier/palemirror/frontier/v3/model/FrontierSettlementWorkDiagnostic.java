@@ -77,6 +77,7 @@ public record FrontierSettlementWorkDiagnostic(
                                            String farmStatus, int livingFarmers, String availableFarmer,
                                            String depotSurface, boolean depotHasFreeSlot, List<String> pendingSchedules) {
         if (readySites.isEmpty()) return "NO_READY_SITE";
+        if (!ProductionStockDemand.read(state, settlementId, "minecraft:wheat").requested()) return "STOCK_TARGET_MET";
         String recoveringFarmer = state.humanPopulation().residents().values().stream()
                 .filter(value -> value.settlementId().equals(settlementId) && SettlementWorkPolicy.permissions(state, value.settlementId()).permits(ResidentWorkKind.AGRICULTURE, value.id()) && value.capability(HumanCapability.AGRICULTURE) > 0)
                 .filter(value -> FrontierWorldStateSupport.workCapable(state, value))

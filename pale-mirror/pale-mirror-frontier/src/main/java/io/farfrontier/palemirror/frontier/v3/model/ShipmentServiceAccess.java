@@ -16,20 +16,18 @@ public final class ShipmentServiceAccess implements ServiceAccessCapability {
             if (shipment.transportMissionId().map(state.shipments().missions()::get)
                     .flatMap(TransportMission::supplies).filter(load -> !load.complete()).isPresent()) continue;
             boolean occupied = ServiceAccessCoordinator.occupies(state, boundary, shipment.execution().actorId());
-            SubjectId target = shipment.status() == Shipment.Status.AWAITING_LOAD
-                    ? shipment.sender().containerId() : shipment.receiver().containerId();
+            var target = point(shipment);
             // Loading completion ends the source operation. A body still at that source
             // is a spatial blocker, not an incumbent of a finished container transaction.
-            if (target.equals(pointId))
+            if (target.filter(pointId::equals).isPresent())
                 result.add(new ServiceAccessDemand(identity(shipment, pointId), priority(), occupied
                         ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH, 0, false));
         }
         return List.copyOf(result);
     }
     static boolean available(FrontierWorldState state, Shipment shipment) {
-        SubjectId point = shipment.status() == Shipment.Status.AWAITING_LOAD
-                ? shipment.sender().containerId() : shipment.receiver().containerId();
-        return operationEligible(state, shipment) && ServiceAccessCoordinator.available(state, identity(shipment, point));
+        return operationEligible(state, shipment) && point(shipment)
+                .map(point -> ServiceAccessCoordinator.available(state, identity(shipment, point))).orElse(true);
     }
     private static boolean operationEligible(FrontierWorldState state, Shipment shipment) {
         var execution = state.actorExecutions().actors().get(shipment.execution().actorId());
@@ -51,8 +49,11 @@ public final class ShipmentServiceAccess implements ServiceAccessCapability {
         return !ShipmentStateSupport.coldTransferLots(state, shipment).isEmpty();
     }
     public static ServiceAccessDemand.Identity identity(Shipment shipment) {
-        var endpoint = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sender() : shipment.receiver();
-        return identity(shipment, endpoint.containerId());
+        return identity(shipment, point(shipment).orElseThrow(() -> new IllegalArgumentException("ground pickup has no container access point")));
+    }
+    public static java.util.Optional<SubjectId> point(Shipment shipment) {
+        return shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sender().container()
+                : java.util.Optional.of(shipment.receiver().containerId());
     }
     private static ServiceAccessDemand.Identity identity(Shipment shipment, SubjectId point) {
         return new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.COURIER, shipment.id(), shipment.execution().actorId(), point);

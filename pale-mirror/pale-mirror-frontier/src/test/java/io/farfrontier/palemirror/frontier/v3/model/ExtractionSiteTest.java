@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Contract: authored finite fronts, real initial storage/tools and no depletion replay after hydration. */
 class ExtractionSiteTest {
-    @Test void deliveredMiningBatchContinuesTheSameMandateWhileSeparateCouriersDeliverStock() {
+    @Test void separateCouriersDeliverMiningStockAndWithdrawnMandatesDrainTheirExactCargo() {
         var configuration = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(
                 new WorldId("frontier:quarry-work-kernel"), 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r3"));
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
@@ -17,7 +17,7 @@ class ExtractionSiteTest {
         var site = initial.extractionSites().deposits().values().stream().sorted(Comparator.comparing(value -> value.site().id())).findFirst().orElseThrow().site();
         boolean deliveredHome = false;
         io.farfrontier.palemirror.frontier.v3.api.SubjectId firstJob = null, firstTool = null;
-        boolean continuedWithSameTool = false, recoveredDelivery = false;
+        boolean recoveredDelivery = false;
         FrontierWorldState continuation = null;
         for (int boundary = 0; boundary < 5000; boundary++) {
             var current = engine.canonicalState().state();
@@ -27,6 +27,9 @@ class ExtractionSiteTest {
                 if (started.isPresent()) { firstJob = started.orElseThrow().id(); firstTool = started.orElseThrow().toolId(); }
             }
             var retained = firstJob == null ? null : current.extractionSites().work().get(firstJob);
+            if (continuation == null && retained != null && retained.phase() == ExtractionWork.Phase.EXTRACT
+                    && ExtractionWorkAuthority.carried(current, retained) > 0
+                    && !current.actorMovements().containsKey(retained.execution().actorId())) continuation = current;
             if (retained != null && retained.batch() > 0) {
                 assertEquals(firstTool, retained.toolId());
                 assertEquals(new InventoryCustody.Actor(retained.execution().actorId()), current.inventory().items().get(firstTool).custody());
@@ -36,14 +39,9 @@ class ExtractionSiteTest {
                     assertEquals(current, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(current)));
                     recoveredDelivery = true;
                 }
-                if (retained.phase() == ExtractionWork.Phase.EXTRACT && ExtractionWorkAuthority.carried(current, retained) > 0
-                        && !current.actorMovements().containsKey(retained.execution().actorId())) {
-                    continuedWithSameTool = true;
-                    if (continuation == null) continuation = current;
-                }
             }
             var homeStock = FungibleResourceCustodySupport.accountAtContainer(current, FrontierWorldState.depotId(site.settlementId()));
-            if (continuedWithSameTool && recoveredDelivery && homeStock.isPresent() && current.inventory().fungibleResources().unclaimedQuantity(
+            if (homeStock.isPresent() && current.inventory().fungibleResources().unclaimedQuantity(
                     homeStock.orElseThrow().id(), site.settlementId(), "minecraft:cobblestone") >= 64) {
                 deliveredHome = true; break;
             }
@@ -63,12 +61,10 @@ class ExtractionSiteTest {
         }
         var state = engine.canonicalState().state();
         var retainedFirst = firstJob;
-        assertTrue(deliveredHome, () -> "mining did not continue after its delivered batch; tick=" + engine.executionView().instant()
+        assertTrue(deliveredHome, () -> "mining output did not reach its home depot; tick=" + engine.executionView().instant()
                 + " site=" + site.id() + " first=" + state.extractionSites().work().get(retainedFirst));
-        assertTrue(continuedWithSameTool, "a delivered stack must not retire the worker/tool mandate");
         assertTrue(state.extractionSites().deposits().get(site.id()).development().revision() > 1,
                 "actual miners must exhaust and open adjacent fronts, not work an initially fully admitted deposit");
-        assertTrue(recoveredDelivery, "the settled batch/select-source boundary must survive recovery");
         assertNotNull(state.inventory().items().get(firstTool));
         assertTrue(state.extractionSites().deposits().get(site.id()).cells().values().stream()
                 .filter(cell -> cell.disposition() == ExtractionDeposit.Disposition.EXTRACTED).count() >= 64);

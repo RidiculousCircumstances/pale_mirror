@@ -25,7 +25,7 @@ final class ProductionClaimForfeitureOwner implements FungibleClaimForfeitureOwn
                 CustodyAccount sourceAfter = inventory.fungibleResources().accounts().get(work.sourceAccountId());
                 int available = sourceAfter == null ? 0 : sourceAfter.lotQuantities().values().stream().mapToInt(Integer::intValue).sum();
                 jobs.put(job.id(), job.withBakeryWork(work.withBlock(Optional.of(new BakeryWorkBlock(
-                        BakeryWorkBlock.Reason.SOURCE_CHANGED, FrontierWorldState.depotId(job.settlementId()), -1,
+                        BakeryWorkBlock.Reason.SOURCE_CHANGED, BakeryStorage.source(job), -1,
                         claim.itemKind(), Math.min(available, 127))))));
                 continue; // Keep the accepted order/payment; this baker may reallocate before pickup.
             }

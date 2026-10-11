@@ -14,7 +14,7 @@ final class ResidentMealAdmissionPlacement {
         ResidentMeal meal = state.humanPopulation().meals().get(actorId);
         if (meal == null) throw new IllegalArgumentException("meal admission lost its exact activity");
         if (meal.phase() == ResidentMeal.Phase.TAKE
-                && !body.equals(SettlementServiceAccessPoints.depotPort(state, meal.settlementId()).serviceSurface().standingBody()))
+                && !body.equals(ResourceStorageAccess.at(state, meal.depotId()).interactionStation(state).standingBody()))
             return state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.reapproach()));
         return state;
     }

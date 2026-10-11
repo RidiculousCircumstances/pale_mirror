@@ -336,12 +336,7 @@ public final class ResourceSiteHarvestProcess {
         ActorLocation actor = state.actorLocations().get(job.workerId());
         if (actor == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job))
             throw new IllegalArgumentException("COLD field batch lacks its retained depot station");
-        java.util.Optional<InventoryCustody.ContainerSlot> nextSlot = job.batchSuccessorSlot();
-        if (nextSlot.isEmpty()) {
-            var free = state.firstFreeContainerSlot(job.outputSlot().containerId());
-            if (free.isPresent()) nextSlot = java.util.Optional.of(
-                    new InventoryCustody.ContainerSlot(job.outputSlot().containerId(), free.getAsInt()));
-        }
+        java.util.Optional<InventoryCustody.ContainerSlot> nextSlot = ResourceSiteHarvestCargo.nextBatchSlot(state, job);
         FungibleResourceLedger resources = state.inventory().fungibleResources()
                 .transferActorOrderCold(ResourceSiteHarvestCargo.deliveryOrder(state, job));
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
@@ -554,9 +549,9 @@ public final class ResourceSiteHarvestProcess {
                 || intent == null || intent.status() != PhysicalIntentStatus.RUNNING)
             throw new IllegalArgumentException("field batch reservation lacks its exact full HOT hand");
         FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, prepared.leaseId());
-        int expectedSlot = state.firstFreeContainerSlot(job.outputSlot().containerId()).orElseThrow(
-                () -> new IllegalArgumentException("field batch has no vacant successor depot slot"));
-        if (!prepared.nextOutputSlot().equals(new InventoryCustody.ContainerSlot(job.outputSlot().containerId(), expectedSlot)))
+        var expectedSlot = ResourceSiteHarvestCargo.nextBatchSlot(state, job).orElseThrow(
+                () -> new IllegalArgumentException("field batch has no demanded successor with vacant depot capacity"));
+        if (!prepared.nextOutputSlot().equals(expectedSlot))
             throw new IllegalArgumentException("field batch reservation does not name the deterministic next vacant slot");
         ActorLocation actor = state.actorLocations().get(job.workerId());
         if (actor == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job))
@@ -929,8 +924,10 @@ public final class ResourceSiteHarvestProcess {
                 throw new IllegalArgumentException("resource-site harvest worker lacks the exact active assignment");
             }
         }
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        if (!job.outputSlot().containerId().equals(depot) || !admitted && !state.containerSlotAvailable(job.outputSlot())) {
+        var storage = ResourceStorageAccess.at(state, job.outputSlot().containerId());
+        var policy = state.inventory().containers().get(storage.containerId()).storage().orElseThrow();
+        if (!storage.settlementId().equals(settlement.id()) || policy.role() != ResourceStorageRole.WAREHOUSE
+                || !admitted && (!policy.filter().accepts("minecraft:wheat") || !state.containerSlotAvailable(job.outputSlot()))) {
             throw new IllegalArgumentException("resource-site harvest output slot is unavailable");
         }
         if (state.inventory().items().containsKey(job.outputItemId())) throw new IllegalArgumentException("resource-site harvest output identity already exists");

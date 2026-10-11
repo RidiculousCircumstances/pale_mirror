@@ -12,10 +12,11 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import static io.farfrontier.palemirror.frontier.v3.process.ProcessTypeSets.types;
+import static io.farfrontier.palemirror.frontier.v3.process.ProcessTypeSets.union;
 import static io.farfrontier.palemirror.frontier.v3.process.ScheduledReviewAdmission.coalescedReview;
 import static io.farfrontier.palemirror.frontier.v3.process.ScheduledReviewAdmission.policyReview;
 
@@ -47,6 +48,7 @@ public final class FrontierWorldProcessCatalog {
             "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
             "frontier.kernel_quarantine_observed");
     private static final Set<String> PHYSICAL = types(
+            "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed", "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
             "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
             "frontier.structure_damaged", "frontier.resource_deposited", "frontier.fungible_stack_layout_observed",
             "frontier.fungible_resource_handoff_observed", "frontier.fungible_stock_departure_observed",
@@ -99,7 +101,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.market_work_order_cancelled", "frontier.market_relationship_incident_recorded", "frontier.market_demand_expired", "frontier.market_demand_cancelled",
             "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
-            "frontier.production_cold_work_advanced", "frontier.bakery_cold_step", "frontier.bakery_input_reallocated",
+            "frontier.production_cold_work_advanced", "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_storage_retargeted",
             "frontier.bakery_hot_effect_prepared", "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_hot_work_tick",
             "frontier.bakery_hot_hand_release", "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
             "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
@@ -117,6 +119,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resource_site_harvest_cold_traversal_advanced", "frontier.resource_site_harvest_cold_goal_advanced", "frontier.resource_site_harvest_cold_goal_held", "frontier.resource_site_harvest_returned",
             "frontier.resource_site_harvest_segment_renewed", "frontier.resource_site_harvest_blocked_cell_skipped", "frontier.resource_site_harvest_immature_cell_skipped", "frontier.resource_site_harvest_work_changed",
             "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_route_blocked",
+            "frontier.resource_site_harvest_storage_retargeted",
             "frontier.resource_site_harvest_route_cleared", "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived",
             "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
             "frontier.resource_site_harvest_scene_lease_prepared",
@@ -218,6 +221,7 @@ public final class FrontierWorldProcessCatalog {
     }
 
     private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
+            Map.entry(ResourceHaulingPolicy.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime(ResourceHaulingPolicy::plan)))),
             Map.entry(ExtractionContinuation.REVIEW, withPlanningRecovery(atExecutionTime((state, action, instant) -> ExtractionWorkProcess.review(state, action, instant.ticks())))),
             Map.entry(ExtractionContinuation.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
@@ -610,16 +614,18 @@ public final class FrontierWorldProcessCatalog {
                 || previous.resourceSites() != next.resourceSites();
         boolean stockChanged = previous.inventory().fungibleResources() != next.inventory().fungibleResources();
         boolean surfaceChanged = previous.inventory().surfaces() != next.inventory().surfaces();
+        boolean policyChanged = previous.inventory().containers() != next.inventory().containers();
         boolean custodyChanged = previous.replicaCustody() != next.replicaCustody();
         boolean sceneChanged = previous.sceneLeases() != next.sceneLeases();
-        if (accessChanged || stockChanged || custodyChanged || sceneChanged || surfaceChanged) keys.add(event.subject());
+        if (accessChanged || stockChanged || custodyChanged || sceneChanged || surfaceChanged || policyChanged) keys.add(event.subject());
+        if (policyChanged) keys.addAll(StoragePolicyWakeKeys.changed(previous.inventory(), next.inventory()));
         if (accessChanged || sceneChanged) {
             keys.addAll(ServiceAccessCoordinator.wakePoints(previous, next));
         }
         if (surfaceChanged) next.inventory().surfaces().forEach((id, surface) -> {
             if (!surface.equals(previous.inventory().surfaces().get(id))) keys.add(id);
         });
-        if (!accessChanged && !stockChanged && !custodyChanged && !sceneChanged && !surfaceChanged)
+        if (!accessChanged && !stockChanged && !custodyChanged && !sceneChanged && !surfaceChanged && !policyChanged)
             return Set.copyOf(keys);
         if (sceneChanged) {
             for (var entry : previous.sceneLeases().entrySet()) {
@@ -687,6 +693,7 @@ public final class FrontierWorldProcessCatalog {
     }
 
     private static Set<String> physicalCommands() { return types(
+            "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed", "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
             "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
             "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.resource_deposited",
             "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.fungible_stock_departure_observed", "frontier.fungible_stock_contribution_observed",
@@ -782,7 +789,6 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> strategySchedules() { return types(
             "frontier.objective.review", "frontier.objective.stock_reconsider", "frontier.objective.reconsider", "frontier.objective.assault"); }
 
-    private static Set<String> types(String... values) { return Set.copyOf(List.of(values)); }
 
     /**
      * Explicit durable output contract for each owner. These are intentionally individual wire
@@ -793,6 +799,7 @@ public final class FrontierWorldProcessCatalog {
         return switch (processId) {
             case "kernel-schedule" -> KERNEL;
             case "physical-observation" -> types(
+                    "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed", "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
                     "kernel.reconsideration_requested",
                     "frontier.physical_custody_checkpointed", "frontier.physical_custody_released",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
@@ -879,7 +886,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_relationship_incident_recorded", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",
                     "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
                     "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
-                    "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_effect_prepared",
+                    "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_storage_retargeted", "frontier.bakery_hot_effect_prepared",
                     "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
                     "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
                     "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
@@ -899,6 +906,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resource_site_harvest_cold_goal_held", "frontier.resource_site_harvest_returned",
                     "frontier.resource_site_harvest_segment_renewed", "frontier.resource_site_harvest_blocked_cell_skipped", "frontier.resource_site_harvest_immature_cell_skipped", "frontier.resource_site_harvest_work_changed",
                     "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_route_blocked", "frontier.resource_site_harvest_route_cleared",
+                    "frontier.resource_site_harvest_storage_retargeted",
                     "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
                     "frontier.resource_site_harvest_scene_reconciled",
                     "frontier.resource_site_harvest_effect_reconciled",
@@ -989,9 +997,4 @@ public final class FrontierWorldProcessCatalog {
         return module;
     }
     static PhysicalIntentLifecycleCapabilities physicalLifecycles() { return PHYSICAL_LIFECYCLES; }
-    @SafeVarargs private static Set<String> union(Set<String>... values) {
-        LinkedHashSet<String> result = new LinkedHashSet<>();
-        for (Set<String> value : values) result.addAll(value);
-        return Set.copyOf(result);
-    }
 }

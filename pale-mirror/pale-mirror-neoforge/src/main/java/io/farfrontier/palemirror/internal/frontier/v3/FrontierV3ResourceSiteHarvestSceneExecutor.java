@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 
 import io.farfrontier.palemirror.frontier.v3.model.HarvestServiceAccess;
 
@@ -304,6 +305,14 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         var actuation = workActuation(state, runtime, lease, job, worker);
         if (!actuation.current(worker)) return;
         var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
+        if (supportedExit.isPresent() && !job.progress().hasPendingPhysicalWork()
+                && !state.resourceSites().harvestMutationPending(job)
+                && ReferenceContainerCustody.blocksCanonicalUse(state, job.outputSlot().containerId())) {
+            FrontierV3GoalNavigation.stop(worker, actuation);
+            if (FrontierV3ResourceFieldLabourExecutor.pause(level, runtime, state, lease, job)) return;
+            beginImmediateColdRelease(level, runtime, state, lease);
+            return;
+        }
         if (supportedExit.isPresent() && HarvestServiceAccess.witnessedExit(
                 state, job, lease.id(), supportedExit.orElseThrow())) {
             FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);
@@ -324,8 +333,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 && !HarvestServiceAccess.available(state, job)) {
             var settlementId = ResourceSiteHarvestGoal.depotPort(state, job).settlementId();
             var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
-                    settlementId, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState.depotId(settlementId),
-                    job.id(), job.workerId(), serviceGoal.kind().wireTag(), serviceGoal.layoutRevision(), actuation);
+                    settlementId, job.outputSlot().containerId(),
+                    job.id(), job.workerId(), serviceGoal.kind().wireTag(), serviceGoal.goalRevision(), actuation);
             if (waiting.status() == FrontierV3GoalNavigation.Status.BLOCKED)
                 FrontierV3PhysicalWaitTrace.actor(worker, state, job.workerId(), "service-wait-clearance:" + waiting.reason());
             return;

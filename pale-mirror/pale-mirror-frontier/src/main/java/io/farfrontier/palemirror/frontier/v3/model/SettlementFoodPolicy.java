@@ -32,19 +32,22 @@ public final class SettlementFoodPolicy {
                 && reserveCoverageBread(state, settlementId) > reserveRequirement(state, settlementId);
     }
 
-    /** Current canonical depot stock, including physically bound HOT stacks; not a spending permit. */
+    private static java.util.Set<SubjectId> stores(FrontierWorldState state, SubjectId home) {
+        return ResourceStorageSelection.containers(state, home, BREAD, java.util.Set.of(ResourceStorageRole.WAREHOUSE));
+    }
+
+    /** Current canonical eligible warehouse stock, including HOT stacks; not a spending permit. */
     public static int breadStock(FrontierWorldState state, SubjectId settlementId) {
-        SubjectId depot = FrontierWorldState.depotId(settlementId);
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return 0;
+        var stores = stores(state, settlementId);
         int exact = state.inventory().items().values().stream()
                 .filter(item -> item.economicOwnerId().equals(settlementId))
                 .filter(item -> BREAD.equals(item.itemKind()))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
-                        && slot.containerId().equals(depot))
+                        && stores.contains(slot.containerId()))
                 .mapToInt(ExactItemStack::count).reduce(0, Math::addExact);
         int fungible = state.inventory().fungibleResources().accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Container container
-                        && container.containerId().equals(depot))
+                        && stores.contains(container.containerId()))
                 .flatMap(account -> account.lotQuantities().entrySet().stream())
                 .filter(entry -> state.inventory().fungibleResources().lots().get(entry.getKey()).economicOwnerId().equals(settlementId))
                 .filter(entry -> BREAD.equals(state.inventory().fungibleResources().lots()
@@ -55,25 +58,24 @@ public final class SettlementFoodPolicy {
 
     /** Food counted toward reserve before physical consumption confirms; HOT binding alone is not consumption. */
     public static int reserveCoverageBread(FrontierWorldState state, SubjectId settlementId) {
-        SubjectId depot = FrontierWorldState.depotId(settlementId);
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return 0;
+        var stores = stores(state, settlementId);
         int exact = state.inventory().items().values().stream()
                 .filter(item -> item.economicOwnerId().equals(settlementId))
                 .filter(item -> BREAD.equals(item.itemKind()))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
-                        && slot.containerId().equals(depot))
+                        && stores.contains(slot.containerId()))
                 .filter(item -> !hasUnconfirmedPhysicalCustody(state, item.id()))
                 .mapToInt(ExactItemStack::count).reduce(0, Math::addExact);
         int fungible = state.inventory().fungibleResources().accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Container container
-                        && container.containerId().equals(depot))
+                        && stores.contains(container.containerId()))
                 .flatMap(account -> account.lotQuantities().entrySet().stream())
                 .filter(entry -> state.inventory().fungibleResources().lots().get(entry.getKey()).economicOwnerId().equals(settlementId))
                 .filter(entry -> BREAD.equals(state.inventory().fungibleResources().lots()
                         .get(entry.getKey()).itemKind()))
                 .mapToInt(java.util.Map.Entry::getValue).reduce(0, Math::addExact);
         int outgoing = state.inventory().fungibleResources().accounts().values().stream()
-                .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot))
+                .filter(account -> account.custody() instanceof ResourceCustody.Container container && stores.contains(container.containerId()))
                 .flatMap(account -> account.claimQuantities().entrySet().stream())
                 .filter(entry -> {
                     ClaimAllocation claim = state.inventory().fungibleResources().claims().get(entry.getKey());
@@ -85,15 +87,14 @@ public final class SettlementFoodPolicy {
 
     /** Unbound, unclaimed stock available to COLD planning, distinct from total stock or HOT take eligibility. */
     public static int coldUsableBread(FrontierWorldState state, SubjectId settlementId) {
-        SubjectId depot = FrontierWorldState.depotId(settlementId);
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return 0;
+        var stores = stores(state, settlementId);
         int exact = state.inventory().items().values().stream().filter(item -> BREAD.equals(item.itemKind()))
                 .filter(item -> item.economicOwnerId().equals(settlementId))
-                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && stores.contains(slot.containerId()))
                 .filter(item -> !hasUnconfirmedPhysicalCustody(state, item.id()))
                 .mapToInt(ExactItemStack::count).reduce(0, Math::addExact);
         int fungible = state.inventory().fungibleResources().accounts().values().stream()
-                .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot))
+                .filter(account -> account.custody() instanceof ResourceCustody.Container container && stores.contains(container.containerId()))
                 .filter(account -> state.inventory().fungibleResources().bindings().values().stream()
                         .noneMatch(binding -> binding.accountId().equals(account.id())))
                 .mapToInt(account -> state.inventory().fungibleResources().unclaimedQuantity(account.id(), settlementId, BREAD))
@@ -104,10 +105,11 @@ public final class SettlementFoodPolicy {
     public static Optional<ExactItemStack> exportableBread(FrontierWorldState state, SubjectId settlementId) {
         int reserve = reserveRequirement(state, settlementId);
         int available = coldUsableBread(state, settlementId);
-        SubjectId depot = FrontierWorldState.depotId(settlementId);
+        var stores = stores(state, settlementId);
         return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
                 .filter(item -> BREAD.equals(item.itemKind()))
-                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                .filter(item -> item.economicOwnerId().equals(settlementId))
+                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && stores.contains(slot.containerId()))
                 .filter(item -> !hasUnconfirmedPhysicalCustody(state, item.id()))
                 .filter(item -> item.count() == 64 && available - item.count() >= reserve).findFirst();
     }
@@ -115,22 +117,18 @@ public final class SettlementFoodPolicy {
     /** COLD export query; a live physical binding is not COLD planning authority. */
     public static Optional<FungibleResourceCustodySupport.LotAtContainer> exportableFungibleBread(
             FrontierWorldState state, SubjectId settlementId) {
-        SubjectId depot = FrontierWorldState.depotId(settlementId);
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return Optional.empty();
+        var stores = stores(state, settlementId);
         int reserve = reserveRequirement(state, settlementId);
         FungibleResourceLedger resources = state.inventory().fungibleResources();
-        CustodyAccount account = FungibleResourceCustodySupport.accountAtContainer(state, depot).orElse(null);
-        if (account == null || resources.bindings().values().stream()
-                .anyMatch(binding -> binding.accountId().equals(account.id()))) return Optional.empty();
-        int unclaimed = resources.unclaimedQuantity(account.id(), settlementId, BREAD);
-        int accountBread = account.lotQuantities().entrySet().stream()
-                .filter(entry -> BREAD.equals(resources.lots().get(entry.getKey()).itemKind()))
-                .mapToInt(java.util.Map.Entry::getValue).sum();
-        // The reserve may reside in other exact stacks at this depot. Subtract the
-        // account's claimed portion from total COLD stock, not the whole reserve from
-        // this single fungible account; doing the latter prevents legitimate exports.
-        if (coldUsableBread(state, settlementId) - (accountBread - unclaimed) - 64 < reserve)
-            return Optional.empty();
+        if (coldUsableBread(state, settlementId) - 64 < reserve) return Optional.empty();
+        return resources.accounts().values().stream().sorted(Comparator.comparing(CustodyAccount::id))
+                .filter(account -> account.custody() instanceof ResourceCustody.Container container && stores.contains(container.containerId()))
+                .filter(account -> resources.bindings().values().stream().noneMatch(binding -> binding.accountId().equals(account.id())))
+                .map(account -> exportCandidate(resources, account, settlementId)).flatMap(Optional::stream).findFirst();
+    }
+
+    private static Optional<FungibleResourceCustodySupport.LotAtContainer> exportCandidate(
+            FungibleResourceLedger resources, CustodyAccount account, SubjectId settlementId) {
         java.util.Map<SubjectId, Integer> pinned = new java.util.HashMap<>();
         account.claimQuantities().keySet().forEach(id -> resources.claims().get(id).lotQuantities()
                 .forEach((lot, count) -> pinned.merge(lot, count, Math::addExact)));

@@ -9,6 +9,7 @@ import java.util.*;
 final class ExtractionDevelopmentContinuation {
     private ExtractionDevelopmentContinuation() { }
     static FrontierWorldState append(FrontierWorldState state, SubjectId site, List<ProposedEvent> events, long tick) {
+        if (!ExtractionWorkPlanning.demanded(state, state.extractionSites().deposits().get(site).site().settlementId())) return state;
         var opening = ExtractionDevelopment.proposal(state, site);
         FrontierPayload event;
         FrontierWorldState after;

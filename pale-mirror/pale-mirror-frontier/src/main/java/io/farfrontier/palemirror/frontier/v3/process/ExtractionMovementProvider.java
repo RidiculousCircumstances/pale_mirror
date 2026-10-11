@@ -26,7 +26,8 @@ public final class ExtractionMovementProvider implements ActorMovementProvider {
         validate(state, movement); return state.withChanges(update);
     }
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
-        validate(state, movement); return KnownPedestrianRouteKnowledge.forFrontier(state);
+        var job = work(state, movement);
+        return ShipmentEndpointComposition.knowledge(state, List.of(job.toolSource(), job.storageTarget()));
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         return placementKnowledge(state, movement).plannedPath(start, movement.order());
@@ -56,7 +57,7 @@ public final class ExtractionMovementProvider implements ActorMovementProvider {
     @Override public Optional<BodyPosition> interruptionCheckpoint(FrontierWorldState state, ActorMovement movement, long tick) {
         var job = work(state, movement);
         var body = ActorMovementProcess.bodyAt(state, movement.order().actorId(), tick);
-        return ServiceAccessCoordinator.boundary(state, ExtractionWorkAuthority.site(state, job).containerId()).cleared(body)
+        return ServiceAccessCoordinator.boundary(state, ExtractionServiceAccess.identity(state, job).pointId()).cleared(body)
                 ? Optional.of(body) : Optional.empty();
     }
     @Override public ActorExecutionState interruptionAuthority(FrontierWorldState state, ActorMovement movement) {

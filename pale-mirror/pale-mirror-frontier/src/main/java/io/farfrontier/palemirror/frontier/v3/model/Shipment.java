@@ -9,7 +9,7 @@ import java.util.Optional;
 
 /** Logistics owns the transport obligation; its resource allocation and actor body live elsewhere. */
 public record Shipment(SubjectId id, ResourceClaimDelegation authorization, ActorExecutionId execution,
-                       ShipmentEndpoint sender, ShipmentEndpoint receiver, SubjectId sourceAccountId,
+                       ResourceSourceEndpoint sender, ShipmentEndpoint receiver, SubjectId sourceAccountId,
                        SubjectId carriedAccountId, SubjectId receivingAccountId, String itemKind,
                        Map<SubjectId, Integer> lotQuantities, Status status, long revision,
                        Optional<ShipmentPhysicalStep> pendingPhysicalStep, Optional<ShipmentReception> reception,
@@ -26,7 +26,7 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
         mobileContainerId = Objects.requireNonNull(mobileContainerId, "explicit carried storage");
         lotQuantities = Map.copyOf(Objects.requireNonNull(lotQuantities));
         if (!authorization.executorId().equals(id) || !execution.activityOwnerId().equals(id)
-                || execution.activityKind() != ActorActivityKind.COURIER || sender.containerId().equals(receiver.containerId())
+                || execution.activityKind() != ActorActivityKind.COURIER || sender.container().filter(receiver.containerId()::equals).isPresent()
                 || sourceAccountId.equals(carriedAccountId) || carriedAccountId.equals(receivingAccountId)
                 || sourceAccountId.equals(receivingAccountId) || revision < 1 || !itemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")
                 || lotQuantities.isEmpty() && status != Status.DELIVERED || lotQuantities.size() > 64
@@ -44,7 +44,7 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
             throw new IllegalArgumentException("unloaded reception has a foreign transport phase");
     }
     public Shipment(SubjectId id, ResourceClaimDelegation authorization, ActorExecutionId execution,
-            ShipmentEndpoint sender, ShipmentEndpoint receiver, SubjectId sourceAccountId, SubjectId carriedAccountId,
+            ResourceSourceEndpoint sender, ShipmentEndpoint receiver, SubjectId sourceAccountId, SubjectId carriedAccountId,
             SubjectId receivingAccountId, String itemKind, Map<SubjectId, Integer> lots, Status status, long revision,
             Optional<ShipmentPhysicalStep> pending, Optional<ShipmentReception> reception, Optional<SubjectId> mission) {
         this(id, authorization, execution, sender, receiver, sourceAccountId, carriedAccountId, receivingAccountId,
@@ -63,7 +63,7 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
                 transportMissionId, Optional.of(containerId));
     }
     public Shipment(SubjectId id, ResourceClaimDelegation authorization, ActorExecutionId execution,
-            ShipmentEndpoint sender, ShipmentEndpoint receiver, SubjectId sourceAccountId, SubjectId carriedAccountId,
+            ResourceSourceEndpoint sender, ShipmentEndpoint receiver, SubjectId sourceAccountId, SubjectId carriedAccountId,
             SubjectId receivingAccountId, String itemKind, Map<SubjectId, Integer> lots, Status status, long revision,
             Optional<ShipmentPhysicalStep> pending, Optional<ShipmentReception> reception) {
         this(id, authorization, execution, sender, receiver, sourceAccountId, carriedAccountId, receivingAccountId,
@@ -76,13 +76,13 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
                 receivingAccountId, itemKind, lotQuantities, status, revision, pendingPhysicalStep, reception, Optional.of(mission), mobileContainerId);
     }
     public Shipment(SubjectId id, ResourceClaimDelegation authorization, ActorExecutionId execution,
-            ShipmentEndpoint sender, ShipmentEndpoint receiver, SubjectId sourceAccountId, SubjectId carriedAccountId,
+            ResourceSourceEndpoint sender, ShipmentEndpoint receiver, SubjectId sourceAccountId, SubjectId carriedAccountId,
             SubjectId receivingAccountId, String itemKind, Map<SubjectId, Integer> lots, Status status, long revision) {
         this(id, authorization, execution, sender, receiver, sourceAccountId, carriedAccountId, receivingAccountId,
                 itemKind, lots, status, revision, Optional.empty(), Optional.empty());
     }
     public Shipment(SubjectId id, ResourceClaimDelegation authorization, ActorExecutionId execution,
-            ShipmentEndpoint sender, ShipmentEndpoint receiver, SubjectId sourceAccountId, SubjectId carriedAccountId,
+            ResourceSourceEndpoint sender, ShipmentEndpoint receiver, SubjectId sourceAccountId, SubjectId carriedAccountId,
             SubjectId receivingAccountId, String itemKind, Map<SubjectId, Integer> lots, Status status, long revision,
             Optional<ShipmentPhysicalStep> pending) {
         this(id, authorization, execution, sender, receiver, sourceAccountId, carriedAccountId, receivingAccountId,
@@ -94,6 +94,12 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
                 receivingAccountId, itemKind, lotQuantities, status, revision, Optional.of(step), reception, transportMissionId, mobileContainerId);
     }
     public int quantity() { return lotQuantities.values().stream().mapToInt(Integer::intValue).sum(); }
+    public Shipment retargetStorage(ShipmentEndpoint destination, SubjectId account) {
+        if (!ShipmentStorageRetargeted.unbegun(this) || !receiver.settlementId().equals(destination.settlementId())
+                || receiver.containerId().equals(destination.containerId())) throw new IllegalArgumentException("shipment storage replacement is not safe");
+        return new Shipment(id, authorization, execution, sender, destination, sourceAccountId, carriedAccountId, account, itemKind,
+                lotQuantities, status, Math.addExact(revision, 1), Optional.empty(), Optional.empty(), transportMissionId, mobileContainerId);
+    }
     public Shipment resumed(ActorExecutionId successor) {
         if (terminal() || pendingPhysicalStep.isPresent() || !execution.actorId().equals(successor.actorId())
                 || execution.activityKind() != successor.activityKind() || !id.equals(successor.activityOwnerId())
@@ -118,28 +124,27 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
         return new Shipment(id, authorization, execution, sender, receiver, sourceAccountId, carriedAccountId,
                 receivingAccountId, itemKind, lotQuantities, next, Math.addExact(revision, 1), Optional.empty(), Optional.empty(), transportMissionId, mobileContainerId);
     }
-    public ActorContainerItemOrder itemOrder() {
+    public ActorResourceItemOrder itemOrder() {
         return itemOrder(lotQuantities);
     }
-    public ActorContainerItemOrder itemOrder(Map<SubjectId, Integer> portionLots) {
+    public ActorResourceItemOrder itemOrder(Map<SubjectId, Integer> portionLots) {
         if (terminal()) throw new IllegalArgumentException("terminal shipment has no item authority");
         if (reception.isPresent()) throw new IllegalArgumentException("shipment awaits exact recipient acknowledgement");
         FungibleResourceLedger.requireSubset(lotQuantities, portionLots, "shipment declared portion");
         if (status == Status.AWAITING_LOAD && !portionLots.equals(lotQuantities))
             throw new IllegalArgumentException("shipment pickup must retain its entire authorized load");
         boolean take = status == Status.AWAITING_LOAD;
-        ShipmentEndpoint endpoint = take ? sender : receiver;
         var portion = new ActorContainerItemOrder.Portion.Fungible(
                 take ? sourceAccountId : carriedAccountId,
-                take ? new ResourceCustody.Container(sender.containerId()) : carriedCustody(),
+                take ? sender.custody() : carriedCustody(),
                 take ? carriedAccountId : receivingAccountId,
                 take ? carriedCustody() : new ResourceCustody.Container(receiver.containerId()),
                 Optional.of(authorization.claimId()), itemKind, portionLots, Optional.of(authorization));
-        return new ActorContainerItemOrder(id, execution.actorId(), take ? ActorContainerItemOrder.Direction.TAKE
-                : ActorContainerItemOrder.Direction.PLACE, portion,
-                new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(endpoint.containerId()), endpoint.station(),
-                mobileContainerId.<ActorItemSlot>map(ActorItemSlot.AttachedStorage::new)
-                        .orElseGet(() -> new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN)), take ? 0 : 1, revision);
+        var slot = mobileContainerId.<ActorItemSlot>map(ActorItemSlot.AttachedStorage::new)
+                .orElseGet(() -> new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN));
+        return take ? ResourceSourceComposition.pickup(sender, id, execution.actorId(), portion, slot, 0, revision)
+                : new ActorContainerItemOrder(id, execution.actorId(), ActorContainerItemOrder.Direction.PLACE, portion,
+                    new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(receiver.containerId()), receiver.station(), slot, 1, revision);
     }
     public Shipment unloaded(ShipmentReception receipt) {
         if (status != Status.CARRYING || reception.isPresent()

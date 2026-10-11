@@ -19,7 +19,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceHandoffObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStockDepartureObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleContainerPlayerEdit;
-import io.farfrontier.palemirror.frontier.v3.model.PlayerStockClaimLoss;
+import io.farfrontier.palemirror.frontier.v3.model.SourceStockClaimLoss;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStockContributionObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStackLayoutObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
@@ -95,7 +95,7 @@ class FungiblePhysicalObservationProcessTest {
         UUID interaction = UUID.fromString("00000000-0000-0000-0000-000000000194");
         FungibleStockDepartureObserved observed = assertInstanceOf(FungibleStockDepartureObserved.class,
                 FungibleContainerPlayerEdit.classify(state.inventory().fungibleResources(), account, depot, owner,
-                        1L, player, interaction, List.of(), PlayerStockClaimLoss.admissibleClaims(state, account)));
+                        1L, player, interaction, List.of(), SourceStockClaimLoss.admissibleClaims(state, account)));
         assertEquals(java.util.Set.of(meal.claimId()), observed.forfeitedClaimIds());
         var plan = assertInstanceOf(CommandPlan.Accepted.class,
                 FrontierWorldPhysicalObservationProcess.planFungibleStockDeparture(state, observed, 48_000L));

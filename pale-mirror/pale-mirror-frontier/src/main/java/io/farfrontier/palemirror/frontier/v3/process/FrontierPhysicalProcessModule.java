@@ -14,6 +14,33 @@ import java.util.List;
 /** Exact owner for durable physical observations, intents and surface state. */
 final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule {
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
+        if (command.payload() instanceof GroundStockExit destroyed) {
+            try { destroyed.apply(state, destroyed.economicOwner()); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            var events = new java.util.ArrayList<ProposedEvent>();
+            events.add(new ProposedEvent(destroyed.economicOwner(), destroyed));
+            for (var activity : SourceStockClaimLoss.released(state, destroyed.forfeitedClaims())) {
+                activity.cancelledProgress().ifPresent(id -> events.add(new ProposedEvent(activity.actor(),
+                        new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(id))));
+                events.add(ResidentActivityProcess.wakeAfterActivity(activity.actor(), command.submittedAt().ticks()));
+            }
+            return new CommandPlan.Accepted(List.copyOf(events));
+        }
+        if (command.payload() instanceof ResourceStorageAdopted adopted) {
+            try { adopted.apply(state, adopted.declaration().container().ownerId()); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(adopted.declaration().container().ownerId(), adopted)));
+        }
+        if (command.payload() instanceof ResourceStorageDeclared declared) {
+            try { declared.apply(state, declared.container().ownerId()); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(declared.container().ownerId(), declared)));
+        }
+        if (command.payload() instanceof ResourceStoragePolicyChanged changed) {
+            try { changed.apply(state, changed.expected().endpoint().settlementId()); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(changed.expected().endpoint().settlementId(), changed)));
+        }
         if (command.payload() instanceof PhysicalIntentTransition || command.payload() instanceof PhysicalIntentPrepared) {
             if (command.payload() instanceof PhysicalIntentPrepared prepared) {
                 return FrontierWorldProcessCatalog.physicalLifecycles().planPrepared(state, command, prepared);
@@ -91,6 +118,10 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
 
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {
+            case GroundStockExit destroyed -> destroyed.apply(state, event.subject());
+            case ResourceStorageDeclared declared -> declared.apply(state, event.subject());
+            case ResourceStorageAdopted adopted -> adopted.apply(state, event.subject());
+            case ResourceStoragePolicyChanged changed -> changed.apply(state, event.subject());
             case PhysicalIntentPrepared prepared -> FrontierWorldProcessCatalog.physicalLifecycles()
                     .reducePrepared(state, event.subject(), prepared.intent());
             case PhysicalIntentTransition transition -> reduceTransitionByOwner(state, event.subject(), transition);

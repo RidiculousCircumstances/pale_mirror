@@ -8,7 +8,8 @@ public enum ContainerPurpose {
     PRODUCTION_STATION(4, "container.production-station"),
     MOBILE_STORAGE(5, "container.mobile-storage"),
     EXTRACTIVE_STORAGE(6, "container.extractive-storage"),
-    ROUTE_MAINTENANCE(7, null);
+    ROUTE_MAINTENANCE(7, null),
+    RESOURCE_STORAGE(8, "container.resource-storage");
 
     private final int wireTag;
     private final String referenceKind;
@@ -24,6 +25,7 @@ public enum ContainerPurpose {
             case 1 -> UNSCOPED; case 2 -> SETTLEMENT_DEPOT; case 3 -> HIVE_STORE;
             case 4 -> PRODUCTION_STATION; case 5 -> MOBILE_STORAGE; case 6 -> EXTRACTIVE_STORAGE;
             case 7 -> ROUTE_MAINTENANCE;
+            case 8 -> RESOURCE_STORAGE;
             default -> throw new IllegalArgumentException("unknown container purpose tag: " + tag);
         };
     }

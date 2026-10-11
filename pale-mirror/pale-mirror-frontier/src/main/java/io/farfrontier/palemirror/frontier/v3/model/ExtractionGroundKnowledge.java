@@ -52,10 +52,8 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
     }
     @Override public Optional<Sample<BlockExtraction.Block>> at(BlockPosition position) {
         if (state.extractionSites().geologicalExclusions().positions().contains(position)) return Optional.empty();
-        var geology = state.bootstrap().ruleset().extraction().geology();
-        if (geology.isEmpty()) return Optional.empty();
-        return geology.get().at(state.bootstrap().bounds(), position).map(kind -> new Sample<>(
-                new BlockExtraction.Block(kind, Map.of()), geology.get().revision(),
+        return ExtractionTerrainFacts.at(state.bootstrap(), position).map(fact -> new Sample<>(
+                fact.block(), fact.revision(),
                 protectedColumns.contains(new TerrainColumn(position.x(), position.z())) || declared.contains(position)
                         ? Sample.Permission.PROTECTED : Sample.Permission.PUBLIC));
     }

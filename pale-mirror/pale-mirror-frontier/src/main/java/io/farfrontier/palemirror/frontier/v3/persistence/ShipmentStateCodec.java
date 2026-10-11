@@ -27,7 +27,7 @@ final class ShipmentStateCodec {
         switch (value.authorization().kind()) { case GOODS_CONTRACT_SHIPMENT -> out.writeByte(1); case INTERNAL_SHIPMENT -> out.writeByte(2); }
         id(out, value.authorization().claimId()); id(out, value.authorization().claimantId()); id(out, value.authorization().executorId());
         out.writeLong(value.authorization().authorizationRevision()); ActorExecutionStateCodec.writeId(out, value.execution());
-        endpoint(out, value.sender()); endpoint(out, value.receiver()); id(out, value.sourceAccountId()); id(out, value.carriedAccountId()); id(out, value.receivingAccountId());
+        source(out, value.sender()); endpoint(out, value.receiver()); id(out, value.sourceAccountId()); id(out, value.carriedAccountId()); id(out, value.receivingAccountId());
         out.writeUTF(value.itemKind()); out.writeInt(value.lotQuantities().size());
         for (var e : value.lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) { id(out, e.getKey()); out.writeInt(e.getValue()); }
         status(out, value.status()); out.writeLong(value.revision());
@@ -46,7 +46,7 @@ final class ShipmentStateCodec {
             default -> throw new IllegalArgumentException("unknown delegation provider tag");
         };
         var grant = new ResourceClaimDelegation(kind, id(in), id(in), id(in), in.readLong());
-        var execution = ActorExecutionStateCodec.readId(in); ShipmentEndpoint sender = endpoint(in), receiver = endpoint(in);
+        var execution = ActorExecutionStateCodec.readId(in); ResourceSourceEndpoint sender = source(in); ShipmentEndpoint receiver = endpoint(in);
         SubjectId source = id(in), carried = id(in), receiving = id(in); String item = in.readUTF();
         int n = in.readInt(); if (n < 0 || n > 64) throw new IllegalArgumentException("invalid shipment lot count");
         var lots = new LinkedHashMap<SubjectId, Integer>();
@@ -80,19 +80,50 @@ final class ShipmentStateCodec {
         };
     }
     static void endpoint(DataOutputStream out, ShipmentEndpoint endpoint) throws IOException {
-        switch (endpoint.kind()) { case SETTLEMENT_DEPOT -> out.writeByte(1); case EXTRACTIVE_SITE -> out.writeByte(2); }
+        switch (endpoint.kind()) { case SETTLEMENT_DEPOT -> out.writeByte(1); case EXTRACTIVE_SITE -> out.writeByte(2); case DECLARED_STORAGE -> out.writeByte(3); }
         id(out, endpoint.settlementId());
         switch (endpoint) {
             case ShipmentEndpoint.Depot depot -> id(out, depot.facilityId());
             case ShipmentEndpoint.ExtractiveSite site -> id(out, site.siteId());
+            case ShipmentEndpoint.Storage storage -> {
+                out.writeBoolean(storage.facilityId().isPresent());
+                if (storage.facilityId().isPresent()) id(out, storage.facilityId().orElseThrow());
+                FrontierWorldStateCodec.writePosition(out, storage.exteriorApproach().support());
+            }
         }
         id(out, endpoint.containerId());
         FrontierWorldStateCodec.writePosition(out, endpoint.station().support());
     }
+    static void source(DataOutputStream out, ResourceSourceEndpoint source) throws IOException {
+        switch (source.sourceKind()) {
+            case CONTAINER -> { out.writeByte(1); endpoint(out, ResourceSourceComposition.requireContainer(source)); }
+            case GROUND -> {
+                if (!(source instanceof ResourceSourceEndpoint.Ground ground)) throw new IllegalArgumentException("foreign ground source schema");
+                out.writeByte(2); id(out, ground.settlementId());
+                out.writeLong(ground.custody().entityId().getMostSignificantBits()); out.writeLong(ground.custody().entityId().getLeastSignificantBits());
+                FrontierWorldStateCodec.writePosition(out, ground.custody().position());
+                FrontierWorldStateCodec.writePosition(out, ground.station().support()); out.writeLong(ground.epoch());
+            }
+        }
+    }
+    static ResourceSourceEndpoint source(DataInputStream in) throws IOException {
+        return switch (in.readUnsignedByte()) {
+            case 1 -> endpoint(in);
+            case 2 -> new ResourceSourceEndpoint.Ground(id(in), new ResourceCustody.Ground(new java.util.UUID(in.readLong(), in.readLong()),
+                    FrontierWorldStateCodec.readPosition(in)), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)), in.readLong());
+            default -> throw new IllegalArgumentException("unknown resource source endpoint tag");
+        };
+    }
     static ShipmentEndpoint endpoint(DataInputStream in) throws IOException {
         int tag = in.readUnsignedByte();
-        if (tag != 1 && tag != 2) throw new IllegalArgumentException("unknown shipment endpoint tag");
-        var home = id(in); var declared = id(in); var container = id(in);
+        if (tag != 1 && tag != 2 && tag != 3) throw new IllegalArgumentException("unknown shipment endpoint tag");
+        var home = id(in);
+        if (tag == 3) {
+            var facility = in.readBoolean() ? java.util.Optional.of(id(in)) : java.util.Optional.<SubjectId>empty();
+            var exterior = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
+            return new ShipmentEndpoint.Storage(home, id(in), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)), facility, exterior);
+        }
+        var declared = id(in); var container = id(in);
         var station = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
         return switch (tag) {
             case 1 -> new ShipmentEndpoint.Depot(home, declared, container, station);

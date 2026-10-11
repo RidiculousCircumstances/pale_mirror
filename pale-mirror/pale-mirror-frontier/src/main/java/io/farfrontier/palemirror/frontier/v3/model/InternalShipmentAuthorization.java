@@ -15,6 +15,9 @@ final class InternalShipmentAuthorization implements ShipmentAuthorizationPort {
                 || !claim.claimantId().equals(grant.claimantId()) || !claim.economicOwnerId().equals(grant.claimantId())
                 || !claim.itemKind().equals(shipment.itemKind()) || !claim.lotQuantities().equals(shipment.lotQuantities()))
             throw new IllegalArgumentException("internal shipment lost its exact same-owner allocation or endpoints");
+        if (admission && !ContainerStorageAdmission.receive(state, shipment.receiver().containerId(), shipment.itemKind(),
+                shipment.quantity(), Optional.empty()))
+            throw new IllegalArgumentException("internal shipment has no receiving storage capacity for its exact load");
     }
     @Override public boolean receptionAccepted(FrontierWorldState state, Shipment shipment, ShipmentReception reception) {
         return false; // Its own atomic receipt transition releases the claim and clears this exact reception.
@@ -38,6 +41,6 @@ final class InternalShipmentAuthorization implements ShipmentAuthorizationPort {
                 FrontierDomainRelationships.Lifecycle.ACTIVE, "shipment:" + shipment.id().value()));
     }
     @Override public Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> capacityCompletionOwner(Shipment shipment) {
-        return Optional.empty();
+        return Optional.of(shipment.id());
     }
 }

@@ -261,6 +261,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case ProductionColdWorkAdvanced advanced -> ProductionProcess.reduceColdWorkAdvanced(state, event.subject(), advanced);
             case BakeryColdStep step -> ProductionProcess.reduceBakeryColdStep(state, event.subject(), step);
             case BakeryInputReallocated reallocated -> ProductionProcess.reduceBakeryInputReallocated(state, event.subject(), reallocated);
+            case BakeryStorageRetargeted retargeted -> BakeryStorageReplacement.apply(state, event.subject(), retargeted);
             case BakeryHotEffectPrepared prepared -> ProductionProcess.reduceBakeryHotEffectPrepared(state, event.subject(), prepared);
             case BakeryHotDeliveryAborted aborted -> ProductionProcess.reduceBakeryHotDeliveryAborted(state, event.subject(), aborted);
             case BakeryHotEffectObserved observed -> ProductionProcess.reduceBakeryHotEffectObserved(state, event.subject(), observed);

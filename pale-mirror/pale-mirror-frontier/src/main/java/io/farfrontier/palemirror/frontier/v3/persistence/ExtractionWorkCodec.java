@@ -11,7 +11,8 @@ final class ExtractionWorkCodec {
     private ExtractionWorkCodec() { }
     static void write(DataOutputStream out, ExtractionWork job) throws IOException {
         id(out, job.id()); id(out, job.siteId()); ActorExecutionStateCodec.writeId(out, job.execution()); id(out, job.toolId());
-        id(out, job.toolReturnSlot().containerId()); out.writeInt(job.toolReturnSlot().slot()); out.writeUTF(job.outputKind());
+        id(out, job.toolReturnSlot().containerId()); out.writeInt(job.toolReturnSlot().slot());
+        ShipmentStateCodec.endpoint(out, job.toolSource()); ShipmentStateCodec.endpoint(out, job.storageTarget()); out.writeUTF(job.outputKind());
         id(out, job.carriedAccountId()); id(out, job.outputLotId()); out.writeLong(job.batch());
         out.writeByte(job.phase().wireTag()); out.writeLong(job.revision()); out.writeBoolean(job.target().isPresent());
         if (job.target().isPresent()) {
@@ -23,14 +24,15 @@ final class ExtractionWorkCodec {
     }
     static ExtractionWork read(DataInputStream in) throws IOException {
         var id = id(in); var site = id(in); var execution = ActorExecutionStateCodec.readId(in); var tool = id(in);
-        var slot = new InventoryCustody.ContainerSlot(id(in), in.readInt()); var kind = in.readUTF();
+        var slot = new InventoryCustody.ContainerSlot(id(in), in.readInt());
+        var toolSource = ShipmentStateCodec.endpoint(in); var storageTarget = ShipmentStateCodec.endpoint(in); var kind = in.readUTF();
         var account = id(in); var lot = id(in); long batch = in.readLong();
         var phase = ExtractionWork.Phase.decode(in.readUnsignedByte()); long revision = in.readLong();
         var target = in.readBoolean() ? Optional.of(new ExtractionTarget(new CellMutationKey(
                 CellMutationKey.OwnerFamily.decode(in.readUnsignedByte()), id(in), in.readLong()), in.readLong())) : Optional.<ExtractionTarget>empty();
         var labour = WorkStateCodec.readProgress(in);
         var pending = in.readBoolean() ? Optional.of(readStep(in)) : Optional.<ExtractionPhysicalStep>empty();
-        return new ExtractionWork(id, site, execution, tool, slot, kind, account, lot, batch, phase, revision, target, labour, pending);
+        return new ExtractionWork(id, site, execution, tool, slot, toolSource, storageTarget, kind, account, lot, batch, phase, revision, target, labour, pending);
     }
     static void writeStep(DataOutputStream out, ExtractionPhysicalStep step) throws IOException {
         switch (step) {

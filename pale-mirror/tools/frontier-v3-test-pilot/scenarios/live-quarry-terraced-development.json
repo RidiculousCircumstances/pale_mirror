@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "live_quarry_terraced_development",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25565, "viewDistance": 6 },
+  "pilot": { "username": "PMQuarryAudit" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative @s" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 64, "z": -132 }, "settleMs": 0 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+        "expect": { "status": "ok", "result": { "geologyKnown": true, "terraceOpened": true, "workersCold": true, "liveSourceRegions": 0 } } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "lowerLanding" } },
+      "offset": { "x": 0, "y": 1, "z": 0 }, "settleMs": 0, "causalMilestone": "ordinary_ingress_into_terraced_excavation" },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "lowerLanding" } },
+      "block": "minecraft:stone", "timeoutMs": 60000 },
+    { "type": "look", "at": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "lowerLanding" } } },
+    { "type": "assert_visible_block", "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "lowerLanding" } }, "timeoutMs": 30000 },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "openingTop" } },
+      "block": "minecraft:air", "timeoutMs": 30000 },
+    { "type": "look", "at": { "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "position" } } },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 64, "z": -132 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": { "status": "ok", "result": { "terraceOpened": true, "workersCold": true, "liveSourceRegions": 0 } }, "timeoutMs": 60000 }
+  ],
+  "assertions": [
+    { "after": 7, "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": { "status": "ok", "result": { "terraceOpened": true, "adjacentAreaMined": true } } },
+    { "after": 9, "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": { "status": "ok", "result": { "terraceOpened": true, "workersCold": true, "liveSourceRegions": 0 } } }
+  ],
+  "frames": [ { "after": 4, "name": "opened-lower-landing" }, { "after": 6, "name": "open-air-descent-to-storage" } ]
+}

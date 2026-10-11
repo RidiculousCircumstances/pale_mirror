@@ -13,6 +13,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.Container;
 
 import java.util.List;
 import java.util.Objects;
@@ -27,7 +28,7 @@ import java.util.UUID;
 final class FrontierV3ActorItemTransfer {
     private FrontierV3ActorItemTransfer() { }
 
-    static boolean take(ChestBlockEntity chest, Villager actor, ExactItemStack expected,
+    static boolean take(Container chest, Villager actor, ExactItemStack expected,
                         InventoryCustody.ContainerSlot source, EquipmentSlot hand) {
         Objects.requireNonNull(chest, "source chest");
         Objects.requireNonNull(actor, "item actor");
@@ -45,7 +46,7 @@ final class FrontierV3ActorItemTransfer {
                 && FrontierV3ExactItemPresentation.exactMatch(actor.getItemBySlot(hand), expected);
     }
 
-    static boolean place(ChestBlockEntity chest, Villager actor, ExactItemStack expected,
+    static boolean place(Container chest, Villager actor, ExactItemStack expected,
                          InventoryCustody.ContainerSlot destination, EquipmentSlot hand) {
         Objects.requireNonNull(chest, "destination chest");
         Objects.requireNonNull(actor, "item actor");

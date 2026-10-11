@@ -439,6 +439,8 @@ public final class FrontierReadabilityPlan {
      * not be misrepresented as the absence of a farmer who is already known to be eligible.
      */
     private static String readyFieldText(FrontierWorldState state, ResourceSite site) {
+        if (!ProductionStockDemand.read(state, site.settlementId(), "minecraft:wheat").requested())
+            return "READY TO HARVEST · STOCK TARGET MET";
         long livingFarmers = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(site.settlementId()))
                 .filter(resident -> SettlementWorkPolicy.permissions(state, resident.settlementId()).permits(ResidentWorkKind.AGRICULTURE, resident.id()) && resident.capability(HumanCapability.AGRICULTURE) > 0)

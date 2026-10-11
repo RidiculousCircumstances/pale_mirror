@@ -10,6 +10,7 @@ import java.util.Set;
 /** Geometry policy for resting outside all temporary service buffers, independent of the service's purpose. */
 public final class ServiceAreaDestinations {
     private static final int MAX_SEARCH_RADIUS = 32; // Bounded search, never an expanding whole-world scan.
+    private record Candidate(SurfaceAnchor surface, long distance, int ordinal) { }
     private ServiceAreaDestinations() { }
 
     public static boolean temporary(ServiceAccessPoint point, SurfaceAnchor surface) {
@@ -25,23 +26,32 @@ public final class ServiceAreaDestinations {
     public static Optional<SurfaceAnchor> select(List<ServiceAccessPoint> points, SubjectId actorId,
             SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded,
             java.util.function.Predicate<SurfaceAnchor> available) {
+        var candidates = new java.util.PriorityQueue<Candidate>(java.util.Comparator.comparingLong(Candidate::distance)
+                .thenComparingInt(Candidate::ordinal));
+        int ordinal = 0;
         for (int distance = 1; distance <= MAX_SEARCH_RADIUS; distance++) {
-            // Manhattan rings choose a nearest reachable free column, including non-flat support.
+            // Expand columns lazily, but rank actual 3-D displacement. A nearby column
+            // above a pit is not a nearby sidestep; unseen columns have distance > this ring.
             for (int dx = -distance; dx <= distance; dx++) {
                 int dz = distance - Math.abs(dx);
                 for (int sign : dz == 0 ? new int[] {1} : new int[] {1, -1}) {
                     SurfaceAnchor candidate = knowledge.supportAt(start.x() + dx, start.z() + sign * dz);
-                    if (!hasStandingClearance(candidate, excluded) || points.stream().anyMatch(point -> temporary(point, candidate))
-                            || !available.test(candidate)) continue;
-                    MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
-                            TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-                    try {
-                        List<SurfaceAnchor> route = knowledge.path(start, order);
-                        if (points.stream().allMatch(point -> point.boundary().allowsWaitingRoute(route)))
-                            return Optional.of(candidate);
-                    } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                        // Unsupported/blocked/unknown columns cannot become an idle destination.
-                    }
+                    if (candidate == null) continue;
+                    long displacement = distance + Math.abs((long) candidate.y() - start.y());
+                    if (displacement <= MAX_SEARCH_RADIUS) candidates.add(new Candidate(candidate, displacement, ordinal++));
+                }
+            }
+            while (!candidates.isEmpty() && candidates.peek().distance() <= distance) {
+                var candidate = candidates.remove().surface();
+                if (!hasStandingClearance(candidate, excluded) || points.stream().anyMatch(point -> temporary(point, candidate))) continue;
+                MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
+                        TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+                try {
+                    List<SurfaceAnchor> route = knowledge.path(start, order);
+                    if (points.stream().allMatch(point -> point.boundary().allowsWaitingRoute(route)) && available.test(candidate))
+                        return Optional.of(candidate);
+                } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                    // Unsupported/blocked/unknown columns cannot consume a native candidate probe.
                 }
             }
         }

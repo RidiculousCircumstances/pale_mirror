@@ -11,6 +11,76 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakeryPartialBatchTest {
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void independentFilteredWarehousesCompleteTheSameStationJobWithoutTheOriginalDepot(boolean replaceOutput) {
+        var state = fixture(24); var home = state.bootstrap().settlements().getFirst();
+        var depot = FrontierWorldState.depotId(home.id()); var original = state.inventory().containers().get(depot).storage().orElseThrow();
+        var station = original.endpoint().station(); var source = new SubjectId("container:bakery-grain-store");
+        var depotPort = SettlementServiceAccessPoints.depotPort(state, home.id());
+        var destination = new SubjectId("container:bakery-bread-store");
+        for (var id : List.of(source, destination)) {
+            var horizontal = id.equals(source) ? station : depotPort.facing().step(station, 6);
+            var point = KnownPedestrianGround.forFrontier(state).at(horizontal.x(), horizontal.z());
+            var endpoint = new ShipmentEndpoint.Storage(home.id(), id, point, Optional.empty(), point);
+            var policy = new ResourceStoragePolicy(endpoint, new ResourceStorageFilter(false,
+                    Set.of(id.equals(source) ? "minecraft:wheat" : "minecraft:bread"), Map.of()), 100, ResourceStorageRole.WAREHOUSE);
+            state = new ResourceStorageDeclared(new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
+                    Optional.empty(), Optional.of(policy)), point.support().offset(1, 1, 0)).apply(state, home.id());
+        }
+        var resources = state.inventory().fungibleResources(); var accounts = new LinkedHashMap<>(resources.accounts());
+        var old = accounts.remove(ReferenceContainerCustody.scopeId(depot)); var sourceAccount = ReferenceContainerCustody.scopeId(source);
+        accounts.put(sourceAccount, new CustodyAccount(sourceAccount, new ResourceCustody.Container(source), old.lotQuantities(), Map.of()));
+        state = state.withInventory(state.inventory().withFungibleResources(new FungibleResourceLedger(resources.lots(), resources.claims(), accounts, resources.bindings())));
+        var excluded = new ResourceStoragePolicy(original.endpoint(), new ResourceStorageFilter(false, Set.of(), Map.of()), 0, original.role());
+        state = new ResourceStoragePolicyChanged(depot, original, excluded).apply(state, home.id());
+        var task = state.strategicPlans().tasks().values().iterator().next(); var started = start(state, task); var job = started.job();
+        assertEquals(source, BakeryStorage.source(job)); assertEquals(destination, BakeryStorage.destination(job));
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, home.id(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, home.id(), started);
+        assertEquals(24L, state.pendingContainerInbound(destination).get("minecraft:bread"), "remote output capacity is retained before pickup");
+        var codec = new FrontierWorldStateCodec(); var seen = EnumSet.noneOf(BakeryColdStep.Action.class);
+        var expectedDestination = destination; boolean replaced = false;
+        for (long due = 300, steps = 0; state.productionJobs().containsKey(job.id()) && steps < 700; due += 20, steps++) {
+            var current = state.productionJobs().get(job.id());
+            if (replaceOutput && !replaced && current.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY) {
+                var horizontal = depotPort.facing().step(station, 10);
+                var point = KnownPedestrianGround.forFrontier(state).at(horizontal.x(), horizontal.z());
+                var alternate = new SubjectId("container:bakery-output-replacement");
+                var endpoint = new ShipmentEndpoint.Storage(home.id(), alternate, point, Optional.empty(), point);
+                var policy = new ResourceStoragePolicy(endpoint, new ResourceStorageFilter(false, Set.of("minecraft:bread"), Map.of()),
+                        200, ResourceStorageRole.WAREHOUSE);
+                state = new ResourceStorageDeclared(new ContainerRecord(alternate, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
+                        Optional.empty(), Optional.of(policy)), point.support().offset(1, 1, 0)).apply(state, home.id());
+                var record = PhysicalReplicaRecord.expected(destination, ReferenceContainerCustody.semanticKind(state, destination), 1,
+                        ReferenceContainerCustody.canonicalFingerprint(state, destination), ReferenceContainerCustody.provenance(destination));
+                var custody = state.replicaCustody().declare(record).observe(destination, 1, 1, record.fingerprint(), record.provenance(), 1);
+                var conflict = ReplicaCustodyDiagnosticProducer.conflict(destination, 1, 2, "missing", record.provenance());
+                state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody.conflict(destination, 1, 2,
+                        conflict.fingerprint(), conflict.provenance(), conflict.diagnostic())));
+                var retarget = io.farfrontier.palemirror.frontier.v3.process.BakeryStorageReplacement.select(state, current).orElseThrow();
+                assertEquals(alternate, retarget.destinationContainer());
+                var before = state.inventory().fungibleResources();
+                state = io.farfrontier.palemirror.frontier.v3.process.BakeryStorageReplacement.apply(state, home.id(), retarget);
+                assertEquals(before, state.inventory().fungibleResources(), "endpoint replacement is not stock transfer");
+                var redirected = state;
+                assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakeryStorageReplacement.apply(redirected, home.id(), retarget));
+                state = codec.decode(codec.encode(state)); current = state.productionJobs().get(job.id());
+                expectedDestination = alternate; replaced = true;
+            }
+            var planned = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, due));
+            var next = planned.stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst();
+            assertTrue(next.isPresent(), "phase=" + current.bakeryWork().orElseThrow() + ";body=" + state.actorLocations().get(current.workerId()).body()
+                    + ";cause=" + io.farfrontier.palemirror.frontier.v3.process.BakeryProcess.coldRouteBlocker(state, current) + ";planned=" + planned);
+            var step = next.orElseThrow();
+            state = ProductionProcess.reduceBakeryColdStep(state, home.id(), step);
+            if (seen.add(step.action())) state = codec.decode(codec.encode(state));
+        }
+        assertFalse(state.productionJobs().containsKey(job.id()));
+        assertTrue(seen.containsAll(EnumSet.of(BakeryColdStep.Action.PICKUP, BakeryColdStep.Action.LOAD, BakeryColdStep.Action.RECIPE,
+                BakeryColdStep.Action.UNLOAD, BakeryColdStep.Action.DELIVER)));
+        assertEquals(24, state.inventory().fungibleResources().unclaimedQuantity(ReferenceContainerCustody.scopeId(expectedDestination), home.id(), "minecraft:bread"));
+        assertTrue(state.pendingContainerInbound(destination).isEmpty());
+    }
     @ParameterizedTest @ValueSource(ints = {1, 60, 64, 80})
     void availableMultiLotBatchCompletesThroughStationAndRecovery(int stock) {
         var state = fixture(stock);

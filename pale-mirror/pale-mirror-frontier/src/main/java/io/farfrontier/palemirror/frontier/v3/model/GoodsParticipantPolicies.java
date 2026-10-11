@@ -23,7 +23,7 @@ public final class GoodsParticipantPolicies {
             var result = new StringBuilder("moneyRaw=" + view.availableMoney().raw());
             for (var commodity : rules.policies().get(kind)) {
                 var stock = view.stocks().get(commodity.itemKind());
-                int target = Math.max(commodity.target(view.residents()), stock.protectedMinimum());
+                int target = StockTargetDemand.target(commodity, view.residents(), stock.protectedMinimum());
                 result.append("; ").append(commodity.itemKind()).append(" unclaimed=").append(stock.unclaimedAtEndpoint())
                         .append(" target=").append(target).append(" incoming=").append(stock.expectedIncoming());
                 if (stock.unclaimedAtEndpoint() + stock.expectedIncoming() < target
@@ -36,7 +36,7 @@ public final class GoodsParticipantPolicies {
             var result = new ArrayList<Intent>();
             for (var commodity : rules.policies().get(kind)) {
                 var stock = Objects.requireNonNull(view.stocks().get(commodity.itemKind()));
-                int target = Math.max(commodity.target(view.residents()), stock.protectedMinimum());
+                int target = StockTargetDemand.target(commodity, view.residents(), stock.protectedMinimum());
                 int missing = target - Math.addExact(stock.unclaimedAtEndpoint(), stock.expectedIncoming());
                 int surplus = stock.unclaimedAtEndpoint() - target;
                 if (missing > 0) {

@@ -112,12 +112,20 @@ public record ProductionJob(
                 workProgress, workTraversal, traversalCursor, bakeryWork, spatial, rights);
     }
 
+    public ProductionJob retargetBakeryOutput(SubjectId container) {
+        var work = bakeryWork.orElseThrow().withDestination(ReferenceContainerCustody.scopeId(container));
+        var nextRights = new ProductionRights(rights.mode(), rights.resourceOwner(), container, rights.employer());
+        return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold,
+                outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor,
+                java.util.Optional.of(work), spatial, nextRights);
+    }
+
     /** Family-owned reservation view; cargo/return ownership can survive releasing the machine. */
     public boolean reservesFacility() {
         return bakeryWork.map(BakeryWorkState::reservesStation).orElse(true);
     }
     /** Replaces only an unconsumed bakery input allocation; the job, worker and output identity remain stable. */
-    public ProductionJob reallocateBakeryInput(ProductionInputHold next) {
+    public ProductionJob reallocateBakeryInput(ProductionInputHold next, SubjectId sourceContainerId) {
         if (bakeryWork.isEmpty() || bakeryWork.orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_PICKUP
                 || bakeryWork.orElseThrow().pendingPhysicalStep().isPresent()
                 || bakeryWork.orElseThrow().block().map(value -> value.reason() != BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(true)
@@ -129,7 +137,7 @@ public record ProductionJob(
                 java.util.Optional.of(bakeryWork.orElseThrow().withReallocatedDepotAccount(
                         next instanceof ProductionInputHold.FungibleCold cold ? cold.accountId()
                                 : next instanceof ProductionInputHold.FungibleBound bound ? bound.accountId()
-                        : bakeryWork.orElseThrow().sourceAccountId())), spatial, rights);
+                        : ReferenceContainerCustody.scopeId(sourceContainerId), sourceContainerId)), spatial, rights);
     }
     /** Exact resource subjects retained by this job, including every fungible input lot. */
     public java.util.Map<SubjectId, Integer> inputQuantities() {

@@ -46,6 +46,7 @@ public final class FrontierV3FixtureCatalog {
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("quarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-graybox"))),
+            Map.entry("storageGround", StorageGroundFixture::configuration),
             Map.entry("goodsShipment", FrontierV3FixtureCatalog::goodsShipmentConfiguration),
             Map.entry("expeditionProvisioning", FrontierV3FixtureCatalog::expeditionProvisioningConfiguration),
             Map.entry("residentMeal", FrontierV3FixtureCatalog::residentMealConfiguration),

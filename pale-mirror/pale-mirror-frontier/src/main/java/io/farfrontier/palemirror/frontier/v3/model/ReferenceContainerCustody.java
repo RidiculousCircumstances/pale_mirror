@@ -90,6 +90,7 @@ public final class ReferenceContainerCustody {
     public static boolean blocksCanonicalUse(FrontierWorldState state, SubjectId containerId) {
         if (!isReferenceContainer(state, containerId)) return false;
         var surface = state.inventory().surfaces().get(containerId);
+        if (surface.status() == ContainerSurfaceStatus.CONFLICT || surface.status() == ContainerSurfaceStatus.ADOPTING) return true;
         if (surface.location() instanceof ContainerLocation.Mobile mobile
                 && state.actorLocations().get(mobile.actorId()).condition().status() != ActorLifeStatus.ALIVE)
             return true; // Cargo disposition, not a free replacement animal, must close this owner.

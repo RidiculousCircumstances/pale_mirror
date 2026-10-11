@@ -28,7 +28,6 @@ final class ExtractionWorkProcess {
             events.add(new ProposedEvent(start.work().id(), new ScheduleEffect.Created(
                     ExtractionContinuation.at(start.work().id(), Math.addExact(now, 1)))));
         }
-        events.addAll(ExtractionHaulingPolicy.dispatch(projected, site, now));
         var next = ExtractionContinuation.review(site.id(), Math.addExact(now, state.bootstrap().ruleset().extraction().reviewTicks()));
         events.add(new ProposedEvent(site.id(), new ScheduleEffect.Rescheduled(action.id(), next)));
         return List.copyOf(events);
@@ -38,8 +37,11 @@ final class ExtractionWorkProcess {
         if (job == null || job.terminal()) return false;
         var actor = job.execution().actorId(); var retained = state.actorExecutions().actors().get(actor);
         if (job.pending().isPresent() || retained == null || !retained.current().equals(Optional.of(job.execution()))
-                || state.actorMovements().containsKey(actor) || ActorExecutionCoordinator.sceneOwns(state, actor)
+                || ActorExecutionCoordinator.sceneOwns(state, actor)
                 || state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE) return true;
+        if (state.actorMovements().containsKey(actor)) return !(needsStorage(state, job)
+                && new ActorMovementInterruptionPlanner().assess(state, actor, Math.max(action.dueAt().ticks(),
+                    state.actorMovements().get(actor).issuedAtTick())) instanceof ActivityInterruptionPlanner.Ready);
         var lease = state.ambientLeases().get(actor);
         return lease != null && lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.HOT;
     }
@@ -51,6 +53,14 @@ final class ExtractionWorkProcess {
         if (job == null || job.terminal()) return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         long now = Math.max(tick, action.dueAt().ticks());
         if (held(state, action)) throw new IllegalArgumentException("mining awaits its exact custody or continuation boundary");
+        if (needsStorage(state, job)) {
+            var interrupted = new ActorMovementInterruptionPlanner().assess(state, job.execution().actorId(), now);
+            if (!(interrupted instanceof ActivityInterruptionPlanner.Ready ready)
+                    || ExtractionStorageSelection.replacement(ready.following(), job).isEmpty()) return retry(state, job, now);
+            var events = new ArrayList<>(ready.events());
+            events.addAll(advance(ready.following(), job, ExtractionWorkProgressed.Operation.SELECT_STORAGE, action, now));
+            return List.copyOf(events);
+        }
         if (!ExtractionWorkPolicy.requested(state, job)
                 && (job.phase() == ExtractionWork.Phase.TAKE_TOOL || job.phase() == ExtractionWork.Phase.EXTRACT))
             return advance(state, job, ExtractionWorkProgressed.Operation.END_WORK, action, now);
@@ -83,14 +93,12 @@ final class ExtractionWorkProcess {
                         new ProposedEvent(job.id(), new ScheduleEffect.Rescheduled(action.id(), ExtractionContinuation.at(job.id(), due))));
             }
             if (!ActorExecutionCoordinator.coldAvailable(state, job.execution().actorId())
-                    || ExtractionSourceCustody.blocksCold(state, job.target().orElseThrow())
-                    || ReferenceContainerCustody.hasLiveCustody(state, site.containerId())
-                    || ReferenceContainerCustody.blocksCanonicalUse(state, site.containerId())) return retry(state, job, now);
+                    || ExtractionSourceCustody.blocksCold(state, job.target().orElseThrow())) return retry(state, job, now);
             operation = ExtractionWorkProgressed.Operation.EXTRACT_BLOCK;
         } else {
             if (!ActorExecutionCoordinator.coldAvailable(state, job.execution().actorId())
-                    || ReferenceContainerCustody.hasLiveCustody(state, site.containerId())
-                    || ReferenceContainerCustody.blocksCanonicalUse(state, site.containerId())
+                    || ReferenceContainerCustody.hasLiveCustody(state, ExtractionServiceAccess.identity(state, job).pointId())
+                    || ReferenceContainerCustody.blocksCanonicalUse(state, ExtractionServiceAccess.identity(state, job).pointId())
                     || !ServiceAccessCoordinator.available(state, ExtractionServiceAccess.identity(state, job))) return retry(state, job, now);
             operation = switch (job.phase()) {
                 case TAKE_TOOL -> ExtractionWorkProgressed.Operation.TAKE_TOOL;
@@ -98,9 +106,9 @@ final class ExtractionWorkProcess {
                 case RETURN_TOOL -> ExtractionWorkProgressed.Operation.RETURN_TOOL;
                 default -> throw new IllegalArgumentException("mining phase lacks a declared station operation");
             };
-            if (job.phase() == ExtractionWork.Phase.STORE && !state.canReceiveFungible(site.containerId(), job.outputKind(), ExtractionWorkAuthority.carried(state, job)))
+            if (job.phase() == ExtractionWork.Phase.STORE && !ExtractionStorageSelection.retainedAvailable(state, job))
                 return retry(state, job, now);
-            if (job.phase() == ExtractionWork.Phase.RETURN_TOOL && state.inventory().firstFreeSlot(site.containerId()).isEmpty())
+            if (job.phase() == ExtractionWork.Phase.RETURN_TOOL && !ExtractionStorageSelection.retainedAvailable(state, job))
                 return retry(state, job, now);
         }
         return advance(state, job, operation, action, now);
@@ -122,5 +130,9 @@ final class ExtractionWorkProcess {
     private static List<ProposedEvent> retry(FrontierWorldState state, ExtractionWork job, long tick) {
         var action = ExtractionContinuation.at(job.id(), Math.addExact(tick, state.bootstrap().ruleset().extraction().reviewTicks()));
         return List.of(new ProposedEvent(job.id(), new ScheduleEffect.Rescheduled(action.id(), action)));
+    }
+    private static boolean needsStorage(FrontierWorldState state, ExtractionWork job) {
+        return job.pending().isEmpty() && (job.phase() == ExtractionWork.Phase.STORE || job.phase() == ExtractionWork.Phase.RETURN_TOOL)
+                && !ExtractionStorageSelection.retainedAvailable(state, job);
     }
 }

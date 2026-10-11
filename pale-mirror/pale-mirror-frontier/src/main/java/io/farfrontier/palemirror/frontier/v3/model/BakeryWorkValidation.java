@@ -10,6 +10,12 @@ final class BakeryWorkValidation {
 
     static void validate(ExactInventory inventory, ProductionJob job, Settlement settlement) {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
+        var sourceStorage = inventory.containers().get(work.sourceContainerId());
+        if (sourceStorage == null || !sourceStorage.ownerId().equals(job.settlementId()) || sourceStorage.storage().isEmpty())
+            throw new IllegalArgumentException("bakery source lost its retained owned storage capability");
+        var destination = inventory.fungibleResources().accounts().get(work.destinationAccountId());
+        if (destination != null && !destination.custody().equals(new ResourceCustody.Container(job.rights().destinationContainerId())))
+            throw new IllegalArgumentException("bakery destination account belongs to another storage endpoint");
         ProductionStationSpec station = null;
         for (ContainerRecord container : inventory.containers().values()) {
             var candidate = container.productionStation();
@@ -47,7 +53,7 @@ final class BakeryWorkValidation {
                 && work.block().map(value -> value.reason() == BakeryWorkBlock.Reason.SOURCE_CHANGED
                         || value.reason() == BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT).orElse(false)
                 && (stack == null || !(stack.custody() instanceof InventoryCustody.ContainerSlot slot)
-                    || !slot.containerId().equals(FrontierWorldState.depotId(job.settlementId())))) {
+                    || !slot.containerId().equals(BakeryStorage.source(job)))) {
             if (inventory.items().containsKey(job.outputItemId()))
                 throw new IllegalArgumentException("blocked bakery pickup cannot already own its output");
             return;
@@ -56,7 +62,7 @@ final class BakeryWorkValidation {
             case DEPOT_PICKUP -> {
                 ExactItemStack source = inventory.items().get(job.consumedItemId());
                 if (source == null || !(source.custody() instanceof InventoryCustody.ContainerSlot slot)
-                        || !slot.containerId().equals(FrontierWorldState.depotId(job.settlementId())))
+                        || !slot.containerId().equals(BakeryStorage.source(job)))
                     throw new IllegalArgumentException("bakery input has no exact depot slot");
                 yield source.custody();
             }
@@ -106,7 +112,7 @@ final class BakeryWorkValidation {
         };
         CustodyAccount account = ledger.accounts().get(currentId);
         ResourceCustody custody = switch (work.phase()) {
-            case DEPOT_PICKUP -> new ResourceCustody.Container(FrontierWorldState.depotId(settlement.id()));
+            case DEPOT_PICKUP -> new ResourceCustody.Container(BakeryStorage.source(job));
             case STATION_LOAD, DEPOT_DELIVERY -> new ResourceCustody.Actor(job.workerId());
             case PROCESSING, STATION_UNLOAD -> new ResourceCustody.Container(station.containerId());
             case DELIVERED -> throw new IllegalStateException("delivered bakery resources are public stock");

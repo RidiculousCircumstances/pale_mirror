@@ -24,7 +24,7 @@ public final class MaterialSourcePreparation {
         }
     }
 
-    public static Review review(FrontierWorldState state, ActorContainerItemOrder order) {
+    public static Review review(FrontierWorldState state, ActorResourceItemOrder order) {
         var ledger = state.inventory().fungibleResources();
         // Validate the actual obligation first. A lost account/claim is not an unpublished layout.
         var account = requireAccount(ledger, order);
@@ -37,12 +37,16 @@ public final class MaterialSourcePreparation {
             epoch = lease.authorityEpoch();
         } else if (account.custody() instanceof ResourceCustody.Actor actor) {
             epoch = ActorBodyAuthority.current(state, actor.actorId()).physicalEpoch();
+        } else if (account.custody() instanceof ResourceCustody.Ground) {
+            var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+            if (bindings.isEmpty()) return new Review(Status.WAITING_FOR_LAYOUT, account.id(), 0, List.of());
+            epoch = bindings.getFirst().authorityEpoch();
         } else throw new IllegalStateException("material order has unsupported physical source: " + account.custody());
         return review(ledger, order, epoch);
     }
 
     /** The observer owns publication; preparation must neither invent slots nor repair a layout. */
-    public static Review review(FungibleResourceLedger ledger, ActorContainerItemOrder order, long expectedEpoch) {
+    public static Review review(FungibleResourceLedger ledger, ActorResourceItemOrder order, long expectedEpoch) {
         if (expectedEpoch < 1) throw new IllegalArgumentException("material preparation requires a current authority epoch");
         var account = requireAccount(ledger, order);
         var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
@@ -51,6 +55,7 @@ public final class MaterialSourcePreparation {
             throw new IllegalStateException("material source layout has a foreign authority epoch;"
                     + context(order, expectedEpoch, bindings));
         try {
+            order.requireSourceEvidence(ledger);
             return new Review(Status.READY, account.id(), expectedEpoch, MaterialSourceSelection.select(ledger, order));
         } catch (IllegalArgumentException contradiction) {
             // This is contradictory canonical evidence, not proof that a physical chest drifted.
@@ -59,14 +64,14 @@ public final class MaterialSourcePreparation {
         }
     }
 
-    private static CustodyAccount requireAccount(FungibleResourceLedger ledger, ActorContainerItemOrder order) {
+    private static CustodyAccount requireAccount(FungibleResourceLedger ledger, ActorResourceItemOrder order) {
         try { return FungibleActorOrderTransfer.accounts(ledger, order).source(); }
         catch (IllegalArgumentException contradiction) {
             throw new IllegalStateException("material preparation lost its canonical obligation: order=" + order, contradiction);
         }
     }
 
-    private static String context(ActorContainerItemOrder order, long epoch, List<PhysicalStackBinding> bindings) {
+    private static String context(ActorResourceItemOrder order, long epoch, List<PhysicalStackBinding> bindings) {
         var portion = (ActorContainerItemOrder.Portion.Fungible) order.portion();
         return " account=" + portion.sourceAccountId().value() + " owner=" + order.ownerId().value()
                 + " kind=" + portion.itemKind() + " quantity=" + portion.quantity()

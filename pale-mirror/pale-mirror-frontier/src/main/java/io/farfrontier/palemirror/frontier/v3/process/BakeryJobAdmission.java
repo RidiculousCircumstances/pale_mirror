@@ -26,10 +26,7 @@ final class BakeryJobAdmission {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
         var workshop = ProductionProcess.workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
-                || !SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id())
-                || ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlement.id()))
-                || ReferenceContainerCustody.hasLiveCustody(state, FrontierWorldState.depotId(settlement.id()))
-                    && !ReferenceContainerCustody.hasOperationalCustody(state, FrontierWorldState.depotId(settlement.id()))) return false;
+                || !SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id())) return false;
         for (var task : state.strategicPlans().tasks().values().stream()
                 .filter(task -> task.ownerId().equals(settlement.id()) && task.kind() == StrategicTaskKind.PRODUCE_BREAD
                         && task.status() == StrategicTaskStatus.PENDING)
@@ -83,7 +80,8 @@ final class BakeryJobAdmission {
                                   SettlementStructure workshop, Optional<ExactItemStack> exactInput,
                                   Optional<FungibleResourceCustodySupport.LotSelection> fungibleInput,
                                   ResidentProfile worker) {
-        if (ReferenceContainerCustody.hasLiveCustody(state, FrontierWorldState.depotId(settlement.id()))
+        if (ReferenceContainerCustody.hasLiveCustody(state, exactInput.map(input -> ((InventoryCustody.ContainerSlot) input.custody()).containerId())
+                    .orElseGet(() -> ((ResourceCustody.Container) state.inventory().fungibleResources().accounts().get(fungibleInput.orElseThrow().accountId()).custody()).containerId()))
                 && exactInput.isPresent())
             return exact(state, task, settlement, workshop, exactInput.orElseThrow(), worker);
         return fungibleInput.map(input -> fungible(state, task, settlement, workshop, input, worker))
@@ -101,12 +99,16 @@ final class BakeryJobAdmission {
             throw new IllegalArgumentException("bakery exact input must belong to its declared production owner");
         SubjectId jobId = ProductionProcess.jobId(task);
         String stem = jobId.value().substring("job:".length());
+        var selectedRights = ProductionOutputCapacity.selectDestination(state, rights, input.count(),
+                ((InventoryCustody.ContainerSlot) input.custody()).containerId()).orElseThrow(
+                () -> new IllegalArgumentException("bakery has no eligible output warehouse"));
         return new ProductionJob(jobId, task.id(), settlement.id(), workshop.id(), worker.id(), input.id(),
                 new ProductionInputHold.Materialized(input.id()),
                 new SubjectId("item:" + stem + "-bread"), "minecraft:bread", input.count(),
                 ProductionWorkProgress.notStarted(), anchor(jobId, workshop, state.actorLocations().get(worker.id())), 0,
                 Optional.of(work(state, workshop, jobId,
-                        new SubjectId("custody:bakery-source-" + task.id().value().substring("task:".length()))))).withRights(rights);
+                        new SubjectId("custody:bakery-source-" + task.id().value().substring("task:".length())),
+                        ((InventoryCustody.ContainerSlot) input.custody()).containerId(), selectedRights.destinationContainerId()))).withRights(selectedRights);
     }
 
     static ProductionJob fungible(FrontierWorldState state, StrategicTask task, Settlement settlement,
@@ -124,10 +126,15 @@ final class BakeryJobAdmission {
         String stem = jobId.value().substring("job:".length());
         ProductionInputHold hold = ProductionResourceCustody.holdForStart(state, input,
                 new SubjectId("claim:" + stem), input.quantity());
+        var selectedRights = ProductionOutputCapacity.selectDestination(state, rights, input.quantity(),
+                ((ResourceCustody.Container) state.inventory().fungibleResources().accounts().get(input.accountId()).custody()).containerId()).orElseThrow(
+                () -> new IllegalArgumentException("bakery has no eligible output warehouse"));
         return new ProductionJob(jobId, task.id(), settlement.id(), workshop.id(), worker.id(), input.firstLotId(), hold,
                 new SubjectId("lot:" + stem + "-bread"), "minecraft:bread", ProductionStationRecipe.breadOutputQuantity(input.quantity()),
                 ProductionWorkProgress.notStarted(), anchor(jobId, workshop, state.actorLocations().get(worker.id())), 0,
-                Optional.of(work(state, workshop, jobId, input.accountId()))).withRights(rights);
+                Optional.of(work(state, workshop, jobId, input.accountId(),
+                        ((ResourceCustody.Container) state.inventory().fungibleResources().accounts().get(input.accountId()).custody()).containerId(),
+                        selectedRights.destinationContainerId()))).withRights(selectedRights);
     }
 
     private static TraversalTopology anchor(SubjectId jobId, SettlementStructure workshop, ActorLocation actor) {
@@ -137,16 +144,17 @@ final class BakeryJobAdmission {
     }
 
     private static BakeryWorkState work(FrontierWorldState state, SettlementStructure workshop, SubjectId jobId,
-                                        SubjectId sourceAccount) {
+                                        SubjectId sourceAccount, SubjectId sourceContainer, SubjectId destinationContainer) {
         ProductionStationSpec station = state.inventory().containers().values().stream()
                 .flatMap(container -> container.productionStation().stream())
                 .filter(value -> value.facilityId().equals(workshop.id())).reduce((left, right) -> {
                     throw new IllegalArgumentException("bakery facility has multiple declared machines");
                 }).orElseThrow(() -> new IllegalArgumentException("bakery facility has no declared machine"));
         String suffix = jobId.value().replace(':', '-');
-        return new BakeryWorkState(BakeryWorkState.Phase.DEPOT_PICKUP, station.id(), sourceAccount,
+        return new BakeryWorkState(BakeryWorkState.Phase.DEPOT_PICKUP, station.id(), sourceAccount, sourceContainer,
                 new SubjectId("custody:" + suffix + "-baker-hand"), new SubjectId("custody:" + suffix + "-station"),
-                sourceAccount, 0);
+                FungibleResourceCustodySupport.accountAtContainer(state, destinationContainer).map(CustodyAccount::id)
+                        .orElseGet(() -> ReferenceContainerCustody.scopeId(destinationContainer)), 0);
     }
 
     static FrontierWorldState admitStarted(FrontierWorldState state, SubjectId subject, ProductionStarted started) {

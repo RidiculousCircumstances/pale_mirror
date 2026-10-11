@@ -213,7 +213,7 @@ final class FrontierV3ContainerClickExecutor {
                         witness.accountId(), witness.containerId(), witness.authorityEpoch(), physical);
             } else payload = FungibleContainerPlayerEdit.classify(current, witness.accountId(), witness.containerId(),
                     witness.ownerId(), witness.authorityEpoch(), witness.playerId(), witness.interactionId(), physical,
-                    PlayerStockClaimLoss.admissibleClaims(state, witness.accountId()));
+                    SourceStockClaimLoss.admissibleClaims(state, witness.accountId()));
             CommandResult result = FrontierV3CommandSubmission.submit(runtime, "depot-player-edit",
                     witness.interactionId().toString(), payload);
             if (result instanceof CommandResult.Accepted) {
@@ -285,7 +285,7 @@ final class FrontierV3ContainerClickExecutor {
     }
 
     private static boolean hasUnretirableClaim(CustodyAccount account, FrontierWorldState state) {
-        return !PlayerStockClaimLoss.admissibleClaims(state, account.id()).containsAll(account.claimQuantities().keySet());
+        return !SourceStockClaimLoss.admissibleClaims(state, account.id()).containsAll(account.claimQuantities().keySet());
     }
 
     static boolean exceedsUnclaimedPortion(PhysicalStackBinding matching, ClickType kind,

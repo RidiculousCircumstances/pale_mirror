@@ -13,13 +13,15 @@ final class ExtractionPayloadCodecs {
             var value = (ExtractionGeologyInvalidated) payload;
             FrontierWorldStateCodec.writePosition(out, value.position()); out.writeLong(value.stratumRevision());
         }, in -> new ExtractionGeologyInvalidated(FrontierWorldStateCodec.readPosition(in), in.readLong())),
-        codec("frontier.extraction_area_extended", (out, payload) -> {
+        codec("frontier.extraction_area_extended.v2", (out, payload) -> {
             var value = (ExtractionAreaExtended) payload;
             out.writeUTF(value.siteId().value()); out.writeLong(value.expectedRevision()); out.writeInt(value.columns().size());
             for (var column : value.columns()) {
                 FrontierWorldStateCodec.writePosition(out, column.station().support());
                 FrontierWorldStateCodec.writePosition(out, column.floor().support());
                 writeSample(out, column.support()); writeSample(out, column.upper()); writeSample(out, column.lower());
+                out.writeByte(column.overburden().size());
+                for (var sample : column.overburden()) writeSample(out, sample);
             }
         }, in -> {
             var site = new SubjectId(in.readUTF()); long revision = in.readLong(); int count = in.readInt();
@@ -27,9 +29,19 @@ final class ExtractionPayloadCodecs {
                 throw new IllegalArgumentException("unbounded excavation extension");
             var columns = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.model.geometry.AdjacentExcavationPlanner.Column<
                     io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block>>();
-            for (int i = 0; i < count; i++) columns.add(new io.farfrontier.palemirror.frontier.v3.model.geometry.AdjacentExcavationPlanner.Column<>(
-                    new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
-                    readSample(in), readSample(in), readSample(in)));
+            for (int i = 0; i < count; i++) {
+                var station = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
+                var floor = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
+                var support = readSample(in); var upper = readSample(in); var lower = readSample(in);
+                int overhead = in.readUnsignedByte();
+                if (overhead > io.farfrontier.palemirror.frontier.v3.model.geometry.AdjacentExcavationPlanner.MAX_CLEARANCE_HEIGHT - 2)
+                    throw new IllegalArgumentException("unbounded overburden payload");
+                var samples = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample<
+                        io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block>>();
+                for (int j = 0; j < overhead; j++) samples.add(readSample(in));
+                columns.add(new io.farfrontier.palemirror.frontier.v3.model.geometry.AdjacentExcavationPlanner.Column<>(
+                        station, floor, support, upper, lower, samples));
+            }
             return new ExtractionAreaExtended(site, revision, columns);
         }), codec("frontier.extraction_frontier_opened", (out, payload) -> {
             var value = (ExtractionFrontierOpened) payload;

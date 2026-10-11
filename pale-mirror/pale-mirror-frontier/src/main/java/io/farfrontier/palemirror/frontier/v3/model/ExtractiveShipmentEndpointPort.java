@@ -26,4 +26,10 @@ final class ExtractiveShipmentEndpointPort implements ShipmentEndpointPort {
     @Override public SurfaceAnchor exteriorApproach(FrontierWorldState state, ShipmentEndpoint endpoint) {
         validate(state, endpoint); return site(state, endpoint).layout().entrance();
     }
+    @Override public List<SurfaceAnchor> stations(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        validate(state, endpoint); return List.of(endpoint.station());
+    }
+    @Override public SurfaceAnchor interactionStation(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        validate(state, endpoint); return endpoint.station();
+    }
 }

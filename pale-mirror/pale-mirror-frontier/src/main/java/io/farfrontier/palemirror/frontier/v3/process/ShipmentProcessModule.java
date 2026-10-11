@@ -6,17 +6,22 @@ import java.util.Set;
 
 /** Registered transport owner; commercial settlement stays in the commercial reducer. */
 final class ShipmentProcessModule implements FrontierWorldProcessModule {
-    static final Set<String> TYPES = Set.of("frontier.shipment_dispatched", "frontier.shipment_cold_transferred", "frontier.shipment_retired",
+    static final Set<String> TYPES = Set.of("frontier.shipment_storage_retargeted", "frontier.shipment_dispatched", "frontier.shipment_cold_transferred", "frontier.shipment_retired",
             "frontier.shipment_hot_prepared", "frontier.shipment_hot_transferred", "frontier.shipment_hand_custody_observed", "frontier.shipment_receipt_acknowledged", "frontier.shipment_cargo_disposition_observed",
             "frontier.internal_shipment_dispatched", "frontier.internal_shipment_received");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("shipments",
             Set.of("frontier.shipment_dispatch_requested", "frontier.shipment_hot_prepared", "frontier.shipment_hot_transferred", "frontier.shipment_hand_custody_observed", "frontier.shipment_cargo_disposition_observed"),
-            Set.of(ShipmentProcess.PROGRESS, InternalShipmentReceipts.RECEIVE), TYPES, java.util.stream.Stream.concat(TYPES.stream(), Set.of(
-                    "frontier.actor_movement_started", "kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled").stream())
+            Set.of(ShipmentProcess.PROGRESS, InternalShipmentReceipts.RECEIVE, ResourceHaulingPolicy.REVIEW), TYPES, java.util.stream.Stream.concat(TYPES.stream(), Set.of(
+                    "frontier.actor_movement_started", "frontier.actor_movement_interrupted", "kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled").stream())
                     .collect(java.util.stream.Collectors.toUnmodifiableSet()), java.util.stream.Stream.concat(TYPES.stream(),
                             java.util.stream.Stream.of("frontier.shipment_dispatch_requested")).collect(java.util.stream.Collectors.toUnmodifiableSet()));
+    @Override public java.util.List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> initialSchedules(FrontierBootstrap bootstrap) {
+        return bootstrap.settlements().stream().map(home -> ResourceHaulingPolicy.review(home.id(), 1)).toList();
+    }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {
+            case ShipmentStorageRetargeted value -> ResidentActivityProcess.retargetHotResident(value.apply(state, event.subject()),
+                    state.shipments().shipments().get(value.shipmentId()).execution().actorId(), event.instant().ticks());
             case InternalShipmentDispatched value -> InternalShipmentStateSupport.dispatch(state, event.subject(), value);
             case InternalShipmentReceived value -> InternalShipmentStateSupport.receive(state, event.subject(), value);
             case ShipmentDispatched value -> ShipmentStateSupport.dispatch(state, event.subject(), value.shipment());

@@ -30,6 +30,35 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class FrontierV3LocalNavigationGameTests {
     private FrontierV3LocalNavigationGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/treasure/big_air_full", timeoutTicks = 180)
+    public static void goalNavigatorWalksTwoExcavatedBenchesWithoutChangingTheBody(GameTestHelper helper) {
+        var level = helper.getLevel(); var hints = new ArrayList<SurfaceAnchor>();
+        for (int x = 4; x <= 15; x++) for (int z = 3; z <= 5; z++) {
+            int y = 30 - (x - 4) / 4;
+            var support = helper.absolutePos(new BlockPos(x, y, z));
+            level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+            if (z == 4) hints.add(SurfaceAnchor.at(support.getX(), support.getY(), support.getZ()));
+        }
+        var target = hints.getLast();
+        var goal = new FrontierV3GoalNavigation.Goal(List.of(target), TraversalCapability.PEDESTRIAN,
+                new FrontierV3NavigationScope.Restricted(LocalNavigationEnvelope.along(hints, List.of(target))), Optional.empty(), hints);
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5, 31.0, 4.5));
+        var identity = worker.getUUID();
+        helper.runAfterDelay(1, () -> {
+            for (int turn = 0; turn < 150 && !FrontierV3SemanticMovement.arrived(level, worker, target); turn++) {
+                var result = FrontierV3GoalNavigation.pursue(level, worker, goal);
+                helper.assertTrue(result.status() != FrontierV3GoalNavigation.Status.BLOCKED, "an open excavated descent has a native path: " + result);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(worker); worker.aiStep();
+            }
+            helper.assertTrue(worker.isAlive() && worker.getUUID().equals(identity)
+                    && FrontierV3SemanticMovement.arrived(level, worker, target),
+                    "the same body must reach the real lower supported landing through shared goal navigation");
+            FrontierV3GoalNavigation.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/treasure/big_air_full", timeoutTicks = 110)

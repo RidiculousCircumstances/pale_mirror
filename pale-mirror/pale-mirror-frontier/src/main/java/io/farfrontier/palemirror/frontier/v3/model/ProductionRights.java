@@ -49,8 +49,10 @@ public record ProductionRights(Mode mode, GoodsTradeParty resourceOwner, Subject
         }
         if (!employer.settlementId().equals(job.settlementId()))
             throw new IllegalArgumentException("production declared a foreign employer home");
-        if (!destinationContainerId.equals(FrontierWorldState.depotId(job.settlementId())))
-            throw new IllegalArgumentException("current production capability requires its declared home depot");
+        var storage = inventory.containers().get(destinationContainerId);
+        if (storage == null || !storage.ownerId().equals(job.settlementId())
+                || storage.storage().map(policy -> policy.role() != ResourceStorageRole.WAREHOUSE).orElse(true))
+            throw new IllegalArgumentException("production capability requires retained owned warehouse access");
         if ((mode == Mode.BUYER_OWNED_SERVICE || mode == Mode.PUBLIC_PRODUCTION) && !resourceOwner.id().equals(job.settlementId()))
             throw new IllegalArgumentException("public manufacturing declared a foreign buyer");
         if (mode == Mode.COMPANY_OWN_ACCOUNT) {

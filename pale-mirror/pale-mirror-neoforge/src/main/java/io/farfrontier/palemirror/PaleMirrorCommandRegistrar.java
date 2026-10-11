@@ -51,6 +51,7 @@ final class PaleMirrorCommandRegistrar {
             else inspect.then(Commands.literal(view.token()).executes(context -> v3Diagnostic(context, view.token(), "")));
         }
         v3.then(inspect);
+        v3.then(io.farfrontier.palemirror.internal.frontier.v3.FrontierV3StorageCommands.branch());
         v3.then(Commands.literal("advance").requires(source -> source.hasPermission(4))
                 .then(Commands.argument("ticks", IntegerArgumentType.integer(1, FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS)).executes(context -> {
                     int ticks = IntegerArgumentType.getInteger(context, "ticks");

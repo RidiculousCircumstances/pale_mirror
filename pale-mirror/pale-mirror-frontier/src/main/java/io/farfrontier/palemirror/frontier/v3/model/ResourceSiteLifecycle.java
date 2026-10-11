@@ -145,6 +145,10 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         return replace(job.withConfirmedCrop(job.progress().confirmPreparedCrop(nextSlot), outcome).bindTarget(cycle));
     }
     public ResourceSiteLifecycle returnFullHarvestBatch(ResourceSiteHarvestJob job) { return replace(require(job).withFullBatchReturn()); }
+    public ResourceSiteLifecycle retargetHarvestStorage(ResourceSiteHarvestJob job, InventoryCustody.ContainerSlot slot,
+            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId replacement) {
+        return replace(require(job).retargetStorage(slot, replacement));
+    }
     public ResourceSiteLifecycle skipBlockedHarvestCell(ResourceSiteHarvestJob job, int count) { return replace(require(job).withBlockedCellsSkipped(count)); }
     public ResourceSiteLifecycle withHarvestLabour(ResourceSiteHarvestJob job, WorkProgress work) { return replace(require(job).withWork(work)); }
     public ResourceSiteLifecycle withHarvestProgress(ResourceSiteHarvestJob job, ResourceSiteHarvestProgress progress) {

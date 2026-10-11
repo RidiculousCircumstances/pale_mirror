@@ -178,8 +178,15 @@ class BakeryHotVerticalTest {
         SubjectId replacementAccountId = new SubjectId("custody:bakery-replacement-depot");
         ResourceLot replacementLot = new ResourceLot(replacementLotId, task.ownerId(), "minecraft:wheat", 64,
                 "test-replenishment", List.of());
+        var warehouse = new SubjectId("container:bakery-source-replacement");
+        var point = SettlementServiceAccessPoints.depotPort(state, task.ownerId()).exteriorApproach();
+        var endpoint = new ShipmentEndpoint.Storage(task.ownerId(), warehouse, point, java.util.Optional.empty(), point);
+        var policy = new ResourceStoragePolicy(endpoint, new ResourceStorageFilter(false, java.util.Set.of("minecraft:wheat"), Map.of()),
+                100, ResourceStorageRole.WAREHOUSE);
+        state = new ResourceStorageDeclared(new ContainerRecord(warehouse, task.ownerId(), 27, ContainerPurpose.RESOURCE_STORAGE,
+                java.util.Optional.empty(), java.util.Optional.of(policy)), point.support().offset(1, 1, 0)).apply(state, task.ownerId());
         FungibleResourceLedger replenished = state.inventory().fungibleResources().issue(replacementLot,
-                new CustodyAccount(replacementAccountId, new ResourceCustody.Container(depot),
+                new CustodyAccount(replacementAccountId, new ResourceCustody.Container(warehouse),
                         Map.of(replacementLotId, 64), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(replenished));
         BakeryInputReallocated event = ProductionProcess.planCompletion(state, ProductionProcess.complete(original, 320L)).stream()
@@ -194,6 +201,7 @@ class BakeryHotVerticalTest {
         assertEquals(original.workerId(), resumed.workerId());
         assertEquals(replacementLotId, resumed.consumedItemId());
         assertEquals(replacementAccountId, resumed.bakeryWork().orElseThrow().sourceAccountId());
+        assertEquals(warehouse, resumed.bakeryWork().orElseThrow().sourceContainerId());
         assertTrue(resumed.bakeryWork().orElseThrow().block().isEmpty());
         assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().get(task.id()).status());
     }

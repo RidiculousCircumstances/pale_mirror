@@ -7,12 +7,13 @@ import java.util.function.Function;
 final class ContainerStorageDemandSources {
     private ContainerStorageDemandSources() { }
     private static final List<Function<FrontierWorldState, List<ContainerInboundCapacity.Demand>>> SOURCES = List.of(
-            state -> ProductionOutputCapacity.pendingInbound(state.productionJobs()), GoodsTradeStorageDemand::pending);
+            state -> ProductionOutputCapacity.pendingInbound(state.productionJobs()), GoodsTradeStorageDemand::pending,
+            InternalShipmentStorageDemand::pending);
     private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> VIEW = new ImmutableInputView<>();
 
     static List<ContainerInboundCapacity.Demand> demands(FrontierWorldState state) {
         return VIEW.get(List.of(state.productionJobs(), state.companies().goodsTrade().contracts(),
-                        state.inventory().fungibleResources().accounts()),
+                        state.inventory().fungibleResources().accounts(), state.shipments()),
                 () -> SOURCES.stream().flatMap(source -> source.apply(state).stream()).toList());
     }
 }

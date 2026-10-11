@@ -25,6 +25,7 @@ final class BakeryWorkStateCodec {
         output.writeByte(value.phase().wireTag());
         writeString(output, value.stationId().value());
         writeString(output, value.sourceAccountId().value());
+        writeString(output, value.sourceContainerId().value());
         writeString(output, value.actorAccountId().value());
         writeString(output, value.stationAccountId().value());
         writeString(output, value.destinationAccountId().value());
@@ -45,6 +46,7 @@ final class BakeryWorkStateCodec {
         BakeryWorkState.Phase phase = BakeryWorkState.Phase.fromWireTag(input.readUnsignedByte());
         SubjectId station = new SubjectId(readString(input));
         SubjectId source = new SubjectId(readString(input));
+        SubjectId sourceContainer = new SubjectId(readString(input));
         SubjectId actor = new SubjectId(readString(input));
         SubjectId stationAccount = new SubjectId(readString(input));
         SubjectId destination = new SubjectId(readString(input));
@@ -53,7 +55,7 @@ final class BakeryWorkStateCodec {
                 ? Optional.of(new BakeryPhysicalStep(BakeryWorkState.Phase.fromWireTag(input.readUnsignedByte()),
                 new SceneLeaseId(readString(input)), input.readByte())) : Optional.empty();
         Optional<BakeryWorkBlock> block = input.readBoolean() ? Optional.of(readBlock(input)) : Optional.empty();
-        return Optional.of(new BakeryWorkState(phase, station, source, actor, stationAccount,
+        return Optional.of(new BakeryWorkState(phase, station, source, sourceContainer, actor, stationAccount,
                 destination, completed, pending, block));
     }
 

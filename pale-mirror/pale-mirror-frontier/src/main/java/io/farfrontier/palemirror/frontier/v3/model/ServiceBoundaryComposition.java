@@ -5,7 +5,8 @@ import java.util.*;
 
 /** Read-only closed point registry. An ID addresses a complete producer declaration, never discovers its type. */
 public final class ServiceBoundaryComposition {
-    private static final List<ServiceBoundaryProvider> PROVIDERS = List.of(new DepotServiceBoundaries(), new ExtractionServiceBoundaries());
+    private static final List<ServiceBoundaryProvider> PROVIDERS = List.of(new DepotServiceBoundaries(), new ExtractionServiceBoundaries(),
+            new StorageServiceBoundaries());
     static {
         if (PROVIDERS.size() != ServicePointId.Kind.values().length
                 || !PROVIDERS.stream().map(ServiceBoundaryProvider::kind).collect(java.util.stream.Collectors.toSet())

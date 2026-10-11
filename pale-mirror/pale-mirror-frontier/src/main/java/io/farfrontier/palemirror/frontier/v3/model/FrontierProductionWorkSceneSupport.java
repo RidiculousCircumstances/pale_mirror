@@ -42,8 +42,16 @@ public final class FrontierProductionWorkSceneSupport {
                 || state.humanPopulation().meals().containsKey(job.workerId())
                 || state.actorMovements().containsKey(job.workerId())
                 || job.bakeryWork().isEmpty() && job.workProgress().terminalEffectEligible()) return Optional.empty();
-        SubjectId depot = FrontierWorldState.depotId(job.settlementId());
-        if (ReferenceContainerCustody.hasLiveCustody(state, depot) && !ReferenceContainerCustody.hasOperationalCustody(state, depot)) return Optional.empty();
+        if (job.bakeryWork().isPresent()) {
+            var phase = job.bakeryWork().orElseThrow().phase();
+            if (phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY) {
+                var container = BakeryStorage.current(job);
+                if (ReferenceContainerCustody.hasLiveCustody(state, container) && !ReferenceContainerCustody.hasOperationalCustody(state, container)) return Optional.empty();
+            }
+        } else {
+            var container = job.rights().destinationContainerId();
+            if (ReferenceContainerCustody.hasLiveCustody(state, container) && !ReferenceContainerCustody.hasOperationalCustody(state, container)) return Optional.empty();
+        }
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
         SettlementStructure workshop = settlement.structures().stream().filter(value -> value.id().equals(job.facilityId())).findFirst().orElse(null);
         ActorLocation worker = state.actorLocations().get(job.workerId());

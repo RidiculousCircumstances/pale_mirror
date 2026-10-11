@@ -7,7 +7,7 @@ import java.util.UUID;
 
 /** Stable resource-account location; a physical slot is deliberately not canonical custody. */
 public sealed interface ResourceCustody permits ResourceCustody.Container, ResourceCustody.Player,
-        ResourceCustody.Cargo, ResourceCustody.WorldCarrier, ResourceCustody.Actor {
+        ResourceCustody.Cargo, ResourceCustody.WorldCarrier, ResourceCustody.Actor, ResourceCustody.Ground {
     record Container(SubjectId containerId) implements ResourceCustody {
         public Container { Objects.requireNonNull(containerId, "resource container"); }
     }
@@ -22,5 +22,9 @@ public sealed interface ResourceCustody permits ResourceCustody.Container, Resou
     }
     record Actor(SubjectId actorId) implements ResourceCustody {
         public Actor { Objects.requireNonNull(actorId, "resource actor"); }
+    }
+    /** One observed item entity. Position is retained evidence, not permission to recreate a missing drop. */
+    record Ground(UUID entityId, BlockPosition position) implements ResourceCustody {
+        public Ground { Objects.requireNonNull(entityId, "ground resource entity"); Objects.requireNonNull(position, "observed drop position"); }
     }
 }

@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "id": "disposable_storage_territorial_adoption",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25595, "profile": "storage-ground", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "restart": { "mode": "graceful", "afterAction": 3 },
+  "setup": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -350, "y": 64, "z": -333 }, "settleMs": 0 },
+    { "type": "assert_fixture", "timeoutMs": 90000, "checks": [
+      { "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE" } }
+    ] },
+    { "type": "command", "command": "/setblock -350 64 -334 minecraft:chest{Items:[{Slot:9b,id:\"minecraft:cobblestone\",count:17}]}" },
+    { "type": "command", "command": "/give PMTestPilot minecraft:chest 1" }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:observed--350_64_-334",
+      "expect": { "status": "ok", "surface": "ACTIVE", "storage": { "role": "WAREHOUSE", "allItems": true } },
+      "timeoutMs": 60000, "causalMilestone": "filled_existing_chest_receives_default_territorial_capability" },
+    { "type": "place", "item": "minecraft:chest", "position": { "x": -348, "y": 64, "z": -334 }, "timeoutMs": 15000,
+      "causalMilestone": "ordinary_player_places_empty_chest_without_storage_registration" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:observed--348_64_-334",
+      "expect": { "status": "ok", "surface": "ACTIVE", "storage": { "role": "WAREHOUSE", "allItems": true } },
+      "timeoutMs": 60000, "causalMilestone": "empty_player_chest_receives_the_same_default_capability" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -347, "y": 64, "z": -333 }, "settleMs": 0,
+      "causalMilestone": "ordinary_return_after_graceful_restart" },
+    { "type": "wait_until_diagnostic", "view": "resource", "id": "custody:container-observed--350_64_-334",
+      "expect": { "status": "ok", "quantity": 17 }, "timeoutMs": 60000,
+      "causalMilestone": "exact_existing_stock_is_accounted_once_after_restart" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:observed--350_64_-334",
+      "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } },
+      "timeoutMs": 60000, "causalMilestone": "adopted_storage_has_current_physical_custody" },
+    { "type": "look", "at": { "x": -350, "y": 64, "z": -334 } },
+    { "type": "assert_visible_block", "position": { "x": -350, "y": 64, "z": -334 }, "timeoutMs": 15000,
+      "causalMilestone": "existing_chest_visible_and_not_rebuilt" },
+    { "type": "open_container", "position": { "x": -350, "y": 64, "z": -334 }, "timeoutMs": 15000,
+      "causalMilestone": "original_physical_contents_remain_in_their_slot" },
+    { "type": "wait_until_diagnostic", "view": "resource", "id": "custody:container-observed--350_64_-334",
+      "expect": { "status": "ok", "quantity": 17 }, "timeoutMs": 15000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:observed--348_64_-334",
+      "expect": { "status": "ok", "surface": "ACTIVE" }, "timeoutMs": 15000 }
+  ],
+  "assertions": [
+    { "after": 10, "view": "resource", "id": "custody:container-observed--350_64_-334", "expect": { "status": "ok", "quantity": 17 } },
+    { "after": 11, "view": "container", "id": "container:observed--348_64_-334", "expect": { "status": "ok", "surface": "ACTIVE" } }
+  ],
+  "frames": [ { "after": 8, "name": "existing-and-player-placed-storages-after-restart" } ]
+}

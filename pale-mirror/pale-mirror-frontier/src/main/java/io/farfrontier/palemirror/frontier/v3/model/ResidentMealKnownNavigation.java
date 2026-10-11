@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/** Ephemeral COLD route to a resident's declared depot service station. */
+/** Ephemeral COLD route to the meal's retained storage capability. */
 public final class ResidentMealKnownNavigation {
     private ResidentMealKnownNavigation() { }
 
@@ -59,36 +59,28 @@ public final class ResidentMealKnownNavigation {
         Objects.requireNonNull(state, "meal navigation state");
         Objects.requireNonNull(meal, "meal navigation owner");
         Objects.requireNonNull(start, "meal navigation start");
-        Settlement settlement = state.bootstrap().settlements().stream()
-                .filter(value -> value.id().equals(meal.settlementId())).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("meal navigation has no retained settlement"));
-        SettlementStructure depot = settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("meal navigation has no retained depot"));
-        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
-        if (!meal.depotId().equals(FrontierWorldState.depotId(settlement.id())))
-            throw new IllegalArgumentException("meal navigation has a foreign depot identity");
+        var port = ResourceStorageAccess.at(state, meal.depotId());
+        if (!port.settlementId().equals(meal.settlementId()))
+            throw new IllegalArgumentException("meal navigation has a foreign storage identity");
+        var service = port.interactionStation(state);
+        var exterior = ShipmentEndpointComposition.exteriorApproach(state, port.endpoint());
+        var point = point(state, meal);
         boolean admitted = ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId());
-        if (admitted && start.equals(port.serviceSurface())) return List.of(start);
-        if (admitted && start.equals(port.exteriorApproach()))
-            return serviceLeg(state, meal, depot, port.exteriorApproach());
+        if (admitted && start.equals(service)) return List.of(start);
+        if (admitted && start.equals(exterior))
+            return serviceLeg(state, meal, port, exterior);
 
         List<SurfaceAnchor> prefix = PedestrianLocalDeparture.exitToPublic(state, meal.residentId(), start);
         SurfaceAnchor outdoorStart = prefix.getLast();
-        List<KnownPedestrianRouteKnowledge.Passage> passages = new ArrayList<>();
-        passages.add(new KnownPedestrianRouteKnowledge.Passage(depot,
-                KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS));
-        KnownPedestrianRouteKnowledge routeKnowledge = KnownPedestrianRouteKnowledge.forSettlement(
-                state, meal.settlementId(), passages);
+        KnownPedestrianRouteKnowledge routeKnowledge = ShipmentEndpointComposition.knowledge(state, List.of(port.endpoint()));
         // A distant applicant is not an occupant and does not own the service
         // turn. Route it to a side pocket first, then reconsider the short
         // entrance from there. A legitimate pocket can be farther than three
         // blocks from the exterior station on irregular terrain.
-        boolean directService = admitted && (Math.abs(start.x() - port.exteriorApproach().x())
-                + Math.abs(start.z() - port.exteriorApproach().z()) <= 3
-                || SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces().contains(start));
-        List<SurfaceAnchor> destinations = directService ? List.of(port.exteriorApproach())
-                : waitingSurfaces(state, meal, port, routeKnowledge).stream()
+        boolean directService = admitted && (Math.abs(start.x() - exterior.x())
+                + Math.abs(start.z() - exterior.z()) <= 3 || point.waitingSurfaces().contains(start));
+        List<SurfaceAnchor> destinations = directService ? List.of(exterior)
+                : waitingSurfaces(state, meal, point).stream()
                     .filter(availableWaitingStation).toList();
         KnownPedestrianNavigation.RouteUnavailable lastUnavailable = null;
         for (SurfaceAnchor destination : destinations) {
@@ -102,7 +94,7 @@ public final class ResidentMealKnownNavigation {
                 List<SurfaceAnchor> result = new ArrayList<>(prefix);
                 result.addAll(route.subList(1, route.size()));
                 if (directService) {
-                    List<SurfaceAnchor> finalLeg = serviceLeg(state, meal, depot, port.exteriorApproach());
+                    List<SurfaceAnchor> finalLeg = serviceLeg(state, meal, port, exterior);
                     result.addAll(finalLeg.subList(1, finalLeg.size()));
                 }
                 return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathComposition.withoutLoops(result);
@@ -120,17 +112,12 @@ public final class ResidentMealKnownNavigation {
 
     /** Accept a current semantic leg without repeating search during WAL replay. */
     public static void requireMovementRoute(FrontierWorldState state, ResidentMeal meal, List<SurfaceAnchor> route) {
-        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
-        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
-                .findFirst().orElseThrow();
-        var continuation = new KnownPedestrianRouteKnowledge.SettlementPassage(settlement.id(),
-                new KnownPedestrianRouteKnowledge.Passage(depot,
-                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS));
-        PedestrianLocalDeparture.departure(state, route.getFirst(), List.of(continuation)).requireRoute(route);
-        var port = SettlementServiceAccessPoints.depotPort(state, meal.settlementId());
+        var port = ResourceStorageAccess.at(state, meal.depotId());
+        PedestrianLocalDeparture.departure(state, route.getFirst(),
+                ShipmentEndpointComposition.passages(state, port.endpoint())).requireRoute(route);
         var end = route.getLast();
         if (meal.phase() == ResidentMeal.Phase.MOVE) {
-            if (end.equals(port.serviceSurface())) {
+            if (end.equals(port.interactionStation(state))) {
                 if (!ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId()))
                     throw new IllegalArgumentException("accepted meal entrance lost its access turn");
             } else if (!waitingStationAvailable(state, meal, end)
@@ -145,16 +132,11 @@ public final class ResidentMealKnownNavigation {
         if (meal.portable()) return false;
         ActorLocation actor = state.actorLocations().get(meal.residentId());
         if (actor == null) return false;
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
-        SettlementStructure depot = settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        return SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces()
+        return point(state, meal).waitingSurfaces()
                 .contains(actor.supportingSurface());
     }
 
-    private static List<SurfaceAnchor> waitingSurfaces(FrontierWorldState state, ResidentMeal meal,
-                                                       SettlementDepotServicePort port,
-                                                       KnownPedestrianRouteKnowledge routeKnowledge) {
+    private static List<SurfaceAnchor> waitingSurfaces(FrontierWorldState state, ResidentMeal meal, ServiceAccessPoint point) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
         int ordinal = 0;
         for (int index = 0; index < settlement.residents().size(); index++) {
@@ -163,9 +145,8 @@ public final class ResidentMealKnownNavigation {
                 break;
             }
         }
-        SettlementStructure depot = settlement.structures().stream().filter(value -> value.id().equals(port.depotId())).findFirst().orElseThrow();
         var excluded = ServiceDestinationClaims.excludedFor(state, meal.residentId());
-        List<SurfaceAnchor> candidates = SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces()
+        List<SurfaceAnchor> candidates = point.waitingSurfaces()
                 .stream().filter(surface -> !excluded.contains(surface)).toList();
         if (candidates.isEmpty()) return List.of();
         List<SurfaceAnchor> preferred = new ArrayList<>(candidates.size());
@@ -176,10 +157,7 @@ public final class ResidentMealKnownNavigation {
 
     /** A retained approach cannot park on another owner's current or reserved exit. */
     public static boolean waitingStationAvailable(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor surface) {
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
-        SettlementStructure depot = settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        var point = SettlementServiceAccessPoints.forDepot(state, settlement, depot);
+        var point = point(state, meal);
         // COLD stops its admitted entrance leg just before crossing the shared
         // boundary. That transient approach is not a waiting/parking claim.
         if ((point.egressSurfaces().contains(surface) || point.boundary().occupied(surface.standingBody()))
@@ -190,14 +168,16 @@ public final class ResidentMealKnownNavigation {
     }
 
 
+    private static ServiceAccessPoint point(FrontierWorldState state, ResidentMeal meal) {
+        return ServiceBoundaryComposition.geometry(state, ServiceBoundaryComposition.declaration(state, meal.depotId()).identity());
+    }
+
     private static List<SurfaceAnchor> serviceLeg(FrontierWorldState state, ResidentMeal meal,
-                                                   SettlementStructure depot, SurfaceAnchor start) {
+                                                   ResourceStorageAccess port, SurfaceAnchor start) {
         MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
                 FrontierWireTags.tag(meal.phase()), 1L,
-                List.of(SettlementDepotServicePort.forDepot(depot).serviceSurface()),
+                List.of(port.interactionStation(state)),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        return KnownPedestrianRouteKnowledge.path(state, meal.settlementId(), start, order,
-                List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
-                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+        return ShipmentEndpointComposition.knowledge(state, List.of(port.endpoint())).path(start, order);
     }
 }

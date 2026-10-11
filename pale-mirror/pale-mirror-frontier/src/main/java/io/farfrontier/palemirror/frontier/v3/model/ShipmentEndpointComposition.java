@@ -4,7 +4,8 @@ import java.util.*;
 
 /** Facility capabilities validate a declared physical station; carriers do not guess geometry. */
 public final class ShipmentEndpointComposition {
-    private static final List<ShipmentEndpointPort> PROVIDERS = List.of(new DepotShipmentEndpointPort(), new ExtractiveShipmentEndpointPort());
+    private static final List<ShipmentEndpointPort> PROVIDERS = List.of(new DepotShipmentEndpointPort(), new ExtractiveShipmentEndpointPort(),
+            new StorageShipmentEndpointPort());
     private static final Map<ShipmentEndpoint.Kind, ShipmentEndpointPort> PORTS = PROVIDERS.stream()
             .collect(java.util.stream.Collectors.toUnmodifiableMap(ShipmentEndpointPort::kind, value -> value));
     static {
@@ -27,6 +28,15 @@ public final class ShipmentEndpointComposition {
     }
     public static SurfaceAnchor exteriorApproach(FrontierWorldState state, ShipmentEndpoint endpoint) {
         return port(endpoint).exteriorApproach(state, endpoint);
+    }
+    public static List<SurfaceAnchor> stations(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        return port(endpoint).stations(state, endpoint);
+    }
+    public static SurfaceAnchor interactionStation(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        return port(endpoint).interactionStation(state, endpoint);
+    }
+    static List<KnownPedestrianRouteKnowledge.SettlementPassage> passages(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        return port(endpoint).passages(state, endpoint);
     }
     private ShipmentEndpointComposition() { }
 }

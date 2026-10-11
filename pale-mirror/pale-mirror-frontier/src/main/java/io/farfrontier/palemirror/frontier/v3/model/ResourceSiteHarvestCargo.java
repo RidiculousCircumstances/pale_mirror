@@ -11,6 +11,16 @@ import java.security.NoSuchAlgorithmException;
 public final class ResourceSiteHarvestCargo {
     private ResourceSiteHarvestCargo() { }
 
+    /** A reserved successor is a retained commitment; otherwise admit another part only on real demand. */
+    public static Optional<InventoryCustody.ContainerSlot> nextBatchSlot(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        if (job.batchSuccessorSlot().isPresent()) return job.batchSuccessorSlot();
+        if (!ProductionStockDemand.read(state, state.resourceSite(job.siteId()).settlementId(),
+                "minecraft:wheat", Optional.of(job.id())).requested()) return Optional.empty();
+        var slot = state.firstFreeContainerSlot(job.outputSlot().containerId());
+        return slot.isPresent() ? Optional.of(new InventoryCustody.ContainerSlot(job.outputSlot().containerId(), slot.getAsInt()))
+                : Optional.empty();
+    }
+
     /** The already-owned current output reservation, never a second slot for a future part. */
     public static boolean deliveryCapacityAvailable(FrontierWorldState state, ResourceSiteHarvestJob job) {
         var slot = job.outputSlot();
@@ -79,7 +89,7 @@ public final class ResourceSiteHarvestCargo {
                         job.depotAccountId(), container, Optional.empty(), part.itemKind(), Map.of(part.id(), part.quantity())),
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(container.containerId()),
                 state.actorLocations().get(job.workerId()).supportingSurface(), ActorContainerItemOrder.Hand.OFF,
-                job.deliveredYieldQuantity() + 1L, state.resourceSites().cycle(job.siteId()).layout().revision());
+                job.deliveredYieldQuantity() + 1L, job.storageRevision());
     }
 
     public static FungibleResourceLedger deliverObserved(FrontierWorldState state, ResourceSiteHarvestJob job,

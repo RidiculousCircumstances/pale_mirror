@@ -26,4 +26,10 @@ final class DepotShipmentEndpointPort implements ShipmentEndpointPort {
     @Override public SurfaceAnchor exteriorApproach(FrontierWorldState state, ShipmentEndpoint endpoint) {
         validate(state, endpoint); return SettlementDepotServicePort.forDepot(facility(state, endpoint)).exteriorApproach();
     }
+    @Override public List<SurfaceAnchor> stations(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        validate(state, endpoint); return SettlementDepotServicePort.forDepot(facility(state, endpoint)).stations();
+    }
+    @Override public SurfaceAnchor interactionStation(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        validate(state, endpoint); return SettlementDepotServicePort.forDepot(facility(state, endpoint)).serviceSurface();
+    }
 }

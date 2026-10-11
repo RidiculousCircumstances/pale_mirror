@@ -344,7 +344,13 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
      * order's station; this ledger proves exact account/claim/custody conservation, never motion.
      * A loaded source or destination cannot use this operation while its physical bindings live.
      */
-    public FungibleResourceLedger transferActorOrderCold(ActorContainerItemOrder order) {
+    public FungibleResourceLedger transferActorOrderCold(ActorResourceItemOrder order) {
+        if (order.endpointKind() == ActorResourceItemOrder.EndpointKind.GROUND_ITEM)
+            throw new IllegalStateException("ground pickup requires its current native item witness");
+        return previewUnboundActorTransfer(order);
+    }
+    /** Package-local quantity preview for the observed path; it cannot publish a physical receipt. */
+    FungibleResourceLedger previewUnboundActorTransfer(ActorResourceItemOrder order) {
         FungibleActorOrderTransfer.Accounts transfer = FungibleActorOrderTransfer.accounts(this, order);
         requireNoPhysicalBinding(transfer.source().id(), "actor item transfer");
         if (transfer.destinationExists()) {
@@ -359,7 +365,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
      * explicit epochs. A job/intent owner must establish durable-before-effect and confirm the
      * physical postcondition before publishing the returned ledger.
      */
-    public FungibleResourceLedger transferActorOrderObserved(ActorContainerItemOrder order,
+    public FungibleResourceLedger transferActorOrderObserved(ActorResourceItemOrder order,
                                                               long sourceEpoch, long destinationEpoch,
                                                               List<PhysicalStackBinding> remainingSource,
                                                               List<PhysicalStackBinding> destinationBindings) {
@@ -377,7 +383,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
      * actor and container performed the handoff. This helper does not infer a resource owner
      * or accept an arbitrary third-party stack as the destination.
      */
-    public FungibleResourceLedger transferActorOrderObservedStacks(ActorContainerItemOrder order,
+    public FungibleResourceLedger transferActorOrderObservedStacks(ActorResourceItemOrder order,
                                                                     long sourceEpoch, long destinationEpoch,
                                                                     List<FungiblePhysicalObservation.Stack> remainingSource,
                                                                     List<FungiblePhysicalObservation.Stack> destination) {

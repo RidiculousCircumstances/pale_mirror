@@ -35,13 +35,13 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Residen
     public boolean portable() { return source instanceof ResidentFoodSource.Personal; }
     public SubjectId sourceAccountId() { return source.accountId(); }
     public SubjectId depotId() {
-        if (!(source instanceof ResidentFoodSource.Depot depot))
+        if (!(source instanceof ResidentFoodSource.Storage depot))
             throw new IllegalStateException("portable meal has no service depot");
         return depot.containerId();
     }
     public ActorItemSlot inventorySlot() {
         return source instanceof ResidentFoodSource.Personal personal ? personal.slot()
-                : ((ResidentFoodSource.Depot) source).portionSlot();
+                : ((ResidentFoodSource.Storage) source).portionSlot();
     }
 
     public ResidentMeal {
@@ -77,8 +77,8 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Residen
                 || pendingPhysicalStep.isPresent()))
             throw new IllegalArgumentException("meal travel must retain the exact moving resident and phase");
         if (startedAtTick < 0) throw new IllegalArgumentException("negative meal start");
-        if (source instanceof ResidentFoodSource.Depot depot) {
-            if (!depot.settlementId().equals(settlementId) || !FrontierWorldState.depotId(settlementId).equals(depot.containerId())
+        if (source instanceof ResidentFoodSource.Storage depot) {
+            if (!depot.settlementId().equals(settlementId)
                     || !depot.accountId().equals(ReferenceContainerCustody.scopeId(depot.containerId()))
                     || depot.accountId().equals(actorAccountId))
                 throw new IllegalArgumentException("depot meal needs its exact household source and distinct portion account");
@@ -95,7 +95,7 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Residen
                         Phase phase, long startedAtTick, Optional<ResidentActivityChoice.Wait> waitReason,
                         Optional<ResidentMealPhysicalStep> pendingPhysicalStep, Optional<TimedKnownRoute> coldTravel,
                         ActorExecutionId executionId) {
-        this(residentId, settlementId, new ResidentFoodSource.Depot(settlementId, depotId, sourceAccountId),
+        this(residentId, settlementId, new ResidentFoodSource.Storage(settlementId, depotId, sourceAccountId),
                 clearingSurface, actorAccountId, portion, claimId, retainedWorkOwner, phase, startedAtTick,
                 waitReason, pendingPhysicalStep, coldTravel, executionId);
     }

@@ -4,13 +4,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Producer-declared food access. A personal inventory is not a fictitious service container. */
-public sealed interface ResidentFoodSource permits ResidentFoodSource.Depot, ResidentFoodSource.Personal {
+public sealed interface ResidentFoodSource permits ResidentFoodSource.Storage, ResidentFoodSource.Personal {
     SubjectId accountId();
-    record Depot(SubjectId settlementId, SubjectId containerId, SubjectId accountId, ActorItemSlot portionSlot) implements ResidentFoodSource {
-        public Depot(SubjectId settlementId, SubjectId containerId, SubjectId accountId) {
+    record Storage(SubjectId settlementId, SubjectId containerId, SubjectId accountId, ActorItemSlot portionSlot) implements ResidentFoodSource {
+        public Storage(SubjectId settlementId, SubjectId containerId, SubjectId accountId) {
             this(settlementId, containerId, accountId, ResidentMeal.CARRIED_PORTION_SLOT);
         }
-        public Depot { Objects.requireNonNull(settlementId); Objects.requireNonNull(containerId); Objects.requireNonNull(accountId);
+        public Storage { Objects.requireNonNull(settlementId); Objects.requireNonNull(containerId); Objects.requireNonNull(accountId);
             Objects.requireNonNull(portionSlot);
             if (portionSlot instanceof ActorItemSlot.AttachedStorage) throw new IllegalArgumentException("meal portion belongs to the eater, not attached storage"); }
     }

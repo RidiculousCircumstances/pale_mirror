@@ -17,13 +17,13 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
         if (state == null || !state.bootstrap().ruleset().extraction().enabled() || !level.hasChunkAt(position)) return;
         var indexed = FrontierV3WorksiteRegistry.point(state, position).orElse(null);
         if (indexed == null) {
-            var geology = state.bootstrap().ruleset().extraction().geology();
             var raw = new BlockPosition(position.getX(), position.getY(), position.getZ());
-            if (!committed && geology.isPresent() && geology.get().at(state.bootstrap().bounds(), raw).isPresent()
+            var fact = ExtractionTerrainFacts.at(state.bootstrap(), raw);
+            if (!committed && fact.isPresent()
                     && !state.extractionSites().geologicalExclusions().positions().contains(raw)
                     && !level.getBlockState(position).equals(replacement))
                 FrontierV3CommandSubmission.submit(runtime, "extraction-geology-invalidated", ExtractionGeologyInvalidated.OWNER.value(),
-                        new ExtractionGeologyInvalidated(raw, geology.get().revision()));
+                        new ExtractionGeologyInvalidated(raw, fact.orElseThrow().revision()));
             return;
         }
         if (FrontierV3WorksiteWrites.owns(indexed.key())) return;

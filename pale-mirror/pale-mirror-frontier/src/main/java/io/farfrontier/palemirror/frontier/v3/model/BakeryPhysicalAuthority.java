@@ -15,7 +15,7 @@ public final class BakeryPhysicalAuthority {
             var work = job.bakeryWork().orElse(null);
             if (work == null || work.pendingPhysicalStep().isEmpty()
                     || work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY) continue;
-            var depot = FrontierWorldState.depotId(job.settlementId());
+            var depot = BakeryStorage.current(job);
             result.add(new ContainerSlotClaim(new ContainerSlotClaim.Owner(ContainerSlotClaim.Family.PRODUCTION, job.id()), new InventoryCustody.ContainerSlot(depot,
                     work.pendingPhysicalStep().orElseThrow().destinationSlot()),
                     java.util.Optional.of(new ContainerInboundCapacity.Demand(job.id(), depot,
@@ -30,7 +30,7 @@ public final class BakeryPhysicalAuthority {
             if (work == null || work.pendingPhysicalStep().isEmpty()) continue;
             if (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                     || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY) {
-                if (FrontierWorldState.depotId(job.settlementId()).equals(containerId)) return true;
+                if (BakeryStorage.current(job).equals(containerId)) return true;
                 continue;
             }
             if (state.inventory().containers().values().stream().flatMap(container -> container.productionStation().stream())

@@ -25,7 +25,8 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
         var targets = new HashSet<io.farfrontier.palemirror.frontier.v3.model.CellMutationKey>();
         for (var job : work.values()) {
             var deposit = deposits.get(job.siteId());
-            if (deposit == null || !job.toolReturnSlot().containerId().equals(deposit.site().containerId()))
+            if (deposit == null || !job.toolSource().settlementId().equals(deposit.site().settlementId())
+                    || !job.storageTarget().settlementId().equals(deposit.site().settlementId()))
                 throw new IllegalArgumentException("extraction work lost its declared site/tool-return relationship");
             if (job.terminal()) continue;
             if (!actors.add(job.execution().actorId()) || !tools.add(job.toolId())
@@ -36,6 +37,9 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
                 if (cell == null || cell.revision() != target.revision() || cell.disposition() != ExtractionDeposit.Disposition.PRESENT
                         || !deposit.development().openedCells().contains(target.key().cell()))
                     throw new IllegalArgumentException("extraction work has a stale source generation");
+                var outputs = deposit.site().layout().require(target.key().cell()).definition().coldOutput();
+                if (outputs.size() != 1 || !outputs.getFirst().itemKind().equals(job.outputKind()))
+                    throw new IllegalArgumentException("extraction target differs from its immutable output kind");
                 if (job.pending().orElse(null) instanceof ExtractionPhysicalStep.BlockWork step
                         && (!step.extraction().target().equals(deposit.site().layout().require(target.key().cell()).source())
                             || !step.extraction().definition().equals(deposit.site().layout().require(target.key().cell()).definition())))
@@ -47,7 +51,7 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
     public void validate(io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrap bootstrap,
                          io.farfrontier.palemirror.frontier.v3.model.ExactInventory inventory) {
         for (var position : geologicalExclusions.positions())
-            if (bootstrap.ruleset().extraction().geology().flatMap(value -> value.at(bootstrap.bounds(), position)).isEmpty())
+            if (io.farfrontier.palemirror.frontier.v3.model.ExtractionTerrainFacts.at(bootstrap, position).isEmpty())
                 throw new IllegalArgumentException("geological exclusion has no declared baseline");
         var homes = bootstrap.settlements().stream().map(io.farfrontier.palemirror.frontier.v3.model.Settlement::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -101,7 +105,8 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
         if (!Objects.equals(work.get(expected.id()), expected) || !expected.id().equals(next.id())
                 || !expected.siteId().equals(next.siteId()) || !expected.toolId().equals(next.toolId())
                 || !expected.execution().actorId().equals(next.execution().actorId())
-                || !expected.toolReturnSlot().equals(next.toolReturnSlot()) || !expected.outputKind().equals(next.outputKind())
+                || !expected.toolReturnSlot().equals(next.toolReturnSlot()) || !expected.toolSource().equals(next.toolSource())
+                || !expected.outputKind().equals(next.outputKind())
                 || !sameResourcePart(expected, next))
             throw new IllegalArgumentException("extraction continuation has a stale or changed retained relationship");
     }

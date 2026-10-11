@@ -87,6 +87,14 @@ public final class FrontierV3BlockExtractionGameTests {
         level.setBlock(crop, Blocks.STONE.defaultBlockState(), 3);
         helper.assertTrue(rock.quantity("minecraft:cobblestone") == 1 && port.apply(rock) == BlockExtractionPort.Result.APPLIED,
                 "the same adapter resolves Minecraft's actual stone loot with a correct tool");
+        var cover = ExtractionRules.terracedGraybox().surfaceCut().orElseThrow().cover();
+        level.setBlock(crop, Blocks.GRASS_BLOCK.defaultBlockState(), 3);
+        worker.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STONE_PICKAXE));
+        var cap = port.prepare("native:surface-cap", execution, target, cover);
+        helper.assertTrue(cap.quantity("minecraft:dirt") == 1 && cap.quantity("minecraft:cobblestone") == 0
+                        && port.apply(cap) == BlockExtractionPort.Result.APPLIED && level.getBlockState(crop).isAir(),
+                "ordinary surface preparation uses native grass loot, not free air projection or invented stone");
+        worker.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_PICKAXE));
         level.setBlock(crop, Blocks.CHEST.defaultBlockState(), 3);
         var chest = (net.minecraft.world.level.block.entity.ChestBlockEntity) level.getBlockEntity(crop);
         if (chest == null) throw new IllegalStateException("native extraction requires the actual chest entity");

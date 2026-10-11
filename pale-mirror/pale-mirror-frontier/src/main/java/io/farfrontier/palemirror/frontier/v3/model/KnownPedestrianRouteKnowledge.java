@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNav
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -17,11 +18,11 @@ public final class KnownPedestrianRouteKnowledge {
     private static FrontierBootstrap cachedBootstrap;
     private static Set<BlockPosition> cachedStaticOccupancy = Set.of();
     private record ViewKey(SubjectId settlementId, List<Passage> passages) { }
-    private static Object viewBootstrap, viewOrgans, viewDeltas, viewTopology, viewSites;
+    private static Object viewBootstrap, viewOrgans, viewDeltas, viewTopology, viewSites, viewContainers, viewContainerSurfaces;
     private static Object geometryVersion = new Object();
     private static final java.util.Map<ViewKey, KnownPedestrianRouteKnowledge> VIEWS = new java.util.LinkedHashMap<>();
     private static KnownPedestrianRouteKnowledge frontierView;
-    private record FieldView(ResourceSite site, SettlementDepotServicePort port, ResourceFieldCycle cycle,
+    private record FieldView(ResourceSite site, ResourceStorageAccess port, ResourceFieldCycle cycle,
                              Set<BlockPosition> obstructions, KnownPedestrianRouteKnowledge knowledge,
                              java.util.Map<SurfaceAnchor, KnownPedestrianRouteKnowledge> witnessedDepartures) { }
     private static final java.util.Map<SubjectId, FieldView> FIELDS = new java.util.LinkedHashMap<>();
@@ -45,6 +46,17 @@ public final class KnownPedestrianRouteKnowledge {
 
     public record SettlementPassage(SubjectId settlementId, Passage passage) {
         public SettlementPassage { Objects.requireNonNull(settlementId); Objects.requireNonNull(passage); }
+    }
+
+    /** Public entrances survive a container transaction. They grant walking, not stock or private workstation access. */
+    public static KnownPedestrianRouteKnowledge forPublicJourney(FrontierWorldState state, SubjectId home,
+                                                                 List<SettlementPassage> additional) {
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), home);
+        var passages = new ArrayList<SettlementPassage>();
+        settlement.structures().stream().filter(facility -> FrontierTraversalPlan.facilityPort(facility).isPresent())
+                .forEach(facility -> passages.add(new SettlementPassage(home, new Passage(facility, Passage.Reach.PUBLIC_ACCESS))));
+        passages.addAll(additional);
+        return passages.isEmpty() ? forFrontier(state) : forJourney(state, passages.stream().distinct().toList());
     }
 
     /** Cross-settlement tasks declare their authorized ports, not their own obstacle rules. */
@@ -109,6 +121,7 @@ public final class KnownPedestrianRouteKnowledge {
             hard.addAll(FrontierGrayboxPlan.intactOrganOccupancy(List.copyOf(state.hiveColony().addedOrgans().values())));
             hard.addAll(KnownSiteGeometry.forState(state).obstacles());
             hard.addAll(state.physicalDeltas().keySet());
+            declaredStorageObstacles(state, hard);
             frontierView = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, KnownPedestrianGround.forFrontier(state));
         }
         return frontierView;
@@ -117,7 +130,8 @@ public final class KnownPedestrianRouteKnowledge {
     private static void refresh(FrontierWorldState state) {
         if (viewBootstrap != state.bootstrap() || viewOrgans != state.hiveColony().addedOrgans()
                 || viewDeltas != state.physicalDeltas() || viewTopology != state.routeTopology()
-                || viewSites != KnownSiteGeometry.forState(state)) {
+                || viewSites != KnownSiteGeometry.forState(state) || viewContainers != state.inventory().containers()
+                || viewContainerSurfaces != state.inventory().surfaces()) {
             VIEWS.clear();
             FIELDS.clear();
             geometryVersion = new Object();
@@ -126,6 +140,7 @@ public final class KnownPedestrianRouteKnowledge {
             viewBootstrap = state.bootstrap(); viewOrgans = state.hiveColony().addedOrgans();
             viewDeltas = state.physicalDeltas(); viewTopology = state.routeTopology();
             viewSites = KnownSiteGeometry.forState(state);
+            viewContainers = state.inventory().containers(); viewContainerSurfaces = state.inventory().surfaces();
         }
     }
 
@@ -135,6 +150,14 @@ public final class KnownPedestrianRouteKnowledge {
 
     public List<SurfaceAnchor> plannedPath(SurfaceAnchor start, MovementOrder order) {
         return KnownPedestrianNavigation.plannedRoute(geometryFrom(start), start, order);
+    }
+    /** Geometry-only admission, without inventing an actor assignment or movement authority. */
+    public boolean reachable(SurfaceAnchor start, SurfaceAnchor target) {
+        try {
+            return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning
+                    .calculate(geometryFrom(start), start, target).status()
+                    == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.FOUND;
+        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return false; }
     }
     /** Connected known supports inside the existing one-cell local collision latitude.
      * No task goal, route clock, arrival or physical actor position is changed. */
@@ -214,12 +237,18 @@ public final class KnownPedestrianRouteKnowledge {
         // A witnessed physical change can close even an authored passage. Never clear it
         // together with the planned structure, and never treat another moving actor as a wall.
         hard.addAll(state.physicalDeltas().keySet());
+        declaredStorageObstacles(state, hard);
         return hard;
+    }
+    private static void declaredStorageObstacles(FrontierWorldState state, Set<BlockPosition> hard) {
+        state.inventory().surfaces().values().stream().filter(ContainerSurface::fixed)
+                .filter(surface -> state.inventory().containers().get(surface.containerId()).purpose() == ContainerPurpose.RESOURCE_STORAGE)
+                .forEach(surface -> hard.add(surface.position()));
     }
 
     /** Typed field overlay on the same structural/physical knowledge and route operation. */
     public static synchronized KnownPedestrianRouteKnowledge forField(FrontierWorldState state, ResourceSite site,
-                                                         ResourceFieldCycle cycle, SettlementDepotServicePort port,
+                                                         ResourceFieldCycle cycle, ResourceStorageAccess port,
                                                          SurfaceAnchor witnessedStart) {
         Objects.requireNonNull(state, "field route state");
         Objects.requireNonNull(site, "field route site");
@@ -232,12 +261,8 @@ public final class KnownPedestrianRouteKnowledge {
         if (!port.settlementId().equals(site.settlementId()))
             throw new IllegalArgumentException("field route has a foreign depot passage");
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());
-        SettlementStructure depot = settlement.structures().stream()
-                .filter(structure -> structure.id().equals(port.depotId()))
-                .reduce((left, right) -> { throw new IllegalArgumentException("duplicate field depot passage"); })
-                .orElseThrow(() -> new IllegalArgumentException("field route has no declared depot passage"));
-        if (!SettlementDepotServicePort.forDepot(depot).equals(port))
-            throw new IllegalArgumentException("field route depot passage differs from its plan");
+        if (!ResourceStorageAccess.at(state, port.containerId()).equals(port))
+            throw new IllegalArgumentException("field route storage passage differs from its declaration");
         FieldView cached = FIELDS.get(site.id());
         if (cached == null || cached.cycle() != cycle || !cached.site().equals(site) || !cached.port().equals(port)) {
             Set<BlockPosition> obstructions = fieldObstructions(cycle);
@@ -245,8 +270,9 @@ public final class KnownPedestrianRouteKnowledge {
                     && cached.cycle().layout() == cycle.layout() && cached.obstructions().equals(obstructions)) {
                 cached = new FieldView(site, port, cycle, cached.obstructions(), cached.knowledge(), cached.witnessedDepartures());
             } else {
-                Set<BlockPosition> hard = occupied(state, settlement,
-                        List.of(new Passage(depot, Passage.Reach.PUBLIC_ACCESS)));
+                var passages = ShipmentEndpointComposition.passages(state, port.endpoint()).stream()
+                        .map(SettlementPassage::passage).toList();
+                Set<BlockPosition> hard = occupied(state, settlement, passages);
                 hard.addAll(site.irrigationSlots());
                 hard.addAll(obstructions);
                 var knowledge = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,

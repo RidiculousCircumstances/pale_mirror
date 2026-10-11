@@ -10,7 +10,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static PayloadCodecs physicalCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
             new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new StructureDamagedCodec(),
             PhysicalDeltaPayloadCodecs.single(), PhysicalDeltaPayloadCodecs.batch(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(),
-            new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), SettlementEconomyPayloadCodecs.resourceDeposited())), FungibleResourcePayloadCodecs.observationCodecs()); }
+            new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), SettlementEconomyPayloadCodecs.resourceDeposited())),
+            new PayloadCodecs(ResourceStoragePayloadCodecs.codecs()), FungibleResourcePayloadCodecs.observationCodecs()); }
     static PayloadCodecs replicaCustodyCodecs() { return PayloadCodecs.merge(new PayloadCodecs(PhysicalReplicaCustodyPayloadCodecs.codecs()), new PayloadCodecs(FencedRecoveryPayloadCodecs.codecs())); }
     static PayloadCodecs ambientCodecs() { return new PayloadCodecs(List.of(
             AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
@@ -41,7 +42,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             SettlementEconomyPayloadCodecs.companyRegistered(), SettlementEconomyPayloadCodecs.employmentOpened(),
             SettlementEconomyPayloadCodecs.employmentTerminated(), MarketPayloadCodecs.opened(),
             MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.relationshipIncident(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(),
-            MarketPayloadCodecs.cancelled(), new BakeryColdStepCodec(), new BakeryInputReallocatedCodec(),
+            MarketPayloadCodecs.cancelled(), new BakeryColdStepCodec(), new BakeryInputReallocatedCodec(), new BakeryStorageRetargetedCodec(),
             new BakeryHotEffectPreparedCodec(), new BakeryHotEffectObservedCodec(), new BakeryHotDeliveryAbortedCodec(), new BakeryHotWorkTickCodec(),
             new BakeryHotHandReleaseCodec(), new BakeryHotHandMaterializedCodec(), new BakeryHotBlockChangedCodec(),
             new BakerySceneReconciledCodec(), new BakeryStationSceneReconciledCodec())),
@@ -54,7 +55,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             ResourceSitePayloadCodecs.harvestColdGoalHeld(), ResourceSitePayloadCodecs.harvestReturned(),
             ResourceSitePayloadCodecs.harvestSegmentRenewed(), ResourceSitePayloadCodecs.harvestBlockedCellSkipped(), ResourceSitePayloadCodecs.harvestImmatureCellSkipped(),
             ResourceSitePayloadCodecs.harvestTargetRetargeted(), ResourceSitePayloadCodecs.harvestRouteBlocked(), ResourceSitePayloadCodecs.harvestRouteCleared(), ResourceSitePayloadCodecs.harvestBatchPrepared(),
-            ResourceSitePayloadCodecs.harvestBatchDelivered(),
+            ResourceSitePayloadCodecs.harvestBatchDelivered(), ResourceSitePayloadCodecs.harvestStorageRetargeted(),
             ResourceSitePayloadCodecs.harvestHotTraversalAdvanced(),
             ResourceSitePayloadCodecs.harvestHotGoalArrived(),
             ResourceSitePayloadCodecs.conflictObserved(), ResourceSitePayloadCodecs.cellObserved(),

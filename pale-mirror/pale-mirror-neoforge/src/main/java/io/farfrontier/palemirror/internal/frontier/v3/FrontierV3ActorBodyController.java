@@ -601,6 +601,8 @@ final class FrontierV3ActorBodyController {
         body.setNoAi(true);
         request.binding().stamp(body);
         if (!request.projection().initialize(body)) return Result.CONFLICT;
+        // Every managed body uses the witnessed resource-transfer port, never autonomous Vanilla pickup.
+        body.setCanPickUpLoot(false);
         // Inventory admission belongs to the body owner, not an optional scene/ambient callback.
         if (!FrontierV3ActorCarryProjection.prepareNew(state, declaration.actorId(), body)) return Result.CONFLICT;
         // A resource projection is not allowed to change the complete physical

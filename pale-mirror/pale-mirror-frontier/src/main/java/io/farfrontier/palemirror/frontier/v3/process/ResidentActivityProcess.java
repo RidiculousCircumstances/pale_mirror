@@ -85,7 +85,10 @@ public final class ResidentActivityProcess {
         if (resident == null) return Set.of(residentId);
         var keys = new java.util.HashSet<SubjectId>();
         keys.add(residentId);
-        keys.add(FrontierWorldState.depotId(resident.settlementId()));
+        state.inventory().containers().values().stream()
+                .filter(container -> container.ownerId().equals(resident.settlementId()))
+                .filter(container -> container.storage().map(policy -> policy.role() == ResourceStorageRole.WAREHOUSE).orElse(false))
+                .map(ContainerRecord::id).forEach(keys::add);
         keys.add(resident.settlementId());
         HumanAssignmentProjection.compile(state).assignment(residentId).ownerId().ifPresent(keys::add);
         return Set.copyOf(keys);

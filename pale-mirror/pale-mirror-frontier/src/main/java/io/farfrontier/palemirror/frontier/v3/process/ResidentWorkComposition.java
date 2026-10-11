@@ -22,7 +22,7 @@ public final class ResidentWorkComposition {
                 public ResidentWorkKind kind() { return ResidentWorkKind.LOGISTICS; }
                 public HumanCapability capability() { return HumanCapability.LOGISTICS; }
                 public boolean available(FrontierWorldState state, ResidentProfile resident, long tick) {
-                    return GoodsShipmentPlanning.availableWork(state, resident, tick) || ExtractionHaulingPolicy.available(state, resident, tick);
+                    return GoodsShipmentPlanning.availableWork(state, resident, tick) || ResourceHaulingPolicy.available(state, resident, tick);
                 }
             }, new ResidentWorkAvailabilityPort() {
                 public ResidentWorkKind kind() { return ResidentWorkKind.EXTRACTION; }

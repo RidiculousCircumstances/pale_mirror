@@ -22,6 +22,48 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ResidentMealProcessTest {
+    @Test void mealUsesAFilteredWarehouseAndRetainsItsSourceAcrossRecoveryWithoutOriginalDepotFood() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:meal-other-warehouse"), 421L));
+        var home = initial.bootstrap().settlements().getFirst(); var resident = home.residents().getFirst().id();
+        var original = FrontierWorldState.depotId(home.id()); var id = new SubjectId("container:meal-warehouse");
+        var station = SettlementServiceAccessPoints.depotPort(initial, home.id()).exteriorApproach();
+        var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, java.util.Optional.empty(), station);
+        var policy = new ResourceStoragePolicy(endpoint,
+                new ResourceStorageFilter(false, java.util.Set.of("minecraft:bread"), Map.of()), 100, ResourceStorageRole.WAREHOUSE);
+        var state = new ResourceStorageDeclared(new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
+                java.util.Optional.empty(), java.util.Optional.of(policy)), station.support().offset(1, 1, 0)).apply(initial, home.id());
+        var account = ReferenceContainerCustody.scopeId(id);
+        var lot = new ResourceLot(new SubjectId("lot:meal-warehouse-bread"), home.id(), "minecraft:bread", 64, "test:warehouse", List.of());
+        var resources = state.inventory().fungibleResources().issue(lot,
+                new CustodyAccount(account, new ResourceCustody.Container(id), Map.of(lot.id(), 64), Map.of()));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(resources))
+                .humanPopulation(state.humanPopulation().accrueHunger(resident, 27_000L)));
+        var hungry = state;
+        var started = ResidentMealProcess.selectSourceAtYield(state, resident, 27_000L).orElseThrow();
+        assertInstanceOf(ResidentFoodSource.Storage.class, started.meal().source());
+        assertEquals(id, started.meal().depotId()); assertEquals(account, started.meal().sourceAccountId());
+        assertNotEquals(original, started.meal().depotId());
+        assertEquals(64, SettlementFoodPolicy.breadStock(state, home.id()));
+        assertEquals(64, SettlementFoodPolicy.reserveCoverageBread(state, home.id()));
+        assertTrue(ResidentActivityProcess.wakeDependencies(state, resident).contains(id));
+        state = ResidentMealProcess.reduceStarted(state, resident, started);
+        var codec = new FrontierWorldStateCodec();
+        var due = ResidentMealProcess.progress(started.meal(), 27_001L);
+        for (int steps = 0; state.humanPopulation().meals().containsKey(resident) && steps < 32; steps++) {
+            var events = ResidentMealProcess.planProgress(state, due);
+            var step = assertInstanceOf(ResidentMealColdStep.class, events.getFirst().payload(), events::toString);
+            state = ResidentMealProcess.reduceColdStep(state, resident, step);
+            state = codec.decode(codec.encode(state));
+            var scheduled = events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                    .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::isInstance)
+                    .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::cast).findFirst();
+            if (scheduled.isPresent()) due = scheduled.orElseThrow().replacement();
+        }
+        assertFalse(state.humanPopulation().meals().containsKey(resident), "warehouse meal must reach confirmed consumption");
+        assertEquals(64 - started.meal().portion().quantity(), state.inventory().fungibleResources().totalQuantity(home.id(), "minecraft:bread"));
+        assertTrue(state.inventory().fungibleResources().claims().isEmpty());
+        assertTrue(state.humanPopulation().nutrition(resident).satietyUnits() > hungry.humanPopulation().nutrition(resident).satietyUnits());
+    }
     private static long nextColdTick(FrontierWorldState state, SubjectId resident, long earliest) {
         ResidentMeal meal = state.humanPopulation().meals().get(resident);
         return meal.coldTravel().map(route -> Math.max(earliest, route.arrivalTick())).orElse(earliest);

@@ -52,18 +52,12 @@ final class FrontierV3ShipmentPhysicalExecutor {
         }
         if (shipment.reception().isPresent() || state.actorMovements().containsKey(actor)
                 || !FrontierV3SurfaceObservation.at(worker, shipment.itemOrder().station())) return false;
-        var container = shipment.itemOrder().containerEndpoint().containerId();
-        var surface = state.inventory().surfaces().get(container);
-        if (surface == null) return false;
-        var physical = FrontierV3PhysicalContainer.loaded(level, state, container).orElse(null);
+        var container = ShipmentServiceAccess.point(shipment).orElse(null);
         var attached = shipment.mobileContainerId().isPresent()
                 ? FrontierV3PhysicalContainer.loaded(level, state, shipment.mobileContainerId().orElseThrow()).orElse(null) : null;
         if (shipment.mobileContainerId().isPresent() && (attached == null
                 || !ReferenceContainerCustody.hasLiveCustody(state, attached.containerId())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, attached.containerId()))) return false;
-        var chest = physical == null ? null : physical.inventory();
-        if (chest == null || !ReferenceContainerCustody.hasLiveCustody(state, container)
-                || ReferenceContainerCustody.blocksCanonicalUse(state, container)) return false;
         var pending = shipment.pendingPhysicalStep().orElse(null);
         // A busy service turn is ordinary waiting, not permission to submit a forbidden
         // physical transaction. Retained prepared effects finish under their original fence.
@@ -85,27 +79,20 @@ final class FrontierV3ShipmentPhysicalExecutor {
             step = pending == null ? new ShipmentPhysicalStep(shipment.status(), shipment.revision(),
                     new ActorHotObservation(actuation.id(), lease.revision()), source, destinationSlot, destinationEpoch,
                     lots, destination == null ? 0 : destination.before()) : pending;
-            var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, physical, attached, worker, worker.getUUID(), source, destinationSlot, step.destinationBefore());
+            var transfer = FrontierV3ActorResourceTransfer.open(level, state, order, worker, source, destinationSlot, step.destinationBefore()).orElse(null);
+            if (transfer == null) return false;
             if (pending == null) {
                 if (!transfer.before()) return conflict(runtime, shipment, container, "prepared source does not match its physical preimage");
                 return accepted(level, runtime, shipment, "shipment-transfer-prepared", new ShipmentHotPrepared(shipment.id(), step));
             }
             if (!step.observation().actuation().equals(actuation.id()) || step.observation().scopeRevision() != lease.revision())
                 return conflict(runtime, shipment, container, "retained physical effect has a stale body/scope fence");
-            if (!transfer.after() && (!transfer.before() || !transfer.apply() || !transfer.after()))
+            if (!transfer.after() && (!transfer.apply() || !transfer.after()))
                 return conflict(runtime, shipment, container, "physical effect matches neither unapplied nor applied evidence");
-            var layout = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, container);
-            boolean taking = shipment.status() == Shipment.Status.AWAITING_LOAD;
-            int remaining = shipment.quantity() - order.portion().quantity();
-            var remainingHand = remaining == 0 ? List.<FungiblePhysicalObservation.Stack>of()
-                    : List.of(new FungiblePhysicalObservation.Stack(step.source().getFirst().address(), shipment.itemKind(), remaining));
-            var carriedLayout = attached == null ? taking ? List.of(hand(shipment, worker.getUUID())) : remainingHand
-                    : FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(attached.inventory(), state, attached.containerId());
-            var receipt = new ShipmentHotTransferred(shipment.id(), step, taking ? layout : carriedLayout, taking ? carriedLayout : layout);
+            var receipt = new ShipmentHotTransferred(shipment.id(), step, transfer.sourceLayout(), transfer.destinationLayout());
             boolean committed = accepted(level, runtime, shipment, "shipment-transfer-observed", receipt);
             if (committed) {
-                if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, container, physical)
-                        || attached != null && !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, attached.containerId(), attached))
+                if (!transfer.checkpoint(runtime))
                     throw new IllegalStateException("shipment resource effect lacks its next container replica boundary");
                 if (attached == null) FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), actor, worker);
             }
@@ -119,7 +106,7 @@ final class FrontierV3ShipmentPhysicalExecutor {
             Shipment shipment, io.farfrontier.palemirror.frontier.v3.api.SubjectId container, String reason) {
         LOGGER.warn("PMV3 shipment effect conflict: shipment={} revision={} execution={} container={} pending={} reason={}",
                 shipment.id(), shipment.revision(), shipment.execution(), container, shipment.pendingPhysicalStep(), reason);
-        return FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, container);
+        return container != null && FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, container);
     }
 
     private static boolean savedDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

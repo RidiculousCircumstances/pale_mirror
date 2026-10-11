@@ -41,7 +41,11 @@ public final class ShipmentProcess {
             if (mission == null) throw new IllegalArgumentException("shipment lost its exact transport mission");
             if (mission.stage() != TransportMission.Stage.UNLOADING) return true;
         }
-        if (state.actorMovements().containsKey(shipment.execution().actorId())) return true;
+        if (state.actorMovements().containsKey(shipment.execution().actorId())) {
+            return !(needsStorage(state, shipment) && new ActorMovementInterruptionPlanner().assess(state,
+                    shipment.execution().actorId(), Math.max(action.dueAt().ticks(),
+                        state.actorMovements().get(shipment.execution().actorId()).issuedAtTick())) instanceof ActivityInterruptionPlanner.Ready);
+        }
         var actor = shipment.execution().actorId();
         if (shipment.reception().isPresent()) return true;
         var authority = state.actorExecutions().actors().get(actor);
@@ -50,10 +54,12 @@ public final class ShipmentProcess {
                 || ActorExecutionCoordinator.sceneOwns(state, actor)) return true;
         var lease = state.ambientLeases().get(actor);
         if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.HOT) return true;
+        if (needsStorage(state, shipment)) return false;
         // Goal issuance is allowed under the same HOT courier execution. Only the item effect
         // waits for COLD custody; otherwise a loaded courier could never start its second leg.
         return shipment.movementOrder().arrivedAt(state.actorLocations().get(actor).supportingSurface())
-                && !ActorExecutionCoordinator.coldAvailable(state, actor);
+                && (!ActorExecutionCoordinator.coldAvailable(state, actor)
+                    || shipment.status() == Shipment.Status.AWAITING_LOAD && !ResourceSourceComposition.coldAvailable(state, shipment.sender()));
     }
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long currentTick) {
         if (!action.kind().equals(PROGRESS) || !action.id().equals(progress(action.subject(), action.dueAt().ticks()).id()))
@@ -65,6 +71,16 @@ public final class ShipmentProcess {
         if (shipment.terminal()) return List.of(new ProposedEvent(shipment.id(), new ScheduleEffect.Rescheduled(action.id(), progress(shipment.id(),
                 now + state.bootstrap().ruleset().cadence().transportReviewInterval()))));
         if (held(state, action)) throw new IllegalArgumentException("shipment awaits its exact custody boundary");
+        if (needsStorage(state, shipment)) {
+            var interrupted = new ActorMovementInterruptionPlanner().assess(state, shipment.execution().actorId(), now);
+            if (!(interrupted instanceof ActivityInterruptionPlanner.Ready ready)) return retry(state, shipment, now);
+            var replacement = ShipmentStorageRetargeted.eligible(ready.following(), shipment);
+            if (replacement.isEmpty()) return retry(state, shipment, now);
+            var retarget = new ShipmentStorageRetargeted(shipment.id(), shipment.revision(), replacement.orElseThrow());
+            retarget.apply(ready.following(), shipment.id());
+            var events = new java.util.ArrayList<>(ready.events()); events.add(new ProposedEvent(shipment.id(), retarget));
+            events.add(wake(shipment.id(), now)); return List.copyOf(events);
+        }
         var order = shipment.movementOrder();
         if (!order.arrivedAt(state.actorLocations().get(order.actorId()).supportingSurface())) {
             var movement = new ActorMovement(order, now, new ActorMovementContext.ShipmentLeg(shipment.id(), shipment.revision()), shipment.execution());
@@ -89,6 +105,9 @@ public final class ShipmentProcess {
         var action = progress(shipment.id(), Math.addExact(now,
                 state.bootstrap().ruleset().cadence().transportReviewInterval()));
         return List.of(new ProposedEvent(shipment.id(), new ScheduleEffect.Rescheduled(action.id(), action)));
+    }
+    private static boolean needsStorage(FrontierWorldState state, Shipment shipment) {
+        return ShipmentStorageRetargeted.unbegun(shipment) && !ShipmentStorageRetargeted.retainedAvailable(state, shipment);
     }
     private ShipmentProcess() { }
 }

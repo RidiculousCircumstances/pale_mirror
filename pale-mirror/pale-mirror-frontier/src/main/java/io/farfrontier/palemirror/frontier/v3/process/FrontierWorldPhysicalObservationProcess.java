@@ -216,7 +216,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         }
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(new ProposedEvent(observed.economicOwnerId(), observed));
-        for (var activity : PlayerStockClaimLoss.released(state, observed)) {
+        for (var activity : SourceStockClaimLoss.released(state, observed)) {
             activity.cancelledProgress().ifPresent(id -> events.add(new ProposedEvent(activity.actor(),
                     new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(id))));
             events.add(ResidentActivityProcess.wakeAfterActivity(activity.actor(), now));
@@ -254,10 +254,10 @@ public final class FrontierWorldPhysicalObservationProcess {
         if (!observed.equals(FungibleContainerPlayerEdit.classify(ledger, observed.sourceAccountId(),
                 observed.containerId(), observed.economicOwnerId(), observed.authorityEpoch(),
                 observed.playerId(), observed.interactionId(), observed.remaining(),
-                PlayerStockClaimLoss.admissibleClaims(state, observed.sourceAccountId()))))
+                SourceStockClaimLoss.admissibleClaims(state, observed.sourceAccountId()))))
             throw new IllegalArgumentException("stock departure differs from its exact witnessed edit classification");
-        FrontierWorldState next = PlayerStockClaimLoss.settle(state, observed);
-        for (var activity : PlayerStockClaimLoss.released(state, observed)) {
+        FrontierWorldState next = SourceStockClaimLoss.settle(state, observed);
+        for (var activity : SourceStockClaimLoss.released(state, observed)) {
             if (activity.retargetAtTick().isPresent()) next = ResidentActivityProcess.retargetHotResident(
                     next, activity.actor(), activity.retargetAtTick().getAsLong());
         }
@@ -310,30 +310,7 @@ public final class FrontierWorldPhysicalObservationProcess {
     static FrontierWorldState reduceFungibleHandoff(FrontierWorldState state, SubjectId subject, FungibleResourceHandoffObserved observed) {
         FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount source = ledger.accounts().get(observed.sourceAccountId());
         if (source == null || !subject.equals(owner(state, source))) throw new IllegalArgumentException("fungible handoff has no owning subject");
-        if (source.custody() instanceof ResourceCustody.Actor
-                || observed.destinationAccount().custody() instanceof ResourceCustody.Actor) {
-            throw new IllegalArgumentException("actor-hand transfer requires its exact work/physical-effect owner");
-        }
-        if (!observed.claimQuantities().isEmpty() && observed.forfeitedClaimIds().isEmpty()) {
-            throw new IllegalArgumentException("physical handoff cannot move a live claimed allocation without retiring its owner");
-        }
-        if (!observed.forfeitedClaimIds().isEmpty()) return FungibleClaimForfeitureStateSupport.apply(state, observed);
-        CustodyAccount existing = ledger.accounts().get(observed.destinationAccount().id());
-        FungibleResourceLedger transferred;
-        if (existing == null) {
-            transferred = ledger.transferObservedToNewAccount(observed.sourceAccountId(), observed.destinationAccount(), observed.sourceEpoch(),
-                    observed.destinationEpoch(), observed.lotQuantities(), observed.claimQuantities(), observed.remainingSource(), observed.destinationBindings());
-        } else {
-            if (!expectedDestination(existing, observed).equals(observed.destinationAccount())) {
-                throw new IllegalArgumentException("fungible handoff has a forged existing destination balance");
-            }
-            transferred = ledger.transferObservedToExistingAccount(observed.sourceAccountId(), existing.id(), observed.sourceEpoch(),
-                    observed.destinationEpoch(), observed.lotQuantities(), observed.claimQuantities(), observed.remainingSource(), observed.destinationBindings());
-        }
-        if (!observed.playerSaveFence().isEmpty()) {
-            transferred = transferred.fenceUnresolvedPlayerSave(observed.destinationAccount().id(), observed.playerSaveFence());
-        }
-        return state.withInventory(state.inventory().withFungibleResources(transferred));
+        return FungibleResourceHandoffStateSupport.apply(state, observed);
     }
 
     static CommandPlan planFungibleBindingRelease(FrontierWorldState state, FungibleStackBindingsReleased released, long now) {

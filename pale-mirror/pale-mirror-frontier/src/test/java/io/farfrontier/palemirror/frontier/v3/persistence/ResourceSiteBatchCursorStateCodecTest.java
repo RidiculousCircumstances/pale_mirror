@@ -57,7 +57,7 @@ class ResourceSiteBatchCursorStateCodecTest {
                 new InventoryCustody.ContainerSlot(depot, 1), intent,
                 new ResourceSiteHarvestProgress(65, 65, -1), 64, false,
                 Optional.empty(), Optional.of(new ResourceSiteHarvestBatchDelivered(receipt, 0)), Optional.empty(), 65,
-                cycle.target(cells.getLast().id()));
+                cycle.target(cells.getLast().id()), 1L);
         ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(site, ResourceSitePhase.HARVESTING, 1, 7,
                 Optional.of(job));
         ResourceSiteState state = new ResourceSiteState(Map.of(site, lifecycle), Map.of(site, cycle));

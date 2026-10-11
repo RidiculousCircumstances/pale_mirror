@@ -37,6 +37,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset PREVIOUS_QUARRY_GRAYBOX_R2 = populationExecution("frontier-v3-quarry-graybox-r2", PREVIOUS_QUARRY_GRAYBOX);
     private static final FrontierRuleset PREVIOUS_QUARRY_GRAYBOX_R3 = expandingQuarry(PREVIOUS_QUARRY_GRAYBOX_R2);
     private static final FrontierRuleset QUARRY_GRAYBOX = developingQuarry(PREVIOUS_QUARRY_GRAYBOX_R3);
+    private static final FrontierRuleset TERRACED_QUARRY_GRAYBOX = terracedQuarry(QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -50,6 +51,7 @@ public final class FrontierRulesets {
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
+            Map.entry(TERRACED_QUARRY_GRAYBOX.id(), TERRACED_QUARRY_GRAYBOX),
             Map.entry(QUARRY_GRAYBOX.id(), QUARRY_GRAYBOX),
             Map.entry(PREVIOUS_QUARRY_GRAYBOX_R3.id(), PREVIOUS_QUARRY_GRAYBOX_R3),
             Map.entry(PREVIOUS_QUARRY_GRAYBOX_R2.id(), PREVIOUS_QUARRY_GRAYBOX_R2),
@@ -80,6 +82,13 @@ public final class FrontierRulesets {
                 base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
                 base.workCatalog(), base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(),
                 io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules.developingGraybox(), base.execution());
+    }
+    private static FrontierRuleset terracedQuarry(FrontierRuleset base) {
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r6", 23, base.cadence(), base.spatial(), base.rates(), base.facilityCapacity(),
+                base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog().withDefinition(new WorkCatalog.Definition("minecraft:grass_block", WorkOperation.EXTRACT,
+                        HumanCapability.EXTRACTION, 40)), base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(),
+                io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules.terracedGraybox(), base.execution());
     }
 
     private static FrontierRuleset populationExecution(String id, FrontierRuleset base) {

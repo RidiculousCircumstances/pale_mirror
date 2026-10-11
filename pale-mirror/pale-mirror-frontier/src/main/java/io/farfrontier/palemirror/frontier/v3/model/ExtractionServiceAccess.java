@@ -14,7 +14,7 @@ public final class ExtractionServiceAccess implements ServiceAccessCapability {
     }
     public static ServiceAccessDemand.Identity identity(FrontierWorldState state, ExtractionWork work) {
         return new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.EXTRACTION, work.id(), work.execution().actorId(),
-                ExtractionWorkAuthority.site(state, work).containerId());
+                (work.phase() == ExtractionWork.Phase.TAKE_TOOL ? work.toolSource() : work.storageTarget()).containerId());
     }
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId point) {
         var boundary = ServiceAccessCoordinator.boundary(state, point);

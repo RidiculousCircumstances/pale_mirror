@@ -10,7 +10,7 @@ final class ResidentFoodSourceCodec {
     private ResidentFoodSourceCodec() { }
     static void write(DataOutputStream out, ResidentFoodSource source) throws IOException {
         switch (source) {
-            case ResidentFoodSource.Depot depot -> {
+            case ResidentFoodSource.Storage depot -> {
                 out.writeByte(1); UnitGroupStateCodec.id(out, depot.settlementId());
                 UnitGroupStateCodec.id(out, depot.containerId()); UnitGroupStateCodec.id(out, depot.accountId());
                 ActorItemSlotCodec.write(out, depot.portionSlot());
@@ -23,7 +23,7 @@ final class ResidentFoodSourceCodec {
     }
     static ResidentFoodSource read(DataInputStream in) throws IOException {
         return switch (in.readUnsignedByte()) {
-            case 1 -> new ResidentFoodSource.Depot(UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in),
+            case 1 -> new ResidentFoodSource.Storage(UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in),
                     UnitGroupStateCodec.id(in), ActorItemSlotCodec.read(in));
             case 2 -> new ResidentFoodSource.Personal(UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), ActorItemSlotCodec.read(in));
             default -> throw new IllegalArgumentException("unknown resident food source tag");

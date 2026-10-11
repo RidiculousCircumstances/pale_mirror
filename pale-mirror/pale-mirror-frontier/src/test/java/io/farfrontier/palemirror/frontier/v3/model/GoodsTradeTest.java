@@ -15,9 +15,9 @@ class GoodsTradeTest {
         state = atStation(state, actor, shipment.sender().station());
         var service = new ShipmentServiceAccess();
         assertEquals(ServiceAccessDemand.Presence.OCCUPIED,
-                service.demands(state, shipment.sender().containerId()).getFirst().presence());
+                service.demands(state, ResourceSourceComposition.requireContainer(shipment.sender()).containerId()).getFirst().presence());
         state = shipmentFact(state, shipment.id(), new ShipmentColdTransferred(shipment.id(), 1, Shipment.Status.AWAITING_LOAD));
-        assertTrue(service.demands(state, shipment.sender().containerId()).isEmpty(),
+        assertTrue(service.demands(state, ResourceSourceComposition.requireContainer(shipment.sender()).containerId()).isEmpty(),
                 "cargo waiting for its group cannot retain a completed source service transaction");
         assertEquals(shipment.receiver().containerId(),
                 service.demands(state, shipment.receiver().containerId()).getFirst().identity().pointId());
@@ -35,7 +35,7 @@ class GoodsTradeTest {
         assertEquals(shipment.execution(), state.actorExecutions().actors().get(actor).current().orElseThrow());
         var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)); assertTrue(ActorSpatialCourtesy.assess(restored, shipment.execution()).ready());
         assertEquals(movement, restored.actorMovements().get(actor), "courtesy admission cannot cancel or replace the route");
-        assertTrue(service.demands(restored, shipment.sender().containerId()).isEmpty());
+        assertTrue(service.demands(restored, ResourceSourceComposition.requireContainer(shipment.sender()).containerId()).isEmpty());
         var foreign = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,
                 shipment.execution().activityKind(), id("shipment:foreign"), shipment.execution().generation());
         assertThrows(IllegalArgumentException.class, () -> ActorSpatialCourtesy.assess(restored, foreign));
@@ -298,7 +298,7 @@ class GoodsTradeTest {
         // Prepared physical-boundary fixture. Full finite-asset/mission admission is
         // separately exercised by ExpeditionSupplyFlowTest, not claimed by this setup.
         if (mobile) {
-            var mission = new TransportMission(missionId, groupId, List.of(shipment.id()), shipment.sender(), shipment.receiver(),
+            var mission = new TransportMission(missionId, groupId, List.of(shipment.id()), ResourceSourceComposition.requireContainer(shipment.sender()), shipment.receiver(),
                     shipment.sender().station(), shipment.receiver().station(), TransportMission.Stage.LOADING, 1).withTransportAsset(actor);
             var group = new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup(groupId,
                     new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Mission(
@@ -672,16 +672,14 @@ class GoodsTradeTest {
         }
     }
 
-    @Test void unfundedUndispatchedPromiseReleasesGoodsButDelegatedShipmentKeepsItsAuthority() {
+    @Test void lossOfOptionalSellerContingencyCashDoesNotWithdrawActualGoodsOrDelegatedShipment() {
         var state = reserved(); var funds = state.inventory().economics().availableToReserve(SELLER);
         state = state.withInventory(state.inventory().withEconomics(state.inventory().economics().transfer(SELLER, BUYER, funds)));
         var action = io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(SELLER, 400);
         var events = FrontierWorldRuntimeDefinition.planScheduled(state, action, new SimInstant(400));
-        assertTrue(events.stream().anyMatch(event -> event.payload() instanceof GoodsTradeCancelled cancelled
-                && cancelled.disposition().reason() == GoodsTradeDisposition.Reason.DISPATCH_UNFUNDED));
-        var closed = applyEvents(state, events, 400, "goods-trade");
-        assertFalse(closed.inventory().fungibleResources().claims().containsKey(CLAIM));
-        assertFalse(closed.inventory().economics().reservations().containsKey(HOLD));
+        assertTrue(events.stream().noneMatch(event -> event.payload() instanceof GoodsTradeCancelled));
+        assertTrue(state.inventory().fungibleResources().claims().containsKey(CLAIM));
+        assertTrue(state.inventory().economics().reservations().containsKey(HOLD));
         state = shipmentFact(state, SELLER, new ShipmentDispatched(shipment(state)));
         var delegated = state;
         assertFalse(GoodsTradeStateSupport.canCancelBeforeLoading(state, state.companies().goodsTrade().contracts().get(CONTRACT), CLAIM));
@@ -880,7 +878,7 @@ class GoodsTradeTest {
         FrontierWorldState state = reserved(); Shipment shipment = shipment(state);
         state = atStation(state, shipment.execution().actorId(), shipment.sender().station());
         FrontierWorldState source = state;
-        assertThrows(IllegalArgumentException.class, () -> ActorItemCustody.transferCold(source, shipment.itemOrder()));
+        assertThrows(IllegalArgumentException.class, () -> ActorResourceTransferComposition.cold(source, shipment.itemOrder()));
         assertThrows(IllegalArgumentException.class, () -> shipmentFact(source, BUYER, new ShipmentDispatched(shipment)));
         var foreignReceivingAccount = new Shipment(shipment.id(), shipment.authorization(), shipment.execution(), shipment.sender(),
                 shipment.receiver(), shipment.sourceAccountId(), shipment.carriedAccountId(), id("custody:second-receiver-account"),

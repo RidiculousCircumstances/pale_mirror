@@ -87,7 +87,7 @@ final class FrontierV3ExtractionExecutor {
                         FrontierV3WorksiteBlockWitness.Phase.SETTLED));
                 ledger.persist(level);
             } else {
-                var container = ExtractionWorkAuthority.site(state, job).containerId();
+                var container = ExtractionServiceAccess.identity(state, job).pointId();
                 var physical = FrontierV3PhysicalContainer.loaded(level, current, container).orElseThrow();
                 if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, container, physical))
                     throw new IllegalStateException("confirmed mining storage effect lacks its successor replica boundary");
@@ -122,14 +122,15 @@ final class FrontierV3ExtractionExecutor {
                     ExtractionPhysicalStateSupport.operation(job), job.execution(), cell.source(), cell.definition());
             return new ExtractionPhysicalStep.BlockWork(observation, extraction, carried, custody.authorityEpoch());
         }
-        var physical = FrontierV3PhysicalContainer.loaded(level, state, site.containerId()).orElse(null);
-        if (physical == null || !ReferenceContainerCustody.hasOperationalCustody(state, site.containerId())
+        var container = ExtractionServiceAccess.identity(state, job).pointId();
+        var physical = FrontierV3PhysicalContainer.loaded(level, state, container).orElse(null);
+        if (physical == null || !ReferenceContainerCustody.hasOperationalCustody(state, container)
                 || !ServiceAccessCoordinator.available(state, ExtractionServiceAccess.identity(state, job))) return null;
-        long epoch = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(site.containerId())).authorityEpoch();
+        long epoch = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container)).authorityEpoch();
         if (job.phase() == ExtractionWork.Phase.STORE) {
             var order = ExtractionWorkEffects.cargo(state, job);
             var source = MaterialSourcePreparation.review(state, order).requireReady();
-            var target = ContainerMaterialDestination.selectWhole(state, site.containerId(), job.outputKind(),
+            var target = ContainerMaterialDestination.selectWhole(state, container, job.outputKind(),
                     ((ActorContainerItemOrder.Portion.Fungible) order.portion()).lotQuantities(), Optional.empty()).orElse(null);
             if (target == null) return null;
             var transfer = new ActorItemTransferStep(observation, source, epoch, target.slot(), target.before());
@@ -197,10 +198,9 @@ final class FrontierV3ExtractionExecutor {
                 return new ExtractionHotObserved(job.id(), step, List.of(), List.of(ExtractionPhysicalStateSupport.hand(state, job, resultCount)), external);
             }
             case ExtractionPhysicalStep.Equipment equipment -> {
-                var site = ExtractionWorkAuthority.site(state, job);
-                var position = new BlockPos(site.layout().container().x(), site.layout().container().y(), site.layout().container().z());
-                var chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, position, site.containerId());
-                if (chest == null) return null;
+                var physical = FrontierV3PhysicalContainer.loaded(level, state, equipment.slot().containerId()).orElse(null);
+                if (physical == null) return null;
+                var chest = physical.inventory();
                 var expected = state.inventory().items().get(job.toolId()); boolean take = job.phase() == ExtractionWork.Phase.TAKE_TOOL;
                 boolean after = take ? chest.getItem(equipment.slot().slot()).isEmpty() && FrontierV3ExactItemPresentation.exactMatch(worker.getMainHandItem(), expected)
                         : worker.getMainHandItem().isEmpty() && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(equipment.slot().slot()), expected);
@@ -210,8 +210,8 @@ final class FrontierV3ExtractionExecutor {
                 return new ExtractionHotObserved(job.id(), step, List.of(), List.of());
             }
             case ExtractionPhysicalStep.Cargo cargo -> {
-                var site = ExtractionWorkAuthority.site(state, job);
-                var physical = FrontierV3PhysicalContainer.loaded(level, state, site.containerId()).orElse(null);
+                var container = job.storageTarget().containerId();
+                var physical = FrontierV3PhysicalContainer.loaded(level, state, container).orElse(null);
                 if (physical == null) return null;
                 var order = ExtractionWorkEffects.cargo(state, job); var transfer = cargo.transfer();
                 var adapter = new FrontierV3ActorItemTransfer.FungibleStep(order, physical, worker, worker.getUUID(),
@@ -219,7 +219,7 @@ final class FrontierV3ExtractionExecutor {
                 if (!adapter.after() && (!adapter.before() || !adapter.apply() || !adapter.after()))
                     throw new IllegalArgumentException("mining storage effect matches neither unapplied nor applied evidence");
                 return new ExtractionHotObserved(job.id(), step, List.of(),
-                        FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, site.containerId()));
+                        FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, container));
             }
         }
     }

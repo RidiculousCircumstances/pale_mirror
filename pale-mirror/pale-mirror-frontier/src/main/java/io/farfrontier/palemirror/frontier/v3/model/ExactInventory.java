@@ -772,6 +772,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 case ResourceCustody.Actor ignored -> { }
                 case ResourceCustody.Player ignored -> { }
                 case ResourceCustody.WorldCarrier ignored -> { }
+                case ResourceCustody.Ground ignored -> { }
             }
         }
         for (CargoBatch batch : cargo.values()) if (batch.fungibleContents()) {

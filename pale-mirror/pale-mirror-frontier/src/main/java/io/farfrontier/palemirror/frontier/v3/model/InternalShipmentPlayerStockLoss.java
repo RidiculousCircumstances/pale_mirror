@@ -4,7 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.*;
 
 /** Internal logistics withdraws an unpicked promise, never an in-flight physical effect. */
-final class InternalShipmentPlayerStockLoss implements PlayerStockClaimLossOwner {
+final class InternalShipmentPlayerStockLoss implements SourceStockClaimLossOwner {
     @Override public ClaimPurpose purpose() { return ClaimPurpose.INTERNAL_LOGISTICS; }
     @Override public void validate(FrontierWorldState state, SubjectId source, ClaimAllocation claim) {
         var account = state.inventory().fungibleResources().accounts().get(source);

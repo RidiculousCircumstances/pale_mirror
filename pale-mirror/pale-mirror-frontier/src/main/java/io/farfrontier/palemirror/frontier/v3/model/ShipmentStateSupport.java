@@ -20,11 +20,11 @@ public final class ShipmentStateSupport {
         else SettlementLabourAllocation.requireMissionCommitment(state, shipment.sender().settlementId(),
                 ResidentWorkKind.LOGISTICS, java.util.List.of(shipment.execution().actorId()));
         ShipmentAuthorizationComposition.validate(state, shipment, true);
-        ShipmentEndpointComposition.validate(state, shipment.sender()); ShipmentEndpointComposition.validate(state, shipment.receiver());
+        ResourceSourceComposition.admit(state, shipment.sender()); ShipmentEndpointComposition.validate(state, shipment.receiver());
         ClaimAllocation claim = state.inventory().fungibleResources().claims().get(shipment.authorization().claimId());
         CustodyAccount source = state.inventory().fungibleResources().accounts().get(shipment.sourceAccountId());
         if (!subject.equals(claim.economicOwnerId()) || source == null
-                || !source.custody().equals(new ResourceCustody.Container(shipment.sender().containerId()))
+                || !source.custody().equals(shipment.sender().custody())
                 || source.claimQuantities().getOrDefault(claim.id(), 0) != shipment.quantity()
                 || state.inventory().fungibleResources().accounts().containsKey(shipment.carriedAccountId())
                     && (shipment.mobileContainerId().isEmpty() || !state.inventory().fungibleResources().accounts().get(shipment.carriedAccountId()).custody().equals(shipment.carriedCustody()))
@@ -38,7 +38,7 @@ public final class ShipmentStateSupport {
                     : ActorExecutionCoordinator.ordinaryWorkAdmission(state, shipment.execution().actorId())).permitted())
             throw new IllegalArgumentException("shipment has no authorized source allocation or available exact courier");
     }
-    public static void validateOrder(FrontierWorldState state, ActorContainerItemOrder order) {
+    public static void validateOrder(FrontierWorldState state, ActorResourceItemOrder order) {
         Shipment shipment = state.shipments().shipments().get(order.ownerId());
         if (shipment == null || shipment.terminal() || !(order.portion() instanceof ActorContainerItemOrder.Portion.Fungible portion)
                 || !shipment.itemOrder(portion.lotQuantities()).equals(order))
@@ -46,7 +46,7 @@ public final class ShipmentStateSupport {
         state.actorExecutions().requireCurrent(shipment.execution());
         ShipmentAuthorizationComposition.validate(state, shipment, false);
     }
-    static ActorItemTransferPreparation prepareTransfer(FrontierWorldState state, ActorContainerItemOrder order) {
+    static ActorItemTransferPreparation prepareTransfer(FrontierWorldState state, ActorResourceItemOrder order) {
         validateOrder(state, order);
         Shipment shipment = state.shipments().shipments().get(order.ownerId());
         var portion = (ActorContainerItemOrder.Portion.Fungible) order.portion();
@@ -56,10 +56,9 @@ public final class ShipmentStateSupport {
         var ownerChanges = ShipmentAuthorizationComposition.allocationPartitioned(state, shipment, partition);
         var grant = new ResourceClaimDelegation(shipment.authorization().kind(), receipt.claimId(), shipment.authorization().claimantId(),
                 shipment.id(), shipment.authorization().authorizationRevision());
-        var executable = new ActorContainerItemOrder(order.ownerId(), order.actorId(), order.direction(),
+        var executable = order.withPortion(
                 new ActorContainerItemOrder.Portion.Fungible(portion.sourceAccountId(), portion.sourceCustody(), portion.destinationAccountId(),
-                        portion.destinationCustody(), java.util.Optional.of(receipt.claimId()), portion.itemKind(), portion.lotQuantities(), java.util.Optional.of(grant)),
-                order.containerEndpoint(), order.station(), order.actorSlot(), order.goalOrdinal(), order.goalRevision());
+                        portion.destinationCustody(), java.util.Optional.of(receipt.claimId()), portion.itemKind(), portion.lotQuantities(), java.util.Optional.of(grant)));
         return new ActorItemTransferPreparation(state.inventory().withFungibleResources(state.inventory().fungibleResources().partitionClaim(partition)), executable, ownerChanges);
     }
     public static FrontierWorldState transferCold(FrontierWorldState state, SubjectId subject, SubjectId shipmentId,
@@ -78,7 +77,7 @@ public final class ShipmentStateSupport {
         if (shipment.status() == Shipment.Status.CARRYING && !ContainerStorageAdmission.receive(state,
                 shipment.receiver().containerId(), shipment.itemKind(), order.portion().quantity(), ShipmentAuthorizationComposition.capacityCompletionOwner(shipment)))
             throw new IllegalArgumentException("shipment receiver cannot fit its retained cargo");
-        var transfer = ActorItemCustody.transferColdUpdate(state, order);
+        var transfer = ActorResourceTransferComposition.cold(state, order);
         Shipment replacement = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.withStatus(Shipment.Status.CARRYING)
                 : shipment.unloaded(ShipmentReception.unloaded(shipment, lots));
         var changes = transfer.shipments(state.shipments().replace(shipment, replacement));
@@ -91,9 +90,8 @@ public final class ShipmentStateSupport {
                 || !ActorExecutionCoordinator.coldAvailable(state, shipment.execution().actorId())
                 || !shipment.movementOrder().arrivedAt(state.actorLocations().get(shipment.execution().actorId()).supportingSurface())
                 || !ShipmentServiceAccess.available(state, shipment)) return false;
-        var endpoint = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sender() : shipment.receiver();
-        if (ReferenceContainerCustody.hasLiveCustody(state, endpoint.containerId())
-                || ReferenceContainerCustody.blocksCanonicalUse(state, endpoint.containerId())) return false;
+        if (!ResourceSourceComposition.coldAvailable(state,
+                shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sender() : shipment.receiver())) return false;
         if (shipment.mobileContainerId().filter(container -> ReferenceContainerCustody.hasLiveCustody(state, container)
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container)).isPresent()) return false;
         return !coldTransferLots(state, shipment).isEmpty();
@@ -145,7 +143,7 @@ public final class ShipmentStateSupport {
     public static void validate(FrontierWorldState state) {
         ShipmentExecutionCapability.validateReferences(state.shipments(), state.actorExecutions());
         for (Shipment shipment : state.shipments().shipments().values()) {
-            ShipmentEndpointComposition.validate(state, shipment.sender()); ShipmentEndpointComposition.validate(state, shipment.receiver());
+            ResourceSourceComposition.validate(state, shipment.sender()); ShipmentEndpointComposition.validate(state, shipment.receiver());
             shipment.mobileContainerId().ifPresent(container -> {
                 var asset = state.transportFleet().require(shipment.execution().actorId());
                 if (!asset.containerId().equals(container) || shipment.transportMissionId().isEmpty()
@@ -157,7 +155,7 @@ public final class ShipmentStateSupport {
             SubjectId accountId = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sourceAccountId() : shipment.carriedAccountId();
             CustodyAccount account = state.inventory().fungibleResources().accounts().get(accountId);
             ResourceCustody expected = shipment.status() == Shipment.Status.AWAITING_LOAD
-                    ? new ResourceCustody.Container(shipment.sender().containerId()) : shipment.carriedCustody();
+                    ? shipment.sender().custody() : shipment.carriedCustody();
             if (account == null || !account.custody().equals(expected)
                     || account.claimQuantities().getOrDefault(shipment.authorization().claimId(), 0) != shipment.quantity())
                 throw new IllegalArgumentException("live shipment lost its exact cargo custody");

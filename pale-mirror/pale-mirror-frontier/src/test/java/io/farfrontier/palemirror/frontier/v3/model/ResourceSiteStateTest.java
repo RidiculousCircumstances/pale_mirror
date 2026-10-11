@@ -70,7 +70,7 @@ class ResourceSiteStateTest {
                 "execution accounting is independent of collective plant flags");
         SurfaceAnchor depotStation = SurfaceAnchor.at(1, 64, 1);
         ResourceSiteHarvestGoal depotGoal = new ResourceSiteHarvestGoal(harvest.id(), siteId, harvest.workerId(),
-                site.layout().revision(), site.layout().cells().size(), ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE,
+                site.layout().revision(), harvest.storageRevision(), site.layout().cells().size(), ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE,
                 Optional.empty(), List.of(depotStation), TraversalCapability.PEDESTRIAN,
                 ResourceSiteHarvestGoal.ArrivalContract.ANY_DEPOT_SERVICE_STATION);
         ResourceSiteLifecycle harvested = growing.harvesting(harvest).harvestedAt(depotGoal, depotStation.standingBody());

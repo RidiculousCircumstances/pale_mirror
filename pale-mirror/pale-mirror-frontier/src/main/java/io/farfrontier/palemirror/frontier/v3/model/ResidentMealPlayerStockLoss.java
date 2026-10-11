@@ -4,7 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.*;
 
 /** Food ownership decides whether its still-unconsumed source can be withdrawn. */
-final class ResidentMealPlayerStockLoss implements PlayerStockClaimLossOwner {
+final class ResidentMealPlayerStockLoss implements SourceStockClaimLossOwner {
     @Override public ClaimPurpose purpose() { return ClaimPurpose.RESIDENT_MEAL; }
     @Override public void validate(FrontierWorldState state, SubjectId source, ClaimAllocation claim) {
         var meal = state.humanPopulation().meals().get(claim.claimantId());

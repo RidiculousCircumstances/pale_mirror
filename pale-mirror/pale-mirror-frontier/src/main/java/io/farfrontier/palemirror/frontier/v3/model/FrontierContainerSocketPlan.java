@@ -18,6 +18,8 @@ public final class FrontierContainerSocketPlan {
     public static Optional<ContainerSocketSupport> declaredSupport(FrontierWorldState state, ContainerSurface surface) {
         var record = state.inventory().containers().get(surface.containerId());
         if (record == null || !surface.fixed()) return Optional.empty();
+        if (record.purpose() == ContainerPurpose.RESOURCE_STORAGE)
+            return Optional.of(new ContainerSocketSupport.Terrain(surface.position().offset(0, -1, 0)));
         if (record.purpose() == ContainerPurpose.EXTRACTIVE_STORAGE)
             return ExtractionWorksiteBlocks.socketSupport(state, surface).map(value -> value);
         return support(state, surface).map(ContainerSocketSupport.Graybox::new);

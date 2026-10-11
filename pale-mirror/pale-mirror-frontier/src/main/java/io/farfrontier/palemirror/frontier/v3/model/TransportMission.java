@@ -87,6 +87,12 @@ public record TransportMission(SubjectId id, SubjectId groupId, List<SubjectId> 
         return new TransportMission(id, groupId, shipmentIds, sender, receiver, homeRendezvous, destinationRendezvous,
                 stage, revision, financialBudgetId, java.util.Optional.of(load), transportAssetId, replenishment, replenishmentPurchase);
     }
+    public TransportMission withFinancialBudget(java.util.Optional<SubjectId> budgetId) {
+        if (stage != Stage.LOADING || revision != 1 || financialBudgetId.isPresent())
+            throw new IllegalArgumentException("funding must be declared once before mission admission");
+        return new TransportMission(id, groupId, shipmentIds, sender, receiver, homeRendezvous, destinationRendezvous,
+                stage, revision, budgetId, supplies, transportAssetId, replenishment, replenishmentPurchase);
+    }
     public TransportMission abortLoading() {
         if (stage != Stage.LOADING) throw new IllegalArgumentException("only loading promises can be withdrawn before departure");
         return new TransportMission(id, groupId, shipmentIds, sender, receiver, homeRendezvous, destinationRendezvous,

@@ -18,9 +18,10 @@ public record ExtractionAreaExtended(SubjectId siteId, long expectedRevision,
                     || Math.abs(column.station().x() - column.floor().x()) + Math.abs(column.station().z() - column.floor().z()) != 1
                     || column.support().permission() != KnownBlockGeometry.Sample.Permission.PUBLIC
                     || column.upper().permission() != KnownBlockGeometry.Sample.Permission.PUBLIC
-                    || column.lower().permission() != KnownBlockGeometry.Sample.Permission.PUBLIC)
+                    || column.lower().permission() != KnownBlockGeometry.Sample.Permission.PUBLIC
+                    || column.overburden().stream().anyMatch(sample -> sample.permission() != KnownBlockGeometry.Sample.Permission.PUBLIC))
                 throw new IllegalArgumentException("excavation requires an adjacent known public front");
         }
     }
-    @Override public String type() { return "frontier.extraction_area_extended"; }
+    @Override public String type() { return "frontier.extraction_area_extended.v2"; }
 }

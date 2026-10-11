@@ -33,8 +33,17 @@ final class FrontierWorldInitialState {
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
         var extraction = GrayboxQuarryPlan.initial(bootstrap);
         extraction.deposits().values().forEach(deposit -> containers.put(deposit.site().containerId(),
-                new ContainerRecord(deposit.site().containerId(), deposit.site().settlementId(), 27, ContainerPurpose.EXTRACTIVE_STORAGE)));
-        bootstrap.settlements().forEach(settlement -> { SubjectId id = FrontierWorldState.depotId(settlement.id()); containers.put(id, new ContainerRecord(id, settlement.id(), 27, ContainerPurpose.SETTLEMENT_DEPOT)); });
+                new ContainerRecord(deposit.site().containerId(), deposit.site().settlementId(), 27, ContainerPurpose.EXTRACTIVE_STORAGE)
+                        .withStorage(new ResourceStoragePolicy(new ShipmentEndpoint.ExtractiveSite(deposit.site().settlementId(),
+                                deposit.site().id(), deposit.site().containerId(), deposit.site().layout().storagePort()),
+                                new ResourceStorageFilter(false, java.util.Set.of(bootstrap.ruleset().extraction().source().toolKind()),
+                                        Map.of("pale_mirror:extracted_materials", bootstrap.ruleset().extraction().source().coldOutput().stream()
+                                                .map(output -> output.itemKind()).collect(java.util.stream.Collectors.toSet()))), 0, ResourceStorageRole.LOCAL_BUFFER))));
+        bootstrap.settlements().forEach(settlement -> {
+            SubjectId id = FrontierWorldState.depotId(settlement.id());
+            containers.put(id, new ContainerRecord(id, settlement.id(), 27, ContainerPurpose.SETTLEMENT_DEPOT)
+                    .withStorage(new ResourceStoragePolicy(GoodsParticipantDeclarations.endpoint(settlement), ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        });
         bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
                 .filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().ifPresent(workshop -> {
                     ProductionStationSpec station = ProductionStationSpec.grayboxBakery(workshop);

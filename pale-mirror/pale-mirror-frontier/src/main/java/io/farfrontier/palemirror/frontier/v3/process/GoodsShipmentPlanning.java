@@ -20,8 +20,6 @@ final class GoodsShipmentPlanning {
     }
     /** Read-only cargo opportunity for priority comparison; it never invokes selection or dispatch. */
     static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long now) {
-        if (state.inventory().economics().availableToReserve(resident.settlementId())
-                .compareTo(state.bootstrap().ruleset().expedition().replenishmentBudget()) < 0) return false;
         if (!SettlementLabourAllocation.canCommitToMission(state, resident.settlementId(),
                 ResidentWorkKind.LOGISTICS, List.of(resident.id()))) return false;
         for (var contract : state.companies().goodsTrade().contracts().values().stream()
@@ -43,14 +41,12 @@ final class GoodsShipmentPlanning {
         return false;
     }
     static List<ProposedEvent> dispatch(FrontierWorldState state, GoodsParticipant seller, long now) {
-        var replenishmentBudget = state.bootstrap().ruleset().expedition().replenishmentBudget();
         for (var contract : state.companies().goodsTrade().contracts().values().stream()
                 .filter(value -> !value.terminal() && value.seller().equals(seller.party())
                         && !value.sourceContainerId().equals(value.receiverContainerId()))
                 .sorted(Comparator.comparing(GoodsTradeContract::id)).toList()) {
             var buyer = state.companies().goodsTrade().participants().participants().get(contract.buyer().id());
             if (buyer == null || !buyer.party().equals(contract.buyer())) throw new IllegalArgumentException("accepted goods contract lost its declared buyer");
-            if (!GoodsTradeSourceAdmission.dispatchFunded(state, seller, buyer.endpoint().containerId())) return List.of();
             var source = FungibleResourceCustodySupport.accountAtContainer(state, contract.sourceContainerId()).orElse(null);
             if (source == null) continue;
             for (var claimId : contract.outstandingClaims().keySet().stream().sorted().toList()) {
@@ -98,8 +94,7 @@ final class GoodsShipmentPlanning {
                 if (state.unitGroups().groups().size() >= io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS
                         || state.shipments().shipments().size() >= ShipmentState.MAX_SHIPMENTS) return List.of();
                 var mission = new TransportMission(missionId, groupId, List.of(shipment.id()), seller.endpoint(), buyer.endpoint(),
-                        home, destination, TransportMission.Stage.LOADING, 1, replenishmentBudget.raw() == 0
-                                ? Optional.empty() : Optional.of(new SubjectId("budget:" + missionId.value().replace(':', '-'))));
+                        home, destination, TransportMission.Stage.LOADING, 1);
                 if (state.bootstrap().ruleset().schemaVersion() >= 17) {
                     var load = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyPlanning.walkingLoad(state, mission, group, now);
                     if (load.isEmpty()) {
@@ -136,6 +131,7 @@ final class GoodsShipmentPlanning {
                     if (load.isEmpty()) continue;
                     mission = mission.withSupplies(load.orElseThrow());
                 }
+                mission = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionFundingAuthority.declare(state, mission);
                 var admitted = new TransportMissionStarted(seller.party().id(), seller.party().kind(), mission, group, List.of(shipment));
                 TransportMissionProcess.admit(state, mission.id(), admitted, now);
                 return List.of(new ProposedEvent(mission.id(), admitted),

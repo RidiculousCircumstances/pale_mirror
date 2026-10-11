@@ -25,17 +25,17 @@ public final class BakeryKnownNavigation {
         Objects.requireNonNull(start, "bakery navigation start");
         BakeryWorkState work = job.bakeryWork().orElseThrow(() -> new IllegalArgumentException("job has no bakery movement goal"));
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
-        SettlementStructure depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
-                .findFirst().orElseThrow();
         SettlementStructure facility = settlement.structures().stream().filter(value -> value.id().equals(job.facilityId()))
                 .findFirst().orElseThrow();
-        SettlementDepotServicePort depotPort = SettlementDepotServicePort.forDepot(depot);
+        var depotPort = BakeryStorage.access(state, job);
+        var serviceStation = depotPort.interactionStation(state);
+        var exterior = ShipmentEndpointComposition.exteriorApproach(state, depotPort.endpoint());
         SettlementWorkshopServicePort workshopPort = SettlementWorkshopServicePort.forWorkshop(facility);
         boolean clearing = work.phase() == BakeryWorkState.Phase.DELIVERED;
         boolean toDepot = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY;
         if (clearing) return KnownServiceExitNavigation.clearancePathFrom(state, job.settlementId(),
-                FrontierWorldState.depotId(job.settlementId()), job.id(), job.workerId(), work.phase().wireTag(), 1L, start);
+                BakeryStorage.destination(job), job.id(), job.workerId(), work.phase().wireTag(), 1L, start);
         SurfaceAnchor goal = BakeryWorkGoal.current(state, job).station();
         if (start.equals(goal)) return List.of(start);
         boolean atWorkshop = start.equals(workshopPort.workStation()) || start.equals(workshopPort.inputStation())
@@ -43,25 +43,23 @@ public final class BakeryKnownNavigation {
                 || start.equals(workshopPort.approachSurface());
         if (!toDepot && !clearing && atWorkshop) return workshopIngress(workshopPort, start);
         List<SurfaceAnchor> prefix = atWorkshop ? workshopExit(workshopPort, start)
-                : start.equals(depotPort.serviceSurface()) ? List.of(start, depotPort.exteriorApproach()) : List.of(start);
+                : start.equals(serviceStation) ? List.of(start, exterior) : List.of(start);
         SurfaceAnchor outdoorStart = prefix.getLast();
-        SurfaceAnchor outdoorGoal = toDepot ? depotPort.exteriorApproach() : workshopPort.exteriorApproach();
+        SurfaceAnchor outdoorGoal = toDepot ? exterior : workshopPort.exteriorApproach();
         MovementOrder outdoor = new MovementOrder(job.id(), job.workerId(), work.phase().wireTag(), 1,
                 List.of(outdoorGoal), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        KnownPedestrianRouteKnowledge routeKnowledge = KnownPedestrianRouteKnowledge.forSettlement(
-                state, job.settlementId(), List.of(
-                        new KnownPedestrianRouteKnowledge.Passage(depot,
-                                KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS),
-                        new KnownPedestrianRouteKnowledge.Passage(facility,
-                                KnownPedestrianRouteKnowledge.Passage.Reach.EXTERIOR)));
+        var passages = new ArrayList<>(ShipmentEndpointComposition.passages(state, depotPort.endpoint()));
+        passages.add(new KnownPedestrianRouteKnowledge.SettlementPassage(job.settlementId(),
+                new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.EXTERIOR)));
+        KnownPedestrianRouteKnowledge routeKnowledge = KnownPedestrianRouteKnowledge.forJourney(state, passages);
         List<SurfaceAnchor> route = routeKnowledge.path(outdoorStart, outdoor);
         List<SurfaceAnchor> result = new ArrayList<>(prefix);
         result.addAll(route.subList(1, route.size()));
         if (toDepot) {
             MovementOrder serviceOrder = new MovementOrder(job.id(), job.workerId(), work.phase().wireTag(), 1L,
-                    List.of(depotPort.serviceSurface()), TraversalCapability.PEDESTRIAN,
+                    List.of(serviceStation), TraversalCapability.PEDESTRIAN,
                     MovementOrder.ArrivalPolicy.EXACT_STATION);
-            List<SurfaceAnchor> serviceLeg = routeKnowledge.path(depotPort.exteriorApproach(), serviceOrder);
+            List<SurfaceAnchor> serviceLeg = routeKnowledge.path(exterior, serviceOrder);
             result.addAll(serviceLeg.subList(1, serviceLeg.size()));
         } else if (!clearing) {
             result.addAll(List.of(workshopPort.approachSurface(), workshopPort.throatSurface(),

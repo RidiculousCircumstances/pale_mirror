@@ -28,7 +28,7 @@ public final class FencedRecoveryContainerSupport {
                 FencedRecoveryBinding binding = current(recovery, id, container);
                 yield recovery.ambiguous(id, binding.authorityEpoch(), "container-surface-conflict", FencedRecoveryDisposition.INSPECT);
             }
-            case UNMATERIALIZED -> throw new IllegalArgumentException("container surface cannot recover to unmaterialized");
+            case UNMATERIALIZED, ADOPTING -> throw new IllegalArgumentException("container surface cannot recover to an admission phase");
         };
     }
     /** Stable exact physical-surface identity; callers never infer a container fence from a slot. */

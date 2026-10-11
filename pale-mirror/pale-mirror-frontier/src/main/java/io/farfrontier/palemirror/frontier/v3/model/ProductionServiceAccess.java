@@ -13,13 +13,14 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
         var boundary = ServiceAccessCoordinator.boundary(state, pointId);
         var result = new ArrayList<ServiceAccessDemand>();
         for (var job : state.productionJobs().values()) {
-            if (job.bakeryWork().isEmpty() || !FrontierWorldState.depotId(job.settlementId()).equals(pointId)
+            if (job.bakeryWork().isEmpty() || !(BakeryStorage.source(job).equals(pointId) || BakeryStorage.destination(job).equals(pointId))
                     || state.humanPopulation().meals().containsKey(job.workerId())
                     || state.actorMovements().containsKey(job.workerId())
                     || !operationEligible(state, job)) continue;
             var phase = job.bakeryWork().orElseThrow().phase();
             boolean occupied = ServiceAccessCoordinator.occupies(state, boundary, job.workerId());
-            if (phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY || occupied)
+            if ((phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY)
+                    && BakeryStorage.current(job).equals(pointId) || occupied)
                 result.add(new ServiceAccessDemand(identity(job, pointId), priority(), occupied
                         ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH, 0L, false));
         }
@@ -32,14 +33,14 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
 
     public static boolean available(FrontierWorldState state, ProductionJob job) {
         return operationEligible(state, job)
-                && ServiceAccessCoordinator.available(state, identity(job, FrontierWorldState.depotId(job.settlementId())));
+                && ServiceAccessCoordinator.available(state, identity(job, BakeryStorage.current(job)));
     }
 
     /** Storage backpressure retains the job/cargo, not an exclusive service turn. */
     private static boolean operationEligible(FrontierWorldState state, ProductionJob job) {
         var work = job.bakeryWork().orElseThrow();
         if (work.pendingPhysicalStep().isPresent() || work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY) return true;
-        var depot = FrontierWorldState.depotId(job.settlementId());
+        var depot = BakeryStorage.current(job);
         return ReferenceContainerCustody.hasLiveCustody(state, depot)
                 ? ProductionOutputCapacity.deliverySlot(state, job).isPresent()
                 : !ProductionOutputCapacity.depotDeliveryUnavailable(state, job);
@@ -47,10 +48,10 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
 
     public static boolean mayAdvance(FrontierWorldState state, ProductionJob job, SurfaceAnchor destination) {
         if (!operationEligible(state, job))
-            return ServiceAccessCoordinator.boundary(state, FrontierWorldState.depotId(job.settlementId()))
+            return ServiceAccessCoordinator.boundary(state, BakeryStorage.current(job))
                     .cleared(destination.standingBody());
         return ServiceAccessCoordinator.mayAdvance(state,
-                identity(job, FrontierWorldState.depotId(job.settlementId())), destination);
+                identity(job, BakeryStorage.current(job)), destination);
     }
 
     public static boolean witnessedExit(FrontierWorldState state, ProductionJob job, BodyPosition observedBody) {
@@ -63,7 +64,7 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
                         && FrontierSceneBehaviors.productionWork(candidate).jobId().equals(job.id()))
                 .findFirst().orElse(null);
         return lease != null && ServiceAccessCoordinator.witnessedExit(
-                ServiceAccessCoordinator.boundary(state, FrontierWorldState.depotId(job.settlementId())),
+                ServiceAccessCoordinator.boundary(state, BakeryStorage.current(job)),
                 lease.memberBody(state.actorLocations(), job.workerId()), observedBody);
     }
 }

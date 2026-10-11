@@ -40,19 +40,19 @@ class InternalShipmentTest {
         ledger = state.inventory().fungibleResources();
         state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(
                 ledger.rebind(source, 1L, FungiblePhysicalObservation.bind(ledger, source, 1L, List.of(stack))))));
-        assertEquals(Set.of(claimId), PlayerStockClaimLoss.admissibleClaims(state, source));
+        assertEquals(Set.of(claimId), SourceStockClaimLoss.admissibleClaims(state, source));
         var loss = assertInstanceOf(FungibleStockDepartureObserved.class, FungibleContainerPlayerEdit.classify(
                 state.inventory().fungibleResources(), source, site.containerId(), home.id(), 1L,
-                UUID.randomUUID(), UUID.randomUUID(), List.of(), PlayerStockClaimLoss.admissibleClaims(state, source)));
+                UUID.randomUUID(), UUID.randomUUID(), List.of(), SourceStockClaimLoss.admissibleClaims(state, source)));
         var economics = state.inventory().economics();
-        var after = PlayerStockClaimLoss.settle(state, loss);
+        var after = SourceStockClaimLoss.settle(state, loss);
         assertEquals(Shipment.Status.ALLOCATION_WITHDRAWN, after.shipments().shipments().get(shipmentId).status());
         assertFalse(after.inventory().fungibleResources().claims().containsKey(claimId));
         assertFalse(after.actorExecutions().current(ActorActivityKind.COURIER).containsKey(worker.id()));
         assertEquals(0, after.inventory().fungibleResources().totalQuantity(home.id(), "minecraft:cobblestone"));
         assertEquals(economics, after.inventory().economics());
         assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
-        assertThrows(IllegalArgumentException.class, () -> PlayerStockClaimLoss.settle(after, loss));
+        assertThrows(IllegalArgumentException.class, () -> SourceStockClaimLoss.settle(after, loss));
     }
 
     @Test void sameOwnerHaulAcceptsExactStockWithoutSellingItAndRejectsForgedOrRepeatedReceipts() {

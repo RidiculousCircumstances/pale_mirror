@@ -56,8 +56,9 @@ final class FungibleObservedStockTransitions {
         CustodyAccount account = requireAccount(ledger, accountId);
         Objects.requireNonNull(departedLots, "departed lots");
         Objects.requireNonNull(remaining, "observed remaining stacks");
-        if (!(account.custody() instanceof ResourceCustody.Container) || authorityEpoch < 1 || departedLots.isEmpty())
-            throw new IllegalArgumentException("external stock exit requires a current container");
+        if (!(account.custody() instanceof ResourceCustody.Container) && !(account.custody() instanceof ResourceCustody.Ground)
+                || authorityEpoch < 1 || departedLots.isEmpty())
+            throw new IllegalArgumentException("external stock exit requires a current declared physical source");
         FungibleResourceLedger.requireSubset(account.lotQuantities(), departedLots, "external stock exit lots");
         requireCurrentBinding(ledger, account.id(), authorityEpoch, "external stock exit");
         Map<SubjectId, ResourceLot> nextLots = new HashMap<>(ledger.lots());

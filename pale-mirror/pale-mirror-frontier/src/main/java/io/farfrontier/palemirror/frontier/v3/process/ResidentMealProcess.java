@@ -181,7 +181,7 @@ public final class ResidentMealProcess {
                 || state.humanPopulation().meals().containsKey(subject)
                 || state.actorMovements().containsKey(subject)
                 || !meal.portable() && (!ResidentMealServiceAccess.mayStart(state, meal.depotId(), subject)
-                    || !ServiceAccessCoordinator.mealClearingSurface(state, subject).equals(Optional.of(meal.clearingSurface())))
+                    || !ServiceAccessCoordinator.mealClearingSurface(state, subject, meal.depotId()).equals(Optional.of(meal.clearingSurface())))
                 || state.humanPopulation().migration(subject) != null
                 || state.actorLocations().get(subject).condition().status() != ActorLifeStatus.ALIVE
                 || !HumanAssignmentProjection.compile(state).assignment(subject).ownerId()
@@ -374,10 +374,11 @@ public final class ResidentMealProcess {
         return body.equals(lease.handoffBody()) || port(state, meal).accessBoundary().cleared(body);
     }
 
-    private static SettlementDepotServicePort port(FrontierWorldState state, ResidentMeal meal) {
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
-        return SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
+    private static ResourceStorageAccess port(FrontierWorldState state, ResidentMeal meal) {
+        var access = ResourceStorageAccess.at(state, meal.depotId());
+        if (!access.settlementId().equals(meal.settlementId()))
+            throw new IllegalArgumentException("meal storage belongs to another household");
+        return access;
     }
 
     /** Eating owns the food effect, not an exact navigation station after access was cleared. */
@@ -585,7 +586,7 @@ public final class ResidentMealProcess {
     }
 
     public static SurfaceAnchor serviceSurface(FrontierWorldState state, ResidentMeal meal) {
-        return SettlementServiceAccessPoints.depotPort(state, meal.settlementId()).serviceSurface();
+        return port(state, meal).interactionStation(state);
     }
 
     /** Business intent only: the shared pedestrian navigator owns geometry and locomotion. */

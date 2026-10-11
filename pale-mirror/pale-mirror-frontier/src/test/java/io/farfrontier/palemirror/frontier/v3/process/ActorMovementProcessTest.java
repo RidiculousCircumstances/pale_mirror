@@ -96,7 +96,7 @@ class ActorMovementProcessTest {
                 .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
         FrontierWorldState state = initial.withActorBody(actorId,
                 SettlementDepotServicePort.forDepot(depot).serviceSurface().standingBody());
-        SurfaceAnchor destination = ServiceAccessCoordinator.mealClearingSurface(state, actorId).orElseThrow();
+        SurfaceAnchor destination = ServiceAccessCoordinator.mealClearingSurface(state, actorId, FrontierWorldState.depotId(settlement.id())).orElseThrow();
         MovementOrder order = new MovementOrder(actorId, actorId, 0L, 1L, List.of(destination),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         ActorMovement movement = new ActorMovement(order, 27_000L,
@@ -122,7 +122,7 @@ class ActorMovementProcessTest {
         Settlement settlement = state.bootstrap().settlements().getFirst();
         SubjectId actorId = settlement.residents().getFirst().id();
         ResidentProfile resident = state.humanPopulation().resident(actorId);
-        SurfaceAnchor destination = ServiceAccessCoordinator.mealClearingSurface(state, actorId).orElseThrow();
+        SurfaceAnchor destination = ServiceAccessCoordinator.mealClearingSurface(state, actorId, FrontierWorldState.depotId(settlement.id())).orElseThrow();
         MovementOrder order = new MovementOrder(actorId, actorId, 0L, 1L, List.of(destination),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         ActorMovement movement = new ActorMovement(order, 27_000L,
@@ -150,7 +150,7 @@ class ActorMovementProcessTest {
                 .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
         SurfaceAnchor station = SettlementDepotServicePort.forDepot(depot).serviceSurface();
         FrontierWorldState state = initial.withActorBody(actorId, station.standingBody());
-        SurfaceAnchor destination = ServiceAccessCoordinator.mealClearingSurface(state, actorId).orElseThrow();
+        SurfaceAnchor destination = ServiceAccessCoordinator.mealClearingSurface(state, actorId, FrontierWorldState.depotId(settlement.id())).orElseThrow();
         MovementOrder order = new MovementOrder(actorId, actorId, 0L, 1L, List.of(destination),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         ActorMovement movement = new ActorMovement(order, 27_000L,
@@ -252,7 +252,7 @@ class ActorMovementProcessTest {
         var depot = FrontierWorldState.depotId(settlement.id());
         var station = SettlementServiceAccessPoints.depotPort(initial, settlement.id()).serviceSurface();
         var state = initial.withActorBody(actor, station.standingBody());
-        var destination = ServiceAccessCoordinator.mealClearingSurface(state, actor).orElseThrow();
+        var destination = ServiceAccessCoordinator.mealClearingSurface(state, actor, depot).orElseThrow();
         var order = new MovementOrder(actor, actor, 0L, 1L, List.of(destination), TraversalCapability.PEDESTRIAN,
                 MovementOrder.ArrivalPolicy.EXACT_STATION);
         var movement = new ActorMovement(order, 1L, new ActorMovementContext.ServiceExit(settlement.id(), depot),

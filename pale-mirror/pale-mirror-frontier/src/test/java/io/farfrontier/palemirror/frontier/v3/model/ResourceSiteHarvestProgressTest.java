@@ -21,7 +21,7 @@ class ResourceSiteHarvestProgressTest {
                 new InventoryCustody.ContainerSlot(new SubjectId("container:large-field-1"), 0),
                 new PhysicalIntentId("intent:site-harvest-large-field-1"), progress,
                 0, false, Optional.empty(), Optional.empty(), Optional.empty(), progress.completedCropSlots(),
-                new ResourceFieldWorkTarget(site, 1L, new ResourceFieldLayout.CellId(1L), 0L));
+                new ResourceFieldWorkTarget(site, 1L, new ResourceFieldLayout.CellId(1L), 0L), 1L);
     }
 
     @Test void deliveredBatchIsBoundedByActualHandAndRoundTripsWithoutRouteCache() {
@@ -59,7 +59,7 @@ class ResourceSiteHarvestProgressTest {
                 1L, ResourceSiteLifecycle.MATURE_STAGE, Optional.of(approaching));
         SurfaceAnchor station = SurfaceAnchor.at(1, 64, 0);
         ResourceSiteHarvestGoal goal = new ResourceSiteHarvestGoal(approaching.id(), approaching.siteId(), approaching.workerId(),
-                1L, 0, ResourceSiteHarvestGoal.Kind.WORK_CELL, Optional.of(new ResourceFieldLayout.CellId(1)),
+                1L, 1L, 0, ResourceSiteHarvestGoal.Kind.WORK_CELL, Optional.of(new ResourceFieldLayout.CellId(1)),
                 List.of(station), TraversalCapability.PEDESTRIAN,
                 ResourceSiteHarvestGoal.ArrivalContract.EXACT_WORK_STATION);
         assertThrows(IllegalArgumentException.class,

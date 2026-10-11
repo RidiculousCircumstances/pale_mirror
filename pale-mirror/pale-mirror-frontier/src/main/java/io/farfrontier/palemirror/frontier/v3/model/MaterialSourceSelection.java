@@ -23,7 +23,7 @@ public final class MaterialSourceSelection {
     }
 
     /** Selects the process-declared lot portion, including an unclaimed subset of a larger account. */
-    public static List<Slice> select(FungibleResourceLedger ledger, ActorContainerItemOrder order) {
+    public static List<Slice> select(FungibleResourceLedger ledger, ActorResourceItemOrder order) {
         Objects.requireNonNull(ledger, "resource ledger");
         FungibleActorOrderTransfer.accounts(ledger, order);
         ActorContainerItemOrder.Portion.Fungible portion = (ActorContainerItemOrder.Portion.Fungible) order.portion();

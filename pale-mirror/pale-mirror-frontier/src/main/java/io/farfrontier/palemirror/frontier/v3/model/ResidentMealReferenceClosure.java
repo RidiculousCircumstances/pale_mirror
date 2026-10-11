@@ -22,6 +22,7 @@ public final class ResidentMealReferenceClosure {
         var assignments = HumanAssignmentProjection.compile(after);
         var previousAssignments = HumanAssignmentProjection.compile(before);
         boolean stockChanged = before.inventory().fungibleResources() != ledger
+                || before.inventory().containers() != after.inventory().containers()
                 || before.bootstrap().ruleset().residentLife().foods() != after.bootstrap().ruleset().residentLife().foods();
         for (ResidentMeal meal : after.humanPopulation().meals().values()) {
             var id = meal.residentId();
@@ -79,6 +80,12 @@ public final class ResidentMealReferenceClosure {
 
     private static void validateMeal(FrontierWorldState state, FungibleResourceLedger ledger,
                                      HumanAssignmentProjection assignments, ResidentMeal meal) {
+            if (meal.source() instanceof ResidentFoodSource.Storage storage) {
+                var container = state.inventory().containers().get(storage.containerId());
+                if (container == null || !container.ownerId().equals(storage.settlementId()) || container.storage().isEmpty())
+                    throw new IllegalArgumentException("meal lost its retained owned storage capability");
+                ShipmentEndpointComposition.validate(state, container.storage().orElseThrow().endpoint());
+            }
             meal.portion().validate(state.bootstrap().ruleset().residentLife().foods());
             ActorLocation actor = state.actorLocations().get(meal.residentId());
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)

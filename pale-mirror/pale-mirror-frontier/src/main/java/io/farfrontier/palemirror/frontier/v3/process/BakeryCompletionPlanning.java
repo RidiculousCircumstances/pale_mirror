@@ -28,6 +28,9 @@ final class BakeryCompletionPlanning {
         var replacement = BakeryProcess.planInputReallocation(state, job);
         if (replacement.isPresent()) return List.of(new ProposedEvent(job.settlementId(), replacement.orElseThrow()),
                 reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
+        var storageReplacement = BakeryStorageReplacement.select(state, job);
+        if (storageReplacement.isPresent()) return List.of(new ProposedEvent(job.settlementId(), storageReplacement.orElseThrow()),
+                reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 1L))));
         if (step.isEmpty()) {
             long interval = job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DELIVERED
                     && ProductionOutputCapacity.depotDeliveryUnavailable(state, job)

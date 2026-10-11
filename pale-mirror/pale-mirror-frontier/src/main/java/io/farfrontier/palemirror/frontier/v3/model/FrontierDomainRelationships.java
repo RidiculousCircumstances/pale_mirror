@@ -36,6 +36,7 @@ public final class FrontierDomainRelationships {
     public enum Kind {
         EXTRACTION_STORAGE("extraction-storage"), EXTRACTION_WORK_SITE("extraction-work-site"),
         EXTRACTION_WORKER("extraction-worker"), EXTRACTION_TOOL("extraction-tool"), EXTRACTION_CARGO("extraction-cargo"),
+        EXTRACTION_TOOL_SOURCE("extraction-tool-source"), EXTRACTION_WORK_STORAGE("extraction-work-storage"),
         BUDGET_PAYER("budget-payer"), BUDGET_OWNER("budget-owner"), RESERVATION_BUDGET("reservation-budget"),
         GROUP_MEMBER("group-member"), GROUP_MISSION("group-mission"), TRANSPORT_GROUP("transport-group"),
         TRANSPORT_SHIPMENT("transport-shipment"), SHIPMENT_MISSION("shipment-mission"),
@@ -96,7 +97,7 @@ public final class FrontierDomainRelationships {
     private static Set<Lifecycle> lifecycle(Kind kind) { return kind == Kind.ACTOR_AMBIENT_LEASE || kind == Kind.ACTOR_CARRIER_EVIDENCE ? EnumSet.of(Lifecycle.OBSERVED) : EnumSet.allOf(Lifecycle.class); }
     private static EntityKind source(Kind kind) { return switch (kind) {
         case EXTRACTION_STORAGE -> EntityKind.EXTRACTION_SITE;
-        case EXTRACTION_WORK_SITE, EXTRACTION_WORKER, EXTRACTION_TOOL, EXTRACTION_CARGO -> EntityKind.EXTRACTION_WORK;
+        case EXTRACTION_WORK_SITE, EXTRACTION_WORKER, EXTRACTION_TOOL, EXTRACTION_CARGO, EXTRACTION_TOOL_SOURCE, EXTRACTION_WORK_STORAGE -> EntityKind.EXTRACTION_WORK;
         case BUDGET_PAYER, BUDGET_OWNER -> EntityKind.FINANCIAL_BUDGET;
         case RESERVATION_BUDGET -> EntityKind.FINANCIAL_RESERVATION;
         case GROUP_MEMBER, GROUP_MISSION -> EntityKind.UNIT_GROUP;
@@ -120,6 +121,7 @@ public final class FrontierDomainRelationships {
         case EXTRACTION_WORKER -> EntityKind.RESIDENT;
         case EXTRACTION_TOOL -> EntityKind.EXACT_ITEM;
         case EXTRACTION_CARGO -> EntityKind.RESOURCE_ACCOUNT;
+        case EXTRACTION_TOOL_SOURCE, EXTRACTION_WORK_STORAGE -> EntityKind.CONTAINER;
         case BUDGET_PAYER -> EntityKind.ECONOMIC_ACCOUNT;
         case BUDGET_OWNER -> EntityKind.TRANSPORT_MISSION;
         case RESERVATION_BUDGET -> EntityKind.FINANCIAL_BUDGET;
@@ -153,7 +155,7 @@ public final class FrontierDomainRelationships {
         case SERVICE_SCENE_LEASE -> EntityKind.SCENE_LEASE; case HIVE_MOBILIZATION_MEMBER -> EntityKind.BIOFORM; }; }
     private static EntityKind owner(Kind kind) { return switch (kind) {
         case EXTRACTION_STORAGE -> EntityKind.EXTRACTION_SITE;
-        case EXTRACTION_WORK_SITE, EXTRACTION_WORKER, EXTRACTION_TOOL, EXTRACTION_CARGO -> EntityKind.EXTRACTION_WORK;
+        case EXTRACTION_WORK_SITE, EXTRACTION_WORKER, EXTRACTION_TOOL, EXTRACTION_CARGO, EXTRACTION_TOOL_SOURCE, EXTRACTION_WORK_STORAGE -> EntityKind.EXTRACTION_WORK;
         case BUDGET_PAYER, BUDGET_OWNER -> EntityKind.FINANCIAL_BUDGET;
         case RESERVATION_BUDGET -> EntityKind.FINANCIAL_RESERVATION;
         case GROUP_MEMBER, GROUP_MISSION -> EntityKind.UNIT_GROUP;
@@ -270,7 +272,7 @@ public final class FrontierDomainRelationships {
             surface(SceneLease.class, "id", "worldId", "ambientHandoffActorIds"),
             surface(AmbientActorLease.class, "actorId"),
             surface(ResidentMealResourceObligation.class, "settlementId", "actorAccountId"),
-            surface(ResidentFoodSource.Depot.class, "settlementId", "containerId", "accountId"),
+            surface(ResidentFoodSource.Storage.class, "settlementId", "containerId", "accountId"),
             surface(ResidentFoodSource.Personal.class, "actorId", "accountId"),
             surface(FencedRecoveryTombstone.class, "bindingId", "ownerId"));
 

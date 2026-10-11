@@ -40,6 +40,7 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
             throw new IllegalArgumentException("stale extraction execution/body authority");
         BlockPos position = position(target);
         if (!level.hasChunkAt(position)) throw new IllegalArgumentException("extraction source is unloaded");
+        if (!withinReach(position)) throw new IllegalArgumentException("extraction source is beyond the actual worker's physical reach");
         BlockState source = level.getBlockState(position);
         if (!describe(source).equals(definition.before())) throw new IllegalArgumentException("extraction source changed");
         requireStateless(source, block(definition.after()));
@@ -78,6 +79,7 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
         if (current.equals(prepared.definition().after())) return Result.POSTCONDITION_PRESENT;
         if (!current.equals(prepared.definition().before())) return Result.SOURCE_CHANGED;
         if (!worker.isAlive() || worker.level() != level) return Result.UNAVAILABLE;
+        if (!withinReach(position)) return Result.UNAVAILABLE;
         var successor = block(prepared.definition().after());
         requireStateless(level.getBlockState(position), successor);
         var tool = worker.getMainHandItem();
@@ -87,6 +89,11 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
         if (!level.setBlock(position, successor, 3)) return Result.UNAVAILABLE;
         return describe(level.getBlockState(position)).equals(prepared.definition().after())
                 ? Result.APPLIED : Result.SOURCE_CHANGED;
+    }
+    private boolean withinReach(BlockPos target) {
+        double radius = io.farfrontier.palemirror.frontier.v3.model.geometry.BlockInteractionReach
+                .VANILLA_ADULT_PEDESTRIAN.radiusMilli() / 1000.0D;
+        return worker.getEyePosition().distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(target)) <= radius * radius;
     }
 
     static BlockExtraction.Block describe(BlockState state) {

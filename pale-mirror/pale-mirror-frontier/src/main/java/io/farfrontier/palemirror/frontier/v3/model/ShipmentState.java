@@ -39,6 +39,8 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
                 || !(replacement.reception().isPresent() && previous.status() == Shipment.Status.CARRYING
                     && previous.reception().isEmpty() && previous.unloaded(replacement.reception().orElseThrow()).equals(replacement)
                     || previous.reception().isPresent() && previous.acknowledged(previous.reception().orElseThrow().id()).equals(replacement)
+                    || ShipmentStorageRetargeted.unbegun(previous) && !previous.receiver().containerId().equals(replacement.receiver().containerId())
+                        && previous.retargetStorage(replacement.receiver(), replacement.receivingAccountId()).equals(replacement)
                     || (replacement.status() == previous.status()
                     ? replacement.pendingPhysicalStep().isPresent() && previous.prepare(replacement.pendingPhysicalStep().orElseThrow()).equals(replacement)
                     : previous.withStatus(replacement.status()).equals(replacement))))

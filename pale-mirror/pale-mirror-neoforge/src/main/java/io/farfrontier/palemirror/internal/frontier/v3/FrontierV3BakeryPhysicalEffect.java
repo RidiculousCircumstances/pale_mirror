@@ -31,7 +31,7 @@ final class FrontierV3BakeryPhysicalEffect {
                     .noneMatch(claim -> claim.claimantId().equals(job.id()))) return;
         SubjectId containerId = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
-                ? FrontierWorldState.depotId(job.settlementId()) : station(state, work).containerId();
+                ? BakeryStorage.current(job) : station(state, work).containerId();
         if (work.pendingPhysicalStep().isEmpty()
                 ? !ReferenceContainerCustody.hasOperationalCustody(state, containerId)
                 : !ReferenceContainerCustody.hasLiveCustody(state, containerId)
@@ -165,7 +165,7 @@ final class FrontierV3BakeryPhysicalEffect {
                 || !ItemStack.isSameItemSameComponents(hand, new ItemStack(item, job.outputCount()))) {
             block(level, runtime, lease, job, observedBlock(BakeryWorkBlock.Reason.HAND_MISMATCH,
                     work.phase() == BakeryWorkState.Phase.STATION_LOAD
-                            ? station(state, work).containerId() : FrontierWorldState.depotId(job.settlementId()), -1, hand));
+                            ? station(state, work).containerId() : BakeryStorage.current(job), -1, hand));
             return true;
         }
         if (work.block().isPresent()) {
@@ -229,7 +229,7 @@ final class FrontierV3BakeryPhysicalEffect {
             switch (source.address()) {
                 case PhysicalStackAddress.ContainerSlot value -> {
                     if (!value.slot().containerId().equals(work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
-                            ? FrontierWorldState.depotId(job.settlementId()) : station(state, work).containerId()))
+                            ? BakeryStorage.current(job) : station(state, work).containerId()))
                         throw new IllegalArgumentException("bakery source is bound to another container");
                 }
                 case PhysicalStackAddress.ActorHand value -> {

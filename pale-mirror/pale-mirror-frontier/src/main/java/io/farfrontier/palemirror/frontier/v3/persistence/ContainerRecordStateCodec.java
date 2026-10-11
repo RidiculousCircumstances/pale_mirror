@@ -39,6 +39,8 @@ final class ContainerRecordStateCodec {
                 output.writeByte(station.inputSlot());
                 output.writeByte(station.outputSlot());
             }
+            output.writeBoolean(value.storage().isPresent());
+            if (value.storage().isPresent()) ResourceStoragePolicyCodec.write(output, value.storage().orElseThrow());
         }
     }
 
@@ -55,7 +57,9 @@ final class ContainerRecordStateCodec {
                     ProductionStationSpec.Capability.fromWireTag(input.readUnsignedByte()),
                     new SurfaceAnchor(readPosition(input)), new SurfaceAnchor(readPosition(input)),
                     input.readUnsignedByte(), input.readUnsignedByte()));
-            if (containers.put(id, new ContainerRecord(id, owner, slots, purpose, station)) != null)
+            var storage = input.readBoolean() ? Optional.of(ResourceStoragePolicyCodec.read(input))
+                    : Optional.<io.farfrontier.palemirror.frontier.v3.model.ResourceStoragePolicy>empty();
+            if (containers.put(id, new ContainerRecord(id, owner, slots, purpose, station, storage)) != null)
                 throw new IllegalArgumentException("duplicate container id");
         }
         return containers;

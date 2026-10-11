@@ -57,7 +57,8 @@ public final class ResidentMealOpportunity {
             if (candidate.foodSource() instanceof ResidentFoodSource.Personal)
                 return Optional.of(new Source(candidate.foodSource(), state.actorLocations().get(residentId).supportingSurface(),
                         candidate.selection(), candidate.portion()));
-            return ServiceAccessCoordinator.mealClearingSurface(state, residentId).map(clearing ->
+            return ServiceAccessCoordinator.mealClearingSurface(state, residentId,
+                    ((ResidentFoodSource.Storage) candidate.foodSource()).containerId()).map(clearing ->
                     new Source(candidate.foodSource(), clearing, candidate.selection(), candidate.portion()));
         });
     }
@@ -97,25 +98,28 @@ public final class ResidentMealOpportunity {
             return CandidateAdmission.waiting(Wait.MISSION_SUPPLY);
         var portionSlot = UnitInventoryPresentation.freeSlot(state, residentId);
         if (portionSlot.isEmpty()) return CandidateAdmission.waiting(Wait.INVENTORY_CAPACITY);
-        SubjectId depot = FrontierWorldState.depotId(resident.settlementId());
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot))
-            return CandidateAdmission.waiting(Wait.CONTAINER_CUSTODY);
-        if (!ResidentMealServiceAccess.mayStart(state, depot, residentId))
-            return CandidateAdmission.waiting(Wait.SERVICE_ACCESS);
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, depot).orElse(null);
-        if (account == null) return CandidateAdmission.waiting(Wait.FOOD_STOCK);
+        boolean serviceUnavailable = false;
+        boolean blockedStock = false;
         // Stable item-kind ordering is selection policy, never implicit resource identity.
         for (var food : new java.util.TreeMap<>(rules.foods().foods()).values()) {
+          for (var endpoint : ResourceStorageSelection.declaredCandidates(state, resident.settlementId(), food.itemKind(),
+                  body.supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
+            SubjectId depot = endpoint.containerId();
+            var account = FungibleResourceCustodySupport.accountAtContainer(state, depot).orElse(null);
+            if (account == null) continue;
             int available = state.inventory().fungibleResources().unclaimedQuantity(account.id(),
                     resident.settlementId(), food.itemKind());
             int quantity = food.portionFor(wanted, available);
             if (quantity == 0) continue;
+            if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) { blockedStock = true; continue; }
+            if (!ResidentMealServiceAccess.mayStart(state, depot, residentId)) { serviceUnavailable = true; continue; }
             var selection = FungibleResourceCustodySupport.selectAtContainer(state, depot,
                     resident.settlementId(), food.itemKind(), quantity).orElseThrow();
-            return new CandidateAdmission(Optional.of(new Candidate(new ResidentFoodSource.Depot(resident.settlementId(),
+            return new CandidateAdmission(Optional.of(new Candidate(new ResidentFoodSource.Storage(resident.settlementId(),
                     depot, account.id(), portionSlot.orElseThrow()), selection,
                     new FoodPortion(food.itemKind(), food.nutritionPerItem(), selection.lotQuantities()))), Optional.empty());
+          }
         }
-        return CandidateAdmission.waiting(Wait.FOOD_STOCK);
+        return CandidateAdmission.waiting(serviceUnavailable ? Wait.SERVICE_ACCESS : blockedStock ? Wait.CONTAINER_CUSTODY : Wait.FOOD_STOCK);
     }
 }

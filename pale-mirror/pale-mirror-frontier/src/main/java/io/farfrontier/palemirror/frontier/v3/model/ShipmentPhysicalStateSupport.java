@@ -9,8 +9,8 @@ public final class ShipmentPhysicalStateSupport {
 
     /** Read-only start gate shared by the HOT adapter and the authoritative command owner. */
     public static PreparationAdmission preparationAdmission(FrontierWorldState state, Shipment shipment) {
-        var container = shipment.itemOrder().containerEndpoint().containerId();
-        if (!ReferenceContainerCustody.hasOperationalCustody(state, container)
+        var container = ShipmentServiceAccess.point(shipment);
+        if (container.filter(point -> !ReferenceContainerCustody.hasOperationalCustody(state, point)).isPresent()
                 || shipment.mobileContainerId().filter(attached ->
                     !ReferenceContainerCustody.hasOperationalCustody(state, attached)).isPresent())
             return PreparationAdmission.WAITING_FOR_CUSTODY;
@@ -86,7 +86,7 @@ public final class ShipmentPhysicalStateSupport {
         if (admission != PreparationAdmission.READY)
             throw new IllegalArgumentException("shipment cannot prepare: " + admission + " shipment="
                     + shipment.id().value() + " actor=" + shipment.execution().actorId().value()
-                    + " container=" + order.containerEndpoint().containerId().value());
+                    + " source=" + shipment.sender() + " receiver=" + shipment.receiver());
         if (!MaterialSourcePreparation.review(state, order).requireReady().equals(prepared.step().source()))
             throw new IllegalArgumentException("shipment effect source differs from current resource bindings");
         if (shipment.status() == Shipment.Status.CARRYING && shipment.mobileContainerId().isEmpty() && (prepared.step().source().size() != 1
@@ -126,7 +126,7 @@ public final class ShipmentPhysicalStateSupport {
                     && stack.itemKind().equals(shipment.itemKind()) && stack.quantity() == receipt.step().destinationBefore() + order.portion().quantity()))
                 throw new IllegalArgumentException("shipment unload did not preserve its exact remaining hand and receiver portion");
         }
-        var transfer = ActorItemCustody.transferObservedUpdate(state, order, receipt.step().sourceEpoch(),
+        var transfer = ActorResourceTransferComposition.observed(state, order, receipt.step().sourceEpoch(),
                 receipt.step().destinationEpoch(), receipt.remainingSource(), receipt.destination());
         Shipment replacement = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.withStatus(Shipment.Status.CARRYING)
                 : shipment.unloaded(ShipmentReception.unloaded(shipment, receipt.step().lotQuantities()));

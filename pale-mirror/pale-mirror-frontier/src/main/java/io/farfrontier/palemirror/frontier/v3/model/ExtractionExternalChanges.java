@@ -41,7 +41,8 @@ public final class ExtractionExternalChanges {
             }
             state = ExtractionWorkTargets.withdrawTargetRoute(state, job);
             var reserved = new HashSet<>(sites.reservedCells(job.siteId())); reserved.remove(target.key().cell());
-            var nextCell = changed.available(reserved).stream().min(Comparator.comparingLong(ExtractionLayout.Cell::id));
+            var nextCell = changed.available(reserved).stream().filter(value -> ExtractionWorkPolicy.matchingOutput(value, job))
+                    .min(Comparator.comparingLong(ExtractionLayout.Cell::id));
             if (job.phase() == ExtractionWork.Phase.TAKE_TOOL && nextCell.isEmpty()) {
                 jobs.remove(job.id()); executions = ActorExecutionComposition.LIFECYCLE
                         .retire(executions, job.execution().actorId(), job.execution().activityKind(), job.id());
@@ -51,7 +52,7 @@ public final class ExtractionExternalChanges {
                         ? ExtractionWork.Phase.STORE : ExtractionWorkPolicy.remaining(changed)
                             ? ExtractionWork.Phase.SELECT_SOURCE : ExtractionWork.Phase.RETURN_TOOL;
                 jobs.put(job.id(), new ExtractionWork(job.id(), job.siteId(), job.execution(), job.toolId(), job.toolReturnSlot(),
-                        job.outputKind(), job.carriedAccountId(), job.outputLotId(), job.batch(), phase, job.revision() + 1,
+                        job.toolSource(), job.storageTarget(), job.outputKind(), job.carriedAccountId(), job.outputLotId(), job.batch(), phase, job.revision() + 1,
                         nextTarget, Optional.empty(), Optional.empty()));
             }
         }

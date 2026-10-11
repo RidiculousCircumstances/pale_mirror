@@ -102,28 +102,23 @@ public final class ProductionProcess {
         if (eligible.isEmpty())
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
                     state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) {
-            return blocked(task, settlement, workshop, depot, ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
-        }
-        boolean physicalCustody = ReferenceContainerCustody.hasLiveCustody(state, depot);
         var availableInput = BakeryBatchSelection.available(state, settlement.id());
-        if (physicalCustody && availableInput.isEmpty()
-                && FungibleResourceCustodySupport.accountAtContainer(state, depot).map(account ->
-                account.lotQuantities().entrySet().stream().filter(entry -> {
-                    ResourceLot lot = state.inventory().fungibleResources().lots().get(entry.getKey());
-                    return lot.economicOwnerId().equals(settlement.id()) && WHEAT.equals(lot.itemKind());
-                }).mapToInt(java.util.Map.Entry::getValue).sum() > 0).orElse(false)) {
-            return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
+        if (availableInput.isEmpty()) {
+            var stored = BakeryBatchSelection.storedInputContainers(state, settlement.id());
+            if (stored.stream().anyMatch(id -> !ReferenceContainerCustody.blocksCanonicalUse(state, id)))
+                return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
+            return blocked(task, settlement, workshop, stored.isEmpty() ? workshop.id() : stored.getFirst(), ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
         }
-        if (availableInput.isEmpty()) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
+        SubjectId depot = availableInput.orElseThrow().sourceContainer(state);
+        boolean physicalCustody = ReferenceContainerCustody.hasLiveCustody(state, depot);
         var batch = BakeryBatchSelection.admissible(state, settlement.id());
         if (batch.isEmpty())
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
                     state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
         Optional<ExactItemStack> input = batch.orElseThrow().exactInput();
         Optional<FungibleResourceCustodySupport.LotSelection> fungible = batch.orElseThrow().fungibleInput();
-        if (physicalCustody && !ReferenceContainerCustody.hasOperationalCustody(state, depot)
+        if (ReferenceContainerCustody.hasLiveCustody(state, batch.orElseThrow().sourceContainer(state))
+                    && !ReferenceContainerCustody.hasOperationalCustody(state, batch.orElseThrow().sourceContainer(state))
                 || fungible.isPresent() && !ProductionResourceCustody.canStart(state, fungible.orElseThrow(), batch.orElseThrow().quantity())) {
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
         }
@@ -629,7 +624,8 @@ public final class ProductionProcess {
                 // unavailability: canonical wheat is deliberately retained, but this exact
                 // depot must not admit it until its evidence is reconciled.  Bind that form to
                 // the depot identity so it cannot be forged as an ordinary no-input block.
-                boolean conflictedDepot = blocked.workId().equals(depot) && ReferenceContainerCustody.blocksCanonicalUse(state, depot);
+                boolean conflictedDepot = BakeryBatchSelection.storedInputContainers(state, settlement.id()).contains(blocked.workId())
+                        && ReferenceContainerCustody.blocksCanonicalUse(state, blocked.workId());
                 if (!conflictedDepot && (!blocked.workId().equals(workshop.id()) || wheatPresent
                         || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT)) {
                     throw new IllegalArgumentException("production input block precondition does not hold");

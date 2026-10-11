@@ -29,9 +29,6 @@ public final class GoodsTradeStateSupport {
         requireContainer(state, contract.sourceContainerId()); requireContainer(state, contract.receiverContainerId());
         int protectedMinimum = GoodsTradeSourceAdmission.protectedMinimum(state, contract.seller(),
                 contract.sourceContainerId(), contract.itemKind());
-        var seller = state.companies().goodsTrade().participants().participants().get(contract.seller().id());
-        if (!GoodsTradeSourceAdmission.dispatchFunded(state, seller, contract.receiverContainerId()))
-            throw new IllegalArgumentException("goods reservation has no source dispatch budget");
         var source = FungibleResourceCustodySupport.accountAtContainer(state, contract.sourceContainerId()).orElseThrow();
         if (state.inventory().fungibleResources().unclaimedQuantity(source.id(), contract.seller().id(), contract.itemKind())
                 - contract.quantity() < protectedMinimum)

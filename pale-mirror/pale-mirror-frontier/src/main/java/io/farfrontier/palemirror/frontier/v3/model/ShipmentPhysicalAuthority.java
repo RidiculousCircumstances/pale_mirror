@@ -6,7 +6,7 @@ import java.util.*;
 public final class ShipmentPhysicalAuthority {
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId container) {
         return state.shipments().shipments().values().stream().anyMatch(shipment -> shipment.pendingPhysicalStep().isPresent()
-                && (shipment.itemOrder().containerEndpoint().containerId().equals(container)
+                && (ShipmentServiceAccess.point(shipment).filter(container::equals).isPresent()
                     || shipment.mobileContainerId().equals(Optional.of(container))));
     }
     public static List<ContainerSlotClaim> slotClaims(FrontierWorldState state) {
@@ -19,7 +19,9 @@ public final class ShipmentPhysicalAuthority {
             if (step == null) continue;
             if (shipment.status() == Shipment.Status.CARRYING)
                 result.add(new ContainerSlotClaim(new ContainerSlotClaim.Owner(ContainerSlotClaim.Family.SHIPMENT, shipment.id()), new InventoryCustody.ContainerSlot(
-                        shipment.receiver().containerId(), step.destinationSlot())));
+                        shipment.receiver().containerId(), step.destinationSlot()),
+                        ShipmentAuthorizationComposition.capacityCompletionOwner(shipment).map(owner -> new ContainerInboundCapacity.Demand(
+                                owner, shipment.receiver().containerId(), shipment.itemKind(), step.lotQuantities().values().stream().mapToInt(Integer::intValue).sum()))));
             else if (shipment.status() == Shipment.Status.AWAITING_LOAD && shipment.mobileContainerId().isPresent())
                 result.add(new ContainerSlotClaim(new ContainerSlotClaim.Owner(ContainerSlotClaim.Family.SHIPMENT, shipment.id()), new InventoryCustody.ContainerSlot(
                         shipment.mobileContainerId().orElseThrow(), step.destinationSlot())));

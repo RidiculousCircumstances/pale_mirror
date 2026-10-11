@@ -10,6 +10,56 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Registered dispatch, movement and custody must really load provisions before an outbound order. */
 class ExpeditionSupplyFlowTest {
+    @Test void fullyProvisionedCashlessSellerDeliversReceivesPaymentAndReturnsAcrossRecovery() {
+        var base = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:cashless-provisioned-expedition"), 41,
+                FrontierRulesets.installed("frontier-v3-expedition-candidate-r1"));
+        var seller = new SubjectId("settlement:1");
+        var buyer = base.initialState().companies().goodsTrade().participants().participants().get(seller).known().getFirst().party().id();
+        var initial = base.initialState();
+        initial = initial.withInventory(initial.inventory().withEconomics(initial.inventory().economics().transfer(seller, buyer,
+                initial.inventory().economics().availableToReserve(seller))));
+        var config = completeNeedClocks(new FrontierEngineConfiguration<>(base.worldId(), initial, base.initialInstant(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
+                base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator(),
+                base.executionMetrics(), base.kernelQuarantineReporter()));
+        var engine = FrontierEngines.createCanonicalStateAccess(config);
+        SubjectId missionId = null; boolean recovered = false, delivered = false, completed = false;
+        for (int boundary = 0; boundary < 4096; boundary++) {
+            var state = engine.canonicalState().state();
+            if (missionId == null && !state.shipments().missions().isEmpty()) {
+                var mission = state.shipments().missions().values().iterator().next();
+                missionId = mission.id();
+                assertEquals(seller, mission.sender().settlementId());
+                assertTrue(mission.supplies().isPresent(), "cashless admission still requires real round-trip food");
+                assertTrue(mission.financialBudgetId().isEmpty());
+            }
+            if (missionId != null) {
+                var mission = state.shipments().missions().get(missionId);
+                var shipment = state.shipments().shipments().get(mission.shipmentIds().getFirst());
+                if (!recovered && shipment.status() == Shipment.Status.CARRYING) {
+                    var checkpoint = engine.checkpoint();
+                    assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+                    engine = FrontierEngines.recoverCanonicalStateAccess(config,
+                            new RecoveryImage(config.worldId(), Optional.of(new SnapshotRecord(checkpoint, 0)), List.of()));
+                    recovered = true;
+                    continue;
+                }
+                delivered |= shipment.status() == Shipment.Status.DELIVERED;
+                if (mission.stage() == TransportMission.Stage.COMPLETE) { completed = true; break; }
+            }
+            var current = engine.canonicalState().state();
+            var next = engine.executionView().schedules().stream()
+                    .filter(action -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, action)).sorted().findFirst().orElseThrow();
+            var result = engine.advanceTo(new SimInstant(Math.max(engine.executionView().instant().ticks(), next.dueAt().ticks())),
+                    new WorkBudget(128, 1024));
+            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
+            if (boundary % 64 == 0) engine.compact(engine.executionView().revision());
+        }
+        assertTrue(recovered); assertTrue(delivered); assertTrue(completed, "cashless admission must not strand the return");
+        var terminal = engine.canonicalState().state();
+        assertTrue(terminal.inventory().economics().require(seller).balance().raw() > 0, "actual acceptance pays the previously cashless seller");
+        assertEquals(terminal, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(terminal)));
+    }
     @Test void actualFullPersonalInventoriesSelectAndReserveTheFiniteAnimalAndLoadItsRealCargoCustody() throws ReflectiveOperationException {
         var base = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:expedition-pack-load"), 41,
                 FrontierRulesets.installed("frontier-v3-expedition-candidate-r1"));

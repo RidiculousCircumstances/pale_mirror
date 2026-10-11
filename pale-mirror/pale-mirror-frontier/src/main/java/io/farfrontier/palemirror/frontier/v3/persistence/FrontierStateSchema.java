@@ -6,7 +6,7 @@ import java.io.*;
 final class FrontierStateSchema {
     // Exact work-area development is independent of finite source/depletion history.
     // Historical disposable worlds lack its explicit admission authority.
-    static final int VERSION = 269;
+    static final int VERSION = 271;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

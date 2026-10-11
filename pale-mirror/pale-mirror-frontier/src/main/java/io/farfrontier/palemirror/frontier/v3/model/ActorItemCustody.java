@@ -111,11 +111,39 @@ public final class ActorItemCustody {
             throw new IllegalArgumentException("attached storage has no capacity for the declared portion");
     }
 
+    /** Ground adapter counterpart. Only an existing exact item-entity binding can fund the pickup. */
+    public static FrontierWorldStateUpdate transferObservedUpdate(FrontierWorldState state, ActorGroundItemOrder order,
+            long sourceEpoch, long destinationEpoch, List<FungiblePhysicalObservation.Stack> remainingSource,
+            List<FungiblePhysicalObservation.Stack> destination) {
+        Objects.requireNonNull(state); Objects.requireNonNull(order);
+        var actor = state.actorLocations().get(order.actorId());
+        var execution = state.actorExecutions().actors().get(order.actorId());
+        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
+                || !actor.supportingSurface().equals(order.station()) || execution == null
+                || execution.current().filter(current -> current.activityOwnerId().equals(order.ownerId())).isEmpty()
+                || sourceEpoch != order.sourceEpoch())
+            throw new IllegalArgumentException("ground pickup has no living exact execution at its declared source");
+        var body = ActorBodyAuthority.current(state, order.actorId());
+        if (body.physicalEpoch() != destinationEpoch
+                || ActorBodyAuthority.require(state, body).phase() != FencedRecoveryPhase.RUNNING)
+            throw new IllegalArgumentException("ground pickup has a stale or non-operational body epoch");
+        if (order.actorSlot().equals(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN))
+                && !state.inventory().actorItems(order.actorId()).isEmpty())
+            throw new IllegalArgumentException("ground pickup would overwrite exact equipment");
+        var preparation = ActorClaimDelegationComposition.prepare(state, order);
+        var resources = preparation.inventory().fungibleResources().transferActorOrderObservedStacks(preparation.order(), sourceEpoch,
+                destinationEpoch, remainingSource, destination);
+        return preparation.ownerChanges().inventory(preparation.inventory().withFungibleResources(resources));
+    }
+
     private static void requireEndpoint(ContainerRecord container, ActorContainerItemOrder order) {
         if (container == null || order.portion() instanceof ActorContainerItemOrder.Portion.Exact exact
                 && !container.ownerId().equals(exact.item().economicOwnerId())) {
             throw new IllegalArgumentException("actor item endpoint has no compatible declared container");
         }
+        if (order.direction() == ActorContainerItemOrder.Direction.PLACE
+                && container.storage().filter(policy -> !policy.filter().accepts(order.portion().itemKind())).isPresent())
+            throw new IllegalArgumentException("declared storage filter refuses this resource portion");
         // Fungible custody and title are independent. The calling owner authorizes the order;
         // the resource ledger validates quantities/claims and preserves each lot's actual owner.
     }

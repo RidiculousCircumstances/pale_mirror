@@ -13,6 +13,7 @@ public final class ExtractionWorkEffects {
     public static ActorContainerItemOrder equipment(FrontierWorldState state, ExtractionWork job,
             Optional<InventoryCustody.ContainerSlot> retainedSlot) {
         var site = ExtractionWorkAuthority.site(state, job);
+        var endpoint = job.phase() == ExtractionWork.Phase.TAKE_TOOL ? job.toolSource() : job.storageTarget();
         var item = Objects.requireNonNull(state.inventory().items().get(job.toolId()), "retained extraction tool");
         boolean take = job.phase() == ExtractionWork.Phase.TAKE_TOOL;
         if (!take && job.phase() != ExtractionWork.Phase.RETURN_TOOL) throw new IllegalArgumentException("mining phase has no equipment handoff");
@@ -22,17 +23,18 @@ public final class ExtractionWorkEffects {
         InventoryCustody.ContainerSlot slot;
         if (take) {
             if (!(item.custody() instanceof InventoryCustody.ContainerSlot stored)
-                    || !stored.containerId().equals(site.containerId())) throw new IllegalArgumentException("mining tool left its admitted source");
+                    || !stored.containerId().equals(endpoint.containerId())) throw new IllegalArgumentException("mining tool left its admitted source");
             slot = stored;
         } else {
-            slot = retainedSlot.orElseGet(() -> new InventoryCustody.ContainerSlot(site.containerId(),
-                    state.inventory().firstFreeSlot(site.containerId()).orElseThrow(() -> new IllegalArgumentException("tool return storage is full"))));
+            slot = retainedSlot.orElseGet(() -> new InventoryCustody.ContainerSlot(endpoint.containerId(),
+                    ContainerStorageAdmission.first(state, endpoint.containerId(), Optional.empty(), held -> false)
+                        .orElseThrow(() -> new IllegalArgumentException("tool return storage is full or reserved"))));
         }
-        if (!slot.containerId().equals(site.containerId()) || retainedSlot.filter(value -> !value.equals(slot)).isPresent())
+        if (!slot.containerId().equals(endpoint.containerId()) || retainedSlot.filter(value -> !value.equals(slot)).isPresent())
             throw new IllegalArgumentException("equipment handoff has a changed source/destination declaration");
         return new ActorContainerItemOrder(job.id(), job.execution().actorId(), take ? ActorContainerItemOrder.Direction.TAKE : ActorContainerItemOrder.Direction.PLACE,
                 new ActorContainerItemOrder.Portion.Exact(item), new ActorContainerItemOrder.ContainerEndpoint.ExactSlot(slot),
-                site.layout().storagePort(), ActorContainerItemOrder.Hand.MAIN, job.phase().wireTag(), job.revision());
+                endpoint.station(), ActorContainerItemOrder.Hand.MAIN, job.phase().wireTag(), job.revision());
     }
     public static ActorContainerItemOrder cargo(FrontierWorldState state, ExtractionWork job) {
         if (job.phase() != ExtractionWork.Phase.STORE) throw new IllegalArgumentException("mining is not storing its cargo");
@@ -42,24 +44,27 @@ public final class ExtractionWorkEffects {
         if (!(account.custody() instanceof ResourceCustody.Actor actor) || !actor.actorId().equals(job.execution().actorId())
                 || !account.claimQuantities().isEmpty() || account.lotQuantities().isEmpty())
             throw new IllegalArgumentException("mining cargo has a foreign holder or competing allocation");
-        var recipient = FungibleResourceCustodySupport.accountAtContainer(state, site.containerId())
-                .map(CustodyAccount::id).orElseGet(() -> new SubjectId("custody:extraction-storage-" + site.id().value().replace(':', '-')));
+        var endpoint = job.storageTarget();
+        var recipient = FungibleResourceCustodySupport.accountAtContainer(state, endpoint.containerId())
+                .map(CustodyAccount::id).orElseGet(() -> ReferenceContainerCustody.scopeId(endpoint.containerId()));
         return new ActorContainerItemOrder(job.id(), job.execution().actorId(), ActorContainerItemOrder.Direction.PLACE,
                 new ActorContainerItemOrder.Portion.Fungible(job.carriedAccountId(), account.custody(), recipient,
-                        new ResourceCustody.Container(site.containerId()), Optional.empty(), job.outputKind(), account.lotQuantities()),
-                new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(site.containerId()), site.layout().storagePort(),
+                        new ResourceCustody.Container(endpoint.containerId()), Optional.empty(), job.outputKind(), account.lotQuantities()),
+                new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(endpoint.containerId()), endpoint.station(),
                 ActorContainerItemOrder.Hand.OFF, job.phase().wireTag(), job.revision());
     }
     public static ExtractionWork afterBlock(FrontierWorldState state, ExtractionWork job, ExtractionDeposit nextDeposit, int carried) {
         var reserved = new HashSet<>(state.extractionSites().reservedCells(job.siteId()));
         reserved.remove(job.target().orElseThrow().key().cell());
         var next = carried < ActorCarriedResources.MAX_STACK_ITEMS && ExtractionWorkPolicy.requested(state, job)
-                ? nextDeposit.available(reserved).stream().min(Comparator.comparingLong((ExtractionLayout.Cell cell) -> distance(
-                    state.actorLocations().get(job.execution().actorId()).supportingSurface(), cell.workstation())).thenComparingLong(ExtractionLayout.Cell::id))
+                ? ExtractionWorkTargets.spatialSelection(state, nextDeposit, job.execution().actorId(),
+                    nextDeposit.available(reserved).stream().filter(cell -> ExtractionWorkPolicy.matchingOutput(cell, job)).toList(),
+                    AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION)
                 : Optional.<ExtractionLayout.Cell>empty();
         return next.map(cell -> job.transition(ExtractionWork.Phase.EXTRACT, Optional.of(target(nextDeposit, cell))))
                 .orElseGet(() -> job.transition(carried < ActorCarriedResources.MAX_STACK_ITEMS
                         && ExtractionWorkPolicy.requested(state, job) && ExtractionWorkPolicy.remaining(nextDeposit)
+                        && nextDeposit.available(reserved).stream().noneMatch(cell -> !ExtractionWorkPolicy.matchingOutput(cell, job))
                         ? ExtractionWork.Phase.SELECT_SOURCE : ExtractionWork.Phase.STORE, Optional.empty()));
     }
     public static ExtractionTarget target(ExtractionDeposit deposit, ExtractionLayout.Cell cell) {

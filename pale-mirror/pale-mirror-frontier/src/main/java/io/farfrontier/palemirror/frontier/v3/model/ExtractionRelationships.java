@@ -23,6 +23,10 @@ final class ExtractionRelationships {
             add(edges, Kind.EXTRACTION_WORK_SITE, owner, EntityKind.EXTRACTION_SITE, job.siteId());
             add(edges, Kind.EXTRACTION_WORKER, owner, EntityKind.RESIDENT, job.execution().actorId());
             add(edges, Kind.EXTRACTION_TOOL, owner, EntityKind.EXACT_ITEM, job.toolId());
+            ShipmentEndpointComposition.validate(state, job.toolSource());
+            ShipmentEndpointComposition.validate(state, job.storageTarget());
+            add(edges, Kind.EXTRACTION_TOOL_SOURCE, owner, EntityKind.CONTAINER, job.toolSource().containerId());
+            add(edges, Kind.EXTRACTION_WORK_STORAGE, owner, EntityKind.CONTAINER, job.storageTarget().containerId());
             if (state.inventory().fungibleResources().accounts().containsKey(job.carriedAccountId()))
                 add(edges, Kind.EXTRACTION_CARGO, owner, EntityKind.RESOURCE_ACCOUNT, job.carriedAccountId());
         }

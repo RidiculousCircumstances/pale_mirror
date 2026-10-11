@@ -111,7 +111,7 @@ class AutonomousGoodsTradeTest {
         assertEquals(companyMoney.minus(FixedScalar.whole(64)), state.inventory().economics().require(COMPANY).balance());
     }
 
-    @Test void mutuallyQuotedGoodsDoNotFreezeStockOrBuyerMoneyWithoutSourceDispatchBudget() {
+    @Test void mutuallyQuotedGoodsReserveActualStockAndBuyerPaymentWithoutSellerContingencyCash() {
         var configuration = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:unfunded-dispatch"), 41);
         var state = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration).canonicalState().state();
         var seller = state.companies().goodsTrade().participants().participants().get(HOME);
@@ -121,11 +121,13 @@ class AutonomousGoodsTradeTest {
         var before = state;
         state = review(state, HOME, 400); state = review(state, buyer, 400);
         assertFalse(state.companies().goodsTrade().orders().isEmpty(), "consent may exist without a committed shipment");
-        assertTrue(state.companies().goodsTrade().contracts().isEmpty());
-        assertTrue(state.inventory().fungibleResources().claims().isEmpty());
-        assertTrue(state.inventory().economics().reservations().isEmpty());
-        assertEquals(before.inventory().economics(), state.inventory().economics());
-        assertTrue(state.companies().goodsTrade().participants().participants().get(buyer).decision().contains("DISPATCH_UNFUNDED"));
+        assertFalse(state.companies().goodsTrade().contracts().isEmpty());
+        assertFalse(state.inventory().fungibleResources().claims().isEmpty());
+        assertFalse(state.inventory().economics().reservations().isEmpty());
+        assertEquals(before.inventory().economics().accounts(), state.inventory().economics().accounts(),
+                "a commercial promise reserves the buyer's payment but does not pay before receipt");
+        assertFalse(state.companies().goodsTrade().participants().participants().get(buyer).decision().contains("DISPATCH_UNFUNDED"));
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
     @Test void delayedPeriodicAndOpportunityReviewsUseExecutionTimeAtTheOrderExpiryBoundary() {

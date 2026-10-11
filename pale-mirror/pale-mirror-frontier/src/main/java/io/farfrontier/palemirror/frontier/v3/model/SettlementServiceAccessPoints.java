@@ -110,29 +110,16 @@ public final class SettlementServiceAccessPoints {
         SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
         ServiceAccessBoundary boundary = geometry.boundary;
         SurfaceAnchor apron = port.facing().step(port.exteriorApproach(), -1);
-        Set<SurfaceAnchor> waiting = new LinkedHashSet<>();
+        var preferred = new java.util.ArrayList<SurfaceAnchor>();
         for (int distance = 1; distance <= Math.max(4, (settlement.residents().size() + 1) / 2); distance++) {
             for (SurfaceAnchor side : List.of(port.facing().stepLeft(apron, distance), port.facing().stepRight(apron, distance))) {
-                SurfaceAnchor supported = knowledge.supportAt(side.x(), side.z());
-                if (!boundary.occupied(supported.standingBody())) waiting.add(supported);
-            }
-        }
-        // A two-dimensional temporary buffer, not a population-sized pair of parking strips.
-        int radius = Math.min(16, Math.max(2, (int) Math.ceil(Math.sqrt(population))));
-        for (int ring = 1; ring <= radius; ring++) {
-            for (int dx = -ring; dx <= ring; dx++) {
-                for (int dz = -ring; dz <= ring; dz++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
-                    SurfaceAnchor supported = knowledge.supportAt(apron.x() + dx, apron.z() + dz);
-                    if (boundary.cleared(supported.standingBody()))
-                        waiting.add(supported);
-                }
+                preferred.add(side);
             }
         }
         // Applicants must never park on the current user's escape perimeter.
         // The same geometry policy governs clearance and both HOT/COLD waiting.
         var egress = geometry.egress;
-        waiting.removeIf(surface -> egress.contains(surface) || !knowledge.traversable(List.of(surface)));
-        return new ServiceAccessPoint(port.depotId(), settlement.id(), port.serviceSurface(), boundary, List.copyOf(waiting), egress);
+        var waiting = ServiceWaitingTargets.select(boundary, knowledge, apron, preferred, egress, population);
+        return new ServiceAccessPoint(port.depotId(), settlement.id(), port.serviceSurface(), boundary, waiting, egress);
     }
 }

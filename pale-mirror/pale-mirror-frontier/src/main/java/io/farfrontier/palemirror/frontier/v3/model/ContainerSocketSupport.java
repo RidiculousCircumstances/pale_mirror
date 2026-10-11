@@ -3,10 +3,15 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import java.util.Objects;
 
 /** Complete producer declaration; a socket must not discover its physical provenance owner. */
-public sealed interface ContainerSocketSupport permits ContainerSocketSupport.Graybox, ContainerSocketSupport.Worksite {
-    enum Kind { GRAYBOX, WORKSITE }
+public sealed interface ContainerSocketSupport permits ContainerSocketSupport.Graybox, ContainerSocketSupport.Worksite, ContainerSocketSupport.Terrain {
+    enum Kind { GRAYBOX, WORKSITE, TERRAIN }
     Kind kind();
     BlockPosition position();
+    /** Ordinary declared storage needs load-bearing terrain, not invented ownership of the ground. */
+    record Terrain(BlockPosition position) implements ContainerSocketSupport {
+        public Terrain { Objects.requireNonNull(position); }
+        @Override public Kind kind() { return Kind.TERRAIN; }
+    }
     record Graybox(GrayboxCell cell) implements ContainerSocketSupport {
         public Graybox { Objects.requireNonNull(cell); }
         @Override public Kind kind() { return Kind.GRAYBOX; }

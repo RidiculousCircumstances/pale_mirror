@@ -18,18 +18,12 @@ public record BakeryWorkGoal(SubjectId jobId, SubjectId workerId, BakeryWorkStat
 
     public static BakeryWorkGoal current(FrontierWorldState state, ProductionJob job) {
         BakeryWorkState work = job.bakeryWork().orElseThrow(() -> new IllegalArgumentException("job has no bakery goal"));
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
         SurfaceAnchor target;
         if (work.phase() == BakeryWorkState.Phase.DELIVERED) {
-            SettlementStructure depot = settlement.structures().stream()
-                    .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-            var port = SettlementDepotServicePort.forDepot(depot);
-            target = port.serviceSurface();
+            target = BakeryStorage.access(state, job).interactionStation(state);
         } else if (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY) {
-            SettlementStructure depot = settlement.structures().stream()
-                    .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-            target = SettlementDepotServicePort.forDepot(depot).serviceSurface();
+            target = BakeryStorage.access(state, job).interactionStation(state);
         } else {
             ProductionStationSpec machine = state.inventory().containers().values().stream()
                     .flatMap(container -> container.productionStation().stream())
@@ -44,7 +38,7 @@ public record BakeryWorkGoal(SubjectId jobId, SubjectId workerId, BakeryWorkStat
     /** Delivery is complete at the depot; later travel is not a production obligation. */
     public static boolean deliveryAccessCleared(FrontierWorldState state, ProductionJob job, BodyPosition body) {
         return job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED
-                && ServiceAccessCoordinator.boundary(state, FrontierWorldState.depotId(job.settlementId())).cleared(body);
+                && ServiceAccessCoordinator.boundary(state, BakeryStorage.destination(job)).cleared(body);
     }
 
     public MovementOrder movementOrder() {

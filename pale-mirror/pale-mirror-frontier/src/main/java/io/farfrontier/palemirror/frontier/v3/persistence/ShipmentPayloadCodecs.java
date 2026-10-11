@@ -9,6 +9,10 @@ final class ShipmentPayloadCodecs {
     private ShipmentPayloadCodecs() { }
     static PayloadCodecs create() {
         return new PayloadCodecs(List.of(
+                codec("frontier.shipment_storage_retargeted", (out, p) -> {
+                    var value = (ShipmentStorageRetargeted) p; out.writeUTF(value.shipmentId().value()); out.writeLong(value.expectedRevision());
+                    ShipmentStateCodec.endpoint(out, value.destination());
+                }, in -> new ShipmentStorageRetargeted(new SubjectId(in.readUTF()), in.readLong(), ShipmentStateCodec.endpoint(in))),
                 codec("frontier.internal_shipment_dispatched", (out, p) -> {
                     var v = (InternalShipmentDispatched) p; ShipmentStateCodec.writeShipment(out, v.shipment());
                     out.writeUTF(v.claim().id().value()); out.writeUTF(v.claim().claimantId().value()); out.writeUTF(v.claim().economicOwnerId().value());

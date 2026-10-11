@@ -9,12 +9,12 @@ import java.util.*;
 final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
     static final Set<String> COMMANDS = Set.of("frontier.extraction_geology_invalidated", "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
             "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed");
-    static final Set<String> TYPES = Set.of("frontier.extraction_geology_invalidated", "frontier.extraction_area_extended", "frontier.extraction_frontier_opened", "frontier.extraction_work_started", "frontier.extraction_work_progressed",
+    static final Set<String> TYPES = Set.of("frontier.extraction_geology_invalidated", "frontier.extraction_area_extended.v2", "frontier.extraction_frontier_opened", "frontier.extraction_work_started", "frontier.extraction_work_progressed",
             "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
             "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("extraction",
             COMMANDS, Set.of(ExtractionContinuation.PROGRESS, ExtractionContinuation.REVIEW), TYPES,
-            java.util.stream.Stream.concat(TYPES.stream(), Set.of("frontier.internal_shipment_dispatched", "frontier.actor_movement_started", "kernel.schedule_created",
+            java.util.stream.Stream.concat(TYPES.stream(), Set.of("frontier.actor_movement_interrupted", "frontier.actor_movement_started", "kernel.schedule_created",
                     "frontier.ambient_lease_transition", "kernel.schedule_rescheduled", "kernel.schedule_cancelled").stream()).collect(java.util.stream.Collectors.toUnmodifiableSet()), TYPES);
     @Override public List<ScheduledAction> initialSchedules(FrontierBootstrap bootstrap) {
         return GrayboxQuarryPlan.initial(bootstrap).deposits().keySet().stream().sorted()

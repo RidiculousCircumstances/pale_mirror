@@ -119,7 +119,7 @@ final class ResourceSiteHarvestPlanning {
 
     /** Family-owned executable opportunity; this probe creates no assignment, movement or reservation. */
     static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long atTick) {
-        if (state.firstFreeContainerSlot(FrontierWorldState.depotId(resident.settlementId())).isEmpty()) return false;
+        if (!ProductionStockDemand.read(state, resident.settlementId(), "minecraft:wheat").requested()) return false;
         for (var task : state.strategicPlans().tasks().values().stream()
                 .filter(task -> task.ownerId().equals(resident.settlementId())
                         && task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
@@ -138,14 +138,20 @@ final class ResourceSiteHarvestPlanning {
 
     private static java.util.Optional<ResourceSiteHarvestJob> offer(FrontierWorldState state, StrategicTask task,
             ResourceSite site, ResidentProfile farmer, long tick) {
+        if (!ProductionStockDemand.read(state, site.settlementId(), "minecraft:wheat").requested())
+            return java.util.Optional.empty();
         if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), tick)
                 || !ActorExecutionCoordinator.ordinaryWorkAdmission(state, farmer.id()).permitted())
             return java.util.Optional.empty();
-        SubjectId depot = FrontierWorldState.depotId(site.settlementId());
-        OptionalInt slot = state.firstFreeContainerSlot(depot);
-        if (slot.isEmpty()) return java.util.Optional.empty();
         ActorLocation worker = state.actorLocations().get(farmer.id());
         if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");
+        var storage = ResourceStorageSelection.destination(state, site.settlementId(), "minecraft:wheat", 64,
+                worker.supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE), java.util.Optional.empty(),
+                endpoint -> state.firstFreeContainerSlot(endpoint.containerId()).isPresent()
+                        && ResourceStorageNavigation.reachable(state, worker.supportingSurface(), endpoint));
+        if (storage.isEmpty()) return java.util.Optional.empty();
+        SubjectId depot = storage.orElseThrow().containerId();
+        OptionalInt slot = state.firstFreeContainerSlot(depot);
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
         var field = state.resourceSites().cycle(site.id());
         ResourceSiteHarvestJob job = job(site, lifecycle, task, farmer,
@@ -255,6 +261,13 @@ final class ResourceSiteHarvestPlanning {
         if (state.resourceSites().site(job.siteId()).phase() != ResourceSitePhase.HARVESTING)
             throw new IllegalArgumentException("resource-site harvest continuation has an active job outside HARVESTING or terminal CONFLICT");
         long now = Math.max(action.dueAt().ticks(), currentTick);
+        var replacement = HarvestStorageReplacement.select(state, job);
+        if (replacement.isPresent()) {
+            var event = replacement.orElseThrow();
+            var after = HarvestStorageReplacement.apply(state, job.siteId(), event);
+            var next = after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
+            return List.of(new ProposedEvent(job.siteId(), event), reschedule(action, coldProgress(next, Math.addExact(now, 1L))));
+        }
         if (!state.humanPopulation().meals().containsKey(job.workerId())
                 && (!state.actorExecutions().owns(job.workerId(),
                         io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id())
@@ -460,14 +473,14 @@ final class ResourceSiteHarvestPlanning {
         if (job == null) return java.util.Set.of(action.subject());
         var settlement = site(state, job.siteId()).settlementId();
         return java.util.Set.of(job.id(), job.siteId(), job.workerId(), settlement,
-                FrontierWorldState.depotId(settlement));
+                job.outputSlot().containerId());
     }
 
     /** COLD may not transfer an actor part into a chest held by a live physical custodian. */
     private static boolean loadedDepotCustodyBlocksDelivery(FrontierWorldState state, ResourceSiteHarvestJob job) {
         if (!(job.progress().complete() || job.returningForBatch()) || !state.inventory().fungibleResources().accounts()
                 .containsKey(job.actorAccountId())) return false;
-        SubjectId depot = FrontierWorldState.depotId(site(state, job.siteId()).settlementId());
+        SubjectId depot = job.outputSlot().containerId();
         // The physical service goal may be any authorized depot station. A historical
         // route endpoint/cursor cannot decide whether COLD may cross the chest custody
         // boundary; hold the return while that chest has a live physical owner.

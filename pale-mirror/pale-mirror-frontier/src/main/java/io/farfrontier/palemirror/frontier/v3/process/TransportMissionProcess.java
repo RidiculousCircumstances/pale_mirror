@@ -59,12 +59,12 @@ public final class TransportMissionProcess {
         TransportGroupMissionPort.validateRendezvous(state, mission.sender(), mission.homeRendezvous(), group.members().size());
         TransportGroupMissionPort.validateRendezvous(state, mission.receiver(), mission.destinationRendezvous(), group.members().size());
         var economics = state.inventory().economics();
-        var budgetAmount = state.bootstrap().ruleset().expedition().replenishmentBudget();
+        var budgetAmount = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionFundingAuthority.allocation(state, mission);
         if (mission.financialBudgetId().isPresent()) {
             economics = economics.reserveBudget(new FinancialBudget(mission.financialBudgetId().orElseThrow(),
                     mission.sender().settlementId(), FinancialBudget.OwnerKind.TRANSPORT_MISSION, mission.id(), budgetAmount));
-        } else if (budgetAmount.raw() > 0 && state.bootstrap().ruleset().schemaVersion() >= 17)
-            throw new IllegalArgumentException("current expedition admission omits its declared replenishment budget");
+            if (budgetAmount.raw() == 0) throw new IllegalArgumentException("expedition declares an unfunded contingency budget");
+        }
         for (var shipment : value.shipments()) {
             if (!shipment.transportMissionId().equals(Optional.of(mission.id()))) throw new IllegalArgumentException("shipment has a foreign mission binding");
             ShipmentStateSupport.validateDispatch(state, value.senderId(), shipment);

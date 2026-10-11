@@ -107,7 +107,8 @@ final class FungibleResourceValidation {
             // its block position alone cannot establish that UUID here.
             case PhysicalStackAddress.HopperSlot ignored -> custody instanceof ResourceCustody.WorldCarrier;
             case PhysicalStackAddress.WorldEntity entity -> custody instanceof ResourceCustody.WorldCarrier owner
-                    && owner.carrierId().equals(entity.entityId());
+                    && owner.carrierId().equals(entity.entityId())
+                    || custody instanceof ResourceCustody.Ground ground && ground.entityId().equals(entity.entityId());
             case PhysicalStackAddress.ActorHand hand -> custody instanceof ResourceCustody.Actor owner
                     && owner.actorId().equals(hand.actorId());
             case PhysicalStackAddress.ActorPocket pocket -> custody instanceof ResourceCustody.Actor owner

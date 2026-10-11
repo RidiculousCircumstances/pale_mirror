@@ -35,7 +35,8 @@ public final class ExtractionLayout {
                 throw new IllegalArgumentException("extraction dependencies must name earlier declared source cells");
             BlockPosition feet = workstation.support().offset(0, 1, 0);
             if (Math.abs(source.x() - feet.x()) + Math.abs(source.z() - feet.z()) > 1
-                    || Math.abs(source.y() - feet.y()) > 1 || source.equals(workstation.support()))
+                    || !io.farfrontier.palemirror.frontier.v3.model.geometry.BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN
+                        .contains(workstation, source) || source.equals(workstation.support()))
                 throw new IllegalArgumentException("extraction source has no adjacent supported work position");
         }
     }

@@ -14,11 +14,15 @@ final class FrontierV3ContainerSocketProvenance {
     }
     private static final Map<ContainerSocketSupport.Kind, Provider> PROVIDERS = Map.of(
             ContainerSocketSupport.Kind.GRAYBOX, FrontierV3ContainerSocketProvenance::graybox,
+            ContainerSocketSupport.Kind.TERRAIN, FrontierV3ContainerSocketProvenance::terrain,
             ContainerSocketSupport.Kind.WORKSITE, FrontierV3ContainerSocketProvenance::worksite);
     private FrontierV3ContainerSocketProvenance() { }
     private static final Map<ContainerSocketSupport.Kind, java.util.function.BiFunction<ContainerSocketSupport, java.util.function.BooleanSupplier, Boolean>> WRITERS = Map.of(
             ContainerSocketSupport.Kind.GRAYBOX, (declaration, effect) -> {
                 if (!(declaration instanceof ContainerSocketSupport.Graybox)) throw new IllegalArgumentException("forged socket schema");
+                return effect.getAsBoolean();
+            }, ContainerSocketSupport.Kind.TERRAIN, (declaration, effect) -> {
+                if (!(declaration instanceof ContainerSocketSupport.Terrain)) throw new IllegalArgumentException("forged terrain socket schema");
                 return effect.getAsBoolean();
             }, ContainerSocketSupport.Kind.WORKSITE, (declaration, effect) -> {
                 if (!(declaration instanceof ContainerSocketSupport.Worksite worksite)) throw new IllegalArgumentException("forged socket schema");
@@ -38,6 +42,13 @@ final class FrontierV3ContainerSocketProvenance {
             BlockPos position, ContainerSocketSupport support) {
         if (!(support instanceof ContainerSocketSupport.Graybox declared)) throw new IllegalArgumentException("forged graybox support schema");
         return FrontierV3ContainerSurfaceExecutor.supportReadiness(level, ledger, position.above(), declared.cell());
+    }
+    private static FrontierV3ContainerSurfaceExecutor.SocketReadiness terrain(ServerLevel level, FrontierV3GrayboxLedger ledger,
+            BlockPos position, ContainerSocketSupport support) {
+        if (!(support instanceof ContainerSocketSupport.Terrain)) throw new IllegalArgumentException("forged terrain support schema");
+        if (!level.hasChunkAt(position)) return FrontierV3ContainerSurfaceExecutor.SocketReadiness.DEFERRED;
+        return level.getBlockState(position).isFaceSturdy(level, position, net.minecraft.core.Direction.UP)
+                ? FrontierV3ContainerSurfaceExecutor.SocketReadiness.READY : FrontierV3ContainerSurfaceExecutor.SocketReadiness.CONFLICT;
     }
     private static FrontierV3ContainerSurfaceExecutor.SocketReadiness worksite(ServerLevel level, FrontierV3GrayboxLedger ledger,
             BlockPos position, ContainerSocketSupport support) {

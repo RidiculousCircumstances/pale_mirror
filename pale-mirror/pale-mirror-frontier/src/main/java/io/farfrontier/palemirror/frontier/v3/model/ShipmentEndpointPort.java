@@ -8,4 +8,6 @@ interface ShipmentEndpointPort {
     void validate(FrontierWorldState state, ShipmentEndpoint endpoint);
     List<KnownPedestrianRouteKnowledge.SettlementPassage> passages(FrontierWorldState state, ShipmentEndpoint endpoint);
     SurfaceAnchor exteriorApproach(FrontierWorldState state, ShipmentEndpoint endpoint);
+    List<SurfaceAnchor> stations(FrontierWorldState state, ShipmentEndpoint endpoint);
+    SurfaceAnchor interactionStation(FrontierWorldState state, ShipmentEndpoint endpoint);
 }

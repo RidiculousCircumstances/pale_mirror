@@ -31,11 +31,23 @@ public final class ExtractionAreaPlanning {
             } catch (KnownPedestrianNavigation.RouteUnavailable blocked) { return false; }
         };
         if (deposit.available(Set.of()).stream().anyMatch(cell -> reachable.test(cell.workstation()))) return Optional.empty();
-        int count = Math.min(rules.developmentBatchCells() / 2, (ExtractionLayout.MAX_CELLS - layout.cells().size()) / 2);
-        var columns = AdjacentExcavationPlanner.propose(layout.accessSurfaces(), ExtractionGroundKnowledge.forState(state),
+        int clearanceBound = rules.surfaceCut().map(cut -> cut.topY() - layout.storagePort().y()
+                + rules.terraces().orElseThrow().maximumDepth()).orElse(2);
+        int count = Math.min(rules.developmentBatchCells() / clearanceBound,
+                (ExtractionLayout.MAX_CELLS - layout.cells().size()) / clearanceBound);
+        if (count < 1) return Optional.empty();
+        var ground = ExtractionGroundKnowledge.forState(state);
+        var columns = rules.terraces().map(terraces -> AdjacentExcavationPlanner.propose(layout.accessSurfaces(), ground,
                 reachable, floor -> !declarationHeld(state, siteId, floor.support()),
-                rules.source().before()::equals, rules.source().before()::equals, count);
-        return columns.isEmpty() ? Optional.empty() : Optional.of(new ExtractionAreaExtended(siteId, deposit.development().revision(), columns));
+                rules.source().before()::equals, block -> rules.definitionFor(block).isPresent(), count,
+                terraces.selection(layout.storagePort().y(), rules.surfaceCut().map(cut -> OptionalInt.of(cut.topY())).orElseGet(OptionalInt::empty), layout.accessSurfaces(),
+                        surface -> !knowledge.geometry().blocked(surface)))).orElseGet(() -> AdjacentExcavationPlanner.propose(
+                layout.accessSurfaces(), ground, reachable, floor -> !declarationHeld(state, siteId, floor.support()),
+                rules.source().before()::equals, rules.source().before()::equals, count));
+        var reachableCuts = columns.stream().filter(column -> BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(
+                column.station(), column.floor().support().offset(0, column.clearance().size(), 0))
+                && BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(column.station(), column.floor().support().offset(0, 1, 0))).toList();
+        return reachableCuts.isEmpty() ? Optional.empty() : Optional.of(new ExtractionAreaExtended(siteId, deposit.development().revision(), reachableCuts));
     }
     private static boolean declarationHeld(FrontierWorldState state, SubjectId siteId, BlockPosition position) {
         var region = new ExtractionRegion(siteId, Math.floorDiv(position.x(), 16), Math.floorDiv(position.z(), 16));
@@ -51,7 +63,7 @@ public final class ExtractionAreaPlanning {
         if (!subject.equals(event.siteId()) || !proposal(state, subject).equals(Optional.of(event)))
             throw new IllegalArgumentException("stale, foreign, protected or unavailable excavation plan");
         var prior = state.extractionSites().deposits().get(subject);
-        var next = prior.extend(event.expectedRevision(), extend(prior.site().layout(), state.bootstrap().ruleset().extraction().source(), event));
+        var next = prior.extend(event.expectedRevision(), extend(prior.site().layout(), state.bootstrap().ruleset().extraction(), event));
         return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().extend(prior, next)));
     }
     public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, ExtractionAreaExtended event, long canonicalRevision) {
@@ -81,7 +93,7 @@ public final class ExtractionAreaPlanning {
         }
         return successor.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
     }
-    private static ExtractionLayout extend(ExtractionLayout prior, BlockExtraction.Definition definition, ExtractionAreaExtended event) {
+    private static ExtractionLayout extend(ExtractionLayout prior, ExtractionRules rules, ExtractionAreaExtended event) {
         var cells = new ArrayList<>(prior.cells()); var fixed = new LinkedHashMap<>(prior.fixedBlocks());
         var ids = new LinkedHashMap<>(prior.infrastructureIds()); var surfaces = new ArrayList<>(prior.accessSurfaces());
         var sources = prior.cells().stream().collect(java.util.stream.Collectors.toMap(ExtractionLayout.Cell::source, ExtractionLayout.Cell::id));
@@ -93,10 +105,14 @@ public final class ExtractionAreaPlanning {
                 var dependency = sources.get(column.station().support().offset(0, height, 0));
                 if (dependency != null) prerequisites.add(dependency);
             }
-            long upperId = ++cellId;
-            cells.add(new ExtractionLayout.Cell(upperId, floor.offset(0, 2, 0), column.station(), definition, prerequisites));
-            var lowerParents = new HashSet<>(prerequisites); lowerParents.add(upperId);
-            cells.add(new ExtractionLayout.Cell(++cellId, floor.offset(0, 1, 0), column.station(), definition, lowerParents));
+            var clearance = column.clearance();
+            for (int height = clearance.size(); height >= 1; height--) {
+                var definition = rules.definitionFor(clearance.get(height - 1).block()).orElseThrow(
+                        () -> new IllegalArgumentException("undeclared excavation preparation recipe"));
+                long currentId = ++cellId;
+                cells.add(new ExtractionLayout.Cell(currentId, floor.offset(0, height, 0), column.station(), definition, prerequisites));
+                prerequisites = new HashSet<>(prerequisites); prerequisites.add(currentId);
+            }
             fixed.put(floor, column.support().block()); ids.put(floor, ++infrastructureId); surfaces.add(column.floor());
         }
         return new ExtractionLayout(cells, fixed, surfaces, prior.entrance(), prior.container(), prior.storagePort(), ids);

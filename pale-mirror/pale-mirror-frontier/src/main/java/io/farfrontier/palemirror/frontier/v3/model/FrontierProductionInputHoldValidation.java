@@ -16,7 +16,8 @@ final class FrontierProductionInputHoldValidation {
         };
         ClaimAllocation claim = resources.claims().get(claimId);
         if (account == null || claim == null || !(account.custody() instanceof ResourceCustody.Container container)
-                || !container.containerId().equals(FrontierWorldState.depotId(settlement.id()))
+                || !container.containerId().equals(job.bakeryWork().isPresent()
+                    ? job.bakeryWork().orElseThrow().sourceContainerId() : job.rights().destinationContainerId())
                 || inputLots.values().stream().mapToInt(Integer::intValue).sum() != job.outputCount()
                 || inputLots.entrySet().stream().anyMatch(entry -> {
                     ResourceLot lot = resources.lots().get(entry.getKey());

@@ -46,6 +46,9 @@ final class FrontierV3FungibleResourceObservationExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
+        if (FrontierV3GroundPickupRecovery.reconcileOne(level, state)) return;
+        if (FrontierV3ContainerDrops.reconcileOne(level, runtime)) return;
+        if (FrontierV3GroundItemDestruction.reconcileOne(level, runtime)) return;
         if (FrontierV3ActorDeathResourceComposition.reconcileOne(level, runtime, state)) return;
         if (FrontierV3UnitInventoryPhysicalCustody.bindOne(level, runtime, state)) return;
         if (FrontierV3ContainerClickExecutor.reconcileOne(level, runtime, state)) return;

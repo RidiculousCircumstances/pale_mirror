@@ -16,15 +16,24 @@ final class ContainerStorageAdmission {
         return ContainerInboundCapacity.incoming(uncovered, container, Optional.empty());
     }
     static boolean receive(FrontierWorldState state, SubjectId container, String kind, int quantity, Optional<SubjectId> completing) {
+        var record = state.inventory().containers().get(container);
+        if (record == null || ReferenceContainerCustody.blocksCanonicalUse(state, container)
+                || record.storage().filter(policy -> !policy.filter().accepts(kind)).isPresent()) return false;
         return state.inventory().canReceiveFungible(container, kind, quantity, ContainerPhysicalReservations.slots(state, container, completing),
                 inbound(state, container, completing));
     }
     static boolean receiveCargo(FrontierWorldState state, SubjectId cargo, SubjectId container) {
+        var record = state.inventory().containers().get(container);
+        var carried = state.inventory().fungibleResources().accounts().get(cargo);
+        if (record == null || ReferenceContainerCustody.blocksCanonicalUse(state, container)) return false;
+        if (carried != null && record.storage().filter(policy -> carried.lotQuantities().keySet().stream().anyMatch(lot ->
+                !policy.filter().accepts(state.inventory().fungibleResources().lots().get(lot).itemKind()))).isPresent()) return false;
         return state.inventory().canReceiveFungibleCargo(cargo, container, state.reservedContainerSlots(container),
                 inbound(state, container, Optional.empty()));
     }
     static boolean available(FrontierWorldState state, InventoryCustody.ContainerSlot slot,
                              Optional<SubjectId> completing, Predicate<InventoryCustody.ContainerSlot> held) {
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())) return false;
         return state.inventory().availableSlots(slot.containerId(), ContainerPhysicalReservations.slots(state, slot.containerId(), completing),
                 inbound(state, slot.containerId(), completing)).contains(slot.slot())
                 && ReferenceContainerCustody.expectedFungibleSlot(state, slot.containerId(), slot.slot()).isEmpty()
@@ -32,6 +41,7 @@ final class ContainerStorageAdmission {
     }
     static OptionalInt first(FrontierWorldState state, SubjectId container, Optional<SubjectId> completing,
                              Predicate<InventoryCustody.ContainerSlot> held) {
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, container)) return OptionalInt.empty();
         for (int slot : state.inventory().availableSlots(container, ContainerPhysicalReservations.slots(state, container, completing), inbound(state, container, completing))) {
             var address = new InventoryCustody.ContainerSlot(container, slot);
             if (ReferenceContainerCustody.expectedFungibleSlot(state, container, slot).isEmpty() && !held.test(address))

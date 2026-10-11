@@ -3,14 +3,14 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.*;
 
-/** One atomic container loss, composed with explicit allocation-owner dispositions. */
-public final class PlayerStockClaimLoss {
-    private static final Map<ClaimPurpose, PlayerStockClaimLossOwner> OWNERS = register(List.of(
+/** One atomic source loss, composed with explicit allocation-owner dispositions. */
+public final class SourceStockClaimLoss {
+    private static final Map<ClaimPurpose, SourceStockClaimLossOwner> OWNERS = register(List.of(
             new ResidentMealPlayerStockLoss(), new InternalShipmentPlayerStockLoss()));
-    private PlayerStockClaimLoss() { }
+    private SourceStockClaimLoss() { }
 
-    private static Map<ClaimPurpose, PlayerStockClaimLossOwner> register(List<PlayerStockClaimLossOwner> owners) {
-        var result = new EnumMap<ClaimPurpose, PlayerStockClaimLossOwner>(ClaimPurpose.class);
+    private static Map<ClaimPurpose, SourceStockClaimLossOwner> register(List<SourceStockClaimLossOwner> owners) {
+        var result = new EnumMap<ClaimPurpose, SourceStockClaimLossOwner>(ClaimPurpose.class);
         for (var owner : owners) if (result.put(owner.purpose(), owner) != null)
             throw new IllegalArgumentException("duplicate player source-loss owner");
         return Map.copyOf(result);
@@ -31,17 +31,21 @@ public final class PlayerStockClaimLoss {
     }
 
     public static FrontierWorldState settle(FrontierWorldState state, FungibleStockDepartureObserved loss) {
+        return settle(state, loss.sourceAccountId(), loss.authorityEpoch(), loss.departedLots(), loss.forfeitedClaimIds(), loss.remaining());
+    }
+    public static FrontierWorldState settle(FrontierWorldState state, SubjectId source, long epoch,
+            Map<SubjectId, Integer> departedLots, Set<SubjectId> forfeited, List<FungiblePhysicalObservation.Stack> remaining) {
         var ledger = state.inventory().fungibleResources();
-        var claims = loss.forfeitedClaimIds().stream().sorted().map(id -> {
+        var claims = forfeited.stream().sorted().map(id -> {
             var claim = ledger.claims().get(id);
             if (claim == null) throw new IllegalArgumentException("player source loss has no current claim: " + id);
             var owner = require(claim);
-            owner.validate(state, loss.sourceAccountId(), claim);
+            owner.validate(state, source, claim);
             return claim;
         }).toList();
-        var cleared = claims.isEmpty() ? ledger : ledger.releaseClaims(loss.forfeitedClaimIds());
-        var departed = cleared.departObserved(loss.sourceAccountId(), loss.authorityEpoch(), loss.departedLots(), loss.remaining());
-        var transaction = new PlayerStockClaimLossOwner.Settlement(FungibleForfeitureSettlement.from(state,
+        var cleared = claims.isEmpty() ? ledger : ledger.releaseClaims(forfeited);
+        var departed = cleared.departObserved(source, epoch, departedLots, remaining);
+        var transaction = new SourceStockClaimLossOwner.Settlement(FungibleForfeitureSettlement.from(state,
                 state.inventory().withFungibleResources(departed)), state.humanPopulation());
         for (var claim : claims) transaction = require(claim).settle(state, claim, transaction);
         return state.withChanges(transaction.resources().contribution().humanPopulation(transaction.population()));
@@ -50,11 +54,14 @@ public final class PlayerStockClaimLoss {
     public record ReleasedActivity(SubjectId actor, Optional<io.farfrontier.palemirror.frontier.v3.api.ScheduleId> cancelledProgress,
                                    OptionalLong retargetAtTick) { }
     public static List<ReleasedActivity> released(FrontierWorldState before, FungibleStockDepartureObserved loss) {
-        return loss.forfeitedClaimIds().stream().sorted().map(before.inventory().fungibleResources().claims()::get)
+        return released(before, loss.forfeitedClaimIds());
+    }
+    public static List<ReleasedActivity> released(FrontierWorldState before, Set<SubjectId> forfeited) {
+        return forfeited.stream().sorted().map(before.inventory().fungibleResources().claims()::get)
                 .flatMap(claim -> require(claim).released(before, claim).stream())
                 .map(value -> new ReleasedActivity(value.actor(), value.cancelledProgress(), value.retargetAtTick())).toList();
     }
-    private static PlayerStockClaimLossOwner require(ClaimAllocation claim) {
+    private static SourceStockClaimLossOwner require(ClaimAllocation claim) {
         var owner = OWNERS.get(claim.purpose());
         if (owner == null) throw new IllegalArgumentException("claim has no player source-loss owner: " + claim.purpose());
         return owner;

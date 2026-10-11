@@ -9,6 +9,19 @@ import java.util.*;
 /** Area selection owns neither route policy nor depletion. Only proved reachable alternatives qualify. */
 public final class ExtractionWorkTargets {
     private ExtractionWorkTargets() { }
+    /** Shared area-work ranking keeps separate miners local without excluding anyone's remaining work. */
+    public static Optional<ExtractionLayout.Cell> spatialSelection(FrontierWorldState state, ExtractionDeposit deposit,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor, List<ExtractionLayout.Cell> available,
+            AreaWorkSelection.SpatialPolicy policy) {
+        var peers = state.extractionSites().work().values().stream()
+                .filter(job -> job.siteId().equals(deposit.site().id()) && !job.execution().actorId().equals(actor))
+                .flatMap(job -> job.target().stream().map(target -> deposit.site().layout().require(target.key().cell()).workstation()))
+                .toList();
+        var cells = available.stream().sorted(Comparator.comparingLong(ExtractionLayout.Cell::id)).toList();
+        var selected = AreaWorkSelection.spatiallySeparated(cells.size(), index -> true,
+                state.actorLocations().get(actor).supportingSurface(), index -> cells.get(index).workstation(), peers, policy);
+        return selected.isEmpty() ? Optional.empty() : Optional.of(cells.get(selected.getAsInt()));
+    }
     /** A source revision invalidates its mining leg, not an independent service exit
      * or the route of a current activity while this exact work is suspended. */
     public static FrontierWorldState withdrawTargetRoute(FrontierWorldState state, ExtractionWork job) {

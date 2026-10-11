@@ -7,7 +7,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /** An allocation owner supplies its safe source-loss transition, never inventory policy. */
-interface PlayerStockClaimLossOwner {
+interface SourceStockClaimLossOwner {
     record ReleasedActivity(SubjectId actor, Optional<ScheduleId> cancelledProgress, OptionalLong retargetAtTick) { }
     record Settlement(FungibleForfeitureSettlement resources, HumanPopulation population) { }
     ClaimPurpose purpose();

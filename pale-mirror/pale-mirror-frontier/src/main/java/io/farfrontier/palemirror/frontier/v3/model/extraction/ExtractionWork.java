@@ -8,7 +8,8 @@ import java.util.*;
 
 /** Extraction owns a source/tool/work continuation, not a body, route or second resource balance. */
 public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId execution, SubjectId toolId,
-        InventoryCustody.ContainerSlot toolReturnSlot, String outputKind, SubjectId carriedAccountId,
+        InventoryCustody.ContainerSlot toolReturnSlot, ShipmentEndpoint toolSource, ShipmentEndpoint storageTarget,
+        String outputKind, SubjectId carriedAccountId,
         SubjectId outputLotId, long batch, Phase phase, long revision, Optional<ExtractionTarget> target,
         Optional<WorkProgress> labour, Optional<ExtractionPhysicalStep> pending) {
     public enum Phase {
@@ -24,6 +25,10 @@ public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId ex
     public ExtractionWork {
         Objects.requireNonNull(id); Objects.requireNonNull(siteId); Objects.requireNonNull(execution); Objects.requireNonNull(toolId);
         Objects.requireNonNull(toolReturnSlot); Objects.requireNonNull(outputKind); Objects.requireNonNull(carriedAccountId);
+        Objects.requireNonNull(toolSource); Objects.requireNonNull(storageTarget);
+        if (!toolSource.containerId().equals(toolReturnSlot.containerId())
+                || !toolSource.settlementId().equals(storageTarget.settlementId()))
+            throw new IllegalArgumentException("extraction storage/source has a foreign declared endpoint");
         Objects.requireNonNull(outputLotId); Objects.requireNonNull(phase); Objects.requireNonNull(target);
         Objects.requireNonNull(labour); Objects.requireNonNull(pending);
         if (!execution.activityOwnerId().equals(id) || execution.activityKind() != ActorActivityKind.EXTRACTION
@@ -48,18 +53,19 @@ public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId ex
     public MovementOrder movementOrder(ExtractionSite site) {
         if (!site.id().equals(siteId) || terminal()) throw new IllegalArgumentException("work has no current declared extraction movement");
         SurfaceAnchor destination = phase == Phase.EXTRACT
-                ? site.layout().require(target.orElseThrow().key().cell()).workstation() : site.layout().storagePort();
+                ? site.layout().require(target.orElseThrow().key().cell()).workstation()
+                : phase == Phase.TAKE_TOOL ? toolSource.station() : storageTarget.station();
         return new MovementOrder(id, execution.actorId(), phase.wireTag(), revision, List.of(destination),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
     }
     public ExtractionWork withLabour(WorkProgress next) {
         if (phase != Phase.EXTRACT || pending.isPresent()) throw new IllegalArgumentException("non-working extraction cannot accrue labour");
-        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, outputKind, carriedAccountId,
+        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, toolSource, storageTarget, outputKind, carriedAccountId,
                 outputLotId, batch, phase, revision, target, Optional.of(next), pending);
     }
     public ExtractionWork prepare(ExtractionPhysicalStep step) {
         if (terminal() || pending.isPresent()) throw new IllegalArgumentException("extraction already retains an effect");
-        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, outputKind, carriedAccountId,
+        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, toolSource, storageTarget, outputKind, carriedAccountId,
                 outputLotId, batch, phase, revision, target, labour, Optional.of(step));
     }
     public ExtractionWork resumed(ActorExecutionId successor) {
@@ -67,7 +73,7 @@ public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId ex
                 || !successor.activityOwnerId().equals(id) || successor.activityKind() != ActorActivityKind.EXTRACTION
                 || successor.generation() <= execution.generation())
             throw new IllegalArgumentException("extraction successor lost its exact continuation");
-        return new ExtractionWork(id, siteId, successor, toolId, toolReturnSlot, outputKind, carriedAccountId,
+        return new ExtractionWork(id, siteId, successor, toolId, toolReturnSlot, toolSource, storageTarget, outputKind, carriedAccountId,
                 outputLotId, batch, phase, revision, target, labour, pending);
     }
     /** The owner supplies the exhaustive next semantic target; no hidden cursor or automatic stock mutation. */
@@ -82,7 +88,7 @@ public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId ex
             case FINISHED -> false;
         };
         if (!legal) throw new IllegalArgumentException("invalid extraction lifecycle transition");
-        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, outputKind, carriedAccountId,
+        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, toolSource, storageTarget, outputKind, carriedAccountId,
                 outputLotId, batch, next, Math.addExact(revision, 1), nextTarget, Optional.empty(), Optional.empty());
     }
     /** The job and tool survive delivery; only the bounded resource part receives new identities. */
@@ -90,9 +96,16 @@ public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId ex
         if (phase != Phase.STORE) throw new IllegalArgumentException("only stored extraction can roll its resource part");
         long nextBatch = Math.addExact(batch, 1);
         String part = id.value().replace(':', '/') + "/batch-" + nextBatch;
-        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, outputKind,
+        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, toolSource, storageTarget, outputKind,
                 new SubjectId("custody:extraction/" + part),
                 new SubjectId("lot:extraction/" + part),
                 nextBatch, Phase.SELECT_SOURCE, Math.addExact(revision, 1), Optional.empty(), Optional.empty(), Optional.empty());
+    }
+    public ExtractionWork retargetStorage(ShipmentEndpoint destination) {
+        if (pending.isPresent() || phase != Phase.STORE && phase != Phase.RETURN_TOOL
+                || !destination.settlementId().equals(storageTarget.settlementId()) || destination.equals(storageTarget))
+            throw new IllegalArgumentException("storage replan requires an unbegun changed same-owner destination");
+        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, toolSource, destination, outputKind,
+                carriedAccountId, outputLotId, batch, phase, Math.addExact(revision, 1), target, labour, Optional.empty());
     }
 }

@@ -7,13 +7,14 @@ import java.util.Objects;
 public record ServicePointId(Kind kind, SubjectId settlementId, SubjectId containerId) {
     public enum Kind {
         SETTLEMENT_DEPOT(1, ContainerPurpose.SETTLEMENT_DEPOT),
-        EXTRACTIVE_STORAGE(2, ContainerPurpose.EXTRACTIVE_STORAGE);
+        EXTRACTIVE_STORAGE(2, ContainerPurpose.EXTRACTIVE_STORAGE),
+        RESOURCE_STORAGE(3, ContainerPurpose.RESOURCE_STORAGE);
         private final int wireTag;
         private final ContainerPurpose purpose;
         Kind(int tag, ContainerPurpose purpose) { wireTag = tag; this.purpose = purpose; }
         public int wireTag() { return wireTag; }
         public static Kind fromWireTag(int tag) {
-            return switch (tag) { case 1 -> SETTLEMENT_DEPOT; case 2 -> EXTRACTIVE_STORAGE;
+            return switch (tag) { case 1 -> SETTLEMENT_DEPOT; case 2 -> EXTRACTIVE_STORAGE; case 3 -> RESOURCE_STORAGE;
                 default -> throw new IllegalArgumentException("unknown service point kind: " + tag); };
         }
     }

@@ -39,11 +39,16 @@ final class FrontierV3ExtractionDiagnosticJson {
         int stored = resources.accounts().values().stream().filter(account -> account.custody().equals(new ResourceCustody.Container(site.containerId())))
                 .flatMap(account -> account.lotQuantities().entrySet().stream())
                 .filter(entry -> resources.lots().get(entry.getKey()).itemKind().equals(output)).mapToInt(Map.Entry::getValue).sum();
+        var demand = ProductionStockDemand.read(state, site.settlementId(), output);
+        var terrace = ExtractionTerraceView.read(state, deposit);
         return FrontierV3DiagnosticJson.base("process", site.id().value(), checkpoint)
                 + ",\"status\":\"ok\",\"family\":\"frontier.extraction.site\",\"container\":" + string(site.containerId().value())
                 + ",\"settlement\":" + string(site.settlementId().value()) + ",\"position\":" + FrontierV3DiagnosticJson.position(site.layout().storagePort().standingBody())
                 + ",\"firstSource\":" + FrontierV3DiagnosticJson.position(site.layout().cells().getFirst().source())
                 + ",\"firstAdjacentSource\":" + (adjacentCells.isEmpty() ? "null" : FrontierV3DiagnosticJson.position(adjacentCells.getFirst().source()))
+                + ",\"lowerLanding\":" + terrace.lowerLanding().map(value -> FrontierV3DiagnosticJson.position(value.support())).orElse("null")
+                + ",\"openingTop\":" + terrace.lowerLanding().flatMap(value -> state.bootstrap().ruleset().extraction().surfaceCut()
+                    .map(cut -> FrontierV3DiagnosticJson.position(new BlockPosition(value.x(), cut.topY(), value.z())))).orElse("null")
                 + ",\"result\":{\"total\":" + deposit.cells().size() + ",\"extracted\":" + extracted + ",\"external\":" + foreign
                 + ",\"developed\":" + deposit.development().openedCells().size() + ",\"developmentRevision\":" + deposit.development().revision()
                 + ",\"undeveloped\":" + (deposit.cells().size() - deposit.development().openedCells().size())
@@ -57,6 +62,12 @@ final class FrontierV3ExtractionDiagnosticJson {
                 + ",\"outputKind\":" + string(output) + ",\"siteQuantity\":" + stored + ",\"homeQuantity\":" + delivered
                 + ",\"hasExtraction\":" + (extracted > 0) + ",\"liveSourceRegions\":" + liveRegions + ",\"workersCold\":" + workersCold
                 + ",\"homeReserveSupplied\":" + (delivered >= state.bootstrap().ruleset().extraction().reserveItems())
+                + ",\"stockTarget\":" + demand.target() + ",\"stockHeld\":" + demand.held()
+                + ",\"stockIncoming\":" + demand.incoming() + ",\"stockOutgoingDemand\":" + demand.outgoing()
+                + ",\"productionRequested\":" + demand.requested()
+                + ",\"terraceDepthLimit\":" + terrace.depthLimit() + ",\"plannedDepth\":" + terrace.plannedDepth()
+                + ",\"openDepth\":" + terrace.openDepth() + ",\"preparationBlocks\":" + terrace.preparationBlocks()
+                + ",\"terraceOpened\":" + terrace.lowerLanding().isPresent()
                 + "},\"workers\":[" + workers + "],\"workerDetails\":[" + details + "]}";
     }
     static String work(FrontierScheduleView checkpoint, FrontierWorldState state, ExtractionWork job) {
@@ -72,13 +83,17 @@ final class FrontierV3ExtractionDiagnosticJson {
         boolean sourceHeld = sourceLease != null && sourceLease.live()
                 && (lease == null || lease.status() != AmbientLeaseStatus.HOT
                     || sourceLease.status() != PhysicalCustodyLeaseStatus.ACQUIRED);
+        boolean storageConflict = ExtractionServiceAccess.needsAccess(job) && ReferenceContainerCustody.blocksCanonicalUse(state,
+                ExtractionServiceAccess.identity(state, job).pointId());
         String wait = job.pending().isPresent() ? "PHYSICAL_EFFECT_RECEIPT" : suspended ? "HIGHER_PRIORITY_ACTIVITY"
+                : storageConflict ? "STORAGE_RECONCILIATION_CONFLICT"
                 : state.actorMovements().containsKey(actor) ? "JOURNEY"
                 : !ResidentActivityCoordinator.ordinaryWorkPermitted(state, actor, now) ? "SCHEDULE_OR_NEED"
                 : job.phase() == ExtractionWork.Phase.EXTRACT && sourceHeld ? "SOURCE_CUSTODY"
                 : job.phase() == ExtractionWork.Phase.EXTRACT && job.labour().filter(labour -> labour.completedAt(now) < labour.requiredMilliWork()).isPresent() ? "LABOUR"
                 : "STATION_OPERATION";
         String disposition = suspended || wait.equals("SCHEDULE_OR_NEED") ? "HIGHER_PRIORITY_ACTIVITY"
+                : storageConflict ? "RECOVERY_UNKNOWN"
                 : lease != null && lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.HOT ? "RECOVERY_UNKNOWN" : "ELIGIBLE";
         long labour = job.labour().map(value -> value.completedAt(now)).orElse(0L);
         return FrontierV3DiagnosticJson.base("process", job.id().value(), checkpoint)

@@ -99,10 +99,10 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 var actor = state.actorLocations().get(job.workerId());
                 if (actor == null) continue;
                 if (job.batchSuccessorSlot().isEmpty()) {
-                    var nextSlot = state.firstFreeContainerSlot(depot);
+                    var nextSlot = ResourceSiteHarvestCargo.nextBatchSlot(state, job);
                     if (nextSlot.isPresent()) {
                         var prepared = new ResourceSiteHarvestBatchPrepared(job.siteId(), job.id(), scene.id(),
-                                job.deliveredYieldQuantity(), new InventoryCustody.ContainerSlot(depot, nextSlot.orElseThrow()));
+                                job.deliveredYieldQuantity(), nextSlot.orElseThrow());
                         CommandResult result = FrontierV3CommandSubmission.submit(runtime, "field-batch-capacity", job.id().value(), prepared);
                         if (!(result instanceof CommandResult.Accepted))
                             FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-batch-next-route-unavailable");

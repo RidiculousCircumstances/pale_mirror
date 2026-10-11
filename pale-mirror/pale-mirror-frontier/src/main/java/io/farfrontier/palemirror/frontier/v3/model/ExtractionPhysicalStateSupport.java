@@ -135,7 +135,7 @@ public final class ExtractionPhysicalStateSupport {
             throw new IllegalArgumentException("mining storage service is currently owned by another visitor");
     }
     private static void requireStorageEpoch(FrontierWorldState state, ExtractionWork job, long epoch) {
-        var container = ExtractionWorkAuthority.site(state, job).containerId();
+        var container = ExtractionServiceAccess.identity(state, job).pointId();
         var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container));
         if (lease == null || !ReferenceContainerCustody.hasOperationalCustody(state, container) || lease.authorityEpoch() != epoch
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container)) throw new IllegalArgumentException("mining storage custody is stale or unavailable");

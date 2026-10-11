@@ -22,6 +22,34 @@ import java.util.Optional;
 public final class PhysicalIntentTransitionStorage {
     private PhysicalIntentTransitionStorage() { }
 
+    /**
+     * Owner-proved unbegun checkpoint replacement. Family validates its pending effects and
+     * stages its successor; this protocol alone retires the old authority and installs the new
+     * immutable intent version in the same canonical update. Historical effects are not replayed.
+     */
+    public static FrontierWorldState supersedeAtCheckpoint(FrontierWorldState state, PhysicalIntent expected,
+            PhysicalIntent successor, FencedRecoveryAsset asset, String reason, FrontierWorldStateUpdate ownerUpdate) {
+        if (!expected.equals(state.physicalIntents().get(expected.id()))
+                || expected.status() != PhysicalIntentStatus.PREPARED && expected.status() != PhysicalIntentStatus.RUNNING
+                || successor.status() != PhysicalIntentStatus.PREPARED || successor.id().equals(expected.id())
+                || successor.kind() != expected.kind() || successor.lifecycleOwner() != expected.lifecycleOwner()
+                || !successor.causeSubjectId().equals(expected.causeSubjectId()))
+            throw new IllegalArgumentException("effect replacement has no exact live same-owner checkpoint");
+        var intents = new LinkedHashMap<>(state.physicalIntents());
+        if (intents.putIfAbsent(successor.id(), successor) != null)
+            throw new IllegalArgumentException("duplicate replacement effect identity");
+        // Retained rejection belongs to the exact recovery tombstone, not a stale live
+        // intent whose roles would outlive the owner's replaced endpoint relationship.
+        intents.remove(expected.id());
+        var bindingId = FencedRecoveryPhysicalIntentSupport.bindingId(expected);
+        var binding = state.fencedRecovery().current().get(bindingId);
+        if (binding == null || binding.asset() != asset || !binding.ownerId().equals(expected.causeSubjectId()))
+            throw new IllegalArgumentException("effect replacement lost its exact previous recovery fence");
+        var retired = state.fencedRecovery().conflict(bindingId, binding.authorityEpoch(), reason);
+        var recovery = FencedRecoveryPhysicalIntentSupport.prepared(retired, successor, asset);
+        return state.withChanges(ownerUpdate.physicalIntents(intents).fencedRecovery(recovery));
+    }
+
     public static FrontierWorldState reduce(FrontierWorldState state, PhysicalIntent intent,
                                             PhysicalIntentTransition transition,
                                             Confirmed confirmed, RecoveryUnknown recoveryUnknown) {
