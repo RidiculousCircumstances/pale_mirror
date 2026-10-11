@@ -42,7 +42,9 @@ final class KnownSiteGeometry {
                     throw new IllegalArgumentException("two geometry owners declared one surface column");
             obstacles.addAll(contribution.obstacles());
         }
-        cachedView = new View(supports, obstacles); cachedBootstrap = state.bootstrap(); cachedVersions = versions;
+        var projected = new View(supports, obstacles);
+        if (cachedBootstrap != state.bootstrap() || !projected.equals(cachedView)) cachedView = projected;
+        cachedBootstrap = state.bootstrap(); cachedVersions = versions;
         return cachedView;
     }
 }

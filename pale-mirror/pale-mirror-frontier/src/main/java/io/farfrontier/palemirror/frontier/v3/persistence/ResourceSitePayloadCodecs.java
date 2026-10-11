@@ -211,6 +211,9 @@ final class ResourceSitePayloadCodecs {
                     FrontierWorldPayloadCodecs.writeBody(output, advanced.nextBody());
                     FrontierWorldPayloadCodecs.writeString(output, advanced.coldScheduleId().value());
                     output.writeLong(advanced.coldDueAt());
+                    output.writeLong(advanced.goalRevision());
+                    ActorExecutionStateCodec.writeId(output, advanced.executionId());
+                    PedestrianRouteReceiptCodec.write(output, advanced.plannedRoute());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
@@ -222,7 +225,8 @@ final class ResourceSitePayloadCodecs {
                                 ResourceSiteHarvestGoal.Kind.requireWireTag(input.readInt()),
                                 FrontierWorldPayloadCodecs.readBody(input),
                                 new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(FrontierWorldPayloadCodecs.readString(input)),
-                                input.readLong()));
+                                input.readLong(), input.readLong(), ActorExecutionStateCodec.readId(input),
+                                PedestrianRouteReceiptCodec.read(input)));
             }
         };
     }

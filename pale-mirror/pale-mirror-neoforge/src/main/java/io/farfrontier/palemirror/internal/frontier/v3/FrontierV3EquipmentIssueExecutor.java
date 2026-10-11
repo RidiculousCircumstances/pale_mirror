@@ -26,7 +26,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.Container;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.List;
@@ -133,11 +133,8 @@ final class FrontierV3EquipmentIssueExecutor {
                 && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.sourceSlot().slot()), target.item());
     }
 
-    static boolean handOff(ChestBlockEntity chest, Villager resident, Target target) {
-        if (!sourceMatches(chest, target) || !resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return false;
-        ItemStack stack = chest.getItem(target.sourceSlot().slot()); chest.setItem(target.sourceSlot().slot(), ItemStack.EMPTY); chest.setChanged();
-        resident.setItemSlot(EquipmentSlot.MAINHAND, stack);
-        return chest.getItem(target.sourceSlot().slot()).isEmpty() && FrontierV3ExactItemPresentation.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
+    static boolean handOff(Container source, Villager resident, Target target) {
+        return FrontierV3ActorItemTransfer.take(source, resident, target.item(), target.sourceSlot(), EquipmentSlot.MAINHAND);
     }
 
     private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,

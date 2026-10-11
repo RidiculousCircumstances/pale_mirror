@@ -21,6 +21,37 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void storageLifecycleInvalidatesRoutesOnlyWhenItsPhysicalFootprintChanges() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:storage-geometry"), 91L));
+        var home = state.bootstrap().settlements().getFirst();
+        var station = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var id = new SubjectId("container:geometry-warehouse");
+        var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, Optional.empty(), station);
+        var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
+                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var before = KnownPedestrianRouteKnowledge.forFrontier(state);
+        assertTrue(before.traversable(List.of(station)));
+        var declared = new ResourceStorageDeclared(record, station.support().offset(0, 1, 0)).apply(state, home.id());
+        var occupied = KnownPedestrianRouteKnowledge.forFrontier(declared);
+        assertTrue(!occupied.traversable(List.of(station)), "a declared physical chest is a real obstacle");
+        var lifecycle = declared;
+        for (var status : List.of(ContainerSurfaceStatus.PREPARED, ContainerSurfaceStatus.ACTIVE,
+                ContainerSurfaceStatus.CONFLICT)) {
+            lifecycle = lifecycle.withInventory(lifecycle.inventory().withSurfaceStatus(id, status));
+            org.junit.jupiter.api.Assertions.assertSame(occupied, KnownPedestrianRouteKnowledge.forFrontier(lifecycle),
+                    "access/custody metadata must not cancel geometry work, or erase an existing physical block");
+        }
+        var active = declared.withInventory(declared.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(id, ContainerSurfaceStatus.ACTIVE));
+        var retired = active.withInventory(active.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.RETIRED));
+        var removed = KnownPedestrianRouteKnowledge.forFrontier(retired);
+        org.junit.jupiter.api.Assertions.assertNotSame(occupied, removed);
+        assertTrue(removed.traversable(List.of(station)), "a durably retired destroyed chest must not remain a phantom wall");
+        assertTrue(!occupied.traversable(List.of(station)), "old route knowledge remains immutable");
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        assertTrue(KnownPedestrianRouteKnowledge.forFrontier(codec.decode(codec.encode(retired))).traversable(List.of(station)));
+    }
+
     @Test void fieldGeometrySurvivesBiologicalChangesButNotObstructionsOrRecovery() {
         var state = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());
         var site = state.resourceSite(new SubjectId("site:1-wheat-field"));

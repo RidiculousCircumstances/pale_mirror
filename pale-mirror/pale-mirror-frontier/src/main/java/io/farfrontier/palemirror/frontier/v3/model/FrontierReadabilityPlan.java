@@ -453,8 +453,10 @@ public final class FrontierReadabilityPlan {
                 .map(ResidentProfile::id).map(state.ambientLeases()::get)
                 .anyMatch(lease -> lease != null && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART);
         if (unknownFarmer) return "READY TO HARVEST · FARMER RECOVERY IN PROGRESS";
-        if (state.firstFreeContainerSlot(FrontierWorldState.depotId(site.settlementId())).isEmpty())
-            return "READY TO HARVEST · DEPOT FULL";
+        if (site.layout().cells().isEmpty() || ResourceStorageSelection.newStackDestination(state, site.settlementId(),
+                "minecraft:wheat", 64, site.layout().cells().getFirst().workstation(),
+                java.util.Set.of(ResourceStorageRole.WAREHOUSE), endpoint -> true).isEmpty())
+            return "READY TO HARVEST · STORAGE UNAVAILABLE";
         boolean pendingExactHarvest = state.strategicPlans().tasks().values().stream()
                 .anyMatch(task -> task.ownerId().equals(site.settlementId())
                         && task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
@@ -506,8 +508,9 @@ public final class FrontierReadabilityPlan {
     private static String foodText(FrontierWorldState state, SubjectId settlementId) {
         int available = SettlementFoodPolicy.breadStock(state, settlementId);
         int reserve = SettlementFoodPolicy.reserveRequirement(state, settlementId);
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlementId)))
-            return "FOOD CONFLICT · INSPECT DEPOT";
+        if (ResourceStorageSelection.containers(state, settlementId, SettlementFoodPolicy.BREAD,
+                java.util.Set.of(ResourceStorageRole.WAREHOUSE)).isEmpty())
+            return "FOOD STORAGE UNAVAILABLE";
         int hungry = (int) state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
@@ -519,8 +522,7 @@ public final class FrontierReadabilityPlan {
     }
 
     private static boolean foodRisk(FrontierWorldState state, SubjectId settlementId) {
-        return ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlementId))
-                || SettlementFoodPolicy.breadStock(state, settlementId) < SettlementFoodPolicy.reserveRequirement(state, settlementId)
+        return SettlementFoodPolicy.breadStock(state, settlementId) < SettlementFoodPolicy.reserveRequirement(state, settlementId)
                 || state.humanPopulation().residents().values().stream()
                     .filter(resident -> resident.settlementId().equals(settlementId))
                     .anyMatch(resident -> state.humanPopulation().nutrition(resident.id()).wantsFood(state.bootstrap().ruleset().residentLife()));

@@ -16,28 +16,54 @@ public final class BakeryStorageReplacement {
                 || ProductionOutputCapacity.depotDeliveryUnavailable(state, job);
     }
     public static Optional<BakeryStorageRetargeted> select(FrontierWorldState state, ProductionJob job) {
+        if (!checkpoint(state, job)) return Optional.empty();
+        var work = job.bakeryWork().orElseThrow();
+        for (var endpoint : destinations(state, job)) {
+            var candidate = job.retargetBakeryOutput(endpoint.containerId());
+            try {
+                var route = BakeryKnownNavigation.plannedPath(state, candidate);
+                var execution = state.actorExecutions().current(
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
+                return Optional.of(new BakeryStorageRetargeted(job.id(), work.phase(), BakeryStorage.destination(job),
+                        endpoint.containerId(), execution, route.size() < 2 ? Optional.empty() : Optional.of(
+                            new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route))));
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                    return Optional.empty();
+            }
+        }
+        return Optional.empty();
+    }
+    private static boolean checkpoint(FrontierWorldState state, ProductionJob job) {
         var work = job.bakeryWork().orElseThrow();
         if (work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY || !unavailable(state, job)
                 || work.pendingPhysicalStep().isPresent()
                 || !ActorExecutionCoordinator.coldAvailable(state, job.workerId())
                 || ActorExecutionCoordinator.sceneOwns(state, job.workerId())
-                || state.actorMovements().containsKey(job.workerId())) return Optional.empty();
+                || state.actorMovements().containsKey(job.workerId())) return false;
+        return state.actorExecutions().owns(job.workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id());
+    }
+    private static List<ShipmentEndpoint> destinations(FrontierWorldState state, ProductionJob job) {
         var origin = state.actorLocations().get(job.workerId()).supportingSurface();
-        return ResourceStorageSelection.destination(state, job.settlementId(), job.outputItemKind(), job.outputCount(), origin,
-                Set.of(ResourceStorageRole.WAREHOUSE), Optional.empty(), endpoint -> {
-                    if (endpoint.containerId().equals(BakeryStorage.destination(job))) return false;
-                    var candidate = job.retargetBakeryOutput(endpoint.containerId());
-                    try {
-                        BakeryKnownNavigation.path(state, candidate);
-                        return true;
-                    } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return false; }
-                }).map(endpoint -> new BakeryStorageRetargeted(job.id(), work.phase(), BakeryStorage.destination(job), endpoint.containerId()));
+        return ResourceStorageSelection.receivingCandidates(state, job.settlementId(), job.outputItemKind(), job.outputCount(), origin,
+                Set.of(ResourceStorageRole.WAREHOUSE), Optional.empty()).stream()
+                .filter(endpoint -> !endpoint.containerId().equals(BakeryStorage.destination(job)))
+                .filter(endpoint -> !(job.inputHold() instanceof ProductionInputHold.Materialized)
+                        || state.firstFreeContainerSlotForOutput(endpoint.containerId(), job.id()).isPresent()).toList();
     }
     public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, BakeryStorageRetargeted event) {
         var job = state.productionJobs().get(event.jobId());
-        if (job == null || !subject.equals(job.settlementId()) || !select(state, job).equals(Optional.of(event)))
+        if (job == null || !subject.equals(job.settlementId()) || !checkpoint(state, job)
+                || job.bakeryWork().orElseThrow().phase() != event.phase()
+                || !BakeryStorage.destination(job).equals(event.previousContainer())
+                || !event.executionId().actorId().equals(job.workerId())
+                || destinations(state, job).stream().noneMatch(endpoint -> endpoint.containerId().equals(event.destinationContainer())))
             throw new IllegalArgumentException("bakery output replacement lacks its exact unbegun checkpoint");
-        var jobs = new LinkedHashMap<>(state.productionJobs()); jobs.put(job.id(), job.retargetBakeryOutput(event.destinationContainer()));
+        state.actorExecutions().requireCurrent(event.executionId());
+        var replacement = job.retargetBakeryOutput(event.destinationContainer());
+        BakeryKnownNavigation.requireAcceptedDestination(state, replacement, event.plannedRoute());
+        var jobs = new LinkedHashMap<>(state.productionJobs()); jobs.put(job.id(), replacement);
         return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs));
     }
 }

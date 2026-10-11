@@ -18,7 +18,7 @@ public final class KnownPedestrianRouteKnowledge {
     private static FrontierBootstrap cachedBootstrap;
     private static Set<BlockPosition> cachedStaticOccupancy = Set.of();
     private record ViewKey(SubjectId settlementId, List<Passage> passages) { }
-    private static Object viewBootstrap, viewOrgans, viewDeltas, viewTopology, viewSites, viewContainers, viewContainerSurfaces;
+    private static Object viewBootstrap, viewOrgans, viewDeltas, viewTopology, viewSites, viewStorageGeometry;
     private static Object geometryVersion = new Object();
     private static final java.util.Map<ViewKey, KnownPedestrianRouteKnowledge> VIEWS = new java.util.LinkedHashMap<>();
     private static KnownPedestrianRouteKnowledge frontierView;
@@ -128,10 +128,11 @@ public final class KnownPedestrianRouteKnowledge {
     }
 
     private static void refresh(FrontierWorldState state) {
+        var sites = KnownSiteGeometry.forState(state);
+        var storage = KnownStorageGeometry.forState(state);
         if (viewBootstrap != state.bootstrap() || viewOrgans != state.hiveColony().addedOrgans()
                 || viewDeltas != state.physicalDeltas() || viewTopology != state.routeTopology()
-                || viewSites != KnownSiteGeometry.forState(state) || viewContainers != state.inventory().containers()
-                || viewContainerSurfaces != state.inventory().surfaces()) {
+                || viewSites != sites || viewStorageGeometry != storage) {
             VIEWS.clear();
             FIELDS.clear();
             geometryVersion = new Object();
@@ -139,8 +140,7 @@ public final class KnownPedestrianRouteKnowledge {
             frontierView = null;
             viewBootstrap = state.bootstrap(); viewOrgans = state.hiveColony().addedOrgans();
             viewDeltas = state.physicalDeltas(); viewTopology = state.routeTopology();
-            viewSites = KnownSiteGeometry.forState(state);
-            viewContainers = state.inventory().containers(); viewContainerSurfaces = state.inventory().surfaces();
+            viewSites = sites; viewStorageGeometry = storage;
         }
     }
 
@@ -150,6 +150,9 @@ public final class KnownPedestrianRouteKnowledge {
 
     public List<SurfaceAnchor> plannedPath(SurfaceAnchor start, MovementOrder order) {
         return KnownPedestrianNavigation.plannedRoute(geometryFrom(start), start, order);
+    }
+    public List<SurfaceAnchor> retainedPath(SurfaceAnchor start, MovementOrder order) {
+        return KnownPedestrianNavigation.retainedRoute(geometryFrom(start), start, order);
     }
     /** Geometry-only admission, without inventing an actor assignment or movement authority. */
     public boolean reachable(SurfaceAnchor start, SurfaceAnchor target) {
@@ -241,9 +244,7 @@ public final class KnownPedestrianRouteKnowledge {
         return hard;
     }
     private static void declaredStorageObstacles(FrontierWorldState state, Set<BlockPosition> hard) {
-        state.inventory().surfaces().values().stream().filter(ContainerSurface::fixed)
-                .filter(surface -> state.inventory().containers().get(surface.containerId()).purpose() == ContainerPurpose.RESOURCE_STORAGE)
-                .forEach(surface -> hard.add(surface.position()));
+        hard.addAll(KnownStorageGeometry.forState(state));
     }
 
     /** Typed field overlay on the same structural/physical knowledge and route operation. */

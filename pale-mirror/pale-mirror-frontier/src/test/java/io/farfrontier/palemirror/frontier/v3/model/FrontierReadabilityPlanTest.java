@@ -308,6 +308,44 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
+    void fieldPolicyAndFoodBoardUseAnAlternativeWarehouseWhenTheOriginalDepotCannotServe() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:alternative-warehouse-board"), 91L));
+        var home = state.bootstrap().settlements().getFirst();
+        var field = state.resourceSiteDescriptors().values().stream()
+                .filter(site -> site.settlementId().equals(home.id())).findFirst().orElseThrow();
+        state = state.withResourceSites(matureReadyField(state, field));
+        var original = FrontierWorldState.depotId(home.id());
+        var unavailable = state.withInventory(state.inventory().withSurfaceStatus(original, ContainerSurfaceStatus.CONFLICT));
+        assertTrue(FrontierReadabilityPlan.compile(unavailable).boards().get(field.id()).text().contains("STORAGE UNAVAILABLE"));
+        var station = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var id = new SubjectId("container:alternative-board-storage");
+        var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, java.util.Optional.empty(), station);
+        var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, java.util.Optional.empty(),
+                java.util.Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var adoption = new ResourceStorageAdopted(new ResourceStorageDeclared(record, station.support().offset(1, 1, 0)),
+                java.util.List.of(new ResourceLot(new SubjectId("lot:alternative-board-bread"), home.id(), "minecraft:bread", 3,
+                        "observed-alternative-storage", java.util.List.of())));
+        var adopted = adoption.apply(unavailable, home.id());
+        assertTrue(FrontierReadabilityPlan.compile(adopted).boards().get(field.id()).text().contains("STORAGE UNAVAILABLE"),
+                "an unconfirmed adopted chest is not usable storage");
+        var active = adopted.withInventory(adopted.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.ACTIVE));
+        var board = FrontierReadabilityPlan.compile(active).boards().get(field.id());
+        assertFalse(board.text().contains("STORAGE UNAVAILABLE"));
+        assertTrue(io.farfrontier.palemirror.frontier.v3.process.SettlementManagementComposition.MANAGEMENT
+                .decide(active, home).considerations().stream().anyMatch(candidate ->
+                        candidate.offer().proposal().resourceSiteTarget().equals(java.util.Optional.of(field.id()))),
+                "the real settlement policy must offer harvest against the same warehouse scope as the board");
+        var depot = home.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        var food = FrontierReadabilityPlan.compile(active).boards().get(depot.id()).text();
+        assertTrue(food.contains("FOOD RESERVE LOW · 3"));
+        assertFalse(food.contains("FOOD CONFLICT"));
+        assertFalse(food.contains("FOOD STORAGE UNAVAILABLE"));
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var restored = codec.decode(codec.encode(active));
+        assertEquals(board.text(), FrontierReadabilityPlan.compile(restored).boards().get(field.id()).text());
+    }
+
+    @Test
     void depotBoardCountsFungibleBakeryBreadAgainstExactResidentNeed() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-fungible-bread"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();

@@ -20,6 +20,72 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakeryColdVerticalTest {
+    @Test void routeWaitsAndRecoveryNeverRediscoverACommittedBakeryMove() throws Exception {
+        var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-cooperative-replay"), 41L)), StrategicTaskStatus.PENDING);
+        var task = state.strategicPlans().tasks().values().iterator().next();
+        var started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        var predecessor = state;
+        var job = started.job();
+        var action = ProductionProcess.complete(job, 300L);
+        var accepted = ProductionProcess.planCompletion(state, action).stream().map(ProposedEvent::payload)
+                .filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+        assertEquals(BakeryColdStep.Action.MOVE, accepted.action());
+        var codecs = io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs.create();
+        assertEquals(accepted, codecs.decode(accepted.type(), codecs.encode(accepted)));
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var waiting = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                List.of(), 0, 0, "bounded search in progress");
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, target) -> {
+            calls.incrementAndGet(); return waiting;
+        })) {
+            assertTrue(BakeryProcess.coldRouteBlocker(predecessor, job).orElseThrow().contains("ROUTE_NOT_CALCULATED"));
+            assertEquals(0, calls.get(), "a diagnostic must not enqueue or run a search");
+            var observation = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(
+                    () -> ProductionProcess.planCompletion(predecessor, action));
+            assertTrue(calls.get() > 0);
+            assertFalse(observation.requests().isEmpty(), "pending calculation retains an addressed wake dependency");
+            assertTrue(observation.result().stream().noneMatch(event -> event.payload() instanceof BakeryColdStep),
+                    "PLANNING cannot award movement, transfer or manufacture NO_PATH");
+            var index = new io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningWakeIndex();
+            var registry = new io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry(
+                    io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.descriptors(), codecs);
+            try (var continuations = io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningContinuations.bind(index)) {
+                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.restorePlanningWaits(registry, predecessor,
+                        new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(predecessor.bootstrap().worldId(),
+                                io.farfrontier.palemirror.frontier.v3.api.Revision.ZERO, new SimInstant(299), List.of(action)));
+                assertEquals(1, index.waitingCount(), "restart reconstructs the exact bakery calculation wait");
+            }
+        }
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, target) -> {
+            fail("committed bakery replay cannot invoke route planning"); return waiting;
+        })) {
+            var codec = new FrontierWorldStateCodec();
+            var recovered = codec.decode(codec.encode(predecessor));
+            var advanced = ProductionProcess.reduceBakeryColdStep(recovered, job.settlementId(), accepted);
+            assertEquals(accepted.nextSurface(), advanced.actorLocations().get(job.workerId()).supportingSurface());
+            assertEquals(recovered.inventory(), advanced.inventory(), "route acceptance never consumes or produces stock");
+            assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(advanced, job.settlementId(), accepted));
+            var old = accepted.executionId();
+            var stale = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                    old.actorId(), old.activityKind(), old.activityOwnerId(), old.generation() + 1);
+            var forged = new BakeryColdStep(accepted.jobId(), accepted.expectedPhase(), accepted.action(),
+                    accepted.nextSurface(), stale, accepted.plannedRoute());
+            assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(recovered, job.settlementId(), forged));
+            var incompleteRoute = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(
+                    accepted.plannedRoute().orElseThrow().route().subList(0, 2));
+            var truncated = new BakeryColdStep(accepted.jobId(), accepted.expectedPhase(), accepted.action(),
+                    accepted.nextSurface(), old, Optional.of(incompleteRoute));
+            assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(recovered, job.settlementId(), truncated));
+        }
+    }
+
     private static void assertWorkOutputIsNotPersonalFood(FrontierWorldState state, ProductionJob job) {
         var hungry = state.withHumanPopulation(state.humanPopulation().accrueHunger(job.workerId(), 27_000));
         var workAccount = job.bakeryWork().orElseThrow().actorAccountId();

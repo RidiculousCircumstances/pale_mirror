@@ -20,6 +20,8 @@ final class BakeryColdStepCodec implements PayloadCodec {
             output.writeInt(step.nextSurface().x());
             output.writeInt(step.nextSurface().y());
             output.writeInt(step.nextSurface().z());
+            ActorExecutionStateCodec.writeId(output, step.executionId());
+            PedestrianRouteReceiptCodec.write(output, step.plannedRoute());
         });
     }
 
@@ -28,6 +30,7 @@ final class BakeryColdStepCodec implements PayloadCodec {
                 FrontierWorldPayloadCodecs.readSubject(input).value(),
                 BakeryWorkState.Phase.fromWireTag(input.readUnsignedByte()),
                 BakeryColdStep.Action.fromWireTag(input.readUnsignedByte()),
-                new SurfaceAnchor(new BlockPosition(input.readInt(), input.readInt(), input.readInt()))));
+                new SurfaceAnchor(new BlockPosition(input.readInt(), input.readInt(), input.readInt())),
+                ActorExecutionStateCodec.readId(input), PedestrianRouteReceiptCodec.read(input)));
     }
 }

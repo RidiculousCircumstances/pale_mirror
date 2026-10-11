@@ -59,8 +59,17 @@ class BakeryPartialBatchTest {
                         conflict.fingerprint(), conflict.provenance(), conflict.diagnostic())));
                 var retarget = io.farfrontier.palemirror.frontier.v3.process.BakeryStorageReplacement.select(state, current).orElseThrow();
                 assertEquals(alternate, retarget.destinationContainer());
+                var payloads = io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs.create();
+                assertEquals(retarget, payloads.decode(retarget.type(), payloads.encode(retarget)));
                 var before = state.inventory().fungibleResources();
-                state = io.farfrontier.palemirror.frontier.v3.process.BakeryStorageReplacement.apply(state, home.id(), retarget);
+                var predecessor = state;
+                state = assertDoesNotThrow(() -> {
+                    try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, target) -> {
+                        throw new AssertionError("replaying output storage replacement must not search for a route");
+                    })) {
+                        return io.farfrontier.palemirror.frontier.v3.process.BakeryStorageReplacement.apply(predecessor, home.id(), retarget);
+                    }
+                });
                 assertEquals(before, state.inventory().fungibleResources(), "endpoint replacement is not stock transfer");
                 var redirected = state;
                 assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakeryStorageReplacement.apply(redirected, home.id(), retarget));

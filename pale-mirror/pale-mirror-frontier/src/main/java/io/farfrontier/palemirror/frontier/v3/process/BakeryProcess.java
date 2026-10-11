@@ -50,27 +50,42 @@ public final class BakeryProcess {
 
     /** A witnessed source loss does not retire the accepted order; choose only currently unclaimed depot wheat. */
     static Optional<BakeryInputReallocated> planInputReallocation(FrontierWorldState state, ProductionJob job) {
-        BakeryWorkState work = job.bakeryWork().orElseThrow();
-        if (work.phase() != BakeryWorkState.Phase.DEPOT_PICKUP || work.pendingPhysicalStep().isPresent()
-                || work.block().map(value -> value.reason() != BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(true))
-            return Optional.empty();
-        if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())
-                || ActorExecutionCoordinator.sceneOwns(state, job.workerId())
-                || state.actorMovements().containsKey(job.workerId())) return Optional.empty();
+        if (!inputReallocationReady(state, job)) return Optional.empty();
         var origin = state.actorLocations().get(job.workerId()).supportingSurface();
         for (var storage : ResourceStorageSelection.candidates(state, job.settlementId(), "minecraft:wheat", origin,
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
             var candidate = replacementAt(state, job, storage.containerId());
             if (candidate.isEmpty()) continue;
-            var value = candidate.orElseThrow();
-            var updated = job.reallocateBakeryInput(value.replacement(), value.sourceContainerId());
-            try { BakeryKnownNavigation.path(state, updated); return candidate; }
-            catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { /* Try another declared source, not a route fallback. */ }
+            var hold = candidate.orElseThrow();
+            var updated = job.reallocateBakeryInput(hold, storage.containerId());
+            try {
+                var route = BakeryKnownNavigation.plannedPath(state, updated);
+                var execution = state.actorExecutions().current(
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
+                return Optional.of(new BakeryInputReallocated(job.id(), storage.containerId(), hold, execution,
+                        route.size() < 2 ? Optional.empty() : Optional.of(
+                            new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route))));
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                    return Optional.empty(); // One bounded candidate calculation at a time, not a NO_PATH refusal.
+            }
         }
         return Optional.empty();
     }
 
-    private static Optional<BakeryInputReallocated> replacementAt(FrontierWorldState state, ProductionJob job, SubjectId depot) {
+    private static boolean inputReallocationReady(FrontierWorldState state, ProductionJob job) {
+        BakeryWorkState work = job.bakeryWork().orElseThrow();
+        if (work.phase() != BakeryWorkState.Phase.DEPOT_PICKUP || work.pendingPhysicalStep().isPresent()
+                || work.block().map(value -> value.reason() != BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(true))
+            return false;
+        if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())
+                || ActorExecutionCoordinator.sceneOwns(state, job.workerId())
+                || state.actorMovements().containsKey(job.workerId())) return false;
+        return state.actorExecutions().owns(job.workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id());
+    }
+
+    private static Optional<ProductionInputHold> replacementAt(FrontierWorldState state, ProductionJob job, SubjectId depot) {
         if (job.inputHold() instanceof ProductionInputHold.Materialized) {
             return state.inventory().items().values().stream().sorted(java.util.Comparator.comparing(ExactItemStack::id))
                     .filter(item -> item.economicOwnerId().equals(job.rights().resourceOwner().id())
@@ -80,25 +95,30 @@ public final class BakeryProcess {
                             && state.productionJobs().values().stream().noneMatch(other -> !other.id().equals(job.id())
                                 && other.inputHold() instanceof ProductionInputHold.Materialized
                                 && other.consumedItemId().equals(item.id())))
-                    .findFirst().map(item -> new BakeryInputReallocated(job.id(), depot, new ProductionInputHold.Materialized(item.id())));
+                    .findFirst().map(item -> new ProductionInputHold.Materialized(item.id()));
         }
         SubjectId claim = claimId(job);
         if (state.inventory().fungibleResources().claims().containsKey(claim)) return Optional.empty();
         return FungibleResourceCustodySupport.selectAtContainer(state, depot, job.rights().resourceOwner().id(),
                 "minecraft:wheat", job.outputCount()).filter(selection ->
                 ProductionResourceCustody.canStart(state, selection, job.outputCount())).map(selection ->
-                new BakeryInputReallocated(job.id(), depot, ProductionResourceCustody.holdForStart(state, selection,
-                        claim, job.outputCount())));
+                ProductionResourceCustody.holdForStart(state, selection, claim, job.outputCount()));
     }
 
     static FrontierWorldState reduceInputReallocated(FrontierWorldState state, SubjectId subject,
                                                      BakeryInputReallocated reallocated) {
         ProductionJob job = state.productionJobs().get(reallocated.jobId());
         if (job == null || !job.settlementId().equals(subject)
-                || !reallocated.equals(planInputReallocation(state, job).orElse(null)))
+                || !inputReallocationReady(state, job)
+                || !reallocated.executionId().actorId().equals(job.workerId())
+                || !ResourceStorageSelection.containers(state, job.settlementId(), "minecraft:wheat",
+                    java.util.Set.of(ResourceStorageRole.WAREHOUSE)).contains(reallocated.sourceContainerId())
+                || !replacementAt(state, job, reallocated.sourceContainerId()).equals(Optional.of(reallocated.replacement())))
             throw new IllegalArgumentException("bakery replacement is not the current unclaimed owned depot input");
+        state.actorExecutions().requireCurrent(reallocated.executionId());
         ProductionInputHold replacement = reallocated.replacement();
         ProductionJob updated = job.reallocateBakeryInput(replacement, reallocated.sourceContainerId());
+        BakeryKnownNavigation.requireAcceptedDestination(state, updated, reallocated.plannedRoute());
         Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs());
         jobs.put(job.id(), updated);
         if (replacement instanceof ProductionInputHold.Materialized)
@@ -123,7 +143,7 @@ public final class BakeryProcess {
         return coldBlocker(state, job, true);
     }
 
-    private static Optional<String> coldBlocker(FrontierWorldState state, ProductionJob job, boolean checkOutputCapacity) {
+    static Optional<String> coldBlocker(FrontierWorldState state, ProductionJob job, boolean checkOutputCapacity) {
         if (job.bakeryWork().orElseThrow().block().filter(BakeryWorkBlock::requiresPhysicalReconciliation).isPresent())
             return Optional.of("BAKERY_" + job.bakeryWork().orElseThrow().block().orElseThrow().reason());
         if (job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()) return Optional.of("PENDING_PHYSICAL_EFFECT");
@@ -160,7 +180,7 @@ public final class BakeryProcess {
         Optional<String> eligibility = coldBlocker(state, job);
         if (eligibility.isPresent()) return Optional.of("NOT_EVALUATED:" + eligibility.orElseThrow());
         try {
-            var route = BakeryKnownNavigation.path(state, job);
+            var route = BakeryKnownNavigation.retainedPath(state, job);
             var phase = job.bakeryWork().orElseThrow().phase();
             if (route.size() > 1 && (phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY)
                     && !ProductionServiceAccess.mayAdvance(state, job, route.get(1)))
@@ -186,49 +206,46 @@ public final class BakeryProcess {
             ActorLocation worker = state.actorLocations().get(job.workerId());
             if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
             if (BakeryWorkGoal.deliveryAccessCleared(state, job, worker.body()))
-                return Optional.of(new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.FINALIZE,
-                        worker.supportingSurface()));
+                return Optional.of(coldStep(state, job, BakeryColdStep.Action.FINALIZE,
+                        worker.supportingSurface(), List.of()));
             // Finalization changes job ownership, not pose. Every movement, including
             // post-delivery clearance, still excludes retained physical authority.
             if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())) return Optional.empty();
             try {
-                List<SurfaceAnchor> clearingRoute = BakeryKnownNavigation.path(state, job);
-                if (clearingRoute.size() > 1) return Optional.of(new BakeryColdStep(job.id(), work.phase(),
-                        BakeryColdStep.Action.MOVE, clearingRoute.get(1)));
-                return Optional.of(new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.FINALIZE,
-                        state.actorLocations().get(job.workerId()).supportingSurface()));
+                List<SurfaceAnchor> clearingRoute = BakeryKnownNavigation.plannedPath(state, job);
+                if (clearingRoute.size() > 1) return Optional.of(coldStep(state, job,
+                        BakeryColdStep.Action.MOVE, clearingRoute.get(1), clearingRoute));
+                return Optional.empty();
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
         }
         if (coldBlocker(state, job, checkOutputCapacity).isPresent()) return Optional.empty();
         List<SurfaceAnchor> route;
-        try { route = BakeryKnownNavigation.path(state, job); }
+        try { route = BakeryKnownNavigation.plannedPath(state, job); }
         catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
         if (route.size() > 1) {
             if ((work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
                     && !ProductionServiceAccess.mayAdvance(state, job, route.get(1))) return Optional.empty();
-            return Optional.of(new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.MOVE, route.get(1)));
+            return Optional.of(coldStep(state, job, BakeryColdStep.Action.MOVE, route.get(1), route));
         }
         SurfaceAnchor current = state.actorLocations().get(job.workerId()).supportingSurface();
-        BakeryColdStep.Action action = switch (work.phase()) {
-            case DEPOT_PICKUP -> BakeryColdStep.Action.PICKUP;
-            case STATION_LOAD -> BakeryColdStep.Action.LOAD;
-            case PROCESSING -> work.completedWorkTicks() < ProductionWorkProgress.REQUIRED_PROCESSING_TICKS
-                    ? BakeryColdStep.Action.WORK_TICK : BakeryColdStep.Action.RECIPE;
-            case STATION_UNLOAD -> BakeryColdStep.Action.UNLOAD;
-            case DEPOT_DELIVERY -> BakeryColdStep.Action.DELIVER;
-            case DELIVERED -> throw new IllegalStateException("delivered bakery work is handled before routing");
-        };
-        return Optional.of(new BakeryColdStep(job.id(), work.phase(), action, current));
+        return Optional.of(coldStep(state, job, BakeryColdStepAdmission.stationAction(work), current, List.of()));
+    }
+
+    private static BakeryColdStep coldStep(FrontierWorldState state, ProductionJob job, BakeryColdStep.Action action,
+            SurfaceAnchor surface, List<SurfaceAnchor> route) {
+        var execution = state.actorExecutions().current(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
+        return new BakeryColdStep(job.id(), job.bakeryWork().orElseThrow().phase(), action, surface, execution,
+                route.isEmpty() ? Optional.empty() : Optional.of(
+                        new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route)));
     }
 
     static FrontierWorldState reduceColdStep(FrontierWorldState state, SubjectId subject, BakeryColdStep step) {
         ProductionJob job = state.productionJobs().get(step.jobId());
         if (job == null || !job.settlementId().equals(subject)
-                || job.bakeryWork().isEmpty() || job.bakeryWork().orElseThrow().phase() != step.expectedPhase()
-                // WAL replay must validate historically committed movement using the old
-                // capacity-independent route. New planning still stops at a full depot.
-                || !step.equals(planColdStep(state, job, false).orElse(null)))
+                || job.bakeryWork().isEmpty() || job.bakeryWork().orElseThrow().phase() != step.expectedPhase())
             throw new IllegalArgumentException("bakery COLD step is not the current exclusive planned successor");
+        BakeryColdStepAdmission.require(state, job, step);
         if (step.action() == BakeryColdStep.Action.DELIVER
                 && ProductionOutputCapacity.depotDeliveryUnavailable(state, job))
             throw new IllegalArgumentException("bakery output cannot enter a full depot");

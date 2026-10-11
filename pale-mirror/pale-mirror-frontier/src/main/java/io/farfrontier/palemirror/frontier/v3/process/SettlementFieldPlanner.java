@@ -27,13 +27,16 @@ final class SettlementFieldPlanner implements SettlementOperationPlanner {
     }
     @Override public Assessment assess(FrontierWorldState state, Settlement settlement) {
         if (!ProductionStockDemand.read(state, settlement.id(), "minecraft:wheat").requested()) return Assessment.empty();
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
         Optional<ResourceSite> recoverableField = state.resourceSiteDescriptors().values().stream()
                 .filter(site -> site.settlementId().equals(settlement.id()))
                 .filter(site -> state.resourceSites().site(site.id()).phase() == ResourceSitePhase.READY)
                 .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT)
+                .filter(site -> !site.layout().cells().isEmpty())
+                .filter(site -> ResourceStorageSelection.newStackDestination(state, settlement.id(), "minecraft:wheat", 64,
+                        site.layout().cells().getFirst().workstation(), java.util.Set.of(ResourceStorageRole.WAREHOUSE),
+                        endpoint -> true).isPresent())
                 .min(Comparator.comparing(ResourceSite::id));
-        if (recoverableField.isPresent() && state.firstFreeContainerSlot(depot).isPresent()
+        if (recoverableField.isPresent()
                 && FrontierWorldStateSupport.availableWorkResident(state, settlement.id(),
                         ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE).isPresent())
             return Assessment.offer(settlement.id(), new StrategicOperationProposal(

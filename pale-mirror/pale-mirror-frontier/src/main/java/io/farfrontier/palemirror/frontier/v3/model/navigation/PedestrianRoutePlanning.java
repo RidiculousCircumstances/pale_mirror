@@ -64,6 +64,13 @@ public final class PedestrianRoutePlanning {
         private final Map<PedestrianRouteGeometry, Map<Endpoints, PedestrianRouteResult>> views = new java.util.WeakHashMap<>();
         private final PedestrianRegionCache regions = new PedestrianRegionCache();
         private Object version;
+        @Override public synchronized java.util.Optional<PedestrianRouteResult> peek(
+                PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+            if (version != geometry.version()) return java.util.Optional.empty();
+            var results = views.get(geometry);
+            return results == null ? java.util.Optional.empty()
+                    : java.util.Optional.ofNullable(results.get(new Endpoints(start, target)));
+        }
         @Override public synchronized PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
             if (version != geometry.version()) { views.clear(); regions.clear(); version = geometry.version(); }
             var results = views.get(geometry);

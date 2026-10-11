@@ -13,12 +13,15 @@ final class BakeryInputReallocatedCodec implements PayloadCodec {
             FrontierWorldPayloadCodecs.writeSubject(output, value.sourceContainerId());
             FrontierWorldPayloadCodecs.writeSubject(output, value.replacement().itemId());
             ProductionJobStateCodec.writeHold(output, value.replacement());
+            ActorExecutionStateCodec.writeId(output, value.executionId());
+            PedestrianRouteReceiptCodec.write(output, value.plannedRoute());
         });
     }
     @Override public FrontierPayload decode(byte[] bytes) {
         return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new BakeryInputReallocated(
                 FrontierWorldPayloadCodecs.readSubject(input).value(),
                 FrontierWorldPayloadCodecs.readSubject(input).value(),
-                ProductionJobStateCodec.readHold(input, FrontierWorldPayloadCodecs.readSubject(input).value())));
+                ProductionJobStateCodec.readHold(input, FrontierWorldPayloadCodecs.readSubject(input).value()),
+                ActorExecutionStateCodec.readId(input), PedestrianRouteReceiptCodec.read(input)));
     }
 }

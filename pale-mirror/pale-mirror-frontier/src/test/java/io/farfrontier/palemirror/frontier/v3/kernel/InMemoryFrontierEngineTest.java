@@ -220,6 +220,37 @@ class InMemoryFrontierEngineTest {
         assertEquals(0, engine.projection(ProjectionQuery.summary()).value());
     }
 
+    @Test void quarantineAfterAPartiallyCommittedAdvanceAppendsAtTheDurableHeadNotThePreviousTurn() {
+        var first = scheduled("schedule:before-failure", SUBJECT.value(), 10L, 1);
+        var failing = scheduled("schedule:after-success", SUBJECT.value(), 11L, 9);
+        List<TransactionRecord> durable = new ArrayList<>();
+        var engine = new InMemoryFrontierEngine<Counter, CounterProjection>(
+                WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, action) -> List.of(new ProposedEvent(action.subject(), new Delta(action.weight()))),
+                (state, event) -> reduce(state, event, true), state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(first, failing),
+                (transaction, durability) -> {
+                    assertTrue(durable.isEmpty() || transaction.instant().compareTo(durable.getLast().instant()) >= 0,
+                            "incident append must not move WAL time backwards");
+                    durable.add(transaction);
+                }, StateValidator.none(), FrontierExecutionMetrics.noOp(),
+                (state, world, causes, instant, boundary, failure) -> {
+                    assertEquals(1, state.value()); assertEquals(new SimInstant(10), instant);
+                    return Optional.of(new ProposedEvent(SUBJECT, new Delta(0)));
+                });
+        var result = engine.advanceTo(new SimInstant(20), new WorkBudget(2, 10));
+        assertEquals("QUARANTINED", result.status().kind().name());
+        assertEquals(List.of(failing), engine.scheduledActions(), "the failed action is not consumed or concealed");
+        assertEquals(2, durable.size()); assertEquals(engine.transactions(), durable);
+        assertEquals(new SimInstant(10), engine.checkpoint().instant());
+        assertEquals(0, engine.failureCause().orElseThrow().getSuppressed().length);
+        var replay = TransactionReplayer.replay(WORLD, new Counter(0), SimInstant.ZERO, List.of(first, failing), durable,
+                (state, event) -> reduce(state, event, false), state -> ByteBuffer.allocate(4).putInt(state.value()).array());
+        assertEquals(new Counter(1), replay.state()); assertEquals(engine.scheduledActions(), replay.schedules());
+    }
+
     @Test
     void duePlannerMayDurablyCancelItsOwnObsoleteActionWithoutASecondAcknowledgement() {
         ScheduledAction action = scheduled("schedule:obsolete", "settlement:a", 10L, 1);

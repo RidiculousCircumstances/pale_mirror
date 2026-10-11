@@ -64,6 +64,11 @@ public final class KnownPedestrianNavigation {
         return route(geometry, start, order, true);
     }
 
+    /** Read-only diagnostics can use retained search evidence, never enqueue or finish a calculation. */
+    public static List<SurfaceAnchor> retainedRoute(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order) {
+        return route(geometry, start, order, true, true);
+    }
+
     /** Reuse supported accepted geometry; an advisory hint grants neither movement nor arrival. */
     public static List<SurfaceAnchor> plannedRoute(PedestrianRouteGeometry geometry, SurfaceAnchor start,
                                                   MovementOrder order, List<SurfaceAnchor> hint) {
@@ -99,6 +104,11 @@ public final class KnownPedestrianNavigation {
     }
 
     private static List<SurfaceAnchor> route(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order, boolean deferredPlanning) {
+        return route(geometry, start, order, deferredPlanning, false);
+    }
+
+    private static List<SurfaceAnchor> route(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order,
+            boolean deferredPlanning, boolean retainedOnly) {
         Objects.requireNonNull(geometry); Objects.requireNonNull(start); Objects.requireNonNull(order);
         if (order.capability() != TraversalCapability.PEDESTRIAN)
             throw new IllegalArgumentException("known pedestrian navigation cannot change actor capability");
@@ -110,8 +120,11 @@ public final class KnownPedestrianNavigation {
         var pendingRequests = new java.util.ArrayList<PedestrianRouteRequest>();
         for (SurfaceAnchor station : order.legalStations()) {
             if (!geometry.bounds().contains(station.support()) || geometry.blocked(station)) continue;
-            PedestrianRouteResult result = deferredPlanning ? PedestrianRoutePlanning.query(geometry, start, station)
-                    : PedestrianRoutePlanning.calculate(geometry, start, station);
+            PedestrianRouteResult result = retainedOnly ? PedestrianRoutePlanning.peek(geometry, start, station)
+                    .orElseGet(() -> new PedestrianRouteResult(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                            List.of(), 0, 0, "ROUTE_NOT_CALCULATED"))
+                    : deferredPlanning ? PedestrianRoutePlanning.query(geometry, start, station)
+                        : PedestrianRoutePlanning.calculate(geometry, start, station);
             if (result.status() == PedestrianRouteResult.Status.PLANNING)
                 pendingRequests.add(PedestrianRouteRequest.of(geometry, start, station));
             if (result.status() == PedestrianRouteResult.Status.FOUND) {
@@ -123,7 +136,7 @@ public final class KnownPedestrianNavigation {
             }
         }
         if (best == null && deferred != null) {
-            pendingRequests.forEach(PedestrianRoutePlanning::await);
+            if (!retainedOnly) pendingRequests.forEach(PedestrianRoutePlanning::await);
             throw new RouteUnavailable(deferred.status(), deferred.reason());
         }
         if (best == null) throw new RouteUnavailable(failure == null ? "NO_CLEAR_DECLARED_STATION"

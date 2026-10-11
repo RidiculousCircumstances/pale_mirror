@@ -4,9 +4,9 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // Exact work-area development is independent of finite source/depletion history.
-    // Historical disposable worlds lack its explicit admission authority.
-    static final int VERSION = 273;
+    // Bakery and field movement WAL retain accepted geometry and exact execution authority;
+    // historical disposable worlds cannot replay that changed event grammar.
+    static final int VERSION = 274;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

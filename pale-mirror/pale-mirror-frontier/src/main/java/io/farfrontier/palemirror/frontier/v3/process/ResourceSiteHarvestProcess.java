@@ -627,16 +627,18 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("COLD field goal has no exclusive current worker and schedule");
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         if (goal.layoutRevision() != advanced.layoutRevision()
+                || goal.goalRevision() != advanced.goalRevision()
                 || goal.nextWorkSlot() != advanced.nextWorkSlot() || goal.kind() != advanced.kind())
             throw new IllegalArgumentException("COLD field goal has a stale work target");
+        state.actorExecutions().requireCurrent(advanced.executionId());
         if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
                 && !HarvestServiceAccess.mayAdvance(state, job, advanced.nextBody().supportingSurface()))
             throw new IllegalArgumentException("COLD field depot approach lacks its service turn");
-        List<SurfaceAnchor> known = ResourceSiteHarvestKnownNavigation.path(state, job);
-        BodyPosition next = known.get(Math.min(1, known.size() - 1)).standingBody();
-        if (!next.equals(advanced.nextBody()))
-            throw new IllegalArgumentException("COLD field goal step is not the next known support");
+        ResourceSiteHarvestKnownNavigation.requireAcceptedDestination(state, job, advanced.plannedRoute());
+        BodyPosition next = advanced.nextBody();
         ActorLocation actor = state.actorLocations().get(job.workerId());
+        if (advanced.plannedRoute().isEmpty() && !next.equals(actor.supportingSurface().standingBody()))
+            throw new IllegalArgumentException("COLD field arrival without movement has a foreign body");
         boolean arrived = goal.arrivedAt(advanced.nextBody().supportingSurface());
         if (actor == null || (actor.body().equals(next)
                 && (!arrived || job.arriveAtSemanticGoal(goal).equals(job))))

@@ -12,11 +12,14 @@ final class BakeryStorageRetargetedCodec implements PayloadCodec {
             FrontierWorldPayloadCodecs.writeSubject(out, value.jobId()); out.writeInt(value.phase().wireTag());
             FrontierWorldPayloadCodecs.writeSubject(out, value.previousContainer());
             FrontierWorldPayloadCodecs.writeSubject(out, value.destinationContainer());
+            ActorExecutionStateCodec.writeId(out, value.executionId());
+            PedestrianRouteReceiptCodec.write(out, value.plannedRoute());
         });
     }
     @Override public FrontierPayload decode(byte[] bytes) {
         return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new BakeryStorageRetargeted(
                 FrontierWorldPayloadCodecs.readSubject(in).value(), BakeryWorkState.Phase.fromWireTag(in.readInt()),
-                FrontierWorldPayloadCodecs.readSubject(in).value(), FrontierWorldPayloadCodecs.readSubject(in).value()));
+                FrontierWorldPayloadCodecs.readSubject(in).value(), FrontierWorldPayloadCodecs.readSubject(in).value(),
+                ActorExecutionStateCodec.readId(in), PedestrianRouteReceiptCodec.read(in)));
     }
 }

@@ -145,10 +145,9 @@ final class ResourceSiteHarvestPlanning {
             return java.util.Optional.empty();
         ActorLocation worker = state.actorLocations().get(farmer.id());
         if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");
-        var storage = ResourceStorageSelection.destination(state, site.settlementId(), "minecraft:wheat", 64,
-                worker.supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE), java.util.Optional.empty(),
-                endpoint -> state.firstFreeContainerSlot(endpoint.containerId()).isPresent()
-                        && ResourceStorageNavigation.reachable(state, worker.supportingSurface(), endpoint));
+        var storage = ResourceStorageSelection.newStackDestination(state, site.settlementId(), "minecraft:wheat", 64,
+                worker.supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE),
+                endpoint -> ResourceStorageNavigation.reachable(state, worker.supportingSurface(), endpoint));
         if (storage.isEmpty()) return java.util.Optional.empty();
         SubjectId depot = storage.orElseThrow().containerId();
         OptionalInt slot = state.firstFreeContainerSlot(depot);
@@ -389,7 +388,11 @@ final class ResourceSiteHarvestPlanning {
             return List.of(reschedule(action, coldProgress(job, nextDue)));
         ResourceSiteHarvestColdGoalAdvanced advanced = new ResourceSiteHarvestColdGoalAdvanced(
                 job.id(), job.workerId(), goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(),
-                next, action.id(), action.dueAt().ticks());
+                next, action.id(), action.dueAt().ticks(), goal.goalRevision(),
+                state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST)
+                        .get(job.workerId()),
+                path.size() > 1 ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(path))
+                        : java.util.Optional.empty());
         reduceColdGoalAdvanced(state, job.siteId(), advanced);
         return List.of(new ProposedEvent(job.siteId(), advanced),
                 reschedule(action, coldProgress(job, nextDue)));

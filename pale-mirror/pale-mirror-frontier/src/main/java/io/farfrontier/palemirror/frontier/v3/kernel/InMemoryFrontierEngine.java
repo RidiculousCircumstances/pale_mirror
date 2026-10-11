@@ -521,12 +521,17 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private void quarantine(CauseChain causes, KernelQuarantineReporter.Boundary boundary, RuntimeException error) {
         if (failureCause != null) return;
         failureCause = error;
+        // Earlier actions in this advance may already be durable while the turn's
+        // public instant is still unchanged. Diagnostics must not append behind them.
+        SimInstant failureInstant = transactions.isEmpty() ? instant
+                : laterOf(instant, transactions.getLast().instant());
         try {
-            kernelQuarantineReporter.report(state, worldId, causes, instant, boundary, error)
-                    .ifPresent(event -> commit(causes, instant, List.of(event), Optional.empty()));
+            kernelQuarantineReporter.report(state, worldId, causes, failureInstant, boundary, error)
+                    .ifPresent(event -> commit(causes, failureInstant, List.of(event), Optional.empty()));
         } catch (RuntimeException diagnosticFailure) {
             error.addSuppressed(diagnosticFailure);
         }
+        instant = failureInstant;
         status = new EngineStatus(EngineStatus.Kind.QUARANTINED, boundedFailure(error));
     }
 

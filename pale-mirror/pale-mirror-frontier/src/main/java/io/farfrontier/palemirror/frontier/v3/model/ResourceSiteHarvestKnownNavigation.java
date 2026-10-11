@@ -29,6 +29,35 @@ public final class ResourceSiteHarvestKnownNavigation {
         return path(state, job, true);
     }
     private static List<SurfaceAnchor> path(FrontierWorldState state, ResourceSiteHarvestJob job, boolean deferred) {
+        Context context = context(state, job);
+        try {
+            return deferred ? context.knowledge().plannedPath(context.start(), context.goal().movementOrder())
+                    : context.knowledge().path(context.start(), context.goal().movementOrder());
+        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            throw new KnowledgeUnavailable("field goal has no path in retained known geometry: "
+                    + context.goal().kind() + ": " + unavailable.getMessage(), unavailable);
+        }
+    }
+
+    /** Check the accepted producer result, not the route a second search happens to prefer. */
+    public static void requireAcceptedDestination(FrontierWorldState state, ResourceSiteHarvestJob job,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> receipt) {
+        Context context = context(state, job);
+        if (receipt.isEmpty()) {
+            if (!context.goal().arrivedAt(context.start()))
+                throw new IllegalArgumentException("field arrival lacks a route or current goal station");
+            context.knowledge().requireRoute(List.of(context.start()));
+            return;
+        }
+        var route = receipt.orElseThrow().route();
+        if (!route.getFirst().equals(context.start()) || !context.goal().arrivedAt(route.getLast()))
+            throw new IllegalArgumentException("field route has a stale departure or foreign goal");
+        context.knowledge().requireRoute(route);
+    }
+
+    private record Context(SurfaceAnchor start, ResourceSiteHarvestGoal goal, KnownPedestrianRouteKnowledge knowledge) { }
+
+    private static Context context(FrontierWorldState state, ResourceSiteHarvestJob job) {
         Objects.requireNonNull(state, "known field navigation state");
         Objects.requireNonNull(job, "known field navigation job");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
@@ -54,12 +83,6 @@ public final class ResourceSiteHarvestKnownNavigation {
         }
         SurfaceAnchor start = actor.supportingSurface();
         ResourceStorageAccess port = ResourceSiteHarvestGoal.depotPort(state, job);
-        try {
-            var knowledge = KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start);
-            return deferred ? knowledge.plannedPath(start, goal.movementOrder()) : knowledge.path(start, goal.movementOrder());
-        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-            throw new KnowledgeUnavailable("field goal has no path in retained known geometry: "
-                    + goal.kind() + ": " + unavailable.getMessage(), unavailable);
-        }
+        return new Context(start, goal, KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start));
     }
 }

@@ -33,6 +33,68 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Goal-navigation regression and shared fixture; obsolete route-cursor tests are archived. */
 class ResourceSiteHarvestProcessTest {
+    @Test void acceptedAlternativeColdRouteReplaysWithoutRediscoveringThePreferredNextSupport() throws Exception {
+        var fixture = coldHarvestAfterSteps(125L, 0);
+        var state = fixture.state(); var job = fixture.job();
+        var usual = ResourceSiteHarvestKnownNavigation.path(state, job);
+        var start = usual.getFirst();
+        var knowledge = KnownPedestrianRouteKnowledge.forField(state, state.resourceSite(job.siteId()),
+                state.resourceSites().cycle(job.siteId()), ResourceSiteHarvestGoal.depotPort(state, job), start);
+        SurfaceAnchor alternative = null;
+        for (int[] delta : List.of(new int[]{1, 0}, new int[]{-1, 0}, new int[]{0, 1}, new int[]{0, -1})) {
+            var candidate = KnownPedestrianGround.forFrontier(state).at(start.x() + delta[0], start.z() + delta[1]);
+            if (candidate == null || candidate.equals(usual.get(1))) continue;
+            try {
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(List.of(start, candidate));
+                knowledge.requireRoute(List.of(start, candidate));
+                alternative = candidate; break;
+            } catch (IllegalArgumentException unavailable) { /* Try another actual supported neighbour. */ }
+        }
+        assertNotNull(alternative, "fixture needs two legal first edges to the same work goal");
+        var route = new java.util.ArrayList<SurfaceAnchor>();
+        route.add(start); route.add(alternative); route.addAll(usual);
+        knowledge.requireRoute(route);
+        var acceptedPath = List.copyOf(route);
+        var action = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
+        ResourceSiteHarvestColdGoalAdvanced accepted;
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) ->
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.FOUND,
+                        acceptedPath, 0, 0, "isolated legal alternative"))) {
+            accepted = ResourceSiteHarvestProcess.planColdProgress(state, action).stream().map(ProposedEvent::payload)
+                    .filter(ResourceSiteHarvestColdGoalAdvanced.class::isInstance)
+                    .map(ResourceSiteHarvestColdGoalAdvanced.class::cast).findFirst().orElseThrow();
+        }
+        assertNotEquals(usual.get(1).standingBody(), accepted.nextBody());
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(accepted, codecs.decode(accepted.type(), codecs.encode(accepted)));
+        var codec = new FrontierWorldStateCodec();
+        var recovered = codec.decode(codec.encode(state));
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            fail("replay must validate accepted geometry without invoking a planner"); return null;
+        })) {
+            var advanced = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(recovered, fixture.site(), accepted);
+            assertEquals(accepted.nextBody(), advanced.actorLocations().get(job.workerId()).body());
+            assertEquals(recovered.inventory(), advanced.inventory());
+            assertEquals(recovered.resourceSites(), advanced.resourceSites(), "movement cannot harvest a cell");
+            assertThrows(IllegalArgumentException.class, () ->
+                    ResourceSiteHarvestProcess.reduceColdGoalAdvanced(advanced, fixture.site(), accepted));
+            var id = accepted.executionId();
+            var stale = new ResourceSiteHarvestColdGoalAdvanced(job.id(), job.workerId(), accepted.layoutRevision(),
+                    accepted.nextWorkSlot(), accepted.kind(), accepted.nextBody(), action.id(), action.dueAt().ticks(),
+                    accepted.goalRevision(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                            id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1), accepted.plannedRoute());
+            assertThrows(IllegalArgumentException.class, () ->
+                    ResourceSiteHarvestProcess.reduceColdGoalAdvanced(recovered, fixture.site(), stale));
+            var truncated = new ResourceSiteHarvestColdGoalAdvanced(job.id(), job.workerId(), accepted.layoutRevision(),
+                    accepted.nextWorkSlot(), accepted.kind(), accepted.nextBody(), action.id(), action.dueAt().ticks(),
+                    accepted.goalRevision(), id, Optional.of(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(
+                            acceptedPath.subList(0, 2))));
+            assertThrows(IllegalArgumentException.class, () ->
+                    ResourceSiteHarvestProcess.reduceColdGoalAdvanced(recovered, fixture.site(), truncated));
+        }
+    }
+
     @Test void fieldRuntimeRouteAdmissionUsesCooperativePlanningWithoutSurveyingTheWorldSynchronously() throws Exception {
         var fixture = coldHarvestAfterSteps(125L, 0);
         try (var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
@@ -49,8 +111,9 @@ class ResourceSiteHarvestProcessTest {
             while (planner.pendingCount() > 0 && turns++ < 4096)
                 planner.advance(io.farfrontier.palemirror.frontier.v3.model.navigation.HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
             assertEquals(0, planner.pendingCount());
-            assertEquals(ResourceSiteHarvestKnownNavigation.path(fixture.state(), fixture.job()),
-                    ResourceSiteHarvestKnownNavigation.plannedPath(fixture.state(), fixture.job()));
+            var route = ResourceSiteHarvestKnownNavigation.plannedPath(fixture.state(), fixture.job());
+            ResourceSiteHarvestKnownNavigation.requireAcceptedDestination(fixture.state(), fixture.job(),
+                    Optional.of(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route)));
         }
     }
     @Test void unavailableWarehouseIsReplacedWithoutLosingTheCarriedHarvestAndOldAuthorityCannotResume() {

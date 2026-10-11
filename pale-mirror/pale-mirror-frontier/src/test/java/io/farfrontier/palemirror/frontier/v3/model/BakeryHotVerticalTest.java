@@ -26,6 +26,15 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakeryHotVerticalTest {
+    private static FrontierWorldState replayInputReplacement(FrontierWorldState state, SubjectId owner, BakeryInputReallocated event) {
+        return assertDoesNotThrow(() -> {
+            try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, target) -> {
+                throw new AssertionError("replaying an accepted input replacement must not search for a route");
+            })) {
+                return ProductionProcess.reduceBakeryInputReallocated(state, owner, event);
+            }
+        });
+    }
     @Test
     void replacingStolenExactWheatRetainsTheSameBakerAndJob() {
         WorldId world = new WorldId("frontier:bakery-exact-input-replacement");
@@ -70,7 +79,7 @@ class BakeryHotVerticalTest {
                 .map(BakeryInputReallocated.class::cast).findFirst().orElseThrow();
         assertEquals(event, FrontierWorldRuntimeDefinition.payloadCodecs().decode(event.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(event)));
-        state = ProductionProcess.reduceBakeryInputReallocated(state, task.ownerId(), event);
+        state = replayInputReplacement(state, task.ownerId(), event);
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         ProductionJob resumed = state.productionJobs().get(original.id());
         assertEquals(original.workerId(), resumed.workerId());
@@ -195,7 +204,7 @@ class BakeryHotVerticalTest {
         assertEquals(event, io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition
                 .payloadCodecs().decode(event.type(), io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition
                         .payloadCodecs().encode(event)));
-        state = ProductionProcess.reduceBakeryInputReallocated(state, task.ownerId(), event);
+        state = replayInputReplacement(state, task.ownerId(), event);
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         ProductionJob resumed = state.productionJobs().get(original.id());
         assertEquals(original.workerId(), resumed.workerId());

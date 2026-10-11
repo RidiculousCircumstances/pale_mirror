@@ -33,15 +33,34 @@ public final class ResourceStorageSelection {
     public static Optional<ShipmentEndpoint> destination(FrontierWorldState state, SubjectId owner, String itemKind,
             int quantity, SurfaceAnchor origin, Set<ResourceStorageRole> roles,
             Optional<SubjectId> completing, Predicate<ShipmentEndpoint> accessible) {
+        Objects.requireNonNull(accessible);
+        return receiving(state, owner, itemKind, quantity, origin, roles, completing)
+                .filter(accessible).findFirst();
+    }
+    /** Capacity only. It neither starts route searches nor grants an interaction/service turn. */
+    public static List<ShipmentEndpoint> receivingCandidates(FrontierWorldState state, SubjectId owner, String itemKind,
+            int quantity, SurfaceAnchor origin, Set<ResourceStorageRole> roles, Optional<SubjectId> completing) {
+        return receiving(state, owner, itemKind, quantity, origin, roles, completing).toList();
+    }
+    private static java.util.stream.Stream<ShipmentEndpoint> receiving(FrontierWorldState state, SubjectId owner, String itemKind,
+            int quantity, SurfaceAnchor origin, Set<ResourceStorageRole> roles, Optional<SubjectId> completing) {
         Objects.requireNonNull(state); Objects.requireNonNull(owner); Objects.requireNonNull(origin);
-        Objects.requireNonNull(completing); Objects.requireNonNull(accessible);
+        Objects.requireNonNull(completing);
         roles = Set.copyOf(Objects.requireNonNull(roles));
         if (roles.isEmpty()) throw new IllegalArgumentException("storage request must declare its permitted tiers");
         if (quantity < 1 || quantity > 64) throw new IllegalArgumentException("storage selection needs a bounded real portion");
         return ranked(state, owner, itemKind, origin, roles)
                 .filter(policy -> !ReferenceContainerCustody.blocksCanonicalUse(state, policy.endpoint().containerId()))
                 .filter(policy -> ContainerStorageAdmission.receive(state, policy.endpoint().containerId(), itemKind, quantity, completing))
-                .map(ResourceStoragePolicy::endpoint).filter(accessible).findFirst();
+                .map(ResourceStoragePolicy::endpoint);
+    }
+    /** Work issuing a new physical stack needs an empty addressed slot as well as volume. */
+    public static Optional<ShipmentEndpoint> newStackDestination(FrontierWorldState state, SubjectId owner, String itemKind,
+            int quantity, SurfaceAnchor origin, Set<ResourceStorageRole> roles, Predicate<ShipmentEndpoint> accessible) {
+        Objects.requireNonNull(accessible);
+        return receiving(state, owner, itemKind, quantity, origin, roles, Optional.empty())
+                .filter(endpoint -> state.firstFreeContainerSlot(endpoint.containerId()).isPresent())
+                .filter(accessible).findFirst();
     }
     /** Hauling may fill available capacity with a real partial batch, rather than waiting for a full stack. */
     public static Optional<Placement> destinationUpTo(FrontierWorldState state, SubjectId owner, String kind, int maximum,
