@@ -62,6 +62,7 @@ public final class FrontierV3TestPilotClient {
     private static boolean visitHandshakeArmed; private static ObservedDiagnostic visitHandshakeBaseline;
     private static boolean containerOpenAttempted;
     private static boolean quickMoveAttempted;
+    private static int quickMoveBeforeQuantity, quickMoveSourceMenuSlot;
     private static boolean inspectSent;
     static boolean fastForwardSent;
     private static ObservedDiagnostic inspectBaseline;
@@ -367,8 +368,12 @@ public final class FrontierV3TestPilotClient {
         }
         ResourceLocation item = ResourceLocation.parse(action.get("item").getAsString()); int count = action.get("count").getAsInt();
         if (quickMoveAttempted) {
-            boolean moved = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container != minecraft.player.getInventory())
-                    .anyMatch(slot -> FrontierV3PilotInventoryActions.sameStack(slot, item, count));
+            // Vanilla may split/merge one source across several destination stacks or physical members.
+            int present = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container != minecraft.player.getInventory())
+                    .filter(slot -> !slot.getItem().isEmpty() && BuiltInRegistries.ITEM.getKey(slot.getItem().getItem()).equals(item))
+                    .mapToInt(slot -> slot.getItem().getCount()).sum();
+            boolean moved = present == quickMoveBeforeQuantity + count
+                    && minecraft.player.containerMenu.getSlot(quickMoveSourceMenuSlot).getItem().isEmpty();
             if (moved) { advance("quick_move_from_inventory"); return; }
             timeout(minecraft, action, "quick move did not reach the container"); return;
         }
@@ -377,6 +382,10 @@ public final class FrontierV3TestPilotClient {
         if (source == null) { timeout(minecraft, action, "player lacks exact stack " + item + " x" + count); return; }
         int menuSlot = minecraft.player.containerMenu.slots.indexOf(source);
         if (menuSlot < 0) throw new IllegalStateException("player inventory slot is absent from the open container menu");
+        quickMoveSourceMenuSlot = menuSlot;
+        quickMoveBeforeQuantity = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container != minecraft.player.getInventory())
+                .filter(slot -> !slot.getItem().isEmpty() && BuiltInRegistries.ITEM.getKey(slot.getItem().getItem()).equals(item))
+                .mapToInt(slot -> slot.getItem().getCount()).sum();
         minecraft.gameMode.handleInventoryMouseClick(minecraft.player.containerMenu.containerId, menuSlot, 0, ClickType.QUICK_MOVE, minecraft.player);
         quickMoveAttempted = true;
     }

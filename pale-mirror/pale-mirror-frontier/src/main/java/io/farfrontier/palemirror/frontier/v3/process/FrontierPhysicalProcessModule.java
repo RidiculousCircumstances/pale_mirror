@@ -14,6 +14,8 @@ import java.util.List;
 /** Exact owner for durable physical observations, intents and surface state. */
 final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule {
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
+        if (command.payload() instanceof ContainerPlayerEditObserved edit)
+            return ContainerPlayerEditProcess.plan(state, edit, command.submittedAt().ticks());
         if (command.payload() instanceof GroundStockExit destroyed) {
             try { destroyed.apply(state, destroyed.economicOwner()); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
@@ -129,6 +131,7 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case PhysicalDeltasObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);
+            case ContainerPlayerEditObserved observed -> ContainerPlayerEditProcess.reduce(state, event.subject(), observed);
             case FungibleStackLayoutObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleLayout(state, event.subject(), observed);
             case FungibleResourceHandoffObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(state, event.subject(), observed);
             case FungibleStockDepartureObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(state, event.subject(), observed);

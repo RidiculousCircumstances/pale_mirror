@@ -53,7 +53,7 @@ class FrontierV3PhysicalStoresTest {
                 ledger.worksite(worksite(FrontierV3WorksiteBlockWitness.Phase.PREPARED, Optional.empty())); return ledger;
             }, tag -> FrontierV3GrayboxLedger.load(tag, null), value -> ((FrontierV3GrayboxLedger) value).worksite(
                     worksite(FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED, Optional.of("effect:mine-1")))),
-            new Case("clicks", () -> { var value=FrontierV3DepotClickLedger.load(empty(1,"pending"),null); value.prepare(click()); return value; },
+            new Case("clicks", () -> { var value=FrontierV3DepotClickLedger.load(empty(3,"pending"),null); value.prepare(click()); return value; },
                 tag -> FrontierV3DepotClickLedger.load(tag,null), value -> ((FrontierV3DepotClickLedger)value).retire(click())),
             new Case("boards", () -> { var value=FrontierV3ObjectBoardLedger.load(empty(1,"claims"),null);
                 value.applied("structure:1-farm",17,UUID.randomUUID().toString()); return value; },
@@ -118,7 +118,7 @@ class FrontierV3PhysicalStoresTest {
         })).toList();
     }
     @Test void failingDiskFenceKeepsDirtyStateAndCannotAcknowledgeTheWitness() throws Exception {
-        var ledger=FrontierV3DepotClickLedger.load(empty(1,"pending"),null);
+        var ledger=FrontierV3DepotClickLedger.load(empty(3,"pending"),null);
         Path path=directory.resolve("failed.dat");
         var store=FrontierV3JournalStore.open(path,FrontierV3JournalStore.PHYSICAL);
         ledger.attachJournal(path,WORLD,DIMENSION,store); ledger.prepare(click()); Files.createDirectory(path);

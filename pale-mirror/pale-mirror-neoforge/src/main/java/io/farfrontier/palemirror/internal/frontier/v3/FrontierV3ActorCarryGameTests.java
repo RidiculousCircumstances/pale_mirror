@@ -111,7 +111,7 @@ public final class FrontierV3ActorCarryGameTests {
         helper.assertTrue(access.frontierV3$horse() == donkey, "menu body is exact, not nearby discovery");
         var container = new SubjectId("container:menu-cargo");
         var target = new FrontierV3ContainerMenuTarget(new ContainerRecord(container, new SubjectId("settlement:menu"), 15),
-                FrontierV3PhysicalContainer.attached(container, 15, donkey), 2);
+                FrontierV3PhysicalContainer.attached(container, 15, donkey), 2, 2);
         helper.assertTrue(target.equipmentSlot(0) && target.equipmentSlot(1) && target.cargoSlot(0) == -1
                         && target.cargoSlot(2) == 0 && target.cargoSlot(16) == 14 && target.cargoSlot(17) == -1,
                 "equipment, cargo and player inventory have distinct declared menu ranges");

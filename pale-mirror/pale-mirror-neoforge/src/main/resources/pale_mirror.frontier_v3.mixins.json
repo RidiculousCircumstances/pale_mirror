@@ -24,6 +24,7 @@
     "FrontierV3EntitySavePassMixin",
     "FrontierV3PlayerActionMixin",
     "FrontierV3DepotMenuClickMixin",
-    "FrontierV3HorseMenuAccessor"
+    "FrontierV3HorseMenuAccessor",
+    "FrontierV3CompoundContainerAccessor"
   ]
 }

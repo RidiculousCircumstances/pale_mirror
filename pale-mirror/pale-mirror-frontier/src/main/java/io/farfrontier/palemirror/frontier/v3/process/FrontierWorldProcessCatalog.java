@@ -48,7 +48,8 @@ public final class FrontierWorldProcessCatalog {
             "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
             "frontier.kernel_quarantine_observed");
     private static final Set<String> PHYSICAL = types(
-            "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed", "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
+            "frontier.container_player_edit_observed", "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed",
+            "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
             "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
             "frontier.structure_damaged", "frontier.resource_deposited", "frontier.fungible_stack_layout_observed",
             "frontier.fungible_resource_handoff_observed", "frontier.fungible_stock_departure_observed",
@@ -692,13 +693,7 @@ public final class FrontierWorldProcessCatalog {
         return new DeterministicProcessDescriptor(id, commands, schedules, events, emissions, codecs);
     }
 
-    private static Set<String> physicalCommands() { return types(
-            "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed", "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
-            "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
-            "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.resource_deposited",
-            "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.fungible_stock_departure_observed", "frontier.fungible_stock_contribution_observed",
-            "frontier.fungible_stack_bindings_released", "frontier.exact_item_custody_changed",
-            "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition"); }
+    private static Set<String> physicalCommands() { return PHYSICAL; }
     private static Set<String> replicaCustodyCommands() { return REPLICA_CUSTODY; }
     private static Set<String> ambientCommands() { return types(
             "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared",
@@ -799,7 +794,8 @@ public final class FrontierWorldProcessCatalog {
         return switch (processId) {
             case "kernel-schedule" -> KERNEL;
             case "physical-observation" -> types(
-                    "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed", "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
+                    "frontier.container_player_edit_observed", "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed",
+                    "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
                     "kernel.reconsideration_requested",
                     "frontier.physical_custody_checkpointed", "frontier.physical_custody_released",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",

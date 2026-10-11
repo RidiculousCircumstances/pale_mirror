@@ -19,6 +19,27 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3DepotClickWitnessTest {
+    @Test void composedWitnessFencesEveryMemberAndRecoversAsOneTransaction() {
+        var second = new SubjectId("container:second-depot");
+        var left = new FrontierV3DepotClickWitness(DEPOT, ACCOUNT, OWNER, 7, PLAYER, INTERACTION, List.of(), Optional.empty());
+        var right = new FrontierV3DepotClickWitness(second, new SubjectId("custody:second-depot"), OWNER, 7,
+                PLAYER, INTERACTION, List.of(), Optional.empty());
+        var prepared = new FrontierV3ContainerClickTransaction(List.of(left, right));
+        assertEquals(prepared, FrontierV3ContainerClickTransaction.read(prepared.save()));
+        var empty = new net.minecraft.nbt.CompoundTag(); empty.putInt("format", 3); empty.put("pending", new net.minecraft.nbt.ListTag());
+        var ledger = FrontierV3DepotClickLedger.load(empty, null); ledger.prepare(prepared);
+        assertEquals(left, ledger.pending(DEPOT)); assertEquals(right, ledger.pending(second));
+        assertThrows(IllegalArgumentException.class, () -> ledger.prepare(right));
+        assertThrows(IllegalArgumentException.class, () -> ledger.retire(left));
+        var observed = new FrontierV3ContainerClickTransaction(List.of(left.observed(List.of(stack(0, 1))), right.observed(List.of())));
+        ledger.observe(prepared, observed);
+        var recovered = FrontierV3DepotClickLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertEquals(observed, recovered.transaction(second));
+        assertThrows(IllegalArgumentException.class, () -> recovered.retire(left));
+        recovered.retire(observed); assertEquals(List.of(), recovered.pending());
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3ContainerClickTransaction(List.of(left.observed(List.of()), right)));
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3ContainerClickTransaction(List.of(left, left)));
+    }
     private static final SubjectId DEPOT = new SubjectId("container:one-depot");
     private static final SubjectId ACCOUNT = new SubjectId("custody:container-one-depot");
     private static final SubjectId OWNER = new SubjectId("settlement:one");

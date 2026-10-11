@@ -33,45 +33,60 @@ final class FrontierV3ContainerClickExecutor {
         // Once v3 owns the physical world, an unavailable canonical image cannot authorize
         // an untracked edit to a potentially managed chest.
         if (state == null) return Admission.REJECTED;
-        if (FrontierV3ContainerMenuTarget.managedCompound(player, menu, state)) return Admission.REJECTED;
-        FrontierV3ContainerMenuTarget target;
-        try { target = FrontierV3ContainerMenuTarget.resolve(player, menu, state); }
+        List<FrontierV3ContainerMenuTarget> targets;
+        try { targets = FrontierV3ContainerMenuTarget.resolveAll(player, menu, state); }
         catch (IllegalArgumentException unavailable) { return Admission.REJECTED; }
-        if (target == null) return Admission.NOT_OWNED;
+        if (targets.isEmpty()) return Admission.NOT_OWNED;
+        UUID interaction = UUID.randomUUID();
+        var members = new java.util.ArrayList<FrontierV3DepotClickWitness>();
+        for (var target : targets) {
+            var witness = prepareMember(player, menu, slot, button, kind, state, target, interaction);
+            if (witness == null) return Admission.REJECTED;
+            members.add(witness);
+        }
+        var witnessLedger = FrontierV3DepotClickLedger.get(level);
+        witnessLedger.prepare(new FrontierV3ContainerClickTransaction(members));
+        witnessLedger.persist(level);
+        return Admission.ACCEPTED;
+    }
+
+    private static FrontierV3DepotClickWitness prepareMember(ServerPlayer player, AbstractContainerMenu menu,
+            int slot, int button, ClickType kind, FrontierWorldState state, FrontierV3ContainerMenuTarget target, UUID interaction) {
+        ServerLevel level = player.serverLevel();
         var owned = target.record();
         var physical = target.physical();
         var chest = physical.inventory();
         int cargoSlot = target.cargoSlot(slot);
-        if (target.equipmentSlot(slot)) return Admission.REJECTED;
-        if (target.firstCargoMenuSlot() > 0 && kind == ClickType.QUICK_MOVE
+        if (target.equipmentSlot(slot)) return null;
+        if (target.equipmentSlotCount() > 0 && kind == ClickType.QUICK_MOVE
                 && slot >= target.firstCargoMenuSlot() + owned.slotCount() && slot < menu.slots.size()
                 && (menu.getSlot(0).mayPlace(menu.getSlot(slot).getItem())
-                    || menu.getSlot(1).mayPlace(menu.getSlot(slot).getItem()))) return Admission.REJECTED;
+                    || menu.getSlot(1).mayPlace(menu.getSlot(slot).getItem()))) return null;
         SubjectId containerId = owned.id();
         var witnessLedger = FrontierV3DepotClickLedger.get(level);
         if (witnessLedger.pending(containerId) != null || witnessLedger.pending().stream().anyMatch(witness ->
                 witness.playerId().equals(player.getUUID())) || kind == ClickType.SWAP
                 || FrontierV3ContainerEffectFence.pending(level, state, containerId)
-                || !exactSlotsCurrent(state, containerId, chest)) return Admission.REJECTED;
-        if (cargoSlot >= 0 && state.inventory().itemAt(containerId, cargoSlot).isPresent()) return Admission.REJECTED;
+                || !exactSlotsCurrent(state, containerId, chest)) return null;
+        if (cargoSlot >= 0 && state.inventory().itemAt(containerId, cargoSlot).isPresent()) return null;
         if (kind == ClickType.PICKUP_ALL && !menu.getCarried().isEmpty()
                 && state.inventory().items().values().stream().anyMatch(item ->
                     item.custody() instanceof InventoryCustody.ContainerSlot source
                             && source.containerId().equals(containerId)
                             && menu.getCarried().is(net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
-                                net.minecraft.resources.ResourceLocation.parse(item.itemKind()))))) return Admission.REJECTED;
+                                net.minecraft.resources.ResourceLocation.parse(item.itemKind()))))) return null;
         CustodyAccount account = state.inventory().fungibleResources().accounts().values().stream()
                 .filter(value -> value.custody().equals(new ResourceCustody.Container(containerId)))
                 .findFirst().orElse(null);
         if (state.inventory().fungibleResources().accounts().values().stream()
                 .filter(value -> value.custody().equals(new ResourceCustody.Container(containerId))).count() > 1)
-            return Admission.REJECTED;
+            return null;
         PhysicalCustodyLease lease = state.replicaCustody().custodyByScope()
                 .get(ReferenceContainerCustody.scopeId(containerId));
         if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED
                 || !ReferenceContainerCustody.hasOperationalCustody(state, containerId)
                 || FrontierV3ContainerSurfaceExecutor.hasForeignFungibleComponents(chest, state, containerId))
-            return Admission.REJECTED;
+            return null;
         var before = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, containerId);
         SubjectId accountId = account == null ? ReferenceContainerCustody.scopeId(containerId) : account.id();
         List<PhysicalStackBinding> canonical = state.inventory().fungibleResources().bindings().values().stream()
@@ -81,24 +96,21 @@ final class FrontierV3ContainerClickExecutor {
             if (account == null ? !before.isEmpty() || !canonical.isEmpty()
                     : canonical.isEmpty() || !canonical.equals(FungiblePhysicalObservation.bind(
                         state.inventory().fungibleResources(), accountId, lease.authorityEpoch(), before)))
-                return Admission.REJECTED;
-        } catch (IllegalArgumentException invalid) { return Admission.REJECTED; }
+                return null;
+        } catch (IllegalArgumentException invalid) { return null; }
         if (account != null && mayRemoveReserved(menu, cargoSlot, button, kind, canonical, account, state))
-            return Admission.REJECTED;
+            return null;
         if (kind == ClickType.PICKUP && cargoSlot >= 0) {
             ItemStack cursor = menu.getCarried(), source = chest.getItem(cargoSlot);
             if (!cursor.isEmpty() && !source.isEmpty() && !ItemStack.isSameItemSameComponents(cursor, source))
-                return Admission.REJECTED;
+                return null;
         }
         java.util.Optional<FrontierV3DepotClickWitness.ReturnSource> returning;
         try { returning = playerReturnSource(player, menu, slot, kind, state); }
-        catch (IllegalArgumentException invalid) { return Admission.REJECTED; }
-        var witness = new FrontierV3DepotClickWitness(containerId, accountId, owned.ownerId(),
-                lease.authorityEpoch(), player.getUUID(), UUID.randomUUID(), before, java.util.Optional.empty(),
+        catch (IllegalArgumentException invalid) { return null; }
+        return new FrontierV3DepotClickWitness(containerId, accountId, owned.ownerId(),
+                lease.authorityEpoch(), player.getUUID(), interaction, before, java.util.Optional.empty(),
                 returning, java.util.Optional.empty());
-        witnessLedger.prepare(witness);
-        witnessLedger.persist(level);
-        return Admission.ACCEPTED;
     }
 
     static boolean ownsContainer(ServerPlayer player, AbstractContainerMenu menu,
@@ -106,7 +118,7 @@ final class FrontierV3ContainerClickExecutor {
         if (!FrontierV3ContainerMenuTarget.supported(menu)) return false;
         return runtime.passiveOwnershipState().map(state -> {
             try { return FrontierV3ContainerMenuTarget.managedCompound(player, menu, state)
-                    || FrontierV3ContainerMenuTarget.resolve(player, menu, state) != null; }
+                    || !FrontierV3ContainerMenuTarget.resolveAll(player, menu, state).isEmpty(); }
             catch (IllegalArgumentException unavailable) { return true; }
         }).orElse(true);
     }
@@ -116,8 +128,13 @@ final class FrontierV3ContainerClickExecutor {
         ServerLevel level = player.serverLevel();
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        var target = FrontierV3ContainerMenuTarget.resolve(player, menu, state);
-        if (target == null) return;
+        var targets = FrontierV3ContainerMenuTarget.resolveAll(player, menu, state);
+        if (targets.isEmpty()) return;
+        var target = targets.getFirst();
+        var transaction = FrontierV3DepotClickLedger.get(level).transaction(target.record().id());
+        if (transaction != null && transaction.members().size() > 1) {
+            FrontierV3CompositeClickExecutor.reconcile(level, runtime, state, transaction); return;
+        }
         ContainerRecord owned = target.record();
         FrontierV3DepotClickWitness witness = FrontierV3DepotClickLedger.get(level).pending(owned.id());
         if (witness == null || !witness.playerId().equals(player.getUUID())) return;
@@ -127,7 +144,12 @@ final class FrontierV3ContainerClickExecutor {
     /** Reconciles at most one pending witness before the ordinary uncaused layout poller runs. */
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state) {
-        for (FrontierV3DepotClickWitness witness : FrontierV3DepotClickLedger.get(level).pending()) {
+        for (var transaction : FrontierV3DepotClickLedger.get(level).transactions()) {
+            if (transaction.members().size() > 1) {
+                if (FrontierV3CompositeClickExecutor.reconcile(level, runtime, state, transaction)) return true;
+                continue;
+            }
+            var witness = transaction.members().getFirst();
             ContainerSurface surface = state.inventory().surfaces().get(witness.containerId());
             if (surface == null) continue;
             var physical = FrontierV3PhysicalContainer.loaded(level, state, witness.containerId()).orElse(null);
@@ -229,7 +251,7 @@ final class FrontierV3ContainerClickExecutor {
         return false;
     }
 
-    private static boolean canonicalMatches(FungibleResourceLedger resources, SubjectId account, long epoch,
+    static boolean canonicalMatches(FungibleResourceLedger resources, SubjectId account, long epoch,
                                             List<FungiblePhysicalObservation.Stack> physical) {
         try {
             List<PhysicalStackBinding> expected = FungiblePhysicalObservation.bind(resources, account, epoch, physical);
@@ -312,7 +334,7 @@ final class FrontierV3ContainerClickExecutor {
                 .findFirst().orElse(null);
     }
 
-    private static boolean exactSlotsCurrent(FrontierWorldState state, SubjectId containerId,
+    static boolean exactSlotsCurrent(FrontierWorldState state, SubjectId containerId,
                                              net.minecraft.world.Container chest) {
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ExactItemStack exact = state.inventory().itemAt(containerId, slot).orElse(null);
@@ -321,7 +343,7 @@ final class FrontierV3ContainerClickExecutor {
         return true;
     }
 
-    private static void conflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static void conflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                  FrontierV3DepotClickWitness witness, String reason) {
         if (REPORTED.size() >= 1_024) REPORTED.clear();
         if (!reason.equals(REPORTED.put(witness.interactionId(), reason)))

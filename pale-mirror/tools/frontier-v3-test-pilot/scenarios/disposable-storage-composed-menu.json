@@ -1,0 +1,265 @@
+{
+  "schema": 1,
+  "id": "disposable_storage_composed_menu",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25595,
+    "profile": "storage-ground",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 7
+  },
+  "setup": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -350,
+        "y": 64,
+        "z": -333
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 90000,
+      "checks": [
+        {
+          "view": "container",
+          "id": "container:1-depot",
+          "expect": {
+            "status": "ok",
+            "surface": "ACTIVE"
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/setblock -350 64 -334 minecraft:chest[facing=north,type=left]{Items:[{Slot:0b,id:\"minecraft:granite\",count:63}]}"
+    },
+    {
+      "type": "command",
+      "command": "/setblock -349 64 -334 minecraft:chest[facing=north,type=right]{Items:[{Slot:0b,id:\"minecraft:granite\",count:63}]}"
+    },
+    {
+      "type": "command",
+      "command": "/clear PMTestPilot"
+    },
+    {
+      "type": "command",
+      "command": "/give PMTestPilot minecraft:granite 17"
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--349_64_-334",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE"
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "filled_half_is_independently_admitted"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--350_64_-334",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE"
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "second_half_is_independently_admitted"
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "x": -349,
+        "y": 64,
+        "z": -334
+      },
+      "timeoutMs": 15000,
+      "causalMilestone": "ordinary_double_chest_menu"
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:granite",
+      "count": 17,
+      "timeoutMs": 15000,
+      "causalMilestone": "one_shift_click_changes_both_halves"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resource",
+      "id": "custody:container-observed--349_64_-334",
+      "expect": {
+        "status": "ok",
+        "quantity": 79,
+        "bindingCount": 2
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "first_member_commits_merge_and_remainder"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resource",
+      "id": "custody:container-observed--350_64_-334",
+      "expect": {
+        "status": "ok",
+        "quantity": 64,
+        "bindingCount": 1
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "second_member_commits_one_merged_unit"
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -349,
+        "y": 64,
+        "z": -334
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -350,
+        "y": 64,
+        "z": -333
+      },
+      "settleMs": 0,
+      "causalMilestone": "ordinary_return_after_graceful_restart"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resource",
+      "id": "custody:container-observed--349_64_-334",
+      "expect": {
+        "status": "ok",
+        "quantity": 79
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "first_member_stock_survives_restart"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resource",
+      "id": "custody:container-observed--350_64_-334",
+      "expect": {
+        "status": "ok",
+        "quantity": 64
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "second_member_stock_survives_restart"
+    },
+    {
+      "type": "break",
+      "position": {
+        "x": -350,
+        "y": 64,
+        "z": -334
+      },
+      "timeoutMs": 15000,
+      "causalMilestone": "ordinary_player_destroys_only_second_half"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--349_64_-334",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "surviving_half_keeps_identity_and_custody"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resource",
+      "id": "custody:container-observed--349_64_-334",
+      "expect": {
+        "status": "ok",
+        "quantity": 79,
+        "bindingCount": 2
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "destroying_neighbor_does_not_erase_surviving_stock"
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -349,
+        "y": 64,
+        "z": -334
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -349,
+        "y": 64,
+        "z": -334
+      },
+      "timeoutMs": 15000,
+      "causalMilestone": "surviving_single_chest_is_visible"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 9,
+      "view": "resource",
+      "id": "custody:container-observed--349_64_-334",
+      "expect": {
+        "status": "ok",
+        "quantity": 79
+      }
+    },
+    {
+      "after": 10,
+      "view": "resource",
+      "id": "custody:container-observed--350_64_-334",
+      "expect": {
+        "status": "ok",
+        "quantity": 64
+      }
+    },
+    {
+      "after": 13,
+      "view": "resource",
+      "id": "custody:container-observed--349_64_-334",
+      "expect": {
+        "status": "ok",
+        "quantity": 79,
+        "bindingCount": 2
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 4,
+      "name": "one-click-spans-double-chest",
+      "presentation": "player"
+    },
+    {
+      "after": 15,
+      "name": "surviving-half-after-restart-and-break"
+    }
+  ]
+}
