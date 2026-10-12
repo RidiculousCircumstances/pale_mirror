@@ -31,6 +31,72 @@ public final class FrontierV3LocalNavigationGameTests {
     private FrontierV3LocalNavigationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/treasure/big_air_full", timeoutTicks = 160)
+    public static void nativeSearchFindsALegalDetourInsteadOfRejectingTheUnconstrainedShortestPath(GameTestHelper helper) {
+        var level = helper.getLevel(); var supports = new LinkedHashSet<BlockPosition>();
+        for (int x = 4; x <= 12; x++) for (int z = 3; z <= 8; z++) {
+            var floor = helper.absolutePos(new BlockPos(x, 30, z));
+            level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
+            if (!(x >= 7 && x <= 9 && z <= 5)) supports.add(new BlockPosition(floor.getX(), floor.getY(), floor.getZ()));
+        }
+        var end = helper.absolutePos(new BlockPos(12, 30, 4));
+        var target = new SurfaceAnchor(new BlockPosition(end.getX(), end.getY(), end.getZ()));
+        var scope = new FrontierV3NavigationScope.Restricted(new LocalNavigationEnvelope(supports));
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5, 31, 4.5));
+        helper.runAfterDelay(1, () -> {
+            FrontierV3BodyObservation.refreshGroundContact(level, worker);
+            var ordinary = worker.getNavigation().createPath(end.above(), 0);
+            helper.assertTrue(ordinary != null && ordinary.canReach()
+                    && FrontierV3PhysicalPathPolicy.reject(level, ordinary, scope).orElseThrow().reason()
+                        == FrontierV3GoalNavigation.BlockReason.OFF_CONTRACT,
+                    "the actual native shortest path must leave the task's hard scope: " + ordinary + ";ground=" + worker.onGround());
+            var query = FrontierV3PedestrianTraffic.query(level, worker, end.above(), scope);
+            helper.assertTrue(FrontierV3PhysicalPathPolicy.reject(level, query.path(), scope).isEmpty(),
+                    "a real longer native path exists within the unchanged hard scope");
+            var goal = FrontierV3GoalNavigation.Goal.station(target, scope);
+            for (int turn = 0; turn < 130 && !FrontierV3SemanticMovement.arrived(level, worker, target); turn++) {
+                var result = FrontierV3GoalNavigation.pursue(level, worker, goal);
+                helper.assertTrue(result.status() != FrontierV3GoalNavigation.Status.BLOCKED, "legal detour remains executable: " + result);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(worker); worker.aiStep();
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, target), "the same body reaches its semantic goal");
+            FrontierV3GoalNavigation.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty")
+    public static void retainedPathProofRejectsNativeEditsAndReobservesTheImmediateFluid(GameTestHelper helper) {
+        var level = helper.getLevel(); var supports = new LinkedHashSet<BlockPosition>();
+        var nodes = new ArrayList<net.minecraft.world.level.pathfinder.Node>();
+        for (int x = 2; x <= 5; x++) {
+            var floor = helper.absolutePos(new BlockPos(x, 0, 2)); level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3);
+            supports.add(new BlockPosition(floor.getX(), floor.getY(), floor.getZ()));
+            nodes.add(new net.minecraft.world.level.pathfinder.Node(floor.getX(), floor.getY() + 1, floor.getZ()));
+        }
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(2.5, 1, 2.5));
+        var scope = new FrontierV3NavigationScope.Restricted(new LocalNavigationEnvelope(supports));
+        var path = new net.minecraft.world.level.pathfinder.Path(nodes, nodes.getLast().asBlockPos(), true);
+        helper.assertTrue(FrontierV3PhysicalPathInspection.inspect(level, worker, path, scope).isEmpty(), "current path is accepted");
+        double retained = FrontierV3PhysicalPathInspection.remainingDistance(worker, path, worker.position());
+        helper.assertTrue(Math.abs(retained - FrontierV3MinecraftGoalNavigation.remainingDistance(path, worker.position())) < 1e-8,
+                "derived suffix cost equals the original path metric");
+        var changed = path.getNode(2);
+        path.replaceNode(2, new net.minecraft.world.level.pathfinder.Node(changed.x, changed.y, changed.z + 2));
+        helper.assertTrue(FrontierV3PhysicalPathInspection.inspect(level, worker, path, scope).orElseThrow().reason()
+                == FrontierV3GoalNavigation.BlockReason.OFF_CONTRACT, "in-place native edits cannot reuse an old scope proof");
+        path.replaceNode(2, changed);
+        helper.assertTrue(FrontierV3PhysicalPathInspection.inspect(level, worker, path, scope).isEmpty(), "restored coordinates are checked again");
+        level.setBlock(path.getNode(1).asBlockPos(), Blocks.WATER.defaultBlockState(), 3);
+        helper.assertTrue(FrontierV3PhysicalPathInspection.inspect(level, worker, path, scope).orElseThrow().reason()
+                == FrontierV3GoalNavigation.BlockReason.UNSUPPORTED_MEDIUM, "cached scope does not conceal new physical fluid");
+        FrontierV3PhysicalPathInspection.forget(worker); worker.discard(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/treasure/big_air_full", timeoutTicks = 180)
     public static void goalNavigatorWalksTwoExcavatedBenchesWithoutChangingTheBody(GameTestHelper helper) {
         var level = helper.getLevel(); var hints = new ArrayList<SurfaceAnchor>();

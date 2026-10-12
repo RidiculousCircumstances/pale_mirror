@@ -51,6 +51,8 @@ class PedestrianRegionalInvalidationTest {
             var adjacent = SurfaceAnchor.at(11, 63, 1);
             assertEquals(PedestrianRouteResult.Status.FOUND, finish(planner, current, start, adjacent).status());
             assertEquals(0, reads.get(), "an unchanged region component is shared across different local routes");
+            assertTrue(planner.workUnits() - work < PedestrianRegion.BUILD_WORK,
+                    "using an existing region cannot consume the cost of building it again");
             var broken = flat(remote.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0))), bounds, s -> s.x() == 8);
             assertTrue(planner.peek(broken, start, end).isEmpty());
             assertEquals(PedestrianRouteResult.Status.NO_PATH, finish(planner, broken, start, end).status());

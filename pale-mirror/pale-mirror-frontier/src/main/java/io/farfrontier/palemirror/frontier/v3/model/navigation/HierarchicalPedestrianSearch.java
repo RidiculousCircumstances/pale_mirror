@@ -98,10 +98,10 @@ public final class HierarchicalPedestrianSearch {
             if (edge == null) { itinerary = reverseItinerary; rewind = null; refinementStart = start; }
             else { reverseItinerary.add(edge); rewind = edge.previous(); }
         }
-        while (itinerary != null && work + PedestrianRegion.BUILD_WORK <= limit) {
+        while (itinerary != null && work + PedestrianRegion.REFINE_WORK <= limit) {
             SurfaceAnchor end = refinement < itinerary.size() ? forwardEdge(refinement).exit() : target;
             var segment = region(PedestrianRegion.Tile.at(refinementStart)).path(refinementStart, end);
-            work += PedestrianRegion.BUILD_WORK;
+            work += PedestrianRegion.REFINE_WORK;
             if (route.size() + segment.size() > MAX_ROUTE_SURFACES)
                 return finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "ROUTE_OUTPUT_SAFETY_LIMIT");
             if (route.isEmpty()) route.addAll(segment); else route.addAll(segment.subList(1, segment.size()));
@@ -115,9 +115,10 @@ public final class HierarchicalPedestrianSearch {
     private PedestrianRegion region(PedestrianRegion.Tile tile) {
         PedestrianRegion prior = regions.get(tile);
         if (prior != null) return prior;
-        PedestrianRegion built = regionCache.region(geometry, tile);
+        var lookup = regionCache.region(geometry, tile);
+        PedestrianRegion built = lookup.region();
         dependencies.put(tile, geometry.regionalRevision().map(revision -> revision.at(tile.x(), tile.z())).orElse(geometry.version()));
-        work += PedestrianRegion.BUILD_WORK; unknown |= built.unknown(); regions.put(tile, built); return built;
+        work += lookup.work(); unknown |= built.unknown(); regions.put(tile, built); return built;
     }
     private void expand(Candidate candidate) {
         var local = region(candidate.node().tile());
@@ -138,7 +139,7 @@ public final class HierarchicalPedestrianSearch {
                 int otherZ = direction == 3 ? 0 : direction == 1 ? PedestrianRegion.SIDE - 1 : z;
                 SurfaceAnchor exit = local.surface(x, z), entrance = neighbour.surface(otherX, otherZ);
                 if (local.componentAt(x, z) != candidate.node().component() || entrance == null || exit == null
-                        || Math.abs(exit.y() - entrance.y()) > 1) continue;
+                        || !geometry.canTraverse(exit, entrance)) continue;
                 Node node = new Node(neighbour.tile, neighbour.componentAt(otherX, otherZ));
                 var edge = new Edge(candidate.node(), exit, entrance);
                 Edge prior = exits.get(node);

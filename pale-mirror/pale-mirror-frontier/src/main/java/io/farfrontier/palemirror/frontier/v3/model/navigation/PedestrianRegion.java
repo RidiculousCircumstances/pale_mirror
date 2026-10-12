@@ -9,8 +9,9 @@ import java.util.List;
 final class PedestrianRegion {
     static final int SIDE = 16;
     static final int CELLS = SIDE * SIDE;
-    // Upper bound includes surveying and four-neighbour component construction.
-    static final int BUILD_WORK = CELLS * 5;
+    // Survey, four bounded edge checks and four-neighbour component construction.
+    static final int BUILD_WORK = CELLS * 9;
+    static final int REFINE_WORK = CELLS * 5;
     record Tile(int x, int z) implements Comparable<Tile> {
         static Tile at(SurfaceAnchor surface) { return new Tile(Math.floorDiv(surface.x(), SIDE), Math.floorDiv(surface.z(), SIDE)); }
         @Override public int compareTo(Tile other) { int xOrder = Integer.compare(x, other.x); return xOrder != 0 ? xOrder : Integer.compare(z, other.z); }
@@ -18,6 +19,7 @@ final class PedestrianRegion {
     final Tile tile;
     private final SurfaceAnchor[] surfaces = new SurfaceAnchor[CELLS];
     private final int[] components = new int[CELLS];
+    private final byte[] edges = new byte[CELLS];
     private boolean unknown;
 
     PedestrianRegion(PedestrianRouteGeometry geometry, Tile tile) {
@@ -35,6 +37,13 @@ final class PedestrianRegion {
                 throw new IllegalArgumentException("navigation survey returned a foreign column");
             if (!geometry.blocked(support)) surfaces[index(x, z)] = support;
         }
+        for (int cell = 0; cell < CELLS; cell++) if (surfaces[cell] != null) {
+            for (int direction = 0; direction < 4; direction++) {
+                int next = neighbour(cell, direction);
+                if (next >= 0 && surfaces[next] != null && geometry.canTraverse(surfaces[cell], surfaces[next]))
+                    edges[cell] |= (byte) (1 << direction);
+            }
+        }
         int component = 0;
         int[] queue = new int[CELLS];
         for (int cell = 0; cell < CELLS; cell++) if (surfaces[cell] != null && components[cell] < 0) {
@@ -43,7 +52,7 @@ final class PedestrianRegion {
                 int current = queue[read++];
                 for (int direction = 0; direction < 4; direction++) {
                     int next = neighbour(current, direction);
-                    if (next < 0 || surfaces[next] == null || components[next] >= 0 || !connected(current, next)) continue;
+                    if (next < 0 || surfaces[next] == null || components[next] >= 0 || !canStep(current, direction)) continue;
                     components[next] = component; queue[write++] = next;
                 }
             }
@@ -71,7 +80,7 @@ final class PedestrianRegion {
             int current = queue[read++];
             for (int direction = 0; direction < 4; direction++) {
                 int next = neighbour(current, direction);
-                if (next < 0 || previous[next] >= 0 || components[next] != component || !connected(current, next)) continue;
+                if (next < 0 || previous[next] >= 0 || components[next] != component || !canStep(current, direction)) continue;
                 previous[next] = current; queue[write++] = next;
             }
         }
@@ -82,7 +91,7 @@ final class PedestrianRegion {
         return reverse.reversed();
     }
 
-    private boolean connected(int first, int second) { return Math.abs(surfaces[first].y() - surfaces[second].y()) <= 1; }
+    private boolean canStep(int cell, int direction) { return (edges[cell] & (1 << direction)) != 0; }
     private static int index(int x, int z) { return z * SIDE + x; }
     private static int neighbour(int cell, int direction) {
         int x = cell % SIDE, z = cell / SIDE;

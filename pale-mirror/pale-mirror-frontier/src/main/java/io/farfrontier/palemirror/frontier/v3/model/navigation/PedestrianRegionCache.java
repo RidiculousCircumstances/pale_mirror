@@ -12,15 +12,17 @@ final class PedestrianRegionCache {
     private final Map<PedestrianRouteGeometry, Map<PedestrianRegion.Tile, PedestrianRegion>> views = new WeakHashMap<>();
     private record RegionalKey(PedestrianRegion.Tile tile, Object revision, io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds) { }
     private final Map<Object, Map<RegionalKey, PedestrianRegion>> scoped = new WeakHashMap<>();
-    synchronized PedestrianRegion region(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) {
+    record Lookup(PedestrianRegion region, int work) { }
+    synchronized Lookup region(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) {
         if (geometry.regionalRevision().isPresent()) {
             var revision = geometry.regionalRevision().orElseThrow();
             if (scoped.size() >= 64 && !scoped.containsKey(revision.scope())) scoped.remove(scoped.keySet().iterator().next());
             var regions = scoped.computeIfAbsent(revision.scope(), ignored -> new LinkedHashMap<>(16, 0.75f, true));
             var key = new RegionalKey(tile, revision.at(tile.x(), tile.z()), geometry.bounds());
             var prior = regions.get(key);
-            if (prior != null) return prior;
-            trim(); var result = new PedestrianRegion(geometry, tile); regions.put(key, result); return result;
+            if (prior != null) return new Lookup(prior, 1);
+            trim(); var result = new PedestrianRegion(geometry, tile); regions.put(key, result);
+            return new Lookup(result, PedestrianRegion.BUILD_WORK);
         }
         var regions = views.get(geometry);
         if (regions == null) {
@@ -28,10 +30,10 @@ final class PedestrianRegionCache {
             regions = new LinkedHashMap<>(16, 0.75f, true); views.put(geometry, regions);
         }
         var result = regions.get(tile);
-        if (result != null) return result;
+        if (result != null) return new Lookup(result, 1);
         result = new PedestrianRegion(geometry, tile);
         trim();
-        regions.put(tile, result); return result;
+        regions.put(tile, result); return new Lookup(result, PedestrianRegion.BUILD_WORK);
     }
     private void trim() {
         if (views.values().stream().mapToInt(Map::size).sum() + scoped.values().stream().mapToInt(Map::size).sum() < MAX_REGIONS) return;

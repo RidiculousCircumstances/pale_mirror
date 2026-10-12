@@ -50,6 +50,8 @@ final class FrontierV3MinecraftGoalNavigation {
     private static final double SPEED = 0.70D;
     private static final Map<Mob, Control> ACTIVE = new WeakHashMap<>();
     private static final Map<Mob, Failure> FAILURES = new WeakHashMap<>();
+    private static final Map<Mob, CrossingWait> CROSSINGS = new WeakHashMap<>();
+    private record CrossingWait(Path path, long since) { }
 
     private FrontierV3MinecraftGoalNavigation() { }
 
@@ -90,24 +92,27 @@ final class FrontierV3MinecraftGoalNavigation {
         if (current != null && current.legalStations().equals(legalStations) && current.scope().equals(scope)
                 && current.order().equals(order)) {
             Path activePath = actor.getNavigation().getPath();
-            if (activePath != null && !actor.getNavigation().isDone()
-                    && FrontierV3PhysicalPathPolicy.reject(level, activePath, scope).isPresent()) {
+            var rejected = activePath != null && !actor.getNavigation().isDone()
+                    ? FrontierV3PhysicalPathInspection.inspect(level, actor, activePath, scope) : Optional.<FrontierV3PhysicalPathPolicy.Rejection>empty();
+            if (rejected.isPresent()) {
                 stop(actor);
-                var rejected = FrontierV3PhysicalPathPolicy.reject(level, activePath, scope).orElseThrow();
-                return new Result(Status.BLOCKED, "minecraft-path-invalid:" + rejected.detail(),
-                        Optional.of(rejected.reason()));
+                return new Result(Status.BLOCKED, "minecraft-path-invalid:" + rejected.orElseThrow().detail(),
+                        Optional.of(rejected.orElseThrow().reason()));
             }
-            Control observed = current.observed(activePath, actor.position(), level.getGameTime());
+            Control observed = current.observed(actor, activePath, actor.position(), level.getGameTime());
             if (observed.lastProgressAt() > current.lastProgressAt()) FAILURES.remove(actor);
             current = observed;
             // Vanilla's ordinary graph ignores living bodies. Replan around a current
             // occupant before the no-motion deadline, without changing the semantic goal.
-            if (activePath != null && !actor.getNavigation().isDone()
-                    && FrontierV3PedestrianTraffic.blockedAhead(level, actor, activePath)) {
+            var near = FrontierV3PedestrianTraffic.nearby(level, actor, activePath);
+            boolean crossing = activePath != null && near.blocked() && near.crossing()
+                    && waitForCrossing(actor, activePath, level.getGameTime());
+            if (!near.blocked()) CROSSINGS.remove(actor);
+            if (activePath != null && !actor.getNavigation().isDone() && near.blocked() && !crossing) {
                 stopPath(actor);
                 activePath = null;
             }
-            double following = FrontierV3PedestrianTraffic.followingPace(level, actor, activePath);
+            double following = crossing ? 0 : FrontierV3PedestrianTraffic.followingPace(level, actor, activePath);
             current = current.following(following == 0, level.getGameTime());
             long baseProgressBudget = permission.pace().map(pace -> Math.max((long) STALLED_TICKS,
                     (long) Math.ceil(0.5 / pace.blocksPerTick())))
@@ -245,13 +250,14 @@ final class FrontierV3MinecraftGoalNavigation {
             return true;
         }
         Path path = actor.getNavigation().getPath();
-        if (FrontierV3PhysicalPathPolicy.reject(level, path, control.scope()).isPresent()) {
+        if (FrontierV3PhysicalPathInspection.inspect(level, actor, path, control.scope()).isPresent()) {
             stopPath(actor);
             return true;
         }
         // Vanilla may replace its path. Validate the new candidate before updating local latitude.
-        if (!pathWithinEnvelope(level, path, control.corridor())) {
-            control = control.withCorridor(FrontierV3PhysicalPathPolicy.corridor(path, control.target()));
+        if (path != control.progressPath()) {
+            control = control.observed(actor, path, actor.position(), level.getGameTime())
+                    .withCorridor(FrontierV3PhysicalPathPolicy.corridor(path, control.target()));
             ACTIVE.put(actor, control);
         }
         if (FrontierV3SemanticMovement.arrived(level, actor, control.target())) {
@@ -325,6 +331,12 @@ final class FrontierV3MinecraftGoalNavigation {
         var courtesy = FrontierV3PedestrianCourtesy.observation(actor);
         if (courtesy.isPresent()) return courtesy.orElseThrow();
         var control = ACTIVE.get(actor);
+        var crossing = CROSSINGS.get(actor);
+        if (control != null && control.permission().current(actor) && crossing != null
+                && crossing.path() == actor.getNavigation().getPath()
+                && actor.level().getGameTime() - crossing.since() < RETRY_TICKS
+                && FrontierV3PedestrianTraffic.nearby((ServerLevel) actor.level(), actor, crossing.path()).crossing())
+            return new Observation("WAITING_FOR_CROSSING", "bounded-native-crossing-wait", control.legalStations(), List.of());
         if (control != null && control.permission().current(actor))
             return new Observation("MOVING", control.permission().pace().map(pace -> "pace-blocks-per-tick="
                     + pace.blocksPerTick() + ";native-speed-modifier=" + speed(actor, control.permission())).orElse(""),
@@ -357,6 +369,9 @@ final class FrontierV3MinecraftGoalNavigation {
 
     private static void stopPath(Mob actor) {
         ACTIVE.remove(actor);
+        CROSSINGS.remove(actor);
+        FrontierV3PedestrianTraffic.forget(actor);
+        FrontierV3PhysicalPathInspection.forget(actor);
         actor.getNavigation().stop();
     }
 
@@ -373,6 +388,10 @@ final class FrontierV3MinecraftGoalNavigation {
     }
 
     private static double speed(Mob actor, FrontierV3GoalNavigation.ProviderPermission permission) {
+        var crossing = CROSSINGS.get(actor);
+        if (crossing != null && crossing.path() == actor.getNavigation().getPath()
+                && actor.level().getGameTime() - crossing.since() < RETRY_TICKS
+                && FrontierV3PedestrianTraffic.nearby((ServerLevel) actor.level(), actor, crossing.path()).crossing()) return 0;
         double following = FrontierV3PedestrianTraffic.followingPace((ServerLevel) actor.level(), actor, actor.getNavigation().getPath());
         if (following == 0) return 0;
         return permission.pace().map(pace -> {
@@ -419,8 +438,8 @@ final class FrontierV3MinecraftGoalNavigation {
                            LocalNavigationEnvelope corridor,
                            Optional<MovementOrder> order, FrontierV3GoalNavigation.ProviderPermission permission, long refreshedAt,
                            long lastProgressAt, Vec3 lastProgressPosition, Path progressPath, double bestRemaining, FollowingWait followingWait, boolean brakeOnArrival) {
-        private Control observed(Path path, Vec3 position, long tick) {
-            double remaining = path == null ? goalDistance(position, target) : remainingDistance(path, position);
+        private Control observed(Mob actor, Path path, Vec3 position, long tick) {
+            double remaining = path == null ? goalDistance(position, target) : FrontierV3PhysicalPathInspection.remainingDistance(actor, path, position);
             // A legal building detour can initially move AWAY from the final goal.
             // Progress is actual planar displacement along the accepted path, not
             // decreasing straight-line goal distance or mere path recomputation.
@@ -445,6 +464,11 @@ final class FrontierV3MinecraftGoalNavigation {
             return new Control(legalStations, target, scope, corridor, order, permission, refreshedAt, lastProgressAt,
                     lastProgressPosition, progressPath, bestRemaining, followingWait.at(waiting, tick), brakeOnArrival);
         }
+    }
+    private static boolean waitForCrossing(Mob actor, Path path, long tick) {
+        var wait = CROSSINGS.get(actor);
+        if (wait == null || wait.path() != path) { wait = new CrossingWait(path, tick); CROSSINGS.put(actor, wait); }
+        return tick - wait.since() < RETRY_TICKS;
     }
     /** Local deadline accounting only; never movement progress or durable world time. */
     record FollowingWait(long since, long elapsed) {

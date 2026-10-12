@@ -5,6 +5,13 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3PedestrianFollowingTest {
+    @Test void onlyAnActualCrossingGetsAShortWaitRatherThanAnImmediateReplan() {
+        var heading = new Vec3(1, 0, 0);
+        assertTrue(FrontierV3PedestrianFollowing.crossing(heading, new Vec3(0, 0, .1)));
+        assertFalse(FrontierV3PedestrianFollowing.crossing(heading, new Vec3(-.1, 0, 0)));
+        assertFalse(FrontierV3PedestrianFollowing.crossing(heading, Vec3.ZERO));
+        assertFalse(FrontierV3PedestrianFollowing.crossing(Vec3.ZERO, new Vec3(0, 0, .1)));
+    }
     @Test void aHeadwayPauseIsExcludedAfterReleaseWithoutClaimingBodyProgress() {
         var wait = FrontierV3MinecraftGoalNavigation.FollowingWait.empty().at(true, 10);
         assertEquals(100, wait.duration(110));

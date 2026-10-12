@@ -217,7 +217,7 @@ public final class KnownPedestrianRouteKnowledge {
             for (int[] offset : List.of(new int[]{0, -1}, new int[]{-1, 0}, new int[]{1, 0}, new int[]{0, 1})) {
                 var next = geometry.supportAt(current.x() + offset[0], current.z() + offset[1]);
                 if (next != null && scope.contains(next.support()) && geometry.bounds().contains(next.support())
-                        && !geometry.blocked(next) && Math.abs((long) next.y() - current.y()) <= 1 && !routes.containsKey(next)) {
+                        && !geometry.blocked(next) && geometry.canTraverse(current, next) && !routes.containsKey(next)) {
                     var route = new java.util.ArrayList<>(routes.get(current)); route.add(next);
                     routes.put(next, List.copyOf(route));
                     queue.addLast(next);

@@ -5,6 +5,11 @@ import net.minecraft.world.phys.Vec3;
 /** Geometric co-flow and headway, independent of activity, group or facility. */
 final class FrontierV3PedestrianFollowing {
     private FrontierV3PedestrianFollowing() { }
+    static boolean crossing(Vec3 direction, Vec3 velocity) {
+        double forward = velocity.x * direction.x + velocity.z * direction.z;
+        double across = velocity.x * direction.z - velocity.z * direction.x;
+        return Math.abs(across) > Math.abs(forward);
+    }
     static boolean coFlow(Vec3 position, Vec3 direction, Vec3 peer, Vec3 velocity) {
         double length = Math.hypot(direction.x, direction.z);
         if (length == 0) return false;

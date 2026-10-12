@@ -126,6 +126,10 @@ public final class KnownPedestrianNavigation {
             // A changed surface invalidates this optimization, not the semantic order.
             if (candidate.stream().anyMatch(surface -> !geometry.bounds().contains(surface.support())
                     || geometry.blocked(surface) || !surface.equals(geometry.supportAt(surface.x(), surface.z())))) continue;
+            boolean connected = true;
+            for (int index = 1; index < candidate.size(); index++)
+                if (!geometry.canTraverse(candidate.get(index - 1), candidate.get(index))) { connected = false; break; }
+            if (!connected) continue;
             if (candidate.size() > 1) new PedestrianRouteReceipt(candidate);
             if (best == null || candidate.size() < best.size()) best = List.copyOf(candidate);
         }
@@ -181,6 +185,9 @@ public final class KnownPedestrianNavigation {
                     || !surface.equals(geometry.supportAt(surface.x(), surface.z())))
                 throw new IllegalArgumentException("accepted pedestrian route differs from current known geometry at " + surface);
         }
+        for (int index = 1; index < route.size(); index++)
+            if (!geometry.canTraverse(route.get(index - 1), route.get(index)))
+                throw new IllegalArgumentException("accepted pedestrian route has no clear transition at " + route.get(index));
     }
 
     private static boolean blocked(SurfaceAnchor surface, Set<BlockPosition> occupied) {

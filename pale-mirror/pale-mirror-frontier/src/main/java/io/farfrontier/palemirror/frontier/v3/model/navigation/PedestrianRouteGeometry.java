@@ -12,4 +12,15 @@ public interface PedestrianRouteGeometry {
     WorldBounds bounds();
     SurfaceAnchor supportAt(int x, int z);
     boolean blocked(SurfaceAnchor surface);
+
+    /** Shared adult-pedestrian edge policy; both endpoints must independently be clear supports.
+     * A one-block step also needs the upper body clearance over its lower support.
+     * This derived query grants no route, arrival, unknown terrain or execution authority. */
+    default boolean canTraverse(SurfaceAnchor from, SurfaceAnchor to) {
+        if (Math.abs((long) from.x() - to.x()) + Math.abs((long) from.z() - to.z()) != 1
+                || Math.abs((long) from.y() - to.y()) > 1) return false;
+        if (from.y() == to.y()) return true;
+        SurfaceAnchor lower = from.y() < to.y() ? from : to;
+        return !blocked(SurfaceAnchor.at(lower.x(), Math.max(from.y(), to.y()), lower.z()));
+    }
 }

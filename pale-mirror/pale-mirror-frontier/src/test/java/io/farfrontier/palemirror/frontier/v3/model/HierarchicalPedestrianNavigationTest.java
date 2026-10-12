@@ -8,6 +8,22 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HierarchicalPedestrianNavigationTest {
+    @Test void aLowCeilingInvalidatesAStepEvenWhenBothStationsAreClear() {
+        var bootstrap = FrontierBootstrapper.create(new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:step-clearance"),
+                20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r7"));
+        var low = SurfaceAnchor.at(10, 63, 10); var high = SurfaceAnchor.at(11, 64, 10);
+        var ceiling = new BlockPosition(10, 66, 10);
+        var blocked = KnownPedestrianNavigation.geometry(bootstrap, java.util.Set.of(ceiling),
+                (x, z) -> x == 10 && z == 10 ? low : x == 11 && z == 10 ? high : null);
+        assertFalse(blocked.blocked(low)); assertFalse(blocked.blocked(high));
+        assertFalse(blocked.canTraverse(low, high)); assertFalse(blocked.canTraverse(high, low));
+        assertEquals(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                finish(new HierarchicalPedestrianSearch(blocked, low, high)).status());
+        assertThrows(IllegalArgumentException.class, () -> KnownPedestrianNavigation.requireRoute(blocked, List.of(low, high)));
+        var clear = KnownPedestrianNavigation.geometry(bootstrap, java.util.Set.of(),
+                (x, z) -> x == 10 && z == 10 ? low : x == 11 && z == 10 ? high : null);
+        assertEquals(PedestrianRouteResult.Status.FOUND, finish(new HierarchicalPedestrianSearch(clear, low, high)).status());
+    }
     @Test void shortSearchesShareOneBudgetAndDeferredWorkKeepsItsAgeAndFinishes() {
         var ground = geometry(new WorldBounds(0, 0, 32, 32), (x, z) -> SurfaceAnchor.at(x, 63, z), s -> false);
         var start = SurfaceAnchor.at(1, 63, 1);
