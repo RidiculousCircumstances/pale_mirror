@@ -39,6 +39,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset QUARRY_GRAYBOX = developingQuarry(PREVIOUS_QUARRY_GRAYBOX_R3);
     private static final FrontierRuleset TERRACED_QUARRY_GRAYBOX = terracedQuarry(QUARRY_GRAYBOX);
     private static final FrontierRuleset AVAILABLE_FRONT_QUARRY_GRAYBOX = availableFrontQuarry(TERRACED_QUARRY_GRAYBOX);
+    private static final FrontierRuleset HIGH_RESERVE_QUARRY_GRAYBOX = quarryReserve(AVAILABLE_FRONT_QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -54,6 +55,7 @@ public final class FrontierRulesets {
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
             Map.entry(TERRACED_QUARRY_GRAYBOX.id(), TERRACED_QUARRY_GRAYBOX),
             Map.entry(AVAILABLE_FRONT_QUARRY_GRAYBOX.id(), AVAILABLE_FRONT_QUARRY_GRAYBOX),
+            Map.entry(HIGH_RESERVE_QUARRY_GRAYBOX.id(), HIGH_RESERVE_QUARRY_GRAYBOX),
             Map.entry(QUARRY_GRAYBOX.id(), QUARRY_GRAYBOX),
             Map.entry(PREVIOUS_QUARRY_GRAYBOX_R3.id(), PREVIOUS_QUARRY_GRAYBOX_R3),
             Map.entry(PREVIOUS_QUARRY_GRAYBOX_R2.id(), PREVIOUS_QUARRY_GRAYBOX_R2),
@@ -97,6 +99,26 @@ public final class FrontierRulesets {
                 base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
                 base.workCatalog(), base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(),
                 io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules.availableFrontGraybox(), base.execution());
+    }
+
+    /** Balance-only selector: production and public trade share the same larger stone target. */
+    private static FrontierRuleset quarryReserve(FrontierRuleset base) {
+        var extraction = base.extraction().withReserveItems(Math.multiplyExact(base.extraction().reserveItems(), 3));
+        var priorTrade = base.goodsTrade();
+        var policies = new java.util.EnumMap<GoodsPolicyKind, java.util.List<GoodsTradeRules.Commodity>>(GoodsPolicyKind.class);
+        policies.putAll(priorTrade.policies());
+        var publicGoods = policies.get(GoodsPolicyKind.PUBLIC_SETTLEMENT);
+        if (publicGoods.stream().noneMatch(value -> value.itemKind().equals("minecraft:cobblestone")))
+            throw new IllegalArgumentException("quarry balance requires its declared stone commodity");
+        policies.put(GoodsPolicyKind.PUBLIC_SETTLEMENT, publicGoods.stream().map(value ->
+                value.itemKind().equals("minecraft:cobblestone") ? new GoodsTradeRules.Commodity(value.itemKind(),
+                        value.targetPerResident(), extraction.reserveItems(), value.minimumSellPrice(), value.maximumBuyPrice()) : value).toList());
+        var trade = new GoodsTradeRules(priorTrade.reviewInterval(), priorTrade.orderLifetime(),
+                priorTrade.maximumBatch(), priorTrade.maximumPairReviews(), policies);
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r8", base.schemaVersion(), base.cadence(), base.spatial(),
+                base.rates(), base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(),
+                base.resourceHarvestColdTravelTicksPerEdge(), base.workCatalog(), trade, base.initialSettlementStocks(),
+                base.labour(), base.expedition(), extraction, base.execution());
     }
 
     private static FrontierRuleset populationExecution(String id, FrontierRuleset base) {

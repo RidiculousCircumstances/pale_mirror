@@ -17,6 +17,30 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierRulesetTest {
+    @Test void quarryReserveTriplesWithoutRetuningOldWorldsOrExtractionGeometry() {
+        var previous = FrontierRulesets.installed("frontier-v3-quarry-graybox-r7");
+        var current = FrontierRulesets.installed("frontier-v3-quarry-graybox-r8");
+        assertEquals(64, previous.extraction().reserveItems());
+        assertEquals(192, current.extraction().reserveItems());
+        assertEquals(previous.extraction().withReserveItems(192), current.extraction());
+        assertEquals(previous.extraction().haulBatch(), current.extraction().haulBatch());
+        assertEquals(previous.cadence(), current.cadence());
+        assertEquals(previous.workCatalog(), current.workCatalog());
+        assertEquals(previous.labour(), current.labour());
+        assertNotEquals(previous.contentSha256(), current.contentSha256());
+        for (var commodity : previous.goodsTrade().policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT)) {
+            var changed = current.goodsTrade().policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT).stream()
+                    .filter(value -> value.itemKind().equals(commodity.itemKind())).findFirst().orElseThrow();
+            if (commodity.itemKind().equals("minecraft:cobblestone")) {
+                assertEquals(192, changed.target(30));
+                assertEquals(commodity.minimumSellPrice(), changed.minimumSellPrice());
+                assertEquals(commodity.maximumBuyPrice(), changed.maximumBuyPrice());
+            } else assertEquals(commodity, changed);
+        }
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:quarry-reserve"), 41L, current));
+        assertEquals(current, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)).bootstrap().ruleset());
+        assertThrows(IllegalArgumentException.class, () -> FrontierRulesets.require(previous.id(), previous.schemaVersion(), current.contentSha256()));
+    }
     @Test void populationBudgetIsHashedRecoveredAndServesTheActualInitialResidentCohort() {
         var current = FrontierRulesets.installed("frontier-v3-quarry-graybox-r2");
         var previous = FrontierRulesets.installed("frontier-v3-quarry-graybox-r1");

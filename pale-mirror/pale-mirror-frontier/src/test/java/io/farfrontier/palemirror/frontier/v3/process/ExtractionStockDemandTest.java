@@ -26,17 +26,20 @@ class ExtractionStockDemandTest {
         assertEquals(state.inventory(), blocked.inventory());
         assertEquals(state.actorExecutions(), blocked.actorExecutions());
     }
-    @Test void fulfilledReserveWithdrawsStaffingAndAdmissionThenConsumptionReopensBothAfterRecovery() {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"frontier-v3-quarry-graybox-r4", "frontier-v3-quarry-graybox-r8"})
+    void fulfilledReserveWithdrawsStaffingAndAdmissionThenConsumptionReopensBothAfterRecovery(String profile) {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:extraction-demand"), 41,
-                FrontierRulesets.installed("frontier-v3-quarry-graybox-r4")));
+                FrontierRulesets.installed(profile)));
+        int reserve = state.bootstrap().ruleset().extraction().reserveItems();
         // All known partners have their local stone target; there is no outstanding export demand.
         for (var home : state.bootstrap().settlements()) {
             var lot = new SubjectId("lot:test-stone-" + home.id().value().replace(':', '-'));
             var temporary = new SubjectId("custody:test-stone-" + home.id().value().replace(':', '-'));
-            var ledger = state.inventory().fungibleResources().issue(new ResourceLot(lot, home.id(), "minecraft:cobblestone", 64,
+            var ledger = state.inventory().fungibleResources().issue(new ResourceLot(lot, home.id(), "minecraft:cobblestone", reserve,
                     "test:reserve", List.of()), new CustodyAccount(temporary, new ResourceCustody.WorldCarrier(
-                    UUID.nameUUIDFromBytes(home.id().value().getBytes(java.nio.charset.StandardCharsets.UTF_8))), Map.of(lot, 64), Map.of()));
-            ledger = ledger.transfer(temporary, ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(home.id())), Map.of(lot, 64), Map.of());
+                    UUID.nameUUIDFromBytes(home.id().value().getBytes(java.nio.charset.StandardCharsets.UTF_8))), Map.of(lot, reserve), Map.of()));
+            ledger = ledger.transfer(temporary, ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(home.id())), Map.of(lot, reserve), Map.of());
             state = state.withInventory(state.inventory().withFungibleResources(ledger));
         }
         var deposit = state.extractionSites().deposits().values().iterator().next(); var home = deposit.site().settlementId();

@@ -112,6 +112,11 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                 base.projectionWritesPerTurn(), base.source(), base.developmentBatchCells(), base.geology(), base.terraces(),
                 base.surfaceCut(), java.util.Optional.of(new ExtractionRockRise(6, 4, 2)));
     }
+    public ExtractionRules withReserveItems(int quantity) {
+        return new ExtractionRules(enabled, producerStride, width, depth, quantity, minersPerSite, haulBatch,
+                reviewTicks, exteriorClearance, pitDepth, projectionWritesPerTurn, source, developmentBatchCells,
+                geology, terraces, surfaceCut, rockRise);
+    }
     public String canonicalText() {
         return enabled + "|" + producerStride + "|" + width + "|" + depth + "|" + reserveItems
                 + "|" + minersPerSite + "|" + haulBatch + "|" + reviewTicks
